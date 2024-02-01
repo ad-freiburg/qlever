@@ -23,7 +23,7 @@ GrbMatrix GrbMatrix::clone() const {
   auto info =
       GrB_Matrix_new(matrixCopy.rawMatrix(), GrB_BOOL, numRows(), numCols());
   handleError(info);
-  info = GrB_Matrix_dup(matrixCopy.rawMatrix(), *matrix_);
+  info = GrB_Matrix_dup(matrixCopy.rawMatrix(), matrix());
   handleError(info);
 
   return matrixCopy;
@@ -31,14 +31,14 @@ GrbMatrix GrbMatrix::clone() const {
 
 // _____________________________________________________________________________
 void GrbMatrix::setElement(size_t row, size_t col, bool value) {
-  auto info = GrB_Matrix_setElement_BOOL(*matrix_, value, row, col);
+  auto info = GrB_Matrix_setElement_BOOL(matrix(), value, row, col);
   handleError(info);
 }
 
 // _____________________________________________________________________________
 bool GrbMatrix::getElement(size_t row, size_t col) const {
   bool result;
-  auto info = GrB_Matrix_extractElement_BOOL(&result, *matrix_, row, col);
+  auto info = GrB_Matrix_extractElement_BOOL(&result, matrix(), row, col);
   handleError(info);
   if (info == GrB_NO_VALUE) {
     return false;
@@ -61,7 +61,7 @@ GrbMatrix GrbMatrix::build(const std::vector<size_t> rowIndices,
     values[i] = true;
   }
   auto info =
-      GrB_Matrix_build_BOOL(matrix.getMatrix(), &rowIndices[0], &colIndices[0],
+      GrB_Matrix_build_BOOL(matrix.matrix(), &rowIndices[0], &colIndices[0],
                             values, nvals, GxB_IGNORE_DUP);
   GrbMatrix::handleError(info);
   return matrix;
@@ -85,7 +85,7 @@ std::vector<std::pair<size_t, size_t>> GrbMatrix::extractTuples() const {
   size_t colIndices[n];
   bool values[n];
   auto info = GrB_Matrix_extractTuples_BOOL(rowIndices, colIndices, values, &n,
-                                            *matrix_);
+                                            matrix());
   GrbMatrix::handleError(info);
 
   std::vector<std::pair<size_t, size_t>> result;
@@ -104,7 +104,7 @@ std::vector<size_t> GrbMatrix::extractColumn(size_t colIndex) const {
   auto info = GrB_Vector_new(columnVector.get(), GrB_BOOL, rows);
   handleError(info);
 
-  info = GrB_Col_extract(*columnVector, GrB_NULL, GrB_NULL, *matrix_, GrB_ALL,
+  info = GrB_Col_extract(*columnVector, GrB_NULL, GrB_NULL, matrix(), GrB_ALL,
                          rows, colIndex, GrB_NULL);
   handleError(info);
 
@@ -132,7 +132,7 @@ std::vector<size_t> GrbMatrix::extractRow(size_t rowIndex) const {
 // _____________________________________________________________________________
 size_t GrbMatrix::numNonZero() const {
   size_t nvals;
-  auto info = GrB_Matrix_nvals(&nvals, *matrix_);
+  auto info = GrB_Matrix_nvals(&nvals, matrix());
   GrbMatrix::handleError(info);
   return nvals;
 }
@@ -140,7 +140,7 @@ size_t GrbMatrix::numNonZero() const {
 // _____________________________________________________________________________
 size_t GrbMatrix::numRows() const {
   size_t nrows;
-  auto info = GrB_Matrix_nrows(&nrows, *matrix_);
+  auto info = GrB_Matrix_nrows(&nrows, matrix());
   GrbMatrix::handleError(info);
   return nrows;
 }
@@ -148,7 +148,7 @@ size_t GrbMatrix::numRows() const {
 // _____________________________________________________________________________
 size_t GrbMatrix::numCols() const {
   size_t ncols;
-  auto info = GrB_Matrix_ncols(&ncols, *matrix_);
+  auto info = GrB_Matrix_ncols(&ncols, matrix());
   GrbMatrix::handleError(info);
   return ncols;
 }
@@ -159,7 +159,7 @@ GrbMatrix GrbMatrix::transpose() const {
   auto info =
       GrB_Matrix_new(transposed.rawMatrix(), GrB_BOOL, numCols(), numRows());
   handleError(info);
-  info = GrB_transpose(transposed.getMatrix(), GrB_NULL, GrB_NULL, *matrix_,
+  info = GrB_transpose(transposed.matrix(), GrB_NULL, GrB_NULL, matrix(),
                        GrB_NULL);
   handleError(info);
 
@@ -168,8 +168,8 @@ GrbMatrix GrbMatrix::transpose() const {
 
 // _____________________________________________________________________________
 void GrbMatrix::accumulateMultiply(const GrbMatrix& otherMatrix) const {
-  auto info = GrB_mxm(*matrix_, GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
-                      *matrix_, otherMatrix.getMatrix(), GrB_NULL);
+  auto info = GrB_mxm(matrix(), GrB_NULL, GrB_LOR, GrB_LOR_LAND_SEMIRING_BOOL,
+                      matrix(), otherMatrix.matrix(), GrB_NULL);
   handleError(info);
 }
 
@@ -181,9 +181,9 @@ GrbMatrix GrbMatrix::multiply(const GrbMatrix& otherMatrix) const {
   auto info = GrB_Matrix_new(result.rawMatrix(), GrB_BOOL, resultNumRows,
                              resultNumCols);
 
-  info = GrB_mxm(result.getMatrix(), GrB_NULL, GrB_NULL,
-                 GrB_LOR_LAND_SEMIRING_BOOL, *matrix_, otherMatrix.getMatrix(),
-                 GrB_NULL);
+  info =
+      GrB_mxm(result.matrix(), GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
+              matrix(), otherMatrix.matrix(), GrB_NULL);
   handleError(info);
 
   return result;

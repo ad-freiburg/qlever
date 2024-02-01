@@ -84,7 +84,7 @@ class GrbMatrix {
   static void finalize();
 
  private:
-  GrB_Matrix& getMatrix() const { return *matrix_; }
+  GrB_Matrix& matrix() const { return *matrix_; }
   GrB_Matrix* rawMatrix() const;
   static void handleError(GrB_Info info);
 };
