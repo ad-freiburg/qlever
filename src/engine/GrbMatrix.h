@@ -32,7 +32,7 @@ class GrbMatrix {
 
   ~GrbMatrix() { GrB_Matrix_free(matrix_.get()); }
 
-  GrbMatrix copy() const;
+  GrbMatrix clone() const;
 
   void setElement(size_t row, size_t col, bool value);
 

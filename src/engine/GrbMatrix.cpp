@@ -18,17 +18,15 @@ GrbMatrix::GrbMatrix(size_t numRows, size_t numCols) {
 }
 
 // _____________________________________________________________________________
-GrbMatrix GrbMatrix::copy() const {
-  GrB_Matrix matrixCopy;
-  auto info = GrB_Matrix_new(&matrixCopy, GrB_BOOL, numRows(), numCols());
+GrbMatrix GrbMatrix::clone() const {
+  GrbMatrix matrixCopy = GrbMatrix();
+  auto info =
+      GrB_Matrix_new(matrixCopy.rawMatrix(), GrB_BOOL, numRows(), numCols());
   handleError(info);
-  info = GrB_Matrix_dup(&matrixCopy, *matrix_);
+  info = GrB_Matrix_dup(matrixCopy.rawMatrix(), *matrix_);
   handleError(info);
 
-  auto returnMatrix = GrbMatrix();
-  returnMatrix.matrix_ = std::make_unique<GrB_Matrix>(matrixCopy);
-
-  return returnMatrix;
+  return matrixCopy;
 }
 
 // _____________________________________________________________________________
@@ -157,16 +155,15 @@ size_t GrbMatrix::numCols() const {
 
 // _____________________________________________________________________________
 GrbMatrix GrbMatrix::transpose() const {
-  GrB_Matrix transposed;
-  auto info = GrB_Matrix_new(&transposed, GrB_BOOL, numCols(), numRows());
+  GrbMatrix transposed;
+  auto info =
+      GrB_Matrix_new(transposed.rawMatrix(), GrB_BOOL, numCols(), numRows());
   handleError(info);
-  info = GrB_transpose(transposed, GrB_NULL, GrB_NULL, *matrix_, GrB_NULL);
+  info = GrB_transpose(transposed.getMatrix(), GrB_NULL, GrB_NULL, *matrix_,
+                       GrB_NULL);
   handleError(info);
 
-  GrbMatrix result = GrbMatrix();
-  result.matrix_ = std::make_unique<GrB_Matrix>(transposed);
-
-  return result;
+  return transposed;
 }
 
 // _____________________________________________________________________________
@@ -180,16 +177,15 @@ void GrbMatrix::accumulateMultiply(const GrbMatrix& otherMatrix) const {
 GrbMatrix GrbMatrix::multiply(const GrbMatrix& otherMatrix) const {
   size_t resultNumRows = numRows();
   size_t resultNumCols = otherMatrix.numCols();
-  GrB_Matrix resultMatrix;
-  auto info =
-      GrB_Matrix_new(&resultMatrix, GrB_BOOL, resultNumRows, resultNumCols);
+  GrbMatrix result;
+  auto info = GrB_Matrix_new(result.rawMatrix(), GrB_BOOL, resultNumRows,
+                             resultNumCols);
 
-  info = GrB_mxm(resultMatrix, GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,
-                 *matrix_, otherMatrix.getMatrix(), GrB_NULL);
+  info = GrB_mxm(result.getMatrix(), GrB_NULL, GrB_NULL,
+                 GrB_LOR_LAND_SEMIRING_BOOL, *matrix_, otherMatrix.getMatrix(),
+                 GrB_NULL);
   handleError(info);
 
-  GrbMatrix result = GrbMatrix(resultNumRows, resultNumCols);
-  result.matrix_ = std::make_unique<GrB_Matrix>(resultMatrix);
   return result;
 }
 

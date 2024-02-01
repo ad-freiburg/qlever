@@ -24,7 +24,7 @@ TEST(GrbMatrixTest, copy) {
   GrbMatrix matrix1 = GrbMatrix(2, 2);
   matrix1.setElement(0, 0, true);
 
-  GrbMatrix matrix2 = matrix1.copy();
+  GrbMatrix matrix2 = matrix1.clone();
 
   matrix1.setElement(1, 1, true);
 
