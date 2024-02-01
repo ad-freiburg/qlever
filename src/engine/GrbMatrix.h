@@ -15,22 +15,16 @@ extern "C" {
 // Currently only boolean matrices are supported.
 class GrbMatrix {
  private:
-  std::unique_ptr<GrB_Matrix> matrix_;
+  std::unique_ptr<GrB_Matrix> matrix_ = std::make_unique<GrB_Matrix>();
   static bool isInitialized_;
 
  public:
-  GrbMatrix(size_t numRows, size_t numCols) {
-    matrix_ = std::make_unique<GrB_Matrix>();
-    auto info = GrB_Matrix_new(matrix_.get(), GrB_BOOL, numRows, numCols);
-    handleError(info);
-  }
+  GrbMatrix(size_t numRows, size_t numCols);
 
-  GrbMatrix() { matrix_ = std::make_unique<GrB_Matrix>(); }
+  GrbMatrix() = default;
 
   // Move constructor
-  GrbMatrix(GrbMatrix&& otherMatrix) {
-    matrix_ = std::move(otherMatrix.matrix_);
-  };
+  GrbMatrix(GrbMatrix&& otherMatrix) = default;
 
   // Disable copy constructor and assignment operator
   GrbMatrix(const GrbMatrix&) = delete;
@@ -69,11 +63,11 @@ class GrbMatrix {
   std::vector<size_t> extractRow(size_t rowIndex) const;
 
   // Number of "true" values in the matrix.
-  size_t nvals() const;
+  size_t numNonZero() const;
 
-  size_t nrows() const;
+  size_t numRows() const;
 
-  size_t ncols() const;
+  size_t numCols() const;
 
   GrbMatrix transpose() const;
 
@@ -91,5 +85,6 @@ class GrbMatrix {
 
  private:
   GrB_Matrix& getMatrix() const { return *matrix_; }
+  GrB_Matrix* rawMatrix() const;
   static void handleError(GrB_Info info);
 };

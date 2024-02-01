@@ -7,9 +7,9 @@ TEST(GrbMatrixTest, constructor) {
   GrbMatrix::initialize();
 
   GrbMatrix matrix = GrbMatrix(2, 3);
-  size_t numRows = matrix.nrows();
-  size_t numCols = matrix.ncols();
-  size_t nvals = matrix.nvals();
+  size_t numRows = matrix.numRows();
+  size_t numCols = matrix.numCols();
+  size_t nvals = matrix.numNonZero();
 
   GrbMatrix::finalize();
 
@@ -46,7 +46,7 @@ TEST(GrbMatrixTest, getSetElement) {
   bool elemOneZero = matrix.getElement(1, 0);
   bool elemZeroTwo = matrix.getElement(0, 2);
   bool elemOneTwo = matrix.getElement(1, 2);
-  size_t nvals = matrix.nvals();
+  size_t nvals = matrix.numNonZero();
 
   GrbMatrix::finalize();
 
@@ -172,8 +172,8 @@ TEST(GrbMatrixTest, multiplyShapedMatrices) {
 
   GrbMatrix matrix3 = matrix1.multiply(matrix2);
 
-  EXPECT_EQ(matrix3.nrows(), 2);
-  EXPECT_EQ(matrix3.ncols(), 2);
+  EXPECT_EQ(matrix3.numRows(), 2);
+  EXPECT_EQ(matrix3.numCols(), 2);
   EXPECT_EQ(matrix3.getElement(0, 0), true);
   EXPECT_EQ(matrix3.getElement(0, 1), false);
   EXPECT_EQ(matrix3.getElement(1, 0), true);
@@ -193,8 +193,8 @@ TEST(GrbMatrixTest, transpose) {
 
   GrbMatrix result = matrix.transpose();
 
-  EXPECT_EQ(3, result.nrows());
-  EXPECT_EQ(2, result.ncols());
+  EXPECT_EQ(3, result.numRows());
+  EXPECT_EQ(2, result.numCols());
 
   EXPECT_EQ(true, result.getElement(0, 0));
   EXPECT_EQ(false, result.getElement(0, 1));

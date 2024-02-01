@@ -200,7 +200,7 @@ void TransitivePath::computeTransitivePathBound(
   std::span<const Id> startNodes =
       startSideTable.getColumn(startSide.treeAndCol_->second);
   GrbMatrix startNodeMatrix =
-      setupStartNodeMatrix(startNodes, graph.nrows(), mapping);
+      setupStartNodeMatrix(startNodes, graph.numRows(), mapping);
 
   auto hull = std::make_unique<GrbMatrix>(
       transitiveHull(graph, std::make_optional(std::move(startNodeMatrix))));
@@ -259,7 +259,7 @@ void TransitivePath::computeTransitivePath(
   if (!startSide.isVariable()) {
     const Id startNode[]{std::get<Id>(startSide.value_)};
     GrbMatrix startMatrix =
-        setupStartNodeMatrix(startNode, graph.nrows(), mapping);
+        setupStartNodeMatrix(startNode, graph.numRows(), mapping);
     hull = std::make_unique<GrbMatrix>(
         transitiveHull(graph, std::make_optional(std::move(startMatrix))));
   } else {
@@ -452,7 +452,7 @@ GrbMatrix TransitivePath::transitiveHull(
   if (startNodes) {
     result = std::make_unique<GrbMatrix>(std::move(startNodes.value()));
   } else {
-    result = std::make_unique<GrbMatrix>(GrbMatrix::diag(graph.nrows()));
+    result = std::make_unique<GrbMatrix>(GrbMatrix::diag(graph.numRows()));
   }
 
   if (minDist_ > 0) {
@@ -461,13 +461,13 @@ GrbMatrix TransitivePath::transitiveHull(
   }
 
   size_t previousNvals = 0;
-  size_t nvals = result->nvals();
+  size_t nvals = result->numNonZero();
   while (nvals > previousNvals && pathLength < maxDist_) {
-    previousNvals = result->nvals();
+    previousNvals = result->numNonZero();
     // Row major, Column major
     result->accumulateMultiply(graph);
     // Add check cancellation
-    nvals = result->nvals();
+    nvals = result->numNonZero();
     pathLength++;
   }
   return std::move(*result);
@@ -744,7 +744,7 @@ std::span<const Id> TransitivePath::setupNodes(const IdTable& table,
 // _____________________________________________________________________________
 GrbMatrix TransitivePath::getTargetRow(GrbMatrix& hull,
                                        size_t targetIndex) const {
-  GrbMatrix transformer = GrbMatrix(hull.ncols(), hull.ncols());
+  GrbMatrix transformer = GrbMatrix(hull.numCols(), hull.numCols());
   transformer.setElement(targetIndex, targetIndex, true);
   return hull.multiply(transformer);
 }
