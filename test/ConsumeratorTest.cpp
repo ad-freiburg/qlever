@@ -7,6 +7,7 @@
 #include "util/Consumerator.h"
 
 using ad_utility::ConsumeratorImpl;
+using ad_utility::Consumerator;
 
 template <auto make>
 constexpr auto makeWrapper =
