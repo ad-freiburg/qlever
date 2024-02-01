@@ -158,13 +158,6 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  /*
-  //! clear all the contents, but not the settings for prefixes etc
-  void clear() {
-    internalVocabulary_.close();
-    externalVocabulary_.close();
-  }
-   */
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 

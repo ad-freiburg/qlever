@@ -17,20 +17,21 @@
 namespace ad_utility {
 /*
 This implements `Consumerators` which are in some sense the opposite of
-`generators`. This is best explained by an EDxample: ConsumeratorImpl<int>
-somethingNumeric(int& target) {
+`generators`. This is best explained by an Example:
+ConsumeratorImpl<int> somethingNumeric(int& target) {
   // Initial portion of the code, executed during the construction phase
   int a = 0;
   int b = target + 24;
-  // The inner loop, the structure of the `co_await`s must be always like this,
-otherwise you get undefined behavior. while (co_await valueWasPushedTag) {
+  // The inner loop, the structure of the `co_await`s must be always like
+  //this, otherwise you get undefined behavior.
+  while (co_await valueWasPushedTag) {
     // This loop sees all the values that are `push`ed to the `Consumerator`.
     int val = co_await nextValueTag;
     a += val;
     b *= a;
   }
   // Remaining final code, will be executed when `finish` or the destructor is
-called, whichever happens first.
+  // called, whichever happens first.
   // In our somewhat artificial example we write back a final result:
   target = a / b;
 }
