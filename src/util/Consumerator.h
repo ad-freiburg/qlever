@@ -15,8 +15,77 @@
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 namespace ad_utility {
+/*
+This implements `Consumerators` which are in some sense the opposite of
+`generators`. This is best explained by an EDxample: ConsumeratorImpl<int>
+somethingNumeric(int& target) {
+  // Initial portion of the code, executed during the construction phase
+  int a = 0;
+  int b = target + 24;
+  // The inner loop, the structure of the `co_await`s must be always like this,
+otherwise you get undefined behavior. while (co_await valueWasPushedTag) {
+    // This loop sees all the values that are `push`ed to the `Consumerator`.
+    int val = co_await nextValueTag;
+    a += val;
+    b *= a;
+  }
+  // Remaining final code, will be executed when `finish` or the destructor is
+called, whichever happens first.
+  // In our somewhat artificial example we write back a final result:
+  target = a / b;
+}
 
-// Two empty structs used as tags for the `Consumerator`
+// This code can be used as follows:
+int target = 13;
+auto consumerator = ad_utility::makeConsumerator(somethingNumeric(target));
+// These values appear as the `val` variable in the inner loop
+consumerator.push(12);
+consumerator.push(4);
+// break out of the loop
+consumerator.finish();
+// `target` has now been modified.
+
+In the following we will describe several aspects of the interfaces.
+1. The template argument is the argument type to the `push` function in the
+calling code as well as the result type of the `co_await nextValueTag` calls
+inside the coroutine loop. It has to either be a reference of any kind (e.g.
+string&&, const string&, etc.) Or a small trivially-copyable object type (e.g.
+int or std::string_view). The reason for this restriction is to prevent
+accidental copies of large objects. If you need copies, either use `const &` and
+then copy inside the coroutine, or use `&&` and create the copies for the `push`
+function.
+2. Exceptions that appear in the first part of the coroutine (before the first
+call to `co_await valueWasPushed`) are directly rethrown in the
+`makeConsumerator()` function. Exceptions that happen inside the loop (i.e.
+between two calls to `valueWasPushed` are propagated to the corresponding `push`
+call. Exceptions in the last part of the code are propagated to the call to
+`finish()` or, if that call is missing or skipped to the destructor. The
+destructor only throws if it is not executed during stack unwinding because it
+would then crash the program. This scenario is detected and logged, and the
+exception is then ignored.
+3. For the same reason it is not very useful to store consumerators in
+containers like `std::vectors` because exceptions in destructors lead to direct
+program termination. To make this less probably, Consumerators are neither
+copy-nor movable. If you really need to store some of them, use `unique_ptr` or
+`optional`, but beware e.g. of the `optional::reset()` function which is
+unconditionally `noexcept`.
+ 4. Unfortunately it is necessary to implement the actual coroutine as a
+`ConsumeratorImpl` and then obtain the actual object via `makeConsumerator`.
+There are currently three reasons, why this is necessary: 4.1 Without it, the
+exceptions from the first part of the execution (the "constructor") couldn't be
+directly propagated, but only at the first call to push. Consider for example a
+Consumerator that writes to a file, and the opening of the file fails, and we
+want to find out immediately. This can only be achieved with the additional
+helper functions because of the internal design of C++20 coroutines and their
+initialization. 4.2 G++ currently (versions 11-13) has a bug, that crashes the
+compiler when a coroutine has a `noexcept(false)` destructor (see 2.). With the
+wrapper function we can work around this bug. 4.3  With the wrapper function we
+can make all constructors of the `Consumerator` class private. That way we can
+rule out several potential bugs (see 3.).
+5. A lot of systematic examples can be found in the tests (`ConsumeratorTest.h`)
+ */
+
+// Two empty structs used as tags for the `ConsumeratorImpl`
 namespace detail {
 struct ValueWasPushedTag {};
 struct NextValueTag {};
@@ -25,20 +94,23 @@ struct NextValueTag {};
 static constexpr detail::ValueWasPushedTag valueWasPushedTag;
 static constexpr detail::NextValueTag nextValueTag;
 template <typename ReferenceType>
-class Consumerator {
-  static_assert(std::is_reference_v<ReferenceType> ||
-                    (std::is_trivially_copyable_v<ReferenceType> &&
-                     sizeof(ReferenceType) < 32),
-                "The `Consumerator` coroutine has to be used a reference type "
-                "as its template argument for efficiency reasons (otherwise "
-                "unnecessary copies would occur). The only exception of this "
-                "rule are small trivially copyable objects wor which the copy "
-                "is typically cheaper than taking a reference");
+class ConsumeratorImpl {
+  static_assert(
+      std::is_reference_v<ReferenceType> ||
+          (std::is_trivially_copyable_v<ReferenceType> &&
+           sizeof(ReferenceType) < 32),
+      "The `ConsumeratorImpl` coroutine has to be used a reference type "
+      "as its template argument for efficiency reasons (otherwise "
+      "unnecessary copies would occur). The only exception of this "
+      "rule are small trivially copyable objects wor which the copy "
+      "is typically cheaper than taking a reference");
 
  public:
   struct promise_type {
     bool isFinished_ = false;
+    bool isFirst_ = true;
     using ValueType = std::remove_reference_t<ReferenceType>;
+
     using PointerType = std::add_pointer_t<ReferenceType>;
     static constexpr bool isLvalueRef =
         std::is_lvalue_reference_v<ReferenceType>;
@@ -75,17 +147,18 @@ class Consumerator {
     constexpr std::suspend_always final_suspend() const noexcept { return {}; }
 
     void unhandled_exception() { exception_ = std::current_exception(); }
+
     void return_void() const noexcept {}
 
-    // Create the actual `Consumerator` object, which gets a
+    // Create the actual `ConsumeratorImpl` object, which gets a
     // `coroutine_handle` to access the `promise_type` object. Note: We only
     // return a `coroutine_handle` here that will later be implicitly converted
-    // to a `Consumerator` object. This way, the exceptions that occur in
+    // to a `ConsumeratorImpl` object. This way, the exceptions that occur in
     // the "constructor" part of the coroutine make the construction of the
     // coroutine throw directly.
     // std::coroutine_handle<promise_type> get_return_object() {
-    Consumerator get_return_object() {
-      return Consumerator{
+    ConsumeratorImpl get_return_object() {
+      return ConsumeratorImpl{
           std::coroutine_handle<promise_type>::from_promise(*this)};
     }
 
@@ -103,7 +176,12 @@ class Consumerator {
     // (`finish`);
     struct ValueWasPushedAwaitable {
       promise_type& promise_;
-      bool await_ready() const { return false; }
+      bool await_ready() const {
+        if (std::exchange(promise_.isFirst_, false)) {
+          promise_.rethrow_if_exception();
+        }
+        return false;
+      }
       void await_suspend(std::coroutine_handle<>) const {}
       bool await_resume() const { return !promise_.isFinished_; }
     };
@@ -130,38 +208,48 @@ class Consumerator {
   using Handle = std::coroutine_handle<promise_type>;
   Handle coro_ = nullptr;
   bool isFinished_ = false;
-  ThrowIfSafe throwIfSafe_;
 
  public:
   // Constructor that gets a handle to the coroutine frame.
   // Note: The implicit conversion is required by the machinery.
-  explicit(false) Consumerator(Handle handle) : coro_{handle} {
-    // Rethrow the exceptions from the constructor part.
-    if (coro_.done()) {
-      coro_.promise().rethrow_if_exception();
-    }
-  }
+  explicit ConsumeratorImpl(Handle handle) : coro_{handle} {}
 
+  template <typename T>
+  friend class Consumerator;
+
+ private:
   // Push the next value to the coroutine loop. Make the `co_await
   // valueWasPushed` return true and store the next value that will be retrieved
   // by `co_await nextValue`.Depending on the `isConst` parameter, `push` may
   // either be called only with non-const (`isConst == false`) or const
   // (`isConst == true`) references.
-  void push(ReferenceType ref) { pushImpl(AD_FWD(ref)); }
-
- private:
-  template <typename T>
-  void pushImpl(T&& value) {
+  void push(ReferenceType value) {
     coro_.promise().setValue(AD_FWD(value));
     coro_.promise().isFinished_ = false;
     AD_EXPENSIVE_CHECK(coro_);
-    coro_.resume();
+    if (coro_.done()) {
+      finish();
+    } else {
+      coro_.resume();
+    }
     if (coro_.done()) {
       finish();
     }
   }
 
- public:
+  void finishIfException() {
+    if (!coro_) {
+      return;
+    }
+    if (!coro_ || !coro_.done() || !coro_.promise().exception_) {
+      return;
+    }
+    auto ptr = std::move(coro_.promise().exception_);
+    coro_.promise().isFinished_ = true;
+    coro_.destroy();
+    coro_ = nullptr;
+    std::rethrow_exception(ptr);
+  }
   // The effect of calling this function is that the next
   // `co_await valueWasPushed` returns false such that the coroutine runs to
   // completion.
@@ -182,23 +270,56 @@ class Consumerator {
     }
   }
 
+ public:
   // The destructor implicitly calls `finish` if it hasn't been called
   // explicitly before.
-  ~Consumerator() noexcept(false) {
-    throwIfSafe_.throwIfSafe([this] { finish(); });
+  ~ConsumeratorImpl() {
+    ad_utility::ignoreExceptionIfThrows([this]() { finish(); });
   }
 
   // Default constructor, move and swap operations.
   // Note: default-constructed and moved-from objects are invalid and may not be
   // accessed until a valid object has been assigned again (via move assignment
   // or swap).
-  Consumerator() = default;
-  Consumerator(Consumerator&& rhs) noexcept
+  ConsumeratorImpl() = default;
+  ConsumeratorImpl(ConsumeratorImpl&& rhs) noexcept
       : coro_{std::exchange(rhs.coro_, nullptr)} {}
-  void swap(Consumerator& rhs) noexcept { std::swap(coro_, rhs.coro_); }
-  Consumerator& operator=(Consumerator rhs) {
+  void swap(ConsumeratorImpl& rhs) noexcept { std::swap(coro_, rhs.coro_); }
+  ConsumeratorImpl& operator=(ConsumeratorImpl rhs) {
     swap(rhs);
     return *this;
   }
 };
+
+template <typename T>
+struct Consumerator {
+ private:
+  ConsumeratorImpl<T> consumerator_;
+  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+
+  explicit Consumerator(ConsumeratorImpl<T> consumerator)
+      : consumerator_{std::move(consumerator)} {
+    consumerator_.finishIfException();
+  }
+  Consumerator(Consumerator&&) = delete;
+  Consumerator& operator=(Consumerator&&) = delete;
+
+ public:
+  void push(T t) { consumerator_.push(AD_FWD(t)); }
+  void finish() { consumerator_.finish(); }
+  ~Consumerator() noexcept(false) {
+    if (numExceptionsDuringConstruction_ == std::uncaught_exceptions()) {
+      finish();
+    } else {
+      ad_utility::ignoreExceptionIfThrows(
+          [this]() { finish(); }, "Destructor of `ad_utility::Consumerator`");
+    }
+  }
+  template <typename U>
+  friend Consumerator<U> makeConsumerator(ConsumeratorImpl<U> consumeratorImpl);
+};
+template <typename T>
+Consumerator<T> makeConsumerator(ConsumeratorImpl<T> consumeratorImpl) {
+  return Consumerator{std::move(consumeratorImpl)};
+}
 }  // namespace ad_utility

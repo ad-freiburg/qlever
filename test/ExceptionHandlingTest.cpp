@@ -2,12 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#include <absl/cleanup/cleanup.h>
+
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "util/ExceptionHandling.h"
 
 // ________________________________________________________________
-TEST(OnDestruction, terminateIfThrows) {
+TEST(ExceptionHandling, terminateIfThrows) {
   // Avoid warnings and crashes when running all tests at once.
   ::testing::FLAGS_gtest_death_test_style = "threadsafe";
   int numCallsToMockedTerminate = 0;
@@ -45,7 +47,7 @@ TEST(OnDestruction, terminateIfThrows) {
 }
 
 // ________________________________________________________________
-TEST(OnDestruction, ignoreExceptionIfThrows) {
+TEST(ExceptionHandling, ignoreExceptionIfThrows) {
   int i = 0;
   ASSERT_NO_THROW(ad_utility::ignoreExceptionIfThrows([&i]() {
     i = 42;

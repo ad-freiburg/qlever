@@ -49,8 +49,8 @@ std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
 }
 
 // _____________________________________________________________________________
-ad_utility::Consumerator<std::string_view> VocabularyOnDisk::getWordWriter(
-    std::string outFileName) {
+ad_utility::ConsumeratorImpl<std::string_view>
+VocabularyOnDisk::getWordWriterImpl(std::string outFileName) {
   _file.open(outFileName.c_str(), "w");
   ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
       outFileName + _offsetSuffix, ad_utility::CreateTag{});

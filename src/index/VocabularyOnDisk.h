@@ -58,6 +58,11 @@ class VocabularyOnDisk {
   // calls to `push` will add the pushed words to the vocabulary with the
   // contiguous Ids [0, 1, ...].
   ad_utility::Consumerator<std::string_view> getWordWriter(
+      std::string outFileName) {
+    return ad_utility::makeConsumerator(
+        getWordWriterImpl(std::move(outFileName)));
+  }
+  ad_utility::ConsumeratorImpl<std::string_view> getWordWriterImpl(
       std::string outFileName);
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to

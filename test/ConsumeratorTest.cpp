@@ -6,9 +6,13 @@
 
 #include "util/Consumerator.h"
 
-using ad_utility::Consumerator;
+using ad_utility::ConsumeratorImpl;
 
-Consumerator<int> intStateMachine(int initial, int& target) {
+template <auto make>
+constexpr auto makeWrapper =
+    [](auto&&... args) { return ad_utility::makeConsumerator(make(args...)); };
+
+ConsumeratorImpl<int> intStateMachineImpl(int initial, int& target) {
   target += initial;
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -17,8 +21,9 @@ Consumerator<int> intStateMachine(int initial, int& target) {
 
   target += initial;
 }
+auto intStateMachine = makeWrapper<&intStateMachineImpl>;
 
-TEST(Consumerator, IntStateMachine) {
+TEST(ConsumeratorImpl, IntStateMachine) {
   int target = 0;
   int compare = 0;
 
@@ -38,7 +43,7 @@ TEST(Consumerator, IntStateMachine) {
 }
 
 // _______________________________________________________________________________________
-Consumerator<std::string&&> moveStringStateMachine(
+ConsumeratorImpl<std::string&&> moveStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
   target.push_back(initial);
 
@@ -48,8 +53,9 @@ Consumerator<std::string&&> moveStringStateMachine(
 
   target.push_back(initial);
 }
+auto moveStringStateMachine = makeWrapper<&moveStringStateMachineImpl>;
 
-TEST(Consumerator, MoveStringStateMachine) {
+TEST(ConsumeratorImpl, MoveStringStateMachine) {
   std::vector<std::string> target;
   std::vector<std::string> compare;
 
@@ -84,7 +90,7 @@ TEST(Consumerator, MoveStringStateMachine) {
 }
 
 // _______________________________________________________________________________________
-Consumerator<const std::string&> constStringStateMachine(
+ConsumeratorImpl<const std::string&> constStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
   target.push_back(initial);
 
@@ -95,7 +101,9 @@ Consumerator<const std::string&> constStringStateMachine(
   target.push_back(initial);
 }
 
-TEST(Consumerator, ConstStringStateMachine) {
+auto constStringStateMachine = makeWrapper<&constStringStateMachineImpl>;
+
+TEST(ConsumeratorImpl, ConstStringStateMachine) {
   std::vector<std::string> target;
   std::vector<std::string> compare;
 
@@ -128,8 +136,8 @@ TEST(Consumerator, ConstStringStateMachine) {
 
 struct TestException : public std::exception {};
 
-Consumerator<bool> stateMachineWithExceptions(bool throwInitial,
-                                              bool throwFinal) {
+ConsumeratorImpl<bool> stateMachineWithExceptionsImpl(bool throwInitial,
+                                                      bool throwFinal) {
   if (throwInitial) {
     throw TestException{};
   }
@@ -145,9 +153,10 @@ Consumerator<bool> stateMachineWithExceptions(bool throwInitial,
     throw TestException{};
   }
 }
+auto stateMachineWithExceptions = makeWrapper<&stateMachineWithExceptionsImpl>;
 
-TEST(Consumerator, StateMachineWithExceptions) {
-  ASSERT_THROW(stateMachineWithExceptions(true, false), TestException);
+TEST(ConsumeratorImpl, StateMachineWithExceptions) {
+  EXPECT_THROW(stateMachineWithExceptions(true, false), TestException);
 
   {
     auto throwOnPush = stateMachineWithExceptions(false, false);
@@ -164,97 +173,38 @@ TEST(Consumerator, StateMachineWithExceptions) {
     }
     ASSERT_THROW(throwOnEnd.finish(), TestException);
   }
+
+  // Throwing destructor.
+  {
+    using T = Consumerator<bool>;
+    alignas(T) unsigned char buf[sizeof(T)];
+    T* throwOnEnd = nullptr;
+    auto assign = [&]() {
+      throwOnEnd = new (buf) T{ad_utility::makeConsumerator(
+
+          stateMachineWithExceptionsImpl(false, true))};
+    };
+    ASSERT_NO_THROW(assign());
+    EXPECT_ANY_THROW(throwOnEnd->~T());
+  }
+  // No throwing destrutor if it wasn't safe.
+  {
+    auto dontThrowInDestructor = []() {
+      auto throwOnEnd = stateMachineWithExceptions(false, true);
+      throw std::runtime_error{"blim"};
+    };
+    // We neither see the `TestException` from the destructor, Nor does it crash
+    // the test executable.
+    EXPECT_THROW(dontThrowInDestructor(), std::runtime_error);
+  }
 }
 
-TEST(Consumerator, DefaultConstructor) {
+TEST(ConsumeratorImpl, DefaultConstructor) {
   // The only thing we can legally do with an default constructed
-  // `Consumerator` is to destroy it or to move something in.
-  { ad_utility::Consumerator<int> x; }
+  // `ConsumeratorImpl` is to destroy it or to move something in.
+  { ad_utility::ConsumeratorImpl<int> x; }
   {
-    ad_utility::Consumerator<int> x;
+    auto x = ad_utility::makeConsumerator(ConsumeratorImpl<int>{});
     x.finish();
-  }
-}
-
-ad_utility::Consumerator<int> simpleStateMachine(int& result) {
-  while (co_await ad_utility::valueWasPushedTag) {
-    result = co_await ad_utility::nextValueTag;
-  }
-  result = 0;
-}
-
-TEST(Consumerator, MoveAssignment) {
-  {
-    int target = 0;
-    ad_utility::Consumerator<int> a;
-    {
-      auto b = simpleStateMachine(target);
-      b.push(42);
-      ASSERT_EQ(target, 42);
-      a = std::move(b);
-      ASSERT_EQ(target, 42);
-      a.push(12);
-      ASSERT_EQ(target, 12);
-      b.finish();
-      ASSERT_EQ(target, 12);
-    }
-    ASSERT_EQ(target, 12);
-    a.push(15);
-    ASSERT_EQ(target, 15);
-    a.finish();
-    ASSERT_EQ(target, 0);
-  }
-}
-
-TEST(Consumerator, MoveConstructor) {
-  {
-    int target = 0;
-    {
-      auto b = simpleStateMachine(target);
-      b.push(42);
-      ASSERT_EQ(target, 42);
-      auto a{std::move(b)};
-      ASSERT_EQ(target, 42);
-      a.push(12);
-      ASSERT_EQ(target, 12);
-      b.finish();
-      ASSERT_EQ(target, 12);
-      ASSERT_EQ(target, 12);
-      a.push(15);
-      ASSERT_EQ(target, 15);
-      a.finish();
-      ASSERT_EQ(target, 0);
-    }
-  }
-}
-
-TEST(Consumerator, Swap) {
-  {
-    int target = 0;
-    int target2 = 0;
-    {
-      auto a = simpleStateMachine(target);
-      auto b = simpleStateMachine(target2);
-      ASSERT_EQ(target, 0);
-      ASSERT_EQ(target2, 0);
-      b.push(42);
-      ASSERT_EQ(target, 0);
-      ASSERT_EQ(target2, 42);
-      a.push(19);
-      ASSERT_EQ(target, 19);
-      ASSERT_EQ(target2, 42);
-      std::swap(a, b);
-      a.push(20);
-      ASSERT_EQ(target, 19);
-      ASSERT_EQ(target2, 20);
-      b.push(3);
-      ASSERT_EQ(target, 3);
-      ASSERT_EQ(target2, 20);
-      b.finish();
-      ASSERT_EQ(target, 0);
-      ASSERT_EQ(target2, 20);
-    }
-    ASSERT_EQ(target, 0);
-    ASSERT_EQ(target2, 0);
   }
 }
