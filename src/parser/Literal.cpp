@@ -5,6 +5,7 @@
 #include "parser/Literal.h"
 
 #include <utility>
+#include <variant>
 
 namespace ad_utility::triple_component {
 // __________________________________________
@@ -75,17 +76,20 @@ Literal Literal::literalWithNormalizedContent(
     return Literal(normalizedRdfContent);
   }
 
-  if (std::holds_alternative<std::string>(descriptor.value())) {
-    NormalizedString languageTag =
-        RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
-    return {normalizedRdfContent, languageTag};
-  }
+  auto literalWithLanguageTag =
+      [&normalizedRdfContent](const std::string& languageTag) {
+        NormalizedString normalizedLanguageTag =
+            RdfEscaping::normalizeLanguageTag(languageTag);
+        return Literal(normalizedRdfContent, normalizedLanguageTag);
+      };
 
-  else if (std::holds_alternative<Iri>(descriptor.value())) {
-    return {normalizedRdfContent, std::get<Iri>(descriptor.value())};
-  }
+  auto literalWithDatatype = [normalizedRdfContent](const Iri& iri) {
+    return Literal(normalizedRdfContent, iri);
+  };
 
-  AD_THROW("Descriptor variable holds unsupported value type.");
+  return std::visit(ad_utility::OverloadCallOperator{literalWithLanguageTag,
+                                                     literalWithDatatype},
+                    descriptor.value());
 }
 
 }  // namespace ad_utility::triple_component

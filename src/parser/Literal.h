@@ -39,11 +39,10 @@ class Literal {
   //   RDFEscaping.h). If the second argument is set and of type IRI, it is
   //   stored as the datatype of the given literal. If the second argument is
   //   set and of type string, it is interpreted as the language tag of the
-  //   given literal. Otherwise, the literal is stored without any descriptor.
+  //   given literal. Otherwise, the literal is stored without any iri.
   static Literal literalWithNormalizedContent(
       const NormalizedString& normalizedRdfContent,
-      const std::optional<std::variant<Iri, string>>& descriptor =
-          std::nullopt);
+      const std::optional<std::variant<Iri, string>>& iri = std::nullopt);
 
  public:
   // Return true if the literal has an assigned language tag
