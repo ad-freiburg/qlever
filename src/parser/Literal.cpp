@@ -54,42 +54,35 @@ Literal Literal::literalWithQuotes(
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
 
-  if (!descriptor.has_value()) {
-    return Literal(content);
-  }
-
-  if (std::holds_alternative<std::string>(descriptor.value())) {
-    NormalizedString languageTag =
-        RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
-    return {content, languageTag};
-  }
-
-  else if (std::holds_alternative<Iri>(descriptor.value())) {
-    return {content, std::get<Iri>(descriptor.value())};
-  }
-
-  AD_THROW("Descriptor variable holds unsupported value type.");
+  return literalWithNormalizedContent(content, descriptor);
 }
 
 // __________________________________________
 Literal Literal::literalWithoutQuotes(
     const string& rdfContentWithoutQuotes,
-    std::optional<std::variant<Iri, string>> descriptor) {
+    const std::optional<std::variant<Iri, string>>& descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
 
+  return literalWithNormalizedContent(content, descriptor);
+}
+
+// __________________________________________
+Literal Literal::literalWithNormalizedContent(
+    const NormalizedString& normalizedRdfContent,
+    const std::optional<std::variant<Iri, string>>& descriptor) {
   if (!descriptor.has_value()) {
-    return Literal(content);
+    return Literal(normalizedRdfContent);
   }
 
   if (std::holds_alternative<std::string>(descriptor.value())) {
     NormalizedString languageTag =
         RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
-    return {content, languageTag};
+    return {normalizedRdfContent, languageTag};
   }
 
   else if (std::holds_alternative<Iri>(descriptor.value())) {
-    return {content, std::get<Iri>(descriptor.value())};
+    return {normalizedRdfContent, std::get<Iri>(descriptor.value())};
   }
 
   AD_THROW("Descriptor variable holds unsupported value type.");

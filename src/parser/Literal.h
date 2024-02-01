@@ -34,6 +34,17 @@ class Literal {
   // Create a new literal with a language tag
   Literal(NormalizedString content, NormalizedString languageTag);
 
+  // Create a new Literal with optional datatype or language tag.
+  //   The literal content is expected to be already normalized (see
+  //   RDFEscaping.h). If the second argument is set and of type IRI, it is
+  //   stored as the datatype of the given literal. If the second argument is
+  //   set and of type string, it is interpreted as the language tag of the
+  //   given literal. Otherwise, the literal is stored without any descriptor.
+  static Literal literalWithNormalizedContent(
+      const NormalizedString& normalizedRdfContent,
+      const std::optional<std::variant<Iri, string>>& descriptor =
+          std::nullopt);
+
  public:
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
@@ -53,29 +64,30 @@ class Literal {
   // prefix. Throws an exception if the literal has no datatype.
   Iri getDatatype() const;
 
-  // Create a new Literal with optional datatype or language tag
+  // Create a new Literal with optional datatype or language tag.
   //   The rdfContent is expected to be a valid string according to SPARQL 1.1
   //   Query Language, 19.8 Grammar, Rule [145], and to be surrounded by
   //   quotation marks (", """, ', or '''). If the second argument is set and of
   //   type IRI, it is stored as the datatype of the given literal. If the
   //   second argument is set and of type string, it is interpreted as the
-  //   language type of the given literal. Otherwise, the literal is stored
+  //   language tag of the given literal. Otherwise, the literal is stored
   //   without any descriptor.
   static Literal literalWithQuotes(
       const std::string& rdfContentWithQuotes,
       const std::optional<std::variant<Iri, string>>& descriptor =
           std::nullopt);
 
-  // Create a new Literal with optional datatype or language tag
+  // Create a new Literal with optional datatype or language tag.
   //   The rdfContent is expected to be a valid string according to SPARQL 1.1
   //   Query Language, 19.8 Grammar, Rule [145], BUT NOT TO BE surrounded by
-  //   quotation marks (", """, ', or '''). If the second argument is set and of
+  //   quotation marks. If the second argument is set and of
   //   type IRI, it is stored as the datatype of the given literal. If the
   //   second argument is set and of type string, it is interpreted as the
-  //   language type of the given literal. Otherwise, the literal is stored
+  //   language tag of the given literal. Otherwise, the literal is stored
   //   without any descriptor.
   static Literal literalWithoutQuotes(
       const std::string& rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      const std::optional<std::variant<Iri, string>>& descriptor =
+          std::nullopt);
 };
 }  // namespace ad_utility::triple_component
