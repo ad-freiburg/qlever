@@ -269,5 +269,7 @@ using parallel_tag = int;
 }  // namespace ad_utility
 #endif
 constexpr size_t NUM_SORT_THREADS = 4;
+/// ANSI escape sequence for bold text in the console
 constexpr std::string_view EMPH_ON = "\033[1m";
+/// ANSI escape sequence to print "normal" text again in the console.
 constexpr std::string_view EMPH_OFF = "\033[22m";
