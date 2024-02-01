@@ -8,9 +8,7 @@
 #pragma once
 #include <string_view>
 namespace qlever::version {
-// The git hash of the commit that was used to QLever.
-extern const std::string_view GitHash;
-// Short version of GitHash
+// Short version of the hash of the commit that was used to QLever.
 extern const std::string_view GitShortHash;
 // The date and time at which QLever was compiled.
 extern const std::string_view DatetimeOfCompilation;

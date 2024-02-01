@@ -884,7 +884,7 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git-hash"] = qlever::version::GitHash;
+  configuration["git-hash"] = qlever::version::GitShortHash;
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
@@ -896,8 +896,7 @@ void IndexImpl::readConfiguration() {
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << configurationJson_["git-hash"].get<std::string_view>().substr(
-                     0, 6)
+              << configurationJson_["git-hash"].get<std::string_view>()
               << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
