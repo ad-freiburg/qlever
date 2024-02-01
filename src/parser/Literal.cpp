@@ -48,31 +48,51 @@ NormalizedStringView Literal::getLanguageTag() const {
 }
 
 // __________________________________________
-Literal Literal::literalWithQuotes(const std::string& contentWithQuotes) {
-  return Literal(RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes));
+Literal Literal::literalWithQuotes(
+    const string& rdfContentWithQuotes,
+    const std::optional<std::variant<Iri, string>>& descriptor) {
+  NormalizedString content =
+      RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
+
+  if (!descriptor.has_value()) {
+    return Literal(content);
+  }
+
+  if (std::holds_alternative<std::string>(descriptor.value())) {
+    NormalizedString languageTag =
+        RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
+    return {content, languageTag};
+  }
+
+  else if (std::holds_alternative<Iri>(descriptor.value())) {
+    return {content, std::get<Iri>(descriptor.value())};
+  }
+
+  AD_THROW("Descriptor variable holds unsupported value type.");
 }
-Literal Literal::literalWithoutQuotes(const std::string& contentWithoutQuotes) {
-  return Literal(
-      RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes));
+
+// __________________________________________
+Literal Literal::literalWithoutQuotes(
+    const string& rdfContentWithoutQuotes,
+    std::optional<std::variant<Iri, string>> descriptor) {
+  NormalizedString content =
+      RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
+
+  if (!descriptor.has_value()) {
+    return Literal(content);
+  }
+
+  if (std::holds_alternative<std::string>(descriptor.value())) {
+    NormalizedString languageTag =
+        RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
+    return {content, languageTag};
+  }
+
+  else if (std::holds_alternative<Iri>(descriptor.value())) {
+    return {content, std::get<Iri>(descriptor.value())};
+  }
+
+  AD_THROW("Descriptor variable holds unsupported value type.");
 }
-Literal Literal::literalWithQuotesWithDatatype(
-    const std::string& contentWithQuotes, Iri datatype) {
-  return {RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes),
-          std::move(datatype)};
-}
-Literal Literal::literalWithoutQuotesWithDatatype(
-    const std::string& contentWithoutQuotes, Iri datatype) {
-  return {RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes),
-          std::move(datatype)};
-}
-Literal Literal::literalWithQuotesWithLanguageTag(
-    const std::string& contentWithQuotes, const std::string& languageTag) {
-  return {RdfEscaping::normalizeLiteralWithQuotes(contentWithQuotes),
-          RdfEscaping::normalizeLanguageTag(languageTag)};
-}
-Literal Literal::literalWithoutQuotesWithLanguageTag(
-    const std::string& contentWithoutQuotes, const std::string& languageTag) {
-  return {RdfEscaping::normalizeLiteralWithoutQuotes(contentWithoutQuotes),
-          RdfEscaping::normalizeLanguageTag(languageTag)};
-}
+
 }  // namespace ad_utility::triple_component

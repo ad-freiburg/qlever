@@ -79,45 +79,6 @@ NormalizedStringView LiteralOrIri::getContent() const {
 }
 
 // __________________________________________
-LiteralOrIri LiteralOrIri::literalWithQuotes(const string& contentWithQuotes) {
-  return LiteralOrIri{Literal::literalWithQuotes(contentWithQuotes)};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithoutQuotes(
-    const std::string& contentWithoutQuotes) {
-  return LiteralOrIri{Literal::literalWithoutQuotes(contentWithoutQuotes)};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithQuotesWithDatatype(
-    const std::string& contentWithQuotes, Iri datatype) {
-  return LiteralOrIri{Literal::literalWithQuotesWithDatatype(
-      contentWithQuotes, std::move(datatype))};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithoutQuotesWithDatatype(
-    const std::string& contentWithoutQuotes, Iri datatype) {
-  return LiteralOrIri{Literal::literalWithoutQuotesWithDatatype(
-      contentWithoutQuotes, std::move(datatype))};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithQuotesWithLanguageTag(
-    const std::string& contentWithQuotes, const std::string& languageTag) {
-  return LiteralOrIri{Literal::literalWithQuotesWithLanguageTag(
-      contentWithQuotes, languageTag)};
-}
-
-// __________________________________________
-LiteralOrIri LiteralOrIri::literalWithoutQuotesWithLanguageTag(
-    const std::string& contentWithoutQuotes, const std::string& languageTag) {
-  return LiteralOrIri{Literal::literalWithoutQuotesWithLanguageTag(
-      contentWithoutQuotes, languageTag)};
-}
-
-// __________________________________________
 LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
   return LiteralOrIri{Iri::iriref(stringWithBrackets)};
 }
@@ -126,5 +87,21 @@ LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
 LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
                                        const std::string& suffix) {
   return LiteralOrIri{Iri::prefixed(prefix, suffix)};
+}
+
+// __________________________________________
+LiteralOrIri LiteralOrIri::literalWithQuotes(
+    const string& rdfContentWithQuotes,
+    const std::optional<std::variant<Iri, string>>& descriptor) {
+  return LiteralOrIri(
+      Literal::literalWithQuotes(rdfContentWithQuotes, descriptor));
+}
+
+// __________________________________________
+LiteralOrIri LiteralOrIri::literalWithoutQuotes(
+    const string& rdfContentWithoutQuotes,
+    const std::optional<std::variant<Iri, string>>& descriptor) {
+  return LiteralOrIri(
+      Literal::literalWithoutQuotes(rdfContentWithoutQuotes, descriptor));
 }
 }  // namespace ad_utility::triple_component

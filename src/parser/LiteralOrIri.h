@@ -65,36 +65,31 @@ class LiteralOrIri {
   // Return the content of the contained Iri, or the contained Literal
   NormalizedStringView getContent() const;
 
-  // Create a new Literal without datatype or language tag
-  //   Content is expected to be surrounded by quotation marks.
-  static LiteralOrIri literalWithQuotes(const std::string& contentWithQuotes);
+  // Create a new Literal with optional datatype or language tag
+  //   The rdfContent is expected to be a valid string according to SPARQL 1.1
+  //   Query Language, 19.8 Grammar, Rule [145], and to be surrounded by
+  //   quotation marks (", """, ', or '''). If the second argument is set and of
+  //   type IRI, it is stored as the datatype of the given literal. If the
+  //   second argument is set and of type string, it is interpreted as the
+  //   language type of the given literal. Otherwise, the literal is stored
+  //   without any descriptor.
+  static LiteralOrIri literalWithQuotes(
+      const std::string& rdfContentWithQuotes,
+      const std::optional<std::variant<Iri, string>>& descriptor =
+          std::nullopt);
 
-  // Create a new Literal without datatype or language tag
-  //   Content is expected to not be surrounded by quotation marks.
+  // Create a new Literal with optional datatype or language tag
+  //   The rdfContent is expected to be a valid string according to SPARQL 1.1
+  //   Query Language, 19.8 Grammar, Rule [145], BUT NOT TO BE surrounded by
+  //   quotation marks (", """, ', or '''). If the second argument is set and of
+  //   type IRI, it is stored as the datatype of the given literal. If the
+  //   second argument is set and of type string, it is interpreted as the
+  //   language type of the given literal. Otherwise, the literal is stored
+  //   without any descriptor.
   static LiteralOrIri literalWithoutQuotes(
-      const std::string& contentWithoutQuotes);
-
-  // Create a new Literal with datatype
-  //   Content is expected to be surrounded by quotation marks.
-  static LiteralOrIri literalWithQuotesWithDatatype(
-      const std::string& contentWithQuotes, Iri datatype);
-
-  // Create a new Literal with datatype
-  //   Content is expected to not be surrounded by quotation marks.
-  static LiteralOrIri literalWithoutQuotesWithDatatype(
-      const std::string& contentWithoutQuotes, Iri datatype);
-
-  // Create a new Literal with language tag
-  //   Content is expected to be surrounded by quotation marks.
-  //   Language Tag can optionally start with an @ character.
-  static LiteralOrIri literalWithQuotesWithLanguageTag(
-      const std::string& contentWithQuotes, const std::string& languageTag);
-
-  // Create a new Literal with language tag
-  //   Content is expected to not be surrounded by quotation marks.
-  //   Language Tag can optionally start with an @ character.
-  static LiteralOrIri literalWithoutQuotesWithLanguageTag(
-      const std::string& contentWithoutQuotes, const std::string& languageTag);
+      const std::string& rdfContentWithoutQuotes,
+      const std::optional<std::variant<Iri, string>>& descriptor =
+          std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets
   static LiteralOrIri iriref(const std::string& stringWithBrackets);

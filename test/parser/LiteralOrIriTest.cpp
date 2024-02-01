@@ -31,7 +31,7 @@ TEST(LiteralTest, LiteralTest) {
 }
 
 TEST(LiteralTest, LiteralTestWithDatatype) {
-  Literal literal = Literal::literalWithoutQuotesWithDatatype(
+  Literal literal = Literal::literalWithoutQuotes(
       "Hello World", Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.hasLanguageTag());
@@ -43,8 +43,7 @@ TEST(LiteralTest, LiteralTestWithDatatype) {
 }
 
 TEST(LiteralTest, LiteralTestWithLanguagetag) {
-  Literal literal =
-      Literal::literalWithoutQuotesWithLanguageTag("Hallo Welt", "@de");
+  Literal literal = Literal::literalWithoutQuotes("Hallo Welt", "@de");
 
   EXPECT_TRUE(literal.hasLanguageTag());
   EXPECT_FALSE(literal.hasDatatype());
@@ -110,7 +109,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
-  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotesWithDatatype(
+  LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
       "Hello World", Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.isIri());
@@ -125,7 +124,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
-  LiteralOrIri literal = LiteralOrIri::literalWithQuotesWithDatatype(
+  LiteralOrIri literal = LiteralOrIri::literalWithQuotes(
       "\"Hello World\"",
       Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
@@ -142,7 +141,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
   LiteralOrIri literal =
-      LiteralOrIri::literalWithoutQuotesWithLanguageTag("Hej världen", "@se");
+      LiteralOrIri::literalWithoutQuotes("Hej världen", "@se");
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -155,8 +154,8 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
-  LiteralOrIri literal = LiteralOrIri::literalWithQuotesWithLanguageTag(
-      "'''Hej världen'''", "@se");
+  LiteralOrIri literal =
+      LiteralOrIri::literalWithQuotes("'''Hej världen'''", "@se");
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -171,10 +170,9 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndLanguageTag) {
 TEST(LiteralOrIri, GetContent) {
   LiteralOrIri iri = LiteralOrIri::iriref("<https://example.org/books/book1>");
   LiteralOrIri literalWithLanguageTag =
-      LiteralOrIri::literalWithoutQuotesWithLanguageTag("Hello World", "@de");
-  LiteralOrIri literalWithDatatype =
-      LiteralOrIri::literalWithoutQuotesWithDatatype(
-          "ABC", Iri::iriref("<https://example.org>"));
+      LiteralOrIri::literalWithoutQuotes("Hello World", "@de");
+  LiteralOrIri literalWithDatatype = LiteralOrIri::literalWithoutQuotes(
+      "ABC", Iri::iriref("<https://example.org>"));
 
   EXPECT_THAT("https://example.org/books/book1",
               asStringViewUnsafe(iri.getContent()));
