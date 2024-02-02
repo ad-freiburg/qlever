@@ -5,7 +5,6 @@
 #ifndef QLEVER_CANCELLATIONHANDLE_H
 #define QLEVER_CANCELLATIONHANDLE_H
 
-#include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
@@ -98,6 +97,10 @@ class CancellationException : public std::runtime_error {
                                : "Query was manually cancelled."} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
+
+  /// Field that stores some metadata, that can be set and passed with this
+  /// rethrown exception
+  std::string operation_{};
 };
 
 // Ensure no locks are used

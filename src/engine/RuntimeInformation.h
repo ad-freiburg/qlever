@@ -38,7 +38,8 @@ class RuntimeInformation {
     lazilyMaterialized,
     optimizedOut,
     failed,
-    failedBecauseChildFailed
+    failedBecauseChildFailed,
+    cancelled
   };
   using enum Status;
 

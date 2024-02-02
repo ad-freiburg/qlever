@@ -167,10 +167,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
 // _____________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
-  auto lastRow = createExecutionTrees(pq);
-  auto minInd = findCheapestExecutionTree(lastRow);
-  LOG(DEBUG) << "Done creating execution plan.\n";
-  return *lastRow[minInd]._qet;
+  try {
+    auto lastRow = createExecutionTrees(pq);
+    auto minInd = findCheapestExecutionTree(lastRow);
+    LOG(DEBUG) << "Done creating execution plan.\n";
+    return *lastRow[minInd]._qet;
+  } catch (ad_utility::CancellationException& e) {
+    e.operation_ = "Query planning";
+    throw;
+  }
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(

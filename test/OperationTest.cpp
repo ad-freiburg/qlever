@@ -154,7 +154,7 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   }};
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(),
                                         ::testing::HasSubstr("timed out"),
-                                        ad_utility::AbortException);
+                                        ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________

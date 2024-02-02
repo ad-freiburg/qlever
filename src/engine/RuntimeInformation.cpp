@@ -159,6 +159,8 @@ std::string_view RuntimeInformation::toString(Status status) {
       return "failed";
     case failedBecauseChildFailed:
       return "failed because child failed";
+    case cancelled:
+      return "cancelled";
   }
   AD_FAIL();
 }
