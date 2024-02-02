@@ -34,12 +34,8 @@ class Literal {
   // Create a new literal with a language tag
   Literal(NormalizedString content, NormalizedString languageTag);
 
-  // Create a new Literal with optional datatype or language tag.
-  //   The literal content is expected to be already normalized (see
-  //   RDFEscaping.h). If the second argument is set and of type IRI, it is
-  //   stored as the datatype of the given literal. If the second argument is
-  //   set and of type string, it is interpreted as the language tag of the
-  //   given literal. Otherwise, the literal is stored without any descriptor.
+  // Similar to `literalWithQuotes`, except the rdfContent is expected to
+  // already be normalized
   static Literal literalWithNormalizedContent(
       NormalizedString normalizedRdfContent,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
@@ -63,12 +59,14 @@ class Literal {
   // prefix. Throws an exception if the literal has no datatype.
   Iri getDatatype() const;
 
-  // Factory functions to create `Literal`s. For their exact documentation, see
-  // the functions with the exact same name in the `LiteralOrIri` class.
+  // For documentation, see documentation of function
+  // LiteralORIri::literalWithQuotes
   static Literal literalWithQuotes(
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
 
+  // For documentation, see documentation of function
+  // LiteralORIri::literalWithoutQuotes
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);

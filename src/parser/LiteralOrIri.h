@@ -65,22 +65,22 @@ class LiteralOrIri {
   // Return the content of the contained Iri, or the contained Literal
   NormalizedStringView getContent() const;
 
-  // Create a new Literal with optional datatype or language tag
+  // Create a new Literal with optional datatype or language tag.
   //   The rdfContent is expected to be a valid string according to SPARQL 1.1
   //   Query Language, 19.8 Grammar, Rule [145], and to be surrounded by
   //   quotation marks (", """, ', or '''). If the second argument is set and of
   //   type IRI, it is stored as the datatype of the given literal. If the
   //   second argument is set and of type string, it is interpreted as the
-  //   language type of the given literal (The @ is optional for language tags
-  //   so "@en" and just "en" will be interpreted in the same way). Otherwise,
-  //   the literal is stored without any descriptor.
+  //   language tag of the given literal. The language tag string can optionally
+  //   start with an @ character, which is removed during the automatic
+  //   normalization. If no second argument is set, the literal is stored
+  //   without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
 
-  // Same as `literalWithQuotes` above, but the content is passed in without
-  // surrounding quotation marks. So `literalWithQuotes("\"hello\"")` and
-  // `literalWithoutQuotes("hello")` will lead to the exact same results.
+  // Similar to `literalWithQuotes`, except the rdfContent is expected to NOT BE
+  // surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);

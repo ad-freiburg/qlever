@@ -5,6 +5,7 @@
 #include "parser/Literal.h"
 
 #include <utility>
+#include <variant>
 
 namespace ad_utility::triple_component {
 // __________________________________________
