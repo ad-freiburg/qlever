@@ -223,7 +223,8 @@ class Operation {
   AD_ALWAYS_INLINE void checkCancellation(
       ad_utility::source_location location =
           ad_utility::source_location::current()) const {
-    cancellationHandle_->throwIfCancelled(location);
+    cancellationHandle_->throwIfCancelled(location,
+                                          [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;

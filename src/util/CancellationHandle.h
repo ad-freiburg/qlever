@@ -76,19 +76,26 @@ struct PseudoStopToken {
   bool running_;
   explicit PseudoStopToken(bool running) : running_{running} {}
 };
+
+/// Helper function to print a warning if `executionStage` is not empty.
+inline void printAdditionalDetails(std::string_view executionStage) {
+  if (executionStage.empty()) {
+    return;
+  }
+  LOG(WARN) << " at stage \"" << executionStage << '"';
+}
+
+constexpr auto printNothing = []() constexpr { return ""; };
 }  // namespace detail
 
 /// An exception signalling an cancellation
 class CancellationException : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
-  CancellationException(CancellationState reason,
-                        ad_utility::source_location location)
-      : std::runtime_error{absl::StrCat(
-            "Cancelled due to ",
-            reason == CancellationState::TIMEOUT ? "timeout"
-                                                 : "manual cancellation",
-            " at ", location.file_name(), ":", location.line())} {
+  CancellationException(CancellationState reason)
+      : std::runtime_error{reason == CancellationState::TIMEOUT
+                               ? "Query timed out."
+                               : "Query was manually cancelled."} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
 };
@@ -126,7 +133,9 @@ class CancellationHandle {
   /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
   /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   void pleaseWatchDog(CancellationState state,
-                      ad_utility::source_location location)
+                      ad_utility::source_location location,
+                      const ad_utility::InvocableWithConvertibleReturnType<
+                          std::string_view> auto& stageInvocable)
       requires WatchDogEnabled {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
@@ -141,7 +150,7 @@ class CancellationHandle {
               state, CancellationState::NOT_CANCELLED,
               std::memory_order_relaxed)) {
         if (windowMissed) {
-          LOG(WARN) << "The time since the last timeout check is at least "
+          LOG(WARN) << "No timeout check has been performed for at least "
                     << ParseableDuration{duration_cast<DurationType>(
                                              steady_clock::now() -
                                              startTimeoutWindow_.load()) +
@@ -149,7 +158,9 @@ class CancellationHandle {
                     << ", should be at most "
                     << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                     << ". Checked at " << location.file_name() << ":"
-                    << location.line() << std::endl;
+                    << location.line();
+          detail::printAdditionalDetails(std::invoke(stageInvocable));
+          LOG(WARN) << std::endl;
         }
         break;
       }
@@ -179,9 +190,12 @@ class CancellationHandle {
   /// nothing otherwise. If `WatchDogEnabled` is true, this will log a warning
   /// if this check is not called frequently enough. It will contain the
   /// filename and line of the caller of this method.
+  template <ad_utility::InvocableWithConvertibleReturnType<std::string_view>
+                Func = decltype(detail::printNothing)>
   AD_ALWAYS_INLINE void throwIfCancelled(
       [[maybe_unused]] ad_utility::source_location location =
-          ad_utility::source_location::current()) {
+          ad_utility::source_location::current(),
+      const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
@@ -189,11 +203,11 @@ class CancellationHandle {
       }
       if constexpr (WatchDogEnabled) {
         if (!detail::isCancelled(state)) {
-          pleaseWatchDog(state, location);
+          pleaseWatchDog(state, location, stageInvocable);
           return;
         }
       }
-      throw CancellationException{state, location};
+      throw CancellationException{state};
     }
   }
 
@@ -210,7 +224,7 @@ class CancellationHandle {
       bool isCancelled = detail::isCancelled(state);
       if constexpr (WatchDogEnabled) {
         if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
-          pleaseWatchDog(state, location);
+          pleaseWatchDog(state, location, detail::printNothing);
         }
       }
       return isCancelled;
