@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "../util/Log.h"
+#include "parser/TurtleParser.h"
 
 using std::array;
 using std::string;

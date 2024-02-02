@@ -2,6 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Andre Schlegel (December of 2023,
 // schlegea@informatik.uni-freiburg.de)
+#include <absl/strings/str_cat.h>
+
+#include <string_view>
 
 #pragma once
 
@@ -15,14 +18,11 @@ be!
 */
 
 // The strings to compare against.
-#include <absl/strings/str_cat.h>
-
-#include <string_view>
 constexpr std::string_view emptyConfigManagerExpectedString =
     "No configuration options were defined.";
-constexpr std::string_view exampleConfigManagerExpectedNotDetailedString =
-    R"--(Configuration:
-{
+constexpr std::string_view
+    exampleConfigManagerExpectedprintConfigurationDocJsonString =
+        R"--({
   "booleanWithoutDescriptionWithoutDefaultValueWithoutValidator": "[must be specified]",
   "booleanWithoutDescriptionWithoutDefaultValueWithValidator": "[must be specified]",
   "booleanWithoutDescriptionWithDefaultValueWithKeepDefaultValueWithoutValidator": true,
@@ -509,10 +509,9 @@ constexpr std::string_view exampleConfigManagerExpectedNotDetailedString =
   }
 })--";
 
-inline const std::string& exampleConfigManagerExpectedDetailedString =
-    absl::StrCat(exampleConfigManagerExpectedNotDetailedString, R"--(
-
-Option 'booleanWithoutDescriptionWithoutDefaultValueWithoutValidator' [boolean]
+constexpr std::string_view
+    exampleConfigManagerExpectedprintConfigurationDocDetailedListString =
+        R"--(Option 'booleanWithoutDescriptionWithoutDefaultValueWithoutValidator' [boolean]
 Value: [must be specified]
 
 Option 'booleanWithoutDescriptionWithoutDefaultValueWithValidator' [boolean]
@@ -1680,4 +1679,4 @@ Sub manager 'subManager'
     Value: [must be specified]
     
     Required invariants:
-        - Validator for configuration options doubleArgumentValidatorFirstArgument, doubleArgumentValidatorSecondArgument.)--");
+        - Validator for configuration options doubleArgumentValidatorFirstArgument, doubleArgumentValidatorSecondArgument.)--";

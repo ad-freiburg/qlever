@@ -250,4 +250,9 @@ class Index {
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+
+  /*
+  @brief Print the detailed documentation of the options for the index builder.
+  */
+  std::string getConfigurationDocForIndexBuilder();
 };

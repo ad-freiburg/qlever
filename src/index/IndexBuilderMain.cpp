@@ -139,7 +139,8 @@ int main(int argc, char** argv) {
   try {
     po::store(po::parse_command_line(argc, argv, boostOptions), optionsMap);
     if (optionsMap.count("help")) {
-      std::cout << boostOptions << '\n';
+      std::cout << boostOptions << '\n'
+                << index.getConfigurationDocForIndexBuilder() << '\n';
       return EXIT_SUCCESS;
     }
     po::notify(optionsMap);

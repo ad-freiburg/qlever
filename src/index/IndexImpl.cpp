@@ -9,12 +9,14 @@
 #include <algorithm>
 #include <cstdio>
 #include <future>
+#include <memory>
 #include <optional>
 #include <unordered_map>
 
 #include "CompilationInfo.h"
 #include "absl/strings/str_join.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -22,12 +24,16 @@
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
+#include "util/Date.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
 #include "util/TypeTraits.h"
+#include "util/json.h"
 
 using std::array;
 using namespace ad_utility::memory_literals;
@@ -892,18 +898,75 @@ void IndexImpl::writeConfiguration() const {
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
-  f >> configurationJson_;
-  if (configurationJson_.find("git-hash") != configurationJson_.end()) {
-    LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git-hash"]).substr(0, 6)
-              << std::endl;
-  } else {
-    LOG(INFO) << "The index was built before git commit hashes were stored in "
-                 "the index meta data"
-              << std::endl;
-  }
+  ad_utility::ConfigManager config{};
 
+  // TODO Write a description.
+  std::string gitHash;
+  config.addOption("git-hash", "", &gitHash, {});
+
+  // TODO Write a description.
+  bool boolPrefixes;
+  config.addOption("prefixes", "", &boolPrefixes, false);
+
+  // TODO Write a description.
+  bool hasAllPermutations;
+  config.addOption("has-all-permutations", "", &hasAllPermutations, true);
+
+  // TODO Write a description.
+  std::vector<std::string> prefixesExternal;
+  config.addOption("prefixes-external", "", &prefixesExternal, {});
+
+  decltype(auto) localeManager = config.addSubManager({"locale"s});
+  // TODO Write a description.
+  std::string lang;
+  localeManager.addOption("language", "", &lang);
+
+  // TODO Write a description.
+  std::string country;
+  localeManager.addOption("country", "", &country);
+
+  // TODO Write a description.
+  bool ignorePunctuation;
+  localeManager.addOption("ignore-punctuation", "", &ignorePunctuation);
+
+  // TODO Write a description.
+  std::vector<std::string> languagesInternal;
+  config.addOption("languages-internal", "", &languagesInternal, {"en"});
+
+  // TODO Write a description.
+  config.addOption("num-predicates-normal", "", &numPredicatesNormal_);
+  // These might be missing if there are only two permutations.
+  config.addOption("num-subjects-normal", "", &numSubjectsNormal_, 0UL);
+  config.addOption("num-objects-normal", "", &numObjectsNormal_, 0UL);
+  config.addOption("num-triples-normal", "", &numTriplesNormal_);
+
+  /*
+  We check those options manually below, but add the options anyway for
+  documentation and parsing purpose. (A config manager doesn't allow any
+  options to be passed, that are not registered within him.)
+  */
+  decltype(auto) indexFormatVersionManager =
+      config.addSubManager({"index-format-version"s});
+  size_t indexFormatVersionPullRequestNumber;
+  indexFormatVersionManager.addOption("pull-request-number",
+                                      "The number of the pull request that "
+                                      "changed the index format most recently.",
+                                      &indexFormatVersionPullRequestNumber);
+  std::string indexFormatVersionDate;
+  indexFormatVersionManager.addOption(
+      "date", "The date of the last breaking change of the index format.",
+      &indexFormatVersionDate);
+
+  configurationJson_ = fileToJson<json>(onDiskBase_ + CONFIGURATION_FILE);
+
+  /*
+  Because an out of date index format version can cause the parsing for
+  configuration options to fail, we have to manually check it before parsing.
+
+  For example: Old configuration option could have been deleted. Trying to set
+  those, would cause an error, before we could actually parse the index format
+  version.
+  */
   if (configurationJson_.find("index-format-version") !=
       configurationJson_.end()) {
     auto indexFormatVersion = static_cast<qlever::IndexFormatVersion>(
@@ -940,76 +1003,40 @@ void IndexImpl::readConfiguration() {
         "Incompatible index format, see log message for details"};
   }
 
-  if (configurationJson_.find("prefixes") != configurationJson_.end()) {
-    if (configurationJson_["prefixes"]) {
-      vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
-      for (string prefix; std::getline(prefixFile, prefix);) {
-        prefixes.emplace_back(
-            RdfEscaping::unescapeNewlinesAndBackslashes(prefix));
-      }
-      vocab_.buildCodebookForPrefixCompression(prefixes);
-    } else {
-      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
-    }
-  }
+  config.parseConfig(configurationJson_);
 
-  if (configurationJson_.find("prefixes-external") !=
-      configurationJson_.end()) {
-    vocab_.initializeExternalizePrefixes(
-        configurationJson_["prefixes-external"]);
-  }
-
-  if (configurationJson_.count("ignore-case")) {
-    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
-    throw std::runtime_error("Deprecated key \"ignore-case\" in index build");
-  }
-
-  if (configurationJson_.count("locale")) {
-    std::string lang{configurationJson_["locale"]["language"]};
-    std::string country{configurationJson_["locale"]["country"]};
-    bool ignorePunctuation{configurationJson_["locale"]["ignore-punctuation"]};
-    vocab_.setLocale(lang, country, ignorePunctuation);
-    textVocab_.setLocale(lang, country, ignorePunctuation);
+  if (!gitHash.empty()) {
+    LOG(INFO) << "The git hash used to build this index was "
+              << gitHash.substr(0, 6) << std::endl;
   } else {
-    LOG(ERROR) << "Key \"locale\" is missing in the metadata. This is probably "
-                  "and old index build that is no longer supported by QLever. "
-                  "Please rebuild your index\n";
-    throw std::runtime_error(
-        "Missing required key \"locale\" in index build's metadata");
+    LOG(INFO) << "The index was built before git commit hashes were stored in "
+                 "the index meta data"
+              << std::endl;
   }
 
-  if (configurationJson_.find("languages-internal") !=
-      configurationJson_.end()) {
-    vocab_.initializeInternalizedLangs(
-        configurationJson_["languages-internal"]);
-  }
-
-  auto loadDataMember = [this]<typename Target>(
-                            std::string_view key, Target& target,
-                            std::optional<std::type_identity_t<Target>>
-                                defaultValue = std::nullopt) {
-    auto it = configurationJson_.find(key);
-    if (it == configurationJson_.end()) {
-      if (defaultValue.has_value()) {
-        target = std::move(defaultValue.value());
-      } else {
-        throw std::runtime_error{absl::StrCat(
-            "The required key \"", key,
-            "\" was not found in the `meta-data.json`. Most likely this index "
-            "was built with an older version of QLever and should be rebuilt")};
-      }
-    } else {
-      target = Target{*it};
+  if (boolPrefixes) {
+    vector<string> prefixes;
+    auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
+    for (string prefix; std::getline(prefixFile, prefix);) {
+      prefixes.emplace_back(
+          RdfEscaping::unescapeNewlinesAndBackslashes(prefix));
     }
-  };
+    vocab_.buildCodebookForPrefixCompression(prefixes);
+  } else {
+    vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
+  }
 
-  loadDataMember("has-all-permutations", loadAllPermutations_, true);
-  loadDataMember("num-predicates-normal", numPredicatesNormal_);
-  // These might be missing if there are only two permutations.
-  loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
-  loadDataMember("num-objects-normal", numObjectsNormal_, 0);
-  loadDataMember("num-triples-normal", numTriplesNormal_);
+  vocab_.initializeExternalizePrefixes(prefixesExternal);
+
+  vocab_.setLocale(lang, country, ignorePunctuation);
+  textVocab_.setLocale(lang, country, ignorePunctuation);
+
+  vocab_.initializeInternalizedLangs(languagesInternal);
+
+  if (!hasAllPermutations) {
+    // If the permutations simply don't exist, then we can never load them.
+    loadAllPermutations_ = false;
+  }
 
   // Compute unique ID for this index.
   //
@@ -1062,23 +1089,134 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
 }
 
 // ___________________________________________________________________________
+std::pair<ad_utility::ConfigManager,
+          std::unique_ptr<IndexImpl::IndexBuilderSettingsVariables>>
+IndexImpl::generateConfigManagerForIndexBuilderSettings() {
+  auto variables{std::make_unique<IndexImpl::IndexBuilderSettingsVariables>()};
+  ad_utility::ConfigManager config{};
+
+  config.addOption("prefixes-external",
+                   "Literals or IRIs that start with any of these prefixes "
+                   "will be stored in the external vocabulary. For example "
+                   "`[\"<\"] will externalize all IRIs",
+                   &variables->prefixesExternal_, {});
+
+  config.addOption("languages-internal",
+                   "Literals with one of these langauge tag will be stored in "
+                   "the internal vocabulary by default",
+                   &variables->languagesInternal_, {"en"});
+
+  // TODO<joka921, schlegan> It would be nice to add a description to this
+  // submanager directly, e.g. "The locale used for all operations that depend
+  // on the lexicographical order of strings, e.g. ORDER BY"
+  decltype(auto) localeManager = config.addSubManager({"locale"s});
+
+  // Should be self-explanatory with the default value.
+  decltype(auto) langOption = localeManager.addOption(
+      "language", "", &variables->localLang_, LOCALE_DEFAULT_LANG);
+
+  // Should be self-explanatory with the default value.
+  decltype(auto) countryOption = localeManager.addOption(
+      "country", "", &variables->localCountry_, LOCALE_DEFAULT_COUNTRY);
+
+  decltype(auto) ignorePunctuationOption = localeManager.addOption(
+      "ignore-punctuation",
+      "If set to true, then punctuation characters will only be considered on "
+      "the last level of comparisons. This will for example lead to the order "
+      "\"aa\", \"a.a\", \"ab\" (the first two are basically equal and the dot "
+      "is only used as a tie break)",
+      &variables->localIgnorePunctuation_, LOCALE_DEFAULT_IGNORE_PUNCTUATION);
+
+  // Validator for the entries under `locale`. Either they all must use the
+  // default value, or all must be set at runtime.
+  localeManager.addOptionValidator(
+      [](const ad_utility::ConfigOption& langOpt,
+         const ad_utility::ConfigOption& countryOpt,
+         const ad_utility::ConfigOption& ignorePunctuationOpt) {
+        return langOpt.wasSetAtRuntime() == countryOpt.wasSetAtRuntime() &&
+               countryOpt.wasSetAtRuntime() ==
+                   ignorePunctuationOpt.wasSetAtRuntime();
+      },
+      "All three options under 'locale' must be set, or none of them.",
+      "All three options under 'locale' must be set, or none of them.",
+      langOption, countryOption, ignorePunctuationOption);
+
+  config.addOption(
+      "ascii-prefixes-only",
+      "Activate a faster parsing mode that is relaxed in two ways: 1. It "
+      "doesn't work if certain corner cases of the Turtle specification are "
+      "used (e.g. certain non-alphanumeric non-ascii characters in prefixes "
+      "and IRIs). 2. It allows certain patterns that are actually not valid "
+      "turtle, for example spaces in IRIs. As parsing is not a bottleneck "
+      "anymore, we recommend setting this to `false` and making sure that the "
+      "input is valid according to the official RDF Turtle specification",
+      &onlyAsciiTurtlePrefixes_, onlyAsciiTurtlePrefixes_);
+
+  config.addOption(
+      "parallel-parsing",
+      "Enable the parallel parser, which assumes the following properties of "
+      "the Turtle input: 1. All prefix definitions are at the beginning of the "
+      "file, 2. All ends of triple blocks (denoted by a dot) are followed by a "
+      "newline (possibly with other whitespace inbetween), and a dot followed "
+      "by a newline always denotes the end of a triple block (especially there "
+      "are no multiline literals). This is true for most reasonably formatted "
+      "turtle files",
+      &useParallelParser_, useParallelParser_);
+
+  config.addOption(
+      "num-triples-per-batch",
+      "The batch size of the first phase of the index build. Lower values will "
+      "reduce the RAM consumption of this phase while a too low value might "
+      "hurt the performance of the index builder",
+      &numTriplesPerBatch_, static_cast<size_t>(NUM_TRIPLES_PER_PARTIAL_VOCAB));
+
+  config.addOption("parser-batch-size",
+                   "The internal batch size of the turtle parser. Typically "
+                   "there is no need to change this parameter.",
+                   &parserBatchSize_, PARSER_BATCH_SIZE);
+
+  decltype(auto) overflowOption = config.addOption(
+      "parser-integer-overflow-behavior",
+      "QLever stores all integer values with a fixed number of bits. This "
+      "option configures the behavior when an integer in the turtle input "
+      "cannot be represented by QLever. Note that this doesn't affect the "
+      "behavior of overflows during the query processing",
+      &variables->parserIntegerOverflowBehavior_,
+      "overflowing-integers-throw"s);
+
+  config.addValidator(
+      [](std::string_view input) {
+        return turtleParserIntegerOverflowBehaviorMap_.contains(input);
+      },
+      "value must be one of " +
+          ad_utility::lazyStrJoin(
+              std::views::keys(turtleParserIntegerOverflowBehaviorMap_), ", "),
+      "dummy description for the overflow behavior validator", overflowOption);
+
+  return {std::move(config), std::move(variables)};
+}
+
+// ___________________________________________________________________________
+std::string IndexImpl::getConfigurationDocForIndexBuilder() {
+  return generateConfigManagerForIndexBuilderSettings()
+      .first.printConfigurationDoc(true);
+}
+
+// ___________________________________________________________________________
 void IndexImpl::readIndexBuilderSettingsFromFile() {
-  json j;  // if we have no settings, we still have to initialize some default
-           // values
+  auto [config,
+        configVariablesPointer]{generateConfigManagerForIndexBuilderSettings()};
+  auto& configVariables{*configVariablesPointer};
+
+  // Set the options.
   if (!settingsFileName_.empty()) {
-    auto f = ad_utility::makeIfstream(settingsFileName_);
-    f >> j;
+    config.parseConfig(fileToJson<json>(settingsFileName_));
+  } else {
+    config.parseConfig(json(json::value_t::object));
   }
 
-  if (j.find("prefixes-external") != j.end()) {
-    vocab_.initializeExternalizePrefixes(j["prefixes-external"]);
-    configurationJson_["prefixes-external"] = j["prefixes-external"];
-  }
-
-  if (j.count("ignore-case")) {
-    LOG(ERROR) << ERROR_IGNORE_CASE_UNSUPPORTED << '\n';
-    throw std::runtime_error("Deprecated key \"ignore-case\" in settings JSON");
-  }
+  vocab_.initializeExternalizePrefixes(configVariables.prefixesExternal_);
+  configurationJson_["prefixes-external"] = configVariables.prefixesExternal_;
 
   /**
    * ICU uses two separate arguments for each Locale, the language ("en" or
@@ -1087,111 +1225,47 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    * locale setting.
    */
 
-  {
-    std::string lang = LOCALE_DEFAULT_LANG;
-    std::string country = LOCALE_DEFAULT_COUNTRY;
-    bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
-    if (j.count("locale")) {
-      lang = std::string{j["locale"]["language"]};
-      country = std::string{j["locale"]["country"]};
-      ignorePunctuation = bool{j["locale"]["ignore-punctuation"]};
-    } else {
-      LOG(INFO) << "Locale was not specified in settings file, default is "
-                   "en_US"
-                << std::endl;
-    }
-    LOG(INFO) << "You specified \"locale = " << lang << "_" << country << "\" "
-              << "and \"ignore-punctuation = " << ignorePunctuation << "\""
-              << std::endl;
+  if (configVariables.localLang_ != LOCALE_DEFAULT_LANG ||
+      configVariables.localCountry_ != LOCALE_DEFAULT_COUNTRY) {
+    LOG(WARN) << "You are using Locale settings that differ from the default "
+                 "language or country.\n\t"
+              << "This should work but is untested by the QLever team. If "
+                 "you are running into unexpected problems,\n\t"
+              << "Please make sure to also report your used locale when "
+                 "filing a bug report. Also note that changing the\n\t"
+              << "locale requires to completely rebuild the index\n";
+  }
+  vocab_.setLocale(configVariables.localLang_, configVariables.localCountry_,
+                   configVariables.localIgnorePunctuation_);
+  textVocab_.setLocale(configVariables.localLang_,
+                       configVariables.localCountry_,
+                       configVariables.localIgnorePunctuation_);
+  configurationJson_["locale"]["language"] = configVariables.localLang_;
+  configurationJson_["locale"]["country"] = configVariables.localCountry_;
+  configurationJson_["locale"]["ignore-punctuation"] =
+      configVariables.localIgnorePunctuation_;
 
-    if (lang != LOCALE_DEFAULT_LANG || country != LOCALE_DEFAULT_COUNTRY) {
-      LOG(WARN) << "You are using Locale settings that differ from the default "
-                   "language or country.\n\t"
-                << "This should work but is untested by the QLever team. If "
-                   "you are running into unexpected problems,\n\t"
-                << "Please make sure to also report your used locale when "
-                   "filing a bug report. Also note that changing the\n\t"
-                << "locale requires to completely rebuild the index\n";
-    }
-    vocab_.setLocale(lang, country, ignorePunctuation);
-    textVocab_.setLocale(lang, country, ignorePunctuation);
-    configurationJson_["locale"]["language"] = lang;
-    configurationJson_["locale"]["country"] = country;
-    configurationJson_["locale"]["ignore-punctuation"] = ignorePunctuation;
-  }
+  vocab_.initializeInternalizedLangs(configVariables.languagesInternal_);
+  configurationJson_["languages-internal"] = configVariables.languagesInternal_;
 
-  if (j.find("languages-internal") != j.end()) {
-    vocab_.initializeInternalizedLangs(j["languages-internal"]);
-    configurationJson_["languages-internal"] = j["languages-internal"];
-  }
-  if (j.count("ascii-prefixes-only")) {
-    onlyAsciiTurtlePrefixes_ = static_cast<bool>(j["ascii-prefixes-only"]);
-  }
   if (onlyAsciiTurtlePrefixes_) {
     LOG(INFO) << WARNING_ASCII_ONLY_PREFIXES << std::endl;
   }
 
-  if (j.count("parallel-parsing")) {
-    useParallelParser_ = static_cast<bool>(j["parallel-parsing"]);
-  }
   if (useParallelParser_) {
     LOG(INFO) << WARNING_PARALLEL_PARSING << std::endl;
   }
 
-  if (j.count("num-triples-per-batch")) {
-    numTriplesPerBatch_ = size_t{j["num-triples-per-batch"]};
-    LOG(INFO)
-        << "You specified \"num-triples-per-batch = " << numTriplesPerBatch_
-        << "\", choose a lower value if the index builder runs out of memory"
-        << std::endl;
-  }
+  turtleParserIntegerOverflowBehavior_ =
+      turtleParserIntegerOverflowBehaviorMap_.at(
+          configVariables.parserIntegerOverflowBehavior_);
 
-  if (j.count("parser-batch-size")) {
-    parserBatchSize_ = size_t{j["parser-batch-size"]};
-    LOG(INFO) << "Overriding setting parser-batch-size to " << parserBatchSize_
-              << " This might influence performance during index build."
-              << std::endl;
-  }
-
-  std::string overflowingIntegersThrow = "overflowing-integers-throw";
-  std::string overflowingIntegersBecomeDoubles =
-      "overflowing-integers-become-doubles";
-  std::string allIntegersBecomeDoubles = "all-integers-become-doubles";
-  std::vector<std::string_view> allModes{overflowingIntegersThrow,
-                                         overflowingIntegersBecomeDoubles,
-                                         allIntegersBecomeDoubles};
-  std::string key = "parser-integer-overflow-behavior";
-  if (j.count(key)) {
-    auto value = static_cast<std::string>(j[key]);
-    if (value == overflowingIntegersThrow) {
-      LOG(INFO) << "Integers that cannot be represented by QLever will throw "
-                   "an exception"
-                << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::Error;
-    } else if (value == overflowingIntegersBecomeDoubles) {
-      LOG(INFO) << "Integers that cannot be represented by QLever will be "
-                   "converted to doubles"
-                << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    } else if (value == allIntegersBecomeDoubles) {
-      LOG(INFO) << "All integers will be converted to doubles" << std::endl;
-      turtleParserIntegerOverflowBehavior_ =
-          TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
-    } else {
-      AD_CONTRACT_CHECK(std::ranges::find(allModes, value) == allModes.end());
-      LOG(ERROR) << "Invalid value for " << key << std::endl;
-      LOG(INFO) << "The currently supported values are "
-                << absl::StrJoin(allModes, ",") << std::endl;
-    }
-  } else {
-    turtleParserIntegerOverflowBehavior_ =
-        TurtleParserIntegerOverflowBehavior::Error;
-    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
-                 "exception (this is the default behavior)"
-              << std::endl;
-  }
+  // Logging used configuration options.
+  LOG(INFO)
+      << "Printing the configuration from the settings json file (including "
+         "implictly defaulted values). For a detailed description of this "
+         "configuration call `IndexBuilderMain --help`:\n"
+      << config.printConfigurationDoc(false) << std::endl;
 }
 
 // ___________________________________________________________________________

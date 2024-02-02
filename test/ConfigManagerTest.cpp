@@ -2682,9 +2682,20 @@ TEST(ConfigManagerTest, PrintConfigurationDocComparison) {
                       doubleArgumentValidatorSecondArgument);
 
   // Finally, check, if the expected and actual output is the same.
-  assertStringEqual(exampleConfigManagerExpectedNotDetailedString,
-                    topManager.printConfigurationDoc(false));
-  assertStringEqual(exampleConfigManagerExpectedDetailedString,
-                    topManager.printConfigurationDoc(true));
+  assertStringEqual(exampleConfigManagerExpectedprintConfigurationDocJsonString,
+                    topManager.printConfigurationDocJson());
+  assertStringEqual(
+      exampleConfigManagerExpectedprintConfigurationDocDetailedListString,
+      topManager.printConfigurationDocDetailedList());
+  assertStringEqual(
+      absl::StrCat("Configuration:\n",
+                   exampleConfigManagerExpectedprintConfigurationDocJsonString),
+      topManager.printConfigurationDoc(false));
+  assertStringEqual(
+      absl::StrCat(
+          "Configuration:\n",
+          exampleConfigManagerExpectedprintConfigurationDocJsonString, "\n\n",
+          exampleConfigManagerExpectedprintConfigurationDocDetailedListString),
+      topManager.printConfigurationDoc(true));
 }
 }  // namespace ad_utility::ConfigManagerImpl

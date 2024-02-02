@@ -334,6 +334,8 @@ template void RdfsVocabulary::buildCodebookForPrefixCompression<
     const std::vector<std::string>&);
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
+template void RdfsVocabulary::initializeInternalizedLangs<
+    std::vector<std::string>>(const std::vector<std::string>&);
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<

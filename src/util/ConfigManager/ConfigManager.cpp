@@ -769,11 +769,33 @@ auto ConfigManager::getValidatorAssignment() const
 }
 
 // ____________________________________________________________________________
+std::string ConfigManager::printConfigurationDocJson() const {
+  return generateConfigurationDocJson("").dump(2);
+}
+
+// ____________________________________________________________________________
+std::string ConfigManager::printConfigurationDocDetailedList() const {
+  /*
+  This works, because sub managers are not allowed to be empty. (This
+  invariant is checked by the helper function for walking over the hash map
+  entries, that is used by the `generateConfigurationDocDetailedList` helper
+  function.) So, the only way for a valid lack of configuration options to be
+  true, is on the top level. A.k.a. the object, on which
+  `printConfigurationDocDetailedList` was called.
+  */
+  if (configurationOptions_.empty()) {
+    return "No configuration options were defined.";
+  }
+
+  return generateConfigurationDocDetailedList("", getValidatorAssignment());
+}
+
+// ____________________________________________________________________________
 std::string ConfigManager::printConfigurationDoc(bool detailed) const {
   /*
   This works, because sub managers are not allowed to be empty. (This
   invariant is checked by the helper function for walking over the hash map
-  entries, that is used by the `generateConfigurationDoc...` helper
+  entries, that is used by the `printConfigurationDoc...` helper
   functions.) So, the only way for a valid lack of configuration options to be
   true, is on the top level. A.k.a. the object, on which
   `printConfigurationDoc` was called.
@@ -783,9 +805,9 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
   }
 
   // We always print the configuration doc json.
-  const std::string& configurationDocJsonString{
-      insertThousandSeparator(absl::StrCat(
-          "Configuration:\n", generateConfigurationDocJson("").dump(2)))};
+  const std::string& configurationDocJsonString{absl::StrCat(
+      "Configuration:\n",
+      insertThousandSeparator<'.'>(printConfigurationDocJson(), ' '))};
 
   if (!detailed) {
     return configurationDocJsonString;
@@ -793,9 +815,7 @@ std::string ConfigManager::printConfigurationDoc(bool detailed) const {
 
   return absl::StrCat(
       configurationDocJsonString, "\n\n",
-      insertThousandSeparator<'.'>(
-          generateConfigurationDocDetailedList("", getValidatorAssignment()),
-          ' '));
+      insertThousandSeparator<'.'>(printConfigurationDocDetailedList(), ' '));
 }
 
 // ____________________________________________________________________________
