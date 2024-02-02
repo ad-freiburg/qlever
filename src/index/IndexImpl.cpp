@@ -896,8 +896,7 @@ void IndexImpl::readConfiguration() {
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << configurationJson_["git-hash"]
-              << std::endl;
+              << configurationJson_["git-hash"] << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
