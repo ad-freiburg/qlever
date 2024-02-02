@@ -74,10 +74,10 @@ class Server {
   /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
-  mutable net::static_thread_pool threadPool_;
+  net::static_thread_pool threadPool_;
 
   /// Executor with a single thread that is used to run timers asynchronously.
-  mutable net::static_thread_pool timerExecutor_{1};
+  net::static_thread_pool timerExecutor_{1};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -147,7 +147,7 @@ class Server {
   /// it's completion, wrapping the result.
   template <typename Function, typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function,
-                                  SharedCancellationHandle handle) const;
+                                  SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -170,7 +170,7 @@ class Server {
   /// means or because the task has been completed successfully.
   auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-      TimeLimit timeLimit) const
+      TimeLimit timeLimit)
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
@@ -178,7 +178,7 @@ class Server {
   net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
                                             QueryExecutionContext& qec,
                                             SharedCancellationHandle handle,
-                                            TimeLimit timeLimit) const;
+                                            TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
@@ -186,7 +186,7 @@ class Server {
   /// `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
   /// member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
-                               TimeLimit timeLimit) const
+                               TimeLimit timeLimit)
       -> ad_utility::isInstantiation<
           CancellationHandleAndTimeoutTimerCancel> auto;
 

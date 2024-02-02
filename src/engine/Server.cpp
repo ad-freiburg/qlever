@@ -503,7 +503,7 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 
 auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-    TimeLimit timeLimit) const
+    TimeLimit timeLimit)
     -> ad_utility::InvocableWithExactReturnType<void> auto {
   net::steady_timer timer{timerExecutor_, timeLimit};
 
@@ -518,7 +518,7 @@ auto Server::cancelAfterDeadline(
 
 // _____________________________________________________________________________
 auto Server::setupCancellationHandle(
-    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit) const
+    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
     -> ad_utility::isInstantiation<
         CancellationHandleAndTimeoutTimerCancel> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
@@ -763,7 +763,7 @@ boost::asio::awaitable<void> Server::processQuery(
 // _____________________________________________________________________________
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
-                                        SharedCancellationHandle handle) const {
+                                        SharedCancellationHandle handle) {
   auto runOnExecutor =
       [](auto executor, Function func,
          SharedCancellationHandle handle) -> net::awaitable<T> {
@@ -781,7 +781,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 // _____________________________________________________________________________
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit) const {
+    SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
