@@ -47,9 +47,9 @@ bool GrbMatrix::getElement(size_t row, size_t col) const {
 }
 
 // _____________________________________________________________________________
-GrbMatrix GrbMatrix::build(const std::vector<size_t> rowIndices,
-                           const std::vector<size_t> colIndices, size_t numRows,
-                           size_t numCols) {
+GrbMatrix GrbMatrix::build(const std::vector<size_t>& rowIndices,
+                           const std::vector<size_t>& colIndices,
+                           size_t numRows, size_t numCols) {
   auto matrix = GrbMatrix(numRows, numCols);
   GrB_Index nvals = rowIndices.size();
   if (nvals == 0) {
@@ -61,8 +61,8 @@ GrbMatrix GrbMatrix::build(const std::vector<size_t> rowIndices,
     values[i] = true;
   }
   auto info =
-      GrB_Matrix_build_BOOL(matrix.matrix(), &rowIndices[0], &colIndices[0],
-                            values, nvals, GxB_IGNORE_DUP);
+      GrB_Matrix_build_BOOL(matrix.matrix(), rowIndices.data(),
+                            colIndices.data(), values, nvals, GxB_IGNORE_DUP);
   GrbMatrix::handleError(info);
   return matrix;
 }

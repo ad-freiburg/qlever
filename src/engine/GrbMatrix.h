@@ -81,8 +81,8 @@ class GrbMatrix {
    * @param numCols Number of columns of the result matrix
    * @return New matrix with given entries set to true
    */
-  static GrbMatrix build(const std::vector<size_t> rowIndices,
-                         const std::vector<size_t> colIndices, size_t numRows,
+  static GrbMatrix build(const std::vector<size_t>& rowIndices,
+                         const std::vector<size_t>& colIndices, size_t numRows,
                          size_t numCols);
 
   /**
