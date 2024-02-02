@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <semaphore>
 #include <string>
 #include <vector>
 
@@ -76,6 +75,9 @@ class Server {
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
   mutable net::static_thread_pool threadPool_;
+
+  /// Executor with a single thread that is used to run timers asynchronously.
+  mutable net::static_thread_pool timerExecutor_{1};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
@@ -166,10 +168,9 @@ class Server {
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
   /// means or because the task has been completed successfully.
-  static auto cancelAfterDeadline(
-      const net::any_io_executor& executor,
+  auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-      TimeLimit timeLimit)
+      TimeLimit timeLimit) const
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
@@ -185,8 +186,7 @@ class Server {
   /// `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
   /// member can be invoked to cancel the imminent cancellation via timeout.
   auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
-                               TimeLimit timeLimit,
-                               const net::any_io_executor& executor) const
+                               TimeLimit timeLimit) const
       -> ad_utility::isInstantiation<
           CancellationHandleAndTimeoutTimerCancel> auto;
 
