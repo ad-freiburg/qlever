@@ -330,7 +330,8 @@ ResultTable GroupBy::computeResult() {
       checkIfHashMapOptimizationPossible(aggregates);
 
   std::shared_ptr<const ResultTable> subresult;
-  if (hashMapOptimizationParams.has_value()) {
+  if (hashMapOptimizationParams.has_value() &&
+      hashMapOptimizationParams.value().onlyIfSort_) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
     subresult = child->getResult();
@@ -705,13 +706,15 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
 GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
-  if (!RuntimeParameters().get<"use-group-by-hash-map-optimization">()) {
+  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
     return std::nullopt;
   }
 
-  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-  if (!sort) {
-    return std::nullopt;
+  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">()) {
+    auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+    if (!sort) {
+      return std::nullopt;
+    }
   }
 
   // Only allow one group by variable
@@ -740,10 +743,18 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
   }
 
   const Variable& groupByVariable = _groupByVariables.front();
-  auto child = _subtree->getRootOperation()->getChildren().at(0);
-  auto columnIndex = child->getVariableColumn(groupByVariable);
 
-  return HashMapOptimizationData{columnIndex, aliasesWithAggregateInfo};
+  size_t columnIndex;
+  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">()) {
+    auto child = _subtree->getRootOperation()->getChildren().at(0);
+    columnIndex = child->getVariableColumn(groupByVariable);
+  } else {
+    columnIndex = _subtree->getVariableColumn(groupByVariable);
+  }
+
+  return HashMapOptimizationData{
+      columnIndex, aliasesWithAggregateInfo,
+      RuntimeParameters().get<"group-by-hash-map-only-if-sort">()};
 }
 
 // _____________________________________________________________________________
@@ -1130,7 +1141,7 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
+  size_t blockSize = RuntimeParameters().get<"group-by-hash-map-block-size">();
 
   for (size_t i = 0; i < numberOfGroups; i += blockSize) {
     checkCancellation();
@@ -1190,7 +1201,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
+  size_t blockSize = RuntimeParameters().get<"group-by-hash-map-block-size">();
 
   for (size_t i = 0; i < subresult.size(); i += blockSize) {
     checkCancellation();

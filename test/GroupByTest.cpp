@@ -605,7 +605,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   std::vector<GroupBy::Aggregate> sumAggregate = {{sumXPimpl, 1}};
 
   // Enable optimization
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   // Must have exactly one variable to group by.
   testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
@@ -620,11 +620,11 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testFailure(variablesOnlyX, aliasesAvgDistinctX, subtreeWithSort,
               avgDistinctAggregate);
   // Optimization has to be enabled
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
   testFailure(variablesOnlyX, aliasesAvgX, subtreeWithSort, avgAggregate);
 
   // Support for MIN & MAX & SUM
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
@@ -645,7 +645,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   ASSERT_EQ(aggregateInfo.expr_, avgXPimpl.getPimpl());
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -670,13 +670,13 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
   std::vector<Alias> aliasesAvgY{Alias{avgYPimpl, Variable{"?avg"}}};
 
   // Calculate result with optimization
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
   // Clear cache, calculate result without optimization
   qec->clearCacheUnpinnedOnly();
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -690,7 +690,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   // Make sure we are calculating the correct result when a grouped variable
   // occurs in an expression.
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -753,13 +753,13 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupedVariable) {
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   // Test for support of min, max and sum when using the HashMap optimization.
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -830,12 +830,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   std::string turtleInput =
       "<x> <label> \"C\" . <x> <label> \"B\" . <x> <label> \"A\" . "
@@ -877,13 +877,13 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
        {getId("<y>"), getLocalVocabId("f g h"), getLocalVocabId("f,g,h")}});
   EXPECT_EQ(table, expected);
 
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   // Test for support of min, max and sum when using the HashMap optimization.
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -924,12 +924,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
        {d(3), getLocalVocabId("g h f"), getLocalVocabId("g,h,f")}});
   EXPECT_EQ(table, expected);
 
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   std::string turtleInput =
       "<x> <label> \"C\" . <x> <label> \"B\" . <x> <label> \"A\" . "
@@ -963,7 +963,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxIndex) {
                              {getId("<y>"), getId("\"f\""), getId("\"h\"")}});
   EXPECT_EQ(table, expected);
 
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
@@ -1051,7 +1051,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
       Alias{constPlusEtcPimpl, Variable{"?sth"}}};
 
   // Clear cache, calculate result without optimization
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
   GroupBy groupByWithoutOptimization{qec, variablesOnlyX, aliasesAvgY,
                                      sortedJoin};
   auto resultWithoutOptimization = groupByWithoutOptimization.getResult();
@@ -1059,7 +1059,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
   // Calculate result with optimization, after calculating it without,
   // since optimization changes tree
   qec->clearCacheUnpinnedOnly();
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
   GroupBy groupByWithOptimization{qec, variablesOnlyX, aliasesAvgY, sortedJoin};
   auto resultWithOptimization = groupByWithOptimization.getResult();
 
@@ -1068,7 +1068,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationNonTrivial) {
             resultWithoutOptimization->asDebugString());
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________

@@ -28,13 +28,17 @@ class ValuesForTesting : public Operation {
   // of columns in the table.
   explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
                             std::vector<std::optional<Variable>> variables,
-                            bool supportsLimit = false)
+                            bool supportsLimit = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
         supportsLimit_{supportsLimit},
         sizeEstimate_{table_.numRows()},
-        costEstimate_{table_.numRows()} {
+        costEstimate_{table_.numRows()},
+        resultSortedColumns_{std::move(sortedColumns)},
+        localVocab_{std::move(localVocab)} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
@@ -51,7 +55,7 @@ class ValuesForTesting : public Operation {
       table.erase(table.begin(),
                   table.begin() + getLimit().actualOffset(table.size()));
     }
-    return {std::move(table), resultSortedOn(), LocalVocab{}};
+    return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
   bool supportsLimit() const override { return supportsLimit_; }
 
@@ -77,9 +81,9 @@ class ValuesForTesting : public Operation {
 
   size_t getResultWidth() const override { return table_.numColumns(); }
 
-  // TODO<joka921> Maybe we will need to store sorted tables for future unit
-  // tests.
-  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  vector<ColumnIndex> resultSortedOn() const override {
+    return resultSortedColumns_;
+  }
 
   void setTextLimit(size_t limit) override { (void)limit; }
 
@@ -115,6 +119,10 @@ class ValuesForTesting : public Operation {
     }
     return m;
   }
+
+  std::vector<ColumnIndex> resultSortedColumns_;
+
+  LocalVocab localVocab_;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns
