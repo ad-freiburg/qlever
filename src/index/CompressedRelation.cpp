@@ -423,13 +423,15 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       std::back_inserter(allColumns));
   // A block is uniquely identified by its start position in the file.
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
-  DecompressedBlock block = blockCache_
-                                .computeOnce(cacheKey,
-                                             [&]() {
-                                               return readAndDecompressBlock(
-                                                   blockMetadata, allColumns);
-                                             })
-                                ._resultPointer->clone();
+  auto sharedResultFromCache =
+      blockCache_
+          .computeOnce(cacheKey,
+                       [&]() {
+                         return readAndDecompressBlock(blockMetadata,
+                                                       allColumns);
+                       })
+          ._resultPointer;
+  const DecompressedBlock& block = *sharedResultFromCache;
   const auto& col1Column = block.getColumn(0);
 
   // Find the range in the blockMetadata, that belongs to the same relation
@@ -452,17 +454,22 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     }
   }();
   auto numResults = subBlock.size();
-  block.erase(block.begin(),
-              block.begin() + (subBlock.begin() - col1Column.begin()));
-  block.resize(numResults);
+  auto beginIndex = subBlock.begin() - col1Column.begin();
+  auto endIndex = subBlock.end() - col1Column.begin();
 
+  DecompressedBlock result{columnIndices.size(), allocator_};
+  result.resize(numResults);
+  for (auto i : ad_utility::integerRange(columnIndices.size())) {
+    const auto& inputCol = block.getColumn(columnIndices[i]);
+    std::ranges::copy(inputCol.begin() + beginIndex,
+                      inputCol.begin() + endIndex, result.getColumn(i).begin());
+  }
   if (scanMetadata.has_value()) {
     auto& details = scanMetadata.value().get();
     ++details.numBlocksRead_;
-    details.numElementsRead_ += block.numRows();
+    details.numElementsRead_ += result.numRows();
   }
-  block.setColumnSubset(columnIndices);
-  return block;
+  return result;
 };
 
 // _____________________________________________________________________________
