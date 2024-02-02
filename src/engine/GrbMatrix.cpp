@@ -56,13 +56,13 @@ GrbMatrix GrbMatrix::build(const std::vector<size_t>& rowIndices,
     return matrix;
   }
 
-  bool values[nvals];
+  std::unique_ptr<bool[]> values{new bool[nvals]()};
   for (size_t i = 0; i < nvals; i++) {
     values[i] = true;
   }
-  auto info =
-      GrB_Matrix_build_BOOL(matrix.matrix(), rowIndices.data(),
-                            colIndices.data(), values, nvals, GxB_IGNORE_DUP);
+  auto info = GrB_Matrix_build_BOOL(matrix.matrix(), rowIndices.data(),
+                                    colIndices.data(), values.get(), nvals,
+                                    GxB_IGNORE_DUP);
   GrbMatrix::handleError(info);
   return matrix;
 }
@@ -80,16 +80,16 @@ GrbMatrix GrbMatrix::diag(size_t nvals) {
 
 // _____________________________________________________________________________
 std::vector<std::pair<size_t, size_t>> GrbMatrix::extractTuples() const {
-  size_t n = numNonZero();
-  size_t rowIndices[n];
-  size_t colIndices[n];
-  bool values[n];
-  auto info = GrB_Matrix_extractTuples_BOOL(rowIndices, colIndices, values, &n,
-                                            matrix());
+  size_t nvals = numNonZero();
+  size_t rowIndices[nvals];
+  size_t colIndices[nvals];
+  std::unique_ptr<bool[]> values{new bool[nvals]()};
+  auto info = GrB_Matrix_extractTuples_BOOL(rowIndices, colIndices,
+                                            values.get(), &nvals, matrix());
   GrbMatrix::handleError(info);
 
   std::vector<std::pair<size_t, size_t>> result;
-  for (size_t i = 0; i < n; i++) {
+  for (size_t i = 0; i < nvals; i++) {
     if (values[i]) {
       result.push_back(std::make_pair(rowIndices[i], colIndices[i]));
     }
@@ -199,9 +199,8 @@ std::vector<size_t> GrbMatrix::extract(size_t index,
 
   std::vector<size_t> indices;
   indices.resize(vectorNvals);
-  bool vals[vectorNvals];
-  info =
-      GrB_Vector_extractTuples_BOOL(indices.data(), vals, &vectorNvals, vector);
+  info = GrB_Vector_extractTuples_BOOL(indices.data(), nullptr, &vectorNvals,
+                                       vector);
   handleError(info);
 
   info = GrB_Vector_free(&vector);
