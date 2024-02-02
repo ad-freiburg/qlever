@@ -49,43 +49,46 @@ NormalizedStringView Literal::getLanguageTag() const {
 
 // __________________________________________
 Literal Literal::literalWithQuotes(
-    const string& rdfContentWithQuotes,
-    const std::optional<std::variant<Iri, string>>& descriptor) {
+    std::string_view rdfContentWithQuotes,
+    std::optional<std::variant<Iri, string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
 
-  return literalWithNormalizedContent(content, descriptor);
+  return literalWithNormalizedContent(content, std::move(descriptor));
 }
 
 // __________________________________________
 Literal Literal::literalWithoutQuotes(
-    const string& rdfContentWithoutQuotes,
-    const std::optional<std::variant<Iri, string>>& descriptor) {
+    std::string_view rdfContentWithoutQuotes,
+    std::optional<std::variant<Iri, string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithoutQuotes(rdfContentWithoutQuotes);
 
-  return literalWithNormalizedContent(content, descriptor);
+  return literalWithNormalizedContent(content, std::move(descriptor));
 }
 
 // __________________________________________
 Literal Literal::literalWithNormalizedContent(
-    const NormalizedString& normalizedRdfContent,
-    const std::optional<std::variant<Iri, string>>& descriptor) {
+    NormalizedString normalizedRdfContent,
+    std::optional<std::variant<Iri, string>> descriptor) {
   if (!descriptor.has_value()) {
-    return Literal(normalizedRdfContent);
+    return Literal(std::move(normalizedRdfContent));
   }
 
-  if (std::holds_alternative<std::string>(descriptor.value())) {
-    NormalizedString languageTag =
-        RdfEscaping::normalizeLanguageTag(std::get<string>(descriptor.value()));
-    return {normalizedRdfContent, languageTag};
-  }
+  using namespace RdfEscaping;
+  auto visitLanguageTag =
+      [&normalizedRdfContent](std::string&& languageTag) -> Literal {
+    return {std::move(normalizedRdfContent),
+            normalizeLanguageTag(std::move(languageTag))};
+  };
 
-  else if (std::holds_alternative<Iri>(descriptor.value())) {
-    return {normalizedRdfContent, std::get<Iri>(descriptor.value())};
-  }
+  auto visitDatatype = [&normalizedRdfContent](Iri&& datatype) -> Literal {
+    return {std::move(normalizedRdfContent), std::move(datatype)};
+  };
 
-  AD_THROW("Descriptor variable holds unsupported value type.");
+  return std::visit(
+      ad_utility::OverloadCallOperator{visitDatatype, visitLanguageTag},
+      std::move(descriptor.value()));
 }
 
 }  // namespace ad_utility::triple_component

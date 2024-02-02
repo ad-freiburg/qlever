@@ -183,12 +183,12 @@ TEST(LiteralOrIri, GetContent) {
 
 TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
   LiteralOrIri literal1 =
-      LiteralOrIri::literalWithQuotes(R"("This is to be \"\t encoded")");
-  EXPECT_THAT("This is to be \"\t encoded",
+      LiteralOrIri::literalWithQuotes(R"("This is to be \"\\ encoded")");
+  EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal1.getContent()));
 
   LiteralOrIri literal2 =
-      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\t encoded)");
-  EXPECT_THAT("This is to be \"\t encoded",
+      LiteralOrIri::literalWithoutQuotes(R"(This is to be \"\\ encoded)");
+  EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal2.getContent()));
 }

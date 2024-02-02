@@ -91,17 +91,17 @@ LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithQuotes(
-    const string& rdfContentWithQuotes,
-    const std::optional<std::variant<Iri, string>>& descriptor) {
+    std::string_view rdfContentWithQuotes,
+    std::optional<std::variant<Iri, string>> descriptor) {
   return LiteralOrIri(
-      Literal::literalWithQuotes(rdfContentWithQuotes, descriptor));
+      Literal::literalWithQuotes(rdfContentWithQuotes, std::move(descriptor)));
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithoutQuotes(
-    const string& rdfContentWithoutQuotes,
-    const std::optional<std::variant<Iri, string>>& descriptor) {
-  return LiteralOrIri(
-      Literal::literalWithoutQuotes(rdfContentWithoutQuotes, descriptor));
+    std::string_view rdfContentWithoutQuotes,
+    std::optional<std::variant<Iri, string>> descriptor) {
+  return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
+                                                    std::move(descriptor)));
 }
 }  // namespace ad_utility::triple_component

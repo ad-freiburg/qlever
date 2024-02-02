@@ -71,25 +71,19 @@ class LiteralOrIri {
   //   quotation marks (", """, ', or '''). If the second argument is set and of
   //   type IRI, it is stored as the datatype of the given literal. If the
   //   second argument is set and of type string, it is interpreted as the
-  //   language type of the given literal. Otherwise, the literal is stored
-  //   without any descriptor.
+  //   language type of the given literal (The @ is optional for language tags
+  //   so "@en" and just "en" will be interpreted in the same way). Otherwise,
+  //   the literal is stored without any descriptor.
   static LiteralOrIri literalWithQuotes(
-      const std::string& rdfContentWithQuotes,
-      const std::optional<std::variant<Iri, string>>& descriptor =
-          std::nullopt);
+      std::string_view rdfContentWithQuotes,
+      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
 
-  // Create a new Literal with optional datatype or language tag
-  //   The rdfContent is expected to be a valid string according to SPARQL 1.1
-  //   Query Language, 19.8 Grammar, Rule [145], BUT NOT TO BE surrounded by
-  //   quotation marks (", """, ', or '''). If the second argument is set and of
-  //   type IRI, it is stored as the datatype of the given literal. If the
-  //   second argument is set and of type string, it is interpreted as the
-  //   language type of the given literal. Otherwise, the literal is stored
-  //   without any descriptor.
+  // Same as `literalWithQuotes` above, but the content is passed in without
+  // surrounding quotation marks. So `literalWithQuotes("\"hello\"")` and
+  // `literalWithoutQuotes("hello")` will lead to the exact same results.
   static LiteralOrIri literalWithoutQuotes(
-      const std::string& rdfContentWithoutQuotes,
-      const std::optional<std::variant<Iri, string>>& descriptor =
-          std::nullopt);
+      std::string_view rdfContentWithoutQuotes,
+      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets
   static LiteralOrIri iriref(const std::string& stringWithBrackets);

@@ -11,21 +11,21 @@ namespace ad_utility::triple_component {
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 // __________________________________________
-Iri::Iri(const Iri& prefix, const NormalizedString& suffix) {
-  iri_ = NormalizedString{prefix.getContent()} + suffix;
-}
+Iri::Iri(const Iri& prefix, const NormalizedString& suffix)
+    : iri_{NormalizedString{prefix.getContent()} + suffix} {};
 
 // __________________________________________
 NormalizedStringView Iri::getContent() const { return iri_; }
 
 // __________________________________________
-Iri Iri::iriref(const std::string& stringWithBrackets) {
+Iri Iri::iriref(std::string_view stringWithBrackets) {
   return Iri{RdfEscaping::normalizeIriWithBrackets(stringWithBrackets)};
 }
 
 // __________________________________________
-Iri Iri::prefixed(const Iri& prefix, const std::string& suffix) {
-  return Iri{prefix, RdfEscaping::normalizeIriWithoutBrackets(suffix)};
+Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
+  return Iri{std::move(prefix),
+             RdfEscaping::normalizeIriWithoutBrackets(suffix)};
 }
 
 }  // namespace ad_utility::triple_component

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <string>
+#include <string_view>
 
 #include "parser/NormalizedString.h"
 
@@ -29,10 +29,10 @@ class Iri {
 
  public:
   // Create a new iri given an iri with brackets
-  static Iri iriref(const std::string& stringWithBrackets);
+  static Iri iriref(std::string_view stringWithBrackets);
 
   // Create a new iri given a prefix iri and its suffix
-  static Iri prefixed(const Iri& prefix, const std::string& suffix);
+  static Iri prefixed(const Iri& prefix, std::string_view suffix);
 
   // Return the string value of the iri object without any leading or trailing
   // angled brackets.
