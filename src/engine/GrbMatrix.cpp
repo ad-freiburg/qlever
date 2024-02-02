@@ -99,34 +99,13 @@ std::vector<std::pair<size_t, size_t>> GrbMatrix::extractTuples() const {
 
 // _____________________________________________________________________________
 std::vector<size_t> GrbMatrix::extractColumn(size_t colIndex) const {
-  std::unique_ptr<GrB_Vector> columnVector = std::make_unique<GrB_Vector>();
-  size_t rows = numRows();
-  auto info = GrB_Vector_new(columnVector.get(), GrB_BOOL, rows);
-  handleError(info);
-
-  info = GrB_Col_extract(*columnVector, GrB_NULL, GrB_NULL, matrix(), GrB_ALL,
-                         rows, colIndex, GrB_NULL);
-  handleError(info);
-
-  size_t indices[rows];
-  bool values[rows];
-  std::unique_ptr<size_t> nvals = std::make_unique<size_t>(rows);
-  info = GrB_Vector_extractTuples_BOOL(indices, values, nvals.get(),
-                                       *columnVector);
-  handleError(info);
-
-  info = GrB_Vector_free(columnVector.get());
-  handleError(info);
-
-  std::vector<size_t> vec;
-  vec.insert(vec.begin(), indices, indices + *nvals);
-  return vec;
+  return extract(colIndex, GrB_NULL);
 }
 
 // _____________________________________________________________________________
 std::vector<size_t> GrbMatrix::extractRow(size_t rowIndex) const {
-  GrbMatrix transposed = transpose();
-  return transposed.extractColumn(rowIndex);
+  // The descriptor GrB_DESC_T0 transposes the second input, which is the matrix
+  return extract(rowIndex, GrB_DESC_T0);
 }
 
 // _____________________________________________________________________________
@@ -195,6 +174,40 @@ GrB_Matrix* GrbMatrix::rawMatrix() const {
     return matrix_.get();
   }
   AD_THROW("GrbMatrix error: internal GrB_Matrix is null");
+}
+
+// _____________________________________________________________________________
+std::vector<size_t> GrbMatrix::extract(size_t index,
+                                       GrB_Descriptor desc) const {
+  GrB_Vector vector;
+  size_t vectorSize;
+  if (desc == GrB_NULL) {
+    vectorSize = numRows();
+  } else {
+    vectorSize = numCols();
+  }
+  auto info = GrB_Vector_new(&vector, GrB_BOOL, vectorSize);
+  handleError(info);
+
+  info = GrB_Col_extract(vector, GrB_NULL, GrB_NULL, matrix(), GrB_ALL,
+                         vectorSize, index, desc);
+  handleError(info);
+
+  size_t vectorNvals;
+  info = GrB_Vector_nvals(&vectorNvals, vector);
+  handleError(info);
+
+  std::vector<size_t> indices;
+  indices.resize(vectorNvals);
+  bool vals[vectorNvals];
+  info =
+      GrB_Vector_extractTuples_BOOL(indices.data(), vals, &vectorNvals, vector);
+  handleError(info);
+
+  info = GrB_Vector_free(&vector);
+  handleError(info);
+
+  return indices;
 }
 
 // _____________________________________________________________________________

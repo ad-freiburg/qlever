@@ -1,4 +1,8 @@
+#include <GraphBLAS.h>
 #include <gtest/gtest.h>
+
+#include <cstdio>
+#include <iostream>
 
 #include "engine/GrbMatrix.h"
 #include "gmock/gmock.h"
@@ -135,6 +139,23 @@ TEST(GrbMatrixTest, extractColumn) {
   std::vector<size_t> expected{0, 2};
 
   EXPECT_THAT(colIndices, testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(GrbMatrixTest, extractRow) {
+  GrbMatrix::initialize();
+
+  GrbMatrix matrix = GrbMatrix(3, 3);
+
+  matrix.setElement(1, 0, true);
+  matrix.setElement(1, 2, true);
+
+  std::vector<size_t> rowIndices = matrix.extractRow(1);
+
+  GrbMatrix::finalize();
+
+  std::vector<size_t> expected{0, 2};
+
+  EXPECT_THAT(rowIndices, testing::UnorderedElementsAreArray(expected));
 }
 
 TEST(GrbMatrixTest, multiplySquareMatrices) {

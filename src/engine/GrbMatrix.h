@@ -166,7 +166,6 @@ class GrbMatrix {
   static void initialize();
   static void finalize();
 
- private:
   /**
    * @brief Get a reference to the internal matrix.
    *
@@ -174,6 +173,7 @@ class GrbMatrix {
    */
   GrB_Matrix& matrix() const { return *matrix_; }
 
+ private:
   /**
    * @brief Get a raw pointer to the internal matrix. If this pointer is the
    * nullptr, an Exception is thrown.
@@ -181,6 +181,8 @@ class GrbMatrix {
    * @return
    */
   GrB_Matrix* rawMatrix() const;
+
+  std::vector<size_t> extract(size_t index, GrB_Descriptor desc) const;
 
   /**
    * @brief Handle the GrB_Info object. GrB_SUCCESS is ignored, all other return
