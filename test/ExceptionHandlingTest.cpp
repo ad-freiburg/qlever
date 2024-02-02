@@ -2,8 +2,6 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <absl/cleanup/cleanup.h>
-
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "util/ExceptionHandling.h"

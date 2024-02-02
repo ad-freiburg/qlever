@@ -505,11 +505,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
     auto wordWriterExternal = vocab_.makeWordWriterForExternalVocabulary(
         onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-    auto externalVocabularyAction = [&wordWriterExternal](const auto& word) {
-      wordWriterExternal.push(word);
-    };
     return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction, externalVocabularyAction,
+                             internalVocabularyAction, wordWriterExternal,
                              memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;

@@ -4,16 +4,16 @@
 
 #include <gmock/gmock.h>
 
-#include "util/Consumerator.h"
+#include "util/Consumer.h"
 
-using ad_utility::Consumerator;
-using ad_utility::ConsumeratorImpl;
+using ad_utility::Consumer;
+using ad_utility::ConsumerImpl;
 
 template <auto make>
 constexpr auto makeWrapper =
-    [](auto&&... args) { return ad_utility::makeConsumerator(make(args...)); };
+    [](auto&&... args) { return ad_utility::makeConsumer(make(args...)); };
 
-ConsumeratorImpl<int> intStateMachineImpl(int initial, int& target) {
+ConsumerImpl<int> intStateMachineImpl(int initial, int& target) {
   target += initial;
 
   while (co_await ad_utility::valueWasPushedTag) {
@@ -24,7 +24,7 @@ ConsumeratorImpl<int> intStateMachineImpl(int initial, int& target) {
 }
 auto intStateMachine = makeWrapper<&intStateMachineImpl>;
 
-TEST(ConsumeratorImpl, IntStateMachine) {
+TEST(ConsumerImpl, IntStateMachine) {
   int target = 0;
   int compare = 0;
 
@@ -34,7 +34,7 @@ TEST(ConsumeratorImpl, IntStateMachine) {
 
   for (int i = 0; i < 2000; ++i) {
     compare += i;
-    z.push(i);
+    z(i);
     // EXPECT_EQ(target, compare);
   }
 
@@ -44,100 +44,100 @@ TEST(ConsumeratorImpl, IntStateMachine) {
 }
 
 // _______________________________________________________________________________________
-ConsumeratorImpl<std::string&&> moveStringStateMachineImpl(
+ConsumerImpl<std::string&&> moveStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
-  target.push_back(initial);
+  target_back(initial);
 
   while (co_await ad_utility::valueWasPushedTag) {
-    target.push_back(std::move(co_await ad_utility::nextValueTag));
+    target_back(std::move(co_await ad_utility::nextValueTag));
   }
 
-  target.push_back(initial);
+  target_back(initial);
 }
 auto moveStringStateMachine = makeWrapper<&moveStringStateMachineImpl>;
 
-TEST(ConsumeratorImpl, MoveStringStateMachine) {
+TEST(ConsumerImpl, MoveStringStateMachine) {
   std::vector<std::string> target;
   std::vector<std::string> compare;
 
   auto stateMachine = moveStringStateMachine("hello", target);
-  compare.push_back("hello");
+  compare_back("hello");
   EXPECT_EQ(target, compare);
 
-  compare.push_back("alpha");
+  compare_back("alpha");
   std::string str = "alpha";
   // Push an lvalue reference, which the coroutine will move.
-  stateMachine.push(std::move(str));
+  stateMachine(std::move(str));
   EXPECT_TRUE(str.empty());
   EXPECT_EQ(target, compare);
 
-  compare.push_back("beta");
+  compare_back("beta");
   str = "beta";
   // Push an rvalue reference, which the coroutine will move.
-  stateMachine.push(std::move(str));
+  stateMachine(std::move(str));
   // also a move
   EXPECT_TRUE(str.empty());
   EXPECT_EQ(target, compare);
 
-  compare.push_back("gamma");
+  compare_back("gamma");
   // Push a temporary, which the coroutine will also move (but we cannot
   // actually test this).
-  stateMachine.push("gamma");
+  stateMachine("gamma");
   EXPECT_EQ(target, compare);
 
   stateMachine.finish();
-  compare.push_back("hello");
+  compare_back("hello");
   ASSERT_EQ(target, compare);
 }
 
 // _______________________________________________________________________________________
-ConsumeratorImpl<const std::string&> constStringStateMachineImpl(
+ConsumerImpl<const std::string&> constStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
-  target.push_back(initial);
+  target_back(initial);
 
   while (co_await ad_utility::valueWasPushedTag) {
-    target.push_back(std::move(co_await ad_utility::nextValueTag));
+    target_back(std::move(co_await ad_utility::nextValueTag));
   }
 
-  target.push_back(initial);
+  target_back(initial);
 }
 
 auto constStringStateMachine = makeWrapper<&constStringStateMachineImpl>;
 
-TEST(ConsumeratorImpl, ConstStringStateMachine) {
+TEST(ConsumerImpl, ConstStringStateMachine) {
   std::vector<std::string> target;
   std::vector<std::string> compare;
 
   auto stateMachine = constStringStateMachine("hello", target);
-  compare.push_back("hello");
+  compare_back("hello");
   EXPECT_EQ(target, compare);
 
-  compare.push_back("alpha");
+  compare_back("alpha");
   std::string str = "alpha";
-  stateMachine.push(str);
+  stateMachine(str);
   // We called `move` on the string, but the const state machine can't actually
   // move.
   EXPECT_EQ(str, "alpha");
   EXPECT_EQ(target, compare);
 
-  compare.push_back("beta");
+  compare_back("beta");
   str = "beta";
-  stateMachine.push(std::move(str));
+  stateMachine(std::move(str));
   EXPECT_EQ(str, "beta");
   EXPECT_EQ(target, compare);
 
-  compare.push_back("gamma");
-  stateMachine.push("gamma");
+  compare_back("gamma");
+  stateMachine("gamma");
   EXPECT_EQ(target, compare);
 
   stateMachine.finish();
-  compare.push_back("hello");
+  compare_back("hello");
   ASSERT_EQ(target, compare);
 }
 
 struct TestException : public std::exception {};
 
-ConsumeratorImpl<bool> stateMachineWithExceptionsImpl(bool throwInitial,
+ConsumerImpl<bool> stateMachineWithExceptionsImpl(bool throwInitial,
                                                       bool throwFinal) {
   if (throwInitial) {
     throw TestException{};
@@ -156,32 +156,32 @@ ConsumeratorImpl<bool> stateMachineWithExceptionsImpl(bool throwInitial,
 }
 auto stateMachineWithExceptions = makeWrapper<&stateMachineWithExceptionsImpl>;
 
-TEST(ConsumeratorImpl, StateMachineWithExceptions) {
+TEST(ConsumerImpl, StateMachineWithExceptions) {
   EXPECT_THROW(stateMachineWithExceptions(true, false), TestException);
 
   {
     auto throwOnPush = stateMachineWithExceptions(false, false);
     for (size_t i = 0; i < 120; ++i) {
-      throwOnPush.push(false);
+      throwOnPush(false);
     }
-    ASSERT_THROW(throwOnPush.push(true), TestException);
+    ASSERT_THROW(throwOnPush(true), TestException);
   }
 
   {
     auto throwOnEnd = stateMachineWithExceptions(false, true);
     for (size_t i = 0; i < 120; ++i) {
-      throwOnEnd.push(false);
+      throwOnEnd(false);
     }
     ASSERT_THROW(throwOnEnd.finish(), TestException);
   }
 
   // Throwing destructor.
   {
-    using T = Consumerator<bool>;
+    using T = Consumer<bool>;
     alignas(T) unsigned char buf[sizeof(T)];
     T* throwOnEnd = nullptr;
     auto assign = [&]() {
-      throwOnEnd = new (buf) T{ad_utility::makeConsumerator(
+      throwOnEnd = new (buf) T{ad_utility::makeConsumer(
 
           stateMachineWithExceptionsImpl(false, true))};
     };
@@ -200,12 +200,12 @@ TEST(ConsumeratorImpl, StateMachineWithExceptions) {
   }
 }
 
-TEST(ConsumeratorImpl, DefaultConstructor) {
+TEST(ConsumerImpl, DefaultConstructor) {
   // The only thing we can legally do with an default constructed
-  // `ConsumeratorImpl` is to destroy it or to move something in.
-  { ad_utility::ConsumeratorImpl<int> x; }
+  // `ConsumerImpl` is to destroy it or to move something in.
+  { ad_utility::ConsumerImpl<int> x; }
   {
-    auto x = ad_utility::makeConsumerator(ConsumeratorImpl<int>{});
+    auto x = ad_utility::makeConsumer(ConsumerImpl<int>{});
     x.finish();
   }
 }

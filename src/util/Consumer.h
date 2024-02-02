@@ -16,35 +16,32 @@
 
 namespace ad_utility {
 /*
-This implements `Consumerators` which are in some sense the opposite of
-`generators`. This is best explained by an Example:
-ConsumeratorImpl<int> somethingNumeric(int& target) {
+This implements `Consumers` which are in some sense the opposite of
+`generators`. This is best explained by an example:
+ConsumerImpl<const std::string&> wordsToFile(const std::string& filename) {
   // Initial portion of the code, executed during the construction phase
-  int a = 0;
-  int b = target + 24;
+  auto file = File{filename, "w"};
   // The inner loop, the structure of the `co_await`s must be always like
   //this, otherwise you get undefined behavior.
   while (co_await valueWasPushedTag) {
-    // This loop sees all the values that are `push`ed to the `Consumerator`.
-    int val = co_await nextValueTag;
-    a += val;
-    b *= a;
+    // This loop sees all the values that are `push`ed to the `Consumer`.
+    const string& word = co_await nextValueTag;
+    file.append(word);
+    file.append("\n");
   }
   // Remaining final code, will be executed when `finish` or the destructor is
   // called, whichever happens first.
-  // In our somewhat artificial example we write back a final result:
-  target = a / b;
+  file.append("END OF INPUT\n");
 }
 
 // This code can be used as follows:
-int target = 13;
-auto consumerator = ad_utility::makeConsumerator(somethingNumeric(target));
+auto consumer = ad_utility::makeConsumer(wordsToFile("words.txt));
 // These values appear as the `val` variable in the inner loop
-consumerator.push(12);
-consumerator.push(4);
+consumer("first line");
+consumer("second line");
 // break out of the loop
-consumerator.finish();
-// `target` has now been modified.
+consumer.finish();
+ // The file is now closed, and has the contents "first line\nsecond line\nEND OF INPUT\n".
 
 In the following we will describe several aspects of the interfaces.
 1. The template argument is the argument type to the `push` function in the
@@ -57,36 +54,36 @@ then copy inside the coroutine, or use `&&` and create the copies for the `push`
 function.
 2. Exceptions that appear in the first part of the coroutine (before the first
 call to `co_await valueWasPushed`) are directly rethrown in the
-`makeConsumerator()` function. Exceptions that happen inside the loop (i.e.
+`makeConsumer()` function. Exceptions that happen inside the loop (i.e.
 between two calls to `valueWasPushed` are propagated to the corresponding `push`
 call. Exceptions in the last part of the code are propagated to the call to
 `finish()` or, if that call is missing or skipped to the destructor. The
 destructor only throws if it is not executed during stack unwinding because it
 would then crash the program. This scenario is detected and logged, and the
 exception is then ignored.
-3. For the same reason it is not very useful to store consumerators in
+3. For the same reason it is not very useful to store consumers in
 containers like `std::vectors` because exceptions in destructors lead to direct
-program termination. To make this less probably, Consumerators are neither
+program termination. To make this less probably, Consumers are neither
 copy-nor movable. If you really need to store some of them, use `unique_ptr` or
 `optional`, but beware e.g. of the `optional::reset()` function which is
 unconditionally `noexcept`.
  4. Unfortunately it is necessary to implement the actual coroutine as a
-`ConsumeratorImpl` and then obtain the actual object via `makeConsumerator`.
+`ConsumerImpl` and then obtain the actual object via `makeConsumer`.
 There are currently three reasons, why this is necessary: 4.1 Without it, the
 exceptions from the first part of the execution (the "constructor") couldn't be
 directly propagated, but only at the first call to push. Consider for example a
-Consumerator that writes to a file, and the opening of the file fails, and we
+Consumer that writes to a file, and the opening of the file fails, and we
 want to find out immediately. This can only be achieved with the additional
 helper functions because of the internal design of C++20 coroutines and their
 initialization. 4.2 G++ currently (versions 11-13) has a bug, that crashes the
 compiler when a coroutine has a `noexcept(false)` destructor (see 2.). With the
 wrapper function we can work around this bug. 4.3  With the wrapper function we
-can make all constructors of the `Consumerator` class private. That way we can
+can make all constructors of the `Consumer` class private. That way we can
 rule out several potential bugs (see 3.).
-5. A lot of systematic examples can be found in the tests (`ConsumeratorTest.h`)
+5. A lot of systematic examples can be found in the tests (`ConsumerTest.h`)
  */
 
-// Two empty structs used as tags for the `ConsumeratorImpl`
+// Two empty structs used as tags for the `ConsumerImpl`
 namespace detail {
 struct ValueWasPushedTag {};
 struct NextValueTag {};
@@ -95,12 +92,12 @@ struct NextValueTag {};
 static constexpr detail::ValueWasPushedTag valueWasPushedTag;
 static constexpr detail::NextValueTag nextValueTag;
 template <typename ReferenceType>
-class ConsumeratorImpl {
+class ConsumerImpl {
   static_assert(
       std::is_reference_v<ReferenceType> ||
           (std::is_trivially_copyable_v<ReferenceType> &&
            sizeof(ReferenceType) < 32),
-      "The `ConsumeratorImpl` coroutine has to be used a reference type "
+      "The `ConsumerImpl` coroutine has to be used a reference type "
       "as its template argument for efficiency reasons (otherwise "
       "unnecessary copies would occur). The only exception of this "
       "rule are small trivially copyable objects wor which the copy "
@@ -151,15 +148,15 @@ class ConsumeratorImpl {
 
     void return_void() const noexcept {}
 
-    // Create the actual `ConsumeratorImpl` object, which gets a
+    // Create the actual `ConsumerImpl` object, which gets a
     // `coroutine_handle` to access the `promise_type` object. Note: We only
     // return a `coroutine_handle` here that will later be implicitly converted
-    // to a `ConsumeratorImpl` object. This way, the exceptions that occur in
+    // to a `ConsumerImpl` object. This way, the exceptions that occur in
     // the "constructor" part of the coroutine make the construction of the
     // coroutine throw directly.
     // std::coroutine_handle<promise_type> get_return_object() {
-    ConsumeratorImpl get_return_object() {
-      return ConsumeratorImpl{
+    ConsumerImpl get_return_object() {
+      return ConsumerImpl{
           std::coroutine_handle<promise_type>::from_promise(*this)};
     }
 
@@ -213,10 +210,10 @@ class ConsumeratorImpl {
  public:
   // Constructor that gets a handle to the coroutine frame.
   // Note: The implicit conversion is required by the machinery.
-  explicit ConsumeratorImpl(Handle handle) : coro_{handle} {}
+  explicit ConsumerImpl(Handle handle) : coro_{handle} {}
 
   template <typename T>
-  friend class Consumerator;
+  friend class Consumer;
 
  private:
   // Push the next value to the coroutine loop. Make the `co_await
@@ -224,7 +221,7 @@ class ConsumeratorImpl {
   // by `co_await nextValue`.Depending on the `isConst` parameter, `push` may
   // either be called only with non-const (`isConst == false`) or const
   // (`isConst == true`) references.
-  void push(ReferenceType value) {
+  void operator()(ReferenceType value) {
     coro_.promise().setValue(AD_FWD(value));
     coro_.promise().isFinished_ = false;
     AD_EXPENSIVE_CHECK(coro_);
@@ -274,7 +271,7 @@ class ConsumeratorImpl {
  public:
   // The destructor implicitly calls `finish` if it hasn't been called
   // explicitly before.
-  ~ConsumeratorImpl() {
+  ~ConsumerImpl() {
     ad_utility::ignoreExceptionIfThrows([this]() { finish(); });
   }
 
@@ -282,45 +279,45 @@ class ConsumeratorImpl {
   // Note: default-constructed and moved-from objects are invalid and may not be
   // accessed until a valid object has been assigned again (via move assignment
   // or swap).
-  ConsumeratorImpl() = default;
-  ConsumeratorImpl(ConsumeratorImpl&& rhs) noexcept
+  ConsumerImpl() = default;
+  ConsumerImpl(ConsumerImpl&& rhs) noexcept
       : coro_{std::exchange(rhs.coro_, nullptr)} {}
-  void swap(ConsumeratorImpl& rhs) noexcept { std::swap(coro_, rhs.coro_); }
-  ConsumeratorImpl& operator=(ConsumeratorImpl rhs) {
+  void swap(ConsumerImpl& rhs) noexcept { std::swap(coro_, rhs.coro_); }
+  ConsumerImpl& operator=(ConsumerImpl rhs) {
     swap(rhs);
     return *this;
   }
 };
 
 template <typename T>
-struct Consumerator {
+struct Consumer {
  private:
-  ConsumeratorImpl<T> consumerator_;
+  ConsumerImpl<T> consumer_;
   int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
 
-  explicit Consumerator(ConsumeratorImpl<T> consumerator)
-      : consumerator_{std::move(consumerator)} {
-    consumerator_.finishIfException();
+  explicit Consumer(ConsumerImpl<T> consumer)
+      : consumer_{std::move(consumer)} {
+    consumer_.finishIfException();
   }
-  Consumerator(Consumerator&&) = delete;
-  Consumerator& operator=(Consumerator&&) = delete;
+  Consumer(Consumer&&) = delete;
+  Consumer& operator=(Consumer&&) = delete;
 
  public:
-  void push(T t) { consumerator_.push(AD_FWD(t)); }
-  void finish() { consumerator_.finish(); }
-  ~Consumerator() noexcept(false) {
+  void operator()(T t) { consumer_(AD_FWD(t)); }
+  void finish() { consumer_.finish(); }
+  ~Consumer() noexcept(false) {
     if (numExceptionsDuringConstruction_ == std::uncaught_exceptions()) {
       finish();
     } else {
       ad_utility::ignoreExceptionIfThrows(
-          [this]() { finish(); }, "Destructor of `ad_utility::Consumerator`");
+          [this]() { finish(); }, "Destructor of `ad_utility::Consumer`");
     }
   }
   template <typename U>
-  friend Consumerator<U> makeConsumerator(ConsumeratorImpl<U> consumeratorImpl);
+  friend Consumer<U> makeConsumer(ConsumerImpl<U> consumerImpl);
 };
 template <typename T>
-Consumerator<T> makeConsumerator(ConsumeratorImpl<T> consumeratorImpl) {
-  return Consumerator{std::move(consumeratorImpl)};
+Consumer<T> makeConsumer(ConsumerImpl<T> consumerImpl) {
+  return Consumer{std::move(consumerImpl)};
 }
 }  // namespace ad_utility

@@ -172,16 +172,17 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // idVecs to have a more useful external access pattern.
 
       // write the new word to the vocabulary
-      if (!lastTripleComponent_.value().isExternal()) {
-        internalVocabularyAction(lastTripleComponent_.value().iriOrLiteral());
+      const auto& nextWord = lastTripleComponent_.value();
+      if (nextWord.isExternal()) {
+        internalVocabularyAction(nextWord.iriOrLiteral());
       } else {
-        externalVocabularyAction(lastTripleComponent_.value().iriOrLiteral());
+        externalVocabularyAction(nextWord.iriOrLiteral());
       }
 
       metaData_.internalEntities_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value().index_);
+          top.iriOrLiteral(), nextWord.index_);
       metaData_.langTaggedPredicates_.addIfWordMatches(
-          top.iriOrLiteral(), lastTripleComponent_.value().index_);
+          top.iriOrLiteral(), nextWord.index_);
       metaData_.numWordsTotal_++;
       if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
         LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;

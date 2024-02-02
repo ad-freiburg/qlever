@@ -296,8 +296,7 @@ class Vocabulary {
   // Get a writer for the external vocab that has a `push` method to which the
   // single words have to be pushed one by one to add words to the vocabulary.
   auto makeWordWriterForExternalVocabulary(const std::string& filename) {
-    return externalVocabulary_.getUnderlyingVocabulary().getWordWriter(
-        filename);
+    return externalVocabulary_.getUnderlyingVocabulary().wordWriter(filename);
   }
 
   auto makeUncompressingWordWriter(const std::string& filename) {

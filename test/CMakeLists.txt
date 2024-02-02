@@ -386,4 +386,4 @@ addLinkAndDiscoverTest(PointerGuardTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
 
-addLinkAndDiscoverTest(ConsumeratorTest)
+addLinkAndDiscoverTest(ConsumerTest)
