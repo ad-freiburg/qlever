@@ -86,7 +86,7 @@ std::vector<std::pair<size_t, size_t>> GrbMatrix::extractTuples() const {
   std::unique_ptr<bool[]> values{new bool[nvals]()};
   auto info = GrB_Matrix_extractTuples_BOOL(rowIndices, colIndices,
                                             values.get(), &nvals, matrix());
-  GrbMatrix::handleError(info);
+  handleError(info);
 
   std::vector<std::pair<size_t, size_t>> result;
   for (size_t i = 0; i < nvals; i++) {
@@ -112,7 +112,7 @@ std::vector<size_t> GrbMatrix::extractRow(size_t rowIndex) const {
 size_t GrbMatrix::numNonZero() const {
   size_t nvals;
   auto info = GrB_Matrix_nvals(&nvals, matrix());
-  GrbMatrix::handleError(info);
+  handleError(info);
   return nvals;
 }
 
@@ -120,7 +120,7 @@ size_t GrbMatrix::numNonZero() const {
 size_t GrbMatrix::numRows() const {
   size_t nrows;
   auto info = GrB_Matrix_nrows(&nrows, matrix());
-  GrbMatrix::handleError(info);
+  handleError(info);
   return nrows;
 }
 
@@ -128,7 +128,7 @@ size_t GrbMatrix::numRows() const {
 size_t GrbMatrix::numCols() const {
   size_t ncols;
   auto info = GrB_Matrix_ncols(&ncols, matrix());
-  GrbMatrix::handleError(info);
+  handleError(info);
   return ncols;
 }
 
