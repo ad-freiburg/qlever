@@ -309,8 +309,10 @@ std::string insertThousandSeparator(const std::string_view str,
 
 // these overloads are missing in the STL
 // TODO they can be constexpr once the compiler completely supports C++20
-inline std::string operator+(const std::string& a, std::string_view b) {
-  std::string res;
+template <typename Char>
+inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
+                                         std::basic_string_view<Char> b) {
+  std::basic_string<Char> res;
   res.reserve(a.size() + b.size());
   res += a;
   res += b;

@@ -6,12 +6,14 @@
 
 #include <utility>
 
+#include "util/StringUtils.h"
+
 namespace ad_utility::triple_component {
 // __________________________________________
 Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 // __________________________________________
-Iri::Iri(const Iri& prefix, const NormalizedString& suffix)
+Iri::Iri(const Iri& prefix, NormalizedStringView suffix)
     : iri_{NormalizedString{prefix.getContent()} + suffix} {};
 
 // __________________________________________

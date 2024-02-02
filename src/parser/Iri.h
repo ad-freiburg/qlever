@@ -25,7 +25,7 @@ class Iri {
   explicit Iri(NormalizedString iri);
 
   // Create a new iri using a prefix
-  Iri(const Iri& prefix, const NormalizedString& suffix);
+  Iri(const Iri& prefix, NormalizedStringView suffix);
 
  public:
   // Create a new iri given an iri with brackets

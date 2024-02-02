@@ -85,7 +85,7 @@ LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
-                                       const std::string& suffix) {
+                                       std::string_view suffix) {
   return LiteralOrIri{Iri::prefixed(prefix, suffix)};
 }
 

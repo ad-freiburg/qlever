@@ -20,6 +20,8 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
 
+using namespace std::string_literals;
+
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
 
@@ -480,7 +482,7 @@ nlohmann::json Server::composeCacheStatsJson() const {
 class QueryAlreadyInUseError : public std::runtime_error {
  public:
   explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
-      : std::runtime_error{"Query id '" + proposedQueryId +
+      : std::runtime_error{"Query id '"s + proposedQueryId +
                            "' is already in use!"} {}
 };
 

@@ -89,6 +89,6 @@ class LiteralOrIri {
   static LiteralOrIri iriref(const std::string& stringWithBrackets);
 
   // Create a new iri given a prefix iri and its suffix
-  static LiteralOrIri prefixedIri(const Iri& prefix, const std::string& suffix);
+  static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix);
 };
 }  // namespace ad_utility::triple_component
