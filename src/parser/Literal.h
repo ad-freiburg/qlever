@@ -59,23 +59,15 @@ class Literal {
   // prefix. Throws an exception if the literal has no datatype.
   Iri getDatatype() const;
 
-  // Create a new Literal with optional datatype or language tag.
-  //   The rdfContent is expected to be a valid string according to SPARQL 1.1
-  //   Query Language, 19.8 Grammar, Rule [145], and to be surrounded by
-  //   quotation marks (", """, ', or '''). If the second argument is set and of
-  //   type IRI, it is stored as the datatype of the given literal. If the
-  //   second argument is set and of type string, it is interpreted as the
-  //   language tag of the given literal. The language tag string can optionally
-  //   start with an @ character, which is removed during the automatic
-  //   normalization. If no second argument is set, the literal is stored
-  //   without any descriptor.
+  // For documentation, see documentation of function
+  // LiteralORIri::literalWithQuotes
   static Literal literalWithQuotes(
       const std::string& rdfContentWithQuotes,
       const std::optional<std::variant<Iri, string>>& descriptor =
           std::nullopt);
 
-  // Similar to `literalWithQuotes`, except the rdfContent is expected to NOT BE
-  // surrounded by quotation marks.
+  // For documentation, see documentation of function
+  // LiteralORIri::literalWithoutQuotes
   static Literal literalWithoutQuotes(
       const std::string& rdfContentWithoutQuotes,
       const std::optional<std::variant<Iri, string>>& descriptor =
