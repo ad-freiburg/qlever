@@ -505,28 +505,15 @@ auto Server::cancelAfterDeadline(
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit) const
     -> ad_utility::InvocableWithExactReturnType<void> auto {
-  // timerExecutor_ is single threaded, so this is safe to do.
-  auto timer = std::make_shared<net::steady_timer>(timerExecutor_, timeLimit);
+  net::steady_timer timer{timerExecutor_, timeLimit};
 
-  auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-         std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
-    // Ignore cancellation exceptions, they are normal
-    co_await timer->async_wait(net::as_tuple(net::use_awaitable));
+  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
+                       const boost::system::error_code&) {
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
-  };
-  net::co_spawn(timerExecutor_,
-                cancelAfterTimeout(std::move(cancellationHandle), timer),
-                net::detached);
-  // For some reason gcc 11-13 with -O3 think `executed` may be uninitialized
-  return [executor = timerExecutor_.get_executor(), timer = std::move(timer),
-          executed = false]() mutable {
-    AD_CORRECTNESS_CHECK(!executed);
-    executed = true;
-    net::post(executor, [timer = std::move(timer)]() { timer->cancel(); });
-  };
+  });
+  return [timer = std::move(timer)]() mutable { timer.cancel(); };
 }
 
 // _____________________________________________________________________________
