@@ -41,7 +41,8 @@ consumer("first line");
 consumer("second line");
 // break out of the loop
 consumer.finish();
- // The file is now closed, and has the contents "first line\nsecond line\nEND OF INPUT\n".
+ // The file is now closed, and has the contents "first line\nsecond line\nEND
+OF INPUT\n".
 
 In the following we will describe several aspects of the interfaces.
 1. The template argument is the argument type to the `push` function in the
@@ -93,15 +94,14 @@ static constexpr detail::ValueWasPushedTag valueWasPushedTag;
 static constexpr detail::NextValueTag nextValueTag;
 template <typename ReferenceType>
 class ConsumerImpl {
-  static_assert(
-      std::is_reference_v<ReferenceType> ||
-          (std::is_trivially_copyable_v<ReferenceType> &&
-           sizeof(ReferenceType) < 32),
-      "The `ConsumerImpl` coroutine has to be used a reference type "
-      "as its template argument for efficiency reasons (otherwise "
-      "unnecessary copies would occur). The only exception of this "
-      "rule are small trivially copyable objects wor which the copy "
-      "is typically cheaper than taking a reference");
+  static_assert(std::is_reference_v<ReferenceType> ||
+                    (std::is_trivially_copyable_v<ReferenceType> &&
+                     sizeof(ReferenceType) < 32),
+                "The `ConsumerImpl` coroutine has to be used a reference type "
+                "as its template argument for efficiency reasons (otherwise "
+                "unnecessary copies would occur). The only exception of this "
+                "rule are small trivially copyable objects wor which the copy "
+                "is typically cheaper than taking a reference");
 
  public:
   struct promise_type {
@@ -295,8 +295,7 @@ struct Consumer {
   ConsumerImpl<T> consumer_;
   int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
 
-  explicit Consumer(ConsumerImpl<T> consumer)
-      : consumer_{std::move(consumer)} {
+  explicit Consumer(ConsumerImpl<T> consumer) : consumer_{std::move(consumer)} {
     consumer_.finishIfException();
   }
   Consumer(Consumer&&) = delete;

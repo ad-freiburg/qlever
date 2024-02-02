@@ -57,8 +57,7 @@ class VocabularyOnDisk {
   // Return a consumerator that can be used to build the vocabulary. Repeated
   // calls to `push` will add the pushed words to the vocabulary with the
   // contiguous indices [0, 1, ...].
-  ad_utility::Consumer<std::string_view> wordWriter(
-      std::string outFileName) {
+  ad_utility::Consumer<std::string_view> wordWriter(std::string outFileName) {
     return ad_utility::makeConsumer(wordWriterImpl(std::move(outFileName)));
   }
   ad_utility::ConsumerImpl<std::string_view> wordWriterImpl(

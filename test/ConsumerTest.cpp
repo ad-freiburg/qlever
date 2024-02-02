@@ -138,7 +138,7 @@ TEST(ConsumerImpl, ConstStringStateMachine) {
 struct TestException : public std::exception {};
 
 ConsumerImpl<bool> stateMachineWithExceptionsImpl(bool throwInitial,
-                                                      bool throwFinal) {
+                                                  bool throwFinal) {
   if (throwInitial) {
     throw TestException{};
   }
