@@ -20,6 +20,14 @@ using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 
 using TripleVec = ad_utility::CompressedExternalIdTable<3>;
 
+namespace ad_utility::vocabulary_merger {
+// Concept for a callback that can be called with a single `string_view`
+// argument.
+template <typename T>
+concept WordCallback = std::invocable<T, std::string_view>;
+// Concept for a callable that compares to `string_view`s.
+template <typename T>
+concept WordComparator = std::predicate<T, std::string_view, std::string_view>;
 /**
  * Class for merging the partial vocabularies. The main function is still in the
  * `mergeVocabulary` function, but the parallel pipeline is easier when this is
@@ -100,24 +108,21 @@ class VocabularyMerger {
 
   // _______________________________________________________________
   // merge the partial vocabularies in the  binary files
-  // fileIdx + PARTIAL_VOCAB_FILE_NAME + to_string(i)
+  // basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
   // where 0 <= i < numFiles
-  // Directly Writes .vocabulary file at fileIdx (no more need to pass
-  // through Vocabulary class
-  // Writes file "externalTextFile" which can be used to directly write external
-  // Literals
   // Returns the number of total Words merged and via the parameters
   // the lower and upper bound of language tagged predicates
-  // Argument comparator gives the way to order strings (case-sensitive or not)
-  // This automatically resets the inner members after finishing, to leave the
-  // external interface stateless
-  template <typename Comp, typename InternalVocabularyAction,
-            typename ExternalVocabularyAction>
-  VocabularyMetaData mergeVocabulary(const std::string& fileIdx,
-                                     size_t numFiles, Comp comparator,
-                                     InternalVocabularyAction& action,
-                                     ExternalVocabularyAction& externalAction,
-                                     ad_utility::MemorySize memToUse);
+  // Argument `comparator` gives the way to order strings (case-sensitive or
+  // not). Arguments `internalVocabAction` and `externalVocabAction` are called
+  // for each merged word in the internal/external vocabulary in the order of
+  // their appearance.// This function automatically resets the inner members
+  // after finishing, to leave the external interface stateless
+  VocabularyMetaData mergeVocabulary(const std::string& basename,
+                                     size_t numFiles,
+                                     WordComparator auto comparator,
+                                     WordCallback auto& internalWordCallback,
+                                     WordCallback auto& externalWordCallback,
+                                     ad_utility::MemorySize memoryToUse);
 
  private:
   // helper struct used in the priority queue for merging.
@@ -147,15 +152,15 @@ class VocabularyMerger {
                                          q._entry.iriOrLiteral().size());
   };
 
-  // write the queu words in the buffer to their corresponding idPairVecs.
-  // Requires that all the QueueWords that are ever passed are ordered
-  // alphabetically (Also across multiple calls)
-  template <typename InternalVocabularyAction,
-            typename ExternalVocabularyAction>
+  // Write the queue words in the buffer to their corresponding `idPairVecs`.
+  // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
+  // across multiple calls).
   void writeQueueWordsToIdVec(
       const std::vector<QueueWord>& buffer,
-      InternalVocabularyAction& internalVocabularyAction,
-      ExternalVocabularyAction& externalVocabularyAction, const auto& lessThan);
+      WordCallback auto& internalVocabularyAction,
+      WordCallback auto& externalVocabularyAction,
+      std::predicate<TripleComponentWithIndex,
+                     TripleComponentWithIndex> auto const& lessThan);
 
   // close all associated files and MmapVectors and reset all internal variables
   void clear() {
@@ -234,5 +239,7 @@ ItemVec vocabMapsToVector(ItemMapArray& map);
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
+
+}  // namespace ad_utility::vocabulary_merger
 
 #include "VocabularyGeneratorImpl.h"

@@ -7,13 +7,12 @@
 #include <string>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/File.h"
-#include "../util/Iterators.h"
-#include "../util/MmapVector.h"
-#include "./vocabulary/VocabularyTypes.h"
-#include "StringSortComparator.h"
+#include "global/Id.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/Consumer.h"
+#include "util/File.h"
+#include "util/Iterators.h"
+#include "util/MmapVector.h"
 
 using std::string;
 using std::vector;
@@ -51,7 +50,7 @@ class VocabularyOnDisk {
 
  public:
   /// Build from a vector of strings with one word per line.
-  /// These functions will assign the contiguous Ids [0 .. #numWords).
+  /// These functions will assign the contiguous indices [0 .. #numWords).
   void buildFromVector(const vector<string>& words, const string& fileName);
 
   // Return a consumerator that can be used to build the vocabulary. Repeated

@@ -2,15 +2,12 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#include "./VocabularyOnDisk.h"
+#include "index/VocabularyOnDisk.h"
 
 #include <fstream>
 
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/BufferedVector.h"
-#include "../util/Generator.h"
-#include "../util/Log.h"
+#include "util/Generator.h"
+#include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 

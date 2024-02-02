@@ -46,13 +46,13 @@ TEST(ConsumerImpl, IntStateMachine) {
 // _______________________________________________________________________________________
 ConsumerImpl<std::string&&> moveStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
-  target_back(initial);
+  target.push_back(initial);
 
   while (co_await ad_utility::valueWasPushedTag) {
-    target_back(std::move(co_await ad_utility::nextValueTag));
+    target.push_back(std::move(co_await ad_utility::nextValueTag));
   }
 
-  target_back(initial);
+  target.push_back(initial);
 }
 auto moveStringStateMachine = makeWrapper<&moveStringStateMachineImpl>;
 
@@ -61,17 +61,17 @@ TEST(ConsumerImpl, MoveStringStateMachine) {
   std::vector<std::string> compare;
 
   auto stateMachine = moveStringStateMachine("hello", target);
-  compare_back("hello");
+  compare.push_back("hello");
   EXPECT_EQ(target, compare);
 
-  compare_back("alpha");
+  compare.push_back("alpha");
   std::string str = "alpha";
   // Push an lvalue reference, which the coroutine will move.
   stateMachine(std::move(str));
   EXPECT_TRUE(str.empty());
   EXPECT_EQ(target, compare);
 
-  compare_back("beta");
+  compare.push_back("beta");
   str = "beta";
   // Push an rvalue reference, which the coroutine will move.
   stateMachine(std::move(str));
@@ -79,27 +79,27 @@ TEST(ConsumerImpl, MoveStringStateMachine) {
   EXPECT_TRUE(str.empty());
   EXPECT_EQ(target, compare);
 
-  compare_back("gamma");
+  compare.push_back("gamma");
   // Push a temporary, which the coroutine will also move (but we cannot
   // actually test this).
   stateMachine("gamma");
   EXPECT_EQ(target, compare);
 
   stateMachine.finish();
-  compare_back("hello");
+  compare.push_back("hello");
   ASSERT_EQ(target, compare);
 }
 
 // _______________________________________________________________________________________
 ConsumerImpl<const std::string&> constStringStateMachineImpl(
     std::string initial, std::vector<std::string>& target) {
-  target_back(initial);
+  target.push_back(initial);
 
   while (co_await ad_utility::valueWasPushedTag) {
-    target_back(std::move(co_await ad_utility::nextValueTag));
+    target.push_back(std::move(co_await ad_utility::nextValueTag));
   }
 
-  target_back(initial);
+  target.push_back(initial);
 }
 
 auto constStringStateMachine = makeWrapper<&constStringStateMachineImpl>;
@@ -109,10 +109,10 @@ TEST(ConsumerImpl, ConstStringStateMachine) {
   std::vector<std::string> compare;
 
   auto stateMachine = constStringStateMachine("hello", target);
-  compare_back("hello");
+  compare.push_back("hello");
   EXPECT_EQ(target, compare);
 
-  compare_back("alpha");
+  compare.push_back("alpha");
   std::string str = "alpha";
   stateMachine(str);
   // We called `move` on the string, but the const state machine can't actually
@@ -120,18 +120,18 @@ TEST(ConsumerImpl, ConstStringStateMachine) {
   EXPECT_EQ(str, "alpha");
   EXPECT_EQ(target, compare);
 
-  compare_back("beta");
+  compare.push_back("beta");
   str = "beta";
   stateMachine(std::move(str));
   EXPECT_EQ(str, "beta");
   EXPECT_EQ(target, compare);
 
-  compare_back("gamma");
+  compare.push_back("gamma");
   stateMachine("gamma");
   EXPECT_EQ(target, compare);
 
   stateMachine.finish();
-  compare_back("hello");
+  compare.push_back("hello");
   ASSERT_EQ(target, compare);
 }
 

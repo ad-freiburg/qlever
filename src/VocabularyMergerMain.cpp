@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
   std::string basename = argv[1];
   size_t numFiles = atoi(argv[2]);
 
-  VocabularyMerger m;
+  ad_utility::vocabulary_merger::VocabularyMerger m;
 
   auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
   auto internalVocabularyAction = [&file](const auto& word) {

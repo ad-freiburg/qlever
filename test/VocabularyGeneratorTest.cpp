@@ -13,6 +13,7 @@
 #include "index/VocabularyGenerator.h"
 #include "util/Algorithm.h"
 
+using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
 bool vocabTestCompare(const IdPairMMapVecView& a,

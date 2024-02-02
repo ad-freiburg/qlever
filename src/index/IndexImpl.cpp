@@ -460,7 +460,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   if (vocabPrefixCompressed_) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
-    VocabularyMerger m;
+    ad_utility::vocabulary_merger::VocabularyMerger m;
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
@@ -491,24 +491,25 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
             << "(internal and external) ..." << std::endl;
-  const VocabularyMerger::VocabularyMetaData mergeRes = [&]() {
-    VocabularyMerger v;
-    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
-                                                          std::string_view b) {
-      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
-    };
-    auto wordWriter =
-        vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&wordWriter](const auto& word) {
-      wordWriter.push(word.data(), word.size());
-    };
+  const ad_utility::vocabulary_merger::VocabularyMerger::VocabularyMetaData
+      mergeRes = [&]() {
+        ad_utility::vocabulary_merger::VocabularyMerger v;
+        auto sortPred = [cmp = &(vocab_.getCaseComparator())](
+                            std::string_view a, std::string_view b) {
+          return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
+        };
+        auto wordWriter = vocab_.makeUncompressingWordWriter(
+            onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+        auto internalVocabularyAction = [&wordWriter](const auto& word) {
+          wordWriter.push(word.data(), word.size());
+        };
 
-    auto wordWriterExternal = vocab_.makeWordWriterForExternalVocabulary(
-        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-    return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction, wordWriterExternal,
-                             memoryLimitIndexBuilding());
-  }();
+        auto wordWriterExternal = vocab_.makeWordWriterForExternalVocabulary(
+            onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+        return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
+                                 internalVocabularyAction, wordWriterExternal,
+                                 memoryLimitIndexBuilding());
+      }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
@@ -624,7 +625,8 @@ IndexImpl::convertPartialToGlobalIds(
       return std::nullopt;
     }
     std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
-    auto map = IdMapFromPartialIdMapFile(mmapFilename);
+    auto map =
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
     return std::pair{idx, std::move(map)};
@@ -1200,6 +1202,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, auto localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
+  using namespace ad_utility::vocabulary_merger;
   LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
   LOG(DEBUG)
       << "Triples processed, also counting internal triples added by QLever: "

@@ -11,8 +11,8 @@
 #include <utility>
 
 #include "util/Exception.h"
+#include "util/ExceptionHandling.h"
 #include "util/Forward.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 namespace ad_utility {
 /*
