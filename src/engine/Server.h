@@ -162,7 +162,7 @@ class Server {
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
       const ad_utility::httpUtils::HttpRequest auto& request,
-      const std::string& query);
+      std::string_view query);
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing

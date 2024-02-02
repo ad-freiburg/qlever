@@ -10,7 +10,6 @@ using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
 using ::testing::ContainerEq;
-using ::testing::ElementsAre;
 using ::testing::IsEmpty;
 
 TEST(QueryId, checkIdEqualityRelation) {

@@ -493,7 +493,7 @@ class QueryAlreadyInUseError : public std::runtime_error {
 
 ad_utility::websocket::OwningQueryId Server::getQueryId(
     const ad_utility::httpUtils::HttpRequest auto& request,
-    const std::string& query) {
+    std::string_view query) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
