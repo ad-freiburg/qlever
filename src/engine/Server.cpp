@@ -223,26 +223,27 @@ net::awaitable<std::optional<Server::TimeLimit>>
 Server::verifyUserSubmittedQueryTimeout(
     std::optional<std::string_view> userTimeout, bool accessTokenOk,
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
-  TimeLimit timeLimit = RuntimeParameters().get<"default-query-timeout">();
+  auto defaultTimeout = RuntimeParameters().get<"default-query-timeout">();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
-    if (timeoutCandidate > timeLimit && !accessTokenOk) {
+    if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
       co_await send(ad_utility::httpUtils::createForbiddenResponse(
           absl::StrCat("User submitted timeout was higher than what is "
                        "currently allowed by "
                        "this instance (",
-                       timeLimit.count(),
-                       "s). Please use a valid-access token to override this "
+                       defaultTimeout.toString(),
+                       "). Please use a valid-access token to override this "
                        "server configuration."),
           request));
       co_return std::nullopt;
     }
     co_return timeoutCandidate;
   }
-  co_return timeLimit;
+  co_return std::chrono::duration_cast<TimeLimit>(
+      decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
 
 // _____________________________________________________________________________
