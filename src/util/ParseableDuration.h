@@ -17,8 +17,12 @@ namespace ad_utility {
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
-template <typename DurationType>
+template <typename DT>
 class ParseableDuration {
+ public:
+  using DurationType = DT;
+
+ private:
   DurationType duration_{};
 
  public:
