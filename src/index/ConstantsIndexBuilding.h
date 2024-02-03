@@ -15,7 +15,10 @@ const std::string EXTERNAL_LITS_TEXT_FILE_NAME = ".externalized-text";
 // Determines the maximum number of bytes of an internal literal (before
 // compression). Every literal larger as this size is externalized regardless
 // of its language tag
-static const size_t MAX_INTERNAL_LITERAL_BYTES = 1'000'000;
+//
+// UNIPROT HACK: Keep only short literals in RAM.
+// TODO: This length should be configurable in the `settings.json`.
+static const size_t MAX_INTERNAL_LITERAL_BYTES = 128;  // 1'000'000
 
 // How many lines are parsed at once during index creation.
 // Reduce to save RAM
