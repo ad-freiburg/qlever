@@ -92,7 +92,7 @@ constexpr auto printNothing = []() constexpr { return ""; };
 class CancellationException : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
-  CancellationException(CancellationState reason)
+  explicit CancellationException(CancellationState reason)
       : std::runtime_error{reason == CancellationState::TIMEOUT
                                ? "Query timed out."
                                : "Query was manually cancelled."} {
