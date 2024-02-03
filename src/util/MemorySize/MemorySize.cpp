@@ -5,20 +5,17 @@
 
 #include "util/MemorySize/MemorySize.h"
 
+#include <absl/strings/charconv.h>
 #include <absl/strings/str_cat.h>
 
-#include <cinttypes>
-#include <ranges>
+#include <cctype>
+#include <charconv>
+#include <ctre-unicode.hpp>
 #include <string_view>
 
-#include "util/Cache.h"
+#include "util/Algorithm.h"
 #include "util/ConstexprMap.h"
 #include "util/ConstexprUtils.h"
-#include "util/Exception.h"
-#include "util/HashMap.h"
-#include "util/MemorySize/MemorySizeParser.h"
-#include "util/MemorySize/generated/MemorySizeLanguageLexer.h"
-#include "util/MemorySize/generated/MemorySizeLanguageParser.h"
 
 namespace ad_utility {
 // _____________________________________________________________________________
@@ -63,7 +60,40 @@ std::string MemorySize::asString() const {
 
 // _____________________________________________________________________________
 MemorySize MemorySize::parse(std::string_view str) {
-  return MemorySizeParser::parseMemorySize(str);
+  constexpr ctll::fixed_string regex =
+      "(?<amount>\\d+(?:\\.\\d+)?)\\s*(?<unit>[kKmMgGtT][bB]?|[bB])";
+  if (auto matcher = ctre::match<regex>(str)) {
+    auto amountString = matcher.get<"amount">().to_view();
+    // Versions after CTRE v3.8.1 should support to_number()
+    // with double values if the compilers support it.
+    double amount;
+    absl::from_chars(amountString.begin(), amountString.end(), amount);
+    auto unitString = matcher.get<"unit">().to_view();
+    switch (std::tolower(unitString.at(0))) {
+      case 'b':
+        if (ad_utility::contains(amountString, '.')) {
+          throw std::runtime_error(absl::StrCat(
+              "'", str,
+              "' could not be parsed as a memory size. When using bytes as "
+              "units only unsigned integers are allowed."));
+        }
+        return MemorySize::bytes(static_cast<size_t>(amount));
+      case 'k':
+        return MemorySize::kilobytes(amount);
+      case 'm':
+        return MemorySize::megabytes(amount);
+      case 'g':
+        return MemorySize::gigabytes(amount);
+      case 't':
+        return MemorySize::terabytes(amount);
+      default:
+        // Whatever this is, it is false.
+        AD_FAIL();
+    }
+  }
+  throw std::runtime_error(absl::StrCat(
+      "'", str,
+      R"(' could not be parsed as a memory size. Examples for valid memory sizes are "4 B", "3.21 MB", "2.392 TB".)"));
 }
 
 // _____________________________________________________________________________

@@ -6,16 +6,12 @@
 
 #pragma once
 
-#include <list>
-
 #include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-
-using std::list;
 
 class Join : public Operation {
  private:
