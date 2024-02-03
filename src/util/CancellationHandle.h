@@ -5,6 +5,7 @@
 #ifndef QLEVER_CANCELLATIONHANDLE_H
 #define QLEVER_CANCELLATIONHANDLE_H
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest_prod.h>
 
 #include <atomic>
@@ -77,11 +78,11 @@ struct PseudoStopToken {
 };
 
 /// Helper function to print a warning if `executionStage` is not empty.
-inline void printAdditionalDetails(std::string_view executionStage) {
+inline std::string printAdditionalDetails(std::string_view executionStage) {
   if (executionStage.empty()) {
-    return;
+    return "";
   }
-  LOG(WARN) << " at stage \"" << executionStage << '"';
+  return absl::StrCat(" at stage \"", executionStage, "\"");
 }
 
 constexpr auto printNothing = []() constexpr { return ""; };
@@ -102,6 +103,14 @@ class CancellationException : public std::runtime_error {
   /// rethrown exception
   std::string operation_{};
 };
+
+/// Trim everything but the filename of a given file path.
+constexpr std::string_view trimFileName(std::string_view fileName) {
+  // Safe to do, because unsigned overflow is not UB and in case of
+  // npos this will overflow back to zero.
+  static_assert(std::string_view::npos + 1 == 0);
+  return fileName.substr(fileName.rfind('/') + 1);
+}
 
 // Ensure no locks are used
 static_assert(std::atomic<CancellationState>::is_always_lock_free);
@@ -160,10 +169,11 @@ class CancellationHandle {
                                          DESIRED_CANCELLATION_CHECK_INTERVAL}
                     << ", should be at most "
                     << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                    << ". Checked at " << location.file_name() << ":"
-                    << location.line();
-          detail::printAdditionalDetails(std::invoke(stageInvocable));
-          LOG(WARN) << std::endl;
+                    << ". Checked at " << trimFileName(location.file_name())
+                    << ":" << location.line()
+                    << detail::printAdditionalDetails(
+                           std::invoke(stageInvocable))
+                    << std::endl;
         }
         break;
       }

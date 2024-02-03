@@ -272,8 +272,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
   EXPECT_THAT(
       std::move(testStream).str(),
-      AllOf(HasSubstr(location.file_name()),
-            HasSubstr(std::to_string(location.line())),
+      AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
             // Check for small miss window
@@ -304,8 +303,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              AllOf(HasSubstr(location.file_name()),
-                    HasSubstr(std::to_string(location.line()))));
+              HasSubstr("CancellationHandleTest.cpp:64"));
 
   testStream.str("");
 
@@ -315,8 +313,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr(location.file_name()),
-                        HasSubstr(std::to_string(location.line())))));
+              Not(HasSubstr("CancellationHandleTest.cpp:64")));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
@@ -326,8 +323,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr(location.file_name()),
-                        HasSubstr(std::to_string(location.line())))));
+              Not(HasSubstr("CancellationHandleTest.cpp:64")));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
@@ -337,8 +333,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              AllOf(HasSubstr(location.file_name()),
-                    HasSubstr(std::to_string(location.line())),
+              AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
                     HasSubstr(printSomething())));
 
   testStream.str("");
@@ -348,8 +343,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr(location.file_name()),
-                        HasSubstr(std::to_string(location.line())),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
                         HasSubstr(printSomething()))));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -360,8 +354,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr(location.file_name()),
-                        HasSubstr(std::to_string(location.line())),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
                         HasSubstr(printSomething()))));
 }
 
@@ -399,8 +392,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              AllOf(HasSubstr(location.file_name()),
-                    HasSubstr(std::to_string(location.line()))));
+              HasSubstr("CancellationHandleTest.cpp:64"));
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   testStream.str("");
@@ -409,8 +401,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr(location.file_name()),
-                        HasSubstr(std::to_string(location.line())))));
+              Not(HasSubstr("CancellationHandleTest.cpp:64")));
 }
 
 // _____________________________________________________________________________
@@ -440,5 +431,13 @@ static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
 // Ideally we'd add a static assertion for throwIfCancelled here too, but
 // because the function is overloaded, we can't get a function pointer for it.
+
+// Constexpr test cases
+static_assert(trimFileName("") == "");
+static_assert(trimFileName("/") == "");
+static_assert(trimFileName("folder/") == "");
+static_assert(trimFileName("//////") == "");
+static_assert(trimFileName("../Test.cpp") == "Test.cpp");
+static_assert(trimFileName("./folder/Test.cpp") == "Test.cpp");
 
 }  // namespace ad_utility
