@@ -25,6 +25,9 @@ class ParseableDuration {
  private:
   DurationType duration_{};
 
+  template <typename Other>
+  friend class ParseableDuration;
+
  public:
   ParseableDuration() = default;
   // Implicit conversion is on purpose!
@@ -36,6 +39,13 @@ class ParseableDuration {
   // supports it.
   auto operator<=>(const ParseableDuration& other) const noexcept {
     return duration_.count() <=> other.duration_.count();
+  }
+
+  template <typename Other>
+  auto operator<=>(const ParseableDuration<Other>& other) const noexcept {
+    using CommonType = std::common_type_t<DurationType, Other>;
+    return CommonType{duration_}.count() <=>
+           CommonType{other.duration_}.count();
   }
 
   bool operator==(const ParseableDuration&) const noexcept = default;

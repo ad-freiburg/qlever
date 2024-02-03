@@ -224,14 +224,12 @@ Server::verifyUserSubmittedQueryTimeout(
     std::optional<std::string_view> userTimeout, bool accessTokenOk,
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
   auto defaultTimeout = RuntimeParameters().get<"default-query-timeout">();
-  using DefaultUnit = decltype(defaultTimeout)::DurationType;
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
-    if (TimeLimit{timeoutCandidate} > DefaultUnit{defaultTimeout} &&
-        !accessTokenOk) {
+    if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
       co_await send(ad_utility::httpUtils::createForbiddenResponse(
           absl::StrCat("User submitted timeout was higher than what is "
                        "currently allowed by "
@@ -244,7 +242,8 @@ Server::verifyUserSubmittedQueryTimeout(
     }
     co_return timeoutCandidate;
   }
-  co_return std::chrono::duration_cast<TimeLimit>(DefaultUnit{defaultTimeout});
+  co_return std::chrono::duration_cast<TimeLimit>(
+      decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
 
 // _____________________________________________________________________________
