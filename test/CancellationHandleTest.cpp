@@ -438,6 +438,7 @@ static_assert(trimFileName("/") == "");
 static_assert(trimFileName("folder/") == "");
 static_assert(trimFileName("//////") == "");
 static_assert(trimFileName("../Test.cpp") == "Test.cpp");
+static_assert(trimFileName("Test.cpp") == "Test.cpp");
 static_assert(trimFileName("./folder/Test.cpp") == "Test.cpp");
 
 }  // namespace ad_utility
