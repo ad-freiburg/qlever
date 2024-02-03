@@ -8,7 +8,6 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
-#include "engine/Comparators.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/ValueIdComparators.h"
 
