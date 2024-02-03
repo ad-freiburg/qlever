@@ -80,9 +80,9 @@ struct PseudoStopToken {
 /// Helper function to print a warning if `executionStage` is not empty.
 inline std::string printAdditionalDetails(std::string_view executionStage) {
   if (executionStage.empty()) {
-    return "";
+    return ".";
   }
-  return absl::StrCat(" at stage \"", executionStage, "\"");
+  return absl::StrCat(" at stage \"", executionStage, "\".");
 }
 
 constexpr auto printNothing = []() constexpr { return ""; };
