@@ -77,6 +77,7 @@ auto EffectiveBooleanValueGetter::operator()(
 // ____________________________________________________________________________
 std::optional<std::string> StringValueGetter::operator()(
     Id id, const EvaluationContext* context) const {
+  // `true` means that we remove the quotes and angle brackets.
   auto optionalStringAndType =
       ExportQueryExecutionTrees::idToStringAndType<true>(
           context->_qec.getIndex(), id, context->_localVocab);
@@ -86,6 +87,31 @@ std::optional<std::string> StringValueGetter::operator()(
     return std::nullopt;
   }
 }
+
+// ____________________________________________________________________________
+template <auto isSomethingFunction, auto prefix>
+Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  if (id.getDatatype() == Datatype::VocabIndex) {
+    // See instantiations below for what `isSomethingFunction` is.
+    return Id::makeFromBool(std::invoke(isSomethingFunction,
+                                        context->_qec.getIndex().getVocab(),
+                                        id.getVocabIndex()));
+  } else if (id.getDatatype() == Datatype::LocalVocabIndex) {
+    auto word = ExportQueryExecutionTrees::idToStringAndType<false>(
+        context->_qec.getIndex(), id, context->_localVocab);
+    return Id::makeFromBool(word.has_value() &&
+                            word.value().first.starts_with(prefix));
+  } else {
+    return Id::makeFromBool(false);
+  }
+}
+template struct sparqlExpression::detail::IsSomethingValueGetter<
+    &Index::Vocab::isIri, isIriPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetter<
+    &Index::Vocab::isBlankNode, isBlankPrefix>;
+template struct sparqlExpression::detail::IsSomethingValueGetter<
+    &Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // ____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(

@@ -264,7 +264,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
-            << "triples to the POS and PSO permutation for "
+            << " triples to the POS and PSO permutation for "
                "`ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
@@ -841,7 +841,7 @@ size_t IndexImpl::getNumDistinctSubjectPredicatePairs() const {
 
 // _____________________________________________________________________________
 bool IndexImpl::isLiteral(const string& object) const {
-  return decltype(vocab_)::isLiteral(object);
+  return decltype(vocab_)::stringIsLiteral(object);
 }
 
 // _____________________________________________________________________________
@@ -884,7 +884,7 @@ void IndexImpl::setPrefixCompression(bool compressed) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git-hash"] = std::string(qlever::version::GitHash);
+  configuration["git-hash"] = qlever::version::GitShortHash;
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
@@ -896,8 +896,7 @@ void IndexImpl::readConfiguration() {
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
-              << std::string(configurationJson_["git-hash"]).substr(0, 6)
-              << std::endl;
+              << configurationJson_["git-hash"] << std::endl;
   } else {
     LOG(INFO) << "The index was built before git commit hashes were stored in "
                  "the index meta data"
@@ -1407,10 +1406,10 @@ bool IndexImpl::getId(const string& element, Id* id) const {
 }
 
 // ___________________________________________________________________________
-std::pair<Id, Id> IndexImpl::prefix_range(const std::string& prefix) const {
+Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
+    std::string_view prefix) const {
   // TODO<joka921> Do we need prefix ranges for numbers?
-  auto [begin, end] = vocab_.prefix_range(prefix);
-  return {Id::makeFromVocabIndex(begin), Id::makeFromVocabIndex(end)};
+  return vocab_.prefixRanges(prefix);
 }
 
 // _____________________________________________________________________________
@@ -1455,6 +1454,7 @@ IdTable IndexImpl::scan(
                              : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
+    cancellationHandle->throwIfCancelled("IndexImpl scan");
     return IdTable{numColumns, allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,

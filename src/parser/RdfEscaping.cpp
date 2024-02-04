@@ -162,29 +162,36 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
   return absl::StrReplaceAll(literal, {{"\n", "\\n"}, {R"(\)", R"(\\)"}});
 }
 
+// ____________________________________________________________________________
+static void literalUnescape(std::string_view input, std::string& res) {
+  detail::unescapeStringAndNumericEscapes<false, false>(
+      input.begin(), input.end(), std::back_inserter(res));
+}
+
+// ____________________________________________________________________________
+static void literalUnescapeWithQuotesRemoved(std::string_view input,
+                                             std::string& res) {
+  if (input.starts_with(R"(""")") || input.starts_with(R"(''')")) {
+    AD_CONTRACT_CHECK(input.ends_with(input.substr(0, 3)));
+    input.remove_prefix(3);
+    input.remove_suffix(3);
+  } else {
+    AD_CONTRACT_CHECK(input.starts_with("\"") || input.starts_with("'"));
+    AD_CONTRACT_CHECK(input.ends_with(input[0]));
+    input.remove_prefix(1);
+    input.remove_suffix(1);
+  }
+
+  literalUnescape(input, res);
+}
+
 // ________________________________________________________________________
 NormalizedRDFString normalizeRDFLiteral(const std::string_view origLiteral) {
   auto literal = origLiteral;
 
   // always start with one double quote "
   std::string res = "\"";
-
-  // Find out, which of the forms "literal", 'literal', """literal""" or
-  // '''literal''' the input has, and strip all the quotes.
-  if (literal.starts_with(R"(""")") || literal.starts_with("'''")) {
-    AD_CONTRACT_CHECK(literal.ends_with(literal.substr(0, 3)));
-    literal.remove_prefix(3);
-    literal.remove_suffix(3);
-  } else {
-    AD_CONTRACT_CHECK(literal.starts_with('"') || literal.starts_with('\''));
-    AD_CONTRACT_CHECK(literal.ends_with(literal[0]));
-    literal.remove_prefix(1);
-    literal.remove_suffix(1);
-  }
-
-  // All numeric and string escapes are allowed for RDF literals
-  detail::unescapeStringAndNumericEscapes<false, false>(
-      literal.begin(), literal.end(), std::back_inserter(res));
+  literalUnescapeWithQuotesRemoved(literal, res);
   res.push_back('\"');
   return NormalizedRDFString{std::move(res)};
 }
@@ -195,7 +202,7 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   size_t posSecondQuote = normLiteral.find('"', 1);
   AD_CONTRACT_CHECK(posSecondQuote != std::string::npos);
   size_t posLastQuote = normLiteral.rfind('"');
-  // If there are onyl two quotes (the first and the last, which every
+  // If there are only two quotes (the first and the last, which every
   // normalized literal has), there is nothing to do.
   if (posSecondQuote == posLastQuote &&
       normLiteral.find_first_of("\\\n\r") == std::string::npos) {
@@ -211,6 +218,22 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
   return absl::StrCat("\"", content, normLiteral.substr(posLastQuote));
 }
 
+// __________________________________________________________________________
+static void unescapeIriWithoutBrackets(std::string_view input,
+                                       std::string& res) {
+  // Only numeric escapes are allowed for iriefs.
+  RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(
+      input.begin(), input.end(), std::back_inserter(res));
+}
+
+// __________________________________________________________________________
+static void unescapeIriWithBrackets(std::string_view input, std::string& res) {
+  AD_CONTRACT_CHECK(input.starts_with("<") && input.ends_with(">"));
+  input.remove_prefix(1);
+  input.remove_suffix(1);
+  unescapeIriWithoutBrackets(input, res);
+}
+
 /**
  * In an Iriref, the only allowed escapes are \uXXXX and '\UXXXXXXXX' ,where X
  * is hexadecimal ([0-9a-fA-F]). This function replaces these escapes by the
@@ -220,14 +243,8 @@ std::string validRDFLiteralFromNormalized(std::string_view normLiteral) {
  * actual value
  */
 std::string unescapeIriref(std::string_view iriref) {
-  AD_CONTRACT_CHECK(iriref.starts_with('<'));
-  AD_CONTRACT_CHECK(iriref.ends_with('>'));
-  iriref.remove_prefix(1);
-  iriref.remove_suffix(1);
   std::string result = "<";
-  // Only numeric escapes are allowed for iriefs.
-  RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(
-      iriref.begin(), iriref.end(), std::back_inserter(result));
+  unescapeIriWithBrackets(iriref, result);
   result.push_back('>');
   return result;
 }
@@ -301,6 +318,53 @@ std::string normalizedContentFromLiteralOrIri(std::string&& input) {
     input.resize(posLastQuote - 1);
   }
   return std::move(input);
+}
+
+// Internal function to cast a string_view to a NormalizedString.
+// Should not be used outside of this package.
+static NormalizedString toNormalizedString(std::string_view input) {
+  NormalizedString normalizedString;
+  normalizedString.resize(input.size());
+  std::ranges::transform(input.begin(), input.end(), normalizedString.begin(),
+                         [](char c) { return NormalizedChar{c}; });
+
+  return normalizedString;
+}
+
+// __________________________________________________________________________
+NormalizedString normalizeLiteralWithQuotes(std::string_view input) {
+  std::string returnValue;
+  literalUnescapeWithQuotesRemoved(input, returnValue);
+  return toNormalizedString(returnValue);
+}
+
+// __________________________________________________________________________
+NormalizedString normalizeLiteralWithoutQuotes(std::string_view input) {
+  std::string returnValue;
+  literalUnescape(input, returnValue);
+  return toNormalizedString(returnValue);
+}
+
+// __________________________________________________________________________
+NormalizedString normalizeIriWithBrackets(std::string_view input) {
+  std::string result;
+  unescapeIriWithBrackets(input, result);
+  return toNormalizedString(result);
+}
+
+// __________________________________________________________________________
+NormalizedString normalizeIriWithoutBrackets(std::string_view input) {
+  std::string result;
+  unescapeIriWithoutBrackets(input, result);
+  return toNormalizedString(result);
+}
+
+// __________________________________________________________________________
+NormalizedString normalizeLanguageTag(std::string_view input) {
+  if (input.starts_with('@')) {
+    input.remove_prefix(1);
+  }
+  return toNormalizedString(input);
 }
 
 }  // namespace RdfEscaping

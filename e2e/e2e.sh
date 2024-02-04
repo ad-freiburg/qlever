@@ -111,7 +111,7 @@ fi
 # here because then we can't easily get the SERVER_PID out of that subshell
 pushd "$BINARY_DIR"
 echo "Launching server from path $(pwd)"
-./ServerMain -i "$INDEX" -p 9099 -m 1GB -t --default-query-timeout 180s &> server_log.txt &
+./ServerMain -i "$INDEX" -p 9099 -m 1GB -t --default-query-timeout 500s &> server_log.txt &
 SERVER_PID=$!
 popd
 

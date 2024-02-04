@@ -180,32 +180,23 @@ struct EvaluationContext {
   // as part of a GROUP BY clause.
   bool _isPartOfGroupBy = false;
 
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
+                    const LocalVocab& localVocab,
+                    ad_utility::SharedCancellationHandle cancellationHandle)
       : _qec{qec},
         _variableToColumnMap{variableToColumnMap},
         _inputTable{inputTable},
         _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  /// Constructor for evaluating an expression on a part of the input
-  /// (only considers the rows [beginIndex, endIndex) from the input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& map, const IdTable& inputTable,
-                    size_t beginIndex, size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnMap{map},
-        _inputTable{inputTable},
-        _beginIndex{beginIndex},
-        _endIndex{endIndex},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
+        _localVocab{localVocab},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
+  }
 
   bool isResultSortedBy(const Variable& variable) {
     if (_columnsByWhichResultIsSorted.empty()) {
@@ -277,10 +268,10 @@ struct NoCalculationWithSetOfIntervals {};
 
 /// A `Function` and one or more `ValueGetters`, that are applied to the
 /// operands of the function before passing them. The number of `ValueGetters`
-/// must either be 1 (the same `ValueGetter` is used for all the operands to the
-/// `Function`, or it must be equal to the number of operands to the `Function`.
-/// This invariant is checked in the `Operation` class template below,
-/// which uses this helper struct.
+/// must either be 1 (the same `ValueGetter` is used for all the operands to
+/// the `Function`), or it must be equal to the number of operands to the
+/// `Function`. This invariant is checked in the `Operation` class template
+/// below, which uses this helper struct.
 template <typename FunctionType, typename... ValueGettersTypes>
 struct FunctionAndValueGetters {
   using Function = FunctionType;

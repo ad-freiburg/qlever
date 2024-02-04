@@ -49,6 +49,7 @@ IdTable Permutation::scan(
 
   if (!meta_.col0IdExists(col0Id)) {
     size_t numColumns = col1Id.has_value() ? 1 : 2;
+    cancellationHandle->throwIfCancelled("Permutation scan");
     return IdTable{numColumns, reader().allocator()};
   }
   const auto& metaData = meta_.getMetaData(col0Id);
