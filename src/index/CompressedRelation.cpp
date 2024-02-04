@@ -411,7 +411,7 @@ IdTable CompressedRelationReader::scan(
   return result;
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedRelationMetadata& relationMetadata,
     std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
@@ -465,7 +465,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   return block;
 };
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 size_t CompressedRelationReader::getResultSizeOfScan(
     const CompressedRelationMetadata& metadata, Id col1Id,
     const vector<CompressedBlockMetadata>& blocks) const {
@@ -506,15 +506,76 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   return numResults;
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
+IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
+    const CompressedRelationMetadata& relationMetadata,
+    const std::vector<CompressedBlockMetadata>& allBlocksMetadata) const {
+  IdTable table(2, allocator_);
+  std::span<const CompressedBlockMetadata> relationBlocksMetadata =
+      getBlocksFromMetadata(relationMetadata, std::nullopt, allBlocksMetadata);
+
+  // Iterate over the blocks and only read (and decompress) those which
+  // contain more than one different `col1Id`. For the others, we can determine
+  // the count from the metadata.
+  Id currentCol1Id{};
+  size_t currentCount = 0;
+  size_t rowIndex = std::numeric_limits<size_t>::max();
+  // Helper lambda that processes a single `col1Id` (with `howMany`
+  // occurrences). If it's new, a row with the previous `col1Id` and
+  // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
+  // are reset.
+  auto processCol1Id = [&table, &rowIndex, &currentCol1Id, &currentCount](
+                           Id col1Id, size_t howMany, bool isNew) {
+    if (isNew) {
+      // For the very first `col1Id`, we don't want to add a row to the table.
+      if (rowIndex != std::numeric_limits<size_t>::max()) {
+        table.emplace_back();
+        table(rowIndex, 0) = currentCol1Id;
+        table(rowIndex, 1) = Id::makeFromInt(currentCount);
+        rowIndex++;
+      } else {
+        rowIndex = 0;
+      }
+      currentCol1Id = col1Id;
+      currentCount = 0;
+    }
+    currentCount += howMany;
+  };
+  for (size_t i = 0; i < relationBlocksMetadata.size(); ++i) {
+    const auto& blockMetadata = relationBlocksMetadata[i];
+    Id firstCol1Id = blockMetadata.firstTriple_.col1Id_;
+    Id lastCol1Id = blockMetadata.lastTriple_.col1Id_;
+    if (firstCol1Id == lastCol1Id) {
+      // The whole block has the same `col1Id`.
+      bool isNew = (i == 0 || firstCol1Id != currentCol1Id);
+      processCol1Id(firstCol1Id, blockMetadata.numRows_, isNew);
+    } else {
+      // Multiple `col1Id`s in one block.
+      std::array<ColumnIndex, 1> columnIndices{0u};
+      const auto& block = readPossiblyIncompleteBlock(
+          relationMetadata, std::nullopt, blockMetadata, std::nullopt,
+          columnIndices);
+      for (size_t j = 0; j < block.numRows(); ++j) {
+        Id col1Id = block(j, 0);
+        bool isNew = (i == 0 && j == 0) || col1Id != currentCol1Id;
+        processCol1Id(col1Id, 1, isNew);
+      }
+    }
+  }
+  // Don't forget to add the last `col1Id` and its count.
+  processCol1Id(Id{}, 0, true);
+  return table;
+}
+
+// ____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
   float multiplicity =
       functional ? 1.0f
                  : static_cast<float>(numElements) / float(numDistinctElements);
-  // Ensure that the multiplicity is only exactly 1.0 if the relation is indeed
-  // functional to prevent numerical instabilities;
+  // Ensure that the multiplicity is only exactly 1.0 if the relation is
+  // indeed functional to prevent numerical instabilities;
   if (!functional && multiplicity == 1.0f) [[unlikely]] {
     multiplicity = std::nextafter(1.0f, 2.0f);
   }
@@ -590,7 +651,7 @@ void CompressedRelationReader::decompressColumn(
   AD_CORRECTNESS_CHECK(numRowsToRead * sizeof(Id) == numBytesActuallyRead);
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     ColumnIndicesRef columnIndices) const {
@@ -600,7 +661,7 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
   return decompressBlock(compressedColumns, numRowsToRead);
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 CompressedBlockMetadata::OffsetAndCompressedSize
 CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
   std::vector<char> compressedBlock = ZstdWrapper::compress(
@@ -705,8 +766,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   AD_CONTRACT_CHECK(!relevantBlocks.empty());
 
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
-    // Note: the following call only returns the part of the block that actually
-    // matches the col0 and col1.
+    // Note: the following call only returns the part of the block that
+    // actually matches the col0 and col1.
     return readPossiblyIncompleteBlock(
         metadataAndBlocks.relationMetadata_, metadataAndBlocks.col1Id_, block,
         std::nullopt, std::array<const ColumnIndex, 2>{0, 1});
@@ -751,7 +812,8 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
   AD_CORRECTNESS_CHECK(!relation.empty());
   size_t numRows = relation.numRows();
   // Make sure that the blocks don't become too large: If the previously
-  // buffered small relations together with the new relations would exceed `1.5
+  // buffered small relations together with the new relations would exceed
+  // `1.5
   // * blocksize` then we start a new block for the current relation. Note:
   // there are some unit tests that rely on this factor being `1.5`.
   if (static_cast<double>(numRows + smallRelationsBuffer_.numRows()) >
@@ -772,8 +834,8 @@ CompressedRelationMetadata CompressedRelationWriter::addSmallRelation(
         relation.getColumn(i),
         smallRelationsBuffer_.getColumn(i).begin() + offsetInBlock);
   }
-  // Note: the multiplicity of the `col2` (where we set the dummy here) will be
-  // set later in `createPermutationPair`.
+  // Note: the multiplicity of the `col2` (where we set the dummy here) will
+  // be set later in `createPermutationPair`.
   return {col0Id, numRows, computeMultiplicity(numRows, numDistinctC1),
           multiplicityDummy, offsetInBlock};
 }
@@ -841,10 +903,10 @@ struct Batcher {
 
 using MetadataCallback = CompressedRelationWriter::MetadataCallback;
 
-// A class that is called for all pairs of `CompressedRelationMetadata` for the
-// same `col0Id` and the "twin permutations" (e.g. PSO and POS). The
-// multiplicity of the last column is exchanged and then the metadata are passed
-// on to the respective `MetadataCallback`.
+// A class that is called for all pairs of `CompressedRelationMetadata` for
+// the same `col0Id` and the "twin permutations" (e.g. PSO and POS). The
+// multiplicity of the last column is exchanged and then the metadata are
+// passed on to the respective `MetadataCallback`.
 class MetadataWriter {
  private:
   using B = Batcher<CompressedRelationMetadata, MetadataCallback>;
@@ -918,8 +980,8 @@ CompressedRelationWriter::createPermutationPair(
                                writer1.blocksize()};
 
   // A queue for the callbacks that have to be applied for each triple.
-  // The second argument is the number of threads. It is crucial that this queue
-  // is single threaded.
+  // The second argument is the number of threads. It is crucial that this
+  // queue is single threaded.
   ad_utility::TaskQueue blockCallbackQueue{
       3, 1, "Additional callbacks during permutation building"};
 

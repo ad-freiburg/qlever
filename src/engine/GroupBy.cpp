@@ -490,8 +490,6 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   }
 
   // Get the right permutation.
-  //
-  // TODO: Can we also just take indexScan->permutation() here?
   Permutation::Enum permutationEnum = groupByVariable == indexScan->getSubject()
                                           ? Permutation::PSO
                                           : Permutation::POS;
@@ -499,71 +497,26 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum);
 
-  // TODO: This is just fake to verify whether it works so far (it does).
-  // const auto& metaData = permutation.meta_.data();
-  // LOG(INFO) << "Metadata size: " << metaData.size() << std::endl;
-
-  // Get the metadata and blocks.
-  std::optional<Permutation::MetadataAndBlocks> metaDataAndBlocks =
-      permutation.getMetadataAndBlocks(predicateId.value(), std::nullopt);
-  if (!metaDataAndBlocks.has_value()) {
+  // If we have only few blocks, we don't need this optimization.
+  //
+  // TODO: Once `getDistinctCol1IdsAndCounts` can also handle small relations
+  // (which might contain other `col0Id`s), we can remove this.
+  /*
+  const auto& predicateMetadata =
+      permutation.meta_.getMetaData(predicateId.value());
+  const auto& allBlocksMetadata = permutation.meta_.blockData();
+  std::span<const CompressedBlockMetadata> predicateBlocksMetadata =
+      permutation.reader().getBlocksFromMetadata(
+          predicateMetadata, std::nullopt, allBlocksMetadata);
+  size_t numPredicateBlocks = predicateBlocksMetadata.size();
+  AD_CORRECTNESS_CHECK(numPredicateBlocks > 0);
+  if (numPredicateBlocks <= 100) {
     return false;
   }
-  const auto& blockMetadata = metaDataAndBlocks.value().blockMetadata_;
-  size_t numBlocks = blockMetadata.size();
-  AD_CORRECTNESS_CHECK(numBlocks > 0);
-  AD_CORRECTNESS_CHECK(blockMetadata[0].offsetsAndCompressedSize_.size() > 0);
+  */
 
-  // If we have only few blocks, we don't need to bother with this
-  // optimization. In the code that follows, we can then assume that all blocks
-  // contain triples from only this predicate.
-  if (numBlocks <= 100) {
-    return false;
-  }
-
-  // TODO TODO TODO: Just checking whether the test still all run through when
-  // we don't change the table in this function and return false.
-  // return false;
-
-  // TODO: The following code just considers the col1Id, which span multiple
-  // blocks. Which is a good approximation for the counts of the frequent
-  // col1Id.
-  auto& table = *result;
-  table.setNumColumns(2);
-  // table.resize(1);
-  // table(0, 0) = predicateId.value();
-  // table(0, 1) = Id::makeFromInt(size);
-  // table.resize(numBlocks);
-  Id currentCol1Id = blockMetadata[0].firstTriple_.col1Id_;
-  size_t currentCount = 0;
-  size_t numRows = 0;
-  for (size_t i = 0; i < numBlocks; i++) {
-    if (blockMetadata[i].lastTriple_.col1Id_ == currentCol1Id) {
-      currentCount += blockMetadata[i].numRows_;
-    } else {
-      table.emplace_back();
-      table(numRows, 0) = currentCol1Id;
-      table(numRows, 1) = Id::makeFromInt(currentCount);
-      numRows++;
-      currentCol1Id = blockMetadata[i].lastTriple_.col1Id_;
-      currentCount = 0;
-    }
-  }
-  if (currentCount > 0) {
-    table.emplace_back();
-    table(numRows, 0) = currentCol1Id;
-    table(numRows, 1) = Id::makeFromInt(currentCount);
-    numRows++;
-  }
-  // table(i, 0) = blockMetadata[i].firstTriple_.col1Id_;
-  // table(i, 1) = blockMetadata[i].lastTriple_.col1Id_;
-  // table(i, 0) = Id::makeFromInt(i);
-  // table(i, 1) = Id::makeFromInt(blockMetadata[i].numRows_);
-  // const auto& offsetsAndCompressedSize =
-  //     blockMetadata[i].offsetsAndCompressedSize_[0];
-  // table(i, 1) = Id::makeFromInt(offsetsAndCompressedSize.offsetInFile_);
-  // table(i, 1) = Id::makeFromInt(offsetsAndCompressedSize.compressedSize_);
-
+  // Compute the result.
+  *result = permutation.getDistinctCol1IdsAndCounts(predicateId.value());
   return true;
 }
 

@@ -68,6 +68,19 @@ size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
   return reader().getResultSizeOfScan(metaData, col1Id, meta_.blockData());
 }
 
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol1IdsAndCounts(Id col0Id) const {
+  // TODO: Isn't `col0Id` searched twice in the metadata, where and in the
+  // other methods? It's a binary search on disk, so not for free.
+  if (!meta_.col0IdExists(col0Id)) {
+    return IdTable{2, reader().allocator()};
+  }
+  const auto& relationMetadata = meta_.getMetaData(col0Id);
+  const auto& allBlocksMetadata = meta_.blockData();
+  return reader().getDistinctCol1IdsAndCounts(relationMetadata,
+                                              allBlocksMetadata);
+}
+
 // _____________________________________________________________________
 std::array<size_t, 3> Permutation::toKeyOrder(Permutation::Enum permutation) {
   using enum Permutation::Enum;
