@@ -463,12 +463,8 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
     return false;
   }
 
-  // There must be exactly one GROUP BY by variable and it must be the object
-  // of the index scan.
-  //
-  // TODO: Could also made to work if the GROUP BY variable is the subject,
-  // but that would only be efficient if there are few subjects and many
-  // objects (typically, it's the other way around).
+  // There must be exactly one GROUP BY variable and it must be the subject or
+  // the object.
   if (_groupByVariables.size() != 1) {
     return false;
   }
@@ -496,24 +492,6 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           permutationEnum);
-
-  // If we have only few blocks, we don't need this optimization.
-  //
-  // TODO: Once `getDistinctCol1IdsAndCounts` can also handle small relations
-  // (which might contain other `col0Id`s), we can remove this.
-  /*
-  const auto& predicateMetadata =
-      permutation.meta_.getMetaData(predicateId.value());
-  const auto& allBlocksMetadata = permutation.meta_.blockData();
-  std::span<const CompressedBlockMetadata> predicateBlocksMetadata =
-      permutation.reader().getBlocksFromMetadata(
-          predicateMetadata, std::nullopt, allBlocksMetadata);
-  size_t numPredicateBlocks = predicateBlocksMetadata.size();
-  AD_CORRECTNESS_CHECK(numPredicateBlocks > 0);
-  if (numPredicateBlocks <= 100) {
-    return false;
-  }
-  */
 
   // Compute the result.
   *result = permutation.getDistinctCol1IdsAndCounts(predicateId.value());
