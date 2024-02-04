@@ -447,6 +447,126 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   return true;
 }
 
+// ____________________________________________________________________________
+bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
+  // The child must be an `IndexScan` of width 2 and the predicate must be
+  // fixed and contained in our index.
+  auto* indexScan =
+      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+  if (!indexScan || indexScan->getResultWidth() != 2) {
+    return false;
+  }
+  const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
+  std::optional<Id> predicateId =
+      indexScan->getPredicate().toValueId(vocabulary);
+  if (!predicateId.has_value()) {
+    return false;
+  }
+
+  // There must be exactly one GROUP BY by variable and it must be the object
+  // of the index scan.
+  //
+  // TODO: Could also made to work if the GROUP BY variable is the subject,
+  // but that would only be efficient if there are few subjects and many
+  // objects (typically, it's the other way around).
+  if (_groupByVariables.size() != 1) {
+    return false;
+  }
+  const auto& groupByVariable = _groupByVariables.at(0);
+  if (groupByVariable != indexScan->getObject() &&
+      groupByVariable != indexScan->getSubject()) {
+    return false;
+  }
+
+  // There must be exactly one alias, which is a non-distinct count of the
+  // subject or of the object (which one makes no difference).
+  auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
+  bool countedVariableIsSubjectOrObject =
+      countedVariable.has_value() &&
+      (countedVariable.value() == indexScan->getSubject() ||
+       countedVariable.value() == indexScan->getObject());
+  if (!countedVariableIsSubjectOrObject) {
+    return false;
+  }
+
+  // Get the right permutation.
+  //
+  // TODO: Can we also just take indexScan->permutation() here?
+  Permutation::Enum permutationEnum = groupByVariable == indexScan->getSubject()
+                                          ? Permutation::PSO
+                                          : Permutation::POS;
+  const auto& permutation =
+      getExecutionContext()->getIndex().getPimpl().getPermutation(
+          permutationEnum);
+
+  // TODO: This is just fake to verify whether it works so far (it does).
+  // const auto& metaData = permutation.meta_.data();
+  // LOG(INFO) << "Metadata size: " << metaData.size() << std::endl;
+
+  // Get the metadata and blocks.
+  std::optional<Permutation::MetadataAndBlocks> metaDataAndBlocks =
+      permutation.getMetadataAndBlocks(predicateId.value(), std::nullopt);
+  if (!metaDataAndBlocks.has_value()) {
+    return false;
+  }
+  const auto& blockMetadata = metaDataAndBlocks.value().blockMetadata_;
+  size_t numBlocks = blockMetadata.size();
+  AD_CORRECTNESS_CHECK(numBlocks > 0);
+  AD_CORRECTNESS_CHECK(blockMetadata[0].offsetsAndCompressedSize_.size() > 0);
+
+  // If we have only few blocks, we don't need to bother with this
+  // optimization. In the code that follows, we can then assume that all blocks
+  // contain triples from only this predicate.
+  if (numBlocks <= 100) {
+    return false;
+  }
+
+  // TODO TODO TODO: Just checking whether the test still all run through when
+  // we don't change the table in this function and return false.
+  // return false;
+
+  // TODO: The following code just considers the col1Id, which span multiple
+  // blocks. Which is a good approximation for the counts of the frequent
+  // col1Id.
+  auto& table = *result;
+  table.setNumColumns(2);
+  // table.resize(1);
+  // table(0, 0) = predicateId.value();
+  // table(0, 1) = Id::makeFromInt(size);
+  // table.resize(numBlocks);
+  Id currentCol1Id = blockMetadata[0].firstTriple_.col1Id_;
+  size_t currentCount = 0;
+  size_t numRows = 0;
+  for (size_t i = 0; i < numBlocks; i++) {
+    if (blockMetadata[i].lastTriple_.col1Id_ == currentCol1Id) {
+      currentCount += blockMetadata[i].numRows_;
+    } else {
+      table.emplace_back();
+      table(numRows, 0) = currentCol1Id;
+      table(numRows, 1) = Id::makeFromInt(currentCount);
+      numRows++;
+      currentCol1Id = blockMetadata[i].lastTriple_.col1Id_;
+      currentCount = 0;
+    }
+  }
+  if (currentCount > 0) {
+    table.emplace_back();
+    table(numRows, 0) = currentCol1Id;
+    table(numRows, 1) = Id::makeFromInt(currentCount);
+    numRows++;
+  }
+  // table(i, 0) = blockMetadata[i].firstTriple_.col1Id_;
+  // table(i, 1) = blockMetadata[i].lastTriple_.col1Id_;
+  // table(i, 0) = Id::makeFromInt(i);
+  // table(i, 1) = Id::makeFromInt(blockMetadata[i].numRows_);
+  // const auto& offsetsAndCompressedSize =
+  //     blockMetadata[i].offsetsAndCompressedSize_[0];
+  // table(i, 1) = Id::makeFromInt(offsetsAndCompressedSize.offsetInFile_);
+  // table(i, 1) = Id::makeFromInt(offsetsAndCompressedSize.compressedSize_);
+
+  return true;
+}
+
 // _____________________________________________________________________________
 bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   if (_groupByVariables.size() != 1) {
@@ -483,7 +603,8 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   if (numCounts > 1) {
     throw std::runtime_error{
         "This query contains two or more COUNT expressions in the same GROUP "
-        "BY that would lead to identical values. This redundancy is currently "
+        "BY that would lead to identical values. This redundancy is "
+        "currently "
         "not supported."};
   }
 
@@ -552,7 +673,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   return true;
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
@@ -581,7 +702,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
   }
 };
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
     const Join* join) {
   if (_groupByVariables.size() != 1) {
@@ -625,7 +746,7 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
                               columnIndex};
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________
 bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   auto join = dynamic_cast<Join*>(_subtree->getRootOperation().get());
   if (!join) {
@@ -655,8 +776,8 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
-  // `std::views::chunk_by` and implement a lazy version of this view for input
-  // iterators.
+  // `std::views::chunk_by` and implement a lazy version of this view for
+  // input iterators.
 
   // Take care of duplicate values in the input.
   Id currentId = subresult->idTable()(0, columnIndex);
@@ -666,11 +787,11 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   auto pushRow = [&]() {
     // If the count is 0 this means that the element with the `currentId`
     // doesn't exist in the knowledge graph. Thus, the join with a three
-    // variable triple would have filtered it out and we don't include it in the
-    // final result.
+    // variable triple would have filtered it out and we don't include it in
+    // the final result.
     if (currentCount > 0) {
-      // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1, id2)`
-      // (requires parenthesized initialization of aggregates.
+      // TODO<C++20, as soon as Clang supports it>: use `emplace_back(id1,
+      // id2)` (requires parenthesized initialization of aggregates.
       idTable.push_back({currentId, Id::makeFromInt(currentCount)});
     }
   };
@@ -698,8 +819,10 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
     return true;
   } else if (computeGroupByForFullIndexScan(result)) {
     return true;
+  } else if (computeGroupByForJoinWithFullScan(result)) {
+    return true;
   } else {
-    return computeGroupByForJoinWithFullScan(result);
+    return computeGroupByObjectWithCount(result);
   }
 }
 
@@ -1148,8 +1271,8 @@ void GroupBy::createResultFromHashMap(
 
 // _____________________________________________________________________________
 // Visitor function to extract values from the result of an evaluation of
-// the child expression of an aggregate, and subsequently processing the values
-// by calling the `addValue` function of the corresponding aggregate.
+// the child expression of an aggregate, and subsequently processing the
+// values by calling the `addValue` function of the corresponding aggregate.
 static constexpr auto makeProcessGroupsVisitor =
     [](size_t blockSize,
        const sparqlExpression::EvaluationContext* evaluationContext,
