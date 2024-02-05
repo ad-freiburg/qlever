@@ -101,7 +101,7 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs_;
 
-  const size_t _bufferSize = 10000000;
+  const size_t _bufferSize = BATCH_SIZE_VOCABULARY_MERGE;
 
  public:
   VocabularyMerger() = default;

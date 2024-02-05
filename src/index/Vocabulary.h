@@ -295,12 +295,13 @@ class Vocabulary {
 
   // Get a writer for the external vocab that has a `push` method to which the
   // single words have to be pushed one by one to add words to the vocabulary.
-  VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
+  static VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
       const std::string& filename) {
     return VocabularyOnDisk::WordWriter(filename);
   }
 
-  auto makeUncompressingWordWriter(const std::string& filename) {
+  static VocabularyInMemory::WordWriter makeUncompressingWordWriter(
+      const std::string& filename) {
     return VocabularyInMemory::WordWriter{filename};
   }
 

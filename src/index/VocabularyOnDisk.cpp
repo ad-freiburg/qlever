@@ -17,8 +17,7 @@ using std::vector;
 std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
     uint64_t idx) const {
   IndexAndOffset idAndDummyOffset{idx, 0};
-  auto it = std::lower_bound(idsAndOffsets_.begin(), idsAndOffsets_.end(),
-                             idAndDummyOffset);
+  auto it = std::ranges::lower_bound(idsAndOffsets_, idAndDummyOffset);
   if (it >= idsAndOffsets_.end() - 1 || it->idx_ != idx) {
     return std::nullopt;
   }
@@ -108,20 +107,23 @@ void VocabularyOnDisk::WordWriter::finish() {
 }
 
 // _____________________________________________________________________________
-VocabularyOnDisk::WordWriter::~WordWriter() { finish(); }
+VocabularyOnDisk::WordWriter::~WordWriter() {
+  throwInDestructorIfSafe_([this]() { finish(); },
+                           "`~VocabularyOnDisk::WordWriter`");
+}
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromVector(const vector<string>& words,
                                        const string& fileName) {
   // Note: Using a reference-capture for `words` will segfault in GCC11.
-  // TODO<joka921> This is a bug in the compiler, report it if still unknown or
-  // post reference link here.
+  // TODO<joka921> This is a bug in the compiler, report it if still unknown
+  // or post reference link here.
   auto generator = [](const auto& words)
       -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     uint64_t index = 0;
     for (const auto& word : (words)) {
-      // Note: Yielding the temporary directly would segfault in GCC, this is a
-      // bug in GCC, see similar places in the `streamable_generator` class.
+      // Note: Yielding the temporary directly would segfault in GCC, this is
+      // a bug in GCC, see similar places in the `streamable_generator` class.
       std::pair<std::string, uint64_t> tmp{word, index};
       co_yield tmp;
       index++;

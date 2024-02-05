@@ -26,6 +26,9 @@ class VocabularyOnDisk {
     auto operator<=>(const IndexAndOffset& rhs) const {
       return idx_ <=> rhs.idx_;
     }
+    bool operator==(const IndexAndOffset& rhs) const {
+      return idx_ == rhs.idx_;
+    }
   };
 
   // The file in which the words are stored.
@@ -65,6 +68,7 @@ class VocabularyOnDisk {
     std::optional<uint64_t> previousId_ = std::nullopt;
     uint64_t currentIndex_ = 0;
     bool isFinished_ = false;
+    ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
 
    public:
     // Constructor, used by `VocabularyOnDisk::wordWriter`
