@@ -184,7 +184,7 @@ In both of those, you have to write out the complete path to your configuration 
 For example: Let's say, you defined a configuration option `someNumber` and added it with the path `tableSizes/someNumber`. Then, if you wanted to set it to `20` using JSON, you would have to write:
 
 ```json
-{"tableSizes": "someNumber": 20}
+{"tableSizes": "some-number": 20}
 ```
 
 However, **if** the passed values can't be interpreted as the correct types for the configuration options, an exception will be thrown.

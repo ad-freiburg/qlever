@@ -53,22 +53,23 @@ class ConfigOptions : public BenchmarkInterface {
 
     manager.addOption("date", "The current date.", &dateString_, "22.3.2023"s);
 
-    auto numSigns = manager.addOption("numSigns", "The number of street signs.",
-                                      &numberOfStreetSigns_, 10000);
+    auto numSigns =
+        manager.addOption("num-signs", "The number of street signs.",
+                          &numberOfStreetSigns_, 10000);
     manager.addValidator([](const int& num) { return num >= 0; },
                          "The number of street signs must be at least 0!",
                          "Negative numbers, or floating point numbers, are not "
-                         "allowed for the configuration option \"numSigns\".",
+                         "allowed for the configuration option \"num-signs\".",
                          numSigns);
 
-    manager.addOption("CoinFlipTry", "The number of succesful coin flips.",
+    manager.addOption("coin-flip-try", "The number of succesful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
 
     // Sub manager can be used to organize things better. They are basically
     // just a path prefix for all the options inside it.
     ad_utility::ConfigManager& subManager{
-        manager.addSubManager({"Accounts"s, "Personal"s})};
-    subManager.addOption("Steve"s, "Steves saving account balance.",
+        manager.addSubManager({"accounts"s, "personal"s})};
+    subManager.addOption("steve"s, "Steves saving account balance.",
                          &balanceOnStevesSavingAccount_, -41.9f);
   }
 };
@@ -274,9 +275,9 @@ class BMConfigurationAndMetadataExample : public ConfigOptions {
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("date", dateString_);
-    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns_);
-    meta.addKeyValuePair("wonOnTryX", wonOnTryX_);
-    meta.addKeyValuePair("Balance on Steves saving account",
+    meta.addKeyValuePair("number-of-street-signs", numberOfStreetSigns_);
+    meta.addKeyValuePair("won-on-try-x", wonOnTryX_);
+    meta.addKeyValuePair("balance-on-steves-saving-account",
                          balanceOnStevesSavingAccount_);
     return BenchmarkResults{};
   }
