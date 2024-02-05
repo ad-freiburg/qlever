@@ -80,7 +80,7 @@ class Server {
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
-  using TimeLimit = std::chrono::seconds;
+  using TimeLimit = std::chrono::milliseconds;
 
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
 
