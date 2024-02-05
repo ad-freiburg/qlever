@@ -29,7 +29,7 @@ class QueryToSocketDistributor {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   mutable AsyncMutex mutex_;
-  mutable net::deadline_timer infiniteTimer_;
+  mutable AsyncSignal signal_;
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
@@ -58,7 +58,8 @@ class QueryToSocketDistributor {
   explicit QueryToSocketDistributor(
       net::io_context& ioContext, const std::function<void(bool)>& cleanupCall);
 
-  ~QueryToSocketDistributor() { infiniteTimer_.cancel(); }
+  // TODO<joka921> do we want synchronous locking?
+  ~QueryToSocketDistributor() { mutex_.asyncLockGuard([this]([[maybe_unused]] auto guard){signal_.notifyAll(); });}
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

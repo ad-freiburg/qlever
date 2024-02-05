@@ -21,31 +21,10 @@ QueryToSocketDistributor::QueryToSocketDistributor(
     net::io_context& ioContext, const std::function<void(bool)>& cleanupCall)
     : strand_{net::make_strand(ioContext)},
       mutex_{ioContext.get_executor()},
-      infiniteTimer_{strand_, static_cast<net::deadline_timer::time_type>(
-                                  boost::posix_time::pos_infin)},
       cleanupCall_{
           cleanupCall,
           [](const auto& cleanupCall) { std::invoke(cleanupCall, false); }},
       signalEndCall_{[cleanupCall] { std::invoke(cleanupCall, true); }} {}
-
-// _____________________________________________________________________________
-net::awaitable<void> QueryToSocketDistributor::waitForUpdate() const {
-  auto [error] =
-      co_await infiniteTimer_.async_wait(net::as_tuple(net::use_awaitable));
-  // If this fails this means the infinite timer expired or aborted with an
-  // unexpected error code. This should not happen at all
-  AD_CORRECTNESS_CHECK(error == net::error::operation_aborted);
-  //  Clear cancellation flag if set, and wake up to allow the caller
-  //  to return no-data and gracefully end this
-  co_await net::this_coro::reset_cancellation_state();
-}
-
-// _____________________________________________________________________________
-
-void QueryToSocketDistributor::wakeUpWaitingListeners() {
-  // Setting the time anew automatically cancels waiting operations
-  infiniteTimer_.expires_at(boost::posix_time::pos_infin);
-}
 
 // _____________________________________________________________________________
 
@@ -54,7 +33,7 @@ net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
   auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
   data_.push_back(std::move(sharedPayload));
-  wakeUpWaitingListeners();
+  signal_.notifyAll();
 }
 
 // _____________________________________________________________________________
@@ -63,7 +42,7 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
   auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
   AD_CONTRACT_CHECK(!finished_);
   finished_ = true;
-  wakeUpWaitingListeners();
+  signal_.notifyAll();
   // Invoke cleanup pre-emptively
   signalEndCall_();
   std::move(cleanupCall_).cancel();
@@ -73,16 +52,13 @@ net::awaitable<void> QueryToSocketDistributor::signalEnd() {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  {
-    auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
-    if (index < data_.size()) {
-      co_return data_.at(index);
-    } else if (finished_) {
-      co_return nullptr;
-    }
-  }
-  co_await waitForUpdate();
   auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
+  if (index < data_.size()) {
+    co_return data_.at(index);
+  } else if (finished_) {
+    co_return nullptr;
+  }
+  co_await signal_.asyncWait(mutex_, net::use_awaitable);
   if (index < data_.size()) {
     co_return data_.at(index);
   } else {

@@ -109,6 +109,7 @@ struct AsyncMutex {
   };
 
  private:
+  friend class AsyncSignal;
   template <typename CompletionHandler>
   void asyncLockImpl(CompletionHandler&& handler) {
     auto executor = net::get_associated_executor(handler, executor_);
@@ -184,6 +185,40 @@ struct AsyncMutex {
       l.unlock();
       std::invoke(f);
     }
+  }
+};
+
+class AsyncSignal {
+ private:
+  std::vector<absl::AnyInvocable<void()>> waiters{};
+
+ private:
+  template <typename CompletionHandler>
+  void asyncWaitImpl(CompletionHandler&& handler, AsyncMutex& mutex) {
+    auto resume = [handler = AD_FWD(handler), &mutex]() mutable {
+      mutex.asyncLockImpl(AD_FWD(handler));
+    };
+    waiters.push_back(std::move(resume));
+    mutex.unlock();
+  }
+
+ public:
+  explicit AsyncSignal() = default;
+
+  template <typename CompletionToken>
+  auto asyncWait(AsyncMutex& mutex, CompletionToken token) -> decltype(auto) {
+    auto impl = [self = this, &mutex](auto&& handler) {
+      self->asyncWaitImpl(AD_FWD(handler), mutex);
+    };
+    return net::async_initiate<CompletionToken, void()>(std::move(impl), token);
+  }
+
+  void notifyAll() {
+    std::ranges::for_each(waiters, [](auto& f) { std::invoke(std::move(f)); });
+    waiters.clear();
+  }
+  ~AsyncSignal() {
+    notifyAll();
   }
 };
 
