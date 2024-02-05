@@ -10,6 +10,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -267,4 +268,8 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-static constexpr size_t NUM_SORT_THREADS = 4;
+constexpr size_t NUM_SORT_THREADS = 4;
+/// ANSI escape sequence for bold text in the console
+constexpr std::string_view EMPH_ON = "\033[1m";
+/// ANSI escape sequence to print "normal" text again in the console.
+constexpr std::string_view EMPH_OFF = "\033[22m";

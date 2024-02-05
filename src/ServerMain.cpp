@@ -22,9 +22,6 @@ using std::string;
 
 namespace po = boost::program_options;
 
-#define EMPH_ON "\033[1m"
-#define EMPH_OFF "\033[22m"
-
 // Main function.
 int main(int argc, char** argv) {
   setlocale(LC_CTYPE, "");
@@ -123,7 +120,7 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever Server, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
+            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     Server server(port, numSimultaneousQueries, memoryMaxSize,
