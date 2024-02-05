@@ -521,7 +521,7 @@ struct ConfigVariables {
   /*
   @brief The maximum amount of memory, the bigger table, and by simple logic
   also the smaller table, is allowed to take up. Iff returns the same value as
-  `maxMemory()`, if the `maxMemory` configuration option, interpreted as a
+  `maxMemory()`, if the `max-memory` configuration option, interpreted as a
   `MemorySize`, wasn't set to `0`. (Which stand for infinite memory.)
   */
   ad_utility::MemorySize maxMemoryBiggerTable() const {
@@ -531,7 +531,7 @@ struct ConfigVariables {
 
   /*
   The maximum amount of memory, any table is allowed to take up.
-  Returns the value of the `maxMemory` configuration option interpreted as a
+  Returns the value of the `max-memory` configuration option interpreted as a
   `MemorySize`, if it wasn't set to `0`. (Which stand for infinite memory.) In
   the case of `0`, returns an empty optional.
   */
@@ -582,7 +582,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     ad_utility::ConfigManager& config = getConfigManager();
 
     decltype(auto) smallerTableNumRows =
-        config.addOption("smallerTableNumRows",
+        config.addOption("smaller-table-num-rows",
                          "Amount of rows for the smaller 'IdTable' in "
                          "the benchmarking class 'Benchmarktables, where the "
                          "smaller table stays at the same amount  of rows and "
@@ -590,26 +590,27 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                          &configVariables_.smallerTableNumRows_, 1000UL);
 
     decltype(auto) minBiggerTableRows = config.addOption(
-        "minBiggerTableRows",
+        "min-bigger-table-rows",
         "The minimum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
         &configVariables_.minBiggerTableRows_, 100000UL);
     decltype(auto) maxBiggerTableRows = config.addOption(
-        "maxBiggerTableRows",
+        "max-bigger-table-rows",
         "The maximum amount of rows for the bigger 'IdTable' in benchmarking "
         "tables.",
         &configVariables_.maxBiggerTableRows_, 10000000UL);
 
     decltype(auto) smallerTableNumColumns =
-        config.addOption("smallerTableNumColumns",
+        config.addOption("smaller-table-num-columns",
                          "The amount of columns in the smaller IdTable.",
                          &configVariables_.smallerTableNumColumns_, 20UL);
-    decltype(auto) biggerTableNumColumns = config.addOption(
-        "biggerTableNumColumns", "The amount of columns in the bigger IdTable.",
-        &configVariables_.biggerTableNumColumns_, 20UL);
+    decltype(auto) biggerTableNumColumns =
+        config.addOption("bigger-table-num-columns",
+                         "The amount of columns in the bigger IdTable.",
+                         &configVariables_.biggerTableNumColumns_, 20UL);
 
     decltype(auto) overlapChance = config.addOption(
-        "overlapChance",
+        "overlap-chance",
         "Chance for all occurrences of a distinc element in the join column of "
         "the smaller 'IdTable' to be the same value as a distinc element in "
         "the join column of the bigger 'IdTable'. Must be in the range "
@@ -617,7 +618,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         &configVariables_.overlapChance_, 42.f);
 
     decltype(auto) smallerTableSampleSizeRatio = config.addOption(
-        "smallerTableJoinColumnSampleSizeRatio",
+        "smaller-table-join-column-sample-size-ratio",
         "Join column entries of the smaller tables are picked from a sample "
         "space with size 'Amount of smaller table rows' via discrete uniform "
         "distribution. This option adjusts the sample space size to 'Amount of "
@@ -625,7 +626,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "duplicates.",
         &configVariables_.smallerTableJoinColumnSampleSizeRatio_, 1.f);
     decltype(auto) biggerTableSampleSizeRatio = config.addOption(
-        "biggerTableJoinColumnSampleSizeRatio",
+        "bigger-table-join-column-sample-size-ratio",
         "Join column entries of the bigger tables are picked from a sample "
         "space with size 'Amount of bigger table rows' via discrete uniform "
         "distribution. This option adjusts the sample space size to 'Amount of "
@@ -634,7 +635,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         &configVariables_.biggerTableJoinColumnSampleSizeRatio_, 1.f);
 
     decltype(auto) randomSeed = config.addOption(
-        "randomSeed",
+        "random-seed",
         "The seed used for random generators. Note: The default value is a "
         "non-deterministic random value, which changes with every execution.",
         &configVariables_.randomSeed_,
@@ -642,14 +643,14 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     using randomSeedValueType = decltype(randomSeed)::value_type;
 
     decltype(auto) minRatioRows = config.addOption(
-        "minRatioRows",
+        "min-ratio-rows",
         "The minimum row ratio between the smaller and the "
         "bigger 'IdTable' for a benchmark table in the benchmark class "
         "'Benchmarktables, where the smaller table grows and the ratio between "
         "tables stays the same.'",
         &configVariables_.minRatioRows_, 10UL);
     decltype(auto) maxRatioRows = config.addOption(
-        "maxRatioRows",
+        "max-ratio-rows",
         "The maximum row ratio between the smaller and the "
         "bigger 'IdTable' for a benchmark table in the benchmark class "
         "'Benchmarktables, where the smaller table grows and the ratio between "
@@ -657,22 +658,23 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         &configVariables_.maxRatioRows_, 1000UL);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
-        "maxMemory",
+        "max-memory",
         "Max amount of memory that any 'IdTable' is allowed to take up. '0' "
         "for unlimited memory. When set to anything else than '0', "
-        "configuration option 'maxBiggerTableRows' is ignored. Example: 4kB, "
+        "configuration option 'max-bigger-table-rows' is ignored. Example: "
+        "4kB, "
         "8MB, 24B, etc. ...",
         &configVariables_.configVariableMaxMemory_, "0B"s);
 
     decltype(auto) maxTimeSingleMeasurement = config.addOption(
-        "maxTimeSingleMeasurement",
+        "max-time-single-measurement",
         "The maximal amount of time, in seconds, any function measurement is "
         "allowed to take. '0' for unlimited time. Note: This can only be "
         "checked, after a measurement was taken.",
         &configVariables_.maxTimeSingleMeasurement_, 0.f);
 
     decltype(auto) benchmarkSampleSizeRatios = config.addOption(
-        "benchmarkSampleSizeRatios",
+        "benchmark-sample-size-ratios",
         absl::StrCat(
             "The sample size ratios for the benchmark class 'Benchmarktables, "
             "where only the sample size ratio changes.', where the sample size "
@@ -732,7 +734,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Adding the validators.
 
     /*
-    Is `maxMemory` big enough, to even allow for one row of the smaller
+    Is `max-memory` big enough, to even allow for one row of the smaller
     table, bigger table, or the table resulting from joining the smaller and
     bigger table?`
     If not, return an error message.
@@ -793,21 +795,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      "of joining the smaller and bigger table."),
         maxMemoryInStringFormat, smallerTableNumColumns, biggerTableNumColumns);
 
-    // Is `smallerTableNumRows` a valid value?
+    // Is `smaller-table-num-rows` a valid value?
     config.addValidator(
         generateBiggerEqualLambda(1UL, true),
         generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
         generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
         smallerTableNumRows);
 
-    // Is `smallerTableNumRows` smaller than `minBiggerTableRows`?
+    // Is `smaller-table-num-rows` smaller than `min-bigger-table-rows`?
     config.addValidator(
         lessEqualLambda,
         generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
         generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
         smallerTableNumRows, minBiggerTableRows);
 
-    // Is `minBiggerTableRows` big enough, to deliver interesting measurements?
+    // Is `min-bigger-table-rows` big enough, to deliver interesting
+    // measurements?
     config.addValidator(
         generateBiggerEqualLambda(
             minBiggerTableRows.getConfigOption().getDefaultValue<size_t>(),
@@ -827,7 +830,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             "onwards."),
         minBiggerTableRows);
 
-    // Is `minBiggerTableRows` smaller, or equal, to `maxBiggerTableRows`?
+    // Is `minBiggerTableRows` smaller, or equal, to `max-bigger-table-rows`?
     config.addValidator(
         lessEqualLambda,
         generateLessEqualLambdaDesc(minBiggerTableRows, maxBiggerTableRows),
@@ -846,7 +849,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         generateBiggerEqualLambdaDesc(biggerTableNumColumns, 1UL, true),
         biggerTableNumColumns);
 
-    // Is `overlapChance_` bigger than 0?
+    // Is `overlap-chance` bigger than 0?
     config.addValidator(
         generateBiggerEqualLambda(0.f, false),
         generateBiggerEqualLambdaDesc(overlapChance, 0.f, false),
@@ -921,7 +924,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         randomSeedMaxSizeValidatorDesc, randomSeedMaxSizeValidatorDesc,
         randomSeed);
 
-    // Is `maxTimeSingleMeasurement` a positive number?
+    // Is `max-time-single-measurement` a positive number?
     config.addValidator(
         generateBiggerEqualLambda(0.f, true),
         generateBiggerEqualLambdaDesc(maxTimeSingleMeasurement, 0.f, true),
@@ -934,7 +937,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                         generateBiggerEqualLambdaDesc(minRatioRows, 10UL, true),
                         minRatioRows);
 
-    // Is `minRatioRows` smaller than `maxRatioRows`?
+    // Is `min-ratio-rows` smaller than `max-ratio-rows`?
     config.addValidator(lessEqualLambda,
                         generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
                         generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
@@ -969,16 +972,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   void addDefaultMetadata(BenchmarkMetadata* meta) const {
     // Information, that is interesting for all the benchmarking classes.
-    meta->addKeyValuePair("randomSeed",
+    meta->addKeyValuePair("random-seed",
                           getConfigVariables().randomSeed().get());
-    meta->addKeyValuePair("smallerTableNumColumns",
+    meta->addKeyValuePair("smaller-table-num-columns",
                           getConfigVariables().smallerTableNumColumns_);
-    meta->addKeyValuePair("biggerTableNumColumns",
+    meta->addKeyValuePair("bigger-table-num-columns",
                           getConfigVariables().biggerTableNumColumns_);
 
     /*
     Add metadata information about:
-    - "maxTimeSingleMeasurement"
+    - "max-time-single-measurement"
     - "maxMemory"
     */
     auto addInfiniteWhen0 = [&meta](const std::string& name,
@@ -989,9 +992,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         meta->addKeyValuePair(name, "infinite");
       }
     };
-    addInfiniteWhen0("maxTimeSingleMeasurement",
+    addInfiniteWhen0("max-time-single-measurement",
                      configVariables_.maxTimeSingleMeasurement_);
-    addInfiniteWhen0("maxMemory",
+    addInfiniteWhen0("max-memory",
                      getConfigVariables().maxMemory().value_or(0_B).getBytes());
   }
 
@@ -1002,10 +1005,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   /*
   @brief Create a benchmark table for join algorithm, with the given
   parameters for the IdTables, which will keep getting more rows, until the
-  `maxTimeSingleMeasurement` getter value, the `maxMemoryBiggerTable()` getter
-  value, or the `maxMemory()` getter value of the configuration options was
-  reached/surpassed. It will additionally stop, iff `stopFunction` returns true.
-  The columns will be:
+  `max-time-single-measurement` getter value, the `maxMemoryBiggerTable()`
+  getter value, or the `maxMemory()` getter value of the configuration options
+  was reached/surpassed. It will additionally stop, iff `stopFunction` returns
+  true. The columns will be:
   - Return values of the parameter, you gave a function for.
   - Time needed for sorting `IdTable`s.
   - Time needed for merge/galloping join.
@@ -1302,7 +1305,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of smaller table rows (",
                        smallerTableNumRows,
-                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+                       ") with 'smaller-table-join-column-sample-size-ratio' (",
                        smallerTableJoinColumnSampleSizeRatio, ")"));
     }
     const size_t smallerTableJoinColumnUpperBound =
@@ -1316,7 +1319,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of smaller table rows (",
                        smallerTableNumRows,
-                       ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+                       ") with 'smaller-table-join-column-sample-size-ratio' (",
                        smallerTableJoinColumnSampleSizeRatio, "), plus 1,"));
     }
     const size_t biggerTableJoinColumnLowerBound =
@@ -1340,7 +1343,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of bigger table rows (",
                        smallerTableNumRows * ratioRows,
-                       ") with 'biggerTableJoinColumnSampleSizeRatio' (",
+                       ") with 'bigger-table-join-column-sample-size-ratio' (",
                        biggerTableJoinColumnSampleSizeRatio, ")"));
     } else if (biggerTableJoinColumnLowerBound - 1 >
                getMaxValue<size_t>() -
@@ -1352,13 +1355,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           "size_t overflow error: The multiplication (rounded up) of the "
           "number of smaller table rows (",
           smallerTableNumRows,
-          ") with 'smallerTableJoinColumnSampleSizeRatio' (",
+          ") with 'smaller-table-join-column-sample-size-ratio' (",
           smallerTableJoinColumnSampleSizeRatio,
           "), minus 1, added to the multiplication (rounded up) of the "
           "number "
           "of bigger table rows (",
           smallerTableNumRows * ratioRows,
-          ") with 'biggerTableJoinColumnSampleSizeRatio' (",
+          ") with 'bigger-table-join-column-sample-size-ratio' (",
           biggerTableJoinColumnSampleSizeRatio,
           ") is bigger than the size_t type maximum ", getMaxValue<size_t>(),
           ". Try reducing the values for the configuration options."));
@@ -1545,23 +1548,23 @@ class BmOnlyBiggerTableSizeChanges final
         // Add the metadata, that changes with every call and can't be
         // generalized.
         BenchmarkMetadata& meta = table.metadata();
-        meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
-        meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+        meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
+        meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
       }
     }
 
     // Add the general metadata.
     BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("Value changing with every row", "ratioRows");
-    meta.addKeyValuePair("smallerTableNumRows",
+    meta.addKeyValuePair("value-changing-with-every-row", "ratio-rows");
+    meta.addKeyValuePair("smaller-table-num-rows",
                          getConfigVariables().smallerTableNumRows_);
     meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
+        "smaller-table-join-column-sample-size-ratio",
         getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
+        "bigger-table-join-column-sample-size-ratio",
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("overlap-chance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
 
     return results;
@@ -1611,24 +1614,24 @@ class BmOnlySmallerTableSizeChanges final
           // Add the metadata, that changes with every call and can't be
           // generalized.
           BenchmarkMetadata& meta = table.metadata();
-          meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
-          meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
-          meta.addKeyValuePair("ratioRows", ratioRows);
+          meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
+          meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
+          meta.addKeyValuePair("ratio-rows", ratioRows);
         }
       }
     }
 
     // Add the general metadata.
     BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("Value changing with every row",
-                         "smallerTableNumRows");
+    meta.addKeyValuePair("value-changing-with-every-row",
+                         "smaller-table-num-rows");
     meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
+        "smaller-table-join-column-sample-size-ratio",
         getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
+        "bigger-table-join-column-sample-size-ratio",
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("overlap-chance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return results;
   }
@@ -1670,23 +1673,23 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
         // Add the metadata, that changes with every call and can't be
         // generalized.
         BenchmarkMetadata& meta = table.metadata();
-        meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
-        meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
+        meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
+        meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
       }
     }
 
     // Add the general metadata.
     BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("Value changing with every row",
-                         "smallerTableNumRows");
-    meta.addKeyValuePair("ratioRows", 1);
+    meta.addKeyValuePair("value-changing-with-every-row",
+                         "smaller-table-num-rows");
+    meta.addKeyValuePair("ratio-rows", 1);
     meta.addKeyValuePair(
-        "smallerTableJoinColumnSampleSizeRatio",
+        "smaller-table-join-column-sample-size-ratio",
         getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
     meta.addKeyValuePair(
-        "biggerTableJoinColumnSampleSizeRatio",
+        "bigger-table-join-column-sample-size-ratio",
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
-    meta.addKeyValuePair("overlapChance", getConfigVariables().overlapChance_);
+    meta.addKeyValuePair("overlap-chance", getConfigVariables().overlapChance_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return results;
   }
@@ -1722,7 +1725,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     Note: Strings are for the generation of error messages.
     */
     const size_t ratioRows{getConfigVariables().minRatioRows_};
-    constexpr std::string_view ratioRowsDescription{"'minRatioRows'"};
+    constexpr std::string_view ratioRowsDescription{"'min-ratio-rows'"};
     size_t smallerTableNumRows{};
     std::string smallerTableNumRowsDescription{};
     std::string smallerTableNumRowsConfigurationOptions{};
@@ -1733,16 +1736,17 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
                                   getConfigVariables().biggerTableNumColumns_) /
           getConfigVariables().minRatioRows_;
       smallerTableNumRowsDescription =
-          "division of the maximum number of rows, under the given 'maxMemory' "
-          "and 'biggerTableNumColumns', with 'minRatioRows'";
+          "division of the maximum number of rows, under the given "
+          "'max-memory' "
+          "and 'bigger-table-num-columns', with 'min-ratio-rows'";
       smallerTableNumRowsConfigurationOptions =
-          "'maxMemory' and 'biggerTableNumColumns'";
+          "'max-memory' and 'bigger-table-num-columns'";
     } else {
       smallerTableNumRows = getConfigVariables().maxBiggerTableRows_ /
                             getConfigVariables().minRatioRows_;
       smallerTableNumRowsDescription =
-          "divison of 'maxBiggerTableRows' with 'minRatioRows'";
-      smallerTableNumRowsConfigurationOptions = "'maxBiggerTableRows'";
+          "divison of 'max-bigger-table-rows' with 'min-ratio-rows'";
+      smallerTableNumRowsConfigurationOptions = "'max-bigger-table-rows'";
     }
 
     /*
@@ -1811,13 +1815,13 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with the biggest entry in "
-                       "'benchmarkSampleSizeRatios'"));
+                       "'benchmark-sample-size-ratios'"));
     } else if (static_cast<double>(smallerTableNumRows * ratioRows) >
                getMaxValue<double>() / maxSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with the biggest entry in "
-                       "'benchmarkSampleSizeRatios' and ",
+                       "'benchmark-sample-size-ratios' and ",
                        ratioRowsDescription));
     } else if (std::ceil(static_cast<double>(smallerTableNumRows) *
                          maxSampleSizeRatio) >
@@ -1828,10 +1832,10 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       throwOverflowError<double>(absl::StrCat(
           "addition of the ", smallerTableNumRowsDescription,
           ",multiplied with the biggest entry in "
-          "'benchmarkSampleSizeRatios', to the ",
+          "'benchmark-sample-size-ratios', to the ",
           smallerTableNumRowsDescription, ", multiplied with ",
           ratioRowsDescription,
-          " and the biggest entry in 'benchmarkSampleSizeRatios',"));
+          " and the biggest entry in 'benchmark-sample-size-ratios',"));
     } else if (!isValuePreservingCast<size_t>(std::floor(
                    static_cast<double>(smallerTableNumRows *
                                        smallerTableNumRows * ratioRows) /
@@ -1844,8 +1848,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           "size_t casting error: The calculated wanted result size in '",
           name(),
           "' has to be castable to size_t. Try increasing the values for the "
-          "configuration options 'minRatioRows' or the biggest entry in "
-          "'benchmarkSampleSizeRatios'. Or decreasing the value of "
+          "configuration options 'min-ratio-rows' or the biggest entry in "
+          "'benchmark-sample-size-ratios'. Or decreasing the value of "
           "'",
           smallerTableNumRowsConfigurationOptions, "'."));
     }
@@ -1892,9 +1896,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           // Add the metadata, that changes with every call and can't be
           // generalized.
           BenchmarkMetadata& meta = table.metadata();
-          meta.addKeyValuePair("smallerTableSorted", smallerTableSorted);
-          meta.addKeyValuePair("biggerTableSorted", biggerTableSorted);
-          meta.addKeyValuePair("smallerTableJoinColumnSampleSizeRatio",
+          meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
+          meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
+          meta.addKeyValuePair("smaller-table-join-column-sample-size-ratio",
                                smallerTableSampleSizeRatio);
         }
       }
@@ -1902,12 +1906,12 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
 
     // Add the general metadata.
     BenchmarkMetadata& meta{getGeneralMetadata()};
-    meta.addKeyValuePair("Value changing with every row",
-                         "biggerTableJoinColumnSampleSizeRatio");
-    meta.addKeyValuePair("ratioRows", ratioRows);
-    meta.addKeyValuePair("smallerTableNumRows", smallerTableNumRows);
-    meta.addKeyValuePair("wantesResultTableSize", resultWantedNumRows);
-    meta.addKeyValuePair("benchmarkSampleSizeRatios",
+    meta.addKeyValuePair("value-changing-with-every-row",
+                         "bigger-table-join-column-sample-size-ratio");
+    meta.addKeyValuePair("ratio-rows", ratioRows);
+    meta.addKeyValuePair("smaller-table-num-rows", smallerTableNumRows);
+    meta.addKeyValuePair("wantes-result-table-size", resultWantedNumRows);
+    meta.addKeyValuePair("benchmark-sample-size-ratios",
                          getConfigVariables().benchmarkSampleSizeRatios_);
     GeneralInterfaceImplementation::addDefaultMetadata(&meta);
     return results;
