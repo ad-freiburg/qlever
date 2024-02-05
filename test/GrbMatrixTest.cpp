@@ -2,7 +2,6 @@
 #include <gtest/gtest.h>
 
 #include <cstdio>
-#include <iostream>
 
 #include "engine/GrbMatrix.h"
 #include "gmock/gmock.h"
@@ -112,16 +111,16 @@ TEST(GrbMatrixTest, extractTuples) {
   matrix.setElement(0, 2, true);
   matrix.setElement(1, 2, true);
 
-  std::vector<std::pair<size_t, size_t>> tuples = matrix.extractTuples();
+  auto [rowIndices, colIndices] = matrix.extractTuples();
 
   GrbMatrix::finalize();
 
-  std::vector<std::pair<size_t, size_t>> expected;
-  expected.push_back({0, 1});
-  expected.push_back({0, 2});
-  expected.push_back({1, 2});
+  std::vector<size_t> expectedRowIndices{0, 0, 1};
+  std::vector<size_t> expectedColIndices{1, 2, 2};
+  auto expected = {expectedRowIndices, expectedColIndices};
+  auto got = {rowIndices, colIndices};
 
-  EXPECT_THAT(tuples, testing::UnorderedElementsAreArray(expected));
+  EXPECT_THAT(got, testing::UnorderedElementsAreArray(expected));
 }
 
 TEST(GrbMatrixTest, extractColumn) {

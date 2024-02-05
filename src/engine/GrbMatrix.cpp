@@ -19,7 +19,7 @@ GrbMatrix::GrbMatrix(size_t numRows, size_t numCols) {
 
 // _____________________________________________________________________________
 GrbMatrix GrbMatrix::clone() const {
-  GrbMatrix matrixCopy = GrbMatrix();
+  GrbMatrix matrixCopy;
   auto info =
       GrB_Matrix_new(matrixCopy.rawMatrix(), GrB_BOOL, numRows(), numCols());
   handleError(info);
@@ -79,22 +79,19 @@ GrbMatrix GrbMatrix::diag(size_t nvals) {
 }
 
 // _____________________________________________________________________________
-std::vector<std::pair<size_t, size_t>> GrbMatrix::extractTuples() const {
+std::pair<std::vector<size_t>, std::vector<size_t>> GrbMatrix::extractTuples()
+    const {
   size_t nvals = numNonZero();
-  size_t rowIndices[nvals];
-  size_t colIndices[nvals];
+  std::vector<size_t> rowIndices;
+  rowIndices.resize(nvals);
+  std::vector<size_t> colIndices;
+  colIndices.resize(nvals);
   std::unique_ptr<bool[]> values{new bool[nvals]()};
-  auto info = GrB_Matrix_extractTuples_BOOL(rowIndices, colIndices,
-                                            values.get(), &nvals, matrix());
+  auto info = GrB_Matrix_extractTuples_BOOL(
+      rowIndices.data(), colIndices.data(), values.get(), &nvals, matrix());
   handleError(info);
 
-  std::vector<std::pair<size_t, size_t>> result;
-  for (size_t i = 0; i < nvals; i++) {
-    if (values[i]) {
-      result.push_back(std::make_pair(rowIndices[i], colIndices[i]));
-    }
-  }
-  return result;
+  return {rowIndices, colIndices};
 }
 
 // _____________________________________________________________________________

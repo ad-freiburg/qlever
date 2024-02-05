@@ -99,7 +99,7 @@ class GrbMatrix {
    * @brief Extract all true entries from the matrix. The first entry in the
    * pair is the row index, the second entry is the column index.
    */
-  std::vector<std::pair<size_t, size_t>> extractTuples() const;
+  std::pair<std::vector<size_t>, std::vector<size_t>> extractTuples() const;
 
   /**
    * @brief Extract a column from the matrix. Returns all row indices where this

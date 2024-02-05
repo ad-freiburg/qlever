@@ -558,10 +558,12 @@ void TransitivePath::fillTableWithHull(IdTableStatic<WIDTH>& table,
                                        const IdMapping& mapping,
                                        size_t startSideCol,
                                        size_t targetSideCol) {
-  std::vector<std::pair<size_t, size_t>> pairs = hull.extractTuples();
-  for (size_t i = 0; i < pairs.size(); i++) {
+  auto [rowIndices, colIndices] = hull.extractTuples();
+
+  for (size_t i = 0; i < rowIndices.size(); i++) {
     table.emplace_back();
-    auto [startIndex, targetIndex] = pairs[i];
+    auto startIndex = rowIndices[i];
+    auto targetIndex = colIndices[i];
     Id startId = mapping.getId(startIndex);
     Id targetId = mapping.getId(targetIndex);
     table(i, startSideCol) = startId;
