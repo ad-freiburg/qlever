@@ -18,7 +18,7 @@
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"

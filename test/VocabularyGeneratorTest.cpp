@@ -10,7 +10,7 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 #include "util/Algorithm.h"
 
 using namespace ad_utility::vocabulary_merger;

@@ -15,7 +15,7 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Vocabulary.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 #include "parser/RdfEscaping.h"
 #include "util/Conversions.h"
 #include "util/Exception.h"

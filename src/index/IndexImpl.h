@@ -19,7 +19,7 @@
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>
-#include <index/VocabularyGenerator.h>
+#include <index/VocabularyMerger.h>
 #include <parser/ContextFileParser.h>
 #include <parser/TripleComponent.h>
 #include <parser/TurtleParser.h>

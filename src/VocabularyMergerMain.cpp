@@ -6,7 +6,7 @@
 // Can be used e.g. for benchmarking this step to develop faster IndexBuilders.
 
 #include "index/Vocabulary.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {
