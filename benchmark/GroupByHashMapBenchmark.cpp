@@ -265,6 +265,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     group.metadata().addKeyValuePair("Sorted", sorted);
     group.metadata().addKeyValuePair("Blocksize", blockSize);
     group.metadata().addKeyValuePair("HashMap", optimizationEnabled);
+    group.metadata().addKeyValuePair("Operation", determineAggregateString(ti<T>));
 
     // Create `ValuesForTesting` object
     auto qec = ad_utility::testing::getQec();
