@@ -61,29 +61,26 @@ struct TransitivePathSide {
 
 // This struct keeps track of the mapping between Ids and matrix indices
 struct IdMapping {
-  ad_utility::HashMap<Id, size_t> idMap_{};
-
-  std::vector<Id> indexMap_;
-
-  size_t nextIndex_ = 0;
-
-  bool isContained(Id id) { return idMap_.contains(id); }
+  bool contains(Id id) { return idMap_.contains(id); }
 
   size_t addId(Id id) {
     if (!idMap_.contains(id)) {
-      idMap_.insert({id, nextIndex_});
       indexMap_.push_back(id);
-      nextIndex_++;
-      return nextIndex_ - 1;
     }
+    idMap_.try_emplace(id, indexMap_.size() - 1);
     return idMap_[id];
   }
 
   Id getId(size_t index) const { return indexMap_.at(index); }
 
-  size_t getIndex(const Id& id) const { return idMap_.at(id); }
+  size_t getIndex(Id id) const { return idMap_.at(id); }
 
   size_t size() const { return indexMap_.size(); }
+
+ private:
+  ad_utility::HashMap<Id, size_t> idMap_;
+
+  std::vector<Id> indexMap_;
 };
 
 class TransitivePath : public Operation {

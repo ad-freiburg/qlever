@@ -784,7 +784,7 @@ GrbMatrix TransitivePath::setupStartNodeMatrix(std::span<const Id> startIds,
   GrbMatrix startMatrix = GrbMatrix(startIds.size(), numCols);
   size_t rowIndex = 0;
   for (Id id : startIds) {
-    if (!mapping.isContained(id)) {
+    if (!mapping.contains(id)) {
       continue;
     }
     size_t colIndex = mapping.getIndex(id);
