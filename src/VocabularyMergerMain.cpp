@@ -18,8 +18,6 @@ int main(int argc, char** argv) {
   std::string basename = argv[1];
   size_t numFiles = atoi(argv[2]);
 
-  ad_utility::vocabulary_merger::VocabularyMerger m;
-
   auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
   auto internalVocabularyAction = [&file](const auto& word) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
@@ -27,6 +25,7 @@ int main(int argc, char** argv) {
   VocabularyOnDisk vocab;
   auto wordWriterExternal =
       VocabularyOnDisk::WordWriter(basename + EXTERNAL_VOCAB_SUFFIX);
-  m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction, wordWriterExternal, 4_GB);
+  ad_utility::vocabulary_merger::mergeVocabulary(
+      basename, numFiles, TripleComponentComparator(), internalVocabularyAction,
+      wordWriterExternal, 4_GB);
 }

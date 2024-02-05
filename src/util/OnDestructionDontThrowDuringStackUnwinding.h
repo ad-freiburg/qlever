@@ -19,7 +19,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
 
  private:
   F f_;
-  ThrowInDestructorIfSafe throwInDestructorIfSafe;
+  ThrowInDestructorIfSafe throwInDestructorIfSafe_;
   bool isCanceled_ = false;
 
  public:
@@ -37,7 +37,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
     if (isCanceled_) {
       return;
     }
-    throwInDestructorIfSafe(std::move(f_));
+    throwInDestructorIfSafe_(std::move(f_));
   }
   friend class OnDestructionCreator;
 

@@ -71,8 +71,7 @@ using ThirdPermutation = SortByPSO;
 // Several data that are passed along between different phases of the
 // index builder.
 struct IndexBuilderDataBase {
-  ad_utility::vocabulary_merger::VocabularyMerger::VocabularyMetaData
-      vocabularyMetaData_;
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   // The prefixes that are used for the prefix compression.
   std::vector<std::string> prefixes_;
 };

@@ -109,12 +109,13 @@ void terminateIfThrows(F&& f, std::string_view message,
 //     throwIfSafe_([]{throw std::runtime_error("haha");});
 //   }
 class ThrowInDestructorIfSafe {
-  int numExceptionsDuringConstruction = std::uncaught_exceptions();
+  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
 
  public:
   void operator()(
       std::invocable auto f,
-      std::convertible_to<std::string_view> auto const&... additionalMessages) {
+      std::convertible_to<std::string_view> auto const&... additionalMessages)
+      const {
     auto logIgnoredException = [&additionalMessages...](std::string_view what) {
       std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
       LOG(WARN) << absl::StrCat(
@@ -125,25 +126,25 @@ class ThrowInDestructorIfSafe {
                 << std::endl;
     };
     // If the number of uncaught exceptions is the same as when then constructor
-    // was called, then it is safe to throw a possible exception For details see
-    // https://en.cppreference.com/w/cpp/error/uncaught_exception, especially
-    // the links at the bottom of the page.
+    // was called, then it is safe to throw a possible exception. For details
+    // see https://en.cppreference.com/w/cpp/error/uncaught_exception,
+    // especially the links at the bottom of the page.
     try {
       std::invoke(std::move(f));
     } catch (const std::exception& e) {
-      if (std::uncaught_exceptions() == numExceptionsDuringConstruction) {
+      if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
         throw;
       } else {
         logIgnoredException(e.what());
       }
     } catch (...) {
-      if (std::uncaught_exceptions() == numExceptionsDuringConstruction) {
+      if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
         throw;
       } else {
         logIgnoredException("Exception not inheriting from `std::exception`");
       }
     }
   }
-  ~ThrowInDestructorIfSafe() noexcept(false) {}
+  ~ThrowInDestructorIfSafe() noexcept(false) = default;
 };
 }  // namespace ad_utility

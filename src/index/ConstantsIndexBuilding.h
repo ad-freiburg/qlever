@@ -36,7 +36,7 @@ inline std::atomic<size_t> FILE_BUFFER_SIZE = 10 * (1ul << 20);
 
 inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 50'000;
 
-// When merging the vocabulary, this many words finished words are buffered
+// When merging the vocabulary, this many finished words are buffered
 // before they are written to the output.
 inline std::atomic<size_t> BATCH_SIZE_VOCABULARY_MERGE = 10'000'000;
 

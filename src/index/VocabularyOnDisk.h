@@ -71,7 +71,7 @@ class VocabularyOnDisk {
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
 
    public:
-    // Constructor, used by `VocabularyOnDisk::wordWriter`
+    // Constructor, used by `VocabularyOnDisk::wordWriter`.
     explicit WordWriter(const std::string& filename);
     // Add the next word to the vocabulary.
     void operator()(std::string_view word);

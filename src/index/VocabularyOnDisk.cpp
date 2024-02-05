@@ -10,8 +10,6 @@
 #include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
-using std::string;
-using std::vector;
 
 // ____________________________________________________________________________
 std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
@@ -113,11 +111,8 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::buildFromVector(const vector<string>& words,
-                                       const string& fileName) {
-  // Note: Using a reference-capture for `words` will segfault in GCC11.
-  // TODO<joka921> This is a bug in the compiler, report it if still unknown
-  // or post reference link here.
+void VocabularyOnDisk::buildFromVector(const std::vector<std::string>& words,
+                                       const std::string& fileName) {
   auto generator = [](const auto& words)
       -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
     uint64_t index = 0;
@@ -134,13 +129,13 @@ void VocabularyOnDisk::buildFromVector(const vector<string>& words,
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromStringsAndIds(
-    const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
-    const string& fileName) {
+    const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
+    const std::string& fileName) {
   return buildFromIterable(wordsAndIds, fileName);
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::open(const string& filename) {
+void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename.c_str(), "r");
   idsAndOffsets_.open(filename + offsetSuffix_);
   AD_CONTRACT_CHECK(idsAndOffsets_.size() > 0);
@@ -155,7 +150,7 @@ WordAndIndex VocabularyOnDisk::getIthElement(size_t n) const {
   AD_CONTRACT_CHECK(n < idsAndOffsets_.size());
   auto offsetSizeId = getOffsetSizeIdForIthElement(n);
 
-  string result(offsetSizeId._size, '\0');
+  std::string result(offsetSizeId._size, '\0');
   file_.read(result.data(), offsetSizeId._size, offsetSizeId._offset);
 
   return {std::move(result), offsetSizeId._id};

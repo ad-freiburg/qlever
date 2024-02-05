@@ -460,7 +460,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   if (vocabPrefixCompressed_) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
-    ad_utility::vocabulary_merger::VocabularyMerger m;
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
@@ -468,12 +467,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
         };
-    m._noIdMapsAndIgnoreExternalVocab = true;
     auto externalActionCompression = ad_utility::noop;
-    auto mergeResult = m.mergeVocabulary(
+    auto mergeResult = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
         internalVocabularyActionCompression, externalActionCompression,
-        memoryLimitIndexBuilding());
+        memoryLimitIndexBuilding(),
+        ad_utility::vocabulary_merger::NoIdMaps::True);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -491,25 +490,23 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
             << "(internal and external) ..." << std::endl;
-  const ad_utility::vocabulary_merger::VocabularyMerger::VocabularyMetaData
-      mergeRes = [&]() {
-        ad_utility::vocabulary_merger::VocabularyMerger v;
-        auto sortPred = [cmp = &(vocab_.getCaseComparator())](
-                            std::string_view a, std::string_view b) {
-          return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
-        };
-        auto wordWriter = vocab_.makeUncompressingWordWriter(
-            onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-        auto internalVocabularyAction = [&wordWriter](const auto& word) {
-          wordWriter.push(word.data(), word.size());
-        };
+  const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
+    auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
+                                                          std::string_view b) {
+      return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
+    };
+    auto wordWriter =
+        vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+    auto internalVocabularyAction = [&wordWriter](const auto& word) {
+      wordWriter.push(word.data(), word.size());
+    };
 
-        auto wordWriterExternal = vocab_.makeWordWriterForExternalVocabulary(
-            onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-        return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                                 internalVocabularyAction, wordWriterExternal,
-                                 memoryLimitIndexBuilding());
-      }();
+    auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
+        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    return ad_utility::vocabulary_merger::mergeVocabulary(
+        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
+        externalVocabularyAction, memoryLimitIndexBuilding());
+  }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;

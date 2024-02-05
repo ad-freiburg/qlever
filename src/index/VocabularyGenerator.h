@@ -28,71 +28,87 @@ concept WordCallback = std::invocable<T, std::string_view>;
 // Concept for a callable that compares to `string_view`s.
 template <typename T>
 concept WordComparator = std::predicate<T, std::string_view, std::string_view>;
-/**
- * Class for merging the partial vocabularies. The main function is still in the
- * `mergeVocabulary` function, but the parallel pipeline is easier when this is
- * encapsulated within a class.
- */
+
+// result of a call to mergeVocabulary
+struct VocabularyMetaData {
+  // This struct is used to incrementally construct the range of IDs that
+  // correspond to a given prefix. To use it, all the words from the
+  // vocabulary must be passed to the member function `addIfWordMatches` in
+  // sorted order. After that, the range `[begin(), end())` is the range of
+  // all the words that start with the prefix.
+  struct IdRangeForPrefix {
+    explicit IdRangeForPrefix(std::string prefix)
+        : prefix_{std::move(prefix)} {}
+    // Check if `word` starts with the `prefix_`. If so, `wordIndex`
+    // will become part of the range that this struct represents.
+    // For this to work, all the words that start with the `prefix_` have to
+    // be passed in consecutively and their indices have to be consecutive
+    // and ascending.
+    void addIfWordMatches(std::string_view word, size_t wordIndex) {
+      if (!word.starts_with(prefix_)) {
+        return;
+      }
+      if (!beginWasSeen_) {
+        begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+        beginWasSeen_ = true;
+      }
+      end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+    }
+
+    Id begin() const { return begin_; }
+    Id end() const { return end_; }
+
+    // Return true iff the `id` belongs to this range.
+    bool contains(Id id) const { return begin_ <= id && id < end_; }
+
+   private:
+    Id begin_ = ID_NO_VALUE;
+    Id end_ = ID_NO_VALUE;
+    std::string prefix_;
+    bool beginWasSeen_ = false;
+  };
+
+  size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
+  // the vocabulary)
+  IdRangeForPrefix langTaggedPredicates_{"@"};
+  IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
+
+  // Return true iff the `id` belongs to one of the two ranges that contain
+  // the internal IDs that were added by QLever and were not part of the
+  // input.
+  bool isQleverInternalId(Id id) const {
+    return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
+  }
+};
+// _______________________________________________________________
+// merge the partial vocabularies in the  binary files
+// basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
+// where 0 <= i < numFiles
+// Returns the number of total Words merged and via the parameters
+// the lower and upper bound of language tagged predicates
+// Argument `comparator` gives the way to order strings (case-sensitive or
+// not). Arguments `internalVocabAction` and `externalVocabAction` are called
+// for each merged word in the internal/external vocabulary in the order of
+// their appearance. This function automatically resets the inner members after
+// finishing, to leave the external interface stateless
+enum NoIdMaps { False, True };
+VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
+                                   WordComparator auto comparator,
+                                   WordCallback auto& internalWordCallback,
+                                   WordCallback auto& externalWordCallback,
+                                   ad_utility::MemorySize memoryToUse,
+                                   NoIdMaps = NoIdMaps::False);
+
+// A helper class that implements the `mergeVocabulary` function (see
+// above). Everything in this class is private and only the
+// `mergeVocabulary` function is a friend.
 class VocabularyMerger {
- public:
+ private:
   // If this is set, then we will only output the internal vocabulary.
   // This is useful for the prefix compression, where we don't need the
   // external part of the vocabulary and the mapping from local to global IDs.
-  bool _noIdMapsAndIgnoreExternalVocab = false;
-  // result of a call to mergeVocabulary
-  struct VocabularyMetaData {
-    // This struct is used to incrementally construct the range of IDs that
-    // correspond to a given prefix. To use it, all the words from the
-    // vocabulary must be passed to the member function `addIfWordMatches` in
-    // sorted order. After that, the range `[begin(), end())` is the range of
-    // all the words that start with the prefix.
-    struct IdRangeForPrefix {
-      explicit IdRangeForPrefix(std::string prefix)
-          : prefix_{std::move(prefix)} {}
-      // Check if `word` starts with the `prefix_`. If so, `wordIndex`
-      // will become part of the range that this struct represents.
-      // For this to work, all the words that start with the `prefix_` have to
-      // be passed in consecutively and their indices have to be consecutive
-      // and ascending.
-      void addIfWordMatches(std::string_view word, size_t wordIndex) {
-        if (!word.starts_with(prefix_)) {
-          return;
-        }
-        if (!beginWasSeen_) {
-          begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
-          beginWasSeen_ = true;
-        }
-        end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
-      }
+  bool noIdMapsAndIgnoreExternalVocab_ = false;
 
-      Id begin() const { return begin_; }
-      Id end() const { return end_; }
-
-      // Return true iff the `id` belongs to this range.
-      bool contains(Id id) const { return begin_ <= id && id < end_; }
-
-     private:
-      Id begin_ = ID_NO_VALUE;
-      Id end_ = ID_NO_VALUE;
-      std::string prefix_;
-      bool beginWasSeen_ = false;
-    };
-
-    size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
-                                // the vocabulary)
-    IdRangeForPrefix langTaggedPredicates_{"@"};
-    IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
-
-    // Return true iff the `id` belongs to one of the two ranges that contain
-    // the internal IDs that were added by QLever and were not part of the
-    // input.
-    bool isQleverInternalId(Id id) const {
-      return internalEntities_.contains(id) ||
-             langTaggedPredicates_.contains(id);
-    }
-  };
-
- private:
   // private data members
 
   // The result (mostly metadata) which we'll return.
@@ -101,9 +117,14 @@ class VocabularyMerger {
   // we will store pairs of <partialId, globalId>
   std::vector<IdPairMMapVec> idVecs_;
 
-  const size_t _bufferSize = BATCH_SIZE_VOCABULARY_MERGE;
+  const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 
- public:
+  // Friend declaration for the publicly available function.
+  friend VocabularyMetaData mergeVocabulary(
+      const std::string& basename, size_t numFiles,
+      WordComparator auto comparator, WordCallback auto& internalWordCallback,
+      WordCallback auto& externalWordCallback,
+      ad_utility::MemorySize memoryToUse, NoIdMaps onlyMergeVocabulary);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
@@ -115,7 +136,7 @@ class VocabularyMerger {
   // Argument `comparator` gives the way to order strings (case-sensitive or
   // not). Arguments `internalVocabAction` and `externalVocabAction` are called
   // for each merged word in the internal/external vocabulary in the order of
-  // their appearance.// This function automatically resets the inner members
+  // their appearance. This function automatically resets the inner members
   // after finishing, to leave the external interface stateless
   VocabularyMetaData mergeVocabulary(const std::string& basename,
                                      size_t numFiles,
@@ -124,32 +145,31 @@ class VocabularyMerger {
                                      WordCallback auto& externalWordCallback,
                                      ad_utility::MemorySize memoryToUse);
 
- private:
   // helper struct used in the priority queue for merging.
   // represents tokens/words in a certain partial vocabulary
   struct QueueWord {
     QueueWord() = default;
     QueueWord(TripleComponentWithIndex&& v, size_t file)
-        : _entry(std::move(v)), _partialFileId(file) {}
-    TripleComponentWithIndex _entry;  // the word, its local ID and the
+        : entry_(std::move(v)), partialFileId_(file) {}
+    TripleComponentWithIndex entry_;  // the word, its local ID and the
                                       // information if it will be externalized
-    size_t _partialFileId;  // from which partial vocabulary did this word come
+    size_t partialFileId_;  // from which partial vocabulary did this word come
 
-    [[nodiscard]] const bool& isExternal() const { return _entry.isExternal(); }
-    [[nodiscard]] bool& isExternal() { return _entry.isExternal(); }
+    [[nodiscard]] const bool& isExternal() const { return entry_.isExternal(); }
+    [[nodiscard]] bool& isExternal() { return entry_.isExternal(); }
 
     [[nodiscard]] const std::string& iriOrLiteral() const {
-      return _entry.iriOrLiteral();
+      return entry_.iriOrLiteral();
     }
-    [[nodiscard]] std::string& iriOrLiteral() { return _entry.iriOrLiteral(); }
+    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
 
-    [[nodiscard]] const auto& id() const { return _entry.index_; }
-    [[nodiscard]] auto& id() { return _entry.index_; }
+    [[nodiscard]] const auto& id() const { return entry_.index_; }
+    [[nodiscard]] auto& id() { return entry_.index_; }
   };
 
   constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {
     return ad_utility::MemorySize::bytes(sizeof(QueueWord) +
-                                         q._entry.iriOrLiteral().size());
+                                         q.entry_.iriOrLiteral().size());
   };
 
   // Write the queue words in the buffer to their corresponding `idPairVecs`.
@@ -239,7 +259,6 @@ ItemVec vocabMapsToVector(ItemMapArray& map);
 template <class StringSortComparator>
 void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
                      bool doParallelSort);
-
 }  // namespace ad_utility::vocabulary_merger
 
 #include "VocabularyGeneratorImpl.h"
