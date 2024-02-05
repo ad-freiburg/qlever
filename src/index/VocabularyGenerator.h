@@ -29,7 +29,7 @@ concept WordCallback = std::invocable<T, std::string_view>;
 template <typename T>
 concept WordComparator = std::predicate<T, std::string_view, std::string_view>;
 
-// result of a call to mergeVocabulary
+// The result of a call to `mergeVocabulary` (see below).
 struct VocabularyMetaData {
   // This struct is used to incrementally construct the range of IDs that
   // correspond to a given prefix. To use it, all the words from the
@@ -81,23 +81,23 @@ struct VocabularyMetaData {
   }
 };
 // _______________________________________________________________
-// merge the partial vocabularies in the  binary files
-// basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
-// where 0 <= i < numFiles
-// Returns the number of total Words merged and via the parameters
-// the lower and upper bound of language tagged predicates
-// Argument `comparator` gives the way to order strings (case-sensitive or
-// not). Arguments `internalVocabAction` and `externalVocabAction` are called
-// for each merged word in the internal/external vocabulary in the order of
-// their appearance. This function automatically resets the inner members after
-// finishing, to leave the external interface stateless
-enum NoIdMaps { False, True };
+// Merge the partial vocabularies in the  binary files
+// `basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)`
+// where `0 <= i < numFiles`.
+// Return the number of total Words merged and the lower and upper bound of
+// language tagged predicates. Argument `comparator` gives the way to order
+// strings (case-sensitive or not). Arguments `internalVocabAction` and
+// `externalVocabAction` are called for each merged word in the
+// internal/external vocabulary in the order of their appearance. If
+// `WithIdMaps::False` is passed as the last argument, then only the merged
+// vocabulary is created, but not the mapping from the local to global IDs.
+enum WithIdMaps { False, True };
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
                                    WordCallback auto& externalWordCallback,
                                    ad_utility::MemorySize memoryToUse,
-                                   NoIdMaps = NoIdMaps::False);
+                                   WithIdMaps = WithIdMaps::True);
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
@@ -124,20 +124,12 @@ class VocabularyMerger {
       const std::string& basename, size_t numFiles,
       WordComparator auto comparator, WordCallback auto& internalWordCallback,
       WordCallback auto& externalWordCallback,
-      ad_utility::MemorySize memoryToUse, NoIdMaps onlyMergeVocabulary);
+      ad_utility::MemorySize memoryToUse, WithIdMaps withIdMaps);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
-  // merge the partial vocabularies in the  binary files
-  // basename + PARTIAL_VOCAB_FILE_NAME + to_string(i)
-  // where 0 <= i < numFiles
-  // Returns the number of total Words merged and via the parameters
-  // the lower and upper bound of language tagged predicates
-  // Argument `comparator` gives the way to order strings (case-sensitive or
-  // not). Arguments `internalVocabAction` and `externalVocabAction` are called
-  // for each merged word in the internal/external vocabulary in the order of
-  // their appearance. This function automatically resets the inner members
-  // after finishing, to leave the external interface stateless
+  // The function that performs the actual merge. See the static global
+  // `mergeVocabulary` function for details.
   VocabularyMetaData mergeVocabulary(const std::string& basename,
                                      size_t numFiles,
                                      WordComparator auto comparator,
@@ -145,8 +137,7 @@ class VocabularyMerger {
                                      WordCallback auto& externalWordCallback,
                                      ad_utility::MemorySize memoryToUse);
 
-  // helper struct used in the priority queue for merging.
-  // represents tokens/words in a certain partial vocabulary
+  // Helper `struct` for a word from a partial vocabulary.
   struct QueueWord {
     QueueWord() = default;
     QueueWord(TripleComponentWithIndex&& v, size_t file)

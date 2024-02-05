@@ -34,9 +34,9 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordCallback auto& internalWordCallback,
                                    WordCallback auto& externalWordCallback,
                                    ad_utility::MemorySize memoryToUse,
-                                   NoIdMaps onlyMergeVocabulary) {
+                                   WithIdMaps withIdMaps) {
   VocabularyMerger merger;
-  if (onlyMergeVocabulary == NoIdMaps::True) {
+  if (withIdMaps == WithIdMaps::False) {
     merger.noIdMapsAndIgnoreExternalVocab_ = true;
   }
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),

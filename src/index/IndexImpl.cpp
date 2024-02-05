@@ -472,7 +472,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
         internalVocabularyActionCompression, externalActionCompression,
         memoryLimitIndexBuilding(),
-        ad_utility::vocabulary_merger::NoIdMaps::True);
+        ad_utility::vocabulary_merger::WithIdMaps::False);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
