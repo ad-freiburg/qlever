@@ -25,7 +25,8 @@ int main(int argc, char** argv) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
   VocabularyOnDisk vocab;
-  auto wordWriterExternal = vocab.wordWriter(basename + EXTERNAL_VOCAB_SUFFIX);
+  auto wordWriterExternal =
+      VocabularyOnDisk::WordWriter(basename + EXTERNAL_VOCAB_SUFFIX);
   m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
                     internalVocabularyAction, wordWriterExternal, 4_GB);
 }

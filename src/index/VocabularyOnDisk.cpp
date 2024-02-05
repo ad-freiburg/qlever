@@ -10,26 +10,28 @@
 #include "util/StringUtils.h"
 
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
+using std::string;
+using std::vector;
 
 // ____________________________________________________________________________
 std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
     uint64_t idx) const {
   IndexAndOffset idAndDummyOffset{idx, 0};
-  auto it = std::lower_bound(_idsAndOffsets.begin(), _idsAndOffsets.end(),
+  auto it = std::lower_bound(idsAndOffsets_.begin(), idsAndOffsets_.end(),
                              idAndDummyOffset);
-  if (it >= _idsAndOffsets.end() - 1 || it->_idx != idx) {
+  if (it >= idsAndOffsets_.end() - 1 || it->idx_ != idx) {
     return std::nullopt;
   }
-  return getOffsetAndSizeForIthElement(it - _idsAndOffsets.begin());
+  return getOffsetAndSizeForIthElement(it - idsAndOffsets_.begin());
 }
 
 // ____________________________________________________________________________
 VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
     uint64_t i) const {
   AD_CONTRACT_CHECK(i < size());
-  const auto offset = _idsAndOffsets[i]._offset;
-  const auto nextOffset = _idsAndOffsets[i + 1]._offset;
-  return OffsetSizeId{offset, nextOffset - offset, _idsAndOffsets[i]._idx};
+  const auto offset = idsAndOffsets_[i].offset_;
+  const auto nextOffset = idsAndOffsets_[i + 1].offset_;
+  return OffsetSizeId{offset, nextOffset - offset, idsAndOffsets_[i].idx_};
 }
 
 // _____________________________________________________________________________
@@ -40,37 +42,9 @@ std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
   }
 
   string result(optionalOffsetAndSize->_size, '\0');
-  _file.read(result.data(), optionalOffsetAndSize->_size,
+  file_.read(result.data(), optionalOffsetAndSize->_size,
              optionalOffsetAndSize->_offset);
   return result;
-}
-
-// _____________________________________________________________________________
-ad_utility::ConsumerImpl<std::string_view> VocabularyOnDisk::wordWriterImpl(
-    std::string outFileName) {
-  _file.open(outFileName.c_str(), "w");
-  ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
-      outFileName + _offsetSuffix, ad_utility::CreateTag{});
-  uint64_t currentOffset = 0;
-  std::optional<uint64_t> previousId = std::nullopt;
-  uint64_t currentIndex = 0;
-  while (co_await ad_utility::valueWasPushedTag) {
-    const auto& word = co_await ad_utility::nextValueTag;
-    AD_CONTRACT_CHECK(!previousId.has_value() ||
-                      previousId.value() < currentIndex);
-    idsAndOffsets.push_back(IndexAndOffset{currentIndex, currentOffset});
-    currentOffset += _file.write(word.data(), word.size());
-    previousId = currentIndex;
-    ++currentIndex;
-  }
-
-  // End offset of last vocabulary entry, also consistent with the empty
-  // vocabulary.
-  auto endIndex = previousId.value_or(_highestIdx);
-  idsAndOffsets.push_back(IndexAndOffset{endIndex, currentOffset});
-  _file.close();
-  idsAndOffsets.close();
-  open(outFileName);
 }
 
 // _____________________________________________________________________________
@@ -78,15 +52,15 @@ template <typename Iterable>
 void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                          const string& fileName) {
   {
-    _file.open(fileName.c_str(), "w");
+    file_.open(fileName.c_str(), "w");
     ad_utility::MmapVector<IndexAndOffset> idsAndOffsets(
-        fileName + _offsetSuffix, ad_utility::CreateTag{});
+        fileName + offsetSuffix_, ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
     std::optional<uint64_t> previousId = std::nullopt;
     for (const auto& [word, id] : it) {
       AD_CONTRACT_CHECK(!previousId.has_value() || previousId.value() < id);
       idsAndOffsets.push_back(IndexAndOffset{id, currentOffset});
-      currentOffset += _file.write(word.data(), word.size());
+      currentOffset += file_.write(word.data(), word.size());
       previousId = id;
     }
 
@@ -96,13 +70,45 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
       idsAndOffsets.push_back(
           IndexAndOffset{previousId.value() + 1, currentOffset});
     } else {
-      idsAndOffsets.push_back(IndexAndOffset{_highestIdx + 1, currentOffset});
+      idsAndOffsets.push_back(IndexAndOffset{highestIdx_ + 1, currentOffset});
     }
-    _file.close();
+    file_.close();
   }  // After this close, the destructor of MmapVector is called, whoch dumps
      // everything to disk.
   open(fileName);
 }
+
+// _____________________________________________________________________________
+VocabularyOnDisk::WordWriter::WordWriter(const std::string& outFilename)
+    : file_{outFilename.c_str(), "w"},
+      idsAndOffsets_{absl::StrCat(outFilename, VocabularyOnDisk::offsetSuffix_),
+                     ad_utility::CreateTag{}} {}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::WordWriter::operator()(std::string_view word) {
+  AD_CONTRACT_CHECK(!previousId_.has_value() ||
+                    previousId_.value() < currentIndex_);
+  idsAndOffsets_.push_back(IndexAndOffset{currentIndex_, currentOffset_});
+  currentOffset_ += file_.write(word.data(), word.size());
+  previousId_ = currentIndex_;
+  ++currentIndex_;
+}
+
+// _____________________________________________________________________________
+void VocabularyOnDisk::WordWriter::finish() {
+  if (std::exchange(isFinished_, true)) {
+    return;
+  }
+  // End offset of last vocabulary entry, also consistent with the empty
+  // vocabulary.
+  auto endIndex = previousId_.value_or(VocabularyOnDisk::highestIndexEmpty_);
+  idsAndOffsets_.push_back(IndexAndOffset{endIndex, currentOffset_});
+  file_.close();
+  idsAndOffsets_.close();
+}
+
+// _____________________________________________________________________________
+VocabularyOnDisk::WordWriter::~WordWriter() { finish(); }
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::buildFromVector(const vector<string>& words,
@@ -133,22 +139,22 @@ void VocabularyOnDisk::buildFromStringsAndIds(
 
 // _____________________________________________________________________________
 void VocabularyOnDisk::open(const string& filename) {
-  _file.open(filename.c_str(), "r");
-  _idsAndOffsets.open(filename + _offsetSuffix);
-  AD_CONTRACT_CHECK(_idsAndOffsets.size() > 0);
-  _size = _idsAndOffsets.size() - 1;
-  if (_size > 0) {
-    _highestIdx = (*(end() - 1))._index;
+  file_.open(filename.c_str(), "r");
+  idsAndOffsets_.open(filename + offsetSuffix_);
+  AD_CONTRACT_CHECK(idsAndOffsets_.size() > 0);
+  size_ = idsAndOffsets_.size() - 1;
+  if (size_ > 0) {
+    highestIdx_ = (*(end() - 1))._index;
   }
 }
 
 // ____________________________________________________________________________
 WordAndIndex VocabularyOnDisk::getIthElement(size_t n) const {
-  AD_CONTRACT_CHECK(n < _idsAndOffsets.size());
+  AD_CONTRACT_CHECK(n < idsAndOffsets_.size());
   auto offsetSizeId = getOffsetSizeIdForIthElement(n);
 
   string result(offsetSizeId._size, '\0');
-  _file.read(result.data(), offsetSizeId._size, offsetSizeId._offset);
+  file_.read(result.data(), offsetSizeId._size, offsetSizeId._offset);
 
   return {std::move(result), offsetSizeId._id};
 }

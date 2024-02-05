@@ -9,13 +9,9 @@
 
 #include "global/Id.h"
 #include "index/vocabulary/VocabularyTypes.h"
-#include "util/Consumer.h"
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
-
-using std::string;
-using std::vector;
 
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
@@ -24,64 +20,83 @@ class VocabularyOnDisk {
  private:
   // An ID and the offset of the corresponding word in the underlying file.
   struct IndexAndOffset {
-    uint64_t _idx;
-    uint64_t _offset;
+    uint64_t idx_;
+    uint64_t offset_;
     // Compare only by the IDs.
     auto operator<=>(const IndexAndOffset& rhs) const {
-      return _idx <=> rhs._idx;
+      return idx_ <=> rhs.idx_;
     }
   };
 
   // The file in which the words are stored.
-  mutable ad_utility::File _file;
+  mutable ad_utility::File file_;
 
   // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<IndexAndOffset> _idsAndOffsets;
+  ad_utility::MmapVectorView<IndexAndOffset> idsAndOffsets_;
 
   // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
-  // this will be Id(-1), s.t. _highestIdx + 1 will overflow to 0.
-  uint64_t _highestIdx = std::numeric_limits<uint64_t>::max();
+  // this will be Id(-1), s.t. highestIdx_ + 1 will overflow to 0.
+  static constexpr uint64_t highestIndexEmpty_ =
+      std::numeric_limits<uint64_t>::max();
+  uint64_t highestIdx_ = highestIndexEmpty_;
   // The number of words stored in the vocabulary.
-  size_t _size = 0;
+  size_t size_ = 0;
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
-  static constexpr std::string_view _offsetSuffix = ".idsAndOffsets.mmap";
+  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets.mmap";
 
  public:
   /// Build from a vector of strings with one word per line.
   /// These functions will assign the contiguous indices [0 .. #numWords).
-  void buildFromVector(const vector<string>& words, const string& fileName);
+  void buildFromVector(const std::vector<string>& words,
+                       const std::string& fileName);
 
-  // Return a consumerator that can be used to build the vocabulary. Repeated
-  // calls to `push` will add the pushed words to the vocabulary with the
-  // contiguous indices [0, 1, ...].
-  ad_utility::Consumer<std::string_view> wordWriter(std::string outFileName) {
-    return ad_utility::makeConsumer(wordWriterImpl(std::move(outFileName)));
-  }
-  ad_utility::ConsumerImpl<std::string_view> wordWriterImpl(
-      std::string outFileName);
+  // A helper class that is used to build a vocabulary word by word.
+  // Each call to `operator()` adds the next word to the vocabulary.
+  // At the end, the `finish()` method can be called. Note that `finish`
+  // is also implicitly called by the destructor, but doing so implicitly
+  // releases resources earlier and is cleaner in case of exceptions.
+  class WordWriter {
+   private:
+    ad_utility::File file_;
+    ad_utility::MmapVector<IndexAndOffset> idsAndOffsets_;
+    uint64_t currentOffset_ = 0;
+    std::optional<uint64_t> previousId_ = std::nullopt;
+    uint64_t currentIndex_ = 0;
+    bool isFinished_ = false;
+
+   public:
+    // Constructor, used by `VocabularyOnDisk::wordWriter`
+    explicit WordWriter(const std::string& filename);
+    // Add the next word to the vocabulary.
+    void operator()(std::string_view word);
+    // Finish the writing. After this no more calls to `operator()` are allowed.
+    void finish();
+    // Destructor. Implicitly calls `finish` if it hasn't been called before.
+    ~WordWriter();
+  };
 
   /// Build from a vector of pairs of `(string, id)`. This requires the IDs to
   /// be contiguous.
   void buildFromStringsAndIds(
-      const vector<std::pair<std::string, uint64_t>>& wordsAndIds,
-      const string& fileName);
+      const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
+      const std::string& fileName);
 
   /// Open the vocabulary from file. It must have been previously written to
   /// this file, for example via `buildFromVector` or `buildFromTextFile`.
-  void open(const string& filename);
+  void open(const std::string& filename);
 
   /// Close the underlying file and uninitialize this vocabulary for further
   /// use.
-  void close() { _file.close(); }
+  void close() { file_.close(); }
 
   /// If an entry with this `idx` exists, return the corresponding string, else
   /// `std::nullopt`
-  std::optional<string> operator[](uint64_t idx) const;
+  std::optional<std::string> operator[](uint64_t idx) const;
 
   /// Get the number of words in the vocabulary.
-  size_t size() const { return _size; }
+  size_t size() const { return size_; }
 
   /// Default constructor for an empty vocabulary.
   VocabularyOnDisk() = default;
@@ -95,7 +110,7 @@ class VocabularyOnDisk {
   // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
   // vocabularies consistent with other vocabulary types like
   // `VocabularyInMemory`.
-  uint64_t getHighestId() const { return _highestIdx; }
+  uint64_t getHighestId() const { return highestIdx_; }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
