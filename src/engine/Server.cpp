@@ -780,10 +780,9 @@ boost::asio::awaitable<void> Server::processQuery(
 // _____________________________________________________________________________
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
-                                        SharedCancellationHandle handle) const {
-  auto run =
-      [handle = std::move(handle), function = std::move(function)](
-         ) mutable {
+                                        SharedCancellationHandle handle) {
+  auto run = [handle = std::move(handle),
+              function = std::move(function)]() mutable {
     // It might take some time until the thread pool is ready,
     // so reset the state here. Ideally waiting for the thread pool
     // would periodically check the cancellation state
