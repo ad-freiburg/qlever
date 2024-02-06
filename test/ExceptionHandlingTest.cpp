@@ -57,3 +57,39 @@ TEST(ExceptionHandling, ignoreExceptionIfThrows) {
       ad_utility::ignoreExceptionIfThrows([&i]() noexcept { i = -4; }));
   EXPECT_EQ(i, -4);
 }
+
+namespace {
+template <auto throwingFunction>
+struct S {
+  ad_utility::ThrowInDestructorIfSafe t_;
+  ~S() { t_(throwingFunction); }
+};
+
+// This function should as part of the `S` destructor invoke the
+// `innerThrowingFunction` and therefore throw the exception.
+template <auto innerThrowingFunction>
+void throwInnerException() {
+  S<innerThrowingFunction> s;
+};
+
+// This function should ignore the function thrown by the
+// `innerThrowingFunction` and only propagate the `system_error` to the outside.
+template <auto innerThrowingFunction>
+[[noreturn]] void ignoreInnerException() {
+  S<innerThrowingFunction> s;
+  throw std::system_error{};
+};
+}  // namespace
+// ________________________________________________________________
+TEST(ExceptionHandling, throwIfSafe) {
+  using namespace ad_utility;
+  ThrowInDestructorIfSafe t;
+  static constexpr auto throwException = []() {
+    throw std::runtime_error{"haha"};
+  };
+  static constexpr auto throwInt = []() { throw 42; };
+  EXPECT_THROW(throwInnerException<throwException>(), std::runtime_error);
+  EXPECT_THROW(throwInnerException<throwInt>(), int);
+  EXPECT_THROW((ignoreInnerException<throwException>()), std::system_error);
+  EXPECT_THROW((ignoreInnerException<throwInt>()), std::system_error);
+}

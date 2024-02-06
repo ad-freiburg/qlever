@@ -152,10 +152,8 @@ class VocabularyMerger {
     [[nodiscard]] const std::string& iriOrLiteral() const {
       return entry_.iriOrLiteral();
     }
-    [[nodiscard]] std::string& iriOrLiteral() { return entry_.iriOrLiteral(); }
 
     [[nodiscard]] const auto& id() const { return entry_.index_; }
-    [[nodiscard]] auto& id() { return entry_.index_; }
   };
 
   constexpr static auto sizeOfQueueWord = [](const QueueWord& q) {

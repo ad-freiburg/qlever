@@ -111,23 +111,6 @@ VocabularyOnDisk::WordWriter::~WordWriter() {
 }
 
 // _____________________________________________________________________________
-void VocabularyOnDisk::buildFromVector(const std::vector<std::string>& words,
-                                       const std::string& fileName) {
-  auto generator = [](const auto& words)
-      -> cppcoro::generator<std::pair<std::string_view, uint64_t>> {
-    uint64_t index = 0;
-    for (const auto& word : (words)) {
-      // Note: Yielding the temporary directly would segfault in GCC, this is
-      // a bug in GCC, see similar places in the `streamable_generator` class.
-      std::pair<std::string, uint64_t> tmp{word, index};
-      co_yield tmp;
-      index++;
-    }
-  }(words);
-  buildFromIterable(std::move(generator), fileName);
-}
-
-// _____________________________________________________________________________
 void VocabularyOnDisk::buildFromStringsAndIds(
     const std::vector<std::pair<std::string, uint64_t>>& wordsAndIds,
     const std::string& fileName) {

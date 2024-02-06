@@ -26,9 +26,9 @@ class VocabularyOnDisk {
     auto operator<=>(const IndexAndOffset& rhs) const {
       return idx_ <=> rhs.idx_;
     }
-    bool operator==(const IndexAndOffset& rhs) const {
-      return idx_ == rhs.idx_;
-    }
+    // Equality comparison is currently unused, but it must be declared to be
+    // able to use `std::ranges::lower_bound` etc.
+    bool operator==(const IndexAndOffset& rhs) const;
   };
 
   // The file in which the words are stored.
@@ -50,11 +50,6 @@ class VocabularyOnDisk {
   static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets.mmap";
 
  public:
-  /// Build from a vector of strings with one word per line.
-  /// These functions will assign the contiguous indices [0 .. #numWords).
-  void buildFromVector(const std::vector<string>& words,
-                       const std::string& fileName);
-
   // A helper class that is used to build a vocabulary word by word.
   // Each call to `operator()` adds the next word to the vocabulary.
   // At the end, the `finish()` method can be called. Note that `finish`
@@ -90,10 +85,6 @@ class VocabularyOnDisk {
   /// Open the vocabulary from file. It must have been previously written to
   /// this file, for example via `buildFromVector` or `buildFromTextFile`.
   void open(const std::string& filename);
-
-  /// Close the underlying file and uninitialize this vocabulary for further
-  /// use.
-  void close() { file_.close(); }
 
   /// If an entry with this `idx` exists, return the corresponding string, else
   /// `std::nullopt`

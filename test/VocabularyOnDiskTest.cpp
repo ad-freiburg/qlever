@@ -35,7 +35,19 @@ class VocabularyCreator {
       std::optional<std::vector<uint64_t>> ids = std::nullopt) {
     VocabularyOnDisk vocabulary;
     if (!ids.has_value()) {
-      vocabulary.buildFromVector(words, vocabFilename_);
+      {
+        auto writer = VocabularyOnDisk::WordWriter(vocabFilename_);
+        for (auto& word : words) {
+          writer(word);
+        }
+        static std::atomic<unsigned> doFinish = 0;
+        // In some tests, call `finish` expclitly, in others let the destructor
+        // handle this.
+        if (doFinish.fetch_add(1) % 2 == 0) {
+          writer.finish();
+        }
+      }
+      vocabulary.open(vocabFilename_);
     } else {
       AD_CONTRACT_CHECK(words.size() == ids.value().size());
       std::vector<std::pair<std::string, uint64_t>> wordsAndIds;
