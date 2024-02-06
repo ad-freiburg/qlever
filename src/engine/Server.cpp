@@ -734,6 +734,14 @@ boost::asio::awaitable<void> Server::processQuery(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
+  } catch (const ad_utility::CancellationException& e) {
+    // Send 429 status code to indicate that the time limit was reached
+    // or the query was cancelled because of some other reason.
+    responseStatus = http::status::too_many_requests;
+    exceptionErrorMsg = e.what();
+    if (!e.operation_.empty()) {
+      *exceptionErrorMsg += " Last operation: " + e.operation_;
+    }
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
@@ -796,11 +804,11 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle), timeLimit]() mutable {
         auto pq = SparqlParser::parseQuery(query);
-        handle->throwIfCancelled("After parsing");
+        handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);
-        handle->throwIfCancelled("After query planning");
+        handle->throwIfCancelled();
         PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
         plannedQuery.queryExecutionTree_.getRootOperation()

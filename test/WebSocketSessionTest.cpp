@@ -193,7 +193,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
                                        net::use_awaitable);
     ASSERT_TRUE(webSocket.is_open());
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     // Wrong keyword should be ignored
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
@@ -202,7 +202,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     net::steady_timer timer{c.strand_, clientTimeout};
     co_await timer.async_wait(net::use_awaitable);
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     co_await webSocket.async_write(toBuffer("cancel"), net::use_awaitable);
 
@@ -210,10 +210,10 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     timer.expires_after(clientTimeout);
     co_await timer.async_wait(net::use_awaitable);
 
-    EXPECT_TRUE(cancellationHandle->isCancelled(""));
+    EXPECT_TRUE(cancellationHandle->isCancelled());
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        cancellationHandle->throwIfCancelled(""),
-        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+        cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
+        ad_utility::CancellationException);
 
     // Cancel should not close connection immediately
     EXPECT_TRUE(webSocket.is_open());
@@ -298,17 +298,17 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
                                        net::use_awaitable);
     ASSERT_TRUE(webSocket.is_open());
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     // Wrong keyword should be ignored
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     co_await webSocket.async_write(toBuffer("cancel_on_close"),
                                    net::use_awaitable);
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     // Wrong keyword should be ignored
     co_await webSocket.async_write(toBuffer("other2"), net::use_awaitable);
@@ -317,7 +317,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
     net::steady_timer timer{c.strand_, clientTimeout};
     co_await timer.async_wait(net::use_awaitable);
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     co_await webSocket.async_close(boost::beast::websocket::close_code::normal,
                                    net::use_awaitable);
@@ -326,10 +326,10 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
     timer.expires_after(clientTimeout);
     co_await timer.async_wait(net::use_awaitable);
 
-    EXPECT_TRUE(cancellationHandle->isCancelled(""));
+    EXPECT_TRUE(cancellationHandle->isCancelled());
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        cancellationHandle->throwIfCancelled(""),
-        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+        cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
+        ad_utility::CancellationException);
 
     {
       // Trigger connection close by creating and destroying message sender
@@ -365,7 +365,7 @@ ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
                                        net::use_awaitable);
     ASSERT_TRUE(webSocket.is_open());
 
-    EXPECT_FALSE(cancellationHandle->isCancelled(""));
+    EXPECT_FALSE(cancellationHandle->isCancelled());
 
     // Wrong keyword should be ignored
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
@@ -374,7 +374,7 @@ ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
   co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
                          net::use_awaitable);
 
-  EXPECT_FALSE(cancellationHandle->isCancelled(""));
+  EXPECT_FALSE(cancellationHandle->isCancelled());
 }
 
 // _____________________________________________________________________________
