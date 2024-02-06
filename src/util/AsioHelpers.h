@@ -15,6 +15,7 @@
 #include <future>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 
 namespace ad_utility {
 
@@ -208,6 +209,8 @@ class AsyncSignal {
   template <typename CompletionToken>
   auto asyncWait(AsyncMutex& mutex, CompletionToken token) -> decltype(auto) {
     auto impl = [self = this, &mutex](auto&& handler) {
+      auto slot = net::get_associated_cancellation_slot(handler);
+      slot.emplace([](){LOG(INFO) << "Cancelled an async wait" << std::endl;});
       self->asyncWaitImpl(AD_FWD(handler), mutex);
     };
     return net::async_initiate<CompletionToken, void()>(std::move(impl), token);
