@@ -199,11 +199,12 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
  private:
   std::random_device rd;
   std::mt19937_64 randomEngine{rd()};
-  static constexpr size_t numInputRows = 100'000;
+  static constexpr size_t numInputRows = 10'000'000;
   static constexpr size_t numMeasurements = 5;
-  static constexpr size_t multiplicities[] = {50'000, 10'000, 1'000,
-                                              100,    10,     1};
-  static constexpr size_t blockSizes[] = {65536, 32768, 16384, 8192, 4096};
+  static constexpr size_t multiplicities[] = {
+      1'000'000, 500'000, 100'000, 50'000, 10'000, 1'000, 100, 10, 1};
+  static constexpr size_t blockSizes[] = {262144, 131072, 65536, 32768,
+                                          16384,  8192,   4096};
   static constexpr size_t randomStringLength = 4;
 
   template <typename T>
@@ -265,7 +266,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     group.metadata().addKeyValuePair("Sorted", sorted);
     group.metadata().addKeyValuePair("Blocksize", blockSize);
     group.metadata().addKeyValuePair("HashMap", optimizationEnabled);
-    group.metadata().addKeyValuePair("Operation", determineAggregateString(ti<T>));
+    group.metadata().addKeyValuePair("Operation",
+                                     determineAggregateString(ti<T>));
 
     // Create `ValuesForTesting` object
     auto qec = ad_utility::testing::getQec();
