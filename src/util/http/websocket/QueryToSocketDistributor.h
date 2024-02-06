@@ -58,8 +58,14 @@ class QueryToSocketDistributor {
   explicit QueryToSocketDistributor(
       net::io_context& ioContext, const std::function<void(bool)>& cleanupCall);
 
+  // Nobody should do any operation anymore, is that assumption correct?
+  /*
   // TODO<joka921> do we want synchronous locking?
-  ~QueryToSocketDistributor() { mutex_.asyncLockGuard([this]([[maybe_unused]] auto guard){signal_.notifyAll(); });}
+  ~QueryToSocketDistributor() {
+    mutex_.asyncLockGuard(
+        [this]([[maybe_unused]] auto guard) { signal_.notifyAll(); });
+  }
+   */
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available

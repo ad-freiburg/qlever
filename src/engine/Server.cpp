@@ -787,18 +787,12 @@ boost::asio::awaitable<void> Server::processQuery(
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) const {
-  auto runOnExecutor =
-      [](auto executor, Function func,
-         SharedCancellationHandle handle) -> net::awaitable<T> {
-    co_await net::post(net::bind_executor(executor, net::use_awaitable));
-    // It might take some time until the thread pool is ready,
-    // so reset the state here. Ideally waiting for the thread pool
-    // would periodically check the cancellation state
+  auto run = [handle = std::move(handle),
+              function = std::move(function)]() mutable {
     handle->resetWatchDogState();
-    co_return std::invoke(func);
+    return std::invoke(std::move(function));
   };
-  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
-      threadPool_.get_executor(), std::move(function), std::move(handle)));
+  return ad_utility::runOnExecutor(threadPool_.get_executor(), run);
 }
 
 // _____________________________________________________________________________

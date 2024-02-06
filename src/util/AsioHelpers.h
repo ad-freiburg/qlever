@@ -7,15 +7,20 @@
 
 #include <absl/functional/any_invocable.h>
 
+#include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_executor.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
+#include <concepts>
 #include <future>
+#include <ranges>
 
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/Synchronized.h"
+#include "util/TransparentFunctors.h"
 
 namespace ad_utility {
 
@@ -113,6 +118,13 @@ struct AsyncMutex {
   friend class AsyncSignal;
   template <typename CompletionHandler>
   void asyncLockImpl(CompletionHandler&& handler) {
+    auto slot = net::get_associated_cancellation_slot(handler);
+    auto log = [](auto) {
+      LOG(INFO) << "Cancelled an async lock" << std::endl;
+    };
+    if (slot.is_connected()) {
+      slot.template emplace<decltype(log)>(log);
+    }
     auto executor = net::get_associated_executor(handler, executor_);
     std::unique_lock lock{mutex_};
     if (!occupied_) {
@@ -134,6 +146,13 @@ struct AsyncMutex {
   template <typename CompletionHandler>
   void asyncLockGuardImpl(CompletionHandler&& handler) {
     auto executor = net::get_associated_executor(handler, executor_);
+    auto slot = net::get_associated_cancellation_slot(handler);
+    auto log = [](auto) {
+      LOG(INFO) << "Cancelled an async lock guard" << std::endl;
+    };
+    if (slot.is_connected()) {
+      slot.template emplace<decltype(log)>(log);
+    }
     std::unique_lock lock{mutex_};
     if (!occupied_) {
       occupied_ = true;
@@ -190,16 +209,55 @@ struct AsyncMutex {
 };
 
 class AsyncSignal {
- private:
-  std::vector<absl::AnyInvocable<void()>> waiters{};
+ public:
+  struct State {
+    size_t nextIndex = 0;
+    static_assert(std::constructible_from<size_t>);
+    std::vector<std::pair<size_t, absl::AnyInvocable<void()>>> waiters{};
+    static_assert(std::constructible_from<
+                  std::vector<std::pair<size_t, absl::AnyInvocable<void()>>>>);
+    State() = default;
+  };
+  // static_assert(std::constructible_from<State>);
+  ad_utility::Synchronized<State> state_{State{}};
 
  private:
+  void cancel(const size_t& index) {
+    // TODO<joka921> this can be done using binary search.
+    state_.withWriteLock([&index](State& s) {
+      auto it = std::ranges::find(s.waiters, index, ad_utility::first);
+      if (it != s.waiters.end()) {
+        LOG(INFO) << "found operation " << index << std::endl;
+        std::invoke(std::move(it->second));
+        LOG(INFO) << "erasing operation " << index << std::endl;
+        s.waiters.erase(it);
+        LOG(INFO) << "erased operation " << index << std::endl;
+      }
+    });
+    LOG(INFO) << "finished erasing operation " << index << std::endl;
+  }
   template <typename CompletionHandler>
   void asyncWaitImpl(CompletionHandler&& handler, AsyncMutex& mutex) {
+    auto slot = net::get_associated_cancellation_slot(handler);
     auto resume = [handler = AD_FWD(handler), &mutex]() mutable {
       mutex.asyncLockImpl(AD_FWD(handler));
     };
-    waiters.push_back(std::move(resume));
+    state_.withWriteLock([self = this, &resume, &slot](State& s) mutable {
+      size_t myIndex = s.nextIndex++;
+      LOG(INFO) << "next index is " << myIndex << std::endl;
+      s.waiters.emplace_back(myIndex, std::move(resume));
+      // TODO<joka921> Don't ignore the cancellationType.
+      auto doCancel = [self, idx = myIndex](auto) {
+        LOG(INFO) << "cancelling operation " << idx << std::endl;
+        LOG(INFO) << &idx << std::endl;
+        self->cancel(idx);
+        LOG(INFO) << &idx << std::endl;
+        LOG(INFO) << "cancelled operation " << idx << std::endl;
+      };
+      if (slot.is_connected()) {
+        slot.template emplace<decltype(doCancel)>(doCancel);
+      }
+    });
     mutex.unlock();
   }
 
@@ -209,20 +267,19 @@ class AsyncSignal {
   template <typename CompletionToken>
   auto asyncWait(AsyncMutex& mutex, CompletionToken token) -> decltype(auto) {
     auto impl = [self = this, &mutex](auto&& handler) {
-      auto slot = net::get_associated_cancellation_slot(handler);
-      slot.emplace([](){LOG(INFO) << "Cancelled an async wait" << std::endl;});
       self->asyncWaitImpl(AD_FWD(handler), mutex);
     };
     return net::async_initiate<CompletionToken, void()>(std::move(impl), token);
   }
 
   void notifyAll() {
-    std::ranges::for_each(waiters, [](auto& f) { std::invoke(std::move(f)); });
-    waiters.clear();
+    state_.withWriteLock([](State& s) {
+      std::ranges::for_each(s.waiters | std::views::values,
+                            [](auto& f) { std::invoke(std::move(f)); });
+      s.waiters.clear();
+    });
   }
-  ~AsyncSignal() {
-    notifyAll();
-  }
+  ~AsyncSignal() { notifyAll(); }
 };
 
 }  // namespace ad_utility
