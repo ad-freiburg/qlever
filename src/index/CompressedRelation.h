@@ -534,15 +534,6 @@ class CompressedRelationReader {
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
-  // A helper function to abstract away the timeout check:
-  static void checkCancellation(
-      const ad_utility::SharedCancellationHandle& cancellationHandle) {
-    // Not really expensive but since this should be called
-    // very often, try to avoid any extra checks.
-    AD_EXPENSIVE_CHECK(cancellationHandle);
-    cancellationHandle->throwIfCancelled("IndexScan"sv);
-  }
-
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
   static std::vector<ColumnIndex> prepareColumnIndices(

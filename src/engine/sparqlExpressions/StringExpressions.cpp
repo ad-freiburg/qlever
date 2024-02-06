@@ -341,11 +341,11 @@ class ConcatExpression : public detail::VariadicExpression {
               str.has_value()) {
             resultAsVec[i].append(str.value());
           }
-          ctx->cancellationHandle_->throwIfCancelled("ConcatExpression");
+          ctx->cancellationHandle_->throwIfCancelled();
           ++i;
         }
       }
-      ctx->cancellationHandle_->throwIfCancelled("ConcatExpression");
+      ctx->cancellationHandle_->throwIfCancelled();
     };
     std::ranges::for_each(
         childrenVec(), [&ctx, &visitSingleExpressionResult](const auto& child) {

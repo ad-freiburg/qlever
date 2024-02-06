@@ -50,7 +50,7 @@ class LiteralExpression : public SparqlExpression {
       auto ptrForCache = std::make_unique<IdOrString>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
-      context->cancellationHandle_->throwIfCancelled("LiteralExpression");
+      context->cancellationHandle_->throwIfCancelled();
       return result;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {

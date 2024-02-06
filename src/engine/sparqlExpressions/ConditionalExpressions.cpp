@@ -49,14 +49,12 @@ class CoalesceExpression : public VariadicExpression {
     ad_utility::chunkedForLoop<CHUNK_SIZE>(
         0, ctx->size(),
         [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
-        [ctx]() {
-          ctx->cancellationHandle_->throwIfCancelled("CoalesceExpression");
-        });
+        [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
                 IdOrString{Id::makeUndefined()});
 
-    ctx->cancellationHandle_->throwIfCancelled("CoalesceExpression");
+    ctx->cancellationHandle_->throwIfCancelled();
 
     auto isUnbound = [](const IdOrString& x) {
       return (std::holds_alternative<Id>(x) &&
@@ -83,10 +81,7 @@ class CoalesceExpression : public VariadicExpression {
             DISABLE_UNINITIALIZED_WARNINGS
             result[unboundIndices[idx]] = constantResult;
           },
-          [ctx]() {
-            ctx->cancellationHandle_->throwIfCancelled(
-                "CoalesceExpression constant expression result");
-          });
+          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
     ENABLE_UNINITIALIZED_WARNINGS
 
@@ -125,10 +120,7 @@ class CoalesceExpression : public VariadicExpression {
             }
             ++generatorIterator;
           },
-          [ctx]() {
-            ctx->cancellationHandle_->throwIfCancelled(
-                "CoalesceExpression vector expression result");
-          });
+          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
     auto visitExpressionResult =
         [
@@ -150,7 +142,7 @@ class CoalesceExpression : public VariadicExpression {
       std::visit(visitExpressionResult, child->evaluate(ctx));
       unboundIndices = std::move(nextUnboundIndices);
       nextUnboundIndices.clear();
-      ctx->cancellationHandle_->throwIfCancelled("CoalesceExpression");
+      ctx->cancellationHandle_->throwIfCancelled();
       // Early stopping if no more unbound result remain.
       if (unboundIndices.empty()) {
         break;

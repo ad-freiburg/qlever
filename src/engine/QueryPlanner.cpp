@@ -167,10 +167,15 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
 // _____________________________________________________________________
 QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
-  auto lastRow = createExecutionTrees(pq);
-  auto minInd = findCheapestExecutionTree(lastRow);
-  LOG(DEBUG) << "Done creating execution plan.\n";
-  return *lastRow[minInd]._qet;
+  try {
+    auto lastRow = createExecutionTrees(pq);
+    auto minInd = findCheapestExecutionTree(lastRow);
+    LOG(DEBUG) << "Done creating execution plan.\n";
+    return *lastRow[minInd]._qet;
+  } catch (ad_utility::CancellationException& e) {
+    e.operation_ = "Query planning";
+    throw;
+  }
 }
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
@@ -1109,7 +1114,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
         candidates[getPruningKey(plan, plan._qet->resultSortedOn())]
             .emplace_back(std::move(plan));
       }
-      cancellationHandle_->throwIfCancelled("Creating join candidates");
+      checkCancellation();
     }
   }
 
@@ -1126,7 +1131,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::merge(
       (void)key;  // silence unused warning
       size_t minIndex = findCheapestExecutionTree(value);
       prunedPlans.push_back(std::move(value[minIndex]));
-      cancellationHandle_->throwIfCancelled("Pruning candidates");
+      checkCancellation();
     }
   };
 
@@ -1330,7 +1335,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
                << std::endl;
     dpTab.emplace_back(vector<SubtreePlan>());
     for (size_t i = 1; i * 2 <= k; ++i) {
-      cancellationHandle_->throwIfCancelled("QueryPlanner producing plans");
+      checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, false);
@@ -1943,6 +1948,7 @@ std::vector<size_t> QueryPlanner::QueryGraph::dfsForAllNodes() {
 }
 
 // _______________________________________________________________
-void QueryPlanner::checkCancellation() const {
-  cancellationHandle_->throwIfCancelled("Query planning");
+void QueryPlanner::checkCancellation(
+    ad_utility::source_location location) const {
+  cancellationHandle_->throwIfCancelled(location);
 }
