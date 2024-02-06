@@ -257,7 +257,7 @@ void TransitivePath::computeTransitivePath(
 
   std::unique_ptr<GrbMatrix> hull;
   if (!startSide.isVariable()) {
-    const Id startNode[]{std::get<Id>(startSide.value_)};
+    std::vector<Id> startNode{std::get<Id>(startSide.value_)};
     GrbMatrix startMatrix =
         setupStartNodeMatrix(startNode, graph.numRows(), mapping);
     hull = std::make_unique<GrbMatrix>(
@@ -273,7 +273,7 @@ void TransitivePath::computeTransitivePath(
   }
 
   if (!startSide.isVariable()) {
-    const Id startNode[]{std::get<Id>(startSide.value_)};
+    std::vector<Id> startNode{std::get<Id>(startSide.value_)};
     TransitivePath::fillTableWithHull<RES_WIDTH>(res, *hull, mapping, startNode,
                                                  startSide.outputCol_,
                                                  targetSide.outputCol_);
@@ -464,9 +464,10 @@ GrbMatrix TransitivePath::transitiveHull(
   size_t nvals = result->numNonZero();
   while (nvals > previousNvals && pathLength < maxDist_) {
     previousNvals = result->numNonZero();
-    // Row major, Column major
+    // TODO: Check effect of matrix orientation (Row major, Column major) on
+    // performance.
     result->accumulateMultiply(graph);
-    // Add check cancellation
+    checkCancellation();
     nvals = result->numNonZero();
     pathLength++;
   }
