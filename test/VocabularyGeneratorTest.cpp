@@ -32,13 +32,6 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 }
 
 auto V = ad_utility::testing::VocabId;
-
-auto makeItemMapArray = [] {
-  auto alloc = ItemAlloc{std::pmr::get_default_resource()};
-  auto make = [&](auto&&...) { return ItemMapAndBuffer{alloc}; };
-  return ad_utility::transformArray(std::array<int, NUM_PARALLEL_ITEM_MAPS>{},
-                                    make);
-};
 }  // namespace
 
 // Test fixture that sets up the binary files vor partial vocabulary and
