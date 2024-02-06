@@ -77,7 +77,7 @@ void throwInnerException() {
 template <auto innerThrowingFunction>
 [[noreturn]] void ignoreInnerException() {
   S<innerThrowingFunction> s;
-  throw std::system_error{};
+  throw std::system_error{std::error_code{}};
 };
 }  // namespace
 // ________________________________________________________________

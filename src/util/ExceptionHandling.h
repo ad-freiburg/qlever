@@ -129,20 +129,20 @@ class ThrowInDestructorIfSafe {
     // was called, then it is safe to throw a possible exception. For details
     // see https://en.cppreference.com/w/cpp/error/uncaught_exception,
     // especially the links at the bottom of the page.
+    auto potentiallyThrow =
+        [this, &logIgnoredException](std::string_view logMessage) {
+          if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
+            throw;
+          } else {
+            logIgnoredException(logMessage);
+          }
+        };
     try {
       std::invoke(std::move(f));
     } catch (const std::exception& e) {
-      if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
-        throw;
-      } else {
-        logIgnoredException(e.what());
-      }
+      potentiallyThrow(e.what());
     } catch (...) {
-      if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
-        throw;
-      } else {
-        logIgnoredException("Exception not inheriting from `std::exception`");
-      }
+      potentiallyThrow("Exception not inheriting from `std::exception`");
     }
   }
   ~ThrowInDestructorIfSafe() noexcept(false) = default;

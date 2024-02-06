@@ -91,7 +91,7 @@ struct VocabularyMetaData {
 // internal/external vocabulary in the order of their appearance. If
 // `WithIdMaps::False` is passed as the last argument, then only the merged
 // vocabulary is created, but not the mapping from the local to global IDs.
-enum WithIdMaps { False, True };
+enum class WithIdMaps { False, True };
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
@@ -184,14 +184,6 @@ class VocabularyMerger {
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
 };
-
-// ______________
-// TODO<joka921> is this even used
-// anymore?___________________________________________________________________________
-template <class Comp>
-void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const ItemMapArray> map, const string& fileName, Comp comp,
-    bool doParallelSort);
 
 // _________________________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(

@@ -86,7 +86,7 @@ auto VocabularyMerger::mergeVocabulary(
   for (size_t i = 0; i < numFiles; i++) {
     generators.push_back(makeGenerator(i));
     if (!noIdMapsAndIgnoreExternalVocab_) {
-      idVecs_.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+      idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
     }
   }
 
@@ -257,14 +257,15 @@ inline ad_utility::HashMap<uint64_t, uint64_t> createInternalMapping(
   bool first = true;
   std::string_view lastWord;
   size_t nextWordId = 0;
-  for (auto& el : els) {
-    if (!first && lastWord != el.first) {
+  for (auto& [word, idAndSplitVal] : els) {
+    auto& id = idAndSplitVal.id_;
+    if (!first && lastWord != word) {
       nextWordId++;
-      lastWord = el.first;
+      lastWord = word;
     }
-    AD_CONTRACT_CHECK(!res.count(el.second.id_));
-    res[el.second.id_] = nextWordId;
-    el.second.id_ = nextWordId;
+    AD_CONTRACT_CHECK(!res.count(id));
+    res[id] = nextWordId;
+    id = nextWordId;
     first = false;
   }
   return res;
@@ -323,29 +324,6 @@ inline void writePartialVocabularyToFile(const ItemVec& els,
   LOG(DEBUG) << "Done writing partial vocabulary\n";
 }
 
-// ______________________________________________________________________________________________
-template <class Pred>
-void writePartialIdMapToBinaryFileForMerging(
-    std::shared_ptr<const ItemMapArray> map, const string& fileName, Pred comp,
-    const bool doParallelSort) {
-  LOG(INFO) << "Creating partial vocabulary from set ..." << std::endl;
-  ItemVec els;
-  size_t totalEls = std::accumulate(
-      map->begin(), map->end(), 0,
-      [](const auto& x, const auto& y) { return x + y.map_.size(); });
-  els.reserve(totalEls);
-  for (const auto& singleMap : *map) {
-    els.insert(end(els), begin(singleMap.map_), end(singleMap.map_));
-  }
-  LOG(TRACE) << "Sorting ..." << std::endl;
-
-  sortVocabVector(&els, comp, doParallelSort);
-
-  LOG(INFO) << "Done creating vocabulary" << std::endl;
-
-  writePartialVocabularyToFile(els, fileName);
-}
-
 // __________________________________________________________________________________________________
 inline ItemVec vocabMapsToVector(ItemMapArray& map) {
   ItemVec els;
@@ -387,10 +365,10 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
       ad_utility::parallel_sort(begin(els), end(els), comp,
                                 ad_utility::parallel_tag(10));
     } else {
-      std::sort(begin(els), end(els), comp);
+      std::ranges::sort(els, comp);
     }
   } else {
-    std::sort(begin(els), end(els), comp);
+    std::ranges::sort(els, comp);
     (void)doParallelSort;  // avoid compiler warning for unused value.
   }
 }
