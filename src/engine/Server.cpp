@@ -321,7 +321,11 @@ Awaitable<void> Server::process(
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");
-    response = createJsonResponse(queryRegistry_.getActiveQueries(), request);
+    nlohmann::json json;
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      json[nlohmann::json(key)] = std::move(value);
+    }
+    response = createJsonResponse(json, request);
   }
 
   // Ping with or without messsage.
@@ -489,13 +493,15 @@ class QueryAlreadyInUseError : public std::runtime_error {
 // _____________________________________________
 
 ad_utility::websocket::OwningQueryId Server::getQueryId(
-    const ad_utility::httpUtils::HttpRequest auto& request) {
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    std::string_view query) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return queryRegistry_.uniqueId();
+    return queryRegistry_.uniqueId(query);
   }
-  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
+  auto queryId =
+      queryRegistry_.uniqueIdFromString(std::string(queryIdHeader), query);
   if (!queryId) {
     throw QueryAlreadyInUseError{queryIdHeader};
   }
@@ -621,7 +627,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request), *queryHub);
+        getQueryId(request, query), *queryHub);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //

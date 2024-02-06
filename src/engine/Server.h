@@ -158,11 +158,13 @@ class Server {
   /// `QueryAlreadyInUseError` exception is thrown.
   ///
   /// \param request The HTTP request to extract the id from.
+  /// \param query A string representation of the query to register an id for.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
-      const ad_utility::httpUtils::HttpRequest auto& request);
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      std::string_view query);
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
