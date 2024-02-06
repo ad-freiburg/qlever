@@ -24,6 +24,6 @@ int main(int argc, char** argv) {
   auto internalVocabularyAction = [&file](const auto& word) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
-  m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
+  m.mergeVocabulary(basename, basename, numFiles, TripleComponentComparator(),
                     internalVocabularyAction, 4_GB);
 }

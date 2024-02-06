@@ -20,27 +20,26 @@ Index makeIndexWithTestSettings() {
   return index;
 }
 
-std::vector<std::string> getAllIndexFilenames(
-    const std::string& indexBasename) {
-  return {indexBasename + ".ttl",
-          indexBasename + ".index.pos",
-          indexBasename + ".index.pos.meta",
-          indexBasename + ".index.pso",
-          indexBasename + ".index.pso.meta",
-          indexBasename + ".index.sop",
-          indexBasename + ".index.sop.meta",
-          indexBasename + ".index.spo",
-          indexBasename + ".index.spo.meta",
-          indexBasename + ".index.ops",
-          indexBasename + ".index.ops.meta",
-          indexBasename + ".index.osp",
-          indexBasename + ".index.osp.meta",
-          indexBasename + ".index.patterns",
-          indexBasename + ".meta-data.json",
-          indexBasename + ".prefixes",
-          indexBasename + ".vocabulary.internal",
-          indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
+std::vector<std::string> getAllIndexFilenames(const std::string& baseName) {
+  return {baseName + ".ttl",
+          baseName + ".index.pos",
+          baseName + ".index.pos.meta",
+          baseName + ".index.pso",
+          baseName + ".index.pso.meta",
+          baseName + ".index.sop",
+          baseName + ".index.sop.meta",
+          baseName + ".index.spo",
+          baseName + ".index.spo.meta",
+          baseName + ".index.ops",
+          baseName + ".index.ops.meta",
+          baseName + ".index.osp",
+          baseName + ".index.osp.meta",
+          baseName + ".index.patterns",
+          baseName + ".meta-data.json",
+          baseName + ".prefixes",
+          baseName + ".vocabulary.internal",
+          baseName + ".vocabulary.external",
+          baseName + ".vocabulary.external.idsAndOffsets.mmap"};
 }
 
 namespace {
@@ -114,7 +113,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 }  // namespace
 
 // ______________________________________________________________
-Index makeTestIndex(const std::string& indexBasename,
+Index makeTestIndex(const std::string& baseName,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
                     bool usePrefixCompression,
@@ -124,7 +123,7 @@ Index makeTestIndex(const std::string& indexBasename,
   // these tests.
   static std::ostringstream ignoreLogStream;
   ad_utility::setGlobalLoggingStream(&ignoreLogStream);
-  std::string inputFilename = indexBasename + ".ttl";
+  std::string inputFilename = baseName + ".ttl";
   if (!turtleInput.has_value()) {
     turtleInput =
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
@@ -146,7 +145,7 @@ Index makeTestIndex(const std::string& indexBasename,
     // triples it may store) ever change, then some unit tests might have to be
     // adapted.
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
-    index.setOnDiskBase(indexBasename);
+    index.setOnDiskBase(baseName, baseName);
     index.usePatterns() = usePatterns;
     index.setPrefixCompression(usePrefixCompression);
     index.loadAllPermutations() = loadAllPermutations;
@@ -162,7 +161,7 @@ Index makeTestIndex(const std::string& indexBasename,
     Index index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.usePatterns() = true;
     index.loadAllPermutations() = true;
-    EXPECT_NO_THROW(index.createFromOnDiskIndex(indexBasename));
+    EXPECT_NO_THROW(index.createFromOnDiskIndex(baseName, baseName));
     EXPECT_EQ(index.loadAllPermutations(), loadAllPermutations);
     EXPECT_EQ(index.usePatterns(), usePatterns);
   }
@@ -170,7 +169,7 @@ Index makeTestIndex(const std::string& indexBasename,
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.usePatterns() = usePatterns;
   index.loadAllPermutations() = loadAllPermutations;
-  index.createFromOnDiskIndex(indexBasename);
+  index.createFromOnDiskIndex(baseName, baseName);
   if (createTextIndex) {
     index.addTextFromOnDiskIndex();
   }

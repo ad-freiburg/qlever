@@ -56,10 +56,10 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   LOG(INFO) << "Converting external vocabulary to binary format ..."
             << std::endl;
   vocab_.externalizeLiteralsFromTextFile(
-      onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME,
-      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-  deleteTemporaryFile(onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME);
-  // clear vocabulary to save ram (only information from partial binary files
+      onDiskBaseVocabulary_ + EXTERNAL_LITS_TEXT_FILE_NAME,
+      onDiskBaseVocabulary_ + EXTERNAL_VOCAB_SUFFIX);
+  deleteTemporaryFile(onDiskBaseVocabulary_ + EXTERNAL_LITS_TEXT_FILE_NAME);
+  // clear vocabulary to save RAM (only information from partial binary files
   // used from now on). This will preserve information about externalized
   // Prefixes etc.
   vocab_.clear();
@@ -76,10 +76,11 @@ void IndexImpl::compressInternalVocabularyIfSpecified(
   // If we have no compression, this will also copy the whole vocabulary.
   // but since we expect compression to be the default case, this  should not
   // hurt.
-  string vocabFile = onDiskBase_ + INTERNAL_VOCAB_SUFFIX;
-  string vocabFileTmp = onDiskBase_ + ".vocabularyTmp";
+  string vocabFile = onDiskBaseVocabulary_ + INTERNAL_VOCAB_SUFFIX;
+  string vocabFileTmp = onDiskBaseVocabulary_ + ".vocabularyTmp";
   if (vocabPrefixCompressed_) {
-    auto prefixFile = ad_utility::makeOfstream(onDiskBase_ + PREFIX_FILE);
+    auto prefixFile =
+        ad_utility::makeOfstream(onDiskBaseVocabulary_ + PREFIX_FILE);
     for (const auto& prefix : prefixes) {
       prefixFile << RdfEscaping::escapeNewlinesAndBackslashes(prefix)
                  << std::endl;
@@ -352,8 +353,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
-      std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
-                                  allocator_));
+      std::make_unique<TripleVec>(onDiskBaseIndex_ + ".unsorted-triples.dat",
+                                  1_GB, allocator_));
   bool parserExhausted = false;
 
   size_t i = 0;
@@ -466,7 +467,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
               << "(internal only) ..." << std::endl;
     VocabularyMerger m;
     auto compressionOutfile = ad_utility::makeOfstream(
-        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
+        onDiskBaseVocabulary_ + TMP_BASENAME_COMPRESSION +
+        INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
         [&compressionOutfile](const auto& word) {
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
@@ -474,8 +476,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
         };
     m._noIdMapsAndIgnoreExternalVocab = true;
     auto mergeResult = m.mergeVocabulary(
-        onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, memoryLimitIndexBuilding());
+        onDiskBaseIndex_, onDiskBaseVocabulary_ + TMP_BASENAME_COMPRESSION,
+        numFiles, std::less<>(), internalVocabularyActionCompression,
+        memoryLimitIndexBuilding());
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -484,8 +487,9 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     compressionOutfile.close();
     // We have to use the "normally" sorted vocabulary for the prefix
     // compression.
-    std::string vocabFileForPrefixCalculation =
-        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
+    std::string vocabFileForPrefixCalculation = onDiskBaseVocabulary_ +
+                                                TMP_BASENAME_COMPRESSION +
+                                                INTERNAL_VOCAB_SUFFIX;
     prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
                                  NUM_COMPRESSION_PREFIXES, 1, true);
     ad_utility::deleteFile(vocabFileForPrefixCalculation);
@@ -499,13 +503,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto wordWriter =
-        vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+    auto wordWriter = vocab_.makeUncompressingWordWriter(onDiskBaseVocabulary_ +
+                                                         INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
-    return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction,
+    return v.mergeVocabulary(onDiskBaseIndex_, onDiskBaseVocabulary_, numFiles,
+                             sortPred, internalVocabularyAction,
                              memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
@@ -520,11 +524,13 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   res.actualPartialSizes = std::move(actualPartialSizes);
 
   LOG(INFO) << "Removing temporary files ..." << std::endl;
-  for (size_t n = 0; n < numFiles; ++n) {
-    deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
+  for (size_t i = 0; i < numFiles; ++i) {
+    deleteTemporaryFile(
+        absl::StrCat(onDiskBaseIndex_, PARTIAL_VOCAB_FILE_NAME, i));
     if (vocabPrefixCompressed_) {
-      deleteTemporaryFile(absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
-                                       PARTIAL_VOCAB_FILE_NAME, n));
+      deleteTemporaryFile(absl::StrCat(onDiskBaseIndex_,
+                                       TMP_BASENAME_COMPRESSION,
+                                       PARTIAL_VOCAB_FILE_NAME, i));
     }
   }
 
@@ -622,7 +628,8 @@ IndexImpl::convertPartialToGlobalIds(
     if (idx >= actualLinesPerPartial.size()) {
       return std::nullopt;
     }
-    std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
+    std::string mmapFilename =
+        absl::StrCat(onDiskBaseIndex_, PARTIAL_MMAP_IDS, idx);
     auto map = IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
@@ -727,8 +734,8 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      numColumns, onDiskBase_ + ".index" + p1.fileSuffix_,
-      onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
+      numColumns, onDiskBaseIndex_ + ".index" + p1.fileSuffix_,
+      onDiskBaseIndex_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
       p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
   LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
@@ -753,7 +760,8 @@ void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
   auto writeMetadata = [this](auto& metaData, const auto& permutation) {
     metaData.setName(getKbName());
     ad_utility::File f(
-        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix_), "r+");
+        absl::StrCat(onDiskBaseIndex_, ".index", permutation.fileSuffix_),
+        "r+");
     metaData.appendToFile(&f);
   };
   LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
@@ -763,24 +771,25 @@ void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
 }
 
 // _____________________________________________________________________________
-void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
-  setOnDiskBase(onDiskBase);
+void IndexImpl::createFromOnDiskIndex(const string& onDiskBaseIndex,
+                                      const string& onDiskBaseVocabulary) {
+  setOnDiskBase(onDiskBaseIndex, onDiskBaseVocabulary);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBaseVocabulary_ + INTERNAL_VOCAB_SUFFIX,
+                      onDiskBaseVocabulary_ + EXTERNAL_VOCAB_SUFFIX);
 
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
+  pso_.loadFromDisk(onDiskBaseIndex_);
+  pos_.loadFromDisk(onDiskBaseIndex_);
 
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
+    ops_.loadFromDisk(onDiskBaseIndex_);
+    osp_.loadFromDisk(onDiskBaseIndex_);
+    spo_.loadFromDisk(onDiskBaseIndex_);
+    sop_.loadFromDisk(onDiskBaseIndex_);
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"
@@ -791,10 +800,11 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   // at all.
   if (usePatterns_) {
     try {
-      PatternCreator::readPatternsFromFile(
-          onDiskBase_ + ".index.patterns", avgNumDistinctSubjectsPerPredicate_,
-          avgNumDistinctPredicatesPerSubject_,
-          numDistinctSubjectPredicatePairs_, patterns_);
+      PatternCreator::readPatternsFromFile(onDiskBaseIndex_ + ".index.patterns",
+                                           avgNumDistinctSubjectsPerPredicate_,
+                                           avgNumDistinctPredicatesPerSubject_,
+                                           numDistinctSubjectPredicatePairs_,
+                                           patterns_);
     } catch (const std::exception& e) {
       LOG(WARN) << "Could not load the patterns. The internal predicate "
                    "`ql:has-predicate` is therefore not available (and certain "
@@ -855,8 +865,10 @@ void IndexImpl::setKbName(const string& name) {
 }
 
 // ____________________________________________________________________________
-void IndexImpl::setOnDiskBase(const std::string& onDiskBase) {
-  onDiskBase_ = onDiskBase;
+void IndexImpl::setOnDiskBase(const std::string& onDiskBaseIndex,
+                              const std::string& onDiskBaseVocabulary) {
+  onDiskBaseIndex_ = onDiskBaseIndex;
+  onDiskBaseVocabulary_ = onDiskBaseVocabulary;
 }
 
 // ____________________________________________________________________________
@@ -886,13 +898,13 @@ void IndexImpl::writeConfiguration() const {
   auto configuration = configurationJson_;
   configuration["git-hash"] = qlever::version::GitShortHash;
   configuration["index-format-version"] = qlever::indexFormatVersion;
-  auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
+  auto f = ad_utility::makeOfstream(onDiskBaseIndex_ + CONFIGURATION_FILE);
   f << configuration;
 }
 
 // ___________________________________________________________________________
 void IndexImpl::readConfiguration() {
-  auto f = ad_utility::makeIfstream(onDiskBase_ + CONFIGURATION_FILE);
+  auto f = ad_utility::makeIfstream(onDiskBaseIndex_ + CONFIGURATION_FILE);
   f >> configurationJson_;
   if (configurationJson_.find("git-hash") != configurationJson_.end()) {
     LOG(INFO) << "The git hash used to build this index was "
@@ -942,7 +954,8 @@ void IndexImpl::readConfiguration() {
   if (configurationJson_.find("prefixes") != configurationJson_.end()) {
     if (configurationJson_["prefixes"]) {
       vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
+      auto prefixFile =
+          ad_utility::makeIfstream(onDiskBaseVocabulary_ + PREFIX_FILE);
       for (string prefix; std::getline(prefixFile, prefix);) {
         prefixes.emplace_back(
             RdfEscaping::unescapeNewlinesAndBackslashes(prefix));
@@ -1204,9 +1217,10 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
       << actualCurrentPartialSize << std::endl;
   std::future<void> resultFuture;
   string partialFilename =
-      absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, numFiles);
-  string partialCompressionFilename = absl::StrCat(
-      onDiskBase_, TMP_BASENAME_COMPRESSION, PARTIAL_VOCAB_FILE_NAME, numFiles);
+      absl::StrCat(onDiskBaseIndex_, PARTIAL_VOCAB_FILE_NAME, numFiles);
+  string partialCompressionFilename =
+      absl::StrCat(onDiskBaseIndex_, TMP_BASENAME_COMPRESSION,
+                   PARTIAL_VOCAB_FILE_NAME, numFiles);
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,
@@ -1553,7 +1567,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns",
+        onDiskBaseIndex_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
@@ -1607,9 +1621,10 @@ auto IndexImpl::makeSorterImpl(std::string_view permutationName) const {
       return Sorter{AD_FWD(args)...};
     }
   };
-  return apply(absl::StrCat(onDiskBase_, ".", permutationName, "-sorter.dat"),
-               memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
-               allocator_);
+  return apply(
+      absl::StrCat(onDiskBaseIndex_, ".", permutationName, "-sorter.dat"),
+      memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME,
+      allocator_);
 }
 
 // _____________________________________________________________________________

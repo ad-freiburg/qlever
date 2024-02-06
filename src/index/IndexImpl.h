@@ -116,7 +116,8 @@ class IndexImpl {
 
   // Private data members.
  private:
-  string onDiskBase_;
+  string onDiskBaseIndex_;
+  string onDiskBaseVocabulary_;
   string settingsFileName_;
   bool onlyAsciiTurtlePrefixes_ = false;
   bool useParallelParser_ = true;
@@ -213,7 +214,8 @@ class IndexImpl {
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
-  void createFromOnDiskIndex(const string& onDiskBase);
+  void createFromOnDiskIndex(const string& onDiskBaseIndex,
+                             const string& onDiskBaseVocabulary);
 
   // Adds a text index to a complete KB index. First reads the given context
   // file (if file name not empty), then adds words from literals (if true).
@@ -368,7 +370,8 @@ class IndexImpl {
     return blocksizePermutationPerColumn_;
   }
 
-  void setOnDiskBase(const std::string& onDiskBase);
+  void setOnDiskBase(const std::string& onDiskBaseIndex,
+                     const std::string& onDiskBaseVocabulary);
 
   void setSettingsFile(const std::string& filename);
 

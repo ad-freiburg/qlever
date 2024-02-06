@@ -54,7 +54,8 @@ Server::Server(unsigned short port, size_t numThreads,
 }
 
 // __________________________________________________________________________
-void Server::initialize(const string& indexBaseName, bool useText,
+void Server::initialize(const string& baseNameIndex,
+                        const string& baseNameVocabulary, bool useText,
                         bool usePatterns, bool loadAllPermutations) {
   LOG(INFO) << "Initializing server ..." << std::endl;
 
@@ -62,7 +63,7 @@ void Server::initialize(const string& indexBaseName, bool useText,
   index_.loadAllPermutations() = loadAllPermutations;
 
   // Init the index.
-  index_.createFromOnDiskIndex(indexBaseName);
+  index_.createFromOnDiskIndex(baseNameIndex, baseNameVocabulary);
   if (useText) {
     index_.addTextFromOnDiskIndex();
   }
@@ -78,8 +79,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
 }
 
 // _____________________________________________________________________________
-void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
-                 bool loadAllPermutations) {
+void Server::run(const string& baseNameIndex, const string& baseNameVocabulary,
+                 bool useText, bool usePatterns, bool loadAllPermutations) {
   using namespace ad_utility::httpUtils;
 
   // Function that handles a request asynchronously, will be passed as argument
@@ -154,7 +155,8 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
                                std::move(webSocketSessionSupplier)};
 
   // Initialize the index
-  initialize(indexBaseName, useText, usePatterns, loadAllPermutations);
+  initialize(baseNameIndex, baseNameVocabulary, useText, usePatterns,
+             loadAllPermutations);
 
   // Start listening for connections on the server.
   httpServer.run();

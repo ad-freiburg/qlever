@@ -30,7 +30,8 @@
 // ___________________________________________________________________
 template <typename Comparator, typename InternalVocabularyAction>
 VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles, Comparator comparator,
+    const std::string& baseNameIndex, const std::string& baseNameVocabulary,
+    size_t numFiles, Comparator comparator,
     InternalVocabularyAction& internalVocabularyAction,
     ad_utility::MemorySize memoryToUse) {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
@@ -53,7 +54,7 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
 
   auto makeGenerator = [&](size_t fileIdx) -> cppcoro::generator<QueueWord> {
     ad_utility::serialization::FileReadSerializer infile{
-        absl::StrCat(basename, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
+        absl::StrCat(baseNameIndex, PARTIAL_VOCAB_FILE_NAME, fileIdx)};
     uint64_t numWords;
     infile >> numWords;
     TripleComponentWithIndex val;
@@ -64,8 +65,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
     }
   };
   if (!_noIdMapsAndIgnoreExternalVocab) {
-    outfileExternal_ =
-        ad_utility::makeOfstream(basename + EXTERNAL_LITS_TEXT_FILE_NAME);
+    outfileExternal_ = ad_utility::makeOfstream(baseNameVocabulary +
+                                                EXTERNAL_LITS_TEXT_FILE_NAME);
   }
 
   // Open and prepare all infiles and mmap output vectors.
@@ -73,7 +74,8 @@ VocabularyMerger::VocabularyMetaData VocabularyMerger::mergeVocabulary(
   for (size_t i = 0; i < numFiles; i++) {
     generators.push_back(makeGenerator(i));
     if (!_noIdMapsAndIgnoreExternalVocab) {
-      idVecs_.emplace_back(0, basename + PARTIAL_MMAP_IDS + std::to_string(i));
+      idVecs_.emplace_back(
+          0, baseNameIndex + PARTIAL_MMAP_IDS + std::to_string(i));
     }
   }
 
