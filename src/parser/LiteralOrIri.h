@@ -30,6 +30,31 @@ class LiteralOrIri {
   // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri iri);
 
+  std::string toInternalRepresentation() const {
+    char c = static_cast<char>(isLiteral());
+    std::string_view first{&c, 1};
+    auto impl = [first](const auto& val) {
+      return absl::StrCat(first, val.toInternalRepresentation());
+    };
+    return std::visit(impl, data_);
+  }
+
+  static LiteralOrIri fromInternalRepresentation(std::string_view internal) {
+    bool isLiteral = internal.front();
+    internal.remove_prefix(1);
+    if (isLiteral) {
+      return LiteralOrIri{Literal::fromInternalRepresentation(internal)};
+    } else {
+      return LiteralOrIri{Iri::fromInternalRepresentation(internal)};
+    }
+  }
+  template <typename H>
+  friend H AbslHashValue(H h,
+                         const std::same_as<LiteralOrIri> auto& literalOrIri) {
+    return H::combine(std::move(h), literalOrIri.data_);
+  }
+  bool operator==(const LiteralOrIri&) const = default;
+
   // Return true if object contains an Iri object
   bool isIri() const;
 

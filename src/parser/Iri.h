@@ -28,6 +28,17 @@ class Iri {
   Iri(const Iri& prefix, NormalizedStringView suffix);
 
  public:
+  template <typename H>
+  friend H AbslHashValue(H h, const std::same_as<Iri> auto& iri) {
+    return H::combine(std::move(h), iri.iri_);
+  }
+  bool operator==(const Iri&) const = default;
+  static Iri fromInternalRepresentation(std::string_view s) {
+    return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
+  }
+  std::string toInternalRepresentation() const {
+    return std::string{asStringViewUnsafe(getContent())};
+  }
   // Create a new iri given an iri with brackets
   static Iri iriref(std::string_view stringWithBrackets);
 

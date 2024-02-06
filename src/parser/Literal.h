@@ -41,6 +41,50 @@ class Literal {
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
 
  public:
+  template <typename H>
+  friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
+    return H::combine(std::move(h), literal.getContent());
+  }
+  bool operator==(const Literal&) const = default;
+
+  std::string toInternalRepresentation() const {
+    uint64_t sz = getContent().size();
+    if (hasLanguageTag()) {
+      sz |= (1ul << 63);
+    }
+    std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
+    if (hasLanguageTag()) {
+      return absl::StrCat(metaData, asStringViewUnsafe(getContent()),
+                          asStringViewUnsafe(getLanguageTag()));
+    } else if (hasDatatype()) {
+      return absl::StrCat(metaData, asStringViewUnsafe(getContent()),
+                          asStringViewUnsafe(getDatatype().getContent()));
+    } else {
+      return absl::StrCat(metaData, asStringViewUnsafe(getContent()));
+    }
+  }
+
+  static Literal fromInternalRepresentation(std::string_view internal) {
+    // TODO<joka921> checkSizes.
+    uint64_t sz;
+    std::memcpy(&sz, internal.data(), sizeof(sz));
+    internal.remove_prefix(sizeof(sz));
+    bool hasLanguageTag = sz &= (1ul << 63);
+    sz ^= (1ul << 63);
+    bool hasDatatype = !hasLanguageTag && internal.size() > sz;
+
+    auto content = internal.substr(0, sz);
+    auto remainder = internal.substr(sz);
+    if (hasLanguageTag) {
+      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                     NormalizedString{asNormalizedStringViewUnsafe(remainder)}};
+    } else if (hasDatatype) {
+      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                     Iri::fromInternalRepresentation(remainder)};
+    } else {
+      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)}};
+    }
+  }
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
 

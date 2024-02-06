@@ -94,6 +94,9 @@ RegexExpression::RegexExpression(
   }
   std::string regexString;
   std::string originalRegexString;
+  AD_FAIL();
+  // TODO<joka921> Reinstate this
+  /*
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
     originalRegexString = regexPtr->value().normalizedLiteralContent().get();
@@ -154,6 +157,7 @@ RegexExpression::RegexExpression(
           r.error())};
     }
   }
+   */
 }
 
 // ___________________________________________________________________________
