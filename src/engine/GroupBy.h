@@ -227,9 +227,9 @@ class GroupBy : public Operation {
     size_t subtreeColumnIndex_;
     // All aliases and the aggregates they contain.
     std::vector<HashMapAliasInformation> aggregateAliases_;
-    // Determine whether we use the optimization even if the root operation
-    // of the subtree is not `SORT`.
-    bool onlyIfSort_;
+    // Determine whether the top operation is `SORT`. Used to determine whether
+    // we skip this operation.
+    bool topOpIsSort_;
   };
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data

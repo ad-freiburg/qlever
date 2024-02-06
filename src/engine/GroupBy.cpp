@@ -331,7 +331,7 @@ ResultTable GroupBy::computeResult() {
 
   std::shared_ptr<const ResultTable> subresult;
   if (hashMapOptimizationParams.has_value() &&
-      hashMapOptimizationParams.value().onlyIfSort_) {
+      hashMapOptimizationParams.value().topOpIsSort_) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
     subresult = child->getResult();
@@ -710,11 +710,12 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">()) {
-    auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-    if (!sort) {
-      return std::nullopt;
-    }
+  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+  bool topOpIsSort = sort != nullptr;
+
+  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">() &&
+      !topOpIsSort) {
+    return std::nullopt;
   }
 
   // Only allow one group by variable
@@ -752,9 +753,8 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     columnIndex = _subtree->getVariableColumn(groupByVariable);
   }
 
-  return HashMapOptimizationData{
-      columnIndex, aliasesWithAggregateInfo,
-      RuntimeParameters().get<"group-by-hash-map-only-if-sort">()};
+  return HashMapOptimizationData{columnIndex, aliasesWithAggregateInfo,
+                                 topOpIsSort};
 }
 
 // _____________________________________________________________________________

@@ -15,6 +15,7 @@
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -611,6 +612,7 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
   testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
   // Top operation must be SORT
+  RuntimeParameters().set<"group-by-hash-map-only-if-sort">(true);
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
   // Can not be a nested aggregate
@@ -628,6 +630,11 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
+
+  // Top operation may not be SORT
+  RuntimeParameters().set<"group-by-hash-map-only-if-sort">(false);
+  testSuccess(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
+              avgAggregate);
 
   // Check details of data structure are correct.
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};
@@ -827,6 +834,91 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSum) {
   auto expected = makeIdTableFromVector({{d(1), i(3), i(42), d(54)},
                                          {d(3), d(1), d(13.37), d(18.37)},
                                          {d(4), undef, undef, undef}});
+  EXPECT_EQ(table, expected);
+
+  // Disable optimization for following tests
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
+}
+
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
+  // Test for support of min, max and sum when using the HashMap optimization.
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
+
+  // SELECT (MIN(?b) as ?x) (MAX(?b) as ?z) (SUM(?b) as ?w) WHERE {
+  //   VALUES (?a ?b) { (1.0 3.0) (1.0 7.0) (5.0 4.0)}
+  // } GROUP BY ?a
+  Variable varA = Variable{"?a"};
+  Variable varX = Variable{"?x"};
+  Variable varB = Variable{"?b"};
+  Variable varZ = Variable{"?z"};
+  Variable varW = Variable{"?w"};
+
+  auto qec = ad_utility::testing::getQec();
+  IdTable testTable{qec->getAllocator()};
+  testTable.setNumColumns(2);
+  testTable.resize(6);
+  std::vector<unsigned long> firstColumn{1, 1, 1, 3, 3, 3};
+  std::vector<unsigned long> secondColumn{42, 9, 3, 13, 1, 4};
+  std::vector<std::optional<Variable>> variables = {Variable{"?a"},
+                                                    Variable{"?b"}};
+
+  auto firstTableColumn = testTable.getColumn(0);
+  auto secondTableColumn = testTable.getColumn(1);
+
+  auto unsignedLongToValueId = [](unsigned long value) {
+    return ValueId::makeFromInt(static_cast<int64_t>(value));
+  };
+  std::ranges::transform(firstColumn.begin(), firstColumn.end(),
+                         firstTableColumn.begin(), unsignedLongToValueId);
+  std::ranges::transform(secondColumn.begin(), secondColumn.end(),
+                         secondTableColumn.begin(), unsignedLongToValueId);
+
+  auto values = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(testTable), variables, false);
+
+  using namespace sparqlExpression;
+
+  // Create `Alias` object for `(MIN(?b) as ?x)`.
+  auto expr1 =
+      std::make_unique<MinExpression>(false, makeVariableExpression(varB));
+  auto alias1 =
+      Alias{SparqlExpressionPimpl{std::move(expr1), "MIN(?b)"}, Variable{"?x"}};
+
+  // Create `Alias` object for `(MAX(?b) as ?z)`.
+  auto expr2 =
+      std::make_unique<MaxExpression>(false, makeVariableExpression(varB));
+  auto alias2 =
+      Alias{SparqlExpressionPimpl{std::move(expr2), "MAX(?b)"}, Variable{"?z"}};
+
+  // Create `Alias` object for `(SUM(?b) as ?w)`.
+  auto expr3 =
+      std::make_unique<SumExpression>(false, makeVariableExpression(varB));
+  auto alias3 =
+      Alias{SparqlExpressionPimpl{std::move(expr3), "SUM(?b)"}, Variable{"?w"}};
+
+  // Set up and evaluate the GROUP BY clause.
+  GroupBy groupBy{ad_utility::testing::getQec(),
+                  {Variable{"?a"}},
+                  {std::move(alias1), std::move(alias2), std::move(alias3)},
+                  std::move(values)};
+  auto result = groupBy.getResult();
+  const auto& table = result->idTable();
+
+  // Check the result.
+  auto d = DoubleId;
+  auto i = IntId;
+  auto undef = ValueId::makeUndefined();
+  using enum ColumnIndexAndTypeInfo::UndefStatus;
+  VariableToColumnMap expectedVariables{
+      {Variable{"?a"}, {0, AlwaysDefined}},
+      {Variable{"?x"}, {1, PossiblyUndefined}},
+      {Variable{"?z"}, {2, PossiblyUndefined}},
+      {Variable{"?w"}, {3, PossiblyUndefined}}};
+  EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
+              ::testing::UnorderedElementsAreArray(expectedVariables));
+  auto expected = makeIdTableFromVector(
+      {{i(1), i(3), i(42), d(54)}, {i(3), i(1), i(13), d(18)}});
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
