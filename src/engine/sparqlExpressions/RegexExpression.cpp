@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "./RegexExpression.h"
 
@@ -184,9 +186,13 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<std::pair<Id, Id>> lowerAndUpperIds;
   lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
-    lowerAndUpperIds.emplace_back(
-        context->_qec.getIndex().prefix_range(prefix));
+    const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
+    for (const auto& [begin, end] : ranges.ranges()) {
+      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
+                                    Id::makeFromVocabIndex(end));
+    }
   }
+  checkCancellation(context);
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
@@ -210,6 +216,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
         resultSetOfIntervals.push_back(
             ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
       }
+      checkCancellation(context);
     }
     return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
                        ad_utility::SetOfIntervals{},
@@ -224,6 +231,7 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
           })));
+      checkCancellation(context);
     }
     return result;
   }
@@ -247,6 +255,7 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
         result.push_back(Id::makeFromBool(
             RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
+      checkCancellation(context);
     }
   };
   if (childIsStrExpression_) {
@@ -307,6 +316,12 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
     return {sizeEstimate, costEstimate};
   }
+}
+
+// ____________________________________________________________________________
+void RegexExpression::checkCancellation(
+    const sparqlExpression::EvaluationContext* context) {
+  context->cancellationHandle_->throwIfCancelled("RegexExpression");
 }
 
 }  // namespace sparqlExpression

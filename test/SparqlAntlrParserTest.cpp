@@ -1,8 +1,9 @@
-// Copyright 2021, University of Freiburg,
-// Chair of Algorithms and Data Structures.
+// Copyright 2021 - 2024, University of Freiburg
+// Chair of Algorithms and Data Structures
 // Authors:
-//   2021-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
-//   2022      Julian Mundhahs (mundhahj@tf.uni-freiburg.de)
+//   2021 -    Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//   2022 -    Julian Mundhahs <mundhahj@cs.uni-freiburg.de>
+//   2022 -    Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -204,8 +205,13 @@ TEST(SparqlExpressionParser, First) {
       ad_utility::testing::makeAllocator()};
   IdTable table{alloc};
   LocalVocab localVocab;
-  sparqlExpression::EvaluationContext input{*ad_utility::testing::getQec(), map,
-                                            table, alloc, localVocab};
+  sparqlExpression::EvaluationContext input{
+      *ad_utility::testing::getQec(),
+      map,
+      table,
+      alloc,
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
@@ -1289,6 +1295,11 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ceil(?x)", matchUnary(&makeCeilExpression));
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
+  expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
+  expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
+  expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
+  expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
+  expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
@@ -1481,7 +1492,7 @@ TEST(SparqlParser, substringExpression) {
   // Too few arguments
   expectBuiltInCallFails("SUBSTR(?x)");
   // Too many arguments
-  expectBuiltInCallFails("SUBSTR(?x), 3, 8, 12");
+  expectBuiltInCallFails("SUBSTR(?x, 3, 8, 12)");
 }
 
 // _________________________________________________________

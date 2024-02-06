@@ -78,6 +78,7 @@ ResultTable Sort::computeResult() {
 
   // Don't report missed timeout check because sort is not cancellable
   cancellationHandle_->resetWatchDogState();
+  checkCancellation();
 
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};

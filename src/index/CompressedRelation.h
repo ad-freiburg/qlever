@@ -515,7 +515,10 @@ class CompressedRelationReader {
   // the `col1Id` doesn't match. For this to work, the block has to be one of
   // the blocks that actually store triples from the given `relationMetadata`'s
   // relation, else the behavior is undefined. Only return the columns specified
-  // by the `columnIndices`.
+  // by the `columnIndices`. Note: Do not call this function for blocks of which
+  // you know that you need them completely, as then this function wastes some
+  // time and space. It is only typically needed for the first and last block of
+  // certain scans.
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,

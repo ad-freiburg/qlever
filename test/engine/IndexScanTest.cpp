@@ -6,6 +6,7 @@
 
 #include "../IndexTestHelpers.h"
 #include "../util/GTestHelpers.h"
+#include "../util/IdTableHelpers.h"
 #include "engine/IndexScan.h"
 #include "parser/ParsedQuery.h"
 
@@ -323,24 +324,27 @@ TEST(IndexScan, additionalColumn) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
   SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
-  triple._additionalScanColumns.emplace_back(1, V{"?blib"});
-  triple._additionalScanColumns.emplace_back(0, V{"?blub"});
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?xpattern"});
+  triple._additionalScanColumns.emplace_back(
+      ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN, V{"?ypattern"});
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
   auto col = makeAlwaysDefinedColumn;
   VariableToColumnMap expected = {{V{"?x"}, col(0)},
                                   {V{"?z"}, col(1)},
-                                  {V("?blib"), col(2)},
-                                  {V("?blub"), col(3)}};
+                                  {V("?xpattern"), col(2)},
+                                  {V("?ypattern"), col(3)}};
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
-              ::testing::ContainsRegex("Additional Columns: 1 0"));
-  // Executing such a query that has the same column multiple times is currently
-  // not supported and fails with an exception inside the `IdTable.h` module
-  // TODO<joka921> Add proper tests as soon as we can properly add additional
-  // columns. Maybe we cann add additional columns generically during the index
-  // build by adding a generic transformation function etc.
-  AD_EXPECT_THROW_WITH_MESSAGE(scan.computeResultOnlyForTesting(),
-                               ::testing::ContainsRegex("IdTable.h"));
+              ::testing::ContainsRegex("Additional Columns: 2 3"));
+  auto res = scan.computeResultOnlyForTesting();
+  auto getId = makeGetId(qec->getIndex());
+  auto I = IntId;
+  // <x> is the only subject, so it has pattern 0, <z> doesn't appear as a
+  // subject, so it has no pattern.
+  auto exp = makeIdTableFromVector(
+      {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
+  EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
