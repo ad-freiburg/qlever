@@ -213,6 +213,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
                              std::shared_ptr<QueryExecutionTree> subtree,
                              bool useOptimization, size_t blockSize) {
     RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
+    RuntimeParameters().set<"group-by-hash-map-only-if-sort">(!useOptimization);
     RuntimeParameters().set<"group-by-hash-map-block-size">(blockSize);
 
     using namespace sparqlExpression;
