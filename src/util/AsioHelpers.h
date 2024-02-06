@@ -174,7 +174,8 @@ struct AsyncMutex {
   }
 
  public:
-  AsyncMutex(net::any_io_executor executor) : executor_(std::move(executor)) {}
+  explicit AsyncMutex(net::any_io_executor executor)
+      : executor_(std::move(executor)) {}
   template <typename CompletionToken>
   auto asyncLock(CompletionToken token) -> decltype(auto) {
     auto impl = [self = this](auto&& handler) {

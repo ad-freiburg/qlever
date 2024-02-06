@@ -113,18 +113,17 @@ namespace ad_utility::websocket {
 ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
   {
     std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
-    // EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
     auto distributor = co_await queryHub->createOrAcquireDistributorForSending(
         QueryId::idFromString("abc"));
-    // EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
     std::atomic_flag blocker = false;
     std::atomic_flag started = false;
     // Add task to "block" execution
-    queryHub->mutex_.asyncLockGuard([&blocker, &started](auto guard) {
-      started.test_and_set();
-      started.notify_all();
-      blocker.wait(false);
-    });
+    queryHub->mutex_->asyncLockGuard(
+        [&blocker, &started]([[maybe_unused]] auto guard) {
+          started.test_and_set();
+          started.notify_all();
+          blocker.wait(false);
+        });
     ad_utility::JThread thread{
         [&ioContext]() { EXPECT_EQ(1, ioContext.poll_one()); }};
     // Destroy object
@@ -157,11 +156,13 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
     std::atomic_flag blocker = false;
     std::atomic_flag started = false;
     // Add task to "block" execution
-    queryHub->mutex_.asyncLockGuard([&blocker, &started](auto guard) {
-      started.test_and_set();
-      started.notify_all();
-      blocker.wait(false);
-    });
+    queryHub->mutex_->asyncLockGuard(
+        [&blocker, &started,
+         mutex = queryHub->mutex_]([[maybe_unused]] auto guard) {
+          started.test_and_set();
+          started.notify_all();
+          blocker.wait(false);
+        });
     ad_utility::JThread thread{[&ctx2]() { EXPECT_EQ(1, ctx2.poll_one()); }};
 
     // Wait for thread to start
@@ -210,7 +211,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
       co_await queryHub.createOrAcquireDistributorForReceiving(queryId);
   std::weak_ptr<const QueryToSocketDistributor> comparison = distributor;
 
-  co_await queryHub.mutex_.asyncLock(net::use_awaitable);
+  co_await queryHub.mutex_->asyncLock(net::use_awaitable);
   net::post(
       ioContext,
       std::packaged_task{[distributor = std::move(distributor)]() mutable {
@@ -227,7 +228,7 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
 
   // First run the cleanupCall of the initial distributor which now sees a
   // non-expired pointer, which is therefore not to be erased.
-  queryHub.mutex_.unlock();
+  queryHub.mutex_->unlock();
   // co_await net::post(ioContext, net::use_awaitable);
 }
 

@@ -69,8 +69,8 @@ void runCoroutine(Func innerRun, size_t numThreads) {
   TEST(test_suite_name, test_name) {                                       \
     runCoroutine(COROUTINE_NAME(test_suite_name, test_name), num_threads); \
   }                                                                        \
-  net::awaitable<void> COROUTINE_NAME(test_suite_name,                     \
-                                      test_name)(net::io_context & ioContext)
+  net::awaitable<void> COROUTINE_NAME(test_suite_name, test_name)(         \
+      [[maybe_unused]] net::io_context & ioContext)
 
 // Drop-in replacement for gtest's TEST() macro, but for tests that make
 // use of boost asio's awaitable coroutines. Note that this prevents you

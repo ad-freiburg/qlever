@@ -41,7 +41,8 @@ class QueryHub {
   net::io_context& ioContext_;
   /// Strand for synchronization
   // net::strand<net::any_io_executor> globalStrand_;
-  AsyncMutex mutex_;
+  std::shared_ptr<AsyncMutex> mutex_ =
+      std::make_shared<AsyncMutex>(ioContext_.get_executor());
   /// Guard to block destruction of the underlying io_context, to allow
   /// to gracefully destroy objects that might depend on the io_context.
   ad_utility::PointerGuard<MapType> socketDistributors_{
@@ -74,7 +75,7 @@ class QueryHub {
  public:
   explicit QueryHub(net::io_context& ioContext)
       : ioContext_{ioContext},
-        mutex_{ioContext.get_executor()} {
+        mutex_{std::make_shared<AsyncMutex>(ioContext.get_executor())} {
   }  // globalStrand_{net::make_strand(ioContext)} {}
 
   /// Create a new `QueryToSocketDistributor` or return a pre-existing one for

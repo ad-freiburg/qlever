@@ -53,32 +53,35 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
   // We pass a weak_ptr version of `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
-  auto cleanupCall =
-      [&mutex = mutex_, socketDistributors = socketDistributors_.getWeak(),
-       queryId, alreadyCalled = false](bool alwaysDelete) mutable {
-        AD_CORRECTNESS_CHECK(!alreadyCalled);
-        alreadyCalled = true;
-        // This if-clause causes `guard_` to prevent destruction of
-        // the io_context backing the global strand which is used here for
-        // scheduling. Otherwise, if the QueryHub is already destroyed, then
-        // just do nothing, no need for cleanup in this case.
-        auto pointer = socketDistributors.lock();
-        if (!pointer) {
-          return;
-        }
-        mutex.asyncLock([socketDistributors = std::move(socketDistributors),
-                         queryId = std::move(queryId), alwaysDelete, &mutex] {
-          if (auto ptr = socketDistributors.lock()) {
-            makeDeleteFromDistributors(std::move(socketDistributors),
-                                       std::move(queryId), alwaysDelete)();
-            mutex.unlock();
-          }
-        });
-        // We don't wait for the deletion to complete here, but only for its
-        // scheduling. We still get the expected behavior because all accesses
-        // to the `socketDistributor` are synchronized via a strand and
-        // BOOST::asio schedules in a FIFO manner.
-      };
+  auto cleanupCall = [mutex = std::weak_ptr<AsyncMutex>(mutex_),
+                      socketDistributors = socketDistributors_.getWeak(),
+                      queryId,
+                      alreadyCalled = false](bool alwaysDelete) mutable {
+    AD_CORRECTNESS_CHECK(!alreadyCalled);
+    alreadyCalled = true;
+    // This if-clause causes `guard_` to prevent destruction of
+    // the io_context backing the global strand which is used here for
+    // scheduling. Otherwise, if the QueryHub is already destroyed, then
+    // just do nothing, no need for cleanup in this case.
+    auto pointer = socketDistributors.lock();
+    auto mutexPtr = mutex.lock();
+    if (!pointer || !mutexPtr) {
+      return;
+    }
+    // We need to keep the mutex alive (at least for unit tests).
+    mutexPtr->asyncLock([socketDistributors = std::move(socketDistributors),
+                         queryId = std::move(queryId), alwaysDelete, mutexPtr] {
+      if (auto ptr = socketDistributors.lock()) {
+        makeDeleteFromDistributors(std::move(socketDistributors),
+                                   std::move(queryId), alwaysDelete)();
+      }
+      mutexPtr->unlock();
+    });
+    // We don't wait for the deletion to complete here, but only for its
+    // scheduling. This currently might lead to the deletion of a queryId from
+    // the registry to be a little bit delayed, but we don't suppose that this
+    // is much of an issue
+  };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
@@ -91,7 +94,7 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
+  auto guard = co_await mutex_->asyncLockGuard(net::use_awaitable);
   co_return createOrAcquireDistributorInternalUnsafe(std::move(queryId),
                                                      isSender);
 }
