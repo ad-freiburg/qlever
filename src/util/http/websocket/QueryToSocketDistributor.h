@@ -29,7 +29,7 @@ class QueryToSocketDistributor {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   mutable AsyncMutex mutex_;
-  mutable AsyncSignal signal_;
+  mutable AsyncConditionVariable signal_;
   /// Vector that stores the actual data, so all websockets can read it at
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};

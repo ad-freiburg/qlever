@@ -16,10 +16,13 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <concepts>
 #include <future>
+#include <list>
 #include <ranges>
 
 #include "util/Exception.h"
+#include "util/GenericBaseClasses.h"
 #include "util/Log.h"
+#include "util/ResetWhenMoved.h"
 #include "util/Synchronized.h"
 #include "util/TransparentFunctors.h"
 
@@ -44,67 +47,43 @@ namespace net = boost::asio;
 //     coroutine stack (which would be cancelable all the way through) without
 //     causing data races on the cancellation state, about which the thread
 //     sanitizer (correctly) complains.
-template <typename Executor, std::invocable F>
-requires(!std::is_void_v<std::invoke_result_t<F>>)
+template <typename Executor, std::invocable F,
+          typename Res = std::invoke_result_t<F>>
+requires(!std::is_void_v<Res>)
 net::awaitable<std::invoke_result_t<F>> runOnExecutor(Executor exec, F f) {
-  /*
-  auto run = [](auto f) -> net::awaitable<std::invoke_result_t<F>> {
+  auto run = [](auto f) -> net::awaitable<std::optional<Res>> {
     co_return std::invoke(f);
   };
 
-  return net::co_spawn(exec, run(std::move(f)), net::use_awaitable);
-   */
-  using Res = std::invoke_result_t<F>;
-  std::variant<std::monostate, Res, std::exception_ptr> res;
-  std::atomic_flag flag(false);
-  net::dispatch(exec, [&]() {
-    try {
-      res = std::invoke(std::move(f));
-    } catch (...) {
-      res.template emplace<std::exception_ptr>(std::current_exception());
-    }
-    flag.test_and_set();
-    flag.notify_all();
-  });
-  flag.wait(false);
-  if (std::holds_alternative<std::exception_ptr>(res)) {
-    std::rethrow_exception(std::get<std::exception_ptr>(res));
-  }
-  co_return std::move(std::get<Res>(res));
+  co_return std::move(
+      (co_await net::co_spawn(exec, run(std::move(f)), net::use_awaitable))
+          .value());
 }
 
 template <typename Executor, std::invocable F>
 requires(std::is_void_v<std::invoke_result_t<F>>)
 net::awaitable<void> runOnExecutor(Executor exec, F f) {
-  std::optional<std::exception_ptr> ex;
-  std::atomic_flag flag(false);
-  net::dispatch(exec, [&]() {
-    try {
-      std::invoke(std::move(f));
-    } catch (...) {
-      ex = std::current_exception();
-    }
-    flag.test_and_set();
-  });
-  flag.wait(false);
-  if (ex) {
-    std::rethrow_exception(ex.value());
-  }
-  co_return;
+  auto run = [](auto f) -> net::awaitable<void> {
+    std::invoke(f);
+    co_return;
+  };
+  co_await net::co_spawn(exec, run(std::move(f)), net::use_awaitable);
 }
 
 struct AsyncMutex {
  private:
   net::any_io_executor executor_;
   std::mutex mutex_;
-  std::vector<absl::AnyInvocable<void()>> waiters{};
+  std::list<absl::AnyInvocable<void()>> waiters_{};
   bool occupied_{false};
 
+  friend class AsyncConditionVariable;
+
  public:
-  [[nodiscard]] struct LockGuard {
+  [[nodiscard]] struct LockGuard : public NoCopyDefaultMove {
    private:
     AsyncMutex* mutex_;
-    bool active_ = true;
+    ad_utility::ResetWhenMoved<bool, false> active_ = true;
 
    public:
     [[nodiscard]] explicit LockGuard(AsyncMutex* mutex) : mutex_{mutex} {}
@@ -113,19 +92,13 @@ struct AsyncMutex {
         mutex_->unlock();
       }
     }
-    [[nodiscard]] LockGuard(LockGuard&& l)
-        : mutex_{l.mutex_}, active_(std::exchange(l.active_, false)) {}
-    [[nodiscard]] LockGuard& operator=(LockGuard&& l) {
-      mutex_ = l.mutex_;
-      active_ = std::exchange(l.active_, false);
-      return *this;
-    }
+    LockGuard(LockGuard&&) = default;
+    LockGuard& operator=(LockGuard&&) = default;
   };
 
  private:
-  friend class AsyncSignal;
-  template <typename CompletionHandler>
-  void asyncLockImpl(CompletionHandler&& handler) {
+  template <bool returnLockGuard>
+  void asyncLockImpl(auto&& handler) {
     auto slot = net::get_associated_cancellation_slot(handler);
     auto log = [](auto) {
       LOG(INFO) << "Cancelled an async lock" << std::endl;
@@ -135,59 +108,38 @@ struct AsyncMutex {
     }
     auto executor = net::get_associated_executor(handler, executor_);
     std::unique_lock lock{mutex_};
+    auto resumeAction = net::bind_executor(
+        executor, [handler = std::move(handler), self = this]() mutable {
+          if constexpr (returnLockGuard) {
+            handler(LockGuard{self});
+          } else {
+            (void)self;
+            handler();
+          }
+        });
     if (!occupied_) {
       occupied_ = true;
       lock.unlock();
       // TODDO<joka921> Several unit tests made by Robing fail when this is
       // changed to `dispatch`, we need to discuss, whether this behavior is
       // important.
-      net::post(net::bind_executor(
-          executor, [handler = std::move(handler)]() mutable { handler(); }));
+      net::post(std::move(resumeAction));
     } else {
-      auto resume = [executor, handler = AD_FWD(handler)]() mutable {
-        net::post(net::bind_executor(
-            executor, [handler = std::move(handler)]() mutable { handler(); }));
+      auto resume = [resumeAction = std::move(resumeAction)]() mutable {
+        net::post(std::move(resumeAction));
       };
-      waiters.push_back(std::move(resume));
-    }
-  }
-  template <typename CompletionHandler>
-  void asyncLockGuardImpl(CompletionHandler&& handler) {
-    auto executor = net::get_associated_executor(handler, executor_);
-    auto slot = net::get_associated_cancellation_slot(handler);
-    auto log = [](auto) {
-      LOG(INFO) << "Cancelled an async lock guard" << std::endl;
-    };
-    if (slot.is_connected()) {
-      slot.template emplace<decltype(log)>(log);
-    }
-    std::unique_lock lock{mutex_};
-    if (!occupied_) {
-      occupied_ = true;
-      lock.unlock();
-      net::post(net::bind_executor(
-          executor, [handler = std::move(handler), self = this]() mutable {
-            handler(LockGuard{self});
-          }));
-    } else {
-      auto resume = [executor, handler = AD_FWD(handler),
-                     self = this]() mutable {
-        net::post(net::bind_executor(
-            executor, [handler = std::move(handler), self]() mutable {
-              handler(LockGuard{self});
-            }));
-      };
-      waiters.push_back(std::move(resume));
+      waiters_.push_back(std::move(resume));
     }
   }
 
  public:
   explicit AsyncMutex(net::any_io_executor executor)
       : executor_(std::move(executor)) {}
+
   template <typename CompletionToken>
   auto asyncLock(CompletionToken token) -> decltype(auto) {
     auto impl = [self = this](auto&& handler) {
-      self->asyncLockImpl(AD_FWD(handler));
+      self->asyncLockImpl<false>(AD_FWD(handler));
     };
     return net::async_initiate<CompletionToken, void()>(std::move(impl), token);
   }
@@ -195,7 +147,7 @@ struct AsyncMutex {
   template <typename CompletionToken>
   auto asyncLockGuard(CompletionToken token) -> decltype(auto) {
     auto impl = [self = this](auto&& handler) {
-      self->asyncLockGuardImpl(AD_FWD(handler));
+      self->asyncLockImpl<true>(AD_FWD(handler));
     };
     return net::async_initiate<CompletionToken, void(LockGuard)>(
         std::move(impl), token);
@@ -203,66 +155,52 @@ struct AsyncMutex {
 
   void unlock() {
     std::unique_lock l{mutex_};
-    if (waiters.empty()) {
+    AD_CORRECTNESS_CHECK(occupied_);
+    if (waiters_.empty()) {
       occupied_ = false;
       return;
     } else {
-      // TODO<joka921> This is rather expensive, use something that supports
-      // FiFO better. But we currently need FIFO to make some unit tests pass.
-      auto f = std::move(waiters.front());
-      waiters.erase(waiters.begin());
-      l.unlock();
+      auto f = std::move(waiters_.front());
+      waiters_.pop_front();
       std::invoke(f);
+      l.unlock();
     }
   }
 };
 
-class AsyncSignal {
+class AsyncConditionVariable {
  public:
   struct State {
-    size_t nextIndex = 0;
     static_assert(std::constructible_from<size_t>);
-    std::vector<std::pair<size_t, absl::AnyInvocable<void()>>> waiters{};
+    std::list<absl::AnyInvocable<void()>> waiters_{};
     static_assert(std::constructible_from<
                   std::vector<std::pair<size_t, absl::AnyInvocable<void()>>>>);
     State() = default;
   };
-  // static_assert(std::constructible_from<State>);
   ad_utility::Synchronized<State> state_{State{}};
 
  private:
-  void cancel(const size_t& index) {
-    // TODO<joka921> this can be done using binary search.
-    state_.withWriteLock([&index](State& s) {
-      auto it = std::ranges::find(s.waiters, index, ad_utility::first);
-      if (it != s.waiters.end()) {
-        LOG(INFO) << "found operation " << index << std::endl;
-        std::invoke(std::move(it->second));
-        LOG(INFO) << "erasing operation " << index << std::endl;
-        s.waiters.erase(it);
-        LOG(INFO) << "erased operation " << index << std::endl;
-      }
-    });
-    LOG(INFO) << "finished erasing operation " << index << std::endl;
+  void cancel(const auto& it) {
+    auto x = state_.wlock();
+    auto el = std::move(*it);
+    // The order of these two calls seems to be important ALTHOUGH we are
+    // holding on to the lock.
+    // TODO<joka921> Figure this out.
+    x->waiters_.erase(it);
+    std::invoke(el);
   }
+
   template <typename CompletionHandler>
   void asyncWaitImpl(CompletionHandler&& handler, AsyncMutex& mutex) {
     auto slot = net::get_associated_cancellation_slot(handler);
     auto resume = [handler = AD_FWD(handler), &mutex]() mutable {
-      mutex.asyncLockImpl(AD_FWD(handler));
+      mutex.asyncLockImpl<false>(AD_FWD(handler));
     };
     state_.withWriteLock([self = this, &resume, &slot](State& s) mutable {
-      size_t myIndex = s.nextIndex++;
-      LOG(INFO) << "next index is " << myIndex << std::endl;
-      s.waiters.emplace_back(myIndex, std::move(resume));
+      s.waiters_.emplace_back(std::move(resume));
       // TODO<joka921> Don't ignore the cancellationType.
-      auto doCancel = [self, idx = myIndex](auto) {
-        LOG(INFO) << "cancelling operation " << idx << std::endl;
-        LOG(INFO) << &idx << std::endl;
-        self->cancel(idx);
-        LOG(INFO) << &idx << std::endl;
-        LOG(INFO) << "cancelled operation " << idx << std::endl;
-      };
+      auto it = --s.waiters_.end();
+      auto doCancel = [self, it](auto) { self->cancel(it); };
       if (slot.is_connected()) {
         slot.template emplace<decltype(doCancel)>(doCancel);
       }
@@ -271,7 +209,10 @@ class AsyncSignal {
   }
 
  public:
-  explicit AsyncSignal() = default;
+  // AsyncConditionVariable() = default;
+  AsyncConditionVariable() {
+    LOG(INFO) << "Async condition variable at " << this << std::endl;
+  }
 
   template <typename CompletionToken>
   auto asyncWait(AsyncMutex& mutex, CompletionToken token) -> decltype(auto) {
@@ -283,12 +224,15 @@ class AsyncSignal {
 
   void notifyAll() {
     state_.withWriteLock([](State& s) {
-      std::ranges::for_each(s.waiters | std::views::values,
+      std::ranges::for_each(s.waiters_,
                             [](auto& f) { std::invoke(std::move(f)); });
-      s.waiters.clear();
+      s.waiters_.clear();
     });
   }
-  ~AsyncSignal() { notifyAll(); }
+  ~AsyncConditionVariable() {
+    LOG(INFO) << "Destroing async condition variable at " << this << std::endl;
+    notifyAll();
+  }
 };
 
 }  // namespace ad_utility

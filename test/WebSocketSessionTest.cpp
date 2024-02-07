@@ -63,11 +63,16 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 // _____________________________________________________________________________
 
 struct WebSocketTestContainer {
-  net::strand<net::io_context::executor_type> strand_;
-  std::unique_ptr<QueryHub> queryHub_;
-  QueryRegistry registry_;
-  tcp::socket server_;
-  tcp::socket client_;
+  ad_utility::ResetWhenMoved<bool, false> isActive_ = true;
+  net::io_context& ioContext_;
+  net::strand<net::io_context::executor_type> strand_{
+      net::make_strand(ioContext_)};
+  std::unique_ptr<QueryHub> queryHub_ = std::make_unique<QueryHub>(ioContext_);
+  QueryRegistry registry_{};
+  tcp::socket server_{strand_};
+  tcp::socket client_{strand_};
+
+  WebSocketTestContainer(net::io_context& ioContext) : ioContext_{ioContext} {}
 
   net::awaitable<void> serverLogic(auto&& completionToken) {
     boost::beast::tcp_stream stream{std::move(server_)};
@@ -79,14 +84,25 @@ struct WebSocketTestContainer {
   }
 
   auto serverLogic() { return serverLogic(net::use_awaitable); }
+
+  WebSocketTestContainer(WebSocketTestContainer&&) = default;
+  WebSocketTestContainer& operator=(WebSocketTestContainer&&) = default;
+  ~WebSocketTestContainer() {
+    if (!isActive_) {
+      return;
+    }
+    ioContext_.stop();
+    std::this_thread::sleep_for(std::chrono::milliseconds(3));
+    ioContext_.restart();
+    while (ioContext_.poll_one()) {
+    }
+  }
 };
 
 net::awaitable<WebSocketTestContainer> createTestContainer(
     net::io_context& ioContext) {
   auto strand = net::make_strand(ioContext);
-  WebSocketTestContainer container{
-      strand, std::make_unique<QueryHub>(ioContext), QueryRegistry{},
-      tcp::socket{strand}, tcp::socket{strand}};
+  WebSocketTestContainer container{ioContext};
   co_await connect(container.server_, container.client_);
   co_return std::move(container);
 }
@@ -122,6 +138,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
 
   co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
                          net::use_awaitable);
+  LOG(INFO) << "Done" << std::endl;
 }
 
 // _____________________________________________________________________________

@@ -10,31 +10,29 @@ namespace ad_utility::websocket {
 
 // Return a lambda that deletes the `queryId` from the `socketDistributors`, but
 // only if it is either expired or `alwaysDelete` was specified.
-inline auto makeDeleteFromDistributors =
-    [](auto socketDistributors, QueryId queryId, bool alwaysDelete) {
-      return [socketDistributors = std::move(socketDistributors),
-              queryId = std::move(queryId), alwaysDelete]() {
-        if (auto pointer = socketDistributors.lock()) {
-          auto it = pointer->find(queryId);
-          if (it == pointer->end()) {
-            return;
-          }
-          bool expired = it->second.pointer_.expired();
-          // The branch `both of them are true` is currently not covered by
-          // tests and also not coverable, because the manual `signalEnd` call
-          // always comes before the destructor.
-          if (alwaysDelete || expired) {
-            pointer->erase(it);
-          }
-        }
-      };
-    };
+inline auto makeDeleteFromDistributors = [](auto& socketDistributors,
+                                            QueryId queryId,
+                                            bool alwaysDelete) {
+  return [&socketDistributors, queryId = std::move(queryId), alwaysDelete]() {
+    auto it = socketDistributors.find(queryId);
+    if (it == socketDistributors.end()) {
+      return;
+    }
+    bool expired = it->second.pointer_.expired();
+    // The branch `both of them are true` is currently not covered by
+    // tests and also not coverable, because the manual `signalEnd` call
+    // always comes before the destructor.
+    if (alwaysDelete || expired) {
+      socketDistributors.erase(it);
+    }
+  };
+};
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryToSocketDistributor>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
                                                    bool isSender) {
-  auto& distributors = socketDistributors_.get();
+  auto& distributors = socketDistributors_;
   if (distributors.contains(queryId)) {
     auto& reference = distributors.at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
@@ -53,29 +51,15 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
   // We pass a weak_ptr version of `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
-  auto cleanupCall = [mutex = std::weak_ptr<AsyncMutex>(mutex_),
-                      socketDistributors = socketDistributors_.getWeak(),
-                      queryId,
+  auto cleanupCall = [this, queryId,
                       alreadyCalled = false](bool alwaysDelete) mutable {
     AD_CORRECTNESS_CHECK(!alreadyCalled);
     alreadyCalled = true;
-    // This if-clause causes `guard_` to prevent destruction of
-    // the io_context backing the global strand which is used here for
-    // scheduling. Otherwise, if the QueryHub is already destroyed, then
-    // just do nothing, no need for cleanup in this case.
-    auto pointer = socketDistributors.lock();
-    auto mutexPtr = mutex.lock();
-    if (!pointer || !mutexPtr) {
-      return;
-    }
     // We need to keep the mutex alive (at least for unit tests).
-    mutexPtr->asyncLock([socketDistributors = std::move(socketDistributors),
-                         queryId = std::move(queryId), alwaysDelete, mutexPtr] {
-      if (auto ptr = socketDistributors.lock()) {
-        makeDeleteFromDistributors(std::move(socketDistributors),
-                                   std::move(queryId), alwaysDelete)();
-      }
-      mutexPtr->unlock();
+    mutex_.asyncLockGuard([this, queryId = std::move(queryId),
+                           alwaysDelete]([[maybe_unused]] auto guard) {
+      makeDeleteFromDistributors(socketDistributors_, std::move(queryId),
+                                 alwaysDelete)();
     });
     // We don't wait for the deletion to complete here, but only for its
     // scheduling. This currently might lead to the deletion of a queryId from
@@ -94,7 +78,7 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  auto guard = co_await mutex_->asyncLockGuard(net::use_awaitable);
+  auto guard = co_await mutex_.asyncLockGuard(net::use_awaitable);
   co_return createOrAcquireDistributorInternalUnsafe(std::move(queryId),
                                                      isSender);
 }
