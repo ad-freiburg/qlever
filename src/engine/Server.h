@@ -5,7 +5,6 @@
 
 #pragma once
 
-#include <semaphore>
 #include <string>
 #include <vector>
 
@@ -18,6 +17,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseException.h"
+#include "util/TypeTraits.h"
 #include "util/http/HttpServer.h"
 #include "util/http/streamable_body.h"
 #include "util/http/websocket/QueryHub.h"
@@ -74,12 +74,35 @@ class Server {
   /// the `WebSocketHandler` created for `HttpServer`.
   std::weak_ptr<ad_utility::websocket::QueryHub> queryHub_;
 
-  mutable net::static_thread_pool threadPool_;
+  net::static_thread_pool threadPool_;
+
+  /// Executor with a single thread that is used to run timers asynchronously.
+  net::static_thread_pool timerExecutor_{1};
 
   template <typename T>
   using Awaitable = boost::asio::awaitable<T>;
 
-  using TimeLimit = std::chrono::seconds;
+  using TimeLimit = std::chrono::milliseconds;
+
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+
+  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
+  struct CancellationHandleAndTimeoutTimerCancel {
+    SharedCancellationHandle handle_;
+    /// Object of type `absl::Cleanup` that when destroyed cancels the timer
+    /// that would otherwise invoke the cancellation of the `handle_` via the
+    /// time limit.
+    CancelTimeout cancelTimeout_;
+  };
+
+  // Clang doesn't seem to be able to automatically deduce the type correctly.
+  // and GCC 11 thinks deduction guides are not allowed within classes.
+#ifdef __clang__
+  template <ad_utility::isInstantiation<absl::Cleanup> CancelTimeout>
+  CancellationHandleAndTimeoutTimerCancel(SharedCancellationHandle,
+                                          CancelTimeout)
+      -> CancellationHandleAndTimeoutTimerCancel<CancelTimeout>;
+#endif
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
@@ -120,12 +143,11 @@ class Server {
 
   json composeCacheStatsJson() const;
 
-  // Perform the following steps: Acquire a token from the
-  // queryProcessingSemaphore_, run `function`, and release the token. These
-  // steps are performed on a new thread (not one of the server threads).
-  // Returns an awaitable of the return value of `function`
+  /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
+  /// it's completion, wrapping the result.
   template <typename Function, typename T = std::invoke_result_t<Function>>
-  Awaitable<T> computeInNewThread(Function function) const;
+  Awaitable<T> computeInNewThread(Function function,
+                                  SharedCancellationHandle handle);
 
   /// This method extracts a client-defined query id from the passed HTTP
   /// request if it is present. If it is not present or empty, a new
@@ -136,35 +158,39 @@ class Server {
   /// `QueryAlreadyInUseError` exception is thrown.
   ///
   /// \param request The HTTP request to extract the id from.
+  /// \param query A string representation of the query to register an id for.
   ///
   /// \return An OwningQueryId object. It removes itself from the registry
   ///         on destruction.
   ad_utility::websocket::OwningQueryId getQueryId(
-      const ad_utility::httpUtils::HttpRequest auto& request);
+      const ad_utility::httpUtils::HttpRequest auto& request,
+      std::string_view query);
 
   /// Schedule a task to trigger the timeout after the `timeLimit`.
   /// The returned callback can be used to prevent this task from executing
   /// either because the `cancellationHandle` has been aborted by some other
   /// means or because the task has been completed successfully.
-  static auto cancelAfterDeadline(
-      const net::any_io_executor& executor,
+  auto cancelAfterDeadline(
       std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
       TimeLimit timeLimit)
-      -> ad_utility::InvocableWithExactReturnType<void> auto;
-
-  /// Acquire the cancellation handle based on `queryId`, pass it to the
-  /// operation and configure it to get cancelled automatically by calling
-  /// `cancelAfterDeadline`. The return value can be used to cancel the timer.
-  auto setupCancellationHandle(const net::any_io_executor& executor,
-                               const ad_utility::websocket::QueryId& queryId,
-                               const std::shared_ptr<Operation>& rootOperation,
-                               TimeLimit timeLimit) const
       -> ad_utility::InvocableWithExactReturnType<void> auto;
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
   net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
-                                            QueryExecutionContext& qec) const;
+                                            QueryExecutionContext& qec,
+                                            SharedCancellationHandle handle,
+                                            TimeLimit timeLimit);
+
+  /// Acquire the `CancellationHandle` for the given `QueryId`, start the
+  /// watchdog and call `cancelAfterDeadline` to set the timeout after
+  /// `timeLimit`. Return an object of type
+  /// `CancellationHandleAndTimeoutTimerCancel`, where the `cancelTimeout_`
+  /// member can be invoked to cancel the imminent cancellation via timeout.
+  auto setupCancellationHandle(const ad_utility::websocket::QueryId& queryId,
+                               TimeLimit timeLimit)
+      -> ad_utility::isInstantiation<
+          CancellationHandleAndTimeoutTimerCancel> auto;
 
   /// Check if the access token is valid. Return true if the access token
   /// exists and is valid. Return false if there's no access token passed.

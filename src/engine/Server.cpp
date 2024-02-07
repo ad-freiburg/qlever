@@ -6,7 +6,6 @@
 
 #include "engine/Server.h"
 
-#include <cstring>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -19,6 +18,8 @@
 #include "util/ParseableDuration.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/websocket/MessageSender.h"
+
+using namespace std::string_literals;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
@@ -220,26 +221,27 @@ net::awaitable<std::optional<Server::TimeLimit>>
 Server::verifyUserSubmittedQueryTimeout(
     std::optional<std::string_view> userTimeout, bool accessTokenOk,
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const {
-  TimeLimit timeLimit = RuntimeParameters().get<"default-query-timeout">();
+  auto defaultTimeout = RuntimeParameters().get<"default-query-timeout">();
   // TODO<GCC12> Use the monadic operations for std::optional
   if (userTimeout.has_value()) {
     auto timeoutCandidate =
         ad_utility::ParseableDuration<TimeLimit>::fromString(
             userTimeout.value());
-    if (timeoutCandidate > timeLimit && !accessTokenOk) {
+    if (timeoutCandidate > defaultTimeout && !accessTokenOk) {
       co_await send(ad_utility::httpUtils::createForbiddenResponse(
           absl::StrCat("User submitted timeout was higher than what is "
                        "currently allowed by "
                        "this instance (",
-                       timeLimit.count(),
-                       "s). Please use a valid-access token to override this "
+                       defaultTimeout.toString(),
+                       "). Please use a valid-access token to override this "
                        "server configuration."),
           request));
       co_return std::nullopt;
     }
     co_return timeoutCandidate;
   }
-  co_return timeLimit;
+  co_return std::chrono::duration_cast<TimeLimit>(
+      decltype(defaultTimeout)::DurationType{defaultTimeout});
 }
 
 // _____________________________________________________________________________
@@ -319,7 +321,11 @@ Awaitable<void> Server::process(
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");
-    response = createJsonResponse(queryRegistry_.getActiveQueries(), request);
+    nlohmann::json json;
+    for (auto& [key, value] : queryRegistry_.getActiveQueries()) {
+      json[nlohmann::json(key)] = std::move(value);
+    }
+    response = createJsonResponse(json, request);
   }
 
   // Ping with or without messsage.
@@ -480,20 +486,22 @@ nlohmann::json Server::composeCacheStatsJson() const {
 class QueryAlreadyInUseError : public std::runtime_error {
  public:
   explicit QueryAlreadyInUseError(std::string_view proposedQueryId)
-      : std::runtime_error{"Query id '" + proposedQueryId +
+      : std::runtime_error{"Query id '"s + proposedQueryId +
                            "' is already in use!"} {}
 };
 
 // _____________________________________________
 
 ad_utility::websocket::OwningQueryId Server::getQueryId(
-    const ad_utility::httpUtils::HttpRequest auto& request) {
+    const ad_utility::httpUtils::HttpRequest auto& request,
+    std::string_view query) {
   using ad_utility::websocket::OwningQueryId;
   std::string_view queryIdHeader = request.base()["Query-Id"];
   if (queryIdHeader.empty()) {
-    return queryRegistry_.uniqueId();
+    return queryRegistry_.uniqueId(query);
   }
-  auto queryId = queryRegistry_.uniqueIdFromString(std::string(queryIdHeader));
+  auto queryId =
+      queryRegistry_.uniqueIdFromString(std::string(queryIdHeader), query);
   if (!queryId) {
     throw QueryAlreadyInUseError{queryIdHeader};
   }
@@ -503,43 +511,32 @@ ad_utility::websocket::OwningQueryId Server::getQueryId(
 // _____________________________________________________________________________
 
 auto Server::cancelAfterDeadline(
-    const net::any_io_executor& executor,
     std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
     TimeLimit timeLimit)
     -> ad_utility::InvocableWithExactReturnType<void> auto {
-  auto strand = net::make_strand(executor);
-  auto timer = std::make_shared<net::steady_timer>(strand, timeLimit);
+  net::steady_timer timer{timerExecutor_, timeLimit};
 
-  auto cancelAfterTimeout =
-      [](std::weak_ptr<ad_utility::CancellationHandle<>> cancellationHandle,
-         std::shared_ptr<net::steady_timer> timer) -> net::awaitable<void> {
-    // Ignore cancellation exceptions, they are normal
-    co_await timer->async_wait(net::as_tuple(net::use_awaitable));
+  timer.async_wait([cancellationHandle = std::move(cancellationHandle)](
+                       const boost::system::error_code&) {
     if (auto pointer = cancellationHandle.lock()) {
       pointer->cancel(ad_utility::CancellationState::TIMEOUT);
     }
-  };
-  net::co_spawn(strand,
-                cancelAfterTimeout(std::move(cancellationHandle), timer),
-                net::detached);
-  return [strand, timer = std::move(timer)]() mutable {
-    net::post(strand, [timer = std::move(timer)]() { timer->cancel(); });
-  };
+  });
+  return [timer = std::move(timer)]() mutable { timer.cancel(); };
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 auto Server::setupCancellationHandle(
-    const net::any_io_executor& executor,
-    const ad_utility::websocket::QueryId& queryId,
-    const std::shared_ptr<Operation>& rootOperation, TimeLimit timeLimit) const
-    -> ad_utility::InvocableWithExactReturnType<void> auto {
+    const ad_utility::websocket::QueryId& queryId, TimeLimit timeLimit)
+    -> ad_utility::isInstantiation<
+        CancellationHandleAndTimeoutTimerCancel> auto {
   auto cancellationHandle = queryRegistry_.getCancellationHandle(queryId);
-  cancellationHandle->startWatchDog();
   AD_CORRECTNESS_CHECK(cancellationHandle);
-  rootOperation->recursivelySetCancellationHandle(
-      std::move(cancellationHandle));
-  rootOperation->recursivelySetTimeConstraint(timeLimit);
-  return cancelAfterDeadline(executor, cancellationHandle, timeLimit);
+  cancellationHandle->startWatchDog();
+  absl::Cleanup cancelCancellationHandle{
+      cancelAfterDeadline(cancellationHandle, timeLimit)};
+  return CancellationHandleAndTimeoutTimerCancel{
+      std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
 // ____________________________________________________________________________
@@ -630,7 +627,7 @@ boost::asio::awaitable<void> Server::processQuery(
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
     auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request), *queryHub);
+        getQueryId(request, query), *queryHub);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
@@ -641,13 +638,13 @@ boost::asio::awaitable<void> Server::processQuery(
     QueryExecutionContext qec(index_, &cache_, allocator_,
                               sortPerformanceEstimator_,
                               std::ref(messageSender), pinSubtrees, pinResult);
+    auto [cancellationHandle, cancelTimeoutOnDestruction] =
+        setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    plannedQuery = co_await parseAndPlan(query, qec);
+    plannedQuery =
+        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
-    absl::Cleanup cancelCancellationHandle{setupCancellationHandle(
-        co_await net::this_coro::executor, messageSender.getQueryId(),
-        qet.getRootOperation(), timeLimit)};
     auto timeForQueryPlanning = requestTimer.msecs();
     auto& runtimeInfoWholeQuery =
         qet.getRootOperation()->getRuntimeInfoWholeQuery();
@@ -659,12 +656,12 @@ boost::asio::awaitable<void> Server::processQuery(
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread([&] {
-        queryRegistry_.getCancellationHandle(messageSender.getQueryId())
-            ->resetWatchDogState();
-        return ExportQueryExecutionTrees::computeResultAsStream(
-            plannedQuery.value().parsedQuery_, qet, mediaType);
-      });
+      auto responseGenerator = co_await computeInNewThread(
+          [&plannedQuery, &qet, mediaType] {
+            return ExportQueryExecutionTrees::computeResultAsStream(
+                plannedQuery.value().parsedQuery_, qet, mediaType);
+          },
+          cancellationHandle);
 
       // The `streamable_body` that is used internally turns all exceptions that
       // occur while generating the results into "broken pipe". We store the
@@ -700,11 +697,13 @@ boost::asio::awaitable<void> Server::processQuery(
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response
-        auto responseString = co_await computeInNewThread([&, maxSend] {
-          return ExportQueryExecutionTrees::computeResultAsJSON(
-              plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-              mediaType.value());
-        });
+        auto responseString = co_await computeInNewThread(
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+              return ExportQueryExecutionTrees::computeResultAsJSON(
+                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  mediaType.value());
+            },
+            cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
       } break;
       default:
@@ -735,6 +734,14 @@ boost::asio::awaitable<void> Server::processQuery(
   } catch (const QueryAlreadyInUseError& e) {
     responseStatus = http::status::conflict;
     exceptionErrorMsg = e.what();
+  } catch (const ad_utility::CancellationException& e) {
+    // Send 429 status code to indicate that the time limit was reached
+    // or the query was cancelled because of some other reason.
+    responseStatus = http::status::too_many_requests;
+    exceptionErrorMsg = e.what();
+    if (!e.operation_.empty()) {
+      *exceptionErrorMsg += " Last operation: " + e.operation_;
+    }
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
@@ -772,26 +779,45 @@ boost::asio::awaitable<void> Server::processQuery(
 
 // _____________________________________________________________________________
 template <typename Function, typename T>
-Awaitable<T> Server::computeInNewThread(Function function) const {
-  auto runOnExecutor = [](auto executor, Function func) -> net::awaitable<T> {
+Awaitable<T> Server::computeInNewThread(Function function,
+                                        SharedCancellationHandle handle) {
+  auto runOnExecutor =
+      [](auto executor, Function func,
+         SharedCancellationHandle handle) -> net::awaitable<T> {
     co_await net::post(net::bind_executor(executor, net::use_awaitable));
+    // It might take some time until the thread pool is ready,
+    // so reset the state here. Ideally waiting for the thread pool
+    // would periodically check the cancellation state
+    handle->resetWatchDogState();
     co_return std::invoke(func);
   };
-  return ad_utility::resumeOnOriginalExecutor(
-      runOnExecutor(threadPool_.get_executor(), std::move(function)));
+  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
+      threadPool_.get_executor(), std::move(function), std::move(handle)));
 }
 
 // _____________________________________________________________________________
 net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
-    const std::string& query, QueryExecutionContext& qec) const {
+    const std::string& query, QueryExecutionContext& qec,
+    SharedCancellationHandle handle, TimeLimit timeLimit) {
+  auto handleCopy = handle;
   return computeInNewThread(
-      [&query, &qec, enablePatternTrick = enablePatternTrick_]() {
+      [&query, &qec, enablePatternTrick = enablePatternTrick_,
+       handle = std::move(handle), timeLimit]() mutable {
         auto pq = SparqlParser::parseQuery(query);
-        QueryPlanner qp(&qec);
+        handle->throwIfCancelled();
+        QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);
         auto qet = qp.createExecutionTree(pq);
-        return PlannedQuery{std::move(pq), std::move(qet)};
-      });
+        handle->throwIfCancelled();
+        PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetCancellationHandle(std::move(handle));
+        plannedQuery.queryExecutionTree_.getRootOperation()
+            ->recursivelySetTimeConstraint(timeLimit);
+        return plannedQuery;
+      },
+      std::move(handleCopy));
 }
 
 // _____________________________________________________________________________

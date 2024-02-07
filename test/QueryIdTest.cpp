@@ -9,9 +9,8 @@
 using ad_utility::websocket::OwningQueryId;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryRegistry;
-using ::testing::ElementsAre;
+using ::testing::ContainerEq;
 using ::testing::IsEmpty;
-using ::testing::UnorderedElementsAre;
 
 TEST(QueryId, checkIdEqualityRelation) {
   auto queryIdOne = QueryId::idFromString("some-id");
@@ -53,8 +52,8 @@ TEST(QueryId, veriyToJsonWorks) {
 
 TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
   QueryRegistry registry{};
-  auto queryIdOne = registry.uniqueId();
-  auto queryIdTwo = registry.uniqueId();
+  auto queryIdOne = registry.uniqueId("my-query");
+  auto queryIdTwo = registry.uniqueId("my-query");
 
   EXPECT_NE(queryIdOne.toQueryId(), queryIdTwo.toQueryId());
 }
@@ -63,8 +62,10 @@ TEST(QueryRegistry, verifyUniqueIdProvidesUniqueIds) {
 
 TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
   QueryRegistry registry{};
-  auto optionalQueryIdOne = registry.uniqueIdFromString("01123581321345589144");
-  auto optionalQueryIdTwo = registry.uniqueIdFromString("01123581321345589144");
+  auto optionalQueryIdOne =
+      registry.uniqueIdFromString("01123581321345589144", "my-query");
+  auto optionalQueryIdTwo =
+      registry.uniqueIdFromString("01123581321345589144", "my-query");
 
   EXPECT_TRUE(optionalQueryIdOne.has_value());
   EXPECT_FALSE(optionalQueryIdTwo.has_value());
@@ -75,11 +76,13 @@ TEST(QueryRegistry, verifyUniqueIdFromStringEnforcesUniqueness) {
 TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
   QueryRegistry registry{};
   {
-    auto optionalQueryId = registry.uniqueIdFromString("01123581321345589144");
+    auto optionalQueryId =
+        registry.uniqueIdFromString("01123581321345589144", "my-query");
     EXPECT_TRUE(optionalQueryId.has_value());
   }
   {
-    auto optionalQueryId = registry.uniqueIdFromString("01123581321345589144");
+    auto optionalQueryId =
+        registry.uniqueIdFromString("01123581321345589144", "my-query");
     EXPECT_TRUE(optionalQueryId.has_value());
   }
 }
@@ -89,8 +92,10 @@ TEST(QueryRegistry, verifyIdIsUnregisteredAfterUse) {
 TEST(QueryRegistry, demonstrateRegistryLocalUniqueness) {
   QueryRegistry registryOne{};
   QueryRegistry registryTwo{};
-  auto optQidOne = registryOne.uniqueIdFromString("01123581321345589144");
-  auto optQidTwo = registryTwo.uniqueIdFromString("01123581321345589144");
+  auto optQidOne =
+      registryOne.uniqueIdFromString("01123581321345589144", "my-query");
+  auto optQidTwo =
+      registryTwo.uniqueIdFromString("01123581321345589144", "my-query");
   ASSERT_TRUE(optQidOne.has_value());
   ASSERT_TRUE(optQidTwo.has_value());
   // The QueryId object doesn't know anything about registries,
@@ -106,7 +111,7 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
   std::unique_ptr<OwningQueryId> holder;
   {
     QueryRegistry registry{};
-    holder = std::make_unique<OwningQueryId>(registry.uniqueId());
+    holder = std::make_unique<OwningQueryId>(registry.uniqueId("my-query"));
   }
 }
 
@@ -114,7 +119,7 @@ TEST(QueryRegistry, performCleanupFromDestroyedRegistry) {
 
 TEST(QueryRegistry, verifyCancellationHandleIsCreated) {
   QueryRegistry registry{};
-  auto queryId = registry.uniqueId();
+  auto queryId = registry.uniqueId("my-query");
 
   auto handle1 = registry.getCancellationHandle(queryId.toQueryId());
   auto handle2 = registry.getCancellationHandle(queryId.toQueryId());
@@ -138,24 +143,27 @@ TEST(QueryRegistry, verifyCancellationHandleIsNullptrIfNotPresent) {
 // _____________________________________________________________________________
 
 TEST(QueryRegistry, verifyGetActiveQueriesReturnsAllActiveQueries) {
+  using MapType = ad_utility::HashMap<QueryId, std::string>;
   QueryRegistry registry{};
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());
 
   {
-    auto queryId1 = registry.uniqueId();
+    auto queryId1 = registry.uniqueId("my-query");
 
-    EXPECT_THAT(registry.getActiveQueries(), ElementsAre(queryId1.toQueryId()));
+    EXPECT_THAT(registry.getActiveQueries(),
+                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
 
     {
-      auto queryId2 = registry.uniqueId();
+      auto queryId2 = registry.uniqueId("other-query");
 
-      EXPECT_THAT(
-          registry.getActiveQueries(),
-          UnorderedElementsAre(queryId1.toQueryId(), queryId2.toQueryId()));
+      EXPECT_THAT(registry.getActiveQueries(),
+                  ContainerEq(MapType{{queryId1.toQueryId(), "my-query"},
+                                      {queryId2.toQueryId(), "other-query"}}));
     }
 
-    EXPECT_THAT(registry.getActiveQueries(), ElementsAre(queryId1.toQueryId()));
+    EXPECT_THAT(registry.getActiveQueries(),
+                ContainerEq(MapType{{queryId1.toQueryId(), "my-query"}}));
   }
 
   EXPECT_THAT(registry.getActiveQueries(), IsEmpty());

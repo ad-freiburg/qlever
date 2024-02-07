@@ -255,5 +255,5 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::AbortException);
+      ad_utility::CancellationException);
 }

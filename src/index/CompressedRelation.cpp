@@ -40,7 +40,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   std::mutex blockIteratorMutex;
   auto readAndDecompressBlock =
       [&]() -> std::optional<std::pair<size_t, DecompressedBlock>> {
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     std::unique_lock lock{blockIteratorMutex};
     if (blockIterator == endBlock) {
       return std::nullopt;
@@ -77,7 +77,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       queueSize, numThreads, readAndDecompressBlock);
   for (IdTable& block : queue) {
     popTimer.stop();
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     ++details.numBlocksRead_;
     details.numElementsRead_ += block.numRows();
     co_yield block;
@@ -110,7 +110,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
                                               std::ref(details), columnIndices);
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
     return result;
   };
 
@@ -327,13 +327,13 @@ IdTable CompressedRelationReader::scan(
     firstBlockResult = readIncompleteBlock(*beginBlock);
     totalResultSize += firstBlockResult.value().size();
     ++beginBlock;
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
   }
   if (beginBlock < endBlock) {
     lastBlockResult = readIncompleteBlock(*(endBlock - 1));
     totalResultSize += lastBlockResult.value().size();
     endBlock--;
-    checkCancellation(cancellationHandle);
+    cancellationHandle->throwIfCancelled();
   }
 
   // Determine the total size of the result.
@@ -343,6 +343,7 @@ IdTable CompressedRelationReader::scan(
                                        return count + block.numRows_;
                                      });
   result.resize(totalResultSize);
+  cancellationHandle->throwIfCancelled();
 
   size_t rowIndexOfNextBlockStart = 0;
   // Lambda that appends a possibly incomplete block (the first or last block)
@@ -364,6 +365,7 @@ IdTable CompressedRelationReader::scan(
       };
 
   addIncompleteBlockIfExists(firstBlockResult);
+  cancellationHandle->throwIfCancelled();
 
   // Insert the complete blocks from the middle in parallel
   if (beginBlock < endBlock) {
@@ -392,7 +394,7 @@ IdTable CompressedRelationReader::scan(
       // block in parallel
 #pragma omp task
       {
-        if (!cancellationHandle->isCancelled("CompressedRelation scan")) {
+        if (!cancellationHandle->isCancelled()) {
           decompressLambda();
         }
       }
@@ -401,10 +403,11 @@ IdTable CompressedRelationReader::scan(
       rowIndexOfNextBlockStart += block.numRows_;
     }  // end of parallel region
   }
+  cancellationHandle->throwIfCancelled();
   // Add the last block.
   addIncompleteBlockIfExists(lastBlockResult);
   AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());
-  checkCancellation(cancellationHandle);
+  cancellationHandle->throwIfCancelled();
   return result;
 }
 
@@ -420,13 +423,15 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       std::back_inserter(allColumns));
   // A block is uniquely identified by its start position in the file.
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
-  DecompressedBlock block = blockCache_
-                                .computeOnce(cacheKey,
-                                             [&]() {
-                                               return readAndDecompressBlock(
-                                                   blockMetadata, allColumns);
-                                             })
-                                ._resultPointer->clone();
+  auto sharedResultFromCache =
+      blockCache_
+          .computeOnce(cacheKey,
+                       [&]() {
+                         return readAndDecompressBlock(blockMetadata,
+                                                       allColumns);
+                       })
+          ._resultPointer;
+  const DecompressedBlock& block = *sharedResultFromCache;
   const auto& col1Column = block.getColumn(0);
 
   // Find the range in the blockMetadata, that belongs to the same relation
@@ -449,17 +454,22 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     }
   }();
   auto numResults = subBlock.size();
-  block.erase(block.begin(),
-              block.begin() + (subBlock.begin() - col1Column.begin()));
-  block.resize(numResults);
+  auto beginIndex = subBlock.begin() - col1Column.begin();
+  auto endIndex = subBlock.end() - col1Column.begin();
 
+  DecompressedBlock result{columnIndices.size(), allocator_};
+  result.resize(numResults);
+  for (auto i : ad_utility::integerRange(columnIndices.size())) {
+    const auto& inputCol = block.getColumn(columnIndices[i]);
+    std::ranges::copy(inputCol.begin() + beginIndex,
+                      inputCol.begin() + endIndex, result.getColumn(i).begin());
+  }
   if (scanMetadata.has_value()) {
     auto& details = scanMetadata.value().get();
     ++details.numBlocksRead_;
-    details.numElementsRead_ += block.numRows();
+    details.numElementsRead_ += result.numRows();
   }
-  block.setColumnSubset(columnIndices);
-  return block;
+  return result;
 };
 
 // _____________________________________________________________________________

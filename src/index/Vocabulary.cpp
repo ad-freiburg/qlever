@@ -66,6 +66,16 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
     LOG(INFO) << "Number of words in external vocabulary: "
               << externalVocabulary_.size() << std::endl;
   }
+
+  // Precomputing ranges for IRIs, blank nodes, and literals, for faster
+  // processing of the `isIrI`, `isBlankNode`, and `isLiteral` functions.
+  //
+  // NOTE: We only need this for the vocabulary of the main index, where
+  // `I` is `VocabIndex`. However, since this is a negligible one-time cost,
+  // it does not harm to do it for all vocabularies.
+  prefixRangesIris_ = prefixRanges("<");
+  prefixRangesBlankNodes_ = prefixRanges("_:");
+  prefixRangesLiterals_ = prefixRanges("\"");
 }
 
 // _____________________________________________________________________________
@@ -95,23 +105,23 @@ void Vocabulary<S, C, I>::createFromSet(
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::isLiteral(const string& word) {
-  return word.size() > 0 && word[0] == '\"';
+bool Vocabulary<S, C, I>::stringIsLiteral(const string& s) {
+  return s.starts_with('"');
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(const string& word) const {
+bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.
 
   // If the string is not compressed, this means that this is a text vocabulary
   // and thus doesn't support externalization.
   if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!isLiteral(word)) {
-      return shouldEntityBeExternalized(word);
+    if (!stringIsLiteral(s)) {
+      return shouldEntityBeExternalized(s);
     } else {
-      return shouldLiteralBeExternalized(word);
+      return shouldLiteralBeExternalized(s);
     }
   } else {
     return false;

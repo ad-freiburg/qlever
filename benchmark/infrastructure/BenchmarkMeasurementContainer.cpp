@@ -52,7 +52,7 @@ ResultEntry::operator std::string() const {
 // ____________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const ResultEntry& resultEntry) {
   j = nlohmann::ordered_json{{"descriptor", resultEntry.descriptor_},
-                             {"measuredTime", resultEntry.measuredTime_},
+                             {"measured-time", resultEntry.measuredTime_},
                              {"metadata", resultEntry.metadata()}};
 }
 
@@ -106,8 +106,8 @@ ResultGroup::operator std::string() const {
 // ____________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const ResultGroup& resultGroup) {
   j = nlohmann::ordered_json{{"descriptor", resultGroup.descriptor_},
-                             {"resultEntries", resultGroup.resultEntries_},
-                             {"resultTables", resultGroup.resultTables_},
+                             {"result-entries", resultGroup.resultEntries_},
+                             {"result-tables", resultGroup.resultTables_},
                              {"metadata", resultGroup.metadata()}};
 }
 
@@ -342,7 +342,7 @@ size_t ResultTable::numColumns() const {
 // ____________________________________________________________________________
 void to_json(nlohmann::ordered_json& j, const ResultTable& resultTable) {
   j = nlohmann::ordered_json{{"descriptor", resultTable.descriptor_},
-                             {"columnNames", resultTable.columnNames_},
+                             {"column-names", resultTable.columnNames_},
                              {"entries", resultTable.entries_},
                              {"metadata", resultTable.metadata()}};
 }

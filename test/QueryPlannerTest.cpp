@@ -2,17 +2,20 @@
 // Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./QueryPlannerTestHelpers.h"
-#include "./util/TripleComponentTestHelpers.h"
+#include "QueryPlannerTestHelpers.h"
 #include "engine/QueryPlanner.h"
-#include "global/Constants.h"
 #include "parser/SparqlParser.h"
+#include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
 using Var = Variable;
+
+QueryPlanner makeQueryPlanner() {
+  return QueryPlanner{nullptr,
+                      std::make_shared<ad_utility::CancellationHandle<>>()};
+}
 
 TEST(QueryPlannerTest, createTripleGraph) {
   using TripleGraph = QueryPlanner::TripleGraph;
@@ -27,7 +30,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
         "SELECT ?x ?z \n "
         "WHERE \t {?x :myrel ?y. ?y ns:myrel ?z.?y xxx:rel2 "
         "<http://abc.de>}");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(
         &pq._rootGraphPattern._graphPatterns[0].getBasic());
     TripleGraph expected =
@@ -57,7 +60,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     TripleGraph expected =
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
@@ -80,7 +83,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE { ?x <is-a> <Book> . \n"
         "?x <Author> <Anthony_Newman_(Author)> }");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
 
     TripleGraph expected =
@@ -103,7 +106,7 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(2u, tg._nodeMap.find(0)->second->_variables.size());
     ASSERT_EQ(2u, tg._nodeMap.find(1)->second->_variables.size());
@@ -159,7 +162,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ASSERT_EQ(3u, tg._adjLists.size());
     ad_utility::HashSet<size_t> lo;
@@ -179,7 +182,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {<A> <B> ?x. ?x <C> ?y. ?y <X> <Y>}");
-    QueryPlanner qp(nullptr);
+    QueryPlanner qp = makeQueryPlanner();
     auto tg = qp.createTripleGraph(&pq.children()[0].getBasic());
     ad_utility::HashSet<size_t> lo;
     auto out = tg.bfsLeaveOut(0, lo);
@@ -255,7 +258,7 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
       "ORDER BY ?a");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(27493u, qet.getCostEstimate());
   ASSERT_EQ(qet.getCacheKey(),
@@ -286,7 +289,7 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?y) }");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(qet.getCacheKey(),
             "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
@@ -300,7 +303,7 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?z) }");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_EQ(qet.getCacheKey(),
             "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
@@ -435,7 +438,7 @@ TEST(QueryExecutionTreeTest, testCyclicQuery) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?x ?y ?m WHERE { ?x <Spouse_(or_domestic_partner)> ?y . "
       "?x <Film_performance> ?m . ?y <Film_performance> ?m }");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   QueryExecutionTree qet = qp.createExecutionTree(pq);
 
   // There are four possible outcomes of this test with the same size
@@ -556,14 +559,14 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
       "FILTER (?1 != fb:m.0vmt) .\n"
       "FILTER (?1 != fb:m.018mts)"
       "} LIMIT 300");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   QueryExecutionTree qet = qp.createExecutionTree(pq);
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?1"}));
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
 }
 
 TEST(QueryPlannerTest, testSimpleOptional) {
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
 
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?a ?b \n "
@@ -588,7 +591,7 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
   // With only one variable, there are always two permutations that will yield
-  // exactly the same result. The query planner consistently chosses one of
+  // exactly the same result. The query planner consistently chooses one of
   // them.
   h::expect("SELECT * WHERE { ?s <p> <o> }",
             h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS}));
@@ -854,7 +857,7 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
 
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . }");
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
       ::testing::ContainsRegex(
@@ -870,7 +873,7 @@ TEST(QueryPlannerTest, TooManyTriples) {
   }
   query = absl::StrCat(query, "}");
   ParsedQuery pq = SparqlParser::parseQuery(query);
-  QueryPlanner qp(nullptr);
+  QueryPlanner qp = makeQueryPlanner();
   AD_EXPECT_THROW_WITH_MESSAGE(
       qp.createExecutionTree(pq),
       ::testing::ContainsRegex("At most 64 triples allowed at the moment."));
