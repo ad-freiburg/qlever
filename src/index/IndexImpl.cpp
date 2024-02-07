@@ -18,7 +18,7 @@
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 #include "parser/ParallelParseBuffer.h"
 #include "util/BatchedPipeline.h"
 #include "util/CachingMemoryResource.h"
@@ -53,16 +53,6 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  LOG(INFO) << "Converting external vocabulary to binary format ..."
-            << std::endl;
-  vocab_.externalizeLiteralsFromTextFile(
-      onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME,
-      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-  deleteTemporaryFile(onDiskBase_ + EXTERNAL_LITS_TEXT_FILE_NAME);
-  // clear vocabulary to save ram (only information from partial binary files
-  // used from now on). This will preserve information about externalized
-  // Prefixes etc.
-  vocab_.clear();
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
       NUM_TRIPLES_PER_PARTIAL_VOCAB);
@@ -261,6 +251,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
   createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
                               std::move(blockGenerator), *thirdSorter);
+  secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
@@ -274,6 +265,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
     // useful for generic unit testing, but not needed otherwise.
     thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
   }
+  hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
 }
 // _____________________________________________________________________________
@@ -303,9 +295,10 @@ void IndexImpl::createFromFile(const string& filename) {
            id.getDatatype() == Datatype::Undefined;
   };
 
+  auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(indexBuilderData.sorter_->getSortedOutput());
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
 
   if (!loadAllPermutations_) {
     // Only two permutations, no patterns, in this case the `firstSorter` is a
@@ -319,6 +312,8 @@ void IndexImpl::createFromFile(const string& filename) {
     auto secondSorter = makeSorter<SecondPermutation>("second");
     createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                std::move(firstSorterWithUnique), secondSorter);
+    firstSorter.clearUnderlying();
+
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
     createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
@@ -333,6 +328,7 @@ void IndexImpl::createFromFile(const string& filename) {
     auto patternOutput =
         createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
                                    std::move(firstSorterWithUnique));
+    firstSorter.clearUnderlying();
     auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
                                                isQleverInternalId);
     createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
@@ -464,7 +460,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   if (vocabPrefixCompressed_) {
     LOG(INFO) << "Merging partial vocabularies in byte order "
               << "(internal only) ..." << std::endl;
-    VocabularyMerger m;
     auto compressionOutfile = ad_utility::makeOfstream(
         onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyActionCompression =
@@ -472,10 +467,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
                              << '\n';
         };
-    m._noIdMapsAndIgnoreExternalVocab = true;
-    auto mergeResult = m.mergeVocabulary(
+    auto externalActionCompression = ad_utility::noop;
+    auto mergeResult = ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, memoryLimitIndexBuilding());
+        internalVocabularyActionCompression, externalActionCompression,
+        memoryLimitIndexBuilding(),
+        ad_utility::vocabulary_merger::WithIdMaps::False);
     sizeInternalVocabulary = mergeResult.numWordsTotal_;
     LOG(INFO) << "Number of words in internal vocabulary: "
               << sizeInternalVocabulary << std::endl;
@@ -493,8 +490,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   LOG(INFO) << "Merging partial vocabularies in Unicode order "
             << "(internal and external) ..." << std::endl;
-  const VocabularyMerger::VocabularyMetaData mergeRes = [&]() {
-    VocabularyMerger v;
+  const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
@@ -504,9 +500,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     auto internalVocabularyAction = [&wordWriter](const auto& word) {
       wordWriter.push(word.data(), word.size());
     };
-    return v.mergeVocabulary(onDiskBase_, numFiles, sortPred,
-                             internalVocabularyAction,
-                             memoryLimitIndexBuilding());
+
+    auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
+        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    return ad_utility::vocabulary_merger::mergeVocabulary(
+        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
+        externalVocabularyAction, memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
@@ -623,7 +622,8 @@ IndexImpl::convertPartialToGlobalIds(
       return std::nullopt;
     }
     std::string mmapFilename = absl::StrCat(onDiskBase_, PARTIAL_MMAP_IDS, idx);
-    auto map = IdMapFromPartialIdMapFile(mmapFilename);
+    auto map =
+        ad_utility::vocabulary_merger::IdMapFromPartialIdMapFile(mmapFilename);
     // Delete the temporary file in which we stored this map
     deleteTemporaryFile(mmapFilename);
     return std::pair{idx, std::move(map)};
@@ -1198,6 +1198,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
     std::unique_ptr<ItemMapArray> items, auto localIds,
     ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr) {
+  using namespace ad_utility::vocabulary_merger;
   LOG(DEBUG) << "Input triples read in this section: " << numLines << std::endl;
   LOG(DEBUG)
       << "Triples processed, also counting internal triples added by QLever: "

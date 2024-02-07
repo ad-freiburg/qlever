@@ -31,10 +31,14 @@ static const size_t PARSER_BATCH_SIZE = 1'000'000;
 static const size_t PARSER_MIN_TRIPLES_AT_ONCE = 10'000;
 
 // When reading from a file, Chunks of this size will
-// be fed to the parser at once (10 MiB)
+// be fed to the parser at once (10 MiB).
 inline std::atomic<size_t> FILE_BUFFER_SIZE = 10 * (1ul << 20);
 
 inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 50'000;
+
+// When merging the vocabulary, this many finished words are buffered
+// before they are written to the output.
+inline std::atomic<size_t> BATCH_SIZE_VOCABULARY_MERGE = 10'000'000;
 
 // When the BZIP2 parser encouters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the

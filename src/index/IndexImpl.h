@@ -19,7 +19,7 @@
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>
-#include <index/VocabularyGenerator.h>
+#include <index/VocabularyMerger.h>
 #include <parser/ContextFileParser.h>
 #include <parser/TripleComponent.h>
 #include <parser/TurtleParser.h>
@@ -71,7 +71,7 @@ using ThirdPermutation = SortByPSO;
 // Several data that are passed along between different phases of the
 // index builder.
 struct IndexBuilderDataBase {
-  VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   // The prefixes that are used for the prefix compression.
   std::vector<std::string> prefixes_;
 };
