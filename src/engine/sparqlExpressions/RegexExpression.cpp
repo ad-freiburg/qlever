@@ -320,8 +320,9 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
 // ____________________________________________________________________________
 void RegexExpression::checkCancellation(
-    const sparqlExpression::EvaluationContext* context) {
-  context->cancellationHandle_->throwIfCancelled("RegexExpression");
+    const sparqlExpression::EvaluationContext* context,
+    ad_utility::source_location location) {
+  context->cancellationHandle_->throwIfCancelled(location);
 }
 
 }  // namespace sparqlExpression

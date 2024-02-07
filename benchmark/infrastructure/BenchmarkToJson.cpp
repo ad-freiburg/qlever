@@ -19,9 +19,9 @@ void to_json(nlohmann::ordered_json& j, const BenchmarkResults& results) {
   // be serialized, because that is the management class for measured
   // benchmarks. We just want the measured benchmarks.
   j = nlohmann::ordered_json{
-      {"singleMeasurements", results.getSingleMeasurements()},
-      {"resultGroups", results.getGroups()},
-      {"resultTables", results.getTables()}};
+      {"single-measurements", results.getSingleMeasurements()},
+      {"result-groups", results.getGroups()},
+      {"result-tables", results.getTables()}};
 }
 
 /*
@@ -68,7 +68,7 @@ nlohmann::ordered_json zipBenchmarkClassAndBenchmarkResultsToJson(
       benchmarkClassAndBenchmarkResults, [](const auto& pair) {
         return nlohmann::ordered_json{
             {"name", pair.first->name()},
-            {"general metadata", pair.first->getGeneralMetadata()},
+            {"general-metadata", pair.first->getGeneralMetadata()},
             {"measurements", pair.second}};
       });
 }

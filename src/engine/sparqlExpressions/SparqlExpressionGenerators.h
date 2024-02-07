@@ -108,7 +108,7 @@ inline auto valueGetterGenerator = []<typename ValueGetter, SingleExpressionResu
                                        Input&& input, ValueGetter&& valueGetter) {
   auto transformation = [ context, valueGetter ]<typename I>(I && i)
       requires std::invocable<ValueGetter, I&&, EvaluationContext*> {
-    context->cancellationHandle_->throwIfCancelled("Value getter generator");
+    context->cancellationHandle_->throwIfCancelled();
     return valueGetter(AD_FWD(i), context);
   };
   return makeGenerator(std::forward<Input>(input), numElements, context, transformation);

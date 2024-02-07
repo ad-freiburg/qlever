@@ -459,6 +459,7 @@ class QueryPlanner {
   [[nodiscard]] bool isInTestMode() const { return _qec == nullptr; }
 
   /// Helper function to check if the assigned `cancellationHandle_` has
-  /// been cancelled yet.
-  void checkCancellation() const;
+  /// been cancelled yet and throw an exception if this is the case.
+  void checkCancellation(ad_utility::source_location location =
+                             ad_utility::source_location::current()) const;
 };
