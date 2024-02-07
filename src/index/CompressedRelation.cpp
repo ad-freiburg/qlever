@@ -517,14 +517,14 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     const CompressedRelationMetadata& relationMetadata,
     const std::vector<CompressedBlockMetadata>& allBlocksMetadata) const {
-  IdTable table(2, allocator_);
+  IdTableStatic<2> table(allocator_);
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
       getBlocksFromMetadata(relationMetadata, std::nullopt, allBlocksMetadata);
 
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `col1Id`. For the others, we can determine
   // the count from the metadata.
-  Id currentCol1Id{};
+  std::optional<Id> currentCol1Id;
   size_t currentCount = 0;
   size_t rowIndex = std::numeric_limits<size_t>::max();
   // Helper lambda that processes a single `col1Id` (with `howMany`
@@ -532,12 +532,11 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
   // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
   // are reset.
   auto processCol1Id = [&table, &rowIndex, &currentCol1Id, &currentCount](
-                           Id col1Id, size_t howMany, bool isNew) {
-    if (isNew) {
-      // For the very first `col1Id`, we don't want to add a row to the table.
-      if (rowIndex != std::numeric_limits<size_t>::max()) {
+                           std::optional<Id> col1Id, size_t howMany) {
+    if (col1Id != currentCol1Id) {
+      if (currentCol1Id.has_value()) {
         table.emplace_back();
-        table(rowIndex, 0) = currentCol1Id;
+        table(rowIndex, 0) = currentCol1Id.value();
         table(rowIndex, 1) = Id::makeFromInt(currentCount);
         rowIndex++;
       } else {
@@ -554,24 +553,25 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     Id lastCol1Id = blockMetadata.lastTriple_.col1Id_;
     if (firstCol1Id == lastCol1Id) {
       // The whole block has the same `col1Id`.
-      bool isNew = (i == 0 || firstCol1Id != currentCol1Id);
-      processCol1Id(firstCol1Id, blockMetadata.numRows_, isNew);
+      processCol1Id(firstCol1Id, blockMetadata.numRows_);
     } else {
       // Multiple `col1Id`s in one block.
       std::array<ColumnIndex, 1> columnIndices{0u};
-      const auto& block = readPossiblyIncompleteBlock(
-          relationMetadata, std::nullopt, blockMetadata, std::nullopt,
-          columnIndices);
+      const auto& block =
+          i == 0 ? readPossiblyIncompleteBlock(relationMetadata, std::nullopt,
+                                               blockMetadata, std::nullopt,
+                                               columnIndices)
+                 : readAndDecompressBlock(blockMetadata, columnIndices);
+      // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
         Id col1Id = block(j, 0);
-        bool isNew = (i == 0 && j == 0) || col1Id != currentCol1Id;
-        processCol1Id(col1Id, 1, isNew);
+        processCol1Id(col1Id, 1);
       }
     }
   }
   // Don't forget to add the last `col1Id` and its count.
-  processCol1Id(Id{}, 0, true);
-  return table;
+  processCol1Id(std::nullopt, 0);
+  return std::move(table).toDynamic();
 }
 
 // ____________________________________________________________________________

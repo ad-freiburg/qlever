@@ -449,52 +449,47 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
 
 // ____________________________________________________________________________
 bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
-  // The child must be an `IndexScan` of width 2 and the predicate must be
-  // fixed and contained in our index.
+  // The child must be an `IndexScan` with exactly two variables.
   auto* indexScan =
       dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
-  if (!indexScan || indexScan->getResultWidth() != 2) {
+  if (!indexScan || indexScan->numVariables() != 2) {
     return false;
   }
+  const auto& permutedTriple = indexScan->getPermutedTriple();
   const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
-  std::optional<Id> predicateId =
-      indexScan->getPredicate().toValueId(vocabulary);
-  if (!predicateId.has_value()) {
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(vocabulary);
+  if (!col0Id.has_value()) {
     return false;
   }
 
-  // There must be exactly one GROUP BY variable and it must be the subject or
-  // the object.
+  // There must be exactly one GROUP BY variable and the result of the index
+  // scan must be sorted by it.
   if (_groupByVariables.size() != 1) {
     return false;
   }
   const auto& groupByVariable = _groupByVariables.at(0);
-  if (groupByVariable != indexScan->getObject() &&
-      groupByVariable != indexScan->getSubject()) {
-    return false;
-  }
+  AD_CORRECTNESS_CHECK(
+      *(permutedTriple[1]) == groupByVariable,
+      "Result of index scan for GROUP BY must be sorted by the "
+      "GROUP BY variable, this is a bug in the query planner",
+      permutedTriple[1]->toString(), groupByVariable.name());
 
-  // There must be exactly one alias, which is a non-distinct count of the
-  // subject or of the object (which one makes no difference).
+  // There must be exactly one alias, which is a non-distinct count of one of
+  // the two variables of the index scan.
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
-  bool countedVariableIsSubjectOrObject =
+  bool countedVariableIsOneOfIndexScanVariables =
       countedVariable.has_value() &&
-      (countedVariable.value() == indexScan->getSubject() ||
-       countedVariable.value() == indexScan->getObject());
-  if (!countedVariableIsSubjectOrObject) {
+      (countedVariable.value() == *(permutedTriple[1]) ||
+       countedVariable.value() == *(permutedTriple[2]));
+  if (!countedVariableIsOneOfIndexScanVariables) {
     return false;
   }
-
-  // Get the right permutation.
-  Permutation::Enum permutationEnum = groupByVariable == indexScan->getSubject()
-                                          ? Permutation::PSO
-                                          : Permutation::POS;
-  const auto& permutation =
-      getExecutionContext()->getIndex().getPimpl().getPermutation(
-          permutationEnum);
 
   // Compute the result.
-  *result = permutation.getDistinctCol1IdsAndCounts(predicateId.value());
+  const auto& permutation =
+      getExecutionContext()->getIndex().getPimpl().getPermutation(
+          indexScan->permutation());
+  *result = permutation.getDistinctCol1IdsAndCounts(col0Id.value());
   return true;
 }
 

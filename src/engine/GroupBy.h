@@ -144,7 +144,7 @@ class GroupBy : public Operation {
   // NOTE: This is exactly what we need for context-sensitive object AC query
   // without context.
   //
-  // TODO: We could compute this in the same way when omittin the ?y or the
+  // TODO: We could compute this in the same way when omitting the ?y or the
   // COUNT. And it doesn't matter whether the COUNT is of ?x or ?y.
   bool computeGroupByObjectWithCount(IdTable* result);
 

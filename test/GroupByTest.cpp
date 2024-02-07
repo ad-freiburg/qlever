@@ -361,6 +361,9 @@ struct GroupByOptimizations : ::testing::Test {
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
+  Tree yxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::POS,
+      SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
   Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
@@ -1294,33 +1297,39 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountDistinctX, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountXTwice, xyScan));
 
-  // Check the results for the given `xyScan`, which produces five triples,
-  // with two different subjects and five different objects; see `turtlInput`
-  // at the beginning of this file.
+  // The following two checks use a scan of the `<label>` predicate from the
+  // test index; see `turtleInput` above. There are five triples, four with
+  // subject `<x>` and one with subject `<z>`. The objects are all different.
   //
-  // TODO: Don't we have code by now to assert a particular result in one line.
+  // NOTE: The method we are testing here always produces its result sorted by
+  // the first column (although the SPARQL standard does not require this).
+
+  // TODO: When constructing the `GroupBy` operations below with a scan that
+  // does not macht the group by variables (e.g., `variablesOnlyY` with
+  // `xyScan`), the child of the `GroupBy` operation is not even an `IndexScan`.
+  // Why is that?.
+
+  // Group by subject.
+  auto getId = makeGetId(qec->getIndex());
   {
     IdTable result{qec->getAllocator()};
     auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
     ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
-    ASSERT_EQ(result.size(), 2);
-    ASSERT_EQ(result.numColumns(), 2);
-    ASSERT_EQ(result(0, 1), Id::makeFromInt(4));
-    ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
+    ASSERT_EQ(result, makeIdTableFromVector(
+                          {{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
   }
 
-  // {
-  //   IdTable result{qec->getAllocator()};
-  //   auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountX, xyScan};
-  //   ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
-  //   ASSERT_EQ(result.size(), 5);
-  //   ASSERT_EQ(result.numColumns(), 2);
-  //   ASSERT_EQ(result(0, 1), Id::makeFromInt(1));
-  //   ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
-  //   ASSERT_EQ(result(2, 1), Id::makeFromInt(1));
-  //   ASSERT_EQ(result(3, 1), Id::makeFromInt(1));
-  //   ASSERT_EQ(result(4, 1), Id::makeFromInt(1));
-  // }
+  // Group by object.
+  {
+    IdTable result{qec->getAllocator()};
+    auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
+    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
+    ASSERT_EQ(result, makeIdTableFromVector({{getId("\"A\""), I(1)},
+                                             {getId("\"alpha\""), I(1)},
+                                             {getId("\"älpha\""), I(1)},
+                                             {getId("\"Beta\""), I(1)},
+                                             {getId("\"zz\"@en"), I(1)}}));
+  }
 }
 
 // _____________________________________________________________________________
