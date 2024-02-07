@@ -53,22 +53,23 @@ class ConfigOptions : public BenchmarkInterface {
 
     manager.addOption("date", "The current date.", &dateString_, "22.3.2023"s);
 
-    auto numSigns = manager.addOption("numSigns", "The number of street signs.",
-                                      &numberOfStreetSigns_, 10000);
+    auto numSigns =
+        manager.addOption("num-signs", "The number of street signs.",
+                          &numberOfStreetSigns_, 10000);
     manager.addValidator([](const int& num) { return num >= 0; },
                          "The number of street signs must be at least 0!",
                          "Negative numbers, or floating point numbers, are not "
-                         "allowed for the configuration option \"numSigns\".",
+                         "allowed for the configuration option \"num-signs\".",
                          numSigns);
 
-    manager.addOption("CoinFlipTry", "The number of succesful coin flips.",
+    manager.addOption("coin-flip-try", "The number of succesful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
 
     // Sub manager can be used to organize things better. They are basically
     // just a path prefix for all the options inside it.
     ad_utility::ConfigManager& subManager{
-        manager.addSubManager({"Accounts"s, "Personal"s})};
-    subManager.addOption("Steve"s, "Steves saving account balance.",
+        manager.addSubManager({"accounts"s, "personal"s})};
+    subManager.addOption("steve"s, "Steves saving account balance.",
                          &balanceOnStevesSavingAccount_, -41.9f);
   }
 };
@@ -104,7 +105,7 @@ class BMSingleMeasurements : public ConfigOptions {
         });
 
     // Adding some basic metadata.
-    multipleTimes.metadata().addKeyValuePair("Amount of exponentiations",
+    multipleTimes.metadata().addKeyValuePair("amount-of-exponentiations",
                                              10'000'000'000);
 
     return results;
@@ -138,34 +139,34 @@ class BMGroups : public ConfigOptions {
 
     // Measuring functions.
     auto& loopAddGroup = results.addGroup("loopAdd");
-    loopAddGroup.metadata().addKeyValuePair("Operator", "+");
+    loopAddGroup.metadata().addKeyValuePair("operator", "+");
 
     auto& loopMultiplyGroup = results.addGroup("loopMultiply");
-    loopMultiplyGroup.metadata().addKeyValuePair("Operator", "*");
+    loopMultiplyGroup.metadata().addKeyValuePair("operator", "*");
 
     auto& addMember1 =
         loopAddGroup.addMeasurement("1+1", [&loopAdd]() { loopAdd(1, 1); });
-    addMember1.metadata().addKeyValuePair("Result", 2);
+    addMember1.metadata().addKeyValuePair("result", 2);
 
     auto& addMember2 =
         loopAddGroup.addMeasurement("42+69", [&loopAdd]() { loopAdd(42, 69); });
-    addMember2.metadata().addKeyValuePair("Result", 42 + 69);
+    addMember2.metadata().addKeyValuePair("result", 42 + 69);
 
     auto& addMember3 = loopAddGroup.addMeasurement(
         "10775+24502", [&loopAdd]() { loopAdd(10775, 24502); });
-    addMember3.metadata().addKeyValuePair("Result", 10775 + 24502);
+    addMember3.metadata().addKeyValuePair("result", 10775 + 24502);
 
     auto& multiplicationMember1 = loopMultiplyGroup.addMeasurement(
         "1*1", [&loopMultiply]() { loopMultiply(1, 1); });
-    multiplicationMember1.metadata().addKeyValuePair("Result", 1);
+    multiplicationMember1.metadata().addKeyValuePair("result", 1);
 
     auto& multiplicationMember2 = loopMultiplyGroup.addMeasurement(
         "42*69", [&loopMultiply]() { loopMultiply(42, 69); });
-    multiplicationMember2.metadata().addKeyValuePair("Result", 42 * 69);
+    multiplicationMember2.metadata().addKeyValuePair("result", 42 * 69);
 
     auto& multiplicationMember3 = loopMultiplyGroup.addMeasurement(
         "10775*24502", [&loopMultiply]() { loopMultiply(10775, 24502); });
-    multiplicationMember3.metadata().addKeyValuePair("Result", 10775 * 24502);
+    multiplicationMember3.metadata().addKeyValuePair("result", 10775 * 24502);
 
     // Addtables.
     ResultTable& addTable =
@@ -216,7 +217,7 @@ class BMTables : public ConfigOptions {
         "Adding exponents", {"2^10", "2^11", "Values written out"},
         {"", "2^10", "2^11"});
     // Adding some metadata.
-    tableAddingExponents.metadata().addKeyValuePair("Manually set fields",
+    tableAddingExponents.metadata().addKeyValuePair("manually-set-fields",
                                                     "Row 2");
 
     // Measure the calculating of the exponents.
@@ -274,9 +275,9 @@ class BMConfigurationAndMetadataExample : public ConfigOptions {
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("date", dateString_);
-    meta.addKeyValuePair("numberOfStreetSigns", numberOfStreetSigns_);
-    meta.addKeyValuePair("wonOnTryX", wonOnTryX_);
-    meta.addKeyValuePair("Balance on Steves saving account",
+    meta.addKeyValuePair("number-of-street-signs", numberOfStreetSigns_);
+    meta.addKeyValuePair("won-on-try-x", wonOnTryX_);
+    meta.addKeyValuePair("balance-on-steves-saving-account",
                          balanceOnStevesSavingAccount_);
     return BenchmarkResults{};
   }
