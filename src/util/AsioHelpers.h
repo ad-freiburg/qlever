@@ -45,12 +45,12 @@ namespace net = boost::asio;
 //     sanitizer (correctly) complains.
 template <typename Executor, std::invocable F>
 requires(!std::is_void_v<std::invoke_result_t<F>>)
-net::awaitable<std::invoke_result_t<F>> runOnExecutor(const Executor& exec,
+net::awaitable<std::invoke_result_t<F>> runOnExecutor(Executor exec,
                                                       F f) {
   using Res = std::invoke_result_t<F>;
   std::variant<std::monostate, Res, std::exception_ptr> res;
   std::atomic_flag flag(false);
-  net::dispatch(exec, [&]() {
+  net::post(exec, [&]() {
     try {
       res = std::invoke(std::move(f));
     } catch (...) {
@@ -67,7 +67,7 @@ net::awaitable<std::invoke_result_t<F>> runOnExecutor(const Executor& exec,
 
 template <typename Executor, std::invocable F>
 requires(std::is_void_v<std::invoke_result_t<F>>)
-net::awaitable<void> runOnExecutor(const Executor& exec, F f) {
+net::awaitable<void> runOnExecutor(Executor exec, F f) {
   std::optional<std::exception_ptr> ex;
   std::atomic_flag flag(false);
   net::dispatch(exec, [&]() {
