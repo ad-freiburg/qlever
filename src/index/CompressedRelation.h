@@ -66,15 +66,16 @@ struct CompressedBlockMetadata {
   // triples depends on the stored permutation: For example, in the PSO
   // permutation, the first element of the triples is the P, the second one is
   // the S and the third one is the O. Note that the first key of the
-  // permutation (for example the P in the PSO permutation) is not stored in the
-  // blocks, but has to be retrieved via the corresponding
+  // permutation (for example the P in the PSO permutation) is not stored in
+  // the blocks, but has to be retrieved via the corresponding
   // `CompressedRelationMetadata`.
+  //
   // NOTE: Strictly speaking, storing one of `firstTriple_` or `lastTriple_`
-  // would probably suffice. However, they make several functions much easier to
-  // implement and don't really harm with respect to space efficiency. For
+  // would probably suffice. However, they make several functions much easier
+  // to implement and don't really harm with respect to space efficiency. For
   // example, for Wikidata, we have only around 50K blocks with block size 8M
-  // and around 5M blocks with block size 80K; even the latter takes only half a
-  // GB in total.
+  // and around 5M blocks with block size 80K; even the latter takes only half
+  // a GB in total.
   struct PermutedTriple {
     Id col0Id_;
     Id col1Id_;
@@ -509,16 +510,15 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData,
       ColumnIndicesRef columnIndices) const;
 
-  // Read the block that is identified by the `blockMetadata` from the `file`,
-  // decompress and return it. Before returning, delete all rows where the col0
-  // ID / relation ID does not correspond with the `relationMetadata`, or where
-  // the `col1Id` doesn't match. For this to work, the block has to be one of
-  // the blocks that actually store triples from the given `relationMetadata`'s
-  // relation, else the behavior is undefined. Only return the columns specified
-  // by the `columnIndices`. Note: Do not call this function for blocks of which
-  // you know that you need them completely, as then this function wastes some
-  // time and space. It is only typically needed for the first and last block of
-  // certain scans.
+  // Read the block identified by `blockMetadata` from disk, decompress it, and
+  // return the part that matches `col1Id` (or the whole block if `col1Id` is
+  // `nullopt`). The block must contain triples from the relation identified by
+  // `relationMetadata`. If `scanMetadata` is not `nullopt`, update information
+  // about the number of blocks and elements read.
+  //
+  // NOTE: When all triples in the block match the `col1Id`, this method makes
+  // an unnecessary copy of the block. Therefore, if you know that you need the
+  // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
       const CompressedRelationMetadata& relationMetadata,
       std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
