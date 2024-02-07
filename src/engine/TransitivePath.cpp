@@ -324,7 +324,7 @@ ResultTable TransitivePath::computeResult() {
 
   size_t subWidth = subRes->idTable().numColumns();
 
-  bool useFallback = false;
+  bool useFallback = !RuntimeParameters().get<"use-graphblas">();
 
   auto computeForOneSide = [this, &idTable, subRes, subWidth, useFallback](
                                auto& boundSide,
@@ -432,8 +432,9 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
     p->variableColumns_[variable] = columnIndexWithType;
-    p->resultWidth_++;
+    //p->resultWidth_++;
   }
+  p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
   return p;
 }
 
