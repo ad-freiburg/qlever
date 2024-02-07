@@ -10,6 +10,7 @@
 #include <boost/asio/associated_cancellation_slot.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_executor.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/asio/dispatch.hpp>
 #include <boost/asio/post.hpp>
 #include <boost/asio/use_awaitable.hpp>
@@ -45,18 +46,25 @@ namespace net = boost::asio;
 //     sanitizer (correctly) complains.
 template <typename Executor, std::invocable F>
 requires(!std::is_void_v<std::invoke_result_t<F>>)
-net::awaitable<std::invoke_result_t<F>> runOnExecutor(Executor exec,
-                                                      F f) {
+net::awaitable<std::invoke_result_t<F>> runOnExecutor(Executor exec, F f) {
+  /*
+  auto run = [](auto f) -> net::awaitable<std::invoke_result_t<F>> {
+    co_return std::invoke(f);
+  };
+
+  return net::co_spawn(exec, run(std::move(f)), net::use_awaitable);
+   */
   using Res = std::invoke_result_t<F>;
   std::variant<std::monostate, Res, std::exception_ptr> res;
   std::atomic_flag flag(false);
-  net::post(exec, [&]() {
+  net::dispatch(exec, [&]() {
     try {
       res = std::invoke(std::move(f));
     } catch (...) {
       res.template emplace<std::exception_ptr>(std::current_exception());
     }
     flag.test_and_set();
+    flag.notify_all();
   });
   flag.wait(false);
   if (std::holds_alternative<std::exception_ptr>(res)) {
