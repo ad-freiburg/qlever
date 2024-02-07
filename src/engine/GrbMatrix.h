@@ -34,6 +34,7 @@ class GrbMatrix {
 
   // Move constructor
   GrbMatrix(GrbMatrix&& otherMatrix) = default;
+  GrbMatrix& operator=(GrbMatrix&&) = default;
 
   // Disable copy constructor and assignment operator
   GrbMatrix(const GrbMatrix&) = delete;

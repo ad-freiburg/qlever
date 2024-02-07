@@ -1,7 +1,4 @@
-#include <GraphBLAS.h>
 #include <gtest/gtest.h>
-
-#include <cstdio>
 
 #include "engine/GrbMatrix.h"
 #include "gmock/gmock.h"
