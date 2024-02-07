@@ -333,12 +333,21 @@ struct GroupByOptimizations : ::testing::Test {
   Variable varA{"?a"};
 
   std::string turtleInput =
-      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
-      "<a> <is-a> <f> . <a> <is> 20 . <b> <is-a> <f> . <b> <is> 40.0 . <c> "
-      "<is-a> <g> . <c> <is> 100 . <x> <is-a> <f> . <x> <is> \"A\" . "
-      "<x> "
-      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-      "\"zz\"@en";
+      "<x> <label> \"alpha\" . "
+      "<x> <label> \"älpha\" . "
+      "<x> <label> \"A\" . "
+      "<a> <is-a> <f> . "
+      "<a> <is> 20 . "
+      "<b> <is-a> <f> . "
+      "<b> <is> 40.0 . "
+      "<c> <is-a> <g> . "
+      "<c> <is> 100 . "
+      "<x> <is-a> <f> . "
+      "<x> <is> \"A\" . "
+      "<x> <label> \"Beta\" . "
+      "<x> <is-a> <y> . "
+      "<y> <is-a> <x> . "
+      "<z> <label> \"zz\"@en .";
 
   QueryExecutionContext* qec = getQec(turtleInput);
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
@@ -433,11 +442,13 @@ struct GroupByOptimizations : ::testing::Test {
   SparqlExpression::Ptr varXExpression2 =
       std::make_unique<VariableExpression>(varX);
   SparqlExpressionPimpl countXPimpl = makeCountPimpl(varX, false);
+  SparqlExpressionPimpl countYPimpl = makeCountPimpl(varY, false);
   SparqlExpressionPimpl countDistinctXPimpl = makeCountPimpl(varX, true);
   std::vector<Alias> aliasesXAsV{Alias{varxExpressionPimpl, Variable{"?v"}}};
   std::vector<Alias> aliasesCountDistinctX{
       Alias{countDistinctXPimpl, Variable{"?count"}}};
   std::vector<Alias> aliasesCountX{Alias{countXPimpl, Variable{"?count"}}};
+  std::vector<Alias> aliasesCountY{Alias{countYPimpl, Variable{"?count"}}};
 
   std::vector<Alias> aliasesCountXTwice{
       Alias{makeCountPimpl(varX, false), Variable{"?count"}},
@@ -1203,7 +1214,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   testFailure(variablesOnlyX, aliasesCountX, xyzScanSortedByX);
 
   // Must (currently) have exactly one alias that is a count.
-  // A distinct count is only supporte if the triple has three variables.
+  // A distinct count is only supported if the triple has three variables.
   testFailure(emptyVariables, emptyAliases, xyzScanSortedByX);
   testFailure(emptyVariables, aliasesCountDistinctX, xyScan);
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
@@ -1250,6 +1261,66 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     // <x>, <y>, <z>, <a>, <b> and <c>.
     ASSERT_EQ(result(0, 0), Id::makeFromInt(6));
   }
+}
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
+  // Construct a GROUP BY operation from the given GROUP BY variables, aliases,
+  // and index scan. Return `true` if and only if the optimization from
+  // `computeGroupByForSingleIndexScan` is suited or this operation.
+  //
+  // TODO: This appears similarly in each TEST_F(GroupByOptimizations, ...)
+  // separately. Define it once and use it in all tests. Also note the
+  // `callSpecializedMethod`, which serves the same purpose as the
+  // `testWithBothInterfaces` in the other tests, but with much less code.
+  auto isSuited = [this](const auto& groupByVariables, const auto& aliases,
+                         const auto& indexScan,
+                         bool callSpecializedMethod = true) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    IdTable result{qec->getAllocator()};
+    return callSpecializedMethod
+               ? groupBy.computeGroupByObjectWithCount(&result)
+               : groupBy.computeOptimizedGroupByIfPossible(&result);
+  };
+
+  // The index scan must have exactly two variables, there must be exactly one
+  // GROUP BY variable, and exactly one alias that is a non-DISTINCT count.
+  ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, true));
+  ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, false));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xyzScanSortedByX));
+  ASSERT_FALSE(isSuited(emptyVariables, aliasesCountX, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, emptyAliases, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesXAsV, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountDistinctX, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountXTwice, xyScan));
+
+  // Check the results for the given `xyScan`, which produces five triples,
+  // with two different subjects and five different objects; see `turtlInput`
+  // at the beginning of this file.
+  //
+  // TODO: Don't we have code by now to assert a particular result in one line.
+  {
+    IdTable result{qec->getAllocator()};
+    auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
+    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
+    ASSERT_EQ(result.size(), 2);
+    ASSERT_EQ(result.numColumns(), 2);
+    ASSERT_EQ(result(0, 1), Id::makeFromInt(4));
+    ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
+  }
+
+  // {
+  //   IdTable result{qec->getAllocator()};
+  //   auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountX, xyScan};
+  //   ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
+  //   ASSERT_EQ(result.size(), 5);
+  //   ASSERT_EQ(result.numColumns(), 2);
+  //   ASSERT_EQ(result(0, 1), Id::makeFromInt(1));
+  //   ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
+  //   ASSERT_EQ(result(2, 1), Id::makeFromInt(1));
+  //   ASSERT_EQ(result(3, 1), Id::makeFromInt(1));
+  //   ASSERT_EQ(result(4, 1), Id::makeFromInt(1));
+  // }
 }
 
 // _____________________________________________________________________________
