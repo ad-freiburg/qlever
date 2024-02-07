@@ -83,7 +83,7 @@ auto generateRandomLocalVocabAndIndicesVec = [](size_t n, size_t m) {
     for (size_t j = 0; j < m; j++) {
       str += alphanum.at(gen());
     }
-    localVocab.getIndexAndAddIfNotContained(str);
+    indices.push_back(localVocab.getIndexAndAddIfNotContained(str));
   }
 
   return std::make_pair(std::move(localVocab), indices);
@@ -135,39 +135,39 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
         for (auto blockSize : blockSizes) {
           for (auto valueIdType : numericValueIdTypes) {
             //-----------------------------------------------------------------------------------------------------
-            runTests(ti<AvgExpression>, results, multiplicity, blockSize,
-                     valueIdType, false, static_cast<bool>(i));
+            runTests<AvgExpression>(results, multiplicity, blockSize,
+                                    valueIdType, false, static_cast<bool>(i));
 
-            runTests(ti<AvgExpression>, results, multiplicity, blockSize,
-                     valueIdType, true, static_cast<bool>(i));
-
-            //-----------------------------------------------------------------------------------------------------
-            runTests(ti<SumExpression>, results, multiplicity, blockSize,
-                     valueIdType, false, static_cast<bool>(i));
-
-            runTests(ti<SumExpression>, results, multiplicity, blockSize,
-                     valueIdType, true, static_cast<bool>(i));
+            runTests<AvgExpression>(results, multiplicity, blockSize,
+                                    valueIdType, true, static_cast<bool>(i));
 
             //-----------------------------------------------------------------------------------------------------
-            runTests(ti<CountExpression>, results, multiplicity, blockSize,
-                     valueIdType, false, static_cast<bool>(i));
+            runTests<SumExpression>(results, multiplicity, blockSize,
+                                    valueIdType, false, static_cast<bool>(i));
 
-            runTests(ti<CountExpression>, results, multiplicity, blockSize,
-                     valueIdType, true, static_cast<bool>(i));
-
-            //-----------------------------------------------------------------------------------------------------
-            runTests(ti<MinExpression>, results, multiplicity, blockSize,
-                     valueIdType, false, static_cast<bool>(i));
-
-            runTests(ti<MinExpression>, results, multiplicity, blockSize,
-                     valueIdType, true, static_cast<bool>(i));
+            runTests<SumExpression>(results, multiplicity, blockSize,
+                                    valueIdType, true, static_cast<bool>(i));
 
             //-----------------------------------------------------------------------------------------------------
-            runTests(ti<MaxExpression>, results, multiplicity, blockSize,
-                     valueIdType, false, static_cast<bool>(i));
+            runTests<CountExpression>(results, multiplicity, blockSize,
+                                      valueIdType, false, static_cast<bool>(i));
 
-            runTests(ti<MaxExpression>, results, multiplicity, blockSize,
-                     valueIdType, true, static_cast<bool>(i));
+            runTests<CountExpression>(results, multiplicity, blockSize,
+                                      valueIdType, true, static_cast<bool>(i));
+
+            //-----------------------------------------------------------------------------------------------------
+            runTests<MinExpression>(results, multiplicity, blockSize,
+                                    valueIdType, false, static_cast<bool>(i));
+
+            runTests<MinExpression>(results, multiplicity, blockSize,
+                                    valueIdType, true, static_cast<bool>(i));
+
+            //-----------------------------------------------------------------------------------------------------
+            runTests<MaxExpression>(results, multiplicity, blockSize,
+                                    valueIdType, false, static_cast<bool>(i));
+
+            runTests<MaxExpression>(results, multiplicity, blockSize,
+                                    valueIdType, true, static_cast<bool>(i));
           }
         }
       }
@@ -178,10 +178,12 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     for (int i = 0; i < 2; i++) {
       for (auto multiplicity : multiplicities) {
         for (auto blockSize : blockSizes) {
-          runTests(ti<GroupConcatExpression>, results, multiplicity, blockSize,
-                   ValueIdType::Strings, false, static_cast<bool>(i));
-          runTests(ti<GroupConcatExpression>, results, multiplicity, blockSize,
-                   ValueIdType::Strings, true, static_cast<bool>(i));
+          runTests<GroupConcatExpression>(results, multiplicity, blockSize,
+                                          ValueIdType::Strings, false,
+                                          static_cast<bool>(i));
+          runTests<GroupConcatExpression>(results, multiplicity, blockSize,
+                                          ValueIdType::Strings, true,
+                                          static_cast<bool>(i));
         }
       }
     }
@@ -199,17 +201,15 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
  private:
   std::random_device rd;
   std::mt19937_64 randomEngine{rd()};
-  static constexpr size_t numInputRows = 10'000'000;
-  static constexpr size_t numMeasurements = 5;
-  static constexpr size_t multiplicities[] = {
-      1'000'000, 500'000, 100'000, 50'000, 10'000, 1'000, 100, 10, 1};
-  static constexpr size_t blockSizes[] = {262144, 131072, 65536, 32768,
-                                          16384,  8192,   4096};
+  static constexpr size_t numInputRows = 1'000'000;
+  static constexpr size_t numMeasurements = 3;
+  static constexpr size_t multiplicities[] = {500'000, 50'000, 5'000,
+                                              500,     50,     5};
+  static constexpr size_t blockSizes[] = {262144, 65536, 16384, 4096};
   static constexpr size_t randomStringLength = 4;
 
   template <typename T>
-  static void computeGroupBy([[maybe_unused]] TI<T> identity,
-                             QueryExecutionContext* qec,
+  static void computeGroupBy(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> subtree,
                              bool useOptimization, size_t blockSize) {
     RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
@@ -241,13 +241,13 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
                     {std::move(alias1)},
                     std::move(subtree)};
     auto result = groupBy.getResult();
-    const auto& table = result->idTable();
+    (void)result->idTable();
 
     qec->clearCacheUnpinnedOnly();
   };
 
   template <typename T>
-  void runTests(TI<T> identity, BenchmarkResults& results, size_t multiplicity,
+  void runTests(BenchmarkResults& results, size_t multiplicity,
                 size_t blockSize, ValueIdType valueTypes,
                 bool optimizationEnabled, bool sorted) {
     // For coin flipping if `ValueIdType` is `RandomlyMixed`
@@ -333,10 +333,9 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
         qec, std::move(table), variables, false, sortedColumns,
         std::move(localVocab));
 
-    for (auto i = 0; i < numMeasurements; i++)
+    for (size_t i = 0; i < numMeasurements; i++)
       group.addMeasurement(std::to_string(i), [&]() {
-        computeGroupBy(identity, qec, valueTree, optimizationEnabled,
-                       blockSize);
+        computeGroupBy<T>(qec, valueTree, optimizationEnabled, blockSize);
       });
   };
 };
