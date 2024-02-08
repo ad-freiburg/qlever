@@ -461,12 +461,9 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   const auto& permutedTriple = indexScan->getPermutedTriple();
   const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
   std::optional<Id> col0Id = permutedTriple[0]->toValueId(vocabulary);
-  // TODO: I did not manage to call this in a way such that `col0Id` is not in
-  // the vocabulary, so I am assuming for now that it cannot happen.
-  AD_CONTRACT_CHECK(col0Id.has_value());
-  // if (!col0Id.has_value()) {
-  //   return false;
-  // }
+  if (!col0Id.has_value()) {
+    return false;
+  }
 
   // There must be exactly one GROUP BY variable and the result of the index
   // scan must be sorted by it.
