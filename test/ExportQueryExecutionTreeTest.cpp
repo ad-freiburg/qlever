@@ -23,11 +23,13 @@ std::string runQueryStreamableResult(const std::string& kg,
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
-  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
-  auto tsvGenerator =
-      ExportQueryExecutionTrees::computeResultAsStream(pq, qet, mediaType);
+  auto tsvGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      pq, qet, mediaType, std::move(cancellationHandle));
   std::string result;
   for (const auto& block : tsvGenerator) {
     result += block;
@@ -43,12 +45,14 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
-  QueryPlanner qp{qec, std::make_shared<ad_utility::CancellationHandle<>>()};
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
-  return ExportQueryExecutionTrees::computeResultAsJSON(pq, qet, timer, 200,
-                                                        mediaType);
+  return ExportQueryExecutionTrees::computeResultAsJSON(
+      pq, qet, timer, 200, mediaType, std::move(cancellationHandle));
 }
 
 // A test case that tests the correct execution and exporting of a SELECT query

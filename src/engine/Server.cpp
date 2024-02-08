@@ -657,9 +657,10 @@ boost::asio::awaitable<void> Server::processQuery(
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
       auto responseGenerator = co_await computeInNewThread(
-          [&plannedQuery, &qet, mediaType] {
+          [&plannedQuery, &qet, mediaType, &cancellationHandle] {
             return ExportQueryExecutionTrees::computeResultAsStream(
-                plannedQuery.value().parsedQuery_, qet, mediaType);
+                plannedQuery.value().parsedQuery_, qet, mediaType,
+                cancellationHandle);
           },
           cancellationHandle);
 
@@ -698,10 +699,11 @@ boost::asio::awaitable<void> Server::processQuery(
       case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
+             &cancellationHandle] {
               return ExportQueryExecutionTrees::computeResultAsJSON(
                   plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-                  mediaType.value());
+                  mediaType.value(), cancellationHandle);
             },
             cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
