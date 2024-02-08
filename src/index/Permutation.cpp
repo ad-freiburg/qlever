@@ -70,11 +70,11 @@ size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(Id col0Id) const {
-  // TODO: Isn't `col0Id` searched twice in the metadata, where and in the
-  // other methods? It's a binary search on disk, so not for free.
-  if (!meta_.col0IdExists(col0Id)) {
-    return IdTable{2, reader().allocator()};
-  }
+  // TODO: It's a recurring pattern here and in other methods in this file,
+  // that it is first checked whether the `col0Id` exists in the metadata and
+  // subsequently the metadata is retrieved. Shoulnd't we avoid this because
+  // each of these is a binary search on disk, so not for free?
+  AD_CONTRACT_CHECK(meta_.col0IdExists(col0Id));
   const auto& relationMetadata = meta_.getMetaData(col0Id);
   const auto& allBlocksMetadata = meta_.blockData();
   return reader().getDistinctCol1IdsAndCounts(relationMetadata,

@@ -97,8 +97,9 @@ vector<ColumnIndex> GroupBy::resultSortedOn() const {
 vector<ColumnIndex> GroupBy::computeSortColumns(
     const QueryExecutionTree* subtree) {
   vector<ColumnIndex> cols;
+  // If we have an implicit GROUP BY, where the entire input is a single group,
+  // no sorting needs to be done.
   if (_groupByVariables.empty()) {
-    // the entire input is a single group, no sorting needs to be done
     return cols;
   }
 
@@ -107,8 +108,10 @@ vector<ColumnIndex> GroupBy::computeSortColumns(
   std::unordered_set<ColumnIndex> sortColSet;
 
   for (const auto& var : _groupByVariables) {
+    AD_CONTRACT_CHECK(inVarColMap.contains(var), "Variable ", var.name(),
+                      " not found in subtree for GROUP BY");
     ColumnIndex col = inVarColMap.at(var).columnIndex_;
-    // avoid sorting by a column twice
+    // Avoid sorting by a column twice.
     if (sortColSet.find(col) == sortColSet.end()) {
       sortColSet.insert(col);
       cols.push_back(col);
@@ -458,9 +461,12 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   const auto& permutedTriple = indexScan->getPermutedTriple();
   const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
   std::optional<Id> col0Id = permutedTriple[0]->toValueId(vocabulary);
-  if (!col0Id.has_value()) {
-    return false;
-  }
+  // TODO: I did not manage to call this in a way such that `col0Id` is not in
+  // the vocabulary, so I am assuming for now that it cannot happen.
+  AD_CONTRACT_CHECK(col0Id.has_value());
+  // if (!col0Id.has_value()) {
+  //   return false;
+  // }
 
   // There must be exactly one GROUP BY variable and the result of the index
   // scan must be sorted by it.
