@@ -24,6 +24,8 @@ class MultiColumnJoin : public Operation {
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
                   std::shared_ptr<QueryExecutionTree> t2);
+  // Only used for testing
+  using Operation::Operation;
 
  protected:
   string getCacheKeyImpl() const override;
@@ -62,7 +64,7 @@ class MultiColumnJoin : public Operation {
    *width resultWidth (or be left vector that should have resultWidth entries).
    *This method is made public here for unit testing purposes.
    **/
-  static void computeMultiColumnJoin(
+  void computeMultiColumnJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);

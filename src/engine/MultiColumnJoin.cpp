@@ -70,6 +70,8 @@ ResultTable MultiColumnJoin::computeResult() {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
+  checkCancellation();
+
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   LOG(DEBUG) << "Computing a multi column join between results of size "
@@ -77,6 +79,8 @@ ResultTable MultiColumnJoin::computeResult() {
 
   computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
                          _joinColumns, &idTable);
+
+  checkCancellation();
 
   LOG(DEBUG) << "MultiColumnJoin result computation done" << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -247,16 +251,19 @@ void MultiColumnJoin::computeMultiColumnJoin(
            (stdr::any_of(left.getColumn(leftCol), &Id::isUndefined));
   });
 
+  auto checkCancellationLambda = [this] { checkCancellation(); };
+
   const size_t numOutOfOrder = [&]() {
     if (isCheap) {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
           std::ranges::lexicographical_compare, addRow, ad_utility::noop,
-          ad_utility::noop);
+          ad_utility::noop, ad_utility::noop, checkCancellationLambda);
     } else {
       return ad_utility::zipperJoinWithUndef(
           leftJoinColumns, rightJoinColumns,
-          std::ranges::lexicographical_compare, addRow, findUndef, findUndef);
+          std::ranges::lexicographical_compare, addRow, findUndef, findUndef,
+          ad_utility::noop, checkCancellationLambda);
     }
   }();
   *result = std::move(rowAdder).resultTable();
@@ -270,6 +277,7 @@ void MultiColumnJoin::computeMultiColumnJoin(
     for (size_t i = 0; i < joinColumns.size(); ++i) {
       cols.push_back(i);
     }
+    checkCancellation();
     Engine::sort(*result, cols);
   }
 
@@ -277,4 +285,5 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // columns than expected, permute them. See the documentation of
   // `JoinColumnMapping` for details.
   result->setColumnSubset(joinColumnData.permutationResult());
+  checkCancellation();
 }

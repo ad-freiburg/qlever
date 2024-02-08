@@ -33,6 +33,8 @@ class OptionalJoin : public Operation {
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2);
+  // Only used for testing
+  using Operation::Operation;
 
  private:
   string getCacheKeyImpl() const override;
@@ -71,7 +73,7 @@ class OptionalJoin : public Operation {
    * @param joinColumns
    * @param result
    */
-  static void optionalJoin(
+  void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,

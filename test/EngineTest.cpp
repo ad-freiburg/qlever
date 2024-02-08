@@ -69,7 +69,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                    makeAllocator()};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
     // a have to equal those of column 2 of b and vice versa).
-    OptionalJoin::optionalJoin(inputA, inputB, jcls, &result);
+    OptionalJoin{}.optionalJoin(inputA, inputB, jcls, &result);
     ASSERT_EQ(expectedResult, result);
   }
 
