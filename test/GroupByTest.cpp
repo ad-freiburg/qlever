@@ -364,9 +364,12 @@ struct GroupByOptimizations : ::testing::Test {
   Tree yxScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::POS,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
-  Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
+  Tree xScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
+      SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
+  Tree xyScanIriNotInVocab = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
@@ -1189,8 +1192,8 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
 
   // Test the case that the input is empty.
   {
-    auto join =
-        makeExecutionTree<Join>(qec, xScanEmptyResult, xyzScanSortedByX, 0, 0);
+    auto join = makeExecutionTree<Join>(qec, xScanIriNotInVocab,
+                                        xyzScanSortedByX, 0, 0);
     IdTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
@@ -1285,12 +1288,14 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
                : groupBy.computeOptimizedGroupByIfPossible(&result);
   };
 
-  // The index scan must have exactly two variables, there must be exactly one
-  // GROUP BY variable, and exactly one alias that is a non-DISTINCT count.
+  // The index scan must have exactly two variables, the IRI must be in the
+  // vocabulary, there must be exactly one GROUP BY variable, and there must be
+  // exactly one alias that is a non-DISTINCT count.
   ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, true));
   ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, false));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xyzScanSortedByX));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xyScanIriNotInVocab));
   ASSERT_FALSE(isSuited(emptyVariables, aliasesCountX, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, emptyAliases, xyScan));
   ASSERT_FALSE(isSuited(variablesOnlyX, aliasesXAsV, xyScan));

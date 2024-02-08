@@ -141,11 +141,9 @@ class GroupBy : public Operation {
   //     ?x <somePredicate> ?y
   //   } GROUP BY ?y
   //
-  // NOTE: This is exactly what we need for context-sensitive object AC query
-  // without context.
-  //
-  // TODO: We could compute this in the same way when omitting the ?y or the
-  // COUNT. And it doesn't matter whether the COUNT is of ?x or ?y.
+  // NOTE: This is exactly what we need for a context-sensitive object AC query
+  // without connected triples. The GROUP BY variable can also be ommitted in
+  // the SELECT clause.
   bool computeGroupByObjectWithCount(IdTable* result);
 
   // Check if the query represented by this GROUP BY is of the following form:

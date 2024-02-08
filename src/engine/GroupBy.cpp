@@ -454,7 +454,7 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
 bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   // The child must be an `IndexScan` with exactly two variables.
   auto* indexScan =
-      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+      dynamic_cast<IndexScan*>(_subtree->getRootOperation().get());
   if (!indexScan || indexScan->numVariables() != 2) {
     return false;
   }
@@ -481,18 +481,21 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   // the two variables of the index scan.
   auto countedVariable = getVariableForNonDistinctCountOfSingleAlias();
   bool countedVariableIsOneOfIndexScanVariables =
-      countedVariable.has_value() &&
-      (countedVariable.value() == *(permutedTriple[1]) ||
-       countedVariable.value() == *(permutedTriple[2]));
+      countedVariable == *(permutedTriple[1]) ||
+      countedVariable == *(permutedTriple[2]);
   if (!countedVariableIsOneOfIndexScanVariables) {
     return false;
   }
 
-  // Compute the result.
+  // Compute the result and update the runtime information (we don't actually
+  // do the index scan, but something smarter).
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
   *result = permutation.getDistinctCol1IdsAndCounts(col0Id.value());
+  indexScan->updateRuntimeInformationWhenOptimizedOut(
+      {}, RuntimeInformation::Status::optimizedOut);
+
   return true;
 }
 
@@ -532,8 +535,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
   if (numCounts > 1) {
     throw std::runtime_error{
         "This query contains two or more COUNT expressions in the same GROUP "
-        "BY that would lead to identical values. This redundancy is "
-        "currently "
+        "BY that would lead to identical values. This redundancy is currently "
         "not supported."};
   }
 

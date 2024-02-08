@@ -526,21 +526,15 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
   // the count from the metadata.
   std::optional<Id> currentCol1Id;
   size_t currentCount = 0;
-  size_t rowIndex = std::numeric_limits<size_t>::max();
   // Helper lambda that processes a single `col1Id` (with `howMany`
   // occurrences). If it's new, a row with the previous `col1Id` and
   // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
   // are reset.
-  auto processCol1Id = [&table, &rowIndex, &currentCol1Id, &currentCount](
+  auto processCol1Id = [&table, &currentCol1Id, &currentCount](
                            std::optional<Id> col1Id, size_t howMany) {
     if (col1Id != currentCol1Id) {
       if (currentCol1Id.has_value()) {
-        table.emplace_back();
-        table(rowIndex, 0) = currentCol1Id.value();
-        table(rowIndex, 1) = Id::makeFromInt(currentCount);
-        rowIndex++;
-      } else {
-        rowIndex = 0;
+        table.push_back({currentCol1Id.value(), Id::makeFromInt(currentCount)});
       }
       currentCol1Id = col1Id;
       currentCount = 0;
