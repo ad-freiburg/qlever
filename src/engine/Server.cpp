@@ -656,12 +656,8 @@ boost::asio::awaitable<void> Server::processQuery(
     // Common code for sending responses for the streamable media types
     // (tsv, csv, octet-stream, turtle).
     auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread(
-          [&plannedQuery, &qet, mediaType, &cancellationHandle] {
-            return ExportQueryExecutionTrees::computeResultAsStream(
-                plannedQuery.value().parsedQuery_, qet, mediaType,
-                cancellationHandle);
-          },
+      auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+          plannedQuery.value().parsedQuery_, qet, mediaType,
           cancellationHandle);
 
       // The `streamable_body` that is used internally turns all exceptions that
@@ -701,9 +697,14 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseString = co_await computeInNewThread(
             [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
              &cancellationHandle] {
-              return ExportQueryExecutionTrees::computeResultAsJSON(
-                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-                  mediaType.value(), cancellationHandle);
+              try {
+                return ExportQueryExecutionTrees::computeResultAsJSON(
+                    plannedQuery.value().parsedQuery_, qet, requestTimer,
+                    maxSend, mediaType.value(), cancellationHandle);
+              } catch (ad_utility::CancellationException& e) {
+                e.operation_ = "Query Export";
+                throw;
+              }
             },
             cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
