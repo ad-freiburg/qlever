@@ -216,13 +216,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
-
-################################
-# NLOHNMANN-JSON
-################################
-# Header only, nothing to include
-include_directories(third_party/json/)
-
 ################################
 # CTRE, Compile-Time-Regular-Expressions
 ################################
