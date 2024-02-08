@@ -22,6 +22,7 @@ TEST(HttpServer, HttpTest) {
   // `util/http/beast.h` for details). Repeat this test several times to make
   // such failures less spurious should they ever reoccur in the future.
   for (size_t k = 0; k < 10; ++k) {
+    LOG(INFO) << k << std::endl;
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
     // target (might be empty), and a copy of the request body (might be empty).
@@ -52,9 +53,9 @@ TEST(HttpServer, HttpTest) {
     // if they are.
     {
       std::vector<ad_utility::JThread> threads;
-      for (size_t i = 0; i < 2; ++i) {
+      for (size_t i = 0; i < 100; ++i) {
         threads.emplace_back([&]() {
-          for (size_t j = 0; j < 5; ++j) {
+          for (size_t j = 0; j < 200; ++j) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));

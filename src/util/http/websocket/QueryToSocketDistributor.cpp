@@ -9,6 +9,7 @@
 #include <boost/asio/use_awaitable.hpp>
 
 #include "util/Exception.h"
+#include "util/AsioHelpers.h"
 
 namespace ad_utility::websocket {
 
@@ -24,7 +25,7 @@ QueryToSocketDistributor::QueryToSocketDistributor(
       signalEndCall_{[cleanupCall] { std::invoke(cleanupCall, true); }} {}
 
 net::awaitable<void> QueryToSocketDistributor::postToStrand() const {
-  return net::post(net::bind_executor(strand_, net::use_awaitable));
+  return ad_utility::runOnStrand(strand_, net::use_awaitable);
 }
 
 // _____________________________________________________________________________

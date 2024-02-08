@@ -87,7 +87,7 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await net::post(net::bind_executor(globalStrand_, net::use_awaitable));
+  co_await ad_utility::runOnStrand(globalStrand_, net::use_awaitable);
   co_return co_await createOrAcquireDistributorInternalUnsafe(
       std::move(queryId), isSender);
 }

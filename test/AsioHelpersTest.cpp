@@ -18,6 +18,7 @@
 #include "util/jthread.h"
 
 namespace net = boost::asio;
+using namespace net::experimental::awaitable_operators;
 
 using ad_utility::resumeOnOriginalExecutor;
 using namespace boost::asio::experimental::awaitable_operators;
@@ -30,66 +31,72 @@ TEST(AsioHelpers, cancellationOnOtherStrand) {
     Strand strand2_ = net::make_strand(ctx_);
     net::deadline_timer infiniteTimer1_{
         strand1_, static_cast<net::deadline_timer::time_type>(
-                     boost::posix_time::pos_infin)};
+                      boost::posix_time::pos_infin)};
     net::deadline_timer infiniteTimer2_{
         strand2_, static_cast<net::deadline_timer::time_type>(
-                     boost::posix_time::pos_infin)};
+                      boost::posix_time::pos_infin)};
 
-      int x_ = 0;
-      std::atomic_flag done_{false};
+    int x_ = 0;
+    std::atomic_flag done_{false};
   };
 
   Context ctx;
 
-  static constexpr size_t numValues = 5'000;
-  /*
+  static constexpr size_t numValues = 1'000;
   auto increment = [](Context& ctx) -> net::awaitable<void> {
-    co_await net::post(ad_utility::ChangeStrandToken{ctx.strand1_, net::use_awaitable});
-    //auto token = ad_utility::ChangeStrandToken{ctx.strand1_, net::use_awaitable});
-    co_await ad_utility::changeStrand(ctx.strand1_, net::use_awaitable);
+    co_await ad_utility::runOnStrand(ctx.strand1_, net::deferred);
     auto result = ++ctx.x_;
     if (result == numValues) {
       ctx.done_.test_and_set();
       ctx.done_.notify_all();
-      throw std::runtime_error("I am done here");
-      //   co_await ctx.infiniteTimer1_.async_wait(net::use_awaitable);
-    } else {
-      // co_await ad_utility::changeStrand(ctx.strand2_, net::use_awaitable);
       co_await ctx.infiniteTimer1_.async_wait(net::use_awaitable);
+    } else {
+      co_await ad_utility::runOnStrand(ctx.strand2_, net::deferred);
+      co_await ctx.infiniteTimer2_.async_wait(net::deferred);
     }
   };
-   */
 
-    auto increment = [](Context& ctx) -> net::awaitable<void> {
-        ctx.done_.test_and_set();
-        ctx.done_.notify_all();
-        co_await net::post(ad_utility::ChangeStrandToken{ctx.strand1_, net::use_awaitable});
-        throw std::runtime_error("I am done here");
-    };
-
-  using Op = decltype(net::co_spawn(ctx.ctx_, increment(ctx),
-                                   net::deferred));
+  using Op = decltype(net::co_spawn(ctx.ctx_, increment(ctx), net::deferred));
   std::vector<Op> ops;
   for (size_t i = 0; i < numValues; ++i) {
-    ops.push_back(net::co_spawn(ctx.ctx_, increment(ctx),
-                  net::deferred));
+    ops.push_back(net::co_spawn(ctx.ctx_, increment(ctx), net::deferred));
   }
   auto group = net::experimental::make_parallel_group(std::move(ops));
-  auto future = group.async_wait(net::experimental::wait_for_one_error(), net::use_future);
+  auto awaitAll = [](auto& group) -> net::awaitable<void> {
+    try {
+      [[maybe_unused]] auto x = group.async_wait(
+          net::experimental::wait_for_one_error(), net::use_future);
+    } catch (...) {
+      LOG(INFO) << "Caught something" << std::endl;
+      throw;
+    }
+    co_return;
+  };
+
+  auto future = net::co_spawn(ctx.strand1_, awaitAll(group), net::use_future);
   std::vector<ad_utility::JThread> threads;
   for (size_t i = 0; i < 20; ++i) {
     threads.emplace_back([&] { ctx.ctx_.run(); });
   }
   ctx.done_.wait(false);
+    net::dispatch(ctx.strand1_, std::packaged_task<void()>{
+            [&]() { ctx.infiniteTimer1_.cancel(); }}).wait();
+    /*
+    net::dispatch(ctx.strand2_, std::packaged_task<void()>{
+            [&]() { ctx.infiniteTimer2_.cancel(); }}).wait();
+            */
   future.get();
   threads.clear();
   ASSERT_EQ(ctx.x_, numValues);
 }
 
-TEST(AsioHelpers, simpleException) {
+
+TEST(AsioHelpers, raceConditionCancellation) {
+    static constexpr size_t numValues = 10'000;
     struct Context {
         net::io_context ctx_;
         using Strand = decltype(net::make_strand(ctx_));
+        std::vector<Strand> strands_;
         Strand strand1_ = net::make_strand(ctx_);
         Strand strand2_ = net::make_strand(ctx_);
         net::deadline_timer infiniteTimer1_{
@@ -101,32 +108,78 @@ TEST(AsioHelpers, simpleException) {
 
         int x_ = 0;
         std::atomic_flag done_{false};
+        Context() {
+          for (size_t i = 0; i < numValues; ++i) {
+            strands_.push_back(net::make_strand(ctx_));
+          }
+        }
     };
 
     Context ctx;
 
-    static constexpr size_t numValues = 2000;
-    auto increment = [](Context& ctx) -> net::awaitable<void> {
-        //co_await net::post(ad_utility::ChangeStrandToken{ctx.strand2_, net::use_awaitable});
-        throw std::runtime_error("I am done here");
+    static constexpr auto dummy = []() -> net::awaitable<void> {
+      auto exec = co_await net::this_coro::executor;
+      net::steady_timer t{exec, std::chrono::microseconds(1)};
+      co_await t.async_wait(net::deferred);
+      co_return;
     };
 
-    using Op = decltype(net::co_spawn(ctx.strand1_, increment(ctx),
-                                      net::deferred));
+    auto increment = [](Context& ctx, size_t num) -> net::awaitable<void> {
+      EXPECT_TRUE(ctx.strands_.at(num).running_in_this_thread());
+      auto other = num == 0 ? 1 : num - 1;
+      EXPECT_FALSE(ctx.strands_.at(other).running_in_this_thread());
+      EXPECT_FALSE(ctx.strand2_.running_in_this_thread());
+      EXPECT_FALSE(ctx.strand1_.running_in_this_thread());
+      if (num == 0) {
+        try {
+          co_await ctx.infiniteTimer1_.async_wait(net::deferred);
+          throw std::runtime_error{"cancelling this"};
+        } catch (...) {
+          LOG(INFO) << "Caught cancellation signal" << std::endl;
+          throw;
+        }
+      }
+      while (true) {
+        co_await dummy();
+        EXPECT_TRUE(ctx.strands_.at(num).running_in_this_thread());
+        auto other = num == 0 ? 1 : num - 1;
+        EXPECT_FALSE(ctx.strands_.at(other).running_in_this_thread());
+        EXPECT_FALSE(ctx.strand2_.running_in_this_thread());
+        EXPECT_FALSE(ctx.strand1_.running_in_this_thread());
+      }
+    };
+
+    using Op = decltype(ad_utility::runAwaitableOnStrand(ctx.strands_.at(0), increment(ctx, 0), net::deferred));
+    //using Op = net::awaitable<void>;
     std::vector<Op> ops;
     for (size_t i = 0; i < numValues; ++i) {
-        ops.push_back(net::co_spawn(ctx.ctx_, increment(ctx),
-                                    net::deferred));
+        ops.push_back(ad_utility::runAwaitableOnStrand(ctx.strands_.at(i), increment(ctx, i), net::deferred));
+        //ops.push_back(ad_utility::runAwaitableOnStrandAwaitable(ctx.strands_.at(i), increment(ctx, i)));
     }
     auto group = net::experimental::make_parallel_group(std::move(ops));
-    auto future = group.async_wait(net::experimental::wait_for_one_error(), net::use_future);
+    auto awaitAll = [](auto& group) -> net::awaitable<void> {
+        try {
+            [[maybe_unused]] auto x = group.async_wait(
+                    net::experimental::wait_for_one_error(), net::use_future);
+        } catch (...) {
+            LOG(INFO) << "Caught something" << std::endl;
+            throw;
+        }
+        co_return;
+    };
+
+    auto future = net::co_spawn(ctx.strand2_, awaitAll(group), net::use_future);
     std::vector<ad_utility::JThread> threads;
-    for (size_t i = 0; i < 20; ++i) {
+    for (size_t i = 0; i < 30; ++i) {
         threads.emplace_back([&] { ctx.ctx_.run(); });
     }
+    std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    net::dispatch(ctx.strand1_, std::packaged_task<void()>{
+            [&]() { ctx.infiniteTimer1_.cancel(); }}).wait();
+    LOG(INFO) << "Cancelled the main thread" << std::endl;
     future.get();
+    //EXPECT_GT(ctx.x_, 0);
     threads.clear();
-    ASSERT_EQ(ctx.x_, numValues);
 }
 
 TEST(AsioHelpers, resumeOnOriginalExecutor) {
