@@ -660,23 +660,32 @@ boost::asio::awaitable<void> Server::processQuery(
           plannedQuery.value().parsedQuery_, qet, mediaType,
           cancellationHandle);
 
-      // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the results into "broken pipe". We store the
-      // actual exceptions and manually rethrow them to propagate the correct
-      // error messages to the user.
-      // TODO<joka921> What happens, when part of the TSV export has already
-      // been sent and an exception occurs after that?
-      std::exception_ptr exceptionPtr;
-      responseGenerator.assignExceptionToThisPointer(&exceptionPtr);
+      auto response =
+          createOkResponse(std::move(responseGenerator), request, mediaType);
       try {
-        auto response =
-            createOkResponse(std::move(responseGenerator), request, mediaType);
         co_await send(std::move(response));
-      } catch (...) {
-        if (exceptionPtr) {
-          std::rethrow_exception(exceptionPtr);
+      } catch (const boost::system::system_error& e) {
+        // "Broken Pipe" errors are thrown and reported by `streamable_body`,
+        // so we can safely ignore these kind of exceptions. In practice this
+        // should only ever "commonly" happen with `CancellationException`s.
+        if (e.code().value() == EPIPE) {
+          co_return;
         }
-        throw;
+        LOG(ERROR) << "Unexpected error while sending response: " << e.what()
+                   << std::endl;
+      } catch (const std::exception& e) {
+        // Even if an exception is thrown here for some unknown reason, don't
+        // propagate it, and log it directly, so the code doesn't try to send
+        // an HTTP response containing the error message onto a HTTP stream
+        // that is already partially written. The only way to pass metadata
+        // after the beginning is by using the trailer mechanism as decribed
+        // here:
+        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
+        // This won't be treated as an error by any regular HTTP client, so
+        // while it might be worth implementing to have some sort of validation
+        // check, it isn't even shown by curl by default let alone in the
+        // browser.
+        LOG(ERROR) << e.what() << std::endl;
       }
     };
 
