@@ -202,16 +202,15 @@ void TransitivePath::computeTransitivePathBound(
   GrbMatrix startNodeMatrix =
       setupStartNodeMatrix(startNodes, graph.numRows(), mapping);
 
-  auto hull = std::make_unique<GrbMatrix>(
-      transitiveHull(graph, std::make_optional(std::move(startNodeMatrix))));
+  auto hull = transitiveHull(graph, std::move(startNodeMatrix));
   if (!targetSide.isVariable()) {
     Id target = std::get<Id>(targetSide.value_);
     size_t targetIndex = mapping.getIndex(target);
-    hull = std::make_unique<GrbMatrix>(getTargetRow(*hull, targetIndex));
+    hull = getTargetRow(hull, targetIndex);
   }
 
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
-      res, *hull, mapping, startSideTable, startNodes, startSide.outputCol_,
+      res, hull, mapping, startSideTable, startNodes, startSide.outputCol_,
       targetSide.outputCol_, startSide.treeAndCol_.value().second);
 
   *dynRes = std::move(res).toDynamic();
@@ -255,31 +254,30 @@ void TransitivePath::computeTransitivePath(
   GrbMatrix::initialize();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
 
-  std::unique_ptr<GrbMatrix> hull;
+  GrbMatrix hull;
   if (!startSide.isVariable()) {
     std::vector<Id> startNode{std::get<Id>(startSide.value_)};
     GrbMatrix startMatrix =
         setupStartNodeMatrix(startNode, graph.numRows(), mapping);
-    hull = std::make_unique<GrbMatrix>(
-        transitiveHull(graph, std::make_optional(std::move(startMatrix))));
+    hull = transitiveHull(graph, std::move(startMatrix));
   } else {
-    hull = std::make_unique<GrbMatrix>(transitiveHull(graph, std::nullopt));
+    hull = transitiveHull(graph, std::nullopt);
   }
 
   if (!targetSide.isVariable()) {
     Id target = std::get<Id>(targetSide.value_);
     size_t targetIndex = mapping.getIndex(target);
-    hull = std::make_unique<GrbMatrix>(getTargetRow(*hull, targetIndex));
+    hull = getTargetRow(hull, targetIndex);
   }
 
   if (!startSide.isVariable()) {
     std::vector<Id> startNode{std::get<Id>(startSide.value_)};
-    TransitivePath::fillTableWithHull<RES_WIDTH>(res, *hull, mapping, startNode,
+    TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, mapping, startNode,
                                                  startSide.outputCol_,
                                                  targetSide.outputCol_);
   } else {
     TransitivePath::fillTableWithHull<RES_WIDTH>(
-        res, *hull, mapping, startSide.outputCol_, targetSide.outputCol_);
+        res, hull, mapping, startSide.outputCol_, targetSide.outputCol_);
   }
 
   *dynRes = std::move(res).toDynamic();
@@ -432,7 +430,7 @@ std::shared_ptr<TransitivePath> TransitivePath::bindLeftOrRightSide(
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
     p->variableColumns_[variable] = columnIndexWithType;
-    //p->resultWidth_++;
+    // p->resultWidth_++;
   }
   p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
   return p;
@@ -448,31 +446,31 @@ bool TransitivePath::isBoundOrId() const {
 GrbMatrix TransitivePath::transitiveHull(
     const GrbMatrix& graph, std::optional<GrbMatrix> startNodes) const {
   size_t pathLength = 0;
-  std::unique_ptr<GrbMatrix> result;
+  GrbMatrix result;
 
   if (startNodes) {
-    result = std::make_unique<GrbMatrix>(std::move(startNodes.value()));
+    result = std::move(startNodes.value());
   } else {
-    result = std::make_unique<GrbMatrix>(GrbMatrix::diag(graph.numRows()));
+    result = GrbMatrix::diag(graph.numRows());
   }
 
   if (minDist_ > 0) {
-    result = std::make_unique<GrbMatrix>(result->multiply(graph));
+    result = result.multiply(graph);
     pathLength++;
   }
 
   size_t previousNvals = 0;
-  size_t nvals = result->numNonZero();
+  size_t nvals = result.numNonZero();
   while (nvals > previousNvals && pathLength < maxDist_) {
-    previousNvals = result->numNonZero();
+    previousNvals = result.numNonZero();
     // TODO: Check effect of matrix orientation (Row major, Column major) on
     // performance.
-    result->accumulateMultiply(graph);
+    result.accumulateMultiply(graph);
     checkCancellation();
-    nvals = result->numNonZero();
+    nvals = result.numNonZero();
     pathLength++;
   }
-  return std::move(*result);
+  return result;
 }
 
 // _____________________________________________________________________________
