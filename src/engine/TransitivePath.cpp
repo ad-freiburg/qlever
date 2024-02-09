@@ -14,6 +14,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "util/Exception.h"
+#include "util/Timer.h"
 
 // _____________________________________________________________________________
 TransitivePath::TransitivePath(QueryExecutionContext* qec,
@@ -195,6 +196,9 @@ void TransitivePath::computeTransitivePathBound(
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
+  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
+  timer.start();
+
   GrbMatrix::initialize();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
 
@@ -203,6 +207,10 @@ void TransitivePath::computeTransitivePathBound(
   GrbMatrix startNodeMatrix =
       setupStartNodeMatrix(startNodes, graph.numRows(), mapping);
 
+  timer.stop();
+  auto initTime = timer.msecs();
+  timer.start();
+
   auto hull = transitiveHull(graph, std::move(startNodeMatrix));
   if (!targetSide.isVariable()) {
     Id target = std::get<Id>(targetSide.value_);
@@ -210,9 +218,21 @@ void TransitivePath::computeTransitivePathBound(
     hull = getTargetRow(hull, targetIndex);
   }
 
+  timer.stop();
+  auto hullTime = timer.msecs();
+  timer.start();
+
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
       res, hull, mapping, startSideTable, startNodes, startSide.outputCol_,
       targetSide.outputCol_, startSide.treeAndCol_.value().second);
+
+  timer.stop();
+  auto fillTime = timer.msecs();
+
+  LOG(DEBUG) << "GraphBLAS Timing measurements:" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -224,8 +244,15 @@ void TransitivePath::computeTransitivePathBoundFallback(
     const TransitivePathSide& targetSide, const IdTable& startSideTable) const {
   IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
+  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
+  timer.start();
+
   auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
       dynSub, startSide, targetSide, startSideTable);
+
+  timer.stop();
+  auto initTime = timer.msecs();
+  timer.start();
 
   Map hull(allocator());
   if (!targetSide.isVariable()) {
@@ -234,9 +261,21 @@ void TransitivePath::computeTransitivePathBoundFallback(
     hull = transitiveHull(edges, nodes, std::nullopt);
   }
 
+  timer.stop();
+  auto hullTime = timer.msecs();
+  timer.start();
+
   TransitivePath::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
       res, hull, nodes, startSide.outputCol_, targetSide.outputCol_,
       startSideTable, startSide.treeAndCol_.value().second);
+
+  timer.stop();
+  auto fillTime = timer.msecs();
+
+  LOG(DEBUG) << "Fallback Timing measurements:" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -252,8 +291,15 @@ void TransitivePath::computeTransitivePath(
   decltype(auto) startCol = sub.getColumn(startSide.subCol_);
   decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
 
+  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
+  timer.start();
+
   GrbMatrix::initialize();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
+
+  timer.stop();
+  auto initTime = timer.msecs();
+  timer.start();
 
   GrbMatrix hull;
   if (!startSide.isVariable()) {
@@ -264,6 +310,10 @@ void TransitivePath::computeTransitivePath(
   } else {
     hull = transitiveHull(graph, std::nullopt);
   }
+
+  timer.stop();
+  auto hullTime = timer.msecs();
+  timer.start();
 
   if (!targetSide.isVariable()) {
     Id target = std::get<Id>(targetSide.value_);
@@ -281,6 +331,14 @@ void TransitivePath::computeTransitivePath(
         res, hull, mapping, startSide.outputCol_, targetSide.outputCol_);
   }
 
+  timer.stop();
+  auto fillTime = timer.msecs();
+
+  LOG(DEBUG) << "GraphBLAS Timing measurements:" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
+
   *dynRes = std::move(res).toDynamic();
 }
 
@@ -291,8 +349,15 @@ void TransitivePath::computeTransitivePathFallback(
     const TransitivePathSide& targetSide) const {
   IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
 
+  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
+  timer.start();
+
   auto [edges, nodes] =
       setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
+
+  timer.stop();
+  auto initTime = timer.msecs();
+  timer.start();
 
   Map hull{allocator()};
   if (!targetSide.isVariable()) {
@@ -301,8 +366,20 @@ void TransitivePath::computeTransitivePathFallback(
     hull = transitiveHull(edges, nodes, std::nullopt);
   }
 
+  timer.stop();
+  auto hullTime = timer.msecs();
+  timer.start();
+
   TransitivePath::fillTableWithHull<RES_WIDTH>(res, hull, startSide.outputCol_,
                                                targetSide.outputCol_);
+
+  timer.stop();
+  auto fillTime = timer.msecs();
+
+  LOG(DEBUG) << "Fallback Timing measurements:" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -323,23 +400,23 @@ ResultTable TransitivePath::computeResult() {
 
   size_t subWidth = subRes->idTable().numColumns();
 
-  bool useFallback = !RuntimeParameters().get<"use-graphblas">();
+  bool useGraphblas = !RuntimeParameters().get<"use-graphblas">();
 
-  auto computeForOneSide = [this, &idTable, subRes, subWidth, useFallback](
+  auto computeForOneSide = [this, &idTable, subRes, subWidth, useGraphblas](
                                auto& boundSide,
                                auto& otherSide) -> ResultTable {
     shared_ptr<const ResultTable> sideRes =
         boundSide.treeAndCol_.value().first->getResult();
     size_t sideWidth = sideRes->idTable().numColumns();
 
-    if (useFallback) {
+    if (useGraphblas) {
       CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
-                      &TransitivePath::computeTransitivePathBoundFallback, this,
+                      &TransitivePath::computeTransitivePathBound, this,
                       &idTable, subRes->idTable(), boundSide, otherSide,
                       sideRes->idTable());
     } else {
       CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
-                      &TransitivePath::computeTransitivePathBound, this,
+                      &TransitivePath::computeTransitivePathBoundFallback, this,
                       &idTable, subRes->idTable(), boundSide, otherSide,
                       sideRes->idTable());
     }
@@ -354,26 +431,26 @@ ResultTable TransitivePath::computeResult() {
     return computeForOneSide(rhs_, lhs_);
     // Right side is an Id
   } else if (!rhs_.isVariable()) {
-    if (useFallback) {
-      CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
-                      &TransitivePath::computeTransitivePathFallback, this,
-                      &idTable, subRes->idTable(), rhs_, lhs_);
-    } else {
+    if (useGraphblas) {
       CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                       &TransitivePath::computeTransitivePath, this, &idTable,
                       subRes->idTable(), rhs_, lhs_);
+    } else {
+      CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
+                      &TransitivePath::computeTransitivePathFallback, this,
+                      &idTable, subRes->idTable(), rhs_, lhs_);
     }
     // No side is a bound variable, the right side is an unbound variable
     // and the left side is either an unbound Variable or an ID.
   } else {
-    if (useFallback) {
-      CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
-                      &TransitivePath::computeTransitivePathFallback, this,
-                      &idTable, subRes->idTable(), lhs_, rhs_);
-    } else {
+    if (useGraphblas) {
       CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                       &TransitivePath::computeTransitivePath, this, &idTable,
                       subRes->idTable(), lhs_, rhs_);
+    } else {
+      CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
+                      &TransitivePath::computeTransitivePathFallback, this,
+                      &idTable, subRes->idTable(), lhs_, rhs_);
     }
   }
 
