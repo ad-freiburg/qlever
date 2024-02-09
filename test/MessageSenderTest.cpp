@@ -25,7 +25,7 @@ using ::testing::VariantWith;
 
 ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId();
+  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryHub queryHub{ioContext};
 
   auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
@@ -47,7 +47,7 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 
 ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId();
+  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryHub queryHub{ioContext};
 
   {
@@ -85,7 +85,7 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 
 ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryRegistry queryRegistry;
-  OwningQueryId queryId = queryRegistry.uniqueId();
+  OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryId reference = queryId.toQueryId();
   QueryHub queryHub{ioContext};
 

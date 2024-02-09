@@ -114,13 +114,14 @@ class AggregateExpression : public SparqlExpression {
     // The operands *without* applying the `valueGetter`.
     auto operands =
         makeGenerator(std::forward<Operand>(operand), inputSize, context);
+    auto checkCancellation =
+        [context](ad_utility::source_location location =
+                      ad_utility::source_location::current()) {
+          context->cancellationHandle_->throwIfCancelled(location);
+        };
 
-    auto impl = [&valueGetter, context, &finalOperation,
-                 &callFunction](auto&& inputs) {
-      auto checkCancellation = [context]() {
-        context->cancellationHandle_->throwIfCancelled(
-            "AggregateExpression evaluate on child operand");
-      };
+    auto impl = [&valueGetter, context, &finalOperation, &callFunction,
+                 &checkCancellation](auto&& inputs) {
       auto it = inputs.begin();
       AD_CORRECTNESS_CHECK(it != inputs.end());
 
@@ -144,8 +145,7 @@ class AggregateExpression : public SparqlExpression {
       if (distinct) {
         auto uniqueValues =
             getUniqueElements(context, inputSize, std::move(operands));
-        context->cancellationHandle_->throwIfCancelled(
-            "AggregateExpression after filtering unique values");
+        checkCancellation();
         return impl(std::move(uniqueValues));
       } else {
         return impl(std::move(operands));

@@ -122,12 +122,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
               }
             });
     auto computeLambda = [this, &timer] {
-      checkCancellation([this]() { return "Before " + getDescriptor(); });
+      checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
       ResultTable result = computeResult();
 
-      checkCancellation([this]() { return "After " + getDescriptor(); });
+      checkCancellation();
       // Compute the datatypes that occur in each column of the result.
       // Also assert, that if a column contains UNDEF values, then the
       // `mightContainUndef` flag for that columns is set.
@@ -176,6 +176,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->resultTable();
+  } catch (ad_utility::CancellationException& e) {
+    if (e.operation_.empty()) {
+      e.operation_ = getDescriptor();
+    }
+    runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
+    throw;
   } catch (const ad_utility::AbortException& e) {
     // A child Operation was aborted, do not print the information again.
     runtimeInfo().status_ =

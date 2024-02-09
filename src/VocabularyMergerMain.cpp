@@ -6,7 +6,7 @@
 // Can be used e.g. for benchmarking this step to develop faster IndexBuilders.
 
 #include "index/Vocabulary.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 
 // ____________________________________________________________________________________________________
 int main(int argc, char** argv) {
@@ -18,12 +18,14 @@ int main(int argc, char** argv) {
   std::string basename = argv[1];
   size_t numFiles = atoi(argv[2]);
 
-  VocabularyMerger m;
-
   auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
   auto internalVocabularyAction = [&file](const auto& word) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
-  m.mergeVocabulary(basename, numFiles, TripleComponentComparator(),
-                    internalVocabularyAction, 4_GB);
+  VocabularyOnDisk vocab;
+  auto externalVocabularyAction =
+      VocabularyOnDisk::WordWriter(basename + EXTERNAL_VOCAB_SUFFIX);
+  ad_utility::vocabulary_merger::mergeVocabulary(
+      basename, numFiles, TripleComponentComparator(), internalVocabularyAction,
+      externalVocabularyAction, 4_GB);
 }

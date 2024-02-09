@@ -84,7 +84,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
           co_yield triple;
         }
       }
-      cancellationHandle->throwIfCancelled("TriplesView generator");
+      cancellationHandle->throwIfCancelled();
     }
   }
 }
