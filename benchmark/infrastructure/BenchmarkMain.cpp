@@ -46,8 +46,9 @@ be treated as `false`.
 static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
     const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
         benchmarkClassAndResults,
-    const std::string& jsonFileName, bool appendToJsonInFile = false) {
-  AD_CORRECTNESS_CHECK(jsonFileName.ends_with(".json"));
+    const std::filesystem::path& jsonFileName,
+    bool appendToJsonInFile = false) {
+  AD_CORRECTNESS_CHECK(jsonFileName.extension() == ".json");
   // Convert to json.
   nlohmann::ordered_json benchmarkClassAndBenchmarkResultsAsJson(
       zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults));
@@ -67,10 +68,10 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
     don't have to risk errors for a better performance.
     */
     const nlohmann::ordered_json fileAsJson(
-        fileToJson<nlohmann::ordered_json>(jsonFileName));
+        fileToJson<nlohmann::ordered_json>(jsonFileName.string()));
     if (!fileAsJson.is_array()) {
       throw std::runtime_error(
-          absl::StrCat("The contents of the file ", jsonFileName,
+          absl::StrCat("The contents of the file ", jsonFileName.string(),
                        " do not describe an array json value. Therefore no "
                        "values can be appended."));
     }
