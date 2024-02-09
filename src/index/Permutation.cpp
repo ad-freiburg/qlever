@@ -69,7 +69,8 @@ size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
 }
 
 // ____________________________________________________________________________
-IdTable Permutation::getDistinctCol1IdsAndCounts(Id col0Id) const {
+IdTable Permutation::getDistinctCol1IdsAndCounts(
+    Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
   // TODO: It's a recurring pattern here and in other methods in this file,
   // that it is first checked whether the `col0Id` exists in the metadata and
   // subsequently the metadata is retrieved. Shoulnd't we avoid this because
@@ -77,8 +78,8 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(Id col0Id) const {
   AD_CONTRACT_CHECK(meta_.col0IdExists(col0Id));
   const auto& relationMetadata = meta_.getMetaData(col0Id);
   const auto& allBlocksMetadata = meta_.blockData();
-  return reader().getDistinctCol1IdsAndCounts(relationMetadata,
-                                              allBlocksMetadata);
+  return reader().getDistinctCol1IdsAndCounts(
+      relationMetadata, allBlocksMetadata, cancellationHandle);
 }
 
 // _____________________________________________________________________

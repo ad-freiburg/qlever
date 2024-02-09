@@ -492,7 +492,8 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
-  *result = permutation.getDistinctCol1IdsAndCounts(col0Id.value());
+  *result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
+                                                    cancellationHandle_);
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
@@ -752,8 +753,10 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
     return true;
   } else if (computeGroupByForJoinWithFullScan(result)) {
     return true;
+  } else if (computeGroupByObjectWithCount(result)) {
+    return true;
   } else {
-    return computeGroupByObjectWithCount(result);
+    return false;
   }
 }
 
