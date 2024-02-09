@@ -1,24 +1,38 @@
+// Copyright 2018, University of Freiburg,
+// Chair of Algorithms and Data Structures.
+// Author: Johannes Herrmann (johannes.roland.herrmann@mars.uni-freiburg.de)
+
 #include <gtest/gtest.h>
 
 #include "engine/GrbMatrix.h"
 #include "gmock/gmock.h"
 
+// This helper function checks all important proprties of a matrix.
+// One matrix consists of row index, column index and value in this order.
+// Entries which do not appear in the entries vector are ignored.
+using Entries = std::vector<std::tuple<size_t, size_t, bool>>;
+void checkMatrix(GrbMatrix& matrix, size_t numRows, size_t numCols,
+                 size_t numNonZero, Entries entries) {
+  EXPECT_THAT(matrix.numNonZero(), numNonZero);
+  EXPECT_THAT(matrix.numRows(), numRows);
+  EXPECT_THAT(matrix.numCols(), numCols);
+
+  for (auto [rowIndex, colIndex, value] : entries) {
+    EXPECT_THAT(matrix.getElement(rowIndex, colIndex), value);
+  }
+}
+
 TEST(GrbMatrixTest, constructor) {
   GrbMatrix::initialize();
 
   GrbMatrix matrix = GrbMatrix(2, 3);
-  size_t numRows = matrix.numRows();
-  size_t numCols = matrix.numCols();
-  size_t nvals = matrix.numNonZero();
+
+  checkMatrix(matrix, 2, 3, 0, {});
 
   GrbMatrix::finalize();
-
-  EXPECT_EQ(nvals, 0);
-  EXPECT_EQ(numRows, 2);
-  EXPECT_EQ(numCols, 3);
 }
 
-TEST(GrbMatrixTest, copy) {
+TEST(GrbMatrixTest, clone) {
   GrbMatrix::initialize();
 
   GrbMatrix matrix1 = GrbMatrix(2, 2);
@@ -28,10 +42,8 @@ TEST(GrbMatrixTest, copy) {
 
   matrix1.setElement(1, 1, true);
 
-  EXPECT_EQ(matrix2.getElement(0, 0), true);
-  EXPECT_EQ(matrix2.getElement(0, 1), false);
-  EXPECT_EQ(matrix2.getElement(1, 0), false);
-  EXPECT_EQ(matrix2.getElement(1, 1), false);
+  checkMatrix(matrix2, 2, 2, 1,
+              {{0, 0, true}, {0, 1, false}, {1, 0, false}, {1, 1, false}});
 
   GrbMatrix::finalize();
 }
@@ -43,17 +55,9 @@ TEST(GrbMatrixTest, getSetElement) {
   matrix.setElement(1, 0, true);
   matrix.setElement(0, 2, true);
 
-  bool elemOneZero = matrix.getElement(1, 0);
-  bool elemZeroTwo = matrix.getElement(0, 2);
-  bool elemOneTwo = matrix.getElement(1, 2);
-  size_t nvals = matrix.numNonZero();
+  checkMatrix(matrix, 3, 3, 2, {{1, 0, true}, {0, 2, true}});
 
   GrbMatrix::finalize();
-
-  EXPECT_EQ(nvals, 2);
-  EXPECT_EQ(elemOneZero, true);
-  EXPECT_EQ(elemZeroTwo, true);
-  EXPECT_EQ(elemOneTwo, false);
 }
 
 TEST(GrbMatrixTest, build) {
@@ -64,17 +68,7 @@ TEST(GrbMatrixTest, build) {
 
   GrbMatrix matrix = GrbMatrix::build(rowIndices, colIndices, 3, 3);
 
-  EXPECT_EQ(false, matrix.getElement(0, 0));
-  EXPECT_EQ(true, matrix.getElement(0, 1));
-  EXPECT_EQ(true, matrix.getElement(0, 2));
-
-  EXPECT_EQ(false, matrix.getElement(1, 0));
-  EXPECT_EQ(false, matrix.getElement(1, 1));
-  EXPECT_EQ(true, matrix.getElement(1, 2));
-
-  EXPECT_EQ(false, matrix.getElement(2, 0));
-  EXPECT_EQ(false, matrix.getElement(2, 1));
-  EXPECT_EQ(false, matrix.getElement(2, 2));
+  checkMatrix(matrix, 3, 3, 3, {{0, 1, true}, {0, 2, true}, {1, 2, true}});
 
   GrbMatrix::finalize();
 }
@@ -84,17 +78,7 @@ TEST(GrbMatrixTest, diag) {
 
   auto matrix = GrbMatrix::diag(3);
 
-  EXPECT_EQ(true, matrix.getElement(0, 0));
-  EXPECT_EQ(false, matrix.getElement(0, 1));
-  EXPECT_EQ(false, matrix.getElement(0, 2));
-
-  EXPECT_EQ(false, matrix.getElement(1, 0));
-  EXPECT_EQ(true, matrix.getElement(1, 1));
-  EXPECT_EQ(false, matrix.getElement(1, 2));
-
-  EXPECT_EQ(false, matrix.getElement(2, 0));
-  EXPECT_EQ(false, matrix.getElement(2, 1));
-  EXPECT_EQ(true, matrix.getElement(2, 2));
+  checkMatrix(matrix, 3, 3, 3, {{0, 0, true}, {1, 1, true}, {2, 2, true}});
 
   GrbMatrix::finalize();
 }
@@ -167,10 +151,7 @@ TEST(GrbMatrixTest, multiplySquareMatrices) {
 
   GrbMatrix matrix3 = matrix1.multiply(matrix2);
 
-  EXPECT_EQ(matrix3.getElement(0, 0), true);
-  EXPECT_EQ(matrix3.getElement(0, 1), false);
-  EXPECT_EQ(matrix3.getElement(1, 0), true);
-  EXPECT_EQ(matrix3.getElement(1, 1), false);
+  checkMatrix(matrix3, 2, 2, 2, {{0, 0, true}, {1, 0, true}});
 
   GrbMatrix::finalize();
 }
@@ -189,12 +170,7 @@ TEST(GrbMatrixTest, multiplyShapedMatrices) {
 
   GrbMatrix matrix3 = matrix1.multiply(matrix2);
 
-  EXPECT_EQ(matrix3.numRows(), 2);
-  EXPECT_EQ(matrix3.numCols(), 2);
-  EXPECT_EQ(matrix3.getElement(0, 0), true);
-  EXPECT_EQ(matrix3.getElement(0, 1), false);
-  EXPECT_EQ(matrix3.getElement(1, 0), true);
-  EXPECT_EQ(matrix3.getElement(1, 1), false);
+  checkMatrix(matrix3, 2, 2, 2, {{0, 0, true}, {1, 0, true}});
 
   GrbMatrix::finalize();
 }
@@ -210,17 +186,7 @@ TEST(GrbMatrixTest, transpose) {
 
   GrbMatrix result = matrix.transpose();
 
-  EXPECT_EQ(3, result.numRows());
-  EXPECT_EQ(2, result.numCols());
-
-  EXPECT_EQ(true, result.getElement(0, 0));
-  EXPECT_EQ(false, result.getElement(0, 1));
-
-  EXPECT_EQ(true, result.getElement(1, 0));
-  EXPECT_EQ(false, result.getElement(1, 1));
-
-  EXPECT_EQ(true, result.getElement(2, 0));
-  EXPECT_EQ(false, result.getElement(2, 1));
+  checkMatrix(result, 3, 2, 3, {{0, 0, true}, {1, 0, true}, {2, 0, true}});
 
   GrbMatrix::finalize();
 }
@@ -238,10 +204,8 @@ TEST(GrbMatrixTest, accumulateMultiply) {
 
   matrix1.accumulateMultiply(matrix2);
 
-  EXPECT_EQ(matrix1.getElement(0, 0), true);
-  EXPECT_EQ(matrix1.getElement(0, 1), true);
-  EXPECT_EQ(matrix1.getElement(1, 0), true);
-  EXPECT_EQ(matrix1.getElement(1, 1), true);
+  checkMatrix(matrix1, 2, 2, 4,
+              {{0, 0, true}, {0, 1, true}, {1, 0, true}, {1, 1, true}});
 
   GrbMatrix::finalize();
 }

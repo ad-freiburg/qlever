@@ -39,10 +39,10 @@ void GrbMatrix::setElement(size_t row, size_t col, bool value) {
 bool GrbMatrix::getElement(size_t row, size_t col) const {
   bool result;
   auto info = GrB_Matrix_extractElement_BOOL(&result, matrix(), row, col);
-  handleError(info);
   if (info == GrB_NO_VALUE) {
     return false;
   }
+  handleError(info);
   return result;
 }
 
@@ -212,7 +212,7 @@ void GrbMatrix::handleError(GrB_Info info) {
     case GrB_SUCCESS:
       return;
     case GrB_NO_VALUE:
-      return;
+      AD_THROW("GraphBLAS error: entry does not appear in the matrix");
     case GrB_UNINITIALIZED_OBJECT:
       AD_THROW("GraphBLAS error: object has not been initialized");
     case GrB_NULL_POINTER:

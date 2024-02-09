@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <cstdlib>
 extern "C" {
 #include <GraphBLAS.h>
 }
@@ -18,7 +19,11 @@ extern "C" {
  */
 class GrbMatrix {
  private:
-  std::unique_ptr<GrB_Matrix> matrix_ = std::make_unique<GrB_Matrix>();
+  using MatrixDeleter =
+      decltype([](GrB_Matrix* matrix) { GrB_Matrix_free(matrix); });
+  using MatrixPtr = std::unique_ptr<GrB_Matrix, MatrixDeleter>;
+  MatrixPtr matrix_ =
+      std::unique_ptr<GrB_Matrix, MatrixDeleter>(new GrB_Matrix());
   static bool isInitialized_;
 
  public:
