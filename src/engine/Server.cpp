@@ -684,7 +684,10 @@ boost::asio::awaitable<void> Server::processQuery(
         // This won't be treated as an error by any regular HTTP client, so
         // while it might be worth implementing to have some sort of validation
         // check, it isn't even shown by curl by default let alone in the
-        // browser.
+        // browser. Currently though it looks like boost.beast does simply not
+        // properly terminate the connection if an error occurs which does
+        // provide a somewhat cryptic error message when using curl, but is
+        // better than silently failing.
         LOG(ERROR) << e.what() << std::endl;
       }
     };
