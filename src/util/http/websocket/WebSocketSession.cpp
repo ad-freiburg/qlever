@@ -43,20 +43,20 @@ bool WebSocketSession::tryToCancelQuery() const {
 net::awaitable<void> WebSocketSession::handleClientCommands() {
   beast::flat_buffer buffer;
 
-  while (ws_.is_open()) {
-    co_await ws_.async_read(buffer, net::use_awaitable);
-    if (ws_.got_text()) {
-      auto data = buffer.data();
-      std::string_view dataAsString{static_cast<char*>(data.data()),
-                                    data.size()};
-      if (dataAsString == "cancel_on_close") {
-        cancelOnClose_ = true;
-      } else if (dataAsString == "cancel" && tryToCancelQuery()) {
-        break;
+    while (ws_.is_open()) {
+      co_await ws_.async_read(buffer, net::use_awaitable);
+      if (ws_.got_text()) {
+        auto data = buffer.data();
+        std::string_view dataAsString{static_cast<char*>(data.data()),
+                                      data.size()};
+        if (dataAsString == "cancel_on_close") {
+          cancelOnClose_ = true;
+        } else if (dataAsString == "cancel" && tryToCancelQuery()) {
+          break;
+        }
       }
+      buffer.clear();
     }
-    buffer.clear();
-  }
 }
 
 // _____________________________________________________________________________
@@ -92,7 +92,18 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
+    auto ex = co_await net::this_coro::executor;
+
+    LOG(INFO) << "Before await" << std::endl;
     co_await (waitForServerEvents() && handleClientCommands());
+      LOG(INFO) << "After await" << std::endl;
+  } catch (const net::multiple_exceptions& e) {
+    // TODO<joka921> We actually have to check, if BOTH the exceptions have the correct type.
+    if (cancelOnClose_) {
+      tryToCancelQuery();
+    }
+      LOG(INFO) << "Multiple exceptions" << std::endl;
+      co_return;
 
   } catch (boost::system::system_error& error) {
     if (cancelOnClose_) {
@@ -106,6 +117,9 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
       co_return;
     }
     // There was an unexpected error, rethrow
+    throw;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << e.what() << std::endl;
     throw;
   }
 }

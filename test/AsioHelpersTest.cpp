@@ -22,7 +22,46 @@ using namespace net::experimental::awaitable_operators;
 
 using ad_utility::resumeOnOriginalExecutor;
 using namespace boost::asio::experimental::awaitable_operators;
+namespace {
+struct Context {
+  net::io_context ctx_;
+  using Strand = decltype(net::make_strand(ctx_));
+  Strand strand1_ = net::make_strand(ctx_);
+  Strand strand2_ = net::make_strand(ctx_);
+  net::deadline_timer infiniteTimer1_{
+      strand1_, static_cast<net::deadline_timer::time_type>(
+                    boost::posix_time::pos_infin)};
+  net::deadline_timer infiniteTimer2_{
+      strand2_, static_cast<net::deadline_timer::time_type>(
+                    boost::posix_time::pos_infin)};
 
+  int x_ = 0;
+  std::atomic_flag done_{false};
+};
+}
+
+
+TEST(AsioHelpers, correctStrandScheduling) {
+   Context ctx;
+   static constexpr auto dummy = [](auto strand, auto wrongStrand)->net::awaitable<void> {
+     EXPECT_TRUE(strand.running_in_this_thread());
+     EXPECT_FALSE(wrongStrand.running_in_this_thread());
+     co_return;
+   };
+
+   auto scheduler = [](Context& ctx) -> net::awaitable<void> {
+     EXPECT_TRUE(ctx.strand1_.running_in_this_thread());
+     EXPECT_FALSE(ctx.strand2_.running_in_this_thread());
+     //co_await ad_utility::runAwaitableOnStrand(ctx.strand2_, dummy(ctx.strand2_, ctx.strand1_), net::use_awaitable);
+     co_await ad_utility::runAwaitableOnStrandAwaitable(ctx.strand2_, dummy(ctx.strand2_, ctx.strand1_));
+     EXPECT_TRUE(ctx.strand1_.running_in_this_thread());
+     EXPECT_FALSE(ctx.strand2_.running_in_this_thread());
+   };
+   net::co_spawn(ctx.strand1_, scheduler(ctx), net::detached);
+   ctx.ctx_.run();
+}
+
+/*
 TEST(AsioHelpers, cancellationOnOtherStrand) {
   struct Context {
     net::io_context ctx_;
@@ -81,14 +120,12 @@ TEST(AsioHelpers, cancellationOnOtherStrand) {
   ctx.done_.wait(false);
     net::dispatch(ctx.strand1_, std::packaged_task<void()>{
             [&]() { ctx.infiniteTimer1_.cancel(); }}).wait();
-    /*
-    net::dispatch(ctx.strand2_, std::packaged_task<void()>{
-            [&]() { ctx.infiniteTimer2_.cancel(); }}).wait();
-            */
   future.get();
   threads.clear();
   ASSERT_EQ(ctx.x_, numValues);
 }
+ */
+
 
 
 TEST(AsioHelpers, raceConditionCancellation) {

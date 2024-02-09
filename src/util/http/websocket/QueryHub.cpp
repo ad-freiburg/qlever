@@ -31,9 +31,10 @@ inline auto makeDeleteFromDistributors =
     };
 
 // _____________________________________________________________________________
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId,
-                                                   bool isSender) {
+template <bool isSender>
+net::awaitable<std::shared_ptr<
+    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   auto& distributors = socketDistributors_.get();
   if (distributors.contains(queryId)) {
     auto& reference = distributors.at(queryId);
@@ -87,24 +88,25 @@ template <bool isSender>
 net::awaitable<std::shared_ptr<
     QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  co_await ad_utility::runOnStrand(globalStrand_, net::use_awaitable);
-  co_return co_await createOrAcquireDistributorInternalUnsafe(
-      std::move(queryId), isSender);
+  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
+  auto res = co_await ad_utility::runAwaitableOnStrandAwaitable(
+      globalStrand_,
+      createOrAcquireDistributorInternalUnsafe<isSender>(std::move(queryId)));
+  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
+  co_return res;
 }
 
 // _____________________________________________________________________________
 net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return resumeOnOriginalExecutor(
-      createOrAcquireDistributorInternal<true>(std::move(queryId)));
+  return createOrAcquireDistributorInternal<true>(std::move(queryId));
 }
 
 // _____________________________________________________________________________
 
 net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return resumeOnOriginalExecutor(
-      createOrAcquireDistributorInternal<false>(std::move(queryId)));
+  return createOrAcquireDistributorInternal<false>(std::move(queryId));
 }
 
 }  // namespace ad_utility::websocket

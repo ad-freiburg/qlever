@@ -406,17 +406,22 @@ ASYNC_TEST(WebSocketSession,
   auto c = co_await createTestContainer(ioContext);
 
   auto controllerActions = [&]() -> net::awaitable<void> {
-    boost::beast::websocket::stream<tcp::socket> webSocket{
-        std::move(c.client_)};
-    co_await webSocket.async_handshake("localhost", "/watch/does-not-exist",
-                                       net::use_awaitable);
-    ASSERT_TRUE(webSocket.is_open());
+    try {
+      boost::beast::websocket::stream<tcp::socket> webSocket{
+          std::move(c.client_)};
+      co_await webSocket.async_handshake("localhost", "/watch/does-not-exist",
+                                         net::use_awaitable);
+      ASSERT_TRUE(webSocket.is_open());
 
-    co_await webSocket.async_write(toBuffer("cancel_on_close"),
-                                   net::use_awaitable);
+      co_await webSocket.async_write(toBuffer("cancel_on_close"),
+                                     net::use_awaitable);
 
-    co_await webSocket.async_close(boost::beast::websocket::close_code::normal,
-                                   net::use_awaitable);
+      co_await webSocket.async_close(
+          boost::beast::websocket::close_code::normal, net::use_awaitable);
+    } catch (const std::exception& e) {
+      LOG(ERROR) << "caught " << e.what() << std::endl;
+      throw;
+    }
   };
 
   EXPECT_NO_THROW(co_await net::co_spawn(

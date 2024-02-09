@@ -48,10 +48,6 @@ class QueryToSocketDistributor {
   /// update to the data.
   net::awaitable<void> waitForUpdate() const;
 
-  /// Schedule a coroutine onto the strand of this instance.
-  /// Make sure to co_await this before accessing any member of this class.
-  net::awaitable<void> postToStrand() const;
-
  public:
   /// Constructor that builds a new strand from the provided io context and
   /// `cleanupCall`. The cleanup call is invoked with `true` as an argument when
@@ -73,6 +69,9 @@ class QueryToSocketDistributor {
   /// for the websocket. co_returns a nullptr if no more data is available
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index) const;
+ private:
+    net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPieceUnguarded(
+            size_t index) const;
 };
 }  // namespace ad_utility::websocket
 

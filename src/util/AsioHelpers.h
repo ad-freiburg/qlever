@@ -10,6 +10,7 @@
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
+#include <boost/asio/co_spawn.hpp>
 
 
 #include "util/Exception.h"
@@ -18,6 +19,7 @@
 namespace ad_utility {
 
 namespace net = boost::asio;
+/*
 template <typename Strand>
 struct Canceller {
   Strand strand_;
@@ -104,35 +106,67 @@ auto runOnStrand(Strand strand, CompletionToken& token) {
   //return net::post(net::bind_executor(strand, token));
   return net::post(ChangeStrandToken{strand, token});
 }
+ */
 
-template <typename Strand, typename CompletionToken>
-auto runAwaitableOnStrand(Strand strand, net::awaitable<void> awaitable,
+    template <typename Strand, typename CompletionToken, typename T>
+auto runAwaitableOnStrand(Strand strand, net::awaitable<T> awaitable,
                           CompletionToken& token) {
-  auto innerAwaitable = [](auto awaitable, auto strand) -> net::awaitable<void> {
+  auto innerAwaitable = [](auto awaitable, auto strand) -> net::awaitable<T> {
       co_await net::post(net::bind_executor(strand, net::use_awaitable));
-      co_await net::co_spawn(strand, std::move(awaitable), net::bind_executor(strand, net::use_awaitable));
-      co_await net::post(net::use_awaitable);
+      if constexpr (std::is_void_v<T>) {
+        co_await net::co_spawn(strand, std::move(awaitable),
+                               net::bind_executor(strand, net::use_awaitable));
+        co_await net::post(net::use_awaitable);
+      } else {
+          decltype(auto) res = co_await net::co_spawn(strand, std::move(awaitable),
+                                 net::bind_executor(strand, net::use_awaitable));
+          co_await net::post(net::use_awaitable);
+          co_return res;
+      }
   };
-  return net::co_spawn(strand, innerAwaitable(std::move(awaitable), strand), net::bind_executor(strand, token));
-  //return net::bind_executor(strand, net::co_spawn(strand, std::move(awaitable), net::bind_executor(strand, token)));
-  /*
-  return net::async_initiate<CompletionToken, void()>(
-      awaitableOnStrandInitiation<Strand>, token, strand, std::move(awaitable));
-      */
-}
-template <typename Strand>
-net::awaitable<void> runAwaitableOnStrandAwaitable(
-    Strand strand, net::awaitable<void> awaitable) {
-  co_await net::post(net::bind_executor(strand, net::use_awaitable));
-  co_await net::co_spawn(strand, std::move(awaitable), net::bind_executor(strand, net::use_awaitable));
-  co_await net::post(net::use_awaitable);
-  /*
-  return net::async_initiate<CompletionToken, void()>(
-      awaitableOnStrandInitiation<Strand>, token, strand, std::move(awaitable));
-      */
+  //return net::co_spawn(strand, innerAwaitable(std::move(awaitable), strand), net::bind_executor(strand, token));
+  return net::co_spawn(strand, innerAwaitable(std::move(awaitable), strand), token);
 }
 
-/// Helper function that ensures that co_await resumes on the executor
+    template <typename Strand, typename CompletionToken,
+              std::invocable Function>
+    auto runFunctionOnStrand(Strand strand, Function function,
+                             CompletionToken& token) {
+  auto awaitable =
+      [](auto function) -> net::awaitable<std::invoke_result_t<Function>> {
+    co_return std::invoke(function);
+  };
+  auto innerAwaitable = [](auto awaitable,
+                           auto strand) -> net::awaitable<void> {
+    co_await net::post(net::bind_executor(strand, net::use_awaitable));
+    co_await net::co_spawn(strand, std::move(awaitable),
+                           net::bind_executor(strand, net::use_awaitable));
+    co_await net::post(net::use_awaitable);
+  };
+  return net::co_spawn(strand,
+                       innerAwaitable(awaitable(std::move(function)), strand),
+                       net::bind_executor(strand, token));
+    }
+
+    template <typename Strand, typename T>
+    net::awaitable<T> runAwaitableOnStrandAwaitable(
+        Strand strand, net::awaitable<T> awaitable) {
+  co_await net::post(net::bind_executor(strand, net::use_awaitable));
+  if constexpr (std::is_void_v<T>) {
+    co_await net::co_spawn(strand, std::move(awaitable),
+                           net::bind_executor(strand, net::use_awaitable));
+    co_await net::post(net::use_awaitable);
+  } else {
+    decltype(auto) res =
+        co_await net::co_spawn(strand, std::move(awaitable),
+                               net::bind_executor(strand, net::use_awaitable));
+    co_await net::post(net::use_awaitable);
+    co_return res;
+    co_await net::post(net::bind_executor(strand, net::use_awaitable));
+  }
+    }
+
+    /// Helper function that ensures that co_await resumes on the executor
 /// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!

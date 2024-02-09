@@ -118,6 +118,7 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
     std::atomic_flag blocker = false;
     std::atomic_flag started = false;
     // Add task to "block" execution
+    EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
     net::post(queryHub->globalStrand_, [&blocker, &started]() {
       started.test_and_set();
       started.notify_all();
@@ -219,8 +220,8 @@ ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
       }})
       .get();
 
-  distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe(
-      queryId, false);
+  distributor = co_await queryHub.createOrAcquireDistributorInternalUnsafe<false>(
+      queryId);
   EXPECT_FALSE(!comparison.owner_before(distributor) &&
                !distributor.owner_before(comparison));
 
