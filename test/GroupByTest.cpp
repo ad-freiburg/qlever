@@ -369,7 +369,7 @@ struct GroupByOptimizations : ::testing::Test {
       SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
   Tree xyScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
+      SparqlTriple{Variable{"?x"}, {"<notInVocab>"}, Variable{"?y"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
