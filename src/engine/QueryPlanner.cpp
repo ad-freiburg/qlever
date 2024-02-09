@@ -893,17 +893,17 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    const string keyword = "MaxDistanceInMeter:";
     const string input = node.triple_._p._iri;
-    if (input.find(keyword) != std::string::npos ) {
+    if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
+          input[input.size() - 1] == '>' ) {
       int maxDist = 0;
       try {
-      maxDist = std::stoi(input.substr(keyword.size()+1,
-          input.size() - keyword.size()-2));  // -2 to compensate for < and >
+        maxDist = std::stoi(input.substr(MAX_DIST_IN_METERS.size(),
+          input.size() - MAX_DIST_IN_METERS.size()-1));  // -1: compensate for >
       } catch(const std::exception& e) {
-        LOG(INFO) << "converstion of maxDistance was not possible "
-                  << "assuming infinite maxDistance" << std::endl;
         LOG(INFO) << "exception: " << e.what() << std::endl;
+        AD_THROW("parsing of the maximum distance for the SpatialJoin "
+            "operation was not possible");
       }
       pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_,
           std::nullopt, std::nullopt, maxDist));

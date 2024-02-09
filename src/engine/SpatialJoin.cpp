@@ -114,9 +114,9 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 
 ResultTable SpatialJoin::computeResult() {
   auto betweenQuotes = [] (std::string extractFrom) {
-    /* returns everything between the first two quotes. If the string does not
-    * contain two quotes, the string is returned as a whole
-    */
+    // returns everything between the first two quotes. If the string does not
+    // contain two quotes, the string is returned as a whole
+    //
     size_t pos1 = extractFrom.find("\"", 0);
     size_t pos2 = extractFrom.find("\"", pos1 + 1);
     if (pos1 != std::string::npos && pos2 != std::string::npos) {
@@ -198,11 +198,10 @@ ResultTable SpatialJoin::computeResult() {
     size_t numColumns = getResultWidth();
     IdTable result{numColumns, _allocator};
 
-    /* this lambda function copies elements from copyFrom
-    * into the table res. It copies them into the row
-    * row_ind_res and column column col_ind_res. It returns the column number
-    * until which elements were copied
-    */
+    // this lambda function copies elements from copyFrom
+    // into the table res. It copies them into the row
+    // row_ind_res and column column col_ind_res. It returns the column number
+    // until which elements were copied
     auto addColumns = [](IdTable* res,
                         const IdTable* copyFrom,
                         size_t row_ind_res,

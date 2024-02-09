@@ -20,25 +20,24 @@ class SpatialJoin : public Operation {
     [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
     ResultTable computeResult() override;
 
-    /* Depending on the amount of children the operation returns a different
-    VariableToColumnMap. If the operation doesn't have both children it needs
-    to aggressively push the queryplanner to add the children, because the
-    operation can't exist without them. If it has both children, it can return
-    the variable to column map, which will be present, after the operation has
-    computed its result */
+    // Depending on the amount of children the operation returns a different
+    // VariableToColumnMap. If the operation doesn't have both children it needs
+    // to aggressively push the queryplanner to add the children, because the
+    // operation can't exist without them. If it has both children, it can
+    // return the variable to column map, which will be present, after the
+    // operation has computed its result
     VariableToColumnMap computeVariableToColumnMap() const override;
 
-    /* this method creates a new SpatialJoin object, to which the child gets
-    added. The reason for this behavior is, that the QueryPlanner can then
-    still use the existing SpatialJoin object, to try different orders
-    */
+    // this method creates a new SpatialJoin object, to which the child gets
+    // added. The reason for this behavior is, that the QueryPlanner can then
+    // still use the existing SpatialJoin object, to try different orders
     std::shared_ptr<SpatialJoin> addChild(
           std::shared_ptr<QueryExecutionTree> child, Variable varOfChild);
     
-    /* if the spatialJoin has both children its construction is done. Then true
-    is returned. This function is needed in the QueryPlanner, so that the
-    QueryPlanner stops trying to add children, after it is already constructed
-    */
+    // if the spatialJoin has both children its construction is done. Then true
+    // is returned. This function is needed in the QueryPlanner, so that the
+    // QueryPlanner stops trying to add children, after the SpatialJoin is
+    // already constructed
     bool isConstructed();
 
   private:

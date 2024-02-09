@@ -82,6 +82,13 @@ static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
 static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 
+// this predicate is the identifier for the SpatialJoin class. It joins the two
+// objects, if their distance is smaller or equal to the maximum distance, which
+// needs to be given in the predicate as well. The syntax for the predicate
+// needs to be like this: <max-distance-in-meters:XXXX>, where XXXX needs to be
+// replaced by an integer number. 
+static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
+
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
 static const char XSD_DATETIME_TYPE[] =

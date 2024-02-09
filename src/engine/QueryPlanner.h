@@ -338,9 +338,9 @@ class QueryPlanner {
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
-  // if one of the inputs is the spatial join and the other input is a matching
-  // geometry, add the geometry as a child to the spatial join instead of
-  // creating a normal join
+  // if one of the inputs is a spatial join which is compatible with the other
+  // input, then add that other input to the spatial join as a child instead of
+  // creating a normal join.
   [[nodiscard]] static std::optional<SubtreePlan> createSpatialJoin(
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
