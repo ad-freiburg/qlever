@@ -30,7 +30,8 @@ class ValuesForTesting : public Operation {
                             std::vector<std::optional<Variable>> variables,
                             bool supportsLimit = false,
                             std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{})
+                            LocalVocab localVocab = LocalVocab{},
+                            std::string cacheKey = "")
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
@@ -38,7 +39,8 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{table_.numRows()},
         costEstimate_{table_.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
-        localVocab_{std::move(localVocab)} {
+        localVocab_{std::move(localVocab)},
+        cacheKey_{std::move(cacheKey)} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
@@ -64,13 +66,8 @@ class ValuesForTesting : public Operation {
   string getCacheKeyImpl() const override {
     std::stringstream str;
     str << "Values for testing with " << table_.numColumns()
-        << " columns and contents ";
-    for (size_t i = 0; i < table_.numColumns(); ++i) {
-      for (Id entry : table_.getColumn(i)) {
-        str << entry << ' ';
-      }
-    }
-    str << "Supports limit: " << supportsLimit_;
+        << " columns. Key: " << cacheKey_
+        << " Supports limit: " << supportsLimit_;
     return std::move(str).str();
   }
 
@@ -123,6 +120,8 @@ class ValuesForTesting : public Operation {
   std::vector<ColumnIndex> resultSortedColumns_;
 
   LocalVocab localVocab_;
+
+  std::string cacheKey_;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns

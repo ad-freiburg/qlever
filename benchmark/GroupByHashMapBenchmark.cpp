@@ -201,12 +201,12 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
  private:
   std::random_device rd;
   std::mt19937_64 randomEngine{rd()};
-  static constexpr size_t numInputRows = 1'000'000;
-  static constexpr size_t numMeasurements = 3;
-  static constexpr size_t multiplicities[] = {500'000, 50'000, 5'000,
+  static constexpr size_t numInputRows = 10'000'000;
+  static constexpr size_t numMeasurements = 4;
+  static constexpr size_t multiplicities[] = {5'000'000, 500'000, 50'000, 5'000,
                                               500,     50,     5};
-  static constexpr size_t blockSizes[] = {262144, 65536, 16384, 4096};
-  static constexpr size_t randomStringLength = 4;
+  static constexpr size_t blockSizes[] = {1048576, 262144, 65536, 16384, 4096};
+  static constexpr size_t randomStringLength = 3;
 
   template <typename T>
   static void computeGroupBy(QueryExecutionContext* qec,
