@@ -449,6 +449,12 @@ class CompressedRelationReader {
       const CompressedRelationMetadata& metaData, Id col1Id,
       const vector<CompressedBlockMetadata>& blocks) const;
 
+  // For a given relation, determine the `col1Id`s and their counts. This is
+  // used for `computeGroupByObjectWithCount`.
+  IdTable getDistinctCol1IdsAndCounts(
+      const CompressedRelationMetadata& relationMetadata,
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata) const;
+
   // Get the contiguous subrange of the given `blockMetadata` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the

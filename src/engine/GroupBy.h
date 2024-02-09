@@ -111,23 +111,22 @@ class GroupBy : public Operation {
   // of tests to write.
 
   // For certain combinations of `_groupByColumns`, `_aliases` and `_subtree`,
-  // it is not necessary to fully materialize the `_subtree`'s result to compute
-  // the GROUP BY, but the result can simply be read from the index meta data.
-  // An example for such a combination is the query
-  //  SELECT ((COUNT ?x) as ?cnt) WHERE {
-  //    ?x <somePredicate> ?y
-  //  }
-  // This function checks whether such a case applies. In this case the result
-  // is computed and stored in `result` and `true` is returned. If no such case
-  // applies, `false` is returned and the `result` is untouched. Precondition:
-  // The `result` must be empty.
-  bool computeOptimizedGroupByIfPossible(IdTable*);
+  // it is not necessary to fully materialize the `_subtree`'s result, but the
+  // result of the GROUP BY can be computed directly from the index meta data.
+  // See the functions below for examples and details.
+  //
+  // This function takes an empty `result` as input and checks whether such a
+  // case applies. In this case the result is computed and stored in `result`
+  // and `true` is returned. If no such case applies, `false` is returned and
+  // `result` remains empty.
+  bool computeOptimizedGroupByIfPossible(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT (COUNT (?x) as ?cnt) WHERE {
-  //    ?x <somePredicate> ?y
-  //  }
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT (COUNT (?x) as ?count) WHERE {
+  //     ?x <somePredicate> ?y
+  //   }
+  //
   // The single triple must contain two or three variables, and the fixed value
   // in the two variable case might also be the subject or object of the triple.
   // The COUNT may be computed on any of the variables in the triple. If the
@@ -136,11 +135,23 @@ class GroupBy : public Operation {
   // `result` is left untouched, and `false` is returned.
   bool computeGroupByForSingleIndexScan(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT ?x (COUNT(?x) as ?cnt) WHERE {
-  //    ?x ?y ?z
-  //  } GROUP BY ?x
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?y (COUNT(?y) as ?count) WHERE {
+  //     ?x <somePredicate> ?y
+  //   } GROUP BY ?y
+  //
+  // NOTE: This is exactly what we need for a context-sensitive object AC query
+  // without connected triples. The GROUP BY variable can also be ommitted in
+  // the SELECT clause.
+  bool computeGroupByObjectWithCount(IdTable* result);
+
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?x (COUNT(?x) as ?count) WHERE {
+  //     ?x ?y ?z
+  //   } GROUP BY ?x
+  //
   // The single triple must contain three variables. The grouped variable and
   // the selected variable must be the same, but may be either one of `?x, `?y`,
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
@@ -148,12 +159,13 @@ class GroupBy : public Operation {
   // `COUNT`.
   bool computeGroupByForFullIndexScan(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT ?x (COUNT (?x) as ?cnt) WHERE {
-  //    %arbitrary graph pattern that contains `?x`, but neither `?y`, nor `?z`.
-  //    ?x ?y ?z
-  //  } GROUP BY ?x
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?x (COUNT (?x) as ?count) WHERE {
+  //     %any graph pattern that contains `?x`, but neither `?y`, nor `?z`.
+  //     ?x ?y ?z
+  //   } GROUP BY ?x
+  //
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
