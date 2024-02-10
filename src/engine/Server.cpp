@@ -713,14 +713,9 @@ boost::asio::awaitable<void> Server::processQuery(
         auto responseString = co_await computeInNewThread(
             [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
              &cancellationHandle] {
-              try {
-                return ExportQueryExecutionTrees::computeResultAsJSON(
-                    plannedQuery.value().parsedQuery_, qet, requestTimer,
-                    maxSend, mediaType.value(), cancellationHandle);
-              } catch (ad_utility::CancellationException& e) {
-                e.operation_ = "Query Export";
-                throw;
-              }
+              return ExportQueryExecutionTrees::computeResultAsJSON(
+                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  mediaType.value(), cancellationHandle);
             },
             cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
@@ -758,9 +753,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    if (!e.operation_.empty()) {
-      *exceptionErrorMsg += " Last operation: " + e.operation_;
-    }
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();

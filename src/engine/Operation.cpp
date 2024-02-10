@@ -177,9 +177,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
                << resultNumCols << std::endl;
     return result._resultPointer->resultTable();
   } catch (ad_utility::CancellationException& e) {
-    if (e.operation_.empty()) {
-      e.operation_ = getDescriptor();
-    }
+    e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
     throw;
   } catch (const ad_utility::AbortException& e) {

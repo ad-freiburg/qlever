@@ -714,8 +714,17 @@ ExportQueryExecutionTrees::computeResultAsStream(
   };
 
   using enum MediaType;
-  return ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml>(
-      compute, mediaType);
+  auto inner =
+      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml>(
+          compute, mediaType);
+  try {
+    for (auto& block : inner) {
+      co_yield block;
+    }
+  } catch (ad_utility::CancellationException& e) {
+    e.setOperation("Stream query export");
+    throw;
+  }
 }
 
 // _____________________________________________________________________________
@@ -743,16 +752,21 @@ nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::Timer& requestTimer, uint64_t maxSend,
     ad_utility::MediaType mediaType, CancellationHandle cancellationHandle) {
-  switch (mediaType) {
-    case ad_utility::MediaType::qleverJson:
-      return computeQueryResultAsQLeverJSON(parsedQuery, qet, requestTimer,
-                                            maxSend,
-                                            std::move(cancellationHandle));
-    case ad_utility::MediaType::sparqlJson:
-      return computeSelectQueryResultAsSparqlJSON(
-          parsedQuery, qet, requestTimer, maxSend,
-          std::move(cancellationHandle));
-    default:
-      AD_FAIL();
+  try {
+    switch (mediaType) {
+      case ad_utility::MediaType::qleverJson:
+        return computeQueryResultAsQLeverJSON(parsedQuery, qet, requestTimer,
+                                              maxSend,
+                                              std::move(cancellationHandle));
+      case ad_utility::MediaType::sparqlJson:
+        return computeSelectQueryResultAsSparqlJSON(
+            parsedQuery, qet, requestTimer, maxSend,
+            std::move(cancellationHandle));
+      default:
+        AD_FAIL();
+    }
+  } catch (ad_utility::CancellationException& e) {
+    e.setOperation("Query export");
+    throw;
   }
 }
