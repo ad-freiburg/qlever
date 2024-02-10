@@ -53,15 +53,11 @@ string Bind::getDescriptor() const { return _bind.getDescriptor(); }
 bool Bind::knownEmptyResult() { return _subtree->knownEmptyResult(); }
 
 // _____________________________________________________________________________
-string Bind::asStringImpl(size_t indent) const {
+string Bind::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "BIND ";
   os << _bind._expression.getCacheKey(_subtree->getVariableColumns());
-  os << "\n" << _subtree->asString(indent);
+  os << "\n" << _subtree->getCacheKey();
   return std::move(os).str();
 }
 
@@ -89,6 +85,7 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 
 // _____________________________________________________________________________
 ResultTable Bind::computeResult() {
+  using std::endl;
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
@@ -125,7 +122,7 @@ void Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -143,29 +140,33 @@ void Bind::computeExpressionBind(
     for (size_t j = 0; j < inCols; ++j) {
       output(i, j) = input(i, j);
     }
+    checkCancellation();
   }
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     constexpr static bool isVariable = std::is_same_v<T, ::Variable>;
     constexpr static bool isStrongId = std::is_same_v<T, Id>;
+
     if constexpr (isVariable) {
       auto column =
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
+        checkCancellation();
       }
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = singleResult;
+        checkCancellation();
       }
     } else {
-      bool isConstant = sparqlExpression::isConstantResult<T>;
+      constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
           std::forward<T>(singleResult), inSize, &evaluationContext);
 
-      if (isConstant) {
+      if constexpr (isConstant) {
         auto it = resultGenerator.begin();
         if (it != resultGenerator.end()) {
           Id constantId =
@@ -173,6 +174,7 @@ void Bind::computeExpressionBind(
                   std::move(*it), *outputLocalVocab);
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
+            checkCancellation();
           }
         }
       } else {
@@ -183,6 +185,7 @@ void Bind::computeExpressionBind(
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue), *outputLocalVocab);
           i++;
+          checkCancellation();
         }
       }
     }

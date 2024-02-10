@@ -14,6 +14,7 @@
 #include "engine/LocalVocab.h"
 #include "global/Constants.h"
 #include "global/Id.h"
+#include "global/SpecialIds.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Date.h"
@@ -84,8 +85,8 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, UNDEF, Variable,
-                               Literal, DateOrLargeYear>;
+  using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
+                               Variable, Literal, DateOrLargeYear>;
   Variant _variant;
 
  public:
@@ -100,13 +101,9 @@ class TripleComponent {
   TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
-      // Previously we stored variables as strings, so this check is a way
-      // to easily track places where this old behavior is accidentally still
-      // in place.
+      // Storing variables and literals as strings is deprecated. The following
+      // checks help find places, where this is accidentally still done.
       AD_CONTRACT_CHECK(!getString().starts_with("?"));
-
-      // We also used to store literals as `std::string`, so we use a similar
-      // check here.
       AD_CONTRACT_CHECK(!getString().starts_with('"'));
       AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }
@@ -183,13 +180,6 @@ class TripleComponent {
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
-  bool isDate() const {
-    return std::holds_alternative<DateOrLargeYear>(_variant);
-  }
-  DateOrLargeYear getDate() const {
-    return std::get<DateOrLargeYear>(_variant);
-  }
-
   /// Access the value. If one of those methods is called but the variant
   /// doesn't hold the correct type, an exception is thrown.
   [[nodiscard]] const std::string& getString() const {
@@ -239,6 +229,8 @@ class TripleComponent {
           isString() ? getString() : getLiteral().rawContent();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
+      } else if (qlever::specialIds.contains(content)) {
+        return qlever::specialIds.at(content);
       } else {
         return std::nullopt;
       }

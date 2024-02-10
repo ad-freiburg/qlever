@@ -9,31 +9,31 @@
 #include "absl/strings/str_join.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexMetaData.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 
 // ____________________________________________________________________________
 LocatedTriple LocatedTriple::locateTripleInPermutation(
     Id id1, Id id2, Id id3, const Permutation& permutation) {
   // Get the internal data structures from the permutation.
-  auto& file = permutation._file;
-  const auto& meta = permutation._meta;
-  const auto& reader = permutation._reader;
+  const Permutation::MetaData& meta = permutation.metaData();
+  const CompressedRelationReader& reader = permutation.reader();
 
   // Find the index of the first block where the last triple is not smaller.
   //
-  // NOTE: Since `_col2LastId` has been added to `CompressedBlockMetadata`, this
-  // can be computed without having to decompress any blocks.
+  // TODO: This is the standard comparator for `std::array<Id, 3>`, no need to
+  // spell it out here.
   const vector<CompressedBlockMetadata>& blocks = meta.blockData();
   auto matchingBlock = std::lower_bound(
       blocks.begin(), blocks.end(), std::array<Id, 3>{id1, id2, id3},
       [&](const CompressedBlockMetadata& block, const auto& triple) -> bool {
-        if (block.col0LastId_ < triple[0]) {
+        const auto& lastTriple = block.lastTriple_;
+        if (lastTriple.col0Id_ < triple[0]) {
           return true;
-        } else if (block.col0LastId_ == triple[0]) {
-          if (block.col1LastId_ < triple[1]) {
+        } else if (lastTriple.col0Id_ == triple[0]) {
+          if (lastTriple.col1Id_ < triple[1]) {
             return true;
-          } else if (block.col1LastId_ == triple[1]) {
-            return block.col2LastId_ < triple[2];
+          } else if (lastTriple.col1Id_ == triple[1]) {
+            return lastTriple.col2Id_ < triple[2];
           }
         }
         return false;
@@ -53,9 +53,10 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
     return locatedTriple;
   }
 
-  // Read and decompress the block.
+  // Read and decompress the block (we want the `col1Id` and `col2Id` columns).
+  std::array<ColumnIndex, 2> columnIndices{0u, 1u};
   DecompressedBlock blockTuples =
-      reader.readAndDecompressBlock(*matchingBlock, file, std::nullopt);
+      reader.readAndDecompressBlock(*matchingBlock, columnIndices);
 
   // Find the smallest relation `Id` that is not smaller than `id1` and get its
   // metadata and the position of the first and last triple with that `Id` in
@@ -75,8 +76,9 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   //
   // NOTE: Since we have already handled the case, where all `Id`s in the
   // permutation are smaller, above, such a relation should exist.
-  Id searchId =
-      matchingBlock->col0FirstId_ > id1 ? matchingBlock->col0FirstId_ : id1;
+  Id searchId = matchingBlock->firstTriple_.col0Id_ > id1
+                    ? matchingBlock->firstTriple_.col0Id_
+                    : id1;
   const auto& it = meta._data.lower_bound(searchId);
   AD_CORRECTNESS_CHECK(it != meta._data.end());
   Id id = it.getId();

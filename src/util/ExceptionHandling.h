@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <type_traits>
 
+#include "absl/strings/str_cat.h"
 #include "util/Forward.h"
 #include "util/Log.h"
 #include "util/SourceLocation.h"
@@ -48,7 +49,7 @@ void ignoreExceptionIfThrows(F&& f,
 // exception, and the location of the call. This can be used to make destructors
 // `noexcept()` that have to perform some non-trivial logic (e.g. writing a
 // trailer to a file), when such a failure should never occur in practice and
-// also is not easily recovarable. For an example usage see `PatternCreator.h`.
+// also is not easily recoverable. For an example usage see `PatternCreator.h`.
 // The actual termination call can be configured for testing purposes. Note that
 // this function must never throw an exception.
 template <typename F,
@@ -59,23 +60,91 @@ void terminateIfThrows(F&& f, std::string_view message,
                        TerminateAction terminateAction = {},
                        ad_utility::source_location l =
                            ad_utility::source_location::current()) noexcept {
+  auto getErrorMessage =
+      [&message, &l](const auto&... additionalMessages) -> std::string {
+    return absl::StrCat(
+        "A function that should never throw has thrown an exception",
+        additionalMessages..., ". The function was called in file ",
+        l.file_name(), " on line ", l.line(),
+        ". Additional information: ", message,
+        ". Please report this. Terminating");
+  };
+
+  auto logAndTerminate = [&terminateAction](std::string_view msg) {
+    try {
+      LOG(ERROR) << msg << std::endl;
+      std::cerr << msg << std::endl;
+    } catch (...) {
+      std::cerr << msg << std::endl;
+    }
+    terminateAction();
+  };
   try {
     std::invoke(AD_FWD(f));
   } catch (const std::exception& e) {
-    std::cerr << "A function that should never throw has thrown an exception "
-                 "with message \""
-              << e.what() << "\". The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
+    auto msg = getErrorMessage(" with message \"", e.what(), "\"");
+    logAndTerminate(msg);
   } catch (...) {
-    std::cerr << "A function that should never throw has thrown an exception. "
-                 "The function was called in file "
-              << l.file_name() << " on line " << l.line()
-              << ". Additional information: " << message
-              << ". Please report this. Terminating" << std::endl;
-    terminateAction();
+    auto msg = getErrorMessage();
+    logAndTerminate(msg);
   }
 }
+
+// This class is used to safely throw or ignore exceptions in destructors. It is
+// used if a destructor of a class must call a function that might fail and
+// report that failure via an exception (e.g. writing some final metadata to a
+// file). Typically, exceptions in C++ destructors are very unsafe, because they
+// immediately lead to program termination if the destructor was called while
+// another exception was already handled. The use case is as follows:
+// 1. Declare a class member of type `ThrowInDestructorIfSafe`. This has the
+// effect that automatically the destructor of your class will implicitly be
+// `noexcept(false)` which enables exceptions in destructors.
+// 2. Pass the potentially throwing code in the destructor as a callable to the
+// `ThrowInDestructorIfSafe` object. If this callable. throws, and it is safe to
+// throw, then the exception is normally propagated. If it is not safe to throw,
+// then the exception is caught and logged, but otherwise ignored. Example:
+// class C {
+//   ThrowOnDestructorIfSafe throwIfSafe_;
+//   ~C() {
+//     throwIfSafe_([]{throw std::runtime_error("haha");});
+//   }
+class ThrowInDestructorIfSafe {
+  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+
+ public:
+  void operator()(
+      std::invocable auto f,
+      std::convertible_to<std::string_view> auto const&... additionalMessages)
+      const {
+    auto logIgnoredException = [&additionalMessages...](std::string_view what) {
+      std::string_view sep = sizeof...(additionalMessages) == 0 ? "" : " ";
+      LOG(WARN) << absl::StrCat(
+                       "An exception was ignored because it would have led to "
+                       "program termination",
+                       sep, additionalMessages...,
+                       ". Exception message: ", what)
+                << std::endl;
+    };
+    // If the number of uncaught exceptions is the same as when then constructor
+    // was called, then it is safe to throw a possible exception. For details
+    // see https://en.cppreference.com/w/cpp/error/uncaught_exception,
+    // especially the links at the bottom of the page.
+    auto potentiallyThrow =
+        [this, &logIgnoredException](std::string_view logMessage) {
+          if (std::uncaught_exceptions() == numExceptionsDuringConstruction_) {
+            throw;
+          } else {
+            logIgnoredException(logMessage);
+          }
+        };
+    try {
+      std::invoke(std::move(f));
+    } catch (const std::exception& e) {
+      potentiallyThrow(e.what());
+    } catch (...) {
+      potentiallyThrow("Exception not inheriting from `std::exception`");
+    }
+  }
+  ~ThrowInDestructorIfSafe() noexcept(false) = default;
+};
 }  // namespace ad_utility

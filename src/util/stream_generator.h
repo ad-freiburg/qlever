@@ -13,14 +13,12 @@
 
 #include <boost/iostreams/device/back_inserter.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
+#include <coroutine>
 #include <exception>
 #include <sstream>
 
-// Coroutines are still experimental in clang libcpp, therefore
-// adapt the appropriate namespaces using the convenience header.
-#include "./Concepts.h"
-#include "./Coroutines.h"
-#include "./Exception.h"
+#include "util/Concepts.h"
+#include "util/Exception.h"
 
 namespace ad_utility::streams {
 

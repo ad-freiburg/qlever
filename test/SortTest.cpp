@@ -12,13 +12,14 @@
 #include "global/ValueIdComparators.h"
 
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
 
 // Create a `Sort` operation that sorts the `input` by the `sortColumns`.
 Sort makeSort(IdTable input, const std::vector<ColumnIndex>& sortColumns) {
-  std::vector<Variable> vars;
+  std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (ColumnIndex i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
@@ -139,7 +140,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("Sort (internal order) on ?0", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("SORT(internal) on columns:asc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(1u, varColMap.size());
@@ -147,7 +148,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ(42.0, s.getMultiplicity(0));
 
-    EXPECT_THAT(s.getSubtree()->getRootOperation()->asString(),
+    EXPECT_THAT(s.getSubtree()->getRootOperation()->getCacheKey(),
                 ::testing::StartsWith("Values for testing with"));
   }
 
@@ -161,7 +162,7 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ("Sort (internal order) on ?1 ?0", s.getDescriptor());
 
     EXPECT_THAT(
-        s.asString(),
+        s.getCacheKey(),
         ::testing::StartsWith("SORT(internal) on columns:asc(1) asc(0) \n"));
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());
@@ -171,4 +172,27 @@ TEST(Sort, SimpleMemberFunctions) {
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
   }
+}
+
+// _____________________________________________________________________________
+
+TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
+  VectorTable input;
+  // Make sure the estimator estimates a couple of ms to sort this
+  for (int64_t i = 0; i < 1000; i++) {
+    input.push_back({0, i});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  Sort sort = makeSort(std::move(inputTable), {1, 0});
+  // Safe to do, because we know the underlying estimator is mutable
+  const_cast<SortPerformanceEstimator&>(
+      sort.getExecutionContext()->getSortPerformanceEstimator())
+      .computeEstimatesExpensively(
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+
+  sort.recursivelySetTimeConstraint(0ms);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
+      ad_utility::CancellationException);
 }

@@ -1,0 +1,2 @@
+addLinkAndDiscoverTest(ParallelBufferTest parser)
+addLinkAndDiscoverTest(LiteralOrIriTest)

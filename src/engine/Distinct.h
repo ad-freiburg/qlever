@@ -3,17 +3,13 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <list>
 #include <utility>
 #include <vector>
 
-#include "../parser/ParsedQuery.h"
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "parser/ParsedQuery.h"
 
-using std::list;
-
-using std::pair;
 using std::vector;
 
 class Distinct : public Operation {
@@ -60,7 +56,7 @@ class Distinct : public Operation {
   }
 
  protected:
-  [[nodiscard]] string asStringImpl(size_t indent = 0) const override;
+  [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
   virtual ResultTable computeResult() override;

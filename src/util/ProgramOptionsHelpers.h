@@ -5,11 +5,12 @@
 #ifndef QLEVER_PROGRAMOPTIONSHELPERS_H
 #define QLEVER_PROGRAMOPTIONSHELPERS_H
 
-#include <util/Concepts.h>
-#include <util/Parameters.h>
-
 #include <boost/program_options.hpp>
 #include <vector>
+
+#include "util/Concepts.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
 namespace ad_utility {
 
 // An implicit wrapper that can be implicitly converted to and from `size_t`.
@@ -33,8 +34,8 @@ Stream& operator<<(Stream& stream, NN&& nonNegative) {
 // This function is required  to use the `NonNegative` class in the
 // `boost::program_options`. It throws an exception when parsing a negative
 // value.
-void validate(boost::any& v, const std::vector<std::string>& values,
-              NonNegative*, int) {
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     NonNegative*, int) {
   using namespace boost::program_options;
   validators::check_first_occurrence(v);
 
@@ -58,6 +59,21 @@ void validate(boost::any& v, const std::vector<std::string>& values,
   // Wrap the T inside std::optional
   AD_CONTRACT_CHECK(!v.empty());
   v = std::optional<T>(boost::any_cast<T>(v));
+}
+
+// This function is required  to use `MemorySize` in `boost::program_options`.
+inline void validate(boost::any& v, const std::vector<std::string>& values,
+                     MemorySize*, int) {
+  using namespace boost::program_options;
+
+  // Make sure no previous assignment to 'v' was made.
+  validators::check_first_occurrence(v);
+  // Extract the first string from 'values'. If there is more than
+  // one string, it's an error, and exception will be thrown.
+  const string& s = validators::get_single_string(values);
+
+  // Convert the string to `MemorySize` and put it into the option.
+  v = MemorySize::parse(s);
 }
 
 /// Create `boost::program_options::value`s (command-line options) from

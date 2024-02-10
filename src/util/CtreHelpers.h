@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "ctre/ctre.h"
+#include <ctre-unicode.hpp>
 
 /// Helper function for ctre: concatenation of fixed_strings
 template <size_t A, size_t B>

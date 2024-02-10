@@ -7,6 +7,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 // Forward declaration because of cyclic dependencies
 // TODO<joka921> The coupling of the `Variable` with its `evaluate` methods
@@ -36,8 +37,17 @@ class Variable {
   // Needed for consistency with the `Alias` class.
   [[nodiscard]] const std::string& targetVariable() const { return _name; }
 
-  // Convert `?someVariable` into `?ql_textscore_someVariable`
-  Variable getTextScoreVariable() const;
+  // Converts `?someTextVar` and `?someEntityVar` into
+  // `?ql_someTextVar_score_var_someEntityVar`.
+  // Converts `?someTextVar` and `someFixedEntity` into
+  // `?ql_someTextVar_fixedEntity_someFixedEntity`.
+  // Note that if the the fixed entity contains non ascii characters they are
+  // converted to numbers and escaped.
+  Variable getScoreVariable(
+      const std::variant<Variable, std::string>& varOrEntity) const;
+
+  // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
+  Variable getMatchingWordVariable(std::string_view term) const;
 
   bool operator==(const Variable&) const = default;
 

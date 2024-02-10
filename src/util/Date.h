@@ -11,9 +11,6 @@
 #include <exception>
 #include <sstream>
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
-#include "ctre/ctre.h"
 #include "global/Constants.h"
 #include "util/CtreHelpers.h"
 #include "util/NBitInteger.h"
@@ -303,6 +300,10 @@ class Date {
     timeZone_ = static_cast<unsigned>(actualTimeZone - minTimeZoneActually);
   }
 
+  // True iff Date object has set time values (hours, minutes, seconds) (i.e
+  //  "This is a `xsd:dateTime`")
+  [[nodiscard]] bool hasTime() const { return getHour() != -1; }
+
   // Correctly format the time zone according to the `xsd` standard. This is a
   // helper function for `toStringAndType` below.
   std::string formatTimeZone() const;
@@ -364,6 +365,9 @@ class DateOrLargeYear {
     bits_ |= flag << numPayloadBits;
     bits_ |= static_cast<uint64_t>(type);
   }
+
+  // Return the underlying bit representation.
+  uint64_t toBits() const { return bits_; }
 
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadBits == datetime; }

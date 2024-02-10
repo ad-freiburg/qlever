@@ -10,12 +10,14 @@
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/ConstexprSmallString.h"
 #include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/TypeTraits.h"
+#include "util/VisitMixin.h"
 
 namespace sparqlExpression {
 
@@ -49,47 +51,34 @@ class VectorWithMemoryLimit
   }
 };
 
-/// A simple wrapper around a bool that prevents the strangely-behaving
-/// std::vector<bool> optimization.
-struct Bool {
-  bool _value;
-  // Implicit conversion from and to bool.
-  Bool(bool value) : _value{value} {}
-
-  operator bool() const { return _value; }
-
-  // Default construction yields undefined value.
-  Bool() = default;
-
-  bool operator==(const Bool& b) const = default;
-
-  // Make the type hashable for absl, see
-  // https://abseil.io/docs/cpp/guides/hash.
-  template <typename H>
-  friend H AbslHashValue(H h, const Bool& b) {
-    return H::combine(std::move(h), b._value);
+// A class to store the results of expressions that can yield strings or IDs as
+// their result (for example IF and COALESCE). It is also used for expressions
+// that can only yield strings. It is currently implemented as a thin wrapper
+// around a `variant`, but a more sophisticated implementation could be done in
+// the future.
+using IdOrStringBase = std::variant<ValueId, std::string>;
+class IdOrString : public IdOrStringBase,
+                   public VisitMixin<IdOrString, IdOrStringBase> {
+ public:
+  using IdOrStringBase::IdOrStringBase;
+  explicit IdOrString(std::optional<std::string> s) {
+    if (s.has_value()) {
+      emplace<std::string>(std::move(s.value()));
+    } else {
+      emplace<Id>(Id::makeUndefined());
+    }
   }
 };
 
-}  // namespace sparqlExpression
-
-// Specializations of std::common_type for the Bool type.
-namespace std {
-template <typename T>
-struct common_type<T, sparqlExpression::Bool> {
-  using type = std::common_type_t<T, bool>;
-};
-
-template <typename T>
-struct common_type<sparqlExpression::Bool, T> {
-  using type = std::common_type_t<T, bool>;
-};
-}  // namespace std
-
-namespace sparqlExpression {
-
-/// A list of StrongIds that all have the same datatype.
-using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
+// Print an `IdOrString` for googletest.
+inline void PrintTo(const IdOrString& var, std::ostream* os) {
+  std::visit(
+      [&os](const auto& s) {
+        auto& stream = *os;
+        stream << s;
+      },
+      var);
+}
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -98,7 +87,7 @@ using StrongIdsWithResultType = VectorWithMemoryLimit<ValueId>;
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<double, int64_t, Bool, string, ValueId>;
+using ConstantTypes = std::tuple<IdOrString, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -117,38 +106,31 @@ using ExpressionResult = ad_utility::TupleToVariant<detail::AllTypesAsTuple>;
 /// match this concept.
 template <typename T>
 concept SingleExpressionResult =
-    ad_utility::isTypeContainedIn<T, ExpressionResult>;
+    ad_utility::SimilarToAnyTypeIn<T, ExpressionResult>;
 
-// If the `ExpressionResult` holds a value that is cheap to copy (a constant or
-// a variable), return a copy. Else throw an exception the message of which
-// implies that this is not a valid usage of this function.
-inline ExpressionResult copyExpressionResultIfNotVector(
-    const ExpressionResult& result) {
+// Copy an expression result.
+inline ExpressionResult copyExpressionResult(
+    ad_utility::SimilarTo<ExpressionResult> auto&& result) {
   auto copyIfCopyable =
       []<SingleExpressionResult R>(const R& x) -> ExpressionResult {
-    if constexpr (std::is_copy_assignable_v<R> &&
-                  std::is_copy_constructible_v<R>) {
-      return x;
+    if constexpr (requires { R{AD_FWD(x)}; }) {
+      return AD_FWD(x);
     } else {
-      AD_THROW(
-          "Tried to copy an expression result that is a vector. This should "
-          "never happen, as this code should only be called for the results of "
-          "expressions in a GROUP BY clause which all should be aggregates. "
-          "Please report this.");
+      return x.clone();
     }
   };
-  return std::visit(copyIfCopyable, result);
+  return std::visit(copyIfCopyable, AD_FWD(result));
 }
 
 /// True iff T represents a constant.
 template <typename T>
 constexpr static bool isConstantResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypes>;
+    ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypes>;
 
 /// True iff T is one of the ConstantTypesAsVector
 template <typename T>
 constexpr static bool isVectorResult =
-    ad_utility::isTypeContainedIn<T, detail::ConstantTypesAsVector> ||
+    ad_utility::SimilarToAnyTypeIn<T, detail::ConstantTypesAsVector> ||
     ad_utility::isSimilar<T, std::span<const ValueId>>;
 
 /// All the additional information which is needed to evaluate a SPARQL
@@ -194,32 +176,27 @@ struct EvaluationContext {
   // `_variableToColumnMapPreviousResults`.
   std::vector<ExpressionResult> _previousResultsFromSameGroup;
 
+  // Used to modify the behavior of the RAND() expression when it is evaluated
+  // as part of a GROUP BY clause.
+  bool _isPartOfGroupBy = false;
+
+  ad_utility::SharedCancellationHandle cancellationHandle_;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
+                    const LocalVocab& localVocab,
+                    ad_utility::SharedCancellationHandle cancellationHandle)
       : _qec{qec},
         _variableToColumnMap{variableToColumnMap},
         _inputTable{inputTable},
         _allocator{allocator},
-        _localVocab{localVocab} {}
-
-  /// Constructor for evaluating an expression on a part of the input
-  /// (only considers the rows [beginIndex, endIndex) from the input.
-  EvaluationContext(const QueryExecutionContext& qec,
-                    const VariableToColumnMap& map, const IdTable& inputTable,
-                    size_t beginIndex, size_t endIndex,
-                    const ad_utility::AllocatorWithLimit<Id>& allocator,
-                    const LocalVocab& localVocab)
-      : _qec{qec},
-        _variableToColumnMap{map},
-        _inputTable{inputTable},
-        _beginIndex{beginIndex},
-        _endIndex{endIndex},
-        _allocator{allocator},
-        _localVocab{localVocab} {}
+        _localVocab{localVocab},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
+  }
 
   bool isResultSortedBy(const Variable& variable) {
     if (_columnsByWhichResultIsSorted.empty()) {
@@ -256,30 +233,31 @@ struct EvaluationContext {
     ColumnIndex idx = map.at(var).columnIndex_;
     AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
 
-    return copyExpressionResultIfNotVector(
-        _previousResultsFromSameGroup.at(idx));
+    return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
   }
 };
 
 namespace detail {
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
+requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
-  static_assert(isConstantResult<T>);
-  if constexpr (ad_utility::isSimilar<T, string>) {
-    return Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(std::forward<T>(result)));
-  } else if constexpr (ad_utility::isSimilar<double, T>) {
-    return Id::makeFromDouble(result);
-  } else if constexpr (ad_utility::isSimilar<T, Id>) {
+  if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-
+  } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
+    return std::visit(
+        [&localVocab]<typename R>(R&& el) mutable {
+          if constexpr (ad_utility::isSimilar<R, string>) {
+            return Id::makeFromLocalVocabIndex(
+                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+          } else {
+            static_assert(ad_utility::isSimilar<R, Id>);
+            return el;
+          }
+        },
+        AD_FWD(result));
   } else {
-    static_assert(ad_utility::isSimilar<int64_t, T> ||
-                  ad_utility::isSimilar<Bool, T>);
-    // This currently covers int and bool.
-    // TODO<joka921> represent bool in the `ValueId` class and adapt this.
-    return Id::makeFromInt(result);
+    static_assert(ad_utility::alwaysFalse<T>);
   }
 }
 
@@ -290,10 +268,10 @@ struct NoCalculationWithSetOfIntervals {};
 
 /// A `Function` and one or more `ValueGetters`, that are applied to the
 /// operands of the function before passing them. The number of `ValueGetters`
-/// must either be 1 (the same `ValueGetter` is used for all the operands to the
-/// `Function`, or it must be equal to the number of operands to the `Function`.
-/// This invariant is checked in the `Operation` class template below,
-/// which uses this helper struct.
+/// must either be 1 (the same `ValueGetter` is used for all the operands to
+/// the `Function`), or it must be equal to the number of operands to the
+/// `Function`. This invariant is checked in the `Operation` class template
+/// below, which uses this helper struct.
 template <typename FunctionType, typename... ValueGettersTypes>
 struct FunctionAndValueGetters {
   using Function = FunctionType;

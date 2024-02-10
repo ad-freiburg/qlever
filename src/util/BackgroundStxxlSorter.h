@@ -34,9 +34,12 @@ class BackgroundStxxlSorter {
   size_t _numElementsInRun;
   // Was the `sort()` function already called
   bool _sortWasCalled = false;
+  size_t _numBlocks = 0;
 
  public:
   using value_type = ValueType;
+
+  size_t numBlocks() const { return _numBlocks; }
 
   // The BackgroundStxxlSorter will actually use 3 * memoryForStxxl bytes plus
   // some overhead.
@@ -61,6 +64,7 @@ class BackgroundStxxlSorter {
       _sortInBackgroundFuture.get();
     }
     auto sortRunInBackground = [this, buffer = std::move(_buffer)]() {
+      _numBlocks++;
       for (const auto& element : buffer) {
         // TODO<joka921> extend the `stxxl::sorter` interface s.t. we can push a
         // whole block at once.
@@ -116,7 +120,7 @@ class BackgroundStxxlSorter {
       _sorter.push(el);
     }
     _sorter.sort();
-    // Deallocate memory for `_buffer`, the output buffering is handled via a
+    // Deallocate memory for `buffer_`, the output buffering is handled via a
     // `bufferedAsyncView` which owns its own buffer.
     _buffer = decltype(_buffer){};
   }

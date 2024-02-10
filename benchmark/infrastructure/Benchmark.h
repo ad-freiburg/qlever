@@ -12,15 +12,17 @@
 #include <variant>
 #include <vector>
 
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
 #include "util/CopyableUniquePtr.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 #include "util/HashMap.h"
+#include "util/Log.h"
 #include "util/SourceLocation.h"
 #include "util/Timer.h"
+#include "util/TypeTraits.h"
 #include "util/json.h"
 
 namespace ad_benchmark {
@@ -29,6 +31,16 @@ namespace ad_benchmark {
  * organizing those measured times.
  */
 class BenchmarkResults {
+  /*
+  A quick explanation, **why** this class uses pointers:
+  All the container for benchmark measurements are created in place and then a
+  reference to the new container returned. This returning of a reference is the
+  sole reason for the usage of pointers.
+  Otherwise adding more entries to the vectors, could lead to all previous
+  references being made invalid, because a vector had to re-allocate memory.
+  If the entries are pointers to the objects, the references to the object stay
+  valid and we don't have this problem.
+  */
   template <typename T>
   using PointerVector = std::vector<ad_utility::CopyableUniquePtr<T>>;
 
@@ -55,7 +67,8 @@ class BenchmarkResults {
   @param constructorArgs Arguments to pass to the constructor of the object,
   that the new `CopyableUniquePtr` will own.
   */
-  template <typename EntryType>
+  template <
+      ad_utility::SameAsAny<ResultTable, ResultEntry, ResultGroup> EntryType>
   static EntryType& addEntryToContainerVector(
       PointerVector<EntryType>& targetVector, auto&&... constructorArgs) {
     targetVector.push_back(ad_utility::make_copyable_unique<EntryType>(
@@ -77,8 +90,7 @@ class BenchmarkResults {
    *  Most of the time a lambda, that calls the actual function to benchmark
    *  with the needed parameters.
    */
-  template <typename Function>
-  requires std::invocable<Function>
+  template <std::invocable Function>
   ResultEntry& addMeasurement(const std::string& descriptor,
                               const Function& functionToMeasure) {
     return addEntryToContainerVector(singleMeasurements_, descriptor,
@@ -101,11 +113,15 @@ class BenchmarkResults {
   std::vector<ResultGroup> getGroups() const;
 
   /*
-   * @brief Creates and returns an empty table.
-   *
-   * @param descriptor The name/identifier of the table.
-   * @param rowNames,columnNames The names for the rows/columns.
-   */
+  @brief Creates and returns an empty table.
+
+  @param descriptor A string to identify this instance in json format later.
+  @param rowNames The names for the rows. The amount of rows in this table is
+  equal to the amount of row names. Important: This first column will be filled
+  with those names.
+  @param columnNames The names for the columns. The amount of columns in this
+  table is equal to the amount of column names.
+  */
   ResultTable& addTable(const std::string& descriptor,
                         const std::vector<std::string>& rowNames,
                         const std::vector<std::string>& columnNames);
@@ -117,7 +133,8 @@ class BenchmarkResults {
 
   // Json serialization. The implementation can be found in
   // `BenchmarkToJson`.
-  friend void to_json(nlohmann::json& j, const BenchmarkResults& results);
+  friend void to_json(nlohmann::ordered_json& j,
+                      const BenchmarkResults& results);
 };
 
 /*
@@ -126,16 +143,12 @@ between a collection of benchmarks of any type (single, group, table) and
 the processing/management of those benchmarks.
 */
 class BenchmarkInterface {
- public:
-  // A human-readable name that will be printed as part of the output.
-  virtual std::string name() const = 0;
-
-  // Used to transport values, that you want to set at runtime.
-  virtual void parseConfiguration(
-      [[maybe_unused]] const BenchmarkConfiguration& config) {
-    // Default behaviour.
-    return;
-  };
+  /*
+  For adding configuration options and getting the values passed at runtime.
+  If you want to add configuration options, do it in the constructor of your
+  class.
+  */
+  ad_utility::ConfigManager manager_;
 
   /*
   For the general metadata of a class. Mostly information, that is the same
@@ -144,17 +157,21 @@ class BenchmarkInterface {
   For example: Let's say, you are measuring the same benchmarks for different
   versions of an algorithm. You could add the metadata information, which
   version it is, to every `resultGroup`, `resultTable`, etc., but that is a bit
-  clunky. Instead, you make one `BenchmarkInterface` instance for every
-  version and simply return which version you are using as metadata through
-  `getMetadata`.
+  clunky. Instead, you make one `BenchmarkInterface` instance for every version
+  and simply return which version you are using as metadata through .
   */
-  virtual BenchmarkMetadata getMetadata() const {
-    // Default behaviour.
-    return BenchmarkMetadata{};
-  }
+  BenchmarkMetadata generalClassMetadata_;
+
+ public:
+  // A human-readable name that will be printed as part of the output.
+  virtual std::string name() const = 0;
+
+  // Getter for the general metadata of the class.
+  BenchmarkMetadata& getGeneralMetadata();
+  const BenchmarkMetadata& getGeneralMetadata() const;
 
   /*
-  Run all your benchmarks. The `BenchmarkResults` class is a management
+  @brief Run all your benchmarks. The `BenchmarkResults` class is a management
   class for measuering the execution time of functions and organizing the
   results.
   */
@@ -162,6 +179,21 @@ class BenchmarkInterface {
 
   // Without this, we get memory problems.
   virtual ~BenchmarkInterface() = default;
+
+  // Needed for manipulation by the infrastructure.
+  ad_utility::ConfigManager& getConfigManager();
+  const ad_utility::ConfigManager& getConfigManager() const;
+
+  /*
+  @brief Only used for manipulaton via the infrastructure. Is called directly
+  before `runAllBenchmarks`.
+
+  Add/update the default metadata of the benchmark class. Currently
+  adds/updates:
+  - A time stamp containing the time and date of this call. Can be used to
+  identify the time and date, `runAllBenchmarks` was run.
+  */
+  void updateDefaultGeneralMetadata();
 };
 
 /*
@@ -190,20 +222,19 @@ class BenchmarkRegister {
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
 
   /*
-  @brief Passes the `BenchmarkConfiguration` to the `parseConfiguration`
-   function of all the registered instances of benchmark classes.
+  @brief Passes the `nlohmann::json` object to the
+  `ConfigManager::parseConfig()` of every registered benchmark class.
   */
-  static void passConfigurationToAllRegisteredBenchmarks(
-      const BenchmarkConfiguration& config = BenchmarkConfiguration{});
+  static void parseConfigWithAllRegisteredBenchmarks(const nlohmann::json& j);
 
   /*
-   * @brief Measures all the registered benchmarks and returns the resulting
-   *  `BenchmarkResuls` objects.
-   *
-   * @return Every benchmark class get's measured with their own
-   *  `BenchmarkResults`. They should be in the same order as the
-   *  registrations.
-   */
+  @brief For each registered benchmark:
+  - Update the default class metadata.
+  - Run the measurments.
+
+  @return Every benchmark class get's measured with their own
+  `BenchmarkResults`. They should be in the same order as the registrations.
+  */
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
 
   /*

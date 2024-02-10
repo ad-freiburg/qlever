@@ -5,24 +5,35 @@
 // Type traits for template metaprogramming
 
 #pragma once
+#include <concepts>
 #include <tuple>
+#include <type_traits>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "util/Forward.h"
+
 namespace ad_utility {
 
 namespace detail {
-// Check (via the compiler's template matching mechanism) whether a given type
-// is an instantiation of a given template.
-// Example 1: IsInstantiationOf<std::vector>::Instantiation<std::vector<int>>
-// is true.
-// Example 2: IsInstantiationOf<std::vector>::Instantiation<std:map<int, int>>
-// is false
+/*
+Check (via the compiler's template matching mechanism) whether a given type
+is an instantiation of a given template.
+This also works with aliases, that were created using `using`.
+For example:
+For
+```
+template <typenanme... Ts>
+using A = B<Ts...>;
+```
+the 'call' `IsInstantiationOf<A>::Instantiation<B<int>>::value` and
+`IsInstantiationOf<B>::Instantiation<B<int>>::value` would both return true.
+*/
 template <template <typename...> typename Template>
 struct IsInstantiationOf {
   template <typename T>
-  struct Instantiation : std::false_type {};
+  struct Instantiation;
 
   template <typename... Ts>
   struct Instantiation<Template<Ts...>> : std::true_type {};
@@ -97,6 +108,13 @@ constexpr static bool isTuple = isInstantiation<T, std::tuple>;
 template <typename T>
 constexpr static bool isVariant = isInstantiation<T, std::variant>;
 
+/// isArray<T> is true if and only if `T` is an instantiation of `std::array`.
+template <typename T>
+constexpr static bool isArray = false;
+
+template <typename T, size_t N>
+constexpr static bool isArray<std::array<T, N>> = true;
+
 /// Two types are similar, if they are the same when we remove all cv (const or
 /// volatile) qualifiers and all references
 template <typename T, typename U>
@@ -107,23 +125,49 @@ constexpr static bool isSimilar =
 template <typename T, typename U>
 concept SimilarTo = isSimilar<T, U>;
 
-/// isTypeContainedIn<T, U> It is true iff type U is a pair, tuple or variant
-/// and T `isSimilar` (see above) to one of the types contained in the tuple,
-/// pair or variant.
-template <typename... Ts>
-constexpr static bool isTypeContainedIn = false;
-
+/// True iff `T` is similar (see above) to any of the `Ts...`.
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::tuple<Ts...>> =
-    (... || isSimilar<T, Ts>);
+concept SimilarToAny = (... || isSimilar<T, Ts>);
 
+/// True iff `T` is the same as any of the `Ts...`.
 template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::variant<Ts...>> =
-    (... || isSimilar<T, Ts>);
+concept SameAsAny = (... || std::same_as<T, Ts>);
 
-template <typename T, typename... Ts>
-constexpr static bool isTypeContainedIn<T, std::pair<Ts...>> =
-    (... || isSimilar<T, Ts>);
+/*
+The implementation for `SimilarToAnyTypeIn` and `SameAsAnyTypeIn` (see below
+namespace detail).
+*/
+namespace detail {
+template <typename T, typename Template>
+struct SimilarToAnyTypeInImpl;
+
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SimilarToAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SimilarToAny<T, Ts...>> {};
+
+template <typename T, typename Template>
+struct SameAsAnyTypeInImpl;
+
+template <typename T, template <typename...> typename Template, typename... Ts>
+struct SameAsAnyTypeInImpl<T, Template<Ts...>>
+    : std::integral_constant<bool, SameAsAny<T, Ts...>> {};
+
+}  // namespace detail
+/*
+`SimilarToAnyTypeIn<T, U>` is true, iff type `U` is an instantiation of a
+template that only has template type parameters (e.g. `std::pair`, `std::tuple`
+or `std::variant`). and `T` is `isSimilar` (see above) to any of the type
+parameters.
+*/
+template <typename T, typename Template>
+concept SimilarToAnyTypeIn = detail::SimilarToAnyTypeInImpl<T, Template>::value;
+
+/*
+Equivalent to `SimilarToAnyTypeIn` (see above), but checks for exactly matching
+types via `std::same_as`.
+*/
+template <typename T, typename Template>
+concept SameAsAnyTypeIn = detail::SameAsAnyTypeInImpl<T, Template>::value;
 
 /// A templated bool that is always false,
 /// independent of the template parameter.
@@ -170,10 +214,10 @@ inline auto visitWithVariantsAndParameters =
     []<typename Function, typename... ParametersOrVariants>(
         Function&& f, ParametersOrVariants&&... parametersOrVariants) {
       auto liftToVariant = []<typename T>(T&& t) {
-        if constexpr (isVariant<T>) {
-          return std::forward<T>(t);
+        if constexpr (isVariant<std::decay_t<T>>) {
+          return AD_FWD(t);
         } else {
-          return std::variant<std::decay_t<T>>{std::forward<T>(t)};
+          return std::variant<std::decay_t<T>>{AD_FWD(t)};
         }
       };
       return std::visit(f, liftToVariant(std::forward<ParametersOrVariants>(
@@ -202,4 +246,70 @@ template <typename... Ts>
 requires(sizeof...(Ts) > 0)
 using First = typename detail::FirstWrapper<Ts...>::type;
 
+/// Concept for `std::is_invocable_r_v`.
+template <typename Func, typename R, typename... ArgTypes>
+concept InvocableWithConvertibleReturnType =
+    std::is_invocable_r_v<R, Func, ArgTypes...>;
+
+/*
+The following concepts are similar to `std::is_invocable_r_v` with the following
+difference: `std::is_invocable_r_v` only checks that the return type of a
+function is convertible to the specified type, but the following concepts check
+for an exact match of the return type (`InvocableWithExactReturnType`) or a
+similar return type (`invocablewithsimilarreturntype`), meaning that the types
+are the same when ignoring `const`, `volatile`, and reference qualifiers.
+*/
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+`isSimilar` to `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithSimilarReturnType =
+    std::invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be invocable with `Args...` and the return type to be
+ `Ret`.
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept InvocableWithExactReturnType =
+    std::invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `isSimilar` to `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithSimilarReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    isSimilar<std::invoke_result_t<Fn, Args...>, Ret>;
+
+/*
+@brief Require `Fn` to be regular invocable with `Args...` and the return type
+to be `Ret`.
+
+Note: Currently, the difference between invocable and regular invocable is
+purely semantic. In other words, we can not, currently, actually check, if an
+invocable type is regular invocable, or not.
+For more information see: https://en.cppreference.com/w/cpp/concepts/invocable
+*/
+template <typename Fn, typename Ret, typename... Args>
+concept RegularInvocableWithExactReturnType =
+    std::regular_invocable<Fn, Args...> &&
+    std::same_as<std::invoke_result_t<Fn, Args...>, Ret>;
+
+// True iff `T` is a value type or an rvalue reference. Can be used to force
+// rvalue references for templated functions: For example: void f(auto&& x) //
+// might be lvalue, because the && denotes a forwarding reference. void f(Rvalue
+// auto&& x) // guaranteed rvalue reference, can safely be moved.
+template <typename T>
+concept Rvalue = std::is_rvalue_reference_v<T&&>;
 }  // namespace ad_utility

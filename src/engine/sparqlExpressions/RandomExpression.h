@@ -6,6 +6,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/ChunkedForLoop.h"
 #include "util/Random.h"
 
 namespace sparqlExpression {
@@ -13,18 +14,29 @@ namespace sparqlExpression {
 class RandomExpression : public SparqlExpression {
  private:
   // Unique random ID for this expression.
-  int64_t randId = FastRandomIntGenerator<int64_t>{}();
+  int64_t randId = ad_utility::FastRandomIntGenerator<int64_t>{}();
 
  public:
   // Evaluate a Sparql expression.
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    VectorWithMemoryLimit<int64_t> result{context->_allocator};
+    VectorWithMemoryLimit<Id> result{context->_allocator};
     const size_t numElements = context->_endIndex - context->_beginIndex;
     result.reserve(numElements);
-    FastRandomIntGenerator<int64_t> randInt;
-    for (size_t i = 0; i < numElements; ++i) {
-      result.push_back(randInt());
+    ad_utility::FastRandomIntGenerator<int64_t> randInt;
+
+    // As part of a GROUP BY we only return one value per group.
+    if (context->_isPartOfGroupBy) {
+      return Id::makeFromInt(randInt() >> Id::numDatatypeBits);
     }
+
+    // 1000 is an arbitrarily chosen interval at which to check for
+    // cancellation.
+    ad_utility::chunkedForLoop<1000>(
+        0, numElements,
+        [&result, &randInt](size_t) {
+          result.push_back(Id::makeFromInt(randInt() >> Id::numDatatypeBits));
+        },
+        [context]() { context->cancellationHandle_->throwIfCancelled(); });
     return result;
   }
 
@@ -36,7 +48,7 @@ class RandomExpression : public SparqlExpression {
 
  private:
   // Get the direct child expressions.
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
 }  // namespace sparqlExpression

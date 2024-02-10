@@ -5,9 +5,9 @@
 #include <cstdlib>
 
 #include "engine/QueryExecutionTree.h"
-#include "nlohmann/json.hpp"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/http/MediaTypes.h"
+#include "util/json.h"
 
 #pragma once
 
@@ -78,9 +78,15 @@ class ExportQueryExecutionTrees {
   template <bool removeQuotesAndAngleBrackets = false,
             bool returnOnlyLiterals = false,
             typename EscapeFunction = std::identity>
-  [[nodiscard]] static std::optional<std::pair<std::string, const char*>>
-  idToStringAndType(const Index& index, Id id, const LocalVocab& localVocab,
-                    EscapeFunction&& escapeFunction = EscapeFunction{});
+  static std::optional<std::pair<std::string, const char*>> idToStringAndType(
+      const Index& index, Id id, const LocalVocab& localVocab,
+      EscapeFunction&& escapeFunction = EscapeFunction{});
+
+  // Same as the previous function, but only handles the datatypes for which the
+  // value is encoded directly in the ID. For other datatypes an exception is
+  // thrown.
+  static std::optional<std::pair<std::string, const char*>>
+  idToStringAndTypeForEncodedValue(Id id);
 
  private:
   // TODO<joka921> The following functions are all internally called by the
@@ -97,11 +103,6 @@ class ExportQueryExecutionTrees {
   static nlohmann::json computeSelectQueryResultAsSparqlJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       ad_utility::Timer& requestTimer, uint64_t maxSend);
-
-  // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator
-  computeConstructQueryResultAsTurtle(const ParsedQuery& query,
-                                      const QueryExecutionTree& qet);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultBindingsToQLeverJSON(
@@ -145,13 +146,6 @@ class ExportQueryExecutionTrees {
       LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
 
   // ___________________________________________________________________________
-  static ad_utility::streams::stream_generator constructQueryResultToTurtle(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset,
-      std::shared_ptr<const ResultTable> resultTable);
-
-  // ___________________________________________________________________________
   static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
@@ -160,7 +154,7 @@ class ExportQueryExecutionTrees {
 
   // ___________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator constructQueryResultToTsvOrCsv(
+  static ad_utility::streams::stream_generator constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
@@ -168,8 +162,7 @@ class ExportQueryExecutionTrees {
 
   // _____________________________________________________________________________
   template <MediaType format>
-  static ad_utility::streams::stream_generator
-  selectQueryResultToCsvTsvOrBinary(
+  static ad_utility::streams::stream_generator selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset);

@@ -4,7 +4,7 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <variant>
 
@@ -629,10 +629,8 @@ TEST(ParserTest, testParse) {
               sc_sub_subquery.getSelectedVariablesAsStrings());
   }
 
-  // We currently only check, that the following two queries don't throw an
-  // exception.
-  // TODO<RobinTF>  Also add checks for the correct semantics.
   {
+    namespace m = matchers;
     // Check Parse Construct (1)
     auto pq_1 = SparqlParser::parseQuery(
         "PREFIX foaf:   <http://xmlns.com/foaf/0.1/> \n"
@@ -640,12 +638,29 @@ TEST(ParserTest, testParse) {
         "CONSTRUCT { ?x foaf:name ?name } \n"
         "WHERE  { ?x org:employeeName ?name }");
 
+    EXPECT_THAT(pq_1,
+                m::ConstructQuery(
+                    {{Variable{"?x"}, Iri{"<http://xmlns.com/foaf/0.1/name>"},
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, "<http://example.com/ns#employeeName>",
+                        Variable{"?name"}}}))));
+
     // Check Parse Construct (2)
     auto pq_2 = SparqlParser::parseQuery(
         "PREFIX foaf:    <http://xmlns.com/foaf/0.1/>\n"
         "PREFIX vcard:   <http://www.w3.org/2001/vcard-rdf/3.0#>\n"
         "CONSTRUCT   { <http://example.org/person#Alice> vcard:FN ?name }\n"
         "WHERE       { ?x foaf:name ?name } ");
+
+    EXPECT_THAT(pq_2,
+                m::ConstructQuery(
+                    {{Iri{"<http://example.org/person#Alice>"},
+                      Iri{"<http://www.w3.org/2001/vcard-rdf/3.0#FN>"},
+                      Variable{"?name"}}},
+                    m::GraphPattern(m::Triples({SparqlTriple{
+                        Variable{"?x"}, "<http://xmlns.com/foaf/0.1/name>",
+                        Variable{"?name"}}}))));
   }
 
   {
@@ -747,8 +762,7 @@ TEST(ParserTest, testLiterals) {
   const auto& c = pq.children()[0].getBasic();
   ASSERT_TRUE(selectClause.isAsterisk());
   ASSERT_EQ(2u, c._triples.size());
-  ASSERT_EQ(lit("\"true\"", "^^<http://www.w3.org/2001/XMLSchema#boolean>"),
-            c._triples[0]._s);
+  ASSERT_EQ(true, c._triples[0]._s);
   ASSERT_EQ("<test:myrel>", c._triples[0]._p._iri);
   ASSERT_EQ(10, c._triples[0]._o);
   ASSERT_EQ(10.2, c._triples[1]._s);
@@ -827,22 +841,22 @@ TEST(ParserTest, testSolutionModifiers) {
 
   {
     auto pq = SparqlParser::parseQuery(
-        "SELECT DISTINCT ?x ?ql_textscore_x ?y WHERE \t {?x "
+        "SELECT DISTINCT ?x ?ql_score_x_var_y ?y WHERE \t {?x "
         "ql:contains-entity ?y}\n"
-        "ORDER BY ASC(?y) DESC(?ql_textscore_x) LIMIT 10 OFFSET 15");
+        "ORDER BY ASC(?y) DESC(?ql_score_x_var_y) LIMIT 10 OFFSET 15");
     ASSERT_TRUE(pq.hasSelectClause());
     const auto& selectClause = pq.selectClause();
     ASSERT_EQ(1u, pq.children().size());
     const auto& c = pq.children()[0].getBasic();
     ASSERT_EQ(3u, selectClause.getSelectedVariables().size());
-    ASSERT_EQ(Var{"?ql_textscore_x"}, selectClause.getSelectedVariables()[1]);
+    ASSERT_EQ(Var{"?ql_score_x_var_y"}, selectClause.getSelectedVariables()[1]);
     ASSERT_EQ(1u, c._triples.size());
     ASSERT_EQ(10u, pq._limitOffset._limit);
     ASSERT_EQ(15u, pq._limitOffset._offset);
     ASSERT_EQ(size_t(2), pq._orderBy.size());
     ASSERT_EQ(Var{"?y"}, pq._orderBy[0].variable_);
     ASSERT_FALSE(pq._orderBy[0].isDescending_);
-    ASSERT_EQ(Var{"?ql_textscore_x"}, pq._orderBy[1].variable_);
+    ASSERT_EQ(Var{"?ql_score_x_var_y"}, pq._orderBy[1].variable_);
     ASSERT_TRUE(pq._orderBy[1].isDescending_);
     ASSERT_TRUE(selectClause.distinct_);
     ASSERT_FALSE(selectClause.reduced_);
@@ -1164,11 +1178,13 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ(
         (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
         triples[0]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?y"},
-                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
-                  "<QLever-internal-function/@en>"}),
-              triples[1]);
+    ASSERT_EQ(
+        (SparqlTriple{
+            Var{"?y"},
+            PropertyPath::fromIri(
+                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+        triples[1]);
   }
 
   // Test that the language filter never changes triples with
@@ -1204,10 +1220,12 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                             PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
                             Var{"?y"}}),
               triples[1]);
-    ASSERT_EQ((SparqlTriple{
-                  Var{"?y"},
-                  PropertyPath::fromIri("<QLever-internal-function/langtag>"),
-                  "<QLever-internal-function/@en>"}),
-              triples[2]);
+    ASSERT_EQ(
+        (SparqlTriple{
+            Var{"?y"},
+            PropertyPath::fromIri(
+                "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+        triples[2]);
   }
 }

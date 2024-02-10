@@ -4,9 +4,12 @@
 
 #pragma once
 
+#include <concepts>
 #include <ranges>
 
 #include "util/Exception.h"
+#include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 // Various helper functions for compile-time programming.
 
@@ -46,6 +49,28 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
   ((loopBody.template operator()<ForLoopIndexes>()), ...);
 }
 
+// A `constexpr` switch statement. Chooses the `MatchingCase` in `FirstCase,
+// Cases...` that is equal to `value` and then calls
+// `function.operator()<MatchingCase>(args...)`.
+template <auto FirstCase, std::same_as<decltype(FirstCase)> auto... Cases>
+auto ConstexprSwitch =
+    [](auto&& function,
+       const std::equality_comparable_with<decltype(FirstCase)> auto& value,
+       auto&&... args) -> decltype(auto) requires(requires {
+  AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
+} && (... &&
+      requires {
+        AD_FWD(function).template operator()<Cases>(AD_FWD(args)...);
+      })) {
+  if (value == FirstCase) {
+    return AD_FWD(function).template operator()<FirstCase>(AD_FWD(args)...);
+  } else if constexpr (sizeof...(Cases) > 0) {
+    return ConstexprSwitch<Cases...>(AD_FWD(function), value, AD_FWD(args)...);
+  } else {
+    AD_FAIL();
+  }
+};
+
 /*
  * @brief 'Converts' a run time value of `size_t` to a compile time value and
  * then calls `function.template operator()<value>()`. `value < MaxValue` must
@@ -63,8 +88,7 @@ void ConstexprForLoop(const std::index_sequence<ForLoopIndexes...>&,
  *  `operator()` which is templated on a single `size_t`.
  */
 template <size_t MaxValue, typename Function>
-void RuntimeValueToCompileTimeValue(const size_t& value,
-                                    const Function& function) {
+void RuntimeValueToCompileTimeValue(const size_t& value, Function function) {
   AD_CONTRACT_CHECK(value <= MaxValue);  // Is the value valid?
   ConstexprForLoop(std::make_index_sequence<MaxValue + 1>{},
                    [&function, &value]<size_t Index>() {
@@ -72,6 +96,34 @@ void RuntimeValueToCompileTimeValue(const size_t& value,
                        function.template operator()<Index>();
                      }
                    });
+}
+
+/*
+@brief Returns the index of the first given type, that passes the given check.
+
+@tparam checkFunction A `constexpr` function, that takes one template
+parameter and return a bool.
+@tparam Args The list of types, that should be checked over.
+
+@return An index out of `[0, sizeof...(Args))`, if there was type, that passed
+the check. Otherwise, returns `sizeof...(Args)`.
+*/
+template <auto checkFunction, typename... Args>
+constexpr size_t getIndexOfFirstTypeToPassCheck() {
+  size_t index = 0;
+
+  auto l = [&index]<typename T>() {
+    if constexpr (checkFunction.template operator()<T>()) {
+      return true;
+    } else {
+      ++index;
+      return false;
+    }
+  };
+
+  ((l.template operator()<Args>()) || ...);
+
+  return index;
 }
 
 // An `ad_utility::ValueSequence<T, values...>` has the same functionality as
@@ -147,6 +199,42 @@ constexpr auto cartesianPowerAsArray() {
 template <std::integral auto Upper, size_t Num>
 auto cartesianPowerAsIntegerArray() {
   return toIntegerSequence<cartesianPowerAsArray<Upper, Num>()>();
+}
+
+/*
+@brief Call the given lambda function with each of the given types `Ts` as
+explicit template parameter, keeping the same order.
+*/
+template <typename... Ts>
+constexpr void forEachTypeInParameterPack(const auto& lambda) {
+  (lambda.template operator()<Ts>(), ...);
+}
+
+/*
+Implementation for `forEachTypeInTemplateType`.
+
+In order to go through the types inside a templated type, we need to use
+template type specialization.
+*/
+namespace detail {
+template <class T>
+struct forEachTypeInTemplateTypeImpl;
+
+template <template <typename...> typename Template, typename... Ts>
+struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
+  void operator()(const auto& lambda) const {
+    forEachTypeInParameterPack<Ts...>(lambda);
+  }
+};
+}  // namespace detail
+
+/*
+@brief Call the given lambda function with each type in the given instantiated
+template type as explicit template parameter, keeping the same order.
+*/
+template <typename TemplateType>
+constexpr void forEachTypeInTemplateType(const auto& lambda) {
+  detail::forEachTypeInTemplateTypeImpl<TemplateType>{}(lambda);
 }
 
 }  // namespace ad_utility

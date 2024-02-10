@@ -14,6 +14,7 @@
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/websocket/QueryId.h"
 #include "util/jthread.h"
 
 using namespace std::literals;
@@ -22,8 +23,21 @@ using namespace std::literals;
 template <typename HttpHandler>
 class TestHttpServer {
  private:
+  static constexpr auto webSocketSessionSupplier =
+      [](net::io_context& ioContext) {
+        using namespace ad_utility::websocket;
+        return [queryHub = QueryHub{ioContext}, registry = QueryRegistry{}](
+                   const http::request<http::string_body>& request,
+                   tcp::socket socket) mutable {
+          return WebSocketSession::handleSession(queryHub, registry, request,
+                                                 std::move(socket));
+        };
+      };
+  using WebSocketHandlerType =
+      decltype(webSocketSessionSupplier(std::declval<net::io_context&>()));
+
   // The server.
-  std::shared_ptr<HttpServer<HttpHandler>> server_;
+  std::shared_ptr<HttpServer<HttpHandler, WebSocketHandlerType>> server_;
 
   // The own thread in which the server is running.
   //
@@ -34,36 +48,18 @@ class TestHttpServer {
 
   // Indicator whether the server has been shut down. We need this because
   // `HttpServer::shutDown` must only be called once.
-  bool hasBeenShutDown_ = false;
+  std::atomic<bool> hasBeenShutDown_ = false;
 
  public:
-  // Create server on localhost. Try out 10 different ports, if connection
-  // to all of them fail, throw `std::runtime_error`.
-  //
-  // TODO: Is there a more robust way to find a free port?
-  TestHttpServer(HttpHandler httpHandler) {
-    std::vector<short unsigned int> ports(10);
-    std::generate(ports.begin(), ports.end(),
-                  []() { return 1024 + std::rand() % (65535 - 1024); });
-    const std::string& ipAddress = "0.0.0.0";
-    int numServerThreads = 1;
-    for (const short unsigned int port : ports) {
-      try {
-        server_ = std::make_shared<HttpServer<HttpHandler>>(
-            port, ipAddress, numServerThreads, std::move(httpHandler));
-        return;
-      } catch (const boost::system::system_error& b) {
-        LOG(INFO) << "Starting test HTTP server on port " << port
-                  << " failed, trying next port ..." << std::endl;
-      }
-    }
-    AD_THROW(
-        absl::StrCat("Could not start test HTTP server on any of these ports: ",
-                     absl::StrJoin(ports, ", ")));
+  // Create server on localhost. Port 0 instructs the operating system to choose
+  // a free port of its choice.
+  explicit TestHttpServer(HttpHandler httpHandler) {
+    server_ = std::make_shared<HttpServer<HttpHandler, WebSocketHandlerType>>(
+        0, "0.0.0.0", 1, std::move(httpHandler), webSocketSessionSupplier);
   }
 
-  // Get the port on which this server is running.
-  short unsigned int getPort() const { return server_->getPort(); }
+  // Get port on which this server is running.
+  auto getPort() const { return server_->getPort(); }
 
   // Run the server in its own thread. Wait for 100ms until the server is up and
   // throw `std::runtime_error` if it's not (it should be up immediately).
@@ -76,29 +72,24 @@ class TestHttpServer {
   // NOTE 2: Catch all exceptions in the server thread so that if an exception
   // is thrown, the whole process does not simply terminate.
   void runInOwnThread() {
-    std::exception_ptr exception_ptr = nullptr;
-    std::shared_ptr<HttpServer<HttpHandler>> serverCopy = server_;
+    auto runnerTask =
+        std::packaged_task<void()>{[server = server_]() { server->run(); }};
+    auto runnerFuture = runnerTask.get_future();
     serverThread_ =
-        std::make_unique<ad_utility::JThread>([&exception_ptr, serverCopy]() {
-          try {
-            serverCopy->run();
-          } catch (...) {
-            exception_ptr = std::current_exception();
-          }
-        });
+        std::make_unique<ad_utility::JThread>(std::move(runnerTask));
     auto waitTimeUntilServerIsUp = 100ms;
-    std::this_thread::sleep_for(waitTimeUntilServerIsUp);
-    if (exception_ptr || !server_->serverIsReady()) {
+    auto status = runnerFuture.wait_for(waitTimeUntilServerIsUp);
+    if (status == std::future_status::ready) {
+      // Propagate exception
+      runnerFuture.get();
+    }
+    if (!server_->serverIsReady()) {
       // Detach the server thread (the `run()` above never returns), so that we
       // can exit this test.
       serverThread_->detach();
-      if (exception_ptr) {
-        std::rethrow_exception(exception_ptr);
-      } else {
-        throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
-                                              waitTimeUntilServerIsUp.count(),
-                                              "ms, this should not happen"));
-      }
+      throw std::runtime_error(absl::StrCat("HttpServer was not up after ",
+                                            waitTimeUntilServerIsUp.count(),
+                                            "ms, this should not happen"));
     }
   }
 
@@ -107,9 +98,8 @@ class TestHttpServer {
   // NOTE: This works by causing the `httpServer->run()` running in the server
   // thread to return, so that the thread can complete.
   void shutDown() {
-    if (!hasBeenShutDown_) {
+    if (server_->serverIsReady() && !hasBeenShutDown_.exchange(true)) {
       server_->shutDown();
-      hasBeenShutDown_ = true;
     }
   }
 

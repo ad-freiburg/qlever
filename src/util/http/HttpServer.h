@@ -13,6 +13,7 @@
 #include "util/Log.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
+#include "util/http/websocket/WebSocketSession.h"
 #include "util/jthread.h"
 
 namespace beast = boost::beast;    // from <boost/beast.hpp>
@@ -40,42 +41,51 @@ using tcp = boost::asio::ip::tcp;  // from <boost/asio/ip/tcp.hpp>
  *
  * A very basic HttpHandler, which simply serves files from a directory, can be
  * obtained via `ad_utility::httpUtils::makeFileServer()`.
+ *
+ * \tparam WebSocketHandler A callable type that receives a `http::request<...>`
+ * and the underlying socket that was used to receive the request and returns
+ * a `net::awaitable<void>`. It is only called if the request is a valid
+ * websocket upgrade request and the URL represents a valid path.
  */
-template <typename HttpHandler>
+template <typename HttpHandler,
+          ad_utility::InvocableWithExactReturnType<
+              net::awaitable<void>, const http::request<http::string_body>&,
+              tcp::socket>
+              WebSocketHandler>
 class HttpServer {
  private:
-  const net::ip::address ipAddress_;
-  const unsigned short port_;
   HttpHandler httpHandler_;
   int numServerThreads_;
   net::io_context ioContext_;
-  tcp::acceptor acceptor_;
+  WebSocketHandler webSocketHandler_;
   // All code that uses the `acceptor_` must run within this strand.
   // Note that the `acceptor_` might be concurrently accessed by the `listener`
   // and the `shutdown` function, the latter of which is currently only used in
   // unit tests.
   net::strand<net::io_context::executor_type> acceptorStrand_ =
       net::make_strand(ioContext_);
+  tcp::acceptor acceptor_{acceptorStrand_};
   std::atomic<bool> serverIsReady_ = false;
 
  public:
-  /// Construct from the port and ip address, on which this server will listen,
-  /// as well as the HttpHandler. This constructor only initializes several
-  /// member functions
-  explicit HttpServer(unsigned short port,
-                      const std::string& ipAddress = "0.0.0.0",
-                      int numServerThreads = 1,
-                      HttpHandler handler = HttpHandler{})
-      : ipAddress_{net::ip::make_address(ipAddress)},
-        port_{port},
-        httpHandler_{std::move(handler)},
+  /// Construct from the `queryRegistry`, port and ip address, on which this
+  /// server will listen, as well as the HttpHandler. This constructor only
+  /// initializes several member functions
+  explicit HttpServer(
+      unsigned short port, std::string_view ipAddress = "0.0.0.0",
+      int numServerThreads = 1, HttpHandler handler = HttpHandler{},
+      ad_utility::InvocableWithConvertibleReturnType<WebSocketHandler,
+                                                     net::io_context&> auto
+          webSocketHandlerSupplier = {})
+      : httpHandler_{std::move(handler)},
         // We need at least two threads to avoid blocking.
         // TODO<joka921> why is that?
         numServerThreads_{std::max(2, numServerThreads)},
         ioContext_{numServerThreads_},
-        acceptor_{ioContext_} {
+        webSocketHandler_{
+            std::invoke(std::move(webSocketHandlerSupplier), ioContext_)} {
     try {
-      tcp::endpoint endpoint{ipAddress_, port_};
+      tcp::endpoint endpoint{net::ip::make_address(ipAddress), port};
       // Open the acceptor.
       acceptor_.open(endpoint.protocol());
       boost::asio::socket_base::reuse_address option{true};
@@ -114,7 +124,7 @@ class HttpServer {
   }
 
   // Get the server port.
-  [[nodiscard]] unsigned short getPort() const { return port_; }
+  auto getPort() const { return acceptor_.local_endpoint().port(); }
 
   // Is the server ready yet? We need this in `test/HttpTest.cpp` so that our
   // test can wait for the server to be ready and continue with its test
@@ -135,6 +145,9 @@ class HttpServer {
 
     // Wait until the posted task has successfully executed
     future.wait();
+    // Make sure the tests don't run forever because without this `run()` may
+    // not terminate.
+    ioContext_.stop();
   }
 
  private:
@@ -162,12 +175,22 @@ class HttpServer {
       try {
         // Wait for a request (the code only continues after we have received
         // and accepted a request).
+
+        // Although a coroutine is conceptually single-threaded we still
+        // schedule onto an explicit strand because the Websocket implementation
+        // expects a strand.
+        auto strand = net::make_strand(ioContext_);
         auto socket =
-            co_await acceptor_.async_accept(boost::asio::use_awaitable);
+            co_await acceptor_.async_accept(strand, boost::asio::use_awaitable);
         // Schedule the session such that it may run in parallel to this loop.
-        net::co_spawn(ioContext_, session(std::move(socket)), net::detached);
+        net::co_spawn(strand, session(std::move(socket)), net::detached);
       } catch (const boost::system::system_error& b) {
-        logBeastError(b.code(), "Error in the accept loop");
+        // If the server is shut down this will cause operations to abort.
+        // This will most likely only happen in tests, but could also occur
+        // in a future version of Qlever that manually handles SIGTERM signals.
+        if (b.code() != boost::asio::error::operation_aborted) {
+          logBeastError(b.code(), "Error in the accept loop");
+        }
       }
     }
   }
@@ -215,13 +238,29 @@ class HttpServer {
         co_await http::async_read(stream, buffer, req,
                                   boost::asio::use_awaitable);
 
-        // Currently there is no timeout on the server side, this is handled
-        // by QLever's timeout mechanism.
-        stream.expires_never();
+        // Let request be handled by `WebSocketSession` if the HTTP
+        // request is a WebSocket handshake
+        if (beast::websocket::is_upgrade(req)) {
+          auto errorResponse = ad_utility::websocket::WebSocketSession::
+              getErrorResponseIfPathIsInvalid(req);
+          if (errorResponse.has_value()) {
+            co_await sendMessage(errorResponse.value());
+          } else {
+            // prevent cleanup after socket has been moved from
+            releaseConnection.cancel();
+            co_await std::invoke(webSocketHandler_, req,
+                                 std::move(stream.socket()));
+            co_return;
+          }
+        } else {
+          // Currently there is no timeout on the server side, this is handled
+          // by QLever's timeout mechanism.
+          stream.expires_never();
 
-        // Handle the http request. Note that `httpHandler_` is also
-        // responsible for sending the message via the `sendMessage` lambda.
-        co_await httpHandler_(std::move(req), sendMessage);
+          // Handle the http request. Note that `httpHandler_` is also
+          // responsible for sending the message via the `sendMessage` lambda.
+          co_await httpHandler_(std::move(req), sendMessage);
+        }
 
         // The closing of the stream is done in the exception handler.
         if (streamNeedsClosing) {
@@ -233,8 +272,10 @@ class HttpServer {
           beast::error_code ec;
           stream.socket().shutdown(tcp::socket::shutdown_send, ec);
         } else {
-          // This is the error "The socket was closed due to a timeout".
-          if (error.code() == beast::error::timeout) {
+          // This is the error "The socket was closed due to a timeout" or if
+          // the client stream ended unexpectedly.
+          if (error.code() == beast::error::timeout ||
+              error.code() == boost::asio::error::eof) {
             LOG(TRACE) << error.what() << " (code " << error.code() << ")"
                        << std::endl;
           } else {
@@ -255,5 +296,13 @@ class HttpServer {
     }
   }
 };
+
+/// Deduction guide, so you don't have to specify the types explicitly
+/// when creating an instance of this class.
+template <typename HttpHandler, typename WebSocketHandlerSupplier>
+HttpServer(unsigned short, const std::string&, int, HttpHandler,
+           WebSocketHandlerSupplier)
+    -> HttpServer<HttpHandler, std::invoke_result_t<WebSocketHandlerSupplier,
+                                                    net::io_context&>>;
 
 #endif  // QLEVER_HTTPSERVER_H

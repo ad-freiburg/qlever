@@ -10,6 +10,7 @@
 #include "CallFixedSize.h"
 #include "QueryExecutionTree.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
@@ -24,18 +25,14 @@ Sort::Sort(QueryExecutionContext* qec,
       sortColumnIndices_{std::move(sortColumnIndices)} {}
 
 // _____________________________________________________________________________
-string Sort::asStringImpl(size_t indent) const {
+string Sort::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-
   os << "SORT(internal) on columns:";
 
   for (const auto& sortCol : sortColumnIndices_) {
     os << "asc(" << sortCol << ") ";
   }
-  os << "\n" << subtree_->asString(indent);
+  os << "\n" << subtree_->getCacheKey();
   return std::move(os).str();
 }
 
@@ -60,23 +57,28 @@ ResultTable Sort::computeResult() {
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto remainingTime = _timeoutTimer->wlock()->remainingTime();
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
           subRes->size(), subRes->width()) >
-      remainingTime * sortEstimateCancellationFactor) {
+      remainingTime() * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation
-    throw ad_utility::TimeoutException(
+    throw ad_utility::CancellationException(
         "Sort operation was canceled, because time estimate exceeded "
         "remaining time by a factor of " +
         std::to_string(sortEstimateCancellationFactor));
   }
 
   LOG(DEBUG) << "Sort result computation..." << endl;
+  ad_utility::Timer t{ad_utility::timer::Timer::InitialStatus::Started};
   IdTable idTable = subRes->idTable().clone();
+  runtimeInfo().addDetail("time-cloning", t.msecs());
   Engine::sort(idTable, sortColumnIndices_);
+
+  // Don't report missed timeout check because sort is not cancellable
+  cancellationHandle_->resetWatchDogState();
+  checkCancellation();
 
   LOG(DEBUG) << "Sort result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};

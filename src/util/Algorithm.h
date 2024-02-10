@@ -28,14 +28,14 @@ namespace ad_utility {
  * @return bool
  */
 template <typename Container, typename T>
-inline bool contains(Container&& container, const T& element) {
+constexpr bool contains(Container&& container, const T& element) {
   // Overload for types like std::string that have a `find` member function
   if constexpr (ad_utility::isSimilar<Container, std::string> ||
                 ad_utility::isSimilar<Container, std::string_view>) {
     return container.find(element) != container.npos;
   } else {
-    return std::ranges::find(container.begin(), container.end(), element) !=
-           container.end();
+    return std::ranges::find(std::begin(container), std::end(container),
+                             element) != std::end(container);
   }
 }
 
@@ -71,16 +71,16 @@ void appendVector(std::vector<T>& destination, U&& source) {
  */
 template <typename Range, typename F>
 auto transform(Range&& input, F unaryOp) {
-  using Output = std::decay_t<decltype(unaryOp(
-      *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
+  using Output = std::decay_t<decltype(std::invoke(
+      unaryOp, *ad_utility::makeForwardingIterator<Range>(input.begin())))>;
   std::vector<Output> out;
   out.reserve(input.size());
-  std::transform(ad_utility::makeForwardingIterator<Range>(input.begin()),
-                 ad_utility::makeForwardingIterator<Range>(input.end()),
-                 std::back_inserter(out), unaryOp);
+  std::ranges::transform(
+      ad_utility::makeForwardingIterator<Range>(input.begin()),
+      ad_utility::makeForwardingIterator<Range>(input.end()),
+      std::back_inserter(out), unaryOp);
   return out;
 }
-
 /*
 @brief Takes two vectors, pairs up their content at the same index positions
 and copies them into `std::pair`s, who are returned inside a vector.
@@ -143,6 +143,19 @@ auto removeDuplicates(const Range& input) -> std::vector<
     }
   }
   return result;
+}
+
+// Return a new `std::input` that is obtained by applying the `function` to each
+// of the elements of the `input`.
+template <typename Array, typename Function>
+requires(ad_utility::isArray<std::decay_t<Array>> &&
+         std::invocable<Function, typename Array::value_type>)
+auto transformArray(Array&& input, Function function) {
+  return std::apply(
+      [&function](auto&&... vals) {
+        return std::array{std::invoke(function, AD_FWD(vals))...};
+      },
+      AD_FWD(input));
 }
 
 }  // namespace ad_utility

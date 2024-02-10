@@ -25,11 +25,8 @@ Service::Service(QueryExecutionContext* qec,
       getTsvFunction_{std::move(getTsvFunction)} {}
 
 // ____________________________________________________________________________
-std::string Service::asStringImpl(size_t indent) const {
+std::string Service::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
   // TODO: This duplicates code in GraphPatternOperation.cpp .
   os << "SERVICE " << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"

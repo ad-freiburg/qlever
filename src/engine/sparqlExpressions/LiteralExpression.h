@@ -14,25 +14,44 @@ namespace detail {
 /// the "leaves" in the expression tree.
 template <typename T>
 class LiteralExpression : public SparqlExpression {
+ private:
+  // For string literals, cache the result of the evaluation as it doesn't
+  // change when `evaluate` is called multiple times. It is a `std::atomic` to
+  // make the `const` evaluate function threadsafe and lock-free.
+  // TODO<joka921> Make this unnecessary by completing multiple small groups at
+  // once during the GROUP BY.
+  mutable std::atomic<IdOrString*> cachedResult_ = nullptr;
+
  public:
   // _________________________________________________________________________
   explicit LiteralExpression(T _value) : _value{std::move(_value)} {}
+  ~LiteralExpression() override {
+    delete cachedResult_.load(std::memory_order_relaxed);
+  }
+  // Disallow copying and moving. We currently don't need it, and we would have
+  // to take care of the cache for proper implementations.
+  LiteralExpression(const LiteralExpression&) = delete;
+  LiteralExpression& operator=(const LiteralExpression&) = delete;
 
   // A simple getter for the stored value.
   const T& value() const { return _value; }
 
   // Evaluating just returns the constant/literal value.
-  ExpressionResult evaluate(
-      [[maybe_unused]] EvaluationContext* context) const override {
+  ExpressionResult evaluate(EvaluationContext* context) const override {
     // Common code for the `Literal` and `std::string` case.
-    auto getIdOrString = [&context](const std::string& s) -> ExpressionResult {
+    auto getIdOrString = [this,
+                          &context](const std::string& s) -> ExpressionResult {
+      if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
+        return *ptr;
+      }
       Id id;
       bool idWasFound = context->_qec.getIndex().getId(s, &id);
-      if (!idWasFound) {
-        // no vocabulary entry found, just use it as a string constant.
-        return s;
-      }
-      return id;
+      IdOrString result = idWasFound ? IdOrString{id} : IdOrString{s};
+      auto ptrForCache = std::make_unique<IdOrString>(result);
+      ptrForCache.reset(std::atomic_exchange_explicit(
+          &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
+      context->cancellationHandle_->throwIfCancelled();
+      return result;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
       return getIdOrString(_value.rawContent());
@@ -40,13 +59,14 @@ class LiteralExpression : public SparqlExpression {
       return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
+    } else if constexpr (std::is_same_v<VectorWithMemoryLimit<ValueId>, T>) {
+      // TODO<kcaliban> Change ExpressionResult such that it might point or
+      //                refer to this vector instead of having to clone it.
+      return _value.clone();
     } else {
       return _value;
     }
   }
-
-  // Literal expressions don't have children
-  std::span<SparqlExpression::Ptr> children() override { return {}; }
 
   // Variables and string constants add their values.
   std::span<const Variable> getContainedVariablesNonRecursive() const override {
@@ -80,6 +100,11 @@ class LiteralExpression : public SparqlExpression {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
       return absl::StrCat("#literal: ", _value.rawContent());
+    } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<ValueId>>) {
+      // We should never cache this, as objects of this type of expression are
+      // used exactly *once* in the HashMap optimization of the GROUP BY
+      // operation
+      AD_THROW("Trying to get cache key for value that should not be cached.");
     } else {
       return {std::to_string(_value)};
     }
@@ -142,16 +167,18 @@ class LiteralExpression : public SparqlExpression {
       return variable;
     }
   }
+
+  // Literal expressions don't have children
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 }  // namespace detail
 
 ///  The actual instantiations and aliases of LiteralExpressions.
-using BoolExpression = detail::LiteralExpression<bool>;
-using IntExpression = detail::LiteralExpression<int64_t>;
-using DoubleExpression = detail::LiteralExpression<double>;
 using VariableExpression = detail::LiteralExpression<::Variable>;
 using IriExpression = detail::LiteralExpression<string>;
 using StringLiteralExpression =
     detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;
+using VectorIdExpression =
+    detail::LiteralExpression<VectorWithMemoryLimit<ValueId>>;
 }  // namespace sparqlExpression

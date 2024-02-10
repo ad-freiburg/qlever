@@ -6,22 +6,24 @@
 
 #pragma once
 
-#include <engine/Engine.h>
-#include <engine/QueryPlanningCostFactors.h>
-#include <engine/ResultTable.h>
-#include <engine/RuntimeInformation.h>
-#include <engine/SortPerformanceEstimator.h>
-#include <global/Constants.h>
-#include <index/Index.h>
-#include <util/Cache.h>
-#include <util/ConcurrentCache.h>
-#include <util/Log.h>
-#include <util/Synchronized.h>
-
 #include <memory>
 #include <shared_mutex>
 #include <string>
 #include <vector>
+
+#include "engine/Engine.h"
+#include "engine/QueryPlanningCostFactors.h"
+#include "engine/ResultTable.h"
+#include "engine/RuntimeInformation.h"
+#include "engine/SortPerformanceEstimator.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "index/Index.h"
+#include "util/Cache.h"
+#include "util/ConcurrentCache.h"
+#include "util/Log.h"
+#include "util/Synchronized.h"
+#include "util/http/websocket/QueryId.h"
 
 using std::shared_ptr;
 using std::string;
@@ -44,16 +46,24 @@ class CacheValue {
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 
-  [[nodiscard]] size_t size() const {
-    return _resultTable ? _resultTable->size() * _resultTable->width() : 0;
-  }
+  // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
+  struct SizeGetter {
+    ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
+      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+        return ad_utility::MemorySize::bytes(tablePtr->size() *
+                                             tablePtr->width() * sizeof(Id));
+      } else {
+        return 0_B;
+      }
+    }
+  };
 };
 
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
-using ConcurrentLruCache =
-    ad_utility::ConcurrentCache<ad_utility::LRUCache<string, CacheValue>>;
+using ConcurrentLruCache = ad_utility::ConcurrentCache<
+    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
@@ -88,18 +98,21 @@ class QueryResultCache : public ConcurrentLruCache {
 // Holds references to index and engine, implements caching.
 class QueryExecutionContext {
  public:
-  QueryExecutionContext(const Index& index, QueryResultCache* const cache,
-                        ad_utility::AllocatorWithLimit<Id> allocator,
-                        SortPerformanceEstimator sortPerformanceEstimator,
-                        const bool pinSubtrees = false,
-                        const bool pinResult = false)
+  QueryExecutionContext(
+      const Index& index, QueryResultCache* const cache,
+      ad_utility::AllocatorWithLimit<Id> allocator,
+      SortPerformanceEstimator sortPerformanceEstimator,
+      std::function<void(std::string)> updateCallback =
+          [](std::string) { /* No-op by default for testing */ },
+      const bool pinSubtrees = false, const bool pinResult = false)
       : _pinSubtrees(pinSubtrees),
         _pinResult(pinResult),
         _index(index),
         _subtreeCache(cache),
         _allocator(std::move(allocator)),
         _costFactors(),
-        _sortPerformanceEstimator(sortPerformanceEstimator) {}
+        _sortPerformanceEstimator(sortPerformanceEstimator),
+        updateCallback_(std::move(updateCallback)) {}
 
   QueryResultCache& getQueryTreeCache() { return *_subtreeCache; }
 
@@ -112,18 +125,25 @@ class QueryExecutionContext {
     return _sortPerformanceEstimator;
   }
 
-  void readCostFactorsFromTSVFile(const string& fileName) {
-    _costFactors.readFromFile(fileName);
-  }
-
   [[nodiscard]] double getCostFactor(const string& key) const {
     return _costFactors.getCostFactor(key);
   };
 
-  ad_utility::AllocatorWithLimit<Id> getAllocator() { return _allocator; }
+  const ad_utility::AllocatorWithLimit<Id>& getAllocator() {
+    return _allocator;
+  }
 
-  const bool _pinSubtrees;
-  const bool _pinResult;
+  /// Function that serializes the given RuntimeInformation to JSON and
+  /// calls the updateCallback with this JSON string.
+  /// This is used to broadcast updates of any query to a third party
+  /// while it's still running.
+  /// \param runtimeInformation The `RuntimeInformation` to serialize
+  void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
+    updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
+  }
+
+  bool _pinSubtrees;
+  bool _pinResult;
 
  private:
   const Index& _index;
@@ -132,4 +152,5 @@ class QueryExecutionContext {
   ad_utility::AllocatorWithLimit<Id> _allocator;
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
+  std::function<void(std::string)> updateCallback_;
 };

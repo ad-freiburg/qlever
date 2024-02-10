@@ -17,17 +17,11 @@
 #include "parser/Tokenizer.h"
 #include "parser/TurtleParser.h"
 #include "util/File.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ProgramOptionsHelpers.h"
 #include "util/ReadableNumberFact.h"
 
-using std::cerr;
-using std::cout;
-using std::endl;
-using std::flush;
 using std::string;
-
-#define EMPH_ON "\033[1m"
-#define EMPH_OFF "\033[22m"
 
 namespace po = boost::program_options;
 
@@ -73,16 +67,15 @@ int main(int argc, char** argv) {
   string filetype;
   string inputFile;
   bool noPrefixCompression = false;
-  bool onDiskLiterals = false;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
   bool onlyPsoAndPos = false;
   bool addWordsFromLiterals = false;
-  std::optional<ad_utility::NonNegative> stxxlMemoryGB;
+  std::optional<ad_utility::MemorySize> stxxlMemory;
   optind = 1;
 
-  Index index;
+  Index index{ad_utility::makeUnlimitedAllocator<Id>()};
 
   boost::program_options::options_description boostOptions(
       "Options for IndexBuilderMain");
@@ -97,7 +90,7 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [tsv|nt|ttl]. If not set, QLever will try to deduce it from the "
+      "of [nt|ttl]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
@@ -119,9 +112,6 @@ int main(int argc, char** argv) {
       "the same `index-basename` already exists.");
 
   // Options for the knowledge graph index.
-  add("externalize-literals,l", po::bool_switch(&onDiskLiterals),
-      "An unused and deprecated option that will be removed from a future "
-      "version of qlever");
   add("settings-file,s", po::value(&settingsFile),
       "A JSON file, where various settings can be specified (see the QLever "
       "documentation).");
@@ -129,13 +119,13 @@ int main(int argc, char** argv) {
       "Disable the precomputation for `ql:has-predicate`.");
   add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
       "Do not apply prefix compression to the vocabulary (default: do apply).");
-  add("only-pos-and-pso-permutations,o", po::bool_switch(&onlyPsoAndPos),
+  add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
 
   // Options for the index building process.
-  add("stxxl-memory-gb,m", po::value(&stxxlMemoryGB),
-      "The amount of memory in GB to use for sorting during the index build. "
+  add("stxxl-memory,m", po::value(&stxxlMemory),
+      "The amount of memory in to use for sorting during the index build. "
       "Decrease if the index builder runs out of memory.");
   add("keep-temporary-files,k", po::bool_switch(&keepTemporaryFiles),
       "Do not delete temporary files from index creation for debugging.");
@@ -155,16 +145,8 @@ int main(int argc, char** argv) {
     std::cerr << boostOptions << '\n';
     return EXIT_FAILURE;
   }
-  if (stxxlMemoryGB.has_value()) {
-    index.stxxlMemoryInBytes() =
-        1024ul * 1024ul * 1024ul * stxxlMemoryGB.value();
-  }
-
-  if (onDiskLiterals) {
-    LOG(WARN) << EMPH_ON
-              << "Warning, the -l command line option has no effect anymore "
-                 "and will be removed from a future version of QLever"
-              << EMPH_OFF << std::endl;
+  if (stxxlMemory.has_value()) {
+    index.memoryLimitIndexBuilding() = stxxlMemory.value();
   }
 
   // If no text index name was specified, take the part of the wordsfile after
@@ -181,7 +163,7 @@ int main(int argc, char** argv) {
 
   LOG(INFO) << EMPH_ON << "QLever IndexBuilder, compiled on "
             << qlever::version::DatetimeOfCompilation << " using git hash "
-            << qlever::version::GitShortHash() << EMPH_OFF << std::endl;
+            << qlever::version::GitShortHash << EMPH_OFF << std::endl;
 
   try {
     LOG(TRACE) << "Configuring STXXL..." << std::endl;
@@ -194,12 +176,12 @@ int main(int argc, char** argv) {
 
     index.setKbName(kbIndexName);
     index.setTextName(textIndexName);
-    index.setUsePatterns(!noPatterns);
+    index.usePatterns() = !noPatterns;
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
     index.setPrefixCompression(!noPrefixCompression);
-    index.setLoadAllPermutations(!onlyPsoAndPos);
+    index.loadAllPermutations() = !onlyPsoAndPos;
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
     // index, but we assume that it already exists. In particular, we then need
     // the vocabulary from the KB index for building the text index.
@@ -213,10 +195,7 @@ int main(int argc, char** argv) {
                   << ad_utility::getUppercase(filetype) << std::endl;
       } else {
         bool filetypeDeduced = false;
-        if (inputFile.ends_with(".tsv")) {
-          filetype = "tsv";
-          filetypeDeduced = true;
-        } else if (inputFile.ends_with(".nt")) {
+        if (inputFile.ends_with(".nt")) {
           filetype = "nt";
           filetypeDeduced = true;
         } else if (inputFile.ends_with(".ttl")) {
@@ -239,18 +218,13 @@ int main(int argc, char** argv) {
       if (filetype == "ttl") {
         LOG(DEBUG) << "Parsing uncompressed TTL from: " << inputFile
                    << std::endl;
-        index.createFromFile<TurtleParserAuto>(inputFile);
+        index.createFromFile(inputFile);
       } else if (filetype == "nt") {
         LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
                    << " (using the Turtle parser)" << std::endl;
-        index.createFromFile<TurtleParserAuto>(inputFile);
-      } else if (filetype == "mmap") {
-        LOG(DEBUG) << "Parsing uncompressed TTL from from: " << inputFile
-                   << " (using mmap, which only works for files, not for "
-                   << "streams)" << std::endl;
-        index.createFromFile<TurtleMmapParser<Tokenizer>>(inputFile);
+        index.createFromFile(inputFile);
       } else {
-        LOG(ERROR) << "File format must be one of: nt ttl mmap" << std::endl;
+        LOG(ERROR) << "File format must be one of: nt ttl" << std::endl;
         std::cerr << boostOptions << std::endl;
         exit(1);
       }
@@ -263,7 +237,7 @@ int main(int argc, char** argv) {
     if (!docsfile.empty()) {
       index.buildDocsDB(docsfile);
     }
-    ad_utility::deleteFile(stxxlFileName);
+    ad_utility::deleteFile(stxxlFileName, false);
   } catch (std::exception& e) {
     LOG(ERROR) << e.what() << std::endl;
     exit(2);

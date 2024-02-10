@@ -1,24 +1,45 @@
-// Copyright 2011, University of Freiburg,
+// Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Authors: Björn Buchhold <buchholb>,
-//          Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "./Vocabulary.h"
+#include "index/Vocabulary.h"
 
 #include <fstream>
 #include <iostream>
 
-#include "../parser/RdfEscaping.h"
-#include "../parser/Tokenizer.h"
-#include "../util/BatchedPipeline.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/HashSet.h"
-#include "../util/Serializer/FileSerializer.h"
-#include "../util/json.h"
-#include "./ConstantsIndexBuilding.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "parser/RdfEscaping.h"
+#include "parser/Tokenizer.h"
+#include "util/BatchedPipeline.h"
+#include "util/File.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/Serializer/FileSerializer.h"
+#include "util/json.h"
 
 using std::string;
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::PrefixRanges(
+    const Ranges& ranges)
+    : ranges_(ranges) {
+  for (const auto& range : ranges_) {
+    AD_CONTRACT_CHECK(range.first <= range.second);
+  }
+}
+
+// ____________________________________________________________________________
+template <typename StringType, typename ComparatorType, typename IndexT>
+bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
+    IndexT index) const {
+  return std::ranges::any_of(
+      ranges_, [index](const std::pair<IndexT, IndexT>& range) {
+        return range.first <= index && index < range.second;
+      });
+}
 
 // _____________________________________________________________________________
 template <class S, class C, typename I>
@@ -26,13 +47,13 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
                                        const string& extLitsFileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
-  _internalVocabulary.close();
+  internalVocabulary_.close();
   ad_utility::serialization::FileReadSerializer file(fileName);
-  _internalVocabulary.open(fileName);
-  LOG(INFO) << "Done, number of words: " << _internalVocabulary.size()
+  internalVocabulary_.open(fileName);
+  LOG(INFO) << "Done, number of words: " << internalVocabulary_.size()
             << std::endl;
   if (!extLitsFileName.empty()) {
-    if (!_isCompressed) {
+    if (!isCompressed_) {
       LOG(INFO) << "ERROR: trying to load externalized literals to an "
                    "uncompressed vocabulary. This is not valid and a "
                    "programming error. Terminating"
@@ -41,10 +62,20 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
     }
 
     LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    _externalVocabulary.open(extLitsFileName);
+    externalVocabulary_.open(extLitsFileName);
     LOG(INFO) << "Number of words in external vocabulary: "
-              << _externalVocabulary.size() << std::endl;
+              << externalVocabulary_.size() << std::endl;
   }
+
+  // Precomputing ranges for IRIs, blank nodes, and literals, for faster
+  // processing of the `isIrI`, `isBlankNode`, and `isLiteral` functions.
+  //
+  // NOTE: We only need this for the vocabulary of the main index, where
+  // `I` is `VocabIndex`. However, since this is a negligible one-time cost,
+  // it does not harm to do it for all vocabularies.
+  prefixRangesIris_ = prefixRanges("<");
+  prefixRangesBlankNodes_ = prefixRanges("_:");
+  prefixRangesLiterals_ = prefixRanges("\"");
 }
 
 // _____________________________________________________________________________
@@ -53,7 +84,7 @@ template <typename, typename>
 void Vocabulary<S, C, I>::writeToFile(const string& fileName) const {
   LOG(TRACE) << "BEGIN Vocabulary::writeToFile" << std::endl;
   ad_utility::serialization::FileWriteSerializer file{fileName};
-  _internalVocabulary.getUnderlyingVocabulary().writeToFile(fileName);
+  internalVocabulary_.getUnderlyingVocabulary().writeToFile(fileName);
   LOG(TRACE) << "END Vocabulary::writeToFile" << std::endl;
 }
 
@@ -62,35 +93,35 @@ template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  _internalVocabulary.close();
+  internalVocabulary_.close();
   std::vector<std::string> words(set.begin(), set.end());
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  _internalVocabulary.build(words);
+  internalVocabulary_.build(words);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::isLiteral(const string& word) {
-  return word.size() > 0 && word[0] == '\"';
+bool Vocabulary<S, C, I>::stringIsLiteral(const string& s) {
+  return s.starts_with('"');
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(const string& word) const {
+bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.
 
   // If the string is not compressed, this means that this is a text vocabulary
   // and thus doesn't support externalization.
   if constexpr (std::is_same_v<S, CompressedString>) {
-    if (!isLiteral(word)) {
-      return shouldEntityBeExternalized(word);
+    if (!stringIsLiteral(s)) {
+      return shouldEntityBeExternalized(s);
     } else {
-      return shouldLiteralBeExternalized(word);
+      return shouldLiteralBeExternalized(s);
     }
   } else {
     return false;
@@ -100,19 +131,33 @@ bool Vocabulary<S, C, I>::shouldBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
-  for (const auto& p : _externalizedPrefixes) {
-    if (word.starts_with(p)) {
-      return true;
-    }
+  // Never externalize the internal IRIs as they are sometimes added before or
+  // after the externalization happens and we thus get inconsistent behavior
+  // etc. for `ql:langtag`.
+  if (word.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+    return false;
   }
-  return false;
+  // Never externalize the special IRIs starting with `@` (for example,
+  // @en@rdfs:label). Otherwise, they will not be found with a setting like
+  // `"prefixes-external": ["@"]` or `"prefixes-external": [""]` in the
+  // `.settings.json` file.
+  //
+  // TODO: This points to a bug or inconsistency elsewhere in the code.
+  if (word.starts_with("@")) {
+    return false;
+  }
+  // Otherwise, externalize if and only if there is a prefix match for one of
+  // `externalizedPrefixes_`.
+  return std::ranges::any_of(externalizedPrefixes_, [&word](const auto& p) {
+    return word.starts_with(p);
+  });
 }
 
 // ___________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
     const string& word) const {
-  for (const auto& p : _externalizedPrefixes) {
+  for (const auto& p : externalizedPrefixes_) {
     if (word.starts_with(p)) {
       return true;
     }
@@ -127,7 +172,7 @@ bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
     return false;
   }
 
-  for (const auto& p : _internalizedLangs) {
+  for (const auto& p : internalizedLangs_) {
     if (lang == p) {
       return false;
     }
@@ -152,7 +197,7 @@ template <class S, class C, class I>
 template <class StringRange, typename, typename>
 void Vocabulary<S, C, I>::buildCodebookForPrefixCompression(
     const StringRange& prefixes) {
-  _internalVocabulary.getUnderlyingVocabulary().getCompressor().buildCodebook(
+  internalVocabulary_.getUnderlyingVocabulary().getCompressor().buildCodebook(
       prefixes);
 }
 
@@ -160,9 +205,9 @@ void Vocabulary<S, C, I>::buildCodebookForPrefixCompression(
 template <class S, class C, class I>
 template <class StringRange>
 void Vocabulary<S, C, I>::initializeExternalizePrefixes(const StringRange& s) {
-  _externalizedPrefixes.clear();
+  externalizedPrefixes_.clear();
   for (const auto& el : s) {
-    _externalizedPrefixes.emplace_back(el);
+    externalizedPrefixes_.emplace_back(el);
   }
 }
 
@@ -170,29 +215,31 @@ void Vocabulary<S, C, I>::initializeExternalizePrefixes(const StringRange& s) {
 template <class S, class C, class I>
 template <class StringRange>
 void Vocabulary<S, C, I>::initializeInternalizedLangs(const StringRange& s) {
-  _internalizedLangs.clear();
+  internalizedLangs_.clear();
   // `StringRange` might be nlohmann::json, for which we have disabled
   // implicit conversions, so `vector::insert` cannot be used.
   for (const auto& el : s) {
-    _internalizedLangs.emplace_back(el);
+    internalizedLangs_.emplace_back(el);
   }
 }
 
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
-bool Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
-    const string& word, IdRange<IndexType>* range) const {
+std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
+    const string& word) const {
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
-  auto prefixRange = prefix_range(word.substr(0, word.size() - 1));
-  bool success = prefixRange.second > prefixRange.first;
-  range->_first = prefixRange.first;
-  range->_last = prefixRange.second.decremented();
+  IdRange<I> range;
+  auto [begin, end] =
+      internalVocabulary_.prefix_range(word.substr(0, word.size() - 1));
+  bool notEmpty = end > begin;
 
-  if (success) {
-    AD_CONTRACT_CHECK(range->_first.get() < _internalVocabulary.size());
-    AD_CONTRACT_CHECK(range->_last.get() < _internalVocabulary.size());
+  if (notEmpty) {
+    range = IdRange{I::make(begin), I::make(end).decremented()};
+    AD_CONTRACT_CHECK(range.first().get() < internalVocabulary_.size());
+    AD_CONTRACT_CHECK(range.last().get() < internalVocabulary_.size());
+    return range;
   }
-  return success;
+  return std::nullopt;
 }
 
 // _______________________________________________________________
@@ -200,7 +247,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(_internalVocabulary.upper_bound(word, level)._index);
+  return IndexType::make(internalVocabulary_.upper_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
@@ -208,7 +255,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(_internalVocabulary.lower_bound(word, level)._index);
+  return IndexType::make(internalVocabulary_.lower_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
@@ -216,9 +263,9 @@ template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
                                                  bool ignorePunctuation) {
-  _internalVocabulary.getComparator() =
+  internalVocabulary_.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  _externalVocabulary.getComparator() =
+  externalVocabulary_.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
 }
 
@@ -227,7 +274,7 @@ template <typename StringType, typename C, typename I>
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C, I>::at(
     IndexType idx) const {
-  return _internalVocabulary[idx.get()];
+  return internalVocabulary_[idx.get()];
 }
 
 // _____________________________________________________________________________
@@ -238,20 +285,26 @@ bool Vocabulary<S, C, I>::getId(const string& word, IndexType* idx) const {
     *idx = lower_bound(word, SortLevel::TOTAL);
     // works for the case insensitive version because
     // of the strict ordering.
-    return idx->get() < _internalVocabulary.size() && at(*idx) == word;
+    return idx->get() < internalVocabulary_.size() && at(*idx) == word;
   }
-  auto wordAndIndex = _externalVocabulary.lower_bound(word, SortLevel::TOTAL);
+  auto wordAndIndex = externalVocabulary_.lower_bound(word, SortLevel::TOTAL);
   idx->get() = wordAndIndex._index;
-  idx->get() += _internalVocabulary.size();
+  idx->get() += internalVocabulary_.size();
   return wordAndIndex._word == word;
 }
 
 // ___________________________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::prefix_range(const string& prefix) const
-    -> std::pair<IndexType, IndexType> {
-  auto [begin, end] = _internalVocabulary.prefix_range(prefix);
-  return {IndexType::make(begin), IndexType::make(end)};
+auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
+    -> Vocabulary<S, C, I>::PrefixRanges {
+  auto rangeInternal = internalVocabulary_.prefix_range(prefix);
+  auto rangeExternal = externalVocabulary_.prefix_range(prefix);
+  auto offset = internalVocabulary_.size();
+  std::pair<I, I> indexRangeInternal{I::make(rangeInternal.first),
+                                     I::make(rangeInternal.second)};
+  std::pair<I, I> indexRangeExternal{I::make(rangeExternal.first + offset),
+                                     I::make(rangeExternal.second + offset)};
+  return PrefixRanges{{indexRangeInternal, indexRangeExternal}};
 }
 
 // _____________________________________________________________________________
@@ -259,51 +312,14 @@ template <typename S, typename C, typename I>
 template <typename, typename>
 std::optional<std::string_view> Vocabulary<S, C, I>::operator[](
     IndexType idx) const {
-  if (idx.get() < _internalVocabulary.size()) {
-    return _internalVocabulary[idx.get()];
+  if (idx.get() < internalVocabulary_.size()) {
+    return internalVocabulary_[idx.get()];
   } else {
     return std::nullopt;
   }
 }
 template std::optional<std::string_view>
 TextVocabulary::operator[]<std::string, void>(IndexType idx) const;
-
-// ___________________________________________________________________________
-template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::getRangesForDatatypes() const
-    -> ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> {
-  ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>> result;
-  result[Datatypes::Literal] = prefix_range("\"");
-  result[Datatypes::Iri] = prefix_range("<");
-
-  return result;
-};
-
-template <typename S, typename C, typename I>
-template <typename, typename>
-void Vocabulary<S, C, I>::printRangesForDatatypes() {
-  auto ranges = getRangesForDatatypes();
-  auto logRange = [&](const auto& range) {
-    LOG(INFO) << range.first << " " << range.second << std::endl;
-    if (range.second > range.first) {
-      LOG(INFO) << indexToOptionalString(range.first).value() << std::endl;
-      LOG(INFO) << indexToOptionalString(range.second.decremented()).value()
-                << std::endl;
-    }
-    if (range.second.get() < _internalVocabulary.size()) {
-      LOG(INFO) << indexToOptionalString(range.second).value() << std::endl;
-    }
-
-    if (range.first.get() > 0) {
-      LOG(INFO) << indexToOptionalString(range.first.decremented()).value()
-                << std::endl;
-    }
-  };
-
-  for (const auto& pair : ranges) {
-    logRange(pair.second);
-  }
-}
 
 template std::optional<string>
 RdfsVocabulary::indexToOptionalString<CompressedString>(IndexType idx) const;
@@ -322,8 +338,6 @@ template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
-
-template void RdfsVocabulary::printRangesForDatatypes();
 
 template void TextVocabulary::writeToFile<std::string, void>(
     const string& fileName) const;

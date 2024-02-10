@@ -4,6 +4,7 @@
 #include "./Index.h"
 #include "./IndexImpl.h"
 #include "./TriplesView.h"
+#include "util/MemorySize/MemorySize.h"
 
 /// Dump a  certain permutation to stdout in a human-readable way as IDs, and
 /// in deterministic order
@@ -11,8 +12,9 @@ template <typename Permutation>
 void dumpToStdout(const Permutation& permutation) {
   ad_utility::AllocatorWithLimit<Id> allocator{
       ad_utility::makeAllocationMemoryLeftThreadsafeObject(
-          std::numeric_limits<uint64_t>::max())};
-  auto triples = TriplesView(permutation, allocator);
+          ad_utility::MemorySize::max())};
+  auto triples = TriplesView(
+      permutation, std::make_shared<ad_utility::CancellationHandle<>>());
   size_t i = 0;
   for (auto triple : triples) {
     std::cout << triple[0] << " " << triple[1] << " " << triple[2] << std::endl;
@@ -40,7 +42,7 @@ int main(int argc, char** argv) {
     return EXIT_FAILURE;
   }
 
-  Index i;
+  Index i{ad_utility::makeUnlimitedAllocator<Id>()};
   IndexImpl& impl = i.getImpl();
   std::string indexName{argv[1]};
   std::string p{argv[2]};

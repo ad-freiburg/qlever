@@ -16,6 +16,7 @@
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
@@ -30,12 +31,9 @@ Filter::Filter(QueryExecutionContext* qec,
       _expression{std::move(expression)} {}
 
 // _____________________________________________________________________________
-string Filter::asStringImpl(size_t indent) const {
+string Filter::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "FILTER " << _subtree->asString(indent);
+  os << "FILTER " << _subtree->getCacheKey();
   os << " with " << _expression.getCacheKey(_subtree->getVariableColumns());
   return std::move(os).str();
 }
@@ -49,6 +47,7 @@ ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
+  checkCancellation();
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(subRes->idTable().numColumns());
@@ -56,6 +55,7 @@ ResultTable Filter::computeResult() {
   size_t width = idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
+  checkCancellation();
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
@@ -67,7 +67,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
@@ -78,39 +78,31 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
+  // Clang 17 seems to incorrectly deduce the type, so try to trick it
+  std::remove_const_t<decltype(output)>& output2 = output;
 
   auto visitor =
-      [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
-        if constexpr (std::is_same_v<T, sparqlExpression::VectorWithMemoryLimit<
-                                            sparqlExpression::Bool>>) {
-          AD_CONTRACT_CHECK(singleResult.size() == input.size());
-          auto totalSize =
-              std::accumulate(singleResult.begin(), singleResult.end(), 0ul);
-          output.reserve(totalSize);
-          for (size_t i = 0; i < singleResult.size(); ++i) {
-            if (singleResult[i]) {
-              output.push_back(input[i]);
-            }
-          }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
-        } else if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
+      [this, &output2, &input,
+       &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+          T&& singleResult) {
+        if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
               0ul, [](const auto& sum, const auto& interval) {
                 return sum + (interval.second - interval.first);
               });
-          output.reserve(totalSize);
+          output2.reserve(totalSize);
+          checkCancellation();
           for (auto [beg, end] : singleResult._intervals) {
             AD_CONTRACT_CHECK(end <= input.size());
-            output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            output2.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            checkCancellation();
           }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
+          AD_CONTRACT_CHECK(output2.size() == totalSize);
         } else {
-          // Default case for all other types. We currently implicitly convert
-          // all kinds of results (strings, doubles, ints) to bools inside a
-          // FILTER.
-          // TODO<joka921> Read up in the standard what is correct here, and
-          // then rewrite the expression module with the correct semantics.
+          // All other results are converted to boolean values via the
+          // `EffectiveBooleanValueGetter`. This means for example, that zero,
+          // UNDEF, and empty strings are filtered out.
           // TODO<joka921> Check whether it's feasible to precompute and reserve
           // the total size. This depends on the expensiveness of the
           // `EffectiveBooleanValueGetter`.
@@ -118,11 +110,12 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
               std::forward<T>(singleResult), input.size(), &evaluationContext);
           size_t i = 0;
 
+          using EBV = sparqlExpression::detail::EffectiveBooleanValueGetter;
           for (auto&& resultValue : resultGenerator) {
-            if (sparqlExpression::detail::EffectiveBooleanValueGetter{}(
-                    resultValue, &evaluationContext)) {
-              output.push_back(input[i]);
+            if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
+              output2.push_back(input[i]);
             }
+            checkCancellation();
             ++i;
           }
         }

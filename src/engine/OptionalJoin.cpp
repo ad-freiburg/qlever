@@ -9,18 +9,18 @@
 #include "engine/CallFixedSize.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
 OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
                            std::shared_ptr<QueryExecutionTree> t1,
-                           std::shared_ptr<QueryExecutionTree> t2,
-                           const std::vector<std::array<ColumnIndex, 2>>& jcs)
+                           std::shared_ptr<QueryExecutionTree> t2)
     : Operation(qec),
       _left{std::move(t1)},
       _right{std::move(t2)},
-      _joinColumns(jcs) {
-  AD_CONTRACT_CHECK(!jcs.empty());
+      _joinColumns(QueryExecutionTree::getJoinColumns(*_left, *_right)) {
+  AD_CORRECTNESS_CHECK(!_joinColumns.empty());
 
   // If `_right` contains no UNDEF in the join columns and at most one column in
   // `_left` contains UNDEF values, and that column is the last join column,
@@ -53,28 +53,20 @@ OptionalJoin::OptionalJoin(QueryExecutionContext* qec,
   }
 
   // The inputs must be sorted by the join columns.
-  auto [sortedLeft, sortedRight] = QueryExecutionTree::createSortedTrees(
+  std::tie(_left, _right) = QueryExecutionTree::createSortedTrees(
       std::move(_left), std::move(_right), _joinColumns);
-  _left = std::move(sortedLeft);
-  _right = std::move(sortedRight);
 }
 
 // _____________________________________________________________________________
-string OptionalJoin::asStringImpl(size_t indent) const {
+string OptionalJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "OPTIONAL_JOIN\n" << _left->asString(indent) << " ";
+  os << "OPTIONAL_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "|X|\n" << _right->asString(indent) << " ";
+  os << "|X|\n" << _right->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
@@ -364,5 +356,5 @@ void OptionalJoin::optionalJoin(
     }
     Engine::sort(*result, cols);
   }
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 }

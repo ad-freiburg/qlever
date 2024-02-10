@@ -77,10 +77,29 @@ class SparqlExpression {
   // Return true iff this expression contains an aggregate like SUM, COUNT etc.
   // This information is needed to check if there is an implicit GROUP BY in a
   // query because any of the selected aliases contains an aggregate.
-  virtual bool containsAggregate() const {
+  virtual bool containsAggregate() const final {
+    if (isAggregate()) return true;
     return std::ranges::any_of(children(), [](const Ptr& child) {
       return child->containsAggregate();
     });
+  }
+
+  // Check if expression is aggregate
+  virtual bool isAggregate() const { return false; }
+
+  // Check if an expression is distinct (only applies to aggregates)
+  virtual bool isDistinct() const {
+    AD_THROW(
+        "isDistinct() maybe only called for aggregate expressions. If this is "
+        "an aggregate expression, then the implementation of isDistinct() is "
+        "missing for this expression. Please report this to the developers.");
+  }
+
+  // Replace child at index `childIndex` with `newExpression`
+  virtual void replaceChild(size_t childIndex,
+                            std::unique_ptr<SparqlExpression> newExpression) {
+    AD_CONTRACT_CHECK(childIndex < children().size());
+    children()[childIndex] = std::move(newExpression);
   }
 
   /// Get a unique identifier for this expression, used as cache key.
@@ -138,6 +157,10 @@ class SparqlExpression {
   // implementation returns `false`.
   virtual bool isConstantExpression() const { return false; }
 
+  // Returns true iff this expression is a STR(...) expression.  Default
+  // implementation returns `false`.
+  virtual bool isStrExpression() const { return false; }
+
   // __________________________________________________________________________
   virtual ~SparqlExpression() = default;
 
@@ -154,13 +177,17 @@ class SparqlExpression {
             std::make_move_iterator(span.end())};
   }
 
- private:
   // Get the direct child expressions.
-  virtual std::span<SparqlExpression::Ptr> children() = 0;
+  virtual std::span<SparqlExpression::Ptr> children() final {
+    return childrenImpl();
+  }
   virtual std::span<const SparqlExpression::Ptr> children() const final {
     auto children = const_cast<SparqlExpression&>(*this).children();
     return {children.data(), children.size()};
   }
+
+ private:
+  virtual std::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
   // Helper function for strings(). Get all variables, iris, and string literals
   // that are included in this expression directly, ignoring possible child

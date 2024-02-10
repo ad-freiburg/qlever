@@ -9,6 +9,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
@@ -21,12 +22,9 @@ Distinct::Distinct(QueryExecutionContext* qec,
     : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________
-string Distinct::asStringImpl(size_t indent) const {
+string Distinct::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "Distinct " << _subtree->asString(indent);
+  os << "Distinct " << _subtree->getCacheKey();
   return std::move(os).str();
 }
 

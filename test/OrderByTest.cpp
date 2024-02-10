@@ -13,12 +13,13 @@
 #include "global/ValueIdComparators.h"
 
 using namespace std::string_literals;
+using namespace std::chrono_literals;
 using ad_utility::source_location;
 
 namespace {
 // Create an `OrderBy` operation that sorts the `input` by the `sortColumns`.
 OrderBy makeOrderBy(IdTable input, const OrderBy::SortIndices& sortColumns) {
-  std::vector<Variable> vars;
+  std::vector<std::optional<Variable>> vars;
   auto qec = ad_utility::testing::getQec();
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?"s + std::to_string(i));
@@ -207,7 +208,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(8u, s.getSizeEstimate());
     EXPECT_EQ("OrderBy on ASC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(0) \n"));
 
     const auto& varColMap = s.getExternallyVisibleVariableColumns();
@@ -224,7 +225,7 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_FALSE(s.knownEmptyResult());
     EXPECT_EQ("OrderBy on ASC(?1) DESC(?0)", s.getDescriptor());
 
-    EXPECT_THAT(s.asString(),
+    EXPECT_THAT(s.getCacheKey(),
                 ::testing::StartsWith("ORDER BY on columns:asc(1) desc(0) \n"));
     auto varColMap = s.getExternallyVisibleVariableColumns();
     ASSERT_EQ(2u, varColMap.size());
@@ -234,4 +235,25 @@ TEST(OrderBy, simpleMemberFunctions) {
     EXPECT_EQ(42.0, s.getMultiplicity(0));
     EXPECT_EQ(84.0, s.getMultiplicity(1));
   }
+}
+
+TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
+  VectorTable input;
+  // Make sure the estimator estimates a couple of ms to sort this
+  for (int64_t i = 0; i < 1000; i++) {
+    input.push_back({0, i});
+  }
+  auto inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
+  OrderBy orderBy = makeOrderBy(std::move(inputTable), {{1, false}, {0, true}});
+  // Safe to do, because we know the underlying estimator is mutable
+  const_cast<SortPerformanceEstimator&>(
+      orderBy.getExecutionContext()->getSortPerformanceEstimator())
+      .computeEstimatesExpensively(
+          ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
+
+  orderBy.recursivelySetTimeConstraint(0ms);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
+      ad_utility::CancellationException);
 }

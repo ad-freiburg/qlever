@@ -7,10 +7,13 @@
 #include <vector>
 
 #include "../benchmark/infrastructure/Benchmark.h"
-#include "../benchmark/infrastructure/BenchmarkConfiguration.h"
 #include "../benchmark/infrastructure/BenchmarkMeasurementContainer.h"
 #include "../benchmark/infrastructure/BenchmarkMetadata.h"
+#include "util/ConfigManager/ConfigManager.h"
+#include "util/ConfigManager/ConfigOption.h"
 #include "util/Random.h"
+
+using namespace std::string_literals;
 
 namespace ad_benchmark {
 /*
@@ -28,25 +31,60 @@ Using the functions described there would require including
 `Google Benchmark` as a  third-party library.
 */
 
+/*
+The general configuration options. Only used by
+`BMConfigurationAndMetadataExample`, but because of how we pass the
+configuration, every benchmark needs to have them, even if they don't use it.
+*/
+class ConfigOptions : public BenchmarkInterface {
+ protected:
+  // For storing the configuration option values.
+  std::string dateString_;
+  int numberOfStreetSigns_;
+  std::vector<bool> wonOnTryX_;
+  float balanceOnStevesSavingAccount_;
+
+ public:
+  /*
+  Just adds some arbitrary configuration options.
+  */
+  ConfigOptions() {
+    ad_utility::ConfigManager& manager = getConfigManager();
+
+    manager.addOption("date", "The current date.", &dateString_, "22.3.2023"s);
+
+    auto numSigns =
+        manager.addOption("num-signs", "The number of street signs.",
+                          &numberOfStreetSigns_, 10000);
+    manager.addValidator([](const int& num) { return num >= 0; },
+                         "The number of street signs must be at least 0!",
+                         "Negative numbers, or floating point numbers, are not "
+                         "allowed for the configuration option \"num-signs\".",
+                         numSigns);
+
+    manager.addOption("coin-flip-try", "The number of succesful coin flips.",
+                      &wonOnTryX_, {false, false, false, false, false});
+
+    // Sub manager can be used to organize things better. They are basically
+    // just a path prefix for all the options inside it.
+    ad_utility::ConfigManager& subManager{
+        manager.addSubManager({"accounts"s, "personal"s})};
+    subManager.addOption("steve"s, "Steves saving account balance.",
+                         &balanceOnStevesSavingAccount_, -41.9f);
+  }
+};
+
 // Single Measurements
-class BMSingleMeasurements : public BenchmarkInterface {
+class BMSingleMeasurements : public ConfigOptions {
  public:
   std::string name() const final { return "Example for single measurements"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
-
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
     // Setup.
-    const size_t number = SlowRandomIntGenerator<size_t>(10, 1'000)();
+    const size_t number =
+        ad_utility::SlowRandomIntGenerator<size_t>(10, 1'000)();
     auto exponentiate = [](const size_t numberToExponentiate) {
       return numberToExponentiate * numberToExponentiate;
     };
@@ -67,7 +105,7 @@ class BMSingleMeasurements : public BenchmarkInterface {
         });
 
     // Adding some basic metadata.
-    multipleTimes.metadata().addKeyValuePair("Amount of exponentiations",
+    multipleTimes.metadata().addKeyValuePair("amount-of-exponentiations",
                                              10'000'000'000);
 
     return results;
@@ -75,18 +113,9 @@ class BMSingleMeasurements : public BenchmarkInterface {
 };
 
 // Groups
-class BMGroups : public BenchmarkInterface {
+class BMGroups : public ConfigOptions {
  public:
   std::string name() const final { return "Example for group benchmarks"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
-
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -110,52 +139,62 @@ class BMGroups : public BenchmarkInterface {
 
     // Measuring functions.
     auto& loopAddGroup = results.addGroup("loopAdd");
-    loopAddGroup.metadata().addKeyValuePair("Operator", "+");
+    loopAddGroup.metadata().addKeyValuePair("operator", "+");
 
     auto& loopMultiplyGroup = results.addGroup("loopMultiply");
-    loopMultiplyGroup.metadata().addKeyValuePair("Operator", "*");
+    loopMultiplyGroup.metadata().addKeyValuePair("operator", "*");
 
     auto& addMember1 =
         loopAddGroup.addMeasurement("1+1", [&loopAdd]() { loopAdd(1, 1); });
-    addMember1.metadata().addKeyValuePair("Result", 2);
+    addMember1.metadata().addKeyValuePair("result", 2);
 
     auto& addMember2 =
         loopAddGroup.addMeasurement("42+69", [&loopAdd]() { loopAdd(42, 69); });
-    addMember2.metadata().addKeyValuePair("Result", 42 + 69);
+    addMember2.metadata().addKeyValuePair("result", 42 + 69);
 
     auto& addMember3 = loopAddGroup.addMeasurement(
         "10775+24502", [&loopAdd]() { loopAdd(10775, 24502); });
-    addMember3.metadata().addKeyValuePair("Result", 10775 + 24502);
+    addMember3.metadata().addKeyValuePair("result", 10775 + 24502);
 
     auto& multiplicationMember1 = loopMultiplyGroup.addMeasurement(
         "1*1", [&loopMultiply]() { loopMultiply(1, 1); });
-    multiplicationMember1.metadata().addKeyValuePair("Result", 1);
+    multiplicationMember1.metadata().addKeyValuePair("result", 1);
 
     auto& multiplicationMember2 = loopMultiplyGroup.addMeasurement(
         "42*69", [&loopMultiply]() { loopMultiply(42, 69); });
-    multiplicationMember2.metadata().addKeyValuePair("Result", 42 * 69);
+    multiplicationMember2.metadata().addKeyValuePair("result", 42 * 69);
 
     auto& multiplicationMember3 = loopMultiplyGroup.addMeasurement(
         "10775*24502", [&loopMultiply]() { loopMultiply(10775, 24502); });
-    multiplicationMember3.metadata().addKeyValuePair("Result", 10775 * 24502);
+    multiplicationMember3.metadata().addKeyValuePair("result", 10775 * 24502);
+
+    // Addtables.
+    ResultTable& addTable =
+        loopAddGroup.addTable("Addition", {"42", "24"}, {"+", "42", "24"});
+    addTable.addMeasurement(0, 1, [&loopAdd]() { loopAdd(42, 42); });
+    addTable.addMeasurement(0, 2, [&loopAdd]() { loopAdd(42, 24); });
+    addTable.addMeasurement(1, 1, [&loopAdd]() { loopAdd(24, 42); });
+    addTable.addMeasurement(1, 2, [&loopAdd]() { loopAdd(24, 24); });
+
+    ResultTable& multiplyTable = loopMultiplyGroup.addTable(
+        "Multiplication", {"42", "24"}, {"*", "42", "24"});
+    multiplyTable.addMeasurement(0, 1,
+                                 [&loopMultiply]() { loopMultiply(42, 42); });
+    multiplyTable.addMeasurement(0, 2,
+                                 [&loopMultiply]() { loopMultiply(42, 24); });
+    multiplyTable.addMeasurement(1, 1,
+                                 [&loopMultiply]() { loopMultiply(24, 42); });
+    multiplyTable.addMeasurement(1, 2,
+                                 [&loopMultiply]() { loopMultiply(24, 24); });
 
     return results;
   }
 };
 
 // Tables
-class BMTables : public BenchmarkInterface {
+class BMTables : public ConfigOptions {
  public:
   std::string name() const final { return "Example for table benchmarks"; }
-
-  void parseConfiguration(const BenchmarkConfiguration&) final {
-    // Nothing to actually do here.
-  }
-
-  BenchmarkMetadata getMetadata() const final {
-    // Again, nothing to really do here.
-    return BenchmarkMetadata{};
-  }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
@@ -178,7 +217,7 @@ class BMTables : public BenchmarkInterface {
         "Adding exponents", {"2^10", "2^11", "Values written out"},
         {"", "2^10", "2^11"});
     // Adding some metadata.
-    tableAddingExponents.metadata().addKeyValuePair("Manually set fields",
+    tableAddingExponents.metadata().addKeyValuePair("manually-set-fields",
                                                     "Row 2");
 
     // Measure the calculating of the exponents.
@@ -221,52 +260,27 @@ class BMTables : public BenchmarkInterface {
   }
 };
 
-// A simple example of the usage of the `BenchmarkConfiguration` and the
+// A simple example of the usage of the `ad_utility::ConfigManager` and the
 // general `BenchmarkMetadata`.
-class BMConfigurationAndMetadataExample : public BenchmarkInterface {
-  // This class will simply transcribe specific configuration options
-  // to this `BenchmarkMetadta` object and return it later with the
-  // `getMetadata()` function.
-  BenchmarkMetadata generalMetadata_;
-
+class BMConfigurationAndMetadataExample : public ConfigOptions {
  public:
   std::string name() const final {
     return "Example for the usage of configuration and metadata";
   }
 
-  void parseConfiguration(const BenchmarkConfiguration& config) final {
-    // Collect some arbitrary values.
-    std::string dateString{
-        config.getValueByNestedKeys<std::string>("exampleDate")
-            .value_or("22.3.2023")};
-    size_t numberOfStreetSigns{
-        config.getValueByNestedKeys<size_t>("numSigns").value_or(10)};
-
-    std::vector<bool> wonOnTryX{};
-    wonOnTryX.reserve(5);
-    for (size_t i = 0; i < 5; i++) {
-      wonOnTryX.push_back(config.getValueByNestedKeys<bool>("Coin_flip_try", i)
-                              .value_or(false));
-    }
-
-    float balanceOnStevesSavingAccount{
-        config.getValueByNestedKeys<float>("Accounts", "Personal", "Steve")
-            .value_or(-41.9)};
-
-    // Transcribe the collected values.
-    generalMetadata_.addKeyValuePair("date", dateString);
-    generalMetadata_.addKeyValuePair("numberOfStreetSigns",
-                                     numberOfStreetSigns);
-    generalMetadata_.addKeyValuePair("wonOnTryX", wonOnTryX);
-    generalMetadata_.addKeyValuePair("Balance on Steves saving account",
-                                     balanceOnStevesSavingAccount);
+  /*
+  This class will simply transcribe the data of the configuration options
+  to the general metadata of the class.
+  */
+  BenchmarkResults runAllBenchmarks() final {
+    BenchmarkMetadata& meta{getGeneralMetadata()};
+    meta.addKeyValuePair("date", dateString_);
+    meta.addKeyValuePair("number-of-street-signs", numberOfStreetSigns_);
+    meta.addKeyValuePair("won-on-try-x", wonOnTryX_);
+    meta.addKeyValuePair("balance-on-steves-saving-account",
+                         balanceOnStevesSavingAccount_);
+    return BenchmarkResults{};
   }
-
-  BenchmarkMetadata getMetadata() const final { return generalMetadata_; }
-
-  // This is just a dummy, because this class is only an example for other
-  // features of the benchmark infrastructure.
-  BenchmarkResults runAllBenchmarks() final { return BenchmarkResults{}; }
 };
 
 // Registering the benchmarks.

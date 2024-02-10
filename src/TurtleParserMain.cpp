@@ -4,13 +4,15 @@
 
 #include <getopt.h>
 
-#include <array>
 #include <fstream>
 #include <iostream>
 #include <string>
 
-#include "./parser/TurtleParser.h"
-#include "./util/Log.h"
+#include "parser/TurtleParser.h"
+#include "util/Log.h"
+
+using std::cout;
+using std::endl;
 
 /**
  * @brief Instantiate a Parser that parses filename and writes the resulting
@@ -27,34 +29,11 @@ void writeNTImpl(std::ostream& out, const std::string& filename) {
   TurtleTriple triple;
   size_t numTriples = 0;
   while (p.getLine(triple)) {
-    out << triple._subject << " " << triple._predicate << " "
-        << triple._object.toRdfLiteral() << " .\n";
+    out << triple.subject_ << " " << triple.predicate_ << " "
+        << triple.object_.toRdfLiteral() << " .\n";
     numTriples++;
     if (numTriples % 10000000 == 0) {
       LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
-    }
-  }
-}
-
-template <class Parser>
-void writeLabel(const std::string& filename) {
-  Parser p(filename);
-  std::array<std::string, 3> triple;
-  size_t numTriples = 0;
-  std::unordered_set<std::string> entities;
-  while (p.getLine(triple)) {
-    entities.insert(std::move(triple[0]));
-    entities.insert(std::move(triple[1]));
-    entities.insert(std::move(triple[2]));
-    numTriples++;
-    if (numTriples % 10000000 == 0) {
-      LOG(INFO) << "Parsed " << numTriples << " triples" << std::endl;
-    }
-  }
-  for (const auto& t : entities) {
-    if (t.starts_with('<')) {
-      std::cout << t << " <qlever_label> \"" << t.substr(1, t.size() - 2)
-                << ".\n";
     }
   }
 }
@@ -70,10 +49,7 @@ template <class Tokenizer_T>
 void writeNT(std::ostream& out, const string& fileFormat,
              const std::string& filename) {
   if (fileFormat == "ttl" || fileFormat == "nt") {
-    // writeLabel<TurtleStreamParser<Tokenizer_T>>(out, filename);
     writeNTImpl<TurtleStreamParser<Tokenizer_T>>(out, filename);
-  } else if (fileFormat == "mmap") {
-    writeNTImpl<TurtleMmapParser<Tokenizer_T>>(out, filename);
   } else {
     LOG(ERROR) << "writeNT was called with unknown file format " << fileFormat
                << ". This should never happen, terminating" << std::endl;

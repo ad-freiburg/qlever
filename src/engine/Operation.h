@@ -17,14 +17,19 @@
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
+#include "util/CancellationHandle.h"
+#include "util/CompilerExtensions.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Timer.h"
+#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
 class Operation {
+  using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
+  using Milliseconds = std::chrono::milliseconds;
+
  public:
   // Default Constructor.
   Operation() : _executionContext(nullptr) {}
@@ -45,7 +50,7 @@ class Operation {
 
   /// get non-owning constant pointers to all the held subtrees to actually use
   /// the Execution Trees as trees
-  std::vector<const QueryExecutionTree*> getChildren() const {
+  virtual std::vector<const QueryExecutionTree*> getChildren() const final {
     vector<QueryExecutionTree*> interm{
         const_cast<Operation*>(this)->getChildren()};
     return {interm.begin(), interm.end()};
@@ -63,9 +68,9 @@ class Operation {
 
   // Get a unique, not ambiguous string representation for a subtree.
   // This should act like an ID for each subtree.
-  // Calls  `asStringImpl` and adds the information about the `LIMIT` clause.
-  virtual string asString(size_t indent = 0) const final {
-    auto result = asStringImpl(indent);
+  // Calls  `getCacheKeyImpl` and adds the information about the `LIMIT` clause.
+  virtual string getCacheKey() const final {
+    auto result = getCacheKeyImpl();
     if (_limit._limit.has_value()) {
       absl::StrAppend(&result, " LIMIT ", _limit._limit.value());
     }
@@ -76,16 +81,17 @@ class Operation {
   }
 
  private:
-  // The individual implementation of `asString` (see above) that has to be
+  // The individual implementation of `getCacheKey` (see above) that has to be
   // customized by every child class.
-  virtual string asStringImpl(size_t indent = 0) const = 0;
+  virtual string getCacheKeyImpl() const = 0;
 
  public:
   // Gets a very short (one line without line ending) descriptor string for
   // this Operation.  This string is used in the RuntimeInformation
   virtual string getDescriptor() const = 0;
   virtual size_t getResultWidth() const = 0;
-  virtual void setTextLimit(size_t limit) = 0;
+  virtual void setTextLimit(size_t limit);
+
   virtual size_t getCostEstimate() = 0;
 
   virtual uint64_t getSizeEstimate() final {
@@ -111,21 +117,50 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
-  RuntimeInformation& getRuntimeInfo() { return _runtimeInfo; }
+  RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
+
+  std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {
+    return _runtimeInfo;
+  }
+
   RuntimeInformationWholeQuery& getRuntimeInfoWholeQuery() {
     return _runtimeInfoWholeQuery;
   }
 
-  // Get the result for the subtree rooted at this element.
-  // Use existing results if they are already available, otherwise
-  // trigger computation.
-  shared_ptr<const ResultTable> getResult(bool isRoot = false);
+  /// Notify the `QueryExecutionContext` of the latest `RuntimeInformation`.
+  void signalQueryUpdate() const;
 
-  // Use the same timeout timer for all children of an operation (= query plan
-  // rooted at that operation). As soon as one child times out, the whole
-  // operation times out.
-  void recursivelySetTimeoutTimer(
-      const ad_utility::SharedConcurrentTimeoutTimer& timer);
+  /**
+   * @brief Get the result for the subtree rooted at this element. Use existing
+   * results if they are already available, otherwise trigger computation.
+   * Always returns a non-null pointer, except for when `onlyReadFromCache` is
+   * true (see below).
+   * @param isRoot Has be set to `true` iff this is the root operation of a
+   * complete query to obtain the expected behavior wrt cache pinning and
+   * runtime information in error cases.
+   * @param onlyReadFromCache If set to true the result is only returned if it
+   * can be read from the cache without any computation. If the result is not in
+   * the cache, `nullptr` will be returned.
+   * @return A shared pointer to the result. May only be `nullptr` if
+   * `onlyReadFromCache` is true.
+   */
+  shared_ptr<const ResultTable> getResult(bool isRoot = false,
+                                          bool onlyReadFromCache = false);
+
+  // Use the same cancellation handle for all children of an operation (= query
+  // plan rooted at that operation). As soon as one child is aborted, the whole
+  // operation is aborted out.
+  void recursivelySetCancellationHandle(
+      SharedCancellationHandle cancellationHandle);
+
+  template <typename Rep, typename Period>
+  void recursivelySetTimeConstraint(
+      std::chrono::duration<Rep, Period> duration) {
+    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
+  }
+
+  void recursivelySetTimeConstraint(
+      std::chrono::steady_clock::time_point deadline);
 
   // True iff this operation directly implement a `LIMIT` clause on its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
@@ -138,10 +173,15 @@ class Operation {
 
   // Create and return the runtime information wrt the size and cost estimates
   // without actually executing the query.
-  virtual void createRuntimeInfoFromEstimates() final;
+  virtual void createRuntimeInfoFromEstimates(
+      std::shared_ptr<const RuntimeInformation> root) final;
 
   QueryExecutionContext* getExecutionContext() const {
     return _executionContext;
+  }
+
+  const ad_utility::AllocatorWithLimit<Id>& allocator() const {
+    return getExecutionContext()->getAllocator();
   }
 
   // If the result of this `Operation` is sorted (either because this
@@ -149,21 +189,6 @@ class Operation {
   // its children), return the variable that is the primary sort key. Else
   // return nullopt.
   virtual std::optional<Variable> getPrimarySortKeyVariable() const final;
-
-  // `IndexScan`s with only one variable are often executed already during
-  // query planning. The result is stored in the cache as well as in the
-  // `IndexScan` object itself. This interface allows to ask an Operation
-  // explicitly whether it stores such a precomputed result. In this case we can
-  // call `computeResult` in O(1) to obtain the precomputed result. This has two
-  // advantages over implicitly reading the result from the cache:
-  // 1. The result might be not in the cache anymore, but the IndexScan still
-  //    stores it.
-  // 2. We can preserve the information, whether the computation was read from
-  //    the cache or actually computed during the query planning or processing.
-  virtual std::optional<std::shared_ptr<const ResultTable>>
-  getPrecomputedResultFromQueryPlanning() {
-    return std::nullopt;
-  }
 
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
@@ -191,34 +216,25 @@ class Operation {
     return _warnings;
   }
 
-  // Check if there is still time left and throw a TimeoutException otherwise.
-  // This will be called at strategic places on code that potentially can take a
-  // (too) long time.
-  void checkTimeout() const;
-
-  // Handles the timeout of this operation.
-  ad_utility::SharedConcurrentTimeoutTimer _timeoutTimer =
-      std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-          ad_utility::TimeoutTimer::unlimited());
-
-  // Returns a lambda with the following behavior: For every call, increase the
-  // internal counter i by countIncrease. If the counter exceeds countMax, check
-  // for timeout and reset the counter to zero. That way, the expensive timeout
-  // check is called only rarely. Note that we sometimes need to "simulate"
-  // several operations at a time, hence the countIncrease.
-  auto checkTimeoutAfterNCallsFactory(
-      size_t numOperationsBetweenTimeoutChecks =
-          NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS) const {
-    return [numOperationsBetweenTimeoutChecks, i = 0ull,
-            this](size_t countIncrease = 1) mutable {
-      i += countIncrease;
-      if (i >= numOperationsBetweenTimeoutChecks) {
-        _timeoutTimer->wlock()->checkTimeoutAndThrow(
-            [this]() { return "Timeout in " + getDescriptor(); });
-        i = 0;
-      }
-    };
+  // Check if the cancellation flag has been set and throw an exception if
+  // that's the case. This will be called at strategic places on code that
+  // potentially can take a (too) long time. This function is designed to be
+  // as lightweight as possible because of that.
+  AD_ALWAYS_INLINE void checkCancellation(
+      ad_utility::source_location location =
+          ad_utility::source_location::current()) const {
+    cancellationHandle_->throwIfCancelled(location,
+                                          [this]() { return getDescriptor(); });
   }
+
+  std::chrono::milliseconds remainingTime() const;
+
+  /// Pointer to the cancellation handle of this operation.
+  SharedCancellationHandle cancellationHandle_ =
+      std::make_shared<SharedCancellationHandle::element_type>();
+
+  std::chrono::steady_clock::time_point deadline_ =
+      std::chrono::steady_clock::time_point::max();
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different
@@ -234,7 +250,7 @@ class Operation {
   // it has either been succesfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
-      size_t timeInMilliseconds) final;
+      Milliseconds duration) final;
 
   // Similar to the function above, but the components are specified manually.
   // If nullopt is specified for the last argument, then the `_runtimeInfo` is
@@ -243,7 +259,7 @@ class Operation {
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
       const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
-      size_t timeInMilliseconds,
+      Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
  public:
@@ -256,25 +272,23 @@ class Operation {
   // children were evaluated nevertheless. For an example usage of this feature
   // see `GroupBy.cpp`
   virtual void updateRuntimeInformationWhenOptimizedOut(
-      std::vector<RuntimeInformation> children);
+      std::vector<std::shared_ptr<RuntimeInformation>> children,
+      RuntimeInformation::Status status =
+          RuntimeInformation::Status::optimizedOut);
 
   // Use the already stored runtime info for the children,
   // but set all of them to `optimizedOut`. This can be used, when a complete
   // tree was optimized out. For example when one child of a JOIN operation is
   // empty, the result will be empty, and it is not necessary to evaluate the
   // other child.
-  virtual void updateRuntimeInformationWhenOptimizedOut();
-
-  // Some operations (currently `IndexScans` with only one variable) are
-  // computed during query planning. Get the total time spent in such
-  // computations for this operation and all its descendants. This can be used
-  // to correct the time statistics for the query planning and execution.
-  size_t getTotalExecutionTimeDuringQueryPlanning() const;
+  virtual void updateRuntimeInformationWhenOptimizedOut(
+      RuntimeInformation::Status status =
+          RuntimeInformation::Status::optimizedOut);
 
  private:
   // Create the runtime information in case the evaluation of this operation has
   // failed.
-  void updateRuntimeInformationOnFailure(size_t timeInMilliseconds);
+  void updateRuntimeInformationOnFailure(Milliseconds duration);
 
   // Compute the variable to column index mapping. Is used internally by
   // `getInternallyVisibleVariableColumns`.
@@ -288,7 +302,11 @@ class Operation {
   template <typename F>
   void forAllDescendants(F f) const;
 
-  RuntimeInformation _runtimeInfo;
+  std::shared_ptr<RuntimeInformation> _runtimeInfo =
+      std::make_shared<RuntimeInformation>();
+  /// Pointer to the head of the `RuntimeInformation`.
+  /// Used in `signalQueryUpdate()`, reset in `createRuntimeInfoFromEstimates()`
+  std::shared_ptr<const RuntimeInformation> _rootRuntimeInfo = _runtimeInfo;
   RuntimeInformationWholeQuery _runtimeInfoWholeQuery;
 
   // Collect all the warnings that were created during the creation or

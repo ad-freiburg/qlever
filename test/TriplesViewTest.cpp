@@ -8,19 +8,30 @@
 #include "./util/IdTestHelpers.h"
 #include "index/TriplesView.h"
 
-using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 
 // This struct mocks the structure of the actual `Permutation::Enum` types used
 // in QLever for testing the `TriplesView`.
 struct DummyPermutation {
-  void scan(Id col0Id, auto* result) const {
-    result->reserve(col0Id.getVocabIndex().get());
+  IdTable scan(Id col0Id, std::optional<Id> col1Id) const {
+    IdTable result(2, ad_utility::makeUnlimitedAllocator<Id>());
+    AD_CORRECTNESS_CHECK(!col1Id.has_value());
+    result.reserve(col0Id.getVocabIndex().get());
     for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
-      result->push_back(std::array{V((i + 1) * col0Id.getVocabIndex().get()),
-                                   V((i + 2) * col0Id.getVocabIndex().get())});
+      result.push_back(std::array{V((i + 1) * col0Id.getVocabIndex().get()),
+                                  V((i + 2) * col0Id.getVocabIndex().get())});
     }
+    return result;
+  }
+
+  cppcoro::generator<IdTable> lazyScan(
+      Id col0Id, std::optional<Id> col1Id,
+      std::optional<std::vector<CompressedBlockMetadata>> blocks,
+      std::span<const ColumnIndex>, const auto&) const {
+    AD_CORRECTNESS_CHECK(!blocks.has_value());
+    auto table = scan(col0Id, col1Id);
+    co_yield table;
   }
 
   struct Metadata {
@@ -38,7 +49,7 @@ struct DummyPermutation {
     Data data() const { return {}; }
   };
 
-  Metadata _meta;
+  Metadata meta_;
 };
 
 std::vector<std::array<Id, 3>> expectedResult() {
@@ -56,7 +67,9 @@ std::vector<std::array<Id, 3>> expectedResult() {
 
 TEST(TriplesView, AllTriples) {
   std::vector<std::array<Id, 3>> result;
-  for (auto triple : TriplesView(DummyPermutation{}, makeAllocator())) {
+  for (auto triple :
+       TriplesView(DummyPermutation{},
+                   std::make_shared<ad_utility::CancellationHandle<>>())) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expectedResult());
@@ -72,7 +85,9 @@ TEST(TriplesView, IgnoreRanges) {
   std::vector<std::pair<Id, Id>> ignoredRanges{
       {V(0), V(4)}, {V(7), V(8)}, {V(13), V(87593)}};
   for (auto triple :
-       TriplesView(DummyPermutation{}, makeAllocator(), ignoredRanges)) {
+       TriplesView(DummyPermutation{},
+                   std::make_shared<ad_utility::CancellationHandle<>>(),
+                   ignoredRanges)) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expected);
@@ -86,7 +101,9 @@ TEST(TriplesView, IgnoreTriples) {
   };
   std::erase_if(expected, isTripleIgnored);
   for (auto triple :
-       TriplesView(DummyPermutation{}, makeAllocator(), {}, isTripleIgnored)) {
+       TriplesView(DummyPermutation{},
+                   std::make_shared<ad_utility::CancellationHandle<>>(), {},
+                   isTripleIgnored)) {
     result.push_back(triple);
   }
   ASSERT_EQ(result, expected);

@@ -16,28 +16,48 @@
 class ValuesForTesting : public Operation {
  private:
   IdTable table_;
-  std::vector<Variable> variables_;
+  std::vector<std::optional<Variable>> variables_;
+  bool supportsLimit_;
+  // Those can be manually overwritten for testing using the respective getters.
+  size_t sizeEstimate_;
+  size_t costEstimate_;
 
  public:
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                   std::vector<Variable> variables)
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            std::vector<std::optional<Variable>> variables,
+                            bool supportsLimit = false)
       : Operation{ctx},
         table_{std::move(table)},
-        variables_{std::move(variables)} {
+        variables_{std::move(variables)},
+        supportsLimit_{supportsLimit},
+        sizeEstimate_{table_.numRows()},
+        costEstimate_{table_.numRows()} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
+  // Accessors for the estimates for manual testing.
+  size_t& sizeEstimate() { return sizeEstimate_; }
+  size_t& costEstimate() { return costEstimate_; }
+
   // ___________________________________________________________________________
   ResultTable computeResult() override {
-    return {table_.clone(), resultSortedOn(), LocalVocab{}};
+    auto table = table_.clone();
+    if (supportsLimit_) {
+      table.erase(table.begin() + getLimit().upperBound(table.size()),
+                  table.end());
+      table.erase(table.begin(),
+                  table.begin() + getLimit().actualOffset(table.size()));
+    }
+    return {std::move(table), resultSortedOn(), LocalVocab{}};
   }
+  bool supportsLimit() const override { return supportsLimit_; }
 
  private:
   // ___________________________________________________________________________
-  string asStringImpl([[maybe_unused]] size_t indent) const override {
+  string getCacheKeyImpl() const override {
     std::stringstream str;
     str << "Values for testing with " << table_.numColumns()
         << " columns and contents ";
@@ -46,6 +66,7 @@ class ValuesForTesting : public Operation {
         str << entry << ' ';
       }
     }
+    str << "Supports limit: " << supportsLimit_;
     return std::move(str).str();
   }
 
@@ -62,10 +83,10 @@ class ValuesForTesting : public Operation {
 
   void setTextLimit(size_t limit) override { (void)limit; }
 
-  size_t getCostEstimate() override { return table_.numRows(); }
+  size_t getCostEstimate() override { return costEstimate_; }
 
  private:
-  uint64_t getSizeEstimateBeforeLimit() override { return table_.numRows(); }
+  uint64_t getSizeEstimateBeforeLimit() override { return sizeEstimate_; }
 
  public:
   // For unit testing purposes it is useful that the columns have different
@@ -83,12 +104,24 @@ class ValuesForTesting : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override {
     VariableToColumnMap m;
     for (auto i = ColumnIndex{0}; i < variables_.size(); ++i) {
+      if (!variables_.at(i).has_value()) {
+        continue;
+      }
       bool containsUndef =
           ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
       using enum ColumnIndexAndTypeInfo::UndefStatus;
-      m[variables_.at(i)] = ColumnIndexAndTypeInfo{
+      m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};
     }
     return m;
   }
+};
+
+// Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns
+// false. This can be used for improved test coverage in cases where we want the
+// empty result to be not optimized out by a check to `knownEmptyResult`.
+class ValuesForTestingNoKnownEmptyResult : public ValuesForTesting {
+ public:
+  using ValuesForTesting::ValuesForTesting;
+  bool knownEmptyResult() override { return false; }
 };

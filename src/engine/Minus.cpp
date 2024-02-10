@@ -4,39 +4,27 @@
 
 #include "Minus.h"
 
-#include "../util/Exception.h"
-#include "CallFixedSize.h"
+#include "engine/CallFixedSize.h"
+#include "util/Exception.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
 Minus::Minus(QueryExecutionContext* qec,
              std::shared_ptr<QueryExecutionTree> left,
-             std::shared_ptr<QueryExecutionTree> right,
-             std::vector<std::array<ColumnIndex, 2>> matchedColumns)
-    : Operation{qec},
-      _left{std::move(left)},
-      _right{std::move(right)},
-      _matchedColumns{std::move(matchedColumns)} {
-  // Check that the invariant (inputs are sorted on the matched columns) holds.
-  auto l = _left->resultSortedOn();
-  auto r = _right->resultSortedOn();
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= l.size());
-  AD_CONTRACT_CHECK(_matchedColumns.size() <= r.size());
-  for (size_t i = 0; i < _matchedColumns.size(); ++i) {
-    AD_CONTRACT_CHECK(_matchedColumns[i][0] == l[i]);
-    AD_CONTRACT_CHECK(_matchedColumns[i][1] == r[i]);
-  }
+             std::shared_ptr<QueryExecutionTree> right)
+    : Operation{qec} {
+  std::tie(_left, _right, _matchedColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(left),
+                                                          std::move(right));
 }
 
 // _____________________________________________________________________________
-string Minus::asStringImpl(size_t indent) const {
+string Minus::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MINUS\n" << _left->asString(indent) << "\n";
-  os << _right->asString(indent) << " ";
+  os << "MINUS\n" << _left->getCacheKey() << "\n";
+  os << _right->getCacheKey() << " ";
   return std::move(os).str();
 }
 
@@ -149,8 +137,6 @@ void Minus::computeMinus(
    */
   auto writeResult = [&result, &a](size_t ia) { result.push_back(a[ia]); };
 
-  auto checkTimeout = checkTimeoutAfterNCallsFactory();
-
   size_t ia = 0, ib = 0;
   while (ia < a.size() && ib < b.size()) {
     // Join columns 0 are the primary sort columns
@@ -158,14 +144,14 @@ void Minus::computeMinus(
       // Write a result
       writeResult(ia);
       ia++;
-      checkTimeout();
+      checkCancellation();
       if (ia >= a.size()) {
         goto finish;
       }
     }
     while (b(ib, joinColumns[0][1]) < a(ia, joinColumns[0][0])) {
       ib++;
-      checkTimeout();
+      checkCancellation();
       if (ib >= b.size()) {
         goto finish;
       }
@@ -199,7 +185,7 @@ void Minus::computeMinus(
         default:
           AD_FAIL();
       }
-      checkTimeout();
+      checkCancellation();
     }
   }
 finish:

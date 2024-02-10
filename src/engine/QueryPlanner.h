@@ -18,8 +18,11 @@
 using std::vector;
 
 class QueryPlanner {
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+
  public:
-  explicit QueryPlanner(QueryExecutionContext* qec);
+  explicit QueryPlanner(QueryExecutionContext* qec,
+                        CancellationHandle cancellationHandle);
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
@@ -36,42 +39,22 @@ class QueryPlanner {
     TripleGraph(const TripleGraph& other, vector<size_t> keepNodes);
 
     struct Node {
-      Node(size_t id, SparqlTriple t) : _id(id), _triple(std::move(t)) {
-        if (isVariable(_triple._s)) {
-          _variables.insert(_triple._s.getVariable());
+      Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
+        if (isVariable(triple_._s)) {
+          _variables.insert(triple_._s.getVariable());
         }
-        if (isVariable(_triple._p)) {
-          _variables.insert(Variable{_triple._p._iri});
+        if (isVariable(triple_._p)) {
+          _variables.insert(Variable{triple_._p._iri});
         }
-        if (isVariable(_triple._o)) {
-          _variables.insert(_triple._o.getVariable());
+        if (isVariable(triple_._o)) {
+          _variables.insert(triple_._o.getVariable());
         }
       }
 
-      Node(size_t id, const Variable& cvar, std::vector<std::string> words,
-           const vector<SparqlTriple>& trips)
-          : _id(id),
-            // TODO<joka921> What is this triple used for? If it is just a
-            // dummy, then we can replace it by a `variant<Triple,
-            // TextNodeData>`.
-            _triple(cvar,
-                    PropertyPath(PropertyPath::Operation::IRI, 0,
-                                 INTERNAL_TEXT_MATCH_PREDICATE, {}),
-                    TripleComponent::UNDEF{}),
-            _cvar(cvar),
-            _wordPart(std::move(words)) {
-        _variables.insert(cvar);
-        for (const auto& t : trips) {
-          if (isVariable(t._s)) {
-            _variables.insert(t._s.getVariable());
-          }
-          if (isVariable(t._p)) {
-            _variables.insert(Variable{t._p._iri});
-          }
-          if (isVariable(t._o)) {
-            _variables.insert(t._o.getVariable());
-          }
-        }
+      Node(size_t id, Variable cvar, std::string word, SparqlTriple t)
+          : Node(id, std::move(t)) {
+        cvar_ = std::move(cvar);
+        wordPart_ = std::move(word);
       }
 
       Node(const Node& other) = default;
@@ -81,30 +64,32 @@ class QueryPlanner {
       // Returns true if the two nodes equal apart from the id
       // and the order of variables
       bool isSimilar(const Node& other) const {
-        return _triple == other._triple && _cvar == other._cvar &&
-               _wordPart == other._wordPart && _variables == other._variables;
+        return triple_ == other.triple_ && cvar_ == other.cvar_ &&
+               wordPart_ == other.wordPart_ && _variables == other._variables;
       }
 
+      bool isTextNode() const { return cvar_.has_value(); }
+
       friend std::ostream& operator<<(std::ostream& out, const Node& n) {
-        out << "id: " << n._id << " triple: " << n._triple.asString()
+        out << "id: " << n.id_ << " triple: " << n.triple_.asString()
             << " vars_ ";
         for (const auto& s : n._variables) {
           out << s.name() << ", ";
         }
         // TODO<joka921> Should the `cvar` and the `wordPart` be stored
         // together?
-        if (n._cvar.has_value()) {
-          out << " cvar " << n._cvar.value().name() << " wordPart "
-              << absl::StrJoin(n._wordPart.value(), " ");
+        if (n.cvar_.has_value()) {
+          out << " cvar " << n.cvar_.value().name() << " wordPart "
+              << n.wordPart_.value();
         }
         return out;
       }
 
-      size_t _id;
-      SparqlTriple _triple;
+      size_t id_;
+      SparqlTriple triple_;
       ad_utility::HashSet<Variable> _variables;
-      std::optional<Variable> _cvar = std::nullopt;
-      std::optional<std::vector<std::string>> _wordPart = std::nullopt;
+      std::optional<Variable> cvar_ = std::nullopt;
+      std::optional<std::string> wordPart_ = std::nullopt;
     };
 
     // Allows for manually building triple graphs for testing
@@ -121,12 +106,8 @@ class QueryPlanner {
     ad_utility::HashMap<size_t, Node*> _nodeMap;
     std::list<TripleGraph::Node> _nodeStorage;
 
-    ad_utility::HashMap<Variable, vector<size_t>> identifyTextCliques() const;
-
     vector<size_t> bfsLeaveOut(size_t startNode,
                                ad_utility::HashSet<size_t> leaveOut) const;
-
-    void collapseTextCliques();
 
    private:
     vector<std::pair<TripleGraph, vector<SparqlFilter>>> splitAtContextVars(
@@ -165,8 +146,63 @@ class QueryPlanner {
     void addAllNodes(uint64_t otherNodes);
   };
 
+  // A helper class to find connected componenents of an RDF query using DFS.
+  class QueryGraph {
+   private:
+    // A simple class to represent a graph node as well as some data for a DFS.
+    class Node {
+     public:
+      const SubtreePlan* plan_;
+      ad_utility::HashSet<Node*> adjacentNodes_{};
+      // Was this node already visited during DFS.
+      bool visited_ = false;
+      // Index of the connected component of this node (will be set to a value
+      // >= 0 by the DFS.
+      int64_t componentIndex_ = -1;
+      // Construct from a non-owning pointer.
+      explicit Node(const SubtreePlan* plan) : plan_{plan} {}
+    };
+    // Storage for all the `Node`s that a graph contains.
+    std::vector<std::shared_ptr<Node>> nodes_;
+
+    // Default constructor
+    QueryGraph() = default;
+
+   public:
+    // Return the indices of the connected component for each of the `node`s.
+    // The return value will have exactly the same size as `node`s and
+    // `result[i]` will be the index of the connected component of `nodes[i]`.
+    // The connected components will be contiguous and start at 0.
+    static std::vector<size_t> computeConnectedComponents(
+        const std::vector<SubtreePlan>& nodes) {
+      QueryGraph graph;
+      graph.setupGraph(nodes);
+      return graph.dfsForAllNodes();
+    }
+
+   private:
+    // The actual implementation of `setupGraph`. First build a
+    // graph from the `leafOperations` and then run DFS and return the result.
+    void setupGraph(const std::vector<SubtreePlan>& leafOperations);
+
+    // Run a single DFS startint at the `startNode`. All nodes that are
+    // connected to this node (including the node itself) will have
+    // `visited_ == true` and  `componentIndex_ == componentIndex` after the
+    // call. Only works if `dfs` hasn't been called before on the `startNode` or
+    // any node connected to it. (Exceptions to this rule are the recursive
+    // calls from `dfs` itself).
+    void dfs(Node* startNode, size_t componentIndex);
+
+    // Run `dfs` repeatedly on nodes that were so far undiscovered until all
+    // nodes are discovered, which means that all connected components have been
+    // identified. Then return the indices of the connected components.
+    std::vector<size_t> dfsForAllNodes();
+  };
+
   [[nodiscard]] TripleGraph createTripleGraph(
       const parsedQuery::BasicGraphPattern* pattern) const;
+
+  void addNodeToTripleGraph(const TripleGraph::Node&, TripleGraph&) const;
 
   void setEnablePatternTrick(bool enablePatternTrick);
 
@@ -175,7 +211,7 @@ class QueryPlanner {
   // that set. When the query has no `ORDER BY` clause, the set contains one
   // optimal execution tree for each possible ordering (by one column) of the
   // result. This is relevant for subqueries, which are currently optimized
-  // independently from the rest of the query, but where it depends on the rest
+  // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
   [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
@@ -184,23 +220,38 @@ class QueryPlanner {
 
   // Used to count the number of unique variables created using
   // generateUniqueVarName
-  size_t _internalVarCount;
+  size_t _internalVarCount = 0;
 
-  bool _enablePatternTrick;
+  bool _enablePatternTrick = true;
+
+  CancellationHandle cancellationHandle_;
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 
-  /**
-   * @brief Fills varToTrip with a mapping from all variables in the root graph
-   * pattern (no matter whether they are in the subject, predicate or object) to
-   * the triple they occur in. Fills contextVars with all subject variables for
-   * which the predicate is either 'contains-word' or 'contains-entity'.
-   */
-  void getVarTripleMap(
-      const ParsedQuery& pq,
-      ad_utility::HashMap<string, vector<SparqlTriple>>* varToTrip,
-      ad_utility::HashSet<string>* contextVars) const;
+  // Add all the possible index scans for the triple represented by the node.
+  // The triple is "ordinary" in the sense that it is neither a text triple with
+  // ql:contains-word nor a special pattern trick triple.
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void seedFromOrdinaryTriple(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  void indexScanSingleVarCase(const TripleGraph::Node& node,
+                              const PushPlanFunction& pushPlan,
+                              const AddedIndexScanFunction& addIndexScan);
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanTwoVarsCase(const TripleGraph::Node& node,
+                            const AddedIndexScanFunction& addIndexScan) const;
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanThreeVarsCase(const TripleGraph::Node& node,
+                              const AddedIndexScanFunction& addIndexScan) const;
 
   /**
    * @brief Fills children with all operations that are associated with a single
@@ -233,13 +284,7 @@ class QueryPlanner {
       const TripleComponent& right);
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromTransitive(
       const TripleComponent& left, const PropertyPath& path,
-      const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
-  seedFromTransitiveMin(const TripleComponent& left, const PropertyPath& path,
-                        const TripleComponent& right);
-  [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern>
-  seedFromTransitiveMax(const TripleComponent& left, const PropertyPath& path,
-                        const TripleComponent& right);
+      const TripleComponent& right, size_t min, size_t max);
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromInverse(
       const TripleComponent& left, const PropertyPath& path,
       const TripleComponent& right);
@@ -388,15 +433,16 @@ class QueryPlanner {
       const TripleGraph& graph, const vector<SparqlFilter>& fs,
       const vector<vector<SubtreePlan>>& children);
 
+  // Internal subroutine of `fillDpTab` that  only works on a single connected
+  // component of the input. Throws if the subtrees in the `connectedComponent`
+  // are not in fact connected (via their variables).
+  std::vector<QueryPlanner::SubtreePlan>
+  runDynamicProgrammingOnConnectedComponent(
+      std::vector<SubtreePlan> connectedComponent,
+      const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
+
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
-
-  [[nodiscard]] SubtreePlan optionalJoin(const SubtreePlan& a,
-                                         const SubtreePlan& b) const;
-  [[nodiscard]] SubtreePlan minus(const SubtreePlan& a,
-                                  const SubtreePlan& b) const;
-  [[nodiscard]] SubtreePlan multiColumnJoin(const SubtreePlan& a,
-                                            const SubtreePlan& b) const;
 
   /**
    * @brief return the index of the cheapest execution tree in the argument.
@@ -411,4 +457,9 @@ class QueryPlanner {
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode
   [[nodiscard]] bool isInTestMode() const { return _qec == nullptr; }
+
+  /// Helper function to check if the assigned `cancellationHandle_` has
+  /// been cancelled yet and throw an exception if this is the case.
+  void checkCancellation(ad_utility::source_location location =
+                             ad_utility::source_location::current()) const;
 };

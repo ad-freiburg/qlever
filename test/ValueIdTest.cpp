@@ -6,12 +6,12 @@
 
 #include <bitset>
 
-#include "../src/global/ValueId.h"
-#include "../src/util/HashSet.h"
-#include "../src/util/Random.h"
-#include "../src/util/Serializer/ByteBufferSerializer.h"
-#include "../src/util/Serializer/Serializer.h"
 #include "./ValueIdTestHelpers.h"
+#include "./util/GTestHelpers.h"
+#include "global/ValueId.h"
+#include "util/Random.h"
+#include "util/Serializer/ByteBufferSerializer.h"
+#include "util/Serializer/Serializer.h"
 
 TEST(ValueId, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
@@ -111,6 +111,8 @@ TEST(ValueId, Indices) {
     for (size_t idx = 0; idx < 10'000; ++idx) {
       auto value = invalidIndexGenerator();
       ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
+      AD_EXPECT_THROW_WITH_MESSAGE(makeId(value),
+                                   ::testing::ContainsRegex("is bigger than"));
     }
   };
 
@@ -119,6 +121,7 @@ TEST(ValueId, Indices) {
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
   testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
                 Datatype::LocalVocabIndex);
+  testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
 
 TEST(ValueId, Undefined) {
@@ -157,6 +160,7 @@ TEST(ValueId, IndexOrdering) {
 
   testOrder(&makeVocabId, &getVocabIndex);
   testOrder(&makeLocalVocabId, &getLocalVocabIndex);
+  testOrder(&makeWordVocabId, &getWordVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
@@ -281,12 +285,17 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeUndefined(), "U:xx");
   test(ValueId::makeFromInt(-42), "I:-42");
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
+  test(ValueId::makeFromBool(false), "B:false");
+  test(ValueId::makeFromBool(true), "B:true");
   test(makeVocabId(15), "V:15");
   test(makeLocalVocabId(25), "L:25");
   test(makeTextRecordId(37), "T:37");
+  test(makeWordVocabId(42), "W:42");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
        "D:123456");
+  // make an ID with an invalid datatype
+  ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
 
 TEST(ValueId, InvalidDatatypeEnumValue) {

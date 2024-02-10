@@ -4,12 +4,14 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "index/CompressedRelation.h"
+#include "index/IndexImpl.h"
 #include "index/IndexMetaData.h"
 #include "index/LocatedTriples.h"
-#include "index/Permutations.h"
+#include "index/Permutation.h"
 
 // TODO: Why the namespace here? (copied from `test/IndexMetaDataTest.cpp`)
 namespace {
@@ -176,14 +178,13 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 TEST_F(LocatedTriplesTest, locatedTriple) {
   // The actual test, for a given block size.
   //
-  // TODO: Also make the permutation an argument, right now it's only PSO.
+  // TODO: Test for all permutations, right now it's only SPO.
   auto testWithGivenBlockSize =
       [](const IdTable& triplesInIndex, const IdTable& triplesToLocate,
-         size_t blockSizeInBytes,
+         const ad_utility::MemorySize& blockSize,
          const ad_utility::HashMap<size_t, std::string>&
              expectedLocatedTriplesPerBlock) {
-        std::string basename = "LocatedTriplesTest.scanWithMergeTriples";
-        std::string permutationFilename = basename + ".index.pso";
+        std::string testIndexBasename = "LocatedTriplesTest.locatedTriple";
 
         // Collect the distinct relation `Id`s.
         std::vector<Id> relationIds;
@@ -193,71 +194,34 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         }
         relationIds = ad_utility::removeDuplicates(relationIds);
 
-        // Helper lambda for creating a `BufferedIdTable` from all triples in
-        // the given `IdTable` matching `relationId`.
-        //
-        // This is needed need for `CompressedRelationWriter` below, which
-        // expects a `BufferedIdTable` with two columns.
-        //
-        // TODO: Something like this is also used in `CompressedRelationsTest`,
-        // so it should be in a helper class.
-        auto getBufferedIdTable = [](const IdTable& idTable,
-                                     Id relationId) -> BufferedIdTable {
-          // Note that these files are never created because we set the
-          // threshold for writing to disk so large.
-          std::string bufferFilename1 = "compressedRelationWriter.buffer1.dat";
-          std::string bufferFilename2 = "compressedRelationWriter.buffer2.dat";
-          AD_CONTRACT_CHECK(idTable.numColumns() == 3);
-          BufferedIdTable bufferedIdTable{
-              2, std::array{
-                     ad_utility::BufferedVector<Id>{
-                         std::numeric_limits<size_t>::max(), bufferFilename1},
-                     ad_utility::BufferedVector<Id>{
-                         std::numeric_limits<size_t>::max(), bufferFilename2}}};
-          for (size_t i = 0; i < idTable.size(); ++i) {
-            if (idTable(i, 0) == relationId) {
-              bufferedIdTable.push_back({idTable(i, 1), idTable(i, 2)});
-            }
-          }
-          return bufferedIdTable;
-        };
+        // Create a permutation pair from `triplesInIndex`.
+        const auto& testAllocator = ad_utility::testing::makeAllocator();
+        Permutation SPO{Permutation::SPO, testAllocator};
+        Permutation SOP{Permutation::SOP, testAllocator};
+        IndexImpl indexBuilder(testAllocator);
+        indexBuilder.setOnDiskBase(testIndexBasename);
+        indexBuilder.blocksizePermutationPerColumn() = blockSize;
+        // The
+        IndexImpl::BlocksOfTriples blocksOfTriples =
+            [&triplesInIndex]() -> cppcoro::generator<IdTableStatic<0>> {
+          co_yield triplesInIndex.clone();
+        }();
+        indexBuilder.createPermutationPair(3, std::move(blocksOfTriples), SPO,
+                                           SOP);
 
-        // Write the permutation to disk (adapted from
-        // `CompressedRelationsTest`, `IndexImpl::createPermutationPairImpl`,
-        // and `IndexImpl::).
-        {
-          ad_utility::File permutationFileForWritingRelations{
-              permutationFilename, "w"};
-          IndexMetaDataMmap metadataMmap;
-          metadataMmap.setup(permutationFilename + MMAP_FILE_SUFFIX,
-                             ad_utility::CreateTag{});
-          CompressedRelationWriter writer{
-              std::move(permutationFileForWritingRelations), blockSizeInBytes};
-          for (size_t i = 0; i < relationIds.size(); ++i) {
-            // The third argument is the number of distinct elements. We set it
-            // to 1 here because it is irrelevant for the purposes of this test.
-            Id relationId = relationIds[i];
-            auto relationMetadata = writer.addRelation(
-                relationId, getBufferedIdTable(triplesInIndex, relationId), 1);
-            metadataMmap.add(relationMetadata);
-          }
-          metadataMmap.blockData() = std::move(writer).getFinishedBlocks();
-          ad_utility::File permutationFileForWritingMetadata(
-              permutationFilename, "r+");
-          metadataMmap.appendToFile(&permutationFileForWritingMetadata);
-        }
-
-        // Create a permutation based on this.
-        Permutation permutation{"PSO", ".pso", {1, 0, 2}};
-        permutation.loadFromDisk(basename);
+        // Load the SPO permutation from disk.
+        Permutation permutation(Permutation::SPO, testAllocator);
+        permutation.loadFromDisk(testIndexBasename);
 
         // Check that the permutation indeed consists of the relations that we
         // have written to it.
         {
-          IdTable result(2, ad_utility::testing::makeAllocator());
+          auto cancellationHandle =
+              std::make_shared<ad_utility::CancellationHandle<>>();
           for (Id relationId : relationIds) {
-            permutation.scan(relationId, &result);
-            std::cout << "Relation: " << relationId << " -> " << result
+            IdTable relation = permutation.scan(relationId, std::nullopt, {},
+                                                cancellationHandle);
+            std::cout << "Relation: " << relationId << " -> " << relation
                       << std::endl;
           }
         }
@@ -294,8 +258,11 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                   expectedLocatedTriplesPerBlock.size());
 
         // Delete the permutation files.
-        ad_utility::deleteFile(permutationFilename);
-        ad_utility::deleteFile(permutationFilename + MMAP_FILE_SUFFIX);
+        for (const auto& permutation_suffix : {"spo", "sop"}) {
+          std::string name = testIndexBasename + ".index." + permutation_suffix;
+          ad_utility::deleteFile(name);
+          ad_utility::deleteFile(name + MMAP_FILE_SUFFIX);
+        }
       };
 
   // Triples in the index.
@@ -327,7 +294,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
   // With block size 16, we have each triple in its own block.
   testWithGivenBlockSize(
-      triplesInIndex, triplesToLocate, 16,
+      triplesInIndex, triplesToLocate, 16_B,
       {{2, "{ LT(2 0 V:2 V:14 V:20 0) LT(2 0 V:2 V:15 V:20 1) }"},
        {4, "{ LT(4 0 V:2 V:20 V:10 1) }"},
        {5, "{ LT(5 0 V:2 V:30 V:20 1) }"},
@@ -339,7 +306,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7). Note that a
   // relation that spans multiple blocks has these blocks on its own.
   testWithGivenBlockSize(
-      triplesInIndex, triplesToLocate, 32,
+      triplesInIndex, triplesToLocate, 32_B,
       {{1, "{ LT(1 1 V:2 V:14 V:20 0) LT(1 1 V:2 V:15 V:20 1) }"},
        {2, "{ LT(2 1 V:2 V:20 V:10 1) }"},
        {3, "{ LT(3 0 V:2 V:30 V:20 1) LT(3 1 V:2 V:30 V:30 1) }"},
@@ -349,7 +316,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   // With block size 48, we have four blocks (Block 0 = Row 0, Block 1 = Row
   // 1+2+3, Block 2 = Row 4+5+6, Block 3 = Row 7).
   testWithGivenBlockSize(
-      triplesInIndex, triplesToLocate, 48,
+      triplesInIndex, triplesToLocate, 48_B,
       {{1, "{ LT(1 1 V:2 V:14 V:20 0) LT(1 1 V:2 V:15 V:20 1) }"},
        {2,
         "{ LT(2 0 V:2 V:20 V:10 1) LT(2 1 V:2 V:30 V:20 1)"
@@ -358,7 +325,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
        {4, "{ LT(4 x V:9 V:30 V:32 0) }"}});
 
   // With block size 100'000, we have one block.
-  testWithGivenBlockSize(triplesInIndex, triplesToLocate, 100'000,
+  testWithGivenBlockSize(triplesInIndex, triplesToLocate, 100'000_B,
                          {{0,
                            "{ LT(0 2 V:2 V:14 V:20 0) LT(0 2 V:2 V:15 V:20 1) "
                            "LT(0 4 V:2 V:20 V:10 1) LT(0 5 V:2 V:30 V:20 1) "

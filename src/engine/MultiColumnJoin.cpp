@@ -8,45 +8,33 @@
 #include "engine/CallFixedSize.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
+using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
-MultiColumnJoin::MultiColumnJoin(
-    QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
-    std::shared_ptr<QueryExecutionTree> t2,
-    const std::vector<std::array<ColumnIndex, 2>>& jcs)
-    : Operation(qec),
-      _left(std::move(t1)),
-      _right(std::move(t2)),
-      _joinColumns(jcs) {
+MultiColumnJoin::MultiColumnJoin(QueryExecutionContext* qec,
+                                 std::shared_ptr<QueryExecutionTree> t1,
+                                 std::shared_ptr<QueryExecutionTree> t2)
+    : Operation{qec} {
   // Make sure subtrees are ordered so that identical queries can be identified.
-  AD_CONTRACT_CHECK(!jcs.empty());
-  if (_left->asString() > _right->asString()) {
-    std::swap(_left, _right);
-    // As the subtrees have been swapped the join columns need to be swapped
-    // as well.
-    for (auto& [leftCol, rightCol] : _joinColumns) {
-      std::swap(leftCol, rightCol);
-    }
+  if (t1->getCacheKey() > t2->getCacheKey()) {
+    std::swap(t1, t2);
   }
+  std::tie(_left, _right, _joinColumns) =
+      QueryExecutionTree::getSortedSubtreesAndJoinColumns(std::move(t1),
+                                                          std::move(t2));
 }
 
 // _____________________________________________________________________________
-string MultiColumnJoin::asStringImpl(size_t indent) const {
+string MultiColumnJoin::getCacheKeyImpl() const {
   std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "MULTI_COLUMN_JOIN\n" << _left->asString(indent) << " ";
+  os << "MULTI_COLUMN_JOIN\n" << _left->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][0] << (i < _joinColumns.size() - 1 ? " & " : "");
   };
   os << "]\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
-  os << "|X|\n" << _right->asString(indent) << " ";
+  os << "|X|\n" << _right->getCacheKey() << " ";
   os << "join-columns: [";
   for (size_t i = 0; i < _joinColumns.size(); i++) {
     os << _joinColumns[i][1] << (i < _joinColumns.size() - 1 ? " & " : "");
@@ -288,5 +276,5 @@ void MultiColumnJoin::computeMultiColumnJoin(
   // The result that `zipperJoinWithUndef` produces has a different order of
   // columns than expected, permute them. See the documentation of
   // `JoinColumnMapping` for details.
-  result->permuteColumns(joinColumnData.permutationResult());
+  result->setColumnSubset(joinColumnData.permutationResult());
 }

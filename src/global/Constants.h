@@ -1,18 +1,28 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//
+// Authors: Björn Buchhold <buchhold@gmail.com>
+//          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
+#include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
-#include "../util/Parameters.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/Parameters.h"
+#include "util/ParseableDuration.h"
 
-static const size_t DEFAULT_STXXL_MEMORY_IN_BYTES = 5'000'000'000UL;
-static const size_t STXXL_DISK_SIZE_INDEX_BUILDER = 1000;  // In MB.
-static const size_t STXXL_DISK_SIZE_INDEX_TEST = 10;
+// For access to `memorySize` literals.
+using namespace ad_utility::memory_literals;
 
-static constexpr size_t DEFAULT_MEM_FOR_QUERIES_IN_GB = 4;
+static const ad_utility::MemorySize DEFAULT_MEMORY_LIMIT_INDEX_BUILDING = 5_GB;
+static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
+
+static constexpr ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
 static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
@@ -26,35 +36,51 @@ static const size_t DISTINCT_LHS_PER_BLOCK = 10'000;
 static const size_t USE_BLOCKS_INDEX_SIZE_TRESHOLD = 20'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
+static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
 static const char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
-static const char INTERNAL_PREDICATE_PREFIX_IRI[] =
-    "<QLever-internal-function/>";
-static const char CONTAINS_ENTITY_PREDICATE[] =
-    "<QLever-internal-function/contains-entity>";
-static const char CONTAINS_WORD_PREDICATE[] =
-    "<QLever-internal-function/contains-word>";
-static const char CONTAINS_WORD_PREDICATE_NS[] = "ql:contains-word";
-static const char INTERNAL_TEXT_MATCH_PREDICATE[] =
-    "<QLever-internal-function/text>";
-static const char HAS_PREDICATE_PREDICATE[] =
-    "<QLever-internal-function/has-predicate>";
+
+static const std::string INTERNAL_PREDICATE_PREFIX =
+    "http://qlever.cs.uni-freiburg.de/builtin-functions/";
+
+// Return a IRI of the form
+// `<http://qlever.cs.uni-freiburg.de/builtin-functions/concatenationOfSuffixes>`
+constexpr auto makeInternalIri = [](auto&&... suffixes) {
+  return absl::StrCat("<", INTERNAL_PREDICATE_PREFIX, suffixes..., ">");
+};
+static const std::string INTERNAL_ENTITIES_URI_PREFIX =
+    absl::StrCat("<", INTERNAL_PREDICATE_PREFIX);
+static const std::string INTERNAL_PREDICATE_PREFIX_IRI = makeInternalIri("");
+static const std::string CONTAINS_ENTITY_PREDICATE =
+    makeInternalIri("contains-entity");
+static const std::string CONTAINS_WORD_PREDICATE =
+    makeInternalIri("contains-word");
+
+static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
+    makeInternalIri("text");
+static const std::string HAS_PREDICATE_PREDICATE =
+    makeInternalIri("has-predicate");
+static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
+static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
+    "geof:", "<http://www.opengis.net/def/function/geosparql/"};
+static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
+    "math:", "<http://www.w3.org/2005/xpath-functions/math#"};
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
+static constexpr std::string_view ENTITY_VARIABLE_PREFIX = "?ql_entity_";
+static constexpr std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
+static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
+    "?ql_matchingword_";
 
 // For anonymous nodes in Turtle.
 static const std::string ANON_NODE_PREFIX = "QLever-Anon-Node";
 
-static const std::string INTERNAL_ENTITIES_URI_PREFIX =
-    "<QLever-internal-function/";
-
-static const std::string LANGUAGE_PREDICATE =
-    INTERNAL_ENTITIES_URI_PREFIX + "langtag>";
+static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
@@ -92,7 +118,7 @@ static const char XSD_UNSIGNED_BYTE_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#unsignedByte";
 static const char XSD_POSITIVE_INTEGER_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#positiveInteger";
-static const char XSD_BOOLEAN_TYPE[] =
+constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char VALUE_DATE_TIME_SEPARATOR[] = "T";
@@ -119,6 +145,12 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "
 // "Most Turtle files fulfill these properties (e.g. that from Wikidata), "
 // "but not all";
+
+static const std::string WARNING_PARALLEL_PARSING =
+    "You specified \"parallel-parsing = true\", which enables faster parsing "
+    "for TTL files that don't include multiline literals with unescaped "
+    "newline characters and that have newline characters after the end of "
+    "triples.";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;
@@ -136,12 +168,6 @@ static constexpr uint8_t NUM_COMPRESSION_PREFIXES = 126;
 // compression has been applied to  a word
 static const uint8_t NO_PREFIX_CHAR =
     MIN_COMPRESSION_PREFIX + NUM_COMPRESSION_PREFIXES;
-
-// After performing this many "basic operations", we check for timeouts
-static constexpr size_t NUM_OPERATIONS_BETWEEN_TIMEOUT_CHECKS = 32000;
-// How many "basic operations" (see above) do we assume for a hashset or hashmap
-// operation
-static constexpr size_t NUM_OPERATIONS_HASHSET_LOOKUP = 32;
 
 // When initializing a sort performance estimator, at most this percentage of
 // the number of triples in the index is being sorted at once.
@@ -165,16 +191,56 @@ static constexpr uint32_t PATTERNS_FILE_VERSION = 1;
 // compiler limits for the evaluation of constexpr functions and templates.
 static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 
+// Interval in which an enabled watchdog would check if
+// `CancellationHandle::throwIfCancelled` is called regularly.
+constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
+
+// In the PSO and PSO permutations the patterns of the subject and object are
+// stored at the following indices. Note that the col0 (the P) is not part of
+// the result, so the column order for PSO is S O PatternS PatternO.
+constexpr size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 2;
+constexpr size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 3;
+
 inline auto& RuntimeParameters() {
+  using ad_utility::detail::parameterShortNames::Bool;
   using ad_utility::detail::parameterShortNames::Double;
+  using ad_utility::detail::parameterShortNames::DurationParameter;
+  using ad_utility::detail::parameterShortNames::MemorySizeParameter;
   using ad_utility::detail::parameterShortNames::SizeT;
-  static ad_utility::Parameters params{
-      // If the time estimate for a sort operation is larger by more than this
-      // factor than the remaining time, then the sort is canceled with a
-      // timeout exception.
-      Double<"sort-estimate-cancellation-factor">{3.0},
-      SizeT<"cache-max-num-entries">{1000}, SizeT<"cache-max-size-gb">{30},
-      SizeT<"cache-max-size-gb-single-entry">{5}};
+  // NOTE: It is important that the value of the static variable is created by
+  // an immediately invoked lambda, otherwise we get really strange segfaults on
+  // Clang 16 and 17.
+  // TODO<joka921> Figure out whether this is a bug in Clang or whether we
+  // clearly misunderstand something about static initialization.
+  static ad_utility::Parameters params = []() {
+    using namespace std::chrono_literals;
+    auto ensureStrictPositivity = [](auto&& parameter) {
+      parameter.setParameterConstraint(
+          [](std::chrono::seconds value, std::string_view parameterName) {
+            if (value <= 0s) {
+              throw std::runtime_error{absl::StrCat(
+                  "Parameter ", parameterName,
+                  " must be strictly positive, was ", value.count(), "s")};
+            }
+          });
+      return AD_FWD(parameter);
+    };
+    return ad_utility::Parameters{
+        // If the time estimate for a sort operation is larger by more than this
+        // factor than the remaining time, then the sort is canceled with a
+        // timeout exception.
+        Double<"sort-estimate-cancellation-factor">{3.0},
+        SizeT<"cache-max-num-entries">{1000},
+        MemorySizeParameter<"cache-max-size">{30_GB},
+        MemorySizeParameter<"cache-max-size-single-entry">{5_GB},
+        SizeT<"lazy-index-scan-queue-size">{20},
+        SizeT<"lazy-index-scan-num-threads">{10},
+        ensureStrictPositivity(
+            DurationParameter<std::chrono::seconds, "default-query-timeout">{
+                30s}),
+        SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
+        Bool<"use-group-by-hash-map-optimization">{false}};
+  }();
   return params;
 }
 
@@ -202,4 +268,8 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-static constexpr size_t NUM_SORT_THREADS = 4;
+constexpr size_t NUM_SORT_THREADS = 4;
+/// ANSI escape sequence for bold text in the console
+constexpr std::string_view EMPH_ON = "\033[1m";
+/// ANSI escape sequence to print "normal" text again in the console.
+constexpr std::string_view EMPH_OFF = "\033[22m";

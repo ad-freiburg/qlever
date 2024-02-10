@@ -1,6 +1,8 @@
-//  Copyright 2022, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2022 - 2024
+// University of Freiburg
+// Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "./RegexExpression.h"
 
@@ -82,7 +84,7 @@ RegexExpression::RegexExpression(
     SparqlExpression::Ptr child, SparqlExpression::Ptr regex,
     std::optional<SparqlExpression::Ptr> optionalFlags)
     : child_{std::move(child)} {
-  if (dynamic_cast<const StrExpression*>(child_.get())) {
+  if (child_->isStrExpression()) {
     child_ = std::move(std::move(*child_).moveChildrenOut().at(0));
     childIsStrExpression_ = true;
   }
@@ -162,7 +164,7 @@ string RegexExpression::getCacheKey(
 }
 
 // ___________________________________________________________________________
-std::span<SparqlExpression::Ptr> RegexExpression::children() {
+std::span<SparqlExpression::Ptr> RegexExpression::childrenImpl() {
   return {&child_, 1};
 }
 
@@ -184,9 +186,13 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
   std::vector<std::pair<Id, Id>> lowerAndUpperIds;
   lowerAndUpperIds.reserve(actualPrefixes.size());
   for (const auto& prefix : actualPrefixes) {
-    lowerAndUpperIds.emplace_back(
-        context->_qec.getIndex().prefix_range(prefix));
+    const auto& ranges = context->_qec.getIndex().prefixRanges(prefix);
+    for (const auto& [begin, end] : ranges.ranges()) {
+      lowerAndUpperIds.emplace_back(Id::makeFromVocabIndex(begin),
+                                    Id::makeFromVocabIndex(end));
+    }
   }
+  checkCancellation(context);
   auto beg = context->_inputTable.begin() + context->_beginIndex;
   auto end = context->_inputTable.begin() + context->_endIndex;
   AD_CONTRACT_CHECK(end <= context->_inputTable.end());
@@ -210,20 +216,22 @@ ExpressionResult RegexExpression::evaluatePrefixRegex(
         resultSetOfIntervals.push_back(
             ad_utility::SetOfIntervals{{{lower - beg, upper - beg}}});
       }
+      checkCancellation(context);
     }
     return std::reduce(resultSetOfIntervals.begin(), resultSetOfIntervals.end(),
                        ad_utility::SetOfIntervals{},
                        ad_utility::SetOfIntervals::Union{});
   } else {
     auto resultSize = context->size();
-    VectorWithMemoryLimit<Bool> result{context->_allocator};
+    VectorWithMemoryLimit<Id> result{context->_allocator};
     result.reserve(resultSize);
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      result.push_back(
+      result.push_back(Id::makeFromBool(
           std::ranges::any_of(lowerAndUpperIds, [&](const auto& lowerUpper) {
             return !valueIdComparators::compareByBits(id, lowerUpper.first) &&
                    valueIdComparators::compareByBits(id, lowerUpper.second);
-          }));
+          })));
+      checkCancellation(context);
     }
     return result;
   }
@@ -235,23 +243,25 @@ ExpressionResult RegexExpression::evaluateNonPrefixRegex(
     sparqlExpression::EvaluationContext* context) const {
   AD_CONTRACT_CHECK(std::holds_alternative<RE2>(regex_));
   auto resultSize = context->size();
-  VectorWithMemoryLimit<Bool> result{context->_allocator};
+  VectorWithMemoryLimit<Id> result{context->_allocator};
   result.reserve(resultSize);
-  if (childIsStrExpression_) {
+
+  auto impl = [&]<typename ValueGetter>(const ValueGetter& getter) {
     for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      result.push_back(RE2::PartialMatch(
-          detail::StringValueGetter{}(id, context), std::get<RE2>(regex_)));
-    }
-  } else {
-    for (auto id : detail::makeGenerator(variable, resultSize, context)) {
-      auto optionalString = detail::LiteralFromIdGetter{}(id, context);
-      if (optionalString.has_value()) {
-        result.push_back(
-            RE2::PartialMatch(optionalString.value(), std::get<RE2>(regex_)));
+      auto str = getter(id, context);
+      if (!str.has_value()) {
+        result.push_back(Id::makeUndefined());
       } else {
-        result.push_back(false);
+        result.push_back(Id::makeFromBool(
+            RE2::PartialMatch(str.value(), std::get<RE2>(regex_))));
       }
+      checkCancellation(context);
     }
+  };
+  if (childIsStrExpression_) {
+    impl(detail::StringValueGetter{});
+  } else {
+    impl(detail::LiteralFromIdGetter{});
   }
   return result;
 }
@@ -306,6 +316,13 @@ auto RegexExpression::getEstimatesForFilterExpression(
 
     return {sizeEstimate, costEstimate};
   }
+}
+
+// ____________________________________________________________________________
+void RegexExpression::checkCancellation(
+    const sparqlExpression::EvaluationContext* context,
+    ad_utility::source_location location) {
+  context->cancellationHandle_->throwIfCancelled(location);
 }
 
 }  // namespace sparqlExpression

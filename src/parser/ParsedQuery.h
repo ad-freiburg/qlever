@@ -15,7 +15,6 @@
 #include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"
 #include "parser/GraphPatternOperation.h"
-#include "parser/ParseException.h"
 #include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
 #include "parser/TripleComponent.h"
@@ -31,6 +30,7 @@
 #include "util/Generator.h"
 #include "util/HashMap.h"
 #include "util/OverloadCallOperator.h"
+#include "util/ParseException.h"
 #include "util/StringUtils.h"
 
 using std::string;
@@ -69,9 +69,7 @@ class SparqlTriple {
       : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)) {}
 
   SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
-      : _s(std::move(s)),
-        _p(PropertyPath::Operation::IRI, 0, p_iri, {}),
-        _o(std::move(o)) {}
+      : _s(std::move(s)), _p(PropertyPath::fromIri(p_iri)), _o(std::move(o)) {}
 
   bool operator==(const SparqlTriple& other) const {
     return _s == other._s && _p == other._p && _o == other._o;
@@ -79,6 +77,11 @@ class SparqlTriple {
   TripleComponent _s;
   PropertyPath _p;
   TripleComponent _o;
+  // The additional columns (e.g. patterns) that are to be attached when
+  // performing an index scan using this triple.
+  // TODO<joka921> On this level we should not store `ColumnIndex`, but the
+  // special predicate IRIs that are to be attached here.
+  std::vector<std::pair<ColumnIndex, Variable>> _additionalScanColumns;
 
   [[nodiscard]] string asString() const;
 };

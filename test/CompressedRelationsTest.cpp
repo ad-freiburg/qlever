@@ -6,10 +6,15 @@
 
 #include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
-#include "index/Permutations.h"
+#include "util/GTestHelpers.h"
+#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
+#include "util/SourceLocation.h"
 
 namespace {
+
+using ad_utility::source_location;
+
 // Return an `ID` of type `VocabIndex` from `index`. Assert that `index`
 // is `>= 0`.
 Id V(int64_t index) {
@@ -20,19 +25,46 @@ Id V(int64_t index) {
 // A representation of a relation, consisting of the constant `col0_` element
 // as well as the 2D-vector for the other two columns. `col1And2_` must be
 // sorted lexicographically.
+using RowInput = std::vector<int>;
 struct RelationInput {
   int col0_;
-  std::vector<std::array<int, 2>> col1And2_;
+  std::vector<RowInput> col1And2_;
 };
+
+template <typename Inner>
+size_t getNumColumns(const std::vector<Inner>& input) {
+  if (input.empty()) {
+    return 2;
+  }
+  auto result = input.at(0).size();
+  AD_CONTRACT_CHECK(std::ranges::all_of(
+      input, [result](const auto& vec) { return vec.size() == result; }));
+  return result;
+}
+
+size_t getNumColumns(const std::vector<RelationInput>& vec) {
+  if (vec.empty()) {
+    return 2;
+  }
+  auto result = getNumColumns(vec.at(0).col1And2_);
+  AD_CONTRACT_CHECK(std::ranges::all_of(vec, [&result](const auto& relation) {
+    return getNumColumns(relation.col1And2_) == result;
+  }));
+  return result;
+}
 
 // Check that `expected` and `actual` have the same contents. The `int`s in
 // expected are converted to `Id`s of type `VocabIndex` using the `V`-function
 // before the comparison.
-template <size_t NumColumns>
-void checkThatTablesAreEqual(
-    const std::vector<std::array<int, NumColumns>> expected,
-    const IdTable& actual) {
-  ASSERT_EQ(NumColumns, actual.numColumns());
+void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
+                             source_location l = source_location::current()) {
+  auto trace = generateLocationTrace(l);
+  ASSERT_EQ(getNumColumns(expected), actual.numColumns());
+  if (actual.numRows() != expected.size()) {
+    LOG(WARN) << actual.numRows() << "vs " << expected.size() << std::endl;
+    LOG(WARN) << "mismatch" << std::endl;
+  }
+  ASSERT_EQ(actual.numRows(), expected.size());
   for (size_t i = 0; i < actual.numRows(); ++i) {
     for (size_t j = 0; j < actual.numColumns(); ++j) {
       ASSERT_EQ(V(expected[i][j]), actual(i, j));
@@ -40,13 +72,15 @@ void checkThatTablesAreEqual(
   }
 }
 
+}  // namespace
+
 // Run a set of tests on a permutation that is defined by the `inputs`. The
 // `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
 // a unique name for the required temporary files and for the implicit cache
 // of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
 // in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const std::vector<RelationInput>& inputs,
-                             std::string testCaseName, size_t blocksize) {
+void testCompressedRelations(const auto& inputs, std::string testCaseName,
+                             ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(
@@ -61,29 +95,44 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
   std::string filename = testCaseName + ".dat";
 
   // First create the on-disk permutation.
-  CompressedRelationWriter writer{ad_utility::File{filename, "w"}, blocksize};
+  size_t numColumns = getNumColumns(inputs);
+  CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
+                                  blocksize};
   vector<CompressedRelationMetadata> metaData;
   {
     size_t i = 0;
     for (const auto& input : inputs) {
       std::string bufferFilename =
           testCaseName + ".buffers." + std::to_string(i) + ".dat";
-      BufferedIdTable buffer{
-          2,
-          std::array{ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".0"},
-                     ad_utility::BufferedVector<Id>{THRESHOLD_RELATION_CREATION,
-                                                    bufferFilename + ".1"}}};
+      IdTable buffer{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
+      size_t numBlocks = 0;
+
+      auto addBlock = [&]() {
+        if (buffer.empty()) {
+          return;
+        }
+        writer.addBlockForLargeRelation(
+            V(input.col0_), std::make_shared<IdTable>(std::move(buffer)));
+        buffer.clear();
+        ++numBlocks;
+      };
       for (const auto& arr : input.col1And2_) {
-        buffer.push_back({V(arr[0]), V(arr[1])});
+        buffer.push_back(std::views::transform(arr, V));
+        if (buffer.numRows() > writer.blocksize()) {
+          addBlock();
+        }
       }
-      // The last argument is the number of distinct elements in `col1`. We
-      // store a dummy value here that we can check later.
-      auto md = writer.addRelation(V(input.col0_), buffer, i + 1);
-      metaData.push_back(md);
+      if (numBlocks > 0 || buffer.numRows() > 0.8 * writer.blocksize()) {
+        addBlock();
+        // The last argument is the number of distinct elements in `col1`. We
+        // store a dummy value here that we can check later.
+        metaData.push_back(writer.finishLargeRelation(i + 1));
+      } else {
+        metaData.push_back(writer.addSmallRelation(V(input.col0_), i + 1,
+                                                   buffer.asStaticView<0>()));
+      }
       buffer.clear();
-      ASSERT_THROW(writer.addRelation(V(input.col0_), buffer, i + 1),
-                   ad_utility::Exception);
+      numBlocks = 0;
       ++i;
     }
   }
@@ -100,12 +149,18 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 
   ASSERT_EQ(metaData.size(), inputs.size());
 
-  ad_utility::File file{filename, "r"};
-  auto timer = std::make_shared<ad_utility::ConcurrentTimeoutTimer>(
-      ad_utility::TimeoutTimer::unlimited());
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
-  CompressedRelationReader reader;
+  auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [&filename] { ad_utility::deleteFile(filename); });
+  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
+                                  ad_utility::File{filename, "r"}};
+  // TODO<C++23> `std::ranges::to<vector>`.
+  std::vector<ColumnIndex> additionalColumns;
+  std::ranges::copy(std::views::iota(2ul, getNumColumns(inputs)),
+                    std::back_inserter(additionalColumns));
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
     ASSERT_EQ(V(inputs[i].col0_), m.col0Id_);
@@ -115,14 +170,17 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table{2, ad_utility::testing::makeAllocator()};
-    reader.scan(metaData[i], blocks, file, &table, timer);
-    {
-      IdTable wrongNumCols{3, ad_utility::testing::makeAllocator()};
-      ASSERT_THROW(reader.scan(metaData[i], blocks, file, &wrongNumCols, timer),
-                   ad_utility::Exception);
-    }
+    IdTable table = reader.scan(metaData[i], std::nullopt, blocks,
+                                additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
+    checkThatTablesAreEqual(col1And2, table);
+
+    table.clear();
+    for (const auto& block :
+         reader.lazyScan(metaData[i], std::nullopt, blocks, additionalColumns,
+                         cancellationHandle)) {
+      table.insertAtEnd(block.begin(), block.end());
+    }
     checkThatTablesAreEqual(col1And2, table);
 
     // Check for all distinct combinations of `(col0, col1)` and check that
@@ -132,16 +190,21 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      IdTable tableWidthOne{1, ad_utility::testing::makeAllocator()};
-      reader.scan(metaData[i], V(lastCol1Id), blocks, file, &tableWidthOne,
-                  timer);
+      auto size =
+          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks);
+      IdTable tableWidthOne =
+          reader.scan(metaData[i], V(lastCol1Id), blocks,
+                      Permutation::ColumnIndicesRef{}, cancellationHandle);
+      ASSERT_EQ(tableWidthOne.numColumns(), 1);
+      EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
-      {
-        IdTable wrongNumCols{2, ad_utility::testing::makeAllocator()};
-        ASSERT_THROW(reader.scan(metaData[i], V(lastCol1Id), blocks, file,
-                                 &wrongNumCols, timer),
-                     ad_utility::Exception);
+      tableWidthOne.clear();
+      for (const auto& block :
+           reader.lazyScan(metaData[i], V(lastCol1Id), blocks,
+                           Permutation::ColumnIndices{}, cancellationHandle)) {
+        tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
+      checkThatTablesAreEqual(col3, tableWidthOne);
     };
     for (size_t j = 0; j < col1And2.size(); ++j) {
       if (col1And2[j][0] == lastCol1Id) {
@@ -156,9 +219,9 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
     // Don't forget the last block.
     scanAndCheck();
   }
-  file.close();
-  ad_utility::deleteFile(filename);
 }
+
+namespace {
 
 // Run `testCompressedRelations` (see above) for the given `inputs` and
 // `testCaseName`, but with a set of different `blocksizes` (small and medium
@@ -166,9 +229,9 @@ void testCompressedRelations(const std::vector<RelationInput>& inputs,
 // blocks.
 void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
                                  std::string testCaseName) {
-  testCompressedRelations(inputs, testCaseName, 37);
-  testCompressedRelations(inputs, testCaseName, 237);
-  testCompressedRelations(inputs, testCaseName, 4096);
+  testCompressedRelations(inputs, testCaseName, 19_B);
+  testCompressedRelations(inputs, testCaseName, 237_B);
+  testCompressedRelations(inputs, testCaseName, 4096_B);
 }
 }  // namespace
 
@@ -188,9 +251,9 @@ TEST(CompressedRelationWriter, SmallRelations) {
 TEST(CompressedRelationWriter, LargeRelationsDistinctCol1) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 6; ++i) {
-    std::vector<std::array<int, 2>> col1And2;
+    std::vector<RowInput> col1And2;
     for (int j = 0; j < 200; ++j) {
-      col1And2.push_back(std::array{i * j, i * j + 3});
+      col1And2.push_back({i * j, i * j + 3});
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
@@ -203,9 +266,9 @@ TEST(CompressedRelationWriter, LargeRelationsDistinctCol1) {
 TEST(CompressedRelationWriter, LargeRelationsDuplicatesCol1) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 6; ++i) {
-    std::vector<std::array<int, 2>> col1And2;
+    std::vector<RowInput> col1And2;
     for (int j = 0; j < 200; ++j) {
-      col1And2.push_back(std::array{i * 12, i * j + 3});
+      col1And2.push_back({i * 12, i * j + 3});
     }
     inputs.push_back(RelationInput{i * 17, std::move(col1And2)});
   }
@@ -220,9 +283,9 @@ TEST(CompressedRelationWriter, MixedSizes) {
   for (int y = 0; y < 3; ++y) {
     // First some large relations with many duplicates in `col1`.
     for (int i = 1; i < 6; ++i) {
-      std::vector<std::array<int, 2>> col1And2;
+      std::vector<RowInput> col1And2;
       for (int j = 0; j < 50; ++j) {
-        col1And2.push_back(std::array{i * 12, i * j + 3});
+        col1And2.push_back({i * 12, i * j + 3});
       }
       inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
     }
@@ -235,11 +298,49 @@ TEST(CompressedRelationWriter, MixedSizes) {
 
     // Finally some large relations with few duplicates in `col1`.
     for (int i = 205; i < 221; ++i) {
-      std::vector<std::array<int, 2>> col1And2;
+      std::vector<RowInput> col1And2;
       for (int j = 0; j < 80; ++j) {
-        col1And2.push_back(std::array{i * j + y, i * j + 3});
+        col1And2.push_back({i * j + y, i * j + 3});
       }
       inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
+    }
+  }
+  testWithDifferentBlockSizes(inputs, "mixedSizes");
+}
+
+TEST(CompressedRelationWriter, AdditionalColumns) {
+  std::vector<RelationInput> inputs;
+  for (int y = 0; y < 3; ++y) {
+    // First some large relations with many duplicates in `col1`.
+    for (int i = 1; i < 6; ++i) {
+      std::vector<RowInput> col1And2;
+      for (int j = 0; j < 50; ++j) {
+        col1And2.push_back({i * 12, i * j + 3});
+      }
+      inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
+    }
+
+    // Then some small relations
+    for (int i = 9; i < 50; ++i) {
+      inputs.push_back(RelationInput{
+          i + (y * 300), {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
+    }
+
+    // Finally some large relations with few duplicates in `col1`.
+    for (int i = 205; i < 221; ++i) {
+      std::vector<RowInput> col1And2;
+      for (int j = 0; j < 80; ++j) {
+        col1And2.push_back({i * j + y, i * j + 3});
+      }
+      inputs.push_back(RelationInput{i + (y * 300), std::move(col1And2)});
+    }
+  }
+
+  // Add two separate columns.
+  for (auto& relation : inputs) {
+    for (auto& row : relation.col1And2_) {
+      row.push_back(row.at(0) + 42);
+      row.push_back(row.at(1) * 42);
     }
   }
   testWithDifferentBlockSizes(inputs, "mixedSizes");
@@ -268,4 +369,139 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
   ASSERT_TRUE(m.isFunctional());
   m.numRows_ = 43;
   ASSERT_EQ(43, m.numRows_);
+}
+
+TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
+  CompressedBlockMetadata block1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata block2{
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+  CompressedBlockMetadata block3{
+      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
+
+  // We are only interested in blocks with a col0 of `42`.
+  CompressedRelationMetadata relation;
+  relation.col0Id_ = V(42);
+
+  std::vector blocks{block1, block2, block3};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+      relation, blocks, std::nullopt, std::nullopt};
+
+  auto test = [&metadataAndBlocks](
+                  const std::vector<Id>& joinColumn,
+                  const std::vector<CompressedBlockMetadata>& expectedBlocks,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l);
+    auto result = CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                             metadataAndBlocks);
+    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedBlocks));
+  };
+  // We have fixed the `col0Id` to be 42. The col1/2Ids of the matching blocks
+  // are as follows (starting at `block2`)
+  // [(3, 0)-(4, 12)], [(4, 13)-(6, 9)]
+
+  // Tests for a fixed col0Id, so the join is on the middle column.
+  test({V(1), V(3), V(17), V(29)}, {block2});
+  test({V(2), V(3), V(4), V(5)}, {block2, block3});
+  test({V(4)}, {block2, block3});
+  test({V(6)}, {block3});
+
+  // Test with a fixed col1Id. We now join on the last column, the first column
+  // is fixed (42), and the second column is also fixed (4).
+  metadataAndBlocks.col1Id_ = V(4);
+  test({V(11), V(27), V(30)}, {block2, block3});
+  test({V(12)}, {block2});
+  test({V(13)}, {block3});
+}
+TEST(CompressedRelationReader, getBlocksForJoin) {
+  CompressedBlockMetadata block1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata block2{
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+  CompressedBlockMetadata block3{
+      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}};
+  CompressedBlockMetadata block4{
+      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}};
+  CompressedBlockMetadata block5{
+      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}};
+
+  // We are only interested in blocks with a col0 of `42`.
+  CompressedRelationMetadata relation;
+  relation.col0Id_ = V(42);
+
+  std::vector blocks{block1, block2, block3, block4, block5};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+      relation, blocks, std::nullopt, std::nullopt};
+
+  CompressedBlockMetadata blockB1{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+  CompressedBlockMetadata blockB2{
+      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}};
+  CompressedBlockMetadata blockB3{
+      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}};
+  CompressedBlockMetadata blockB4{
+      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}};
+  CompressedBlockMetadata blockB5{
+      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}};
+  CompressedBlockMetadata blockB6{
+      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}};
+
+  // We are only interested in blocks with a col0 of `42`.
+  CompressedRelationMetadata relationB;
+  relationB.col0Id_ = V(47);
+
+  std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
+  CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
+      relationB, blocksB, std::nullopt, std::nullopt};
+
+  auto test = [&metadataAndBlocks, &metadataAndBlocksB](
+                  const std::array<std::vector<CompressedBlockMetadata>, 2>&
+                      expectedBlocks,
+                  source_location l = source_location::current()) {
+    auto t = generateLocationTrace(l);
+    auto result = CompressedRelationReader::getBlocksForJoin(
+        metadataAndBlocks, metadataAndBlocksB);
+    EXPECT_THAT(result[0], ::testing::ElementsAreArray(expectedBlocks[0]));
+    EXPECT_THAT(result[1], ::testing::ElementsAreArray(expectedBlocks[1]));
+
+    result = CompressedRelationReader::getBlocksForJoin(metadataAndBlocksB,
+                                                        metadataAndBlocks);
+    EXPECT_THAT(result[1], ::testing::ElementsAreArray(expectedBlocks[0]));
+    EXPECT_THAT(result[0], ::testing::ElementsAreArray(expectedBlocks[1]));
+  };
+
+  // We have fixed the `col0Id` to be 42 for the left input and 47 for the right
+  // input. The col1/2Ids of the blocks that have this col0Id are as follows:
+
+  // (starting at `block2`.
+  // [(3, 0)- (4, 12)], [(5, 13) - (8, 9)], [(8, 16) - (20, 9)], [(20, 16) -
+  // (20, 63)]
+
+  // Starting at `blockB2`.
+  // [(3, 0)-(6, 12)], [(7, 13)-(9, 9)], [(38, 7)-(38, 8)], [(38, 9)-(38, 12)],
+  // [(38, 13)-(38, 15)]
+
+  // Test for only the `col0Id` fixed.
+  test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
+  // Test with a fixed col1Id on both sides. We now join on the last column.
+  metadataAndBlocks.col1Id_ = V(20);
+  metadataAndBlocksB.col1Id_ = V(38);
+  test({std::vector{block4}, std::vector{blockB4, blockB5}});
+
+  // Fix only the col1Id of the left input.
+  metadataAndBlocks.col1Id_ = V(4);
+  metadataAndBlocksB.col1Id_ = std::nullopt;
+  test({std::vector{block2}, std::vector{blockB2, blockB3}});
+
+  // Fix only the col1Id of the right input.
+  metadataAndBlocks.col1Id_ = std::nullopt;
+  metadataAndBlocksB.col1Id_ = V(7);
+  test({std::vector{block4, block5}, std::vector{blockB3}});
+}
+
+TEST(CompressedRelationReader, PermutedTripleToString) {
+  auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
+  std::stringstream str;
+  str << tr;
+  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
 }

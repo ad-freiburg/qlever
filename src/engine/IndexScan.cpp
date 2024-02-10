@@ -7,133 +7,93 @@
 #include <sstream>
 #include <string>
 
+#include "absl/strings/str_join.h"
 #include "index/IndexImpl.h"
 #include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
 
 using std::string;
 
-IndexScan::IndexScan(QueryExecutionContext* qec, ScanType type,
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTriple& triple)
     : Operation(qec),
-      _type(type),
-      _subject(triple._s),
-      _predicate(triple._p.getIri()),
-      _object(triple._o),
-      _sizeEstimate(std::numeric_limits<size_t>::max()) {
-  precomputeSizeEstimate();
-}
-// _____________________________________________________________________________
-string IndexScan::asStringImpl(size_t indent) const {
-  std::ostringstream os;
-  for (size_t i = 0; i < indent; ++i) {
-    os << ' ';
+      permutation_(permutation),
+      subject_(triple._s),
+      predicate_(triple._p.getIri().starts_with("?")
+                     ? TripleComponent(Variable{triple._p.getIri()})
+                     : TripleComponent(triple._p.getIri())),
+      object_(triple._o),
+      numVariables_(static_cast<size_t>(subject_.isVariable()) +
+                    static_cast<size_t>(predicate_.isVariable()) +
+                    static_cast<size_t>(object_.isVariable())) {
+  for (auto& [idx, variable] : triple._additionalScanColumns) {
+    additionalColumns_.push_back(idx);
+    additionalVariables_.push_back(variable);
   }
-  switch (_type) {
-    case PSO_BOUND_S:
-      os << "SCAN PSO with P = \"" << _predicate << "\", S = \"" << _subject
-         << "\"";
-      break;
-    case POS_BOUND_O:
-      os << "SCAN POS with P = \"" << _predicate << "\", O = \""
-         << _object.toRdfLiteral() << "\"";
-      break;
-    case SOP_BOUND_O:
-      os << "SCAN SOP with S = \"" << _subject << "\", O = \""
-         << _object.toRdfLiteral() << "\"";
-      break;
-    case PSO_FREE_S:
-      os << "SCAN PSO with P = \"" << _predicate << "\"";
-      break;
-    case POS_FREE_O:
-      os << "SCAN POS with P = \"" << _predicate << "\"";
-      break;
-    case SPO_FREE_P:
-      os << "SCAN SPO with S = \"" << _subject << "\"";
-      break;
-    case SOP_FREE_O:
-      os << "SCAN SOP with S = \"" << _subject << "\"";
-      break;
-    case OPS_FREE_P:
-      os << "SCAN OPS with O = \"" << _object.toRdfLiteral() << "\"";
-      break;
-    case OSP_FREE_S:
-      os << "SCAN OSP with O = \"" << _object.toRdfLiteral() << "\"";
-      break;
-    case FULL_INDEX_SCAN_SPO:
-      os << "SCAN FOR FULL INDEX SPO (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_SOP:
-      os << "SCAN FOR FULL INDEX SOP (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_PSO:
-      os << "SCAN FOR FULL INDEX PSO (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_POS:
-      os << "SCAN FOR FULL INDEX POS (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_OSP:
-      os << "SCAN FOR FULL INDEX OSP (DUMMY OPERATION)";
-      break;
-    case FULL_INDEX_SCAN_OPS:
-      os << "SCAN FOR FULL INDEX OPS (DUMMY OPERATION)";
-      break;
+  sizeEstimate_ = computeSizeEstimate();
+
+  // Check the following invariant: The permuted input triple must contain at
+  // least one variable, and all the variables must be at the end of the
+  // permuted triple. For example in the PSO permutation, either only the O, or
+  // the S and O, or all three of P, S, O can be variables, all other
+  // combinations are not supported.
+  auto permutedTriple = getPermutedTriple();
+  for (size_t i = 0; i < 3 - numVariables_; ++i) {
+    AD_CONTRACT_CHECK(!permutedTriple.at(i)->isVariable());
+  }
+  for (size_t i = 3 - numVariables_; i < permutedTriple.size(); ++i) {
+    AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
+  }
+}
+
+// _____________________________________________________________________________
+string IndexScan::getCacheKeyImpl() const {
+  std::ostringstream os;
+  auto permutationString = Permutation::toString(permutation_);
+
+  if (numVariables_ == 3) {
+    os << "SCAN FOR FULL INDEX " << permutationString << " (DUMMY OPERATION)";
+
+  } else {
+    os << "SCAN " << permutationString << " with ";
+    auto addKey = [&os, &permutationString, this](size_t idx) {
+      auto keyString = permutationString.at(idx);
+      const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
+      os << keyString << " = \"" << key << "\"";
+    };
+    addKey(0);
+    if (numVariables_ == 1) {
+      os << ", ";
+      addKey(1);
+    }
+  }
+  if (!additionalColumns_.empty()) {
+    os << " Additional Columns: ";
+    os << absl::StrJoin(additionalColumns(), " ");
   }
   return std::move(os).str();
 }
 
 // _____________________________________________________________________________
 string IndexScan::getDescriptor() const {
-  return "IndexScan " + _subject.toString() + " " + _predicate + " " +
-         _object.toString();
+  return "IndexScan " + subject_.toString() + " " + predicate_.toString() +
+         " " + object_.toString();
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getResultWidth() const {
-  switch (_type) {
-    case PSO_BOUND_S:
-    case POS_BOUND_O:
-    case SOP_BOUND_O:
-      return 1;
-    case PSO_FREE_S:
-    case POS_FREE_O:
-    case SPO_FREE_P:
-    case SOP_FREE_O:
-    case OSP_FREE_S:
-    case OPS_FREE_P:
-      return 2;
-    case FULL_INDEX_SCAN_SPO:
-    case FULL_INDEX_SCAN_SOP:
-    case FULL_INDEX_SCAN_PSO:
-    case FULL_INDEX_SCAN_POS:
-    case FULL_INDEX_SCAN_OSP:
-    case FULL_INDEX_SCAN_OPS:
-      return 3;
-    default:
-      AD_FAIL();
-  }
+  return numVariables_ + additionalVariables_.size();
 }
 
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  switch (_type) {
-    case PSO_BOUND_S:
-    case POS_BOUND_O:
-    case SOP_BOUND_O:
+  switch (numVariables_) {
+    case 1:
       return {ColumnIndex{0}};
-    case PSO_FREE_S:
-    case POS_FREE_O:
-    case SPO_FREE_P:
-    case SOP_FREE_O:
-    case OSP_FREE_S:
-    case OPS_FREE_P:
+    case 2:
       return {ColumnIndex{0}, ColumnIndex{1}};
-    case FULL_INDEX_SCAN_SPO:
-    case FULL_INDEX_SCAN_SOP:
-    case FULL_INDEX_SCAN_PSO:
-    case FULL_INDEX_SCAN_POS:
-    case FULL_INDEX_SCAN_OSP:
-    case FULL_INDEX_SCAN_OPS:
+    case 3:
       return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
     default:
       AD_FAIL();
@@ -142,76 +102,21 @@ vector<ColumnIndex> IndexScan::resultSortedOn() const {
 
 // _____________________________________________________________________________
 VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
-  VariableToColumnMap res;
-  // All the columns of an index scan only contain defined values.
-  auto makeCol = makeAlwaysDefinedColumn;
-  auto col = ColumnIndex{0};
-
-  // Helper lambdas that add the respective triple component as the next column.
-  auto addSubject = [&]() {
-    if (_subject.isVariable()) {
-      res[_subject.getVariable()] = makeCol(col);
-      ++col;
-    }
-  };
-  // TODO<joka921> Refactor the `PropertyPath` class s.t. it also has
-  //`isVariable` and `getVariable`, then those three lambdas can become one.
-  auto addPredicate = [&]() {
-    if (_predicate[0] == '?') {
-      res[Variable{_predicate}] = makeCol(col);
-      ++col;
-    }
-  };
-  auto addObject = [&]() {
-    if (_object.isVariable()) {
-      res[_object.getVariable()] = makeCol(col);
-      ++col;
-    }
+  VariableToColumnMap variableToColumnMap;
+  auto addCol = [&variableToColumnMap,
+                 nextColIdx = ColumnIndex{0}](const Variable& var) mutable {
+    // All the columns of an index scan only contain defined values.
+    variableToColumnMap[var] = makeAlwaysDefinedColumn(nextColIdx);
+    ++nextColIdx;
   };
 
-  switch (_type) {
-    case SPO_FREE_P:
-    case FULL_INDEX_SCAN_SPO:
-      addSubject();
-      addPredicate();
-      addObject();
-      return res;
-    case SOP_FREE_O:
-    case SOP_BOUND_O:
-    case FULL_INDEX_SCAN_SOP:
-      addSubject();
-      addObject();
-      addPredicate();
-      return res;
-    case PSO_BOUND_S:
-    case PSO_FREE_S:
-    case FULL_INDEX_SCAN_PSO:
-      addPredicate();
-      addSubject();
-      addObject();
-      return res;
-    case POS_BOUND_O:
-    case POS_FREE_O:
-    case FULL_INDEX_SCAN_POS:
-      addPredicate();
-      addObject();
-      addSubject();
-      return res;
-    case OPS_FREE_P:
-    case FULL_INDEX_SCAN_OPS:
-      addObject();
-      addPredicate();
-      addSubject();
-      return res;
-    case OSP_FREE_S:
-    case FULL_INDEX_SCAN_OSP:
-      addObject();
-      addSubject();
-      addPredicate();
-      return res;
-    default:
-      AD_FAIL();
+  for (const TripleComponent* const ptr : getPermutedTriple()) {
+    if (ptr->isVariable()) {
+      addCol(ptr->getVariable());
+    }
   }
+  std::ranges::for_each(additionalVariables_, addCol);
+  return variableToColumnMap;
 }
 // _____________________________________________________________________________
 ResultTable IndexScan::computeResult() {
@@ -219,149 +124,72 @@ ResultTable IndexScan::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Permutation::Enum;
-  switch (_type) {
-    case PSO_BOUND_S:
-      computePSOboundS(&idTable);
-      break;
-    case POS_BOUND_O:
-      computePOSboundO(&idTable);
-      break;
-    case PSO_FREE_S:
-      computePSOfreeS(&idTable);
-      break;
-    case POS_FREE_O:
-      computePOSfreeO(&idTable);
-      break;
-    case SOP_BOUND_O:
-      computeSOPboundO(&idTable);
-      break;
-    case SPO_FREE_P:
-      computeSPOfreeP(&idTable);
-      break;
-    case SOP_FREE_O:
-      computeSOPfreeO(&idTable);
-      break;
-    case OSP_FREE_S:
-      computeOSPfreeS(&idTable);
-      break;
-    case OPS_FREE_P:
-      computeOPSfreeP(&idTable);
-      break;
-    case FULL_INDEX_SCAN_SPO:
-      computeFullScan(&idTable, SPO);
-      break;
-    case FULL_INDEX_SCAN_SOP:
-      computeFullScan(&idTable, SOP);
-      break;
-    case FULL_INDEX_SCAN_PSO:
-      computeFullScan(&idTable, PSO);
-      break;
-    case FULL_INDEX_SCAN_POS:
-      computeFullScan(&idTable, POS);
-      break;
-    case FULL_INDEX_SCAN_OSP:
-      computeFullScan(&idTable, OSP);
-      break;
-    case FULL_INDEX_SCAN_OPS:
-      computeFullScan(&idTable, OPS);
-      break;
+  idTable.setNumColumns(numVariables_);
+  const auto& index = _executionContext->getIndex();
+  const auto permutedTriple = getPermutedTriple();
+  if (numVariables_ == 2) {
+    idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
+                         additionalColumns(), cancellationHandle_);
+  } else if (numVariables_ == 1) {
+    idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
+                         additionalColumns(), cancellationHandle_);
+  } else {
+    AD_CORRECTNESS_CHECK(numVariables_ == 3);
+    computeFullScan(&idTable, permutation_);
   }
+  AD_CORRECTNESS_CHECK(idTable.numColumns() == getResultWidth());
   LOG(DEBUG) << "IndexScan result computation done.\n";
+  checkCancellation();
 
   return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
 
 // _____________________________________________________________________________
-void IndexScan::computePSOboundS(IdTable* result) const {
-  result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _subject, result, Permutation::PSO, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computePSOfreeS(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Permutation::PSO, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computePOSboundO(IdTable* result) const {
-  result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, _object, result, Permutation::POS, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computePOSfreeO(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_predicate, result, Permutation::POS, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-size_t IndexScan::computeSizeEstimate() {
+size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
     // Should always be in this branch. Else is only for test cases.
 
     // We have to do a simple scan anyway so might as well do it now
-    if (getResultWidth() == 1) {
+    if (numVariables_ == 1) {
+      // TODO<C++23> Use the monadic operation `std::optional::or_else`.
+      // Note: we cannot use `optional::value_or()` here, because the else
+      // case is expensive to compute, and we need it lazily evaluated.
       if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
-              asString());
+              getCacheKey());
           size.has_value()) {
         return size.value();
       } else {
-        // Explicitly store the result of the index scan. This make sure that
-        // 1. It is not evicted from the cache before this query needs it again.
-        // 2. We preserve the information whether this scan was computed during
-        // the query planning.
-        // TODO<joka921> We should only do this for small index scans. Even with
-        // only one variable, index scans can become arbitrary large (e.g.
-        // ?x rdf:type <someFixedType>. But this requires more information
-        // from the scanning, so I leave it open for another PR.
-        createRuntimeInfoFromEstimates();
-        _precomputedResult = getResult();
-        if (getRuntimeInfo().status_ == RuntimeInformation::Status::completed) {
-          getRuntimeInfo().status_ =
-              RuntimeInformation::Status::completedDuringQueryPlanning;
-        }
-        auto sizeEstimate = _precomputedResult.value()->size();
-        getRuntimeInfo().sizeEstimate_ = sizeEstimate;
-        getRuntimeInfo().costEstimate_ = sizeEstimate;
-        return sizeEstimate;
+        // This call explicitly has to read two blocks of triples from memory to
+        // obtain an exact size estimate.
+        return getIndex().getResultSizeOfScan(
+            *getPermutedTriple()[0], *getPermutedTriple().at(1), permutation_);
       }
+    } else if (numVariables_ == 2) {
+      const TripleComponent& firstKey = *getPermutedTriple().at(0);
+      return getIndex().getCardinality(firstKey, permutation_);
+    } else {
+      // The triple consists of three variables.
+      // TODO<joka921> As soon as all implementations of a full index scan
+      // (Including the "dummy joins" in Join.cpp) consistently exclude the
+      // internal triples, this estimate should be changed to only return
+      // the number of triples in the actual knowledge graph (excluding the
+      // internal triples).
+      AD_CORRECTNESS_CHECK(numVariables_ == 3);
+      return getIndex().numTriples().normalAndInternal_();
     }
-    // TODO<joka921> Should be a oneliner
-    // getIndex().cardinality(getPermutation(), getFirstKey());
-    if (_type == SPO_FREE_P || _type == SOP_FREE_O) {
-      return getIndex().getCardinality(_subject, Permutation::SPO);
-    } else if (_type == POS_FREE_O || _type == PSO_FREE_S) {
-      return getIndex().getCardinality(_predicate, Permutation::PSO);
-    } else if (_type == OPS_FREE_P || _type == OSP_FREE_S) {
-      return getIndex().getCardinality(_object, Permutation::OSP);
-    }
-    // The triple consists of three variables.
-    // TODO<joka921> As soon as all implementations of a full index scan
-    // (Including the "dummy joins" in Join.cpp) consistently exclude the
-    // internal triples, this estimate should be changed to only return
-    // the number of triples in the actual knowledge graph (excluding the
-    // internal triples).
-    return getIndex().numTriples().normalAndInternal_();
   } else {
     // Only for test cases. The handling of the objects is to make the
     // strange query planner tests pass.
-    // TODO<joka921> Code duplication.
-    std::string objectStr =
-        _object.isString() ? _object.getString() : _object.toString();
-    std::string subjectStr =
-        _subject.isString() ? _subject.getString() : _subject.toString();
-    return 1000 + subjectStr.size() + _predicate.size() + objectStr.size();
+    auto strLen = [](const auto& el) {
+      return (el.isString() ? el.getString() : el.toString()).size();
+    };
+    return 1000 + strLen(subject_) + strLen(object_) + strLen(predicate_);
   }
 }
 
 // _____________________________________________________________________________
 size_t IndexScan::getCostEstimate() {
-  if (getResultWidth() != 3) {
+  if (numVariables_ != 3) {
     return getSizeEstimateBeforeLimit();
   } else {
     // The computation of the `full scan` estimate must be consistent with the
@@ -387,97 +215,35 @@ size_t IndexScan::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-void IndexScan::computeSPOfreeP(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Permutation::SPO, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computeSOPboundO(IdTable* result) const {
-  result->setNumColumns(1);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, _object, result, Permutation::SOP, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computeSOPfreeO(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_subject, result, Permutation::SOP, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computeOPSfreeP(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Permutation::OPS, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
-void IndexScan::computeOSPfreeS(IdTable* result) const {
-  result->setNumColumns(2);
-  const auto& idx = _executionContext->getIndex();
-  idx.scan(_object, result, Permutation::OSP, _timeoutTimer);
-}
-
-// _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
-  _multiplicity.clear();
+  multiplicity_.clear();
   if (_executionContext) {
-    if (getResultWidth() == 1) {
-      _multiplicity.emplace_back(1);
+    const auto& idx = getIndex();
+    if (numVariables_ == 1) {
+      // There are no duplicate triples in RDF and two elements are fixed.
+      multiplicity_.emplace_back(1);
+    } else if (numVariables_ == 2) {
+      const auto permutedTriple = getPermutedTriple();
+      multiplicity_ = idx.getMultiplicities(*permutedTriple[0], permutation_);
     } else {
-      const auto& idx = getIndex();
-      switch (_type) {
-        case PSO_FREE_S:
-          _multiplicity = idx.getMultiplicities(_predicate, Permutation::PSO);
-          break;
-        case POS_FREE_O:
-          _multiplicity = idx.getMultiplicities(_predicate, Permutation::POS);
-          break;
-        case SPO_FREE_P:
-          _multiplicity = idx.getMultiplicities(_subject, Permutation::SPO);
-          break;
-        case SOP_FREE_O:
-          _multiplicity = idx.getMultiplicities(_subject, Permutation::SOP);
-          break;
-        case OSP_FREE_S:
-          _multiplicity = idx.getMultiplicities(_object, Permutation::OSP);
-          break;
-        case OPS_FREE_P:
-          _multiplicity = idx.getMultiplicities(_object, Permutation::OPS);
-          break;
-        case FULL_INDEX_SCAN_SPO:
-          _multiplicity = idx.getMultiplicities(Permutation::SPO);
-          break;
-        case FULL_INDEX_SCAN_SOP:
-          _multiplicity = idx.getMultiplicities(Permutation::SOP);
-          break;
-        case FULL_INDEX_SCAN_PSO:
-          _multiplicity = idx.getMultiplicities(Permutation::PSO);
-          break;
-        case FULL_INDEX_SCAN_POS:
-          _multiplicity = idx.getMultiplicities(Permutation::POS);
-          break;
-        case FULL_INDEX_SCAN_OSP:
-          _multiplicity = idx.getMultiplicities(Permutation::OSP);
-          break;
-        case FULL_INDEX_SCAN_OPS:
-          _multiplicity = idx.getMultiplicities(Permutation::OPS);
-          break;
-        default:
-          AD_FAIL();
-      }
+      AD_CORRECTNESS_CHECK(numVariables_ == 3);
+      multiplicity_ = idx.getMultiplicities(permutation_);
     }
   } else {
-    _multiplicity.emplace_back(1);
-    _multiplicity.emplace_back(1);
-    if (getResultWidth() == 3) {
-      _multiplicity.emplace_back(1);
+    // This branch is only used in certain unit tests.
+    multiplicity_.emplace_back(1);
+    if (numVariables_ == 2) {
+      multiplicity_.emplace_back(1);
+    }
+    if (numVariables_ == 3) {
+      multiplicity_.emplace_back(1);
     }
   }
-  assert(_multiplicity.size() >= 1 || _multiplicity.size() <= 3);
+  for ([[maybe_unused]] size_t i :
+       std::views::iota(multiplicity_.size(), getResultWidth())) {
+    multiplicity_.emplace_back(1);
+  }
+  AD_CONTRACT_CHECK(multiplicity_.size() == getResultWidth());
 }
 
 // ________________________________________________________________________
@@ -506,9 +272,8 @@ void IndexScan::computeFullScan(IdTable* result,
   size_t i = 0;
   const auto& permutationImpl =
       getExecutionContext()->getIndex().getImpl().getPermutation(permutation);
-  auto triplesView =
-      TriplesView(permutationImpl, getExecutionContext()->getAllocator(),
-                  ignoredRanges, isTripleIgnored);
+  auto triplesView = TriplesView(permutationImpl, cancellationHandle_,
+                                 ignoredRanges, isTripleIgnored);
   for (const auto& triple : triplesView) {
     if (i >= resultSize) {
       break;
@@ -517,4 +282,96 @@ void IndexScan::computeFullScan(IdTable* result,
     ++i;
   }
   *result = std::move(table).toDynamic();
+}
+
+// ___________________________________________________________________________
+std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
+    const {
+  std::array triple{&subject_, &predicate_, &object_};
+  auto permutation = Permutation::toKeyOrder(permutation_);
+  return {triple[permutation[0]], triple[permutation[1]],
+          triple[permutation[2]]};
+}
+
+// ___________________________________________________________________________
+Permutation::IdTableGenerator IndexScan::getLazyScan(
+    const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
+  const IndexImpl& index = s.getIndex().getImpl();
+  Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+  std::optional<Id> col1Id;
+  if (s.numVariables_ == 1) {
+    col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
+  }
+  return index.getPermutation(s.permutation())
+      .lazyScan(col0Id, col1Id, std::move(blocks), s.additionalColumns(),
+                s.cancellationHandle_);
+};
+
+// ________________________________________________________________
+std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
+    const IndexScan& s) {
+  auto permutedTriple = s.getPermutedTriple();
+  const IndexImpl& index = s.getIndex().getImpl();
+  std::optional<Id> col0Id = permutedTriple[0]->toValueId(index.getVocab());
+  std::optional<Id> col1Id =
+      s.numVariables_ == 2 ? std::nullopt
+                           : permutedTriple[1]->toValueId(index.getVocab());
+  if (!col0Id.has_value() || (!col1Id.has_value() && s.numVariables_ == 1)) {
+    return std::nullopt;
+  }
+
+  return index.getPermutation(s.permutation())
+      .getMetadataAndBlocks(col0Id.value(), col1Id);
+};
+
+// ________________________________________________________________
+std::array<Permutation::IdTableGenerator, 2>
+IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
+  AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
+
+  // This function only works for single column joins. This means that the first
+  // variable of both scans must be equal, but the second variables of the scans
+  // (if present) must be different.
+  const auto& getFirstVariable = [](const IndexScan& scan) {
+    return scan.numVariables_ == 2 ? *scan.getPermutedTriple()[1]
+                                   : *scan.getPermutedTriple()[2];
+  };
+
+  AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
+  if (s1.numVariables_ == 2 && s2.numVariables_ == 2) {
+    AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
+  }
+
+  auto metaBlocks1 = getMetadataForScan(s1);
+  auto metaBlocks2 = getMetadataForScan(s2);
+
+  if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
+    return {{}};
+  }
+  auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
+      metaBlocks1.value(), metaBlocks2.value());
+
+  std::array result{getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
+  result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
+  return result;
+}
+
+// ________________________________________________________________
+Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
+    std::span<const Id> joinColumn, const IndexScan& s) {
+  AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
+  AD_CONTRACT_CHECK(s.numVariables_ == 1 || s.numVariables_ == 2);
+
+  auto metaBlocks1 = getMetadataForScan(s);
+
+  if (!metaBlocks1.has_value()) {
+    return {};
+  }
+  auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
+                                                           metaBlocks1.value());
+
+  auto result = getLazyScan(s, blocks);
+  result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
+  return result;
 }

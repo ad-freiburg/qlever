@@ -4,12 +4,8 @@
 //         Florian Kramer (florian.kramer@netpun.uni-freiburg.de)
 #pragma once
 
-#include <list>
-
-#include "./Operation.h"
-#include "./QueryExecutionTree.h"
-
-using std::list;
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 class OptionalJoin : public Operation {
  private:
@@ -36,11 +32,10 @@ class OptionalJoin : public Operation {
  public:
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
-               std::shared_ptr<QueryExecutionTree> t2,
-               const std::vector<std::array<ColumnIndex, 2>>& joinCols);
+               std::shared_ptr<QueryExecutionTree> t2);
 
  private:
-  string asStringImpl(size_t indent = 0) const override;
+  string getCacheKeyImpl() const override;
 
  public:
   string getDescriptor() const override;

@@ -46,14 +46,11 @@ Union::Union(QueryExecutionContext* qec,
   }));
 }
 
-string Union::asStringImpl(size_t indent) const {
+string Union::getCacheKeyImpl() const {
   std::ostringstream os;
-  os << _subtrees[0]->asString(indent) << "\n";
-  for (size_t i = 0; i < indent; ++i) {
-    os << " ";
-  }
+  os << _subtrees[0]->getCacheKey() << "\n";
   os << "UNION\n";
-  os << _subtrees[1]->asString(indent) << "\n";
+  os << _subtrees[1]->getCacheKey() << "\n";
   return std::move(os).str();
 }
 
@@ -199,7 +196,7 @@ void Union::computeUnion(
   auto copyChunked = [this](auto beg, auto end, auto target) {
     size_t total = end - beg;
     for (size_t i = 0; i < total; i += chunkSize) {
-      checkTimeout();
+      checkCancellation();
       size_t actualEnd = std::min(i + chunkSize, total);
       std::copy(beg + i, beg + actualEnd, target + i);
     }
@@ -209,7 +206,7 @@ void Union::computeUnion(
   auto fillChunked = [this](auto beg, auto end, const auto& value) {
     size_t total = end - beg;
     for (size_t i = 0; i < total; i += chunkSize) {
-      checkTimeout();
+      checkCancellation();
       size_t actualEnd = std::min(i + chunkSize, total);
       std::fill(beg + i, beg + actualEnd, value);
     }

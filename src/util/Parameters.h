@@ -2,19 +2,22 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach<joka921> (johannes.kalmbach@gmail.com)
 
-#ifndef QLEVER_PARAMETERS_H
-#define QLEVER_PARAMETERS_H
+#pragma once
 
 #include <atomic>
+#include <concepts>
 #include <optional>
 #include <tuple>
+#include <type_traits>
 
-#include "./ConstexprMap.h"
-#include "./ConstexprSmallString.h"
-#include "./HashMap.h"
-#include "./HashSet.h"
-#include "./TupleForEach.h"
-#include "./TypeTraits.h"
+#include "util/ConstexprMap.h"
+#include "util/ConstexprSmallString.h"
+#include "util/HashMap.h"
+#include "util/HashSet.h"
+#include "util/MemorySize/MemorySize.h"
+#include "util/ParseableDuration.h"
+#include "util/TupleForEach.h"
+#include "util/TypeTraits.h"
 
 namespace ad_utility {
 using ParameterName = ad_utility::ConstexprSmallString<100>;
@@ -31,6 +34,17 @@ struct ParameterBase {
   virtual ~ParameterBase() = default;
 };
 
+// Concepts for the template types of `Parameter`.
+template <typename FunctionType, typename ToType>
+concept ParameterFromStringType =
+    std::default_initializable<FunctionType> &&
+    InvocableWithSimilarReturnType<FunctionType, ToType, const std::string&>;
+
+template <typename FunctionType, typename FromType>
+concept ParameterToStringType =
+    std::default_initializable<FunctionType> &&
+    InvocableWithSimilarReturnType<FunctionType, std::string, FromType>;
+
 /// Abstraction for a parameter that connects a (compile time) `Name` to a
 /// runtime value.
 /// \tparam Type The type of the parameter value
@@ -40,22 +54,24 @@ struct ParameterBase {
 ///         a std::string representation.
 /// \tparam Name The Name of the parameter (there are typically a lot of
 ///         parameters with the same `Type`).
-template <typename Type, typename FromString, typename ToString,
-          ParameterName Name>
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
 struct Parameter : public ParameterBase {
   constexpr static ParameterName name = Name;
 
  private:
-  Type _value{};
+  Type value_{};
 
   // This function is called each time the value is changed.
   using OnUpdateAction = std::function<void(Type)>;
-  std::optional<OnUpdateAction> _onUpdateAction = std::nullopt;
+  std::optional<OnUpdateAction> onUpdateAction_ = std::nullopt;
+  using ParameterConstraint = std::function<void(Type, std::string_view)>;
+  std::optional<ParameterConstraint> parameterConstraint_ = std::nullopt;
 
  public:
   /// Construction is only allowed using an initial parameter value
   Parameter() = delete;
-  explicit Parameter(Type initialValue) : _value{std::move(initialValue)} {};
+  explicit Parameter(Type initialValue) : value_{std::move(initialValue)} {};
 
   /// Copying is disabled, but moving is ok
   Parameter(const Parameter& rhs) = delete;
@@ -71,43 +87,115 @@ struct Parameter : public ParameterBase {
 
   /// Set the value.
   void set(Type newValue) {
-    _value = std::move(newValue);
+    if (parameterConstraint_.has_value()) {
+      std::invoke(parameterConstraint_.value(), newValue, name);
+    }
+    value_ = std::move(newValue);
     triggerOnUpdateAction();
   }
 
-  const Type& get() const { return _value; }
+  const Type& get() const { return value_; }
 
   /// Specify the onUpdateAction and directly trigger it.
   /// Note that this useful when the initial value of the parameter
   /// is known before the `onUpdateAction`.
   void setOnUpdateAction(OnUpdateAction onUpdateAction) {
-    _onUpdateAction = std::move(onUpdateAction);
+    onUpdateAction_ = std::move(onUpdateAction);
     triggerOnUpdateAction();
+  }
+
+  /// Set an constraint that will be executed every time the value changes
+  /// and once initially when setting it. It is intended to throw an exception
+  /// if the value is invalid.
+  void setParameterConstraint(ParameterConstraint&& parameterConstraint) {
+    std::invoke(parameterConstraint, value_, name);
+    parameterConstraint_ = std::move(parameterConstraint);
   }
 
   // ___________________________________________________________________
   [[nodiscard]] std::string toString() const override {
-    return ToString{}(_value);
+    return ToString{}(value_);
   }
 
  private:
   // Manually trigger the `_onUpdateAction` if it exists
   void triggerOnUpdateAction() {
-    if (_onUpdateAction.has_value()) {
-      _onUpdateAction.value()(_value);
+    if (onUpdateAction_.has_value()) {
+      onUpdateAction_.value()(value_);
     }
   }
 };
+
+// Concept that checks whether a type is an instantiation of the `Parameter`
+// template.
+namespace detail::parameterConceptImpl {
+template <typename T>
+struct ParameterConceptImpl : std::false_type {};
+
+template <std::semiregular Type, ParameterFromStringType<Type> FromString,
+          ParameterToStringType<Type> ToString, ParameterName Name>
+struct ParameterConceptImpl<Parameter<Type, FromString, ToString, Name>>
+    : std::true_type {};
+}  // namespace detail::parameterConceptImpl
+
+template <typename T>
+concept IsParameter =
+    detail::parameterConceptImpl::ParameterConceptImpl<T>::value;
 
 namespace detail::parameterShortNames {
 
 // TODO<joka921> Replace these by versions that actually parse the whole
 // string.
-using fl = decltype([](const auto& s) { return std::stof(s); });
-using dbl = decltype([](const auto& s) { return std::stod(s); });
-using szt = decltype([](const auto& s) { return std::stoull(s); });
+struct fl {
+  float operator()(const auto& s) const { return std::stof(s); }
+};
+struct dbl {
+  double operator()(const auto& s) const { return std::stod(s); }
+};
+struct szt {
+  size_t operator()(const auto& s) const { return std::stoull(s); }
+};
+struct bl {
+  bool operator()(const auto& s) const {
+    if (s == "true") return true;
+    if (s == "false") return false;
+    AD_THROW(
+        R"(The string value for bool parameter must be either "true" or "false".)");
+  }
+};
 
-using toString = decltype([](const auto& s) { return std::to_string(s); });
+struct toString {
+  std::string operator()(const auto& s) const { return std::to_string(s); }
+};
+struct boolToString {
+  std::string operator()(const bool& v) const { return v ? "true" : "false"; }
+};
+
+template <typename DurationType>
+struct durationToString {
+  std::string operator()(
+      const ad_utility::ParseableDuration<DurationType>& duration) const {
+    return duration.toString();
+  }
+};
+
+template <typename DurationType>
+struct durationFromString {
+  ad_utility::ParseableDuration<DurationType> operator()(
+      const std::string& duration) const {
+    return ad_utility::ParseableDuration<DurationType>::fromString(duration);
+  }
+};
+
+// To/from string for `MemorySize`.
+struct MemorySizeToString {
+  std::string operator()(const MemorySize& m) const { return m.asString(); }
+};
+struct MemorySizeFromString {
+  MemorySize operator()(const std::string& str) const {
+    return MemorySize::parse(str);
+  }
+};
 
 /// Partial template specialization for Parameters with common types (numeric
 /// types and strings)
@@ -123,6 +211,17 @@ using SizeT = Parameter<size_t, szt, toString, Name>;
 template <ParameterName Name>
 using String = Parameter<std::string, std::identity, std::identity, Name>;
 
+template <ParameterName Name>
+using Bool = Parameter<bool, bl, boolToString, Name>;
+
+template <ParameterName Name>
+using MemorySizeParameter =
+    Parameter<MemorySize, MemorySizeFromString, MemorySizeToString, Name>;
+
+template <typename DurationType, ParameterName Name>
+using DurationParameter = Parameter<ad_utility::ParseableDuration<DurationType>,
+                                    durationFromString<DurationType>,
+                                    durationToString<DurationType>, Name>;
 }  // namespace detail::parameterShortNames
 
 /// A container class that stores several `Parameters`. The reading (via
@@ -133,7 +232,7 @@ using String = Parameter<std::string, std::identity, std::identity, Name>;
 /// "increase the cache size by 20%") nor an atomic update of multiple
 /// parameters at the same time. If needed, this functionality could be added
 /// to the current implementation.
-template <typename... ParameterTypes>
+template <IsParameter... ParameterTypes>
 class Parameters {
  private:
   using Tuple = std::tuple<ad_utility::Synchronized<ParameterTypes>...>;
@@ -252,5 +351,3 @@ class Parameters {
   }
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_PARAMETERS_H

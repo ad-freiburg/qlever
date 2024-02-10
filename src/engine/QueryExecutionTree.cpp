@@ -11,8 +11,8 @@
 #include <string>
 #include <utility>
 
-#include "absl/strings/str_join.h"
 #include "engine/Bind.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/Distinct.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -28,7 +28,8 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
-#include "engine/TextOperationWithFilter.h"
+#include "engine/TextIndexScanForEntity.h"
+#include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -41,50 +42,16 @@ using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
-    : _qec(qec),
-      _rootOperation(nullptr),
-      _type(OperationType::UNDEFINED),
-      _asString(),
-      _sizeEstimate(std::numeric_limits<size_t>::max()) {}
+    : qec_(qec) {}
 
 // _____________________________________________________________________________
-string QueryExecutionTree::asString(size_t indent) {
-  if (indent == _indent && !_asString.empty()) {
-    return _asString;
-  }
-  string indentStr;
-  for (size_t i = 0; i < indent; ++i) {
-    indentStr += " ";
-  }
-  if (_rootOperation) {
-    std::ostringstream os;
-    os << indentStr << "{\n"
-       << _rootOperation->asString(indent + 2) << "\n"
-       << indentStr << "  qet-width: " << getResultWidth() << " ";
-    os << '\n' << indentStr << '}';
-    _asString = std::move(os).str();
-  } else {
-    _asString = "<Empty QueryExecutionTree>";
-  }
-  _indent = indent;
-  return _asString;
-}
-
-// _____________________________________________________________________________
-void QueryExecutionTree::setOperation(QueryExecutionTree::OperationType type,
-                                      std::shared_ptr<Operation> op) {
-  _type = type;
-  _rootOperation = std::move(op);
-  _asString = "";
-  _sizeEstimate = std::numeric_limits<size_t>::max();
-  // with setting the operation the initialization is done and we can try to
-  // find our result in the cache.
-  readFromCache();
+string QueryExecutionTree::getCacheKey() const {
+  return rootOperation_->getCacheKey();
 }
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getVariableColumn(const Variable& variable) const {
-  AD_CONTRACT_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(rootOperation_);
   const auto& varCols = getVariableColumns();
   if (!varCols.contains(variable)) {
     AD_THROW("Variable could not be mapped to result column. Var: " +
@@ -99,7 +66,8 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
     const SelectClause& selectClause, bool includeQuestionMark) const {
   ColumnIndicesAndTypes exportColumns;
 
-  for (const auto& var : selectClause.getSelectedVariables()) {
+  auto variables = selectClause.getSelectedVariables();
+  for (const auto& var : variables) {
     std::string varString = var.name();
     if (getVariableColumns().contains(var)) {
       auto columnIndex = getVariableColumns().at(var).columnIndex_;
@@ -122,107 +90,111 @@ QueryExecutionTree::selectedVariablesToColumnIndices(
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getCostEstimate() {
-  if (_cachedResult) {
+  if (cachedResult_) {
     // result is pinned in cache. Nothing to compute
     return 0;
   }
-  if (_type == QueryExecutionTree::SCAN && getResultWidth() == 1) {
+  if (type_ == QueryExecutionTree::SCAN && getResultWidth() == 1) {
     return getSizeEstimate();
   } else {
-    return _rootOperation->getCostEstimate();
+    return rootOperation_->getCostEstimate();
   }
 }
 
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
-  if (_sizeEstimate == std::numeric_limits<size_t>::max()) {
-    if (_cachedResult) {
-      _sizeEstimate = _cachedResult->size();
+  if (!sizeEstimate_.has_value()) {
+    if (cachedResult_) {
+      sizeEstimate_ = cachedResult_->size();
     } else {
       // if we are in a unit test setting and there is no QueryExecutionContest
-      // specified it is the _rootOperation's obligation to handle this case
+      // specified it is the rootOperation_'s obligation to handle this case
       // correctly
-      _sizeEstimate = _rootOperation->getSizeEstimate();
+      sizeEstimate_ = rootOperation_->getSizeEstimate();
     }
   }
-  return _sizeEstimate;
+  return sizeEstimate_.value();
 }
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
-  if (_cachedResult) {
-    return _cachedResult->size() == 0;
+  if (cachedResult_) {
+    return cachedResult_->size() == 0;
   }
-  return _rootOperation->knownEmptyResult();
+  return rootOperation_->knownEmptyResult();
 }
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::isVariableCovered(Variable variable) const {
-  AD_CONTRACT_CHECK(_rootOperation);
+  AD_CONTRACT_CHECK(rootOperation_);
   return getVariableColumns().contains(variable);
 }
 
 // _______________________________________________________________________
 void QueryExecutionTree::readFromCache() {
-  if (!_qec) {
+  if (!qec_) {
     return;
   }
-  auto& cache = _qec->getQueryTreeCache();
-  auto res = cache.getIfContained(asString());
+  auto& cache = qec_->getQueryTreeCache();
+  auto res = cache.getIfContained(getCacheKey());
   if (res.has_value()) {
-    _cachedResult = res->_resultPointer->resultTable();
+    cachedResult_ = res->_resultPointer->resultTable();
   }
 }
-
-bool QueryExecutionTree::isIndexScan() const { return _type == SCAN; }
 
 template <typename Op>
 void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
   if constexpr (std::is_same_v<Op, IndexScan>) {
-    _type = SCAN;
+    type_ = SCAN;
   } else if constexpr (std::is_same_v<Op, Union>) {
-    _type = UNION;
+    type_ = UNION;
   } else if constexpr (std::is_same_v<Op, Bind>) {
-    _type = BIND;
+    type_ = BIND;
   } else if constexpr (std::is_same_v<Op, Sort>) {
-    _type = SORT;
+    type_ = SORT;
   } else if constexpr (std::is_same_v<Op, Distinct>) {
-    _type = DISTINCT;
+    type_ = DISTINCT;
   } else if constexpr (std::is_same_v<Op, Values>) {
-    _type = VALUES;
+    type_ = VALUES;
   } else if constexpr (std::is_same_v<Op, Service>) {
-    _type = SERVICE;
+    type_ = SERVICE;
   } else if constexpr (std::is_same_v<Op, TransitivePath>) {
-    _type = TRANSITIVE_PATH;
+    type_ = TRANSITIVE_PATH;
   } else if constexpr (std::is_same_v<Op, OrderBy>) {
-    _type = ORDER_BY;
+    type_ = ORDER_BY;
   } else if constexpr (std::is_same_v<Op, GroupBy>) {
-    _type = GROUP_BY;
+    type_ = GROUP_BY;
   } else if constexpr (std::is_same_v<Op, HasPredicateScan>) {
-    _type = HAS_PREDICATE_SCAN;
+    type_ = HAS_PREDICATE_SCAN;
   } else if constexpr (std::is_same_v<Op, Filter>) {
-    _type = FILTER;
+    type_ = FILTER;
   } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
-    _type = NEUTRAL_ELEMENT;
+    type_ = NEUTRAL_ELEMENT;
   } else if constexpr (std::is_same_v<Op, Join>) {
-    _type = JOIN;
-  } else if constexpr (std::is_same_v<Op, TextOperationWithFilter>) {
-    _type = TEXT_WITH_FILTER;
+    type_ = JOIN;
+  } else if constexpr (std::is_same_v<Op, TextIndexScanForWord>) {
+    type_ = TEXT_INDEX_SCAN_FOR_WORD;
+  } else if constexpr (std::is_same_v<Op, TextIndexScanForEntity>) {
+    type_ = TEXT_INDEX_SCAN_FOR_ENTITY;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
-    _type = COUNT_AVAILABLE_PREDICATES;
+    type_ = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
-    _type = MINUS;
+    type_ = MINUS;
   } else if constexpr (std::is_same_v<Op, OptionalJoin>) {
-    _type = OPTIONAL_JOIN;
+    type_ = OPTIONAL_JOIN;
   } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
-    _type = MULTICOLUMN_JOIN;
-  } else if constexpr (std::is_same_v<Op, ValuesForTesting>) {
-    _type = DUMMY;
+    type_ = MULTICOLUMN_JOIN;
+  } else if constexpr (std::is_same_v<Op, ValuesForTesting> ||
+                       std::is_same_v<Op, ValuesForTestingNoKnownEmptyResult>) {
+    type_ = DUMMY;
+  } else if constexpr (std::is_same_v<Op, CartesianProductJoin>) {
+    type_ = CARTESIAN_PRODUCT_JOIN;
   } else {
     static_assert(ad_utility::alwaysFalse<Op>,
                   "New type of operation that was not yet registered");
   }
-  _rootOperation = std::move(operation);
+  rootOperation_ = std::move(operation);
+  readFromCache();
 }
 
 template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
@@ -242,7 +214,9 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<NeutralElementOperation>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
-    std::shared_ptr<TextOperationWithFilter>);
+    std::shared_ptr<TextIndexScanForWord>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TextIndexScanForEntity>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<CountAvailablePredicates>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);
@@ -251,6 +225,10 @@ template void QueryExecutionTree::setOperation(
     std::shared_ptr<MultiColumnJoin>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<ValuesForTesting>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<ValuesForTestingNoKnownEmptyResult>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<CartesianProductJoin>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
@@ -270,8 +248,26 @@ std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(
   return std::make_shared<QueryExecutionTree>(qec, std::move(sort));
 }
 
+// _____________________________________________________________________________
+std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
+    const QueryExecutionTree& qetA, const QueryExecutionTree& qetB) {
+  std::vector<std::array<ColumnIndex, 2>> jcs;
+  const auto& aVarCols = qetA.getVariableColumns();
+  const auto& bVarCols = qetB.getVariableColumns();
+  for (const auto& aVarCol : aVarCols) {
+    auto it = bVarCols.find(aVarCol.first);
+    if (it != bVarCols.end()) {
+      jcs.push_back(std::array<ColumnIndex, 2>{
+          {aVarCol.second.columnIndex_, it->second.columnIndex_}});
+    }
+  }
+
+  std::ranges::sort(jcs, std::ranges::lexicographical_compare);
+  return jcs;
+}
+
 // ____________________________________________________________________________
-std::array<std::shared_ptr<QueryExecutionTree>, 2>
+std::pair<std::shared_ptr<QueryExecutionTree>, shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,
@@ -284,6 +280,18 @@ QueryExecutionTree::createSortedTrees(
 
   return {createSortedTree(std::move(qetA), sortColumnsA),
           createSortedTree(std::move(qetB), sortColumnsB)};
+}
+
+// ____________________________________________________________________________
+auto QueryExecutionTree::getSortedSubtreesAndJoinColumns(
+    std::shared_ptr<QueryExecutionTree> qetA,
+    std::shared_ptr<QueryExecutionTree> qetB) -> SortedTreesAndJoinColumns {
+  AD_CORRECTNESS_CHECK(qetA && qetB);
+  auto joinCols = getJoinColumns(*qetA, *qetB);
+  AD_CONTRACT_CHECK(!joinCols.empty());
+  auto [leftSorted, rightSorted] =
+      createSortedTrees(std::move(qetA), std::move(qetB), joinCols);
+  return {std::move(leftSorted), std::move(rightSorted), std::move(joinCols)};
 }
 
 // _____________________________________________________________________________

@@ -48,28 +48,32 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   v.createFromSet(s);
 
   uint64_t word0 = 0;
-  IdRange retVal;
   // Match exactly one
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA1*", &retVal));
-  ASSERT_EQ(word0 + 1, retVal._first.get());
-  ASSERT_EQ(word0 + 1, retVal._last.get());
+  auto retVal = v.getIdRangeForFullTextPrefix("wordA1*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 1, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match all
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("word*", &retVal));
-  ASSERT_EQ(word0, retVal._first.get());
-  ASSERT_EQ(word0 + 4, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("word*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
   // Match first two
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordA*", &retVal));
-  ASSERT_EQ(word0, retVal._first.get());
-  ASSERT_EQ(word0 + 1, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("wordA*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0, retVal.value().first().get());
+  ASSERT_EQ(word0 + 1, retVal.value().last().get());
 
   // Match last three
-  ASSERT_TRUE(v.getIdRangeForFullTextPrefix("wordB*", &retVal));
-  ASSERT_EQ(word0 + 2, retVal._first.get());
-  ASSERT_EQ(word0 + 4, retVal._last.get());
+  retVal = v.getIdRangeForFullTextPrefix("wordB*");
+  ASSERT_TRUE(retVal.has_value());
+  ASSERT_EQ(word0 + 2, retVal.value().first().get());
+  ASSERT_EQ(word0 + 4, retVal.value().last().get());
 
-  ASSERT_FALSE(v.getIdRangeForFullTextPrefix("foo*", &retVal));
+  retVal = v.getIdRangeForFullTextPrefix("foo*");
+  ASSERT_FALSE(retVal.has_value());
 }
 
 TEST(VocabularyTest, readWriteTest) {
@@ -112,17 +116,22 @@ TEST(VocabularyTest, IncompleteLiterals) {
 }
 
 TEST(Vocabulary, PrefixFilter) {
-  RdfsVocabulary voc;
-  voc.setLocale("en", "US", true);
-  ad_utility::HashSet<string> s;
+  RdfsVocabulary vocabulary;
+  vocabulary.setLocale("en", "US", true);
+  ad_utility::HashSet<string> words;
 
-  s.insert("\"exa\"");
-  s.insert("\"exp\"");
-  s.insert("\"ext\"");
-  s.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
-  voc.createFromSet(s);
+  words.insert("\"exa\"");
+  words.insert("\"exp\"");
+  words.insert("\"ext\"");
+  words.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
+  vocabulary.createFromSet(words);
 
-  auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first.get(), 1u);
-  ASSERT_EQ(x.second.get(), 2u);
+  // Found in internal but not in external vocabulary.
+  auto ranges = vocabulary.prefixRanges("\"exp");
+  auto firstIndexExternal =
+      VocabIndex::make(vocabulary.getInternalVocab().size());
+  RdfsVocabulary::PrefixRanges expectedRanges{
+      {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)},
+       {std::pair{firstIndexExternal, firstIndexExternal}}}};
+  ASSERT_EQ(ranges, expectedRanges);
 }

@@ -7,6 +7,12 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    # will not take effect without FORCE
+    set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
+endif()
+
+
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
@@ -44,32 +50,59 @@ if ("${CMAKE_GENERATOR}" STREQUAL "Ninja")
     endif ()
 endif ()
 
-if (("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "12") AND
-   (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12.2"))
-    message(STATUS "Adding -Wno-error for g++12.0 because of the many false positive warnings from stdlib headers")
-    add_compile_options(-Wno-error)
-    else()
-endif ()
-
 ###############################################################################
 ##### Essential settings #####
 ###############################################################################
+include(FetchContent)
 
 ################################
 # GTEST AND GMOCK
 ################################
-add_subdirectory(third_party/googletest EXCLUDE_FROM_ALL)
-include_directories(third_party/googletest/googletest/include)
-include_directories(third_party/googletest/googlemock/include)
+FetchContent_Declare(
+        googletest
+        GIT_REPOSITORY https://github.com/google/googletest.git
+        GIT_TAG        f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
+)
+
+################################
+# NLOHMANN JSON
+################################
+FetchContent_Declare(
+        nlohmann-json
+        GIT_REPOSITORY https://github.com/nlohmann/json.git
+        GIT_TAG 9cca280a4d0ccf0c08f47a99aa71d1b0e52f8d03 # release-3.11.3
+)
+# We only want to include a single file from the nlohmann GitHub repository, so we initialize the submodule
+# manually
+FetchContent_GetProperties(nlohmann-json)
+if (NOT nlohmann-json_POPULATED)
+    FetchContent_Populate(nlohmann-json)
+    include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
+endif()
+
 
 ###############################
 # ANTLR CPP RUNTIME FOR THE SPARQL PARSER
 ###############################
-set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-add_subdirectory(third_party/antlr4/runtime/Cpp EXCLUDE_FROM_ALL )
-target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-include_directories(SYSTEM third_party/antlr4/runtime/Cpp/runtime/src )
+FetchContent_Declare(
+        antlr
+        GIT_REPOSITORY https://github.com/antlr/antlr4.git
+        GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
+)
+
+# From ANTLR we actually don't want the toplevel directory (which doesn't
+# have a proper `CMakeLists.txt` anyway), but only the C++ runtime which
+# resides in a subdirectory. We additionally need to suppress some warnings
+# only for ANTLR. We therefore have to perform the initialization for
+# ANTLR using `FetchContent` manually.
+FetchContent_GetProperties(antlr)
+if (NOT antlr_POPULATED)
+    FetchContent_Populate(antlr)
+    set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
+    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL )
+    target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
+    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src )
+endif()
 
 ################################
 # Threading
@@ -124,7 +157,7 @@ endif()
 ######################################
 # BOOST
 ######################################
-find_package(Boost 1.74 COMPONENTS iostreams program_options REQUIRED)
+find_package(Boost 1.81 COMPONENTS iostreams program_options url REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 
 
@@ -134,15 +167,21 @@ include_directories(${Boost_INCLUDE_DIR})
 find_package(OpenSSL REQUIRED)
 
 ##############################################
-# Define a set of common third-party libraries that are used almost as
-# frequently as the standard library or as a  drop-in replacement for
-# some of its functionality.To enable the usage in all parts of QLever,
-# call the following function `qlever_target_link_libraries` for all
-# libraries and executables. It is a drop-in replacement for
-# `target_link_libraries` that additionally links against the common
-# libraries.
+# Define a set of common third-party and self made libraries that are used almost
+# as frequently as the standard library or as a  drop-in replacement for some of
+# its functionality.To enable the usage in all parts of QLever, call the following
+# function `qlever_target_link_libraries` for all libraries and executables. It
+# is a drop-in replacement for `target_link_libraries` that additionally links
+# against the common libraries.
 function (qlever_target_link_libraries target)
-    target_link_libraries(${target} ${ARGN} absl::flat_hash_map absl::flat_hash_set absl::strings absl::str_format ICU::uc ICU::i18n)
+    target_link_libraries(${target} ${ARGN} absl::flat_hash_map
+        absl::flat_hash_set absl::strings absl::str_format ICU::uc
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
+
+    # memorySize is a utility library for defining memory sizes.
+    if (NOT ${target} STREQUAL "memorySize")
+        target_link_libraries(${target} memorySize)
+    endif()
 endfunction()
 
 
@@ -177,25 +216,26 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
-
-################################
-# NLOHNMANN-JSON
-################################
-# Header only, nothing to include
-include_directories(third_party/json/)
-
 ################################
 # CTRE, Compile-Time-Regular-Expressions
 ################################
-# Header only, nothing to include
-include_directories(third_party/ctre/include)
+FetchContent_Declare(
+    ctre
+    GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
+    GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+)
 
 ################################
 # ABSEIL
 ################################
-set(BUILD_TESTING OFF CACHE BOOL "Don't build tests for abseil" FORCE)
-add_subdirectory(third_party/abseil-cpp  EXCLUDE_FROM_ALL)
-include_directories(SYSTEM third_party/abseil-cpp/)
+set(ABSL_ENABLE_INSTALL ON)
+set(ABSL_USE_SYSTEM_INCLUDES ON)
+set(ABSL_PROPAGATE_CXX_STD ON)
+FetchContent_Declare(
+        abseil
+        GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
+        GIT_TAG 258e5a15759cc3d122d4a4826bc499af91d40aa9 # 2023-12-21
+)
 
 if (USE_PARALLEL)
     include(FindOpenMP)
@@ -221,6 +261,15 @@ if (ENABLE_EXPENSIVE_CHECKS)
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
 endif()
 
+set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
+# Hint for cmake gui, but not actually enforced
+set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_DOG" "DISABLED")
+# So enforce this ourselves
+if(QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
+    message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
+endif()
+add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
+
 ################################
 # STXXL
 ################################
@@ -228,27 +277,33 @@ endif()
 set(USE_GNU_PARALLEL OFF CACHE BOOL "Don't use gnu parallel" FORCE)
 set(USE_OPENMP OFF CACHE BOOL "Don't use OPENMP as default" FORCE)
 
-add_subdirectory(third_party/stxxl EXCLUDE_FROM_ALL)
-
-# apply STXXL CXXFLAGS
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${STXXL_CXX_FLAGS}")
-include_directories(SYSTEM ${STXXL_INCLUDE_DIRS})
+set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
+FetchContent_Declare(
+        stxxl
+        GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
+        GIT_TAG 449a8fed095ffd5c10560714b446895e54c65486
+)
 
 ################################
 # RE2
 ################################
-# RE2 has a lot of unused-parameter warnings, we will deactivate
-# these for the subproject
-set(LOCAL_CXX_BACKUP_FLAGS "${CMAKE_CXX_FLAGS}")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unused-parameter")
-
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
-add_subdirectory(third_party/re2 EXCLUDE_FROM_ALL)
-target_compile_options(re2 PRIVATE -Wno-unused-but-set-variable)
-include_directories(SYSTEM third_party/re2)
+FetchContent_Declare(
+        re2
+        GIT_REPOSITORY https://github.com/google/re2.git
+        GIT_TAG bc0faab533e2b27b85b8ad312abf061e33ed6b5d # v.2023-11-01
+        GIT_SHALLOW TRUE
+        OVERRIDE_FIND_PACKAGE
+)
 
-# reinstate original flags including all warnings
-set(CMAKE_CXX_FLAGS "${LOCAL_CXX_BACKUP_FLAGS}")
+################################
+# Apply FetchContent
+################################
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
+# Disable some warnings in RE2 and STXXL
+target_compile_options(re2 PRIVATE -Wno-unused-parameter)
+target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
+include_directories(${ctre_SOURCE_DIR}/single-header)
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -281,13 +336,13 @@ else()
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
 endif()
 
-set(LOG_LEVEL_FATAL 0)
-set(LOG_LEVEL_ERROR 1)
-set(LOG_LEVEL_WARN 2)
-set(LOG_LEVEL_INFO 3)
-set(LOG_LEVEL_DEBUG 4)
-set(LOG_LEVEL_TIMING 5)
-set(LOG_LEVEL_TRACE 6)
+set(LOG_LEVEL_FATAL FATAL)
+set(LOG_LEVEL_ERROR ERROR)
+set(LOG_LEVEL_WARN WARN)
+set(LOG_LEVEL_INFO INFO)
+set(LOG_LEVEL_DEBUG DEBUG)
+set(LOG_LEVEL_TIMING TIMING)
+set(LOG_LEVEL_TRACE TRACE)
 
 
 if(CMAKE_BUILD_TYPE MATCHES DEBUG)
@@ -298,10 +353,18 @@ endif()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
+
+##################################################
+# Warnings about incorrect combination of CMake variables
+
+if(LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
+    message(WARNING "Log level is not printing logs with level WARN, which is necessary when QUERY_CANCELLATION_MODE=ENABLED for it to work properly")
+endif()
+
 ##################################################
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
-set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h third_party/ctre/include/ctre/ctre.h third_party/antlr4/runtime/Cpp/runtime/src/antlr4-runtime.h)
+set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
@@ -315,19 +378,12 @@ enable_testing()
 option(SINGLE_TEST_BINARY "Link all unit tests into a single binary. This is useful e.g. for code coverage tools" OFF)
 add_subdirectory(test)
 
-configure_file(src/web/index.html index.html)
-configure_file(src/web/style.css style.css)
-configure_file(src/web/script.js script.js)
-
 # Add the library with the constants declared in `CompilationInfo.h` and defined
 # in `CompilationInfo.cpp` created by `CompilationInfo.cmake`.
 add_library(compilationInfo ${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp)
 
 add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
-
-add_executable(CreatePatternsMain src/index/CreatePatternsMain.cpp src/util/ConstexprSmallString.h)
-qlever_target_link_libraries(CreatePatternsMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
@@ -344,3 +400,6 @@ qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT
 
 add_executable(PermutationExporterMain src/index/PermutationExporterMain.cpp)
 qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_INIT})
+
+add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
+qlever_target_link_libraries(PrintIndexVersionMain util)

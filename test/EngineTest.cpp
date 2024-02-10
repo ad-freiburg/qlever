@@ -74,11 +74,11 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
   }
 
   {
-    std::vector<Variable> varsLeft;
+    std::vector<std::optional<Variable>> varsLeft;
     for (size_t i = 0; i < inputA.numColumns(); ++i) {
       varsLeft.emplace_back(absl::StrCat("?left_", i));
     }
-    std::vector<Variable> varsRight;
+    std::vector<std::optional<Variable>> varsRight;
     for (size_t i = 0; i < inputB.numColumns(); ++i) {
       varsRight.emplace_back(absl::StrCat("?right_", i));
     }
@@ -93,7 +93,7 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
         qec, inputA.clone(), varsLeft);
     auto right = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, inputB.clone(), varsRight);
-    OptionalJoin opt{qec, left, right, jcls};
+    OptionalJoin opt{qec, left, right};
 
     auto result = opt.computeResultOnlyForTesting();
     ASSERT_EQ(result.idTable(), expectedResult);

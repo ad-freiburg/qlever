@@ -98,7 +98,7 @@ static constexpr detail::HoldsAlternativeImpl<T> holdsAlternative;
 /// Transparent functor for `std::get`. Currently only works for `std::variant`
 /// and not for `std::array` or `std::tuple`.
 template <typename T>
-static constexpr detail::HoldsAlternativeImpl<T> get;
+static constexpr detail::GetImpl<T> get;
 
 /// Transparent functor for `std::get_if`. As an extension to `std::get_if`,
 /// `ad_utility::getIf` may also be called with a `variant` object or reference,
@@ -107,6 +107,17 @@ template <typename T>
 static constexpr detail::GetIfImpl<T> getIf;
 
 static constexpr detail::ToBoolImpl toBool;
+
+/// A functor that takes an arbitrary number of arguments by reference and does
+/// nothing.
+struct Noop {
+  void operator()(const auto&...) const {
+    // This function deliberately does nothing (static analysis expects a
+    // comment here).
+  }
+};
+[[maybe_unused]] static constexpr Noop noop{};
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_TRANSPARENTFUNCTORS_H

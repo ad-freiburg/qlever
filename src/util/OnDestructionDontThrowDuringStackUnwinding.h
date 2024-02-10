@@ -19,7 +19,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
 
  private:
   F f_;
-  int numExceptionsDuringConstruction_ = std::uncaught_exceptions();
+  ThrowInDestructorIfSafe throwInDestructorIfSafe_;
   bool isCanceled_ = false;
 
  public:
@@ -37,19 +37,7 @@ class OnDestructionDontThrowDuringStackUnwinding {
     if (isCanceled_) {
       return;
     }
-    // If the number of uncaught exceptions is the same as when then constructor
-    // was called, then it is safe to throw a possible exception For details see
-    // https://en.cppreference.com/w/cpp/error/uncaught_exception, especially
-    // the links at the bottom of the page.
-    if (numExceptionsDuringConstruction_ == std::uncaught_exceptions()) {
-      std::invoke(std::move(f_));
-    } else {
-      // We must not throw, so we simply ignore possible exceptions.
-      ad_utility::ignoreExceptionIfThrows(
-          std::move(f_),
-          "Note: the exception would have been thrown during stack unwinding "
-          "in a way that would immediately terminate the program.");
-    }
+    throwInDestructorIfSafe_(std::move(f_));
   }
   friend class OnDestructionCreator;
 

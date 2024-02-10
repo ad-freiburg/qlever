@@ -6,15 +6,12 @@
 
 #pragma once
 
-#include <list>
-
+#include "engine/IndexScan.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
-
-using std::list;
 
 class Join : public Operation {
  private:
@@ -23,6 +20,8 @@ class Join : public Operation {
 
   ColumnIndex _leftJoinCol;
   ColumnIndex _rightJoinCol;
+
+  Variable _joinVar{"?notSet"};
 
   bool _keepJoinColumn;
 
@@ -119,12 +118,20 @@ class Join : public Operation {
                 ColumnIndex jc2, IdTable* dynRes);
 
   static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
-    return tree->getType() == QueryExecutionTree::SCAN &&
-           tree->getResultWidth() == 3;
+    if (tree->getType() != QueryExecutionTree::SCAN) {
+      return false;
+    }
+    // Note: it is not sufficient to check `getResultWidth == 3` as
+    // the index scan might also have 2 variables + one additional column
+    // for the pattern trick (or any other additional column that we might add
+    // in the future).
+    const auto& scan =
+        dynamic_cast<const IndexScan&>(*tree->getRootOperation());
+    return scan.numVariables() == 3;
   }
 
  protected:
-  virtual string asStringImpl(size_t indent = 0) const override;
+  virtual string getCacheKeyImpl() const override;
 
  private:
   ResultTable computeResult() override;
@@ -133,7 +140,22 @@ class Join : public Operation {
 
   ResultTable computeResultForJoinWithFullScanDummy();
 
-  using ScanMethodType = std::function<void(Id, IdTable*)>;
+  // A special implementation that is called when both children are
+  // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
+  // `IndexScan`s that is actually needed without fully materializing them.
+  IdTable computeResultForTwoIndexScans();
+
+  // A special implementation that is called when one of the children is an
+  // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`
+  // is the left or the right child of this `Join`. This needs to be known to
+  // determine the correct order of the columns in the result.
+  template <bool scanIsLeft>
+  IdTable computeResultForIndexScanAndIdTable(const IdTable& idTable,
+                                              ColumnIndex joinColTable,
+                                              IndexScan& scan,
+                                              ColumnIndex joinColScan);
+
+  using ScanMethodType = std::function<IdTable(Id)>;
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;

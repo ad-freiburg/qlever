@@ -1,9 +1,13 @@
 include(GoogleTest)
 
-# Link binary ${basename} against `gmock_main`, the threading library,
-# and all libraries that are specified as additional arguments.
+# Needed for creating the `testUil`-library.
+add_subdirectory(util)
+
+# Link binary ${basename} against `gmock_main`, the threading library, the
+# general test utilities and all libraries that are specified as additional
+# arguments.
 function (linkTest basename)
-    qlever_target_link_libraries(${basename} ${ARGN} gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
 # Add the exectutable ${basename} that is compiled from the source file
@@ -20,7 +24,7 @@ endfunction()
 # if a test binary requires multiple sources
 function(linkAndDiscoverTest basename)
     linkTest(${basename} ${ARGN})
-    gtest_discover_tests(${basename} ${basename})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
 endfunction()
 
 # Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
@@ -36,7 +40,7 @@ endfunction()
 if (SINGLE_TEST_BINARY)
     message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
     add_executable(QLeverAllUnitTestsMain)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain gmock_main ${CMAKE_THREAD_LIBS_INIT})
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
 else()
@@ -80,11 +84,15 @@ function(addAndLinkTest basename)
     linkTest(${basename} ${ARGN})
 endfunction()
 
+add_subdirectory(engine)
+add_subdirectory(parser)
+add_subdirectory(index)
+
 addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
 addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-addLinkAndDiscoverTest(StringUtilsTest)
+addLinkAndDiscoverTest(StringUtilsTest util)
 
 addLinkAndDiscoverTest(CacheTest)
 
@@ -105,8 +113,6 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTestSerial(LocatedTriplesTest index)
-
-addLinkAndDiscoverTest(FTSAlgorithmsTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
@@ -139,7 +145,7 @@ else()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif()
 
-addLinkAndDiscoverTest(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -213,17 +219,11 @@ addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
 
-# The VocabularyOnDisk uses mmap which fails when the tests are run in
-# parallel. This should be fixed by using distinct filenames for each test case.
-# TODO<qup42, joka921> fix this
 addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
 addLinkAndDiscoverTest(IteratorTest)
-
-# Here we also seem to have race conditions on the tests
-addLinkAndDiscoverTestSerial(PatternCreatorTest index)
 
 # Stxxl currently always uses a file ./-stxxl.disk for all indices, which
 # makes it impossible to run the test cases for the Index class in parallel.
@@ -238,7 +238,7 @@ addLinkAndDiscoverTest(CompressorStreamTest engine)
 
 addLinkAndDiscoverTest(AsyncStreamTest)
 
-addLinkAndDiscoverTest(TriplesViewTest util)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
 addLinkAndDiscoverTest(BitUtilsTest)
 
@@ -286,7 +286,7 @@ addLinkAndDiscoverTest(TimerTest)
 
 addLinkAndDiscoverTest(AlgorithmTest)
 
-addLinkAndDiscoverTest(CompressedRelationsTest index)
+addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
 addLinkAndDiscoverTest(ExceptionTest)
 
@@ -306,13 +306,13 @@ addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
 addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-addLinkAndDiscoverTest(SparqlExpressionTypesTest util)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
 addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
 addLinkAndDiscoverTest(OperationTest engine)
 
-addLinkAndDiscoverTest(RuntimeInformationTest engine)
+addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
 addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
@@ -320,14 +320,70 @@ addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
 addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-addLinkAndDiscoverTest(BenchmarkConfigurationTest benchmark)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
-addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark)
+addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-addLinkAndDiscoverTest(FindUndefRangesTest)
+addLinkAndDiscoverTest(ValidatorTest configManager)
 
-addLinkAndDiscoverTest(AddCombinedRowToTableTest util)
+addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
+
+addLinkAndDiscoverTest(ConfigUtilTest configManager)
+
+addLinkAndDiscoverTest(RandomTest)
+
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
+
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
+
+addLinkAndDiscoverTest(FindUndefRangesTest engine)
+
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine util)
 
 addLinkAndDiscoverTest(CtreHelpersTest)
 
 addLinkAndDiscoverTest(ComparisonWithNanTest)
+
+addLinkAndDiscoverTest(ThreadSafeQueueTest)
+
+addLinkAndDiscoverTest(IdTableHelpersTest)
+
+addLinkAndDiscoverTest(GeneratorTest)
+
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
+
+addLinkAndDiscoverTest(JsonUtilTest)
+
+addLinkAndDiscoverTest(JoinAlgorithmsTest)
+
+addLinkAndDiscoverTest(AsioHelpersTest)
+
+addLinkAndDiscoverTest(UniqueCleanupTest)
+
+addLinkAndDiscoverTest(WebSocketSessionTest http)
+
+addLinkAndDiscoverTest(QueryIdTest)
+
+addLinkAndDiscoverTest(QueryHubTest http)
+
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
+
+addLinkAndDiscoverTest(UpdateFetcherTest http)
+
+addLinkAndDiscoverTest(MessageSenderTest http)
+
+addLinkAndDiscoverTest(CancellationHandleTest util)
+
+addLinkAndDiscoverTest(CachingMemoryResourceTest)
+
+addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
+
+addLinkAndDiscoverTest(ParseableDurationTest)
+
+addLinkAndDiscoverTest(ConstantsTest)
+
+addLinkAndDiscoverTest(JThreadTest)
+
+addLinkAndDiscoverTest(PointerGuardTest)
+
+addLinkAndDiscoverTest(ChunkedForLoopTest)

@@ -23,8 +23,6 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/Sort.h"
-#include "engine/TextOperationWithFilter.h"
-#include "engine/TextOperationWithoutFilter.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -204,22 +202,19 @@ TEST(LocalVocab, propagation) {
   Join join2(testQec, qet(values1), qet(values1), 0, 0);
   checkThrow(join2);
 
-  // OPTIONAL JOIN operation with exactly one non-empty local vocab. The last
-  // arguments are the two join columns.
-  OptionalJoin optJoin1(testQec, qet(values1), qet(values2), {{0, 0}});
+  // OPTIONAL JOIN operation with exactly one non-empty local vocab.
+  OptionalJoin optJoin1(testQec, qet(values1), qet(values2));
   checkLocalVocab(optJoin1, std::vector<std::string>{"x", "y1", "y2"});
 
   // OPTIONAL JOIN operation with two non-empty local vocab.
-  OptionalJoin optJoin2(testQec, qet(values1), qet(values1), {{0, 0}});
+  OptionalJoin optJoin2(testQec, qet(values1), qet(values1));
   checkThrow(optJoin2);
 
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab and with
-  // two non-empty local vocabs (the fourth argument are the join-column pairs).
-  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2),
-                             {{0, 0}, {1, 1}});
+  // two non-empty local vocabs.
+  MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2));
   checkLocalVocab(multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
-  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1),
-                             {{0, 0}, {1, 1}});
+  MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1));
   checkThrow(multiJoin2);
 
   // ORDER BY operation (the third argument are the indices of the columns to be
@@ -269,11 +264,10 @@ TEST(LocalVocab, propagation) {
   checkThrow(union2);
 
   // MINUS operation with exactly one non-empty local vocab and with
-  // two non-empty local vocabs (the fourth argument are the indices of the
-  // matching columns).
-  Minus minus1(testQec, qet(values1), qet(values2), {});
+  // two non-empty local vocabs.
+  Minus minus1(testQec, qet(values1), qet(values2));
   checkLocalVocab(minus1, std::vector<std::string>{"x", "y1", "y2"});
-  Minus minus2(testQec, qet(values1), qet(values1), {});
+  Minus minus2(testQec, qet(values1), qet(values1));
   checkThrow(minus2);
 
   // FILTER operation (the third argument is an expression; which one doesn't
@@ -297,12 +291,13 @@ TEST(LocalVocab, propagation) {
   // NOTE: As part of an actual query, the child of a transitive path
   // operation is always an index scan, which has a non-empty
   // local-vocabulary. Still, it doesn't harm to test this.
-  TransitivePath transitivePath(testQec, qet(values1), true, true, 0, 1, {}, {},
-                                Variable{"?x"}, Variable{"?y"}, 1, 1);
+  TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
+  TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
+  TransitivePath transitivePath(testQec, qet(values1), left, right, 1, 1);
   checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
 
   // PATTERN TRICK operations.
-  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, "?z");
+  HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
   checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});
@@ -311,14 +306,6 @@ TEST(LocalVocab, propagation) {
 
   // TEXT operations.
   //
-  // NOTE: `TextOperationWithoutFilter` takes no arguments, so the local
-  // vocabulary of the operation remains empty (but it doesn't harm to check
-  // that that is indeed the case).
-  TextOperationWithFilter text1(
-      testQec, "someWord", {Variable{"?x"}, Variable{"?y"}, Variable{"?text"}},
-      Variable{"?text"}, qet(values1), 0);
-  checkLocalVocab(text1, std::vector<std::string>{"x", "y1", "y2"});
-  TextOperationWithoutFilter text2(testQec, {"someWord"}, {Variable{"?text"}},
-                                   Variable{"?text"});
-  checkLocalVocab(text2, {});
+  // TODO<joka921> Maybe add tests for the new TextIndexScanFor... classes,
+  // they never introduce any local vocab.
 }
