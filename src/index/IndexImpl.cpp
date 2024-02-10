@@ -740,10 +740,12 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
 }
 
 // ________________________________________________________________________
-void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
+template <typename SortedTriplesType, typename... CallbackTypes>
+void IndexImpl::createPermutationPair(size_t numColumns,
+                                      SortedTriplesType&& sortedTriples,
                                       const Permutation& p1,
                                       const Permutation& p2,
-                                      auto&&... perTripleCallbacks) {
+                                      CallbackTypes&&... perTripleCallbacks) {
   auto [metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
@@ -761,6 +763,15 @@ void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
 }
+
+// Explicit instantiation needed for `test/LocatedTripleTest.cpp`.
+//
+// TODO: Do we really need to make `SortedTriplesType` a template parameter (or
+// `auto&&` as it was before)? To me it looks like this function (and others of
+// its kind) are always called with `sortedTriples` of type `BlocksOfTriples`.
+template void IndexImpl::createPermutationPair<IndexImpl::BlocksOfTriples>(
+    size_t, IndexImpl::BlocksOfTriples&&, const Permutation&,
+    const Permutation&);
 
 // _____________________________________________________________________________
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {

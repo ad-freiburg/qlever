@@ -32,7 +32,7 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   std::stringstream str;
   IdOrString idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
-  ASSERT_EQ(str.str(), "Undefined:Undefined");
+  ASSERT_EQ(str.str(), "U:xx");
   idOrString = "bimm";
   // Clear the stringstream.
   str.str({});

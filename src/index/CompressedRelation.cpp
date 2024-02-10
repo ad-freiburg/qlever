@@ -1073,7 +1073,9 @@ CompressedRelationWriter::createPermutationPair(
   }
   inputWaitTimer.cont();
   for (auto& block : AD_FWD(sortedTriples)) {
-    AD_CORRECTNESS_CHECK(block.numColumns() == numColumns + 1);
+    AD_CORRECTNESS_CHECK(block.numColumns() == numColumns + 1,
+                         "block.numColumns() = ", block.numColumns(),
+                         ", numColumns = ", numColumns);
     inputWaitTimer.stop();
     // This only happens when the index is completely empty.
     if (block.empty()) {
