@@ -37,7 +37,7 @@ class ExportQueryExecutionTrees {
   // queries. Invalid `mediaType`s and invalid combinations of `mediaType` and
   // the query type will throw. The result is returned as a `stream_generator`
   // that lazily computes the serialized result in large chunks of bytes.
-  static ad_utility::streams::stream_generator computeResultAsStream(
+  static cppcoro::generator<std::string> computeResultAsStream(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, CancellationHandle cancellationHandle);
 

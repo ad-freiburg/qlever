@@ -697,7 +697,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
 }
 
 // _____________________________________________________________________________
-ad_utility::streams::stream_generator
+cppcoro::generator<std::string>
 ExportQueryExecutionTrees::computeResultAsStream(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, CancellationHandle cancellationHandle) {
@@ -719,7 +719,7 @@ ExportQueryExecutionTrees::computeResultAsStream(
           compute, mediaType);
   try {
     for (auto& block : inner) {
-      co_yield block;
+      co_yield std::move(block);
     }
   } catch (ad_utility::CancellationException& e) {
     e.setOperation("Stream query export");
