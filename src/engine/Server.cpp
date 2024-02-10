@@ -539,6 +539,47 @@ auto Server::setupCancellationHandle(
       std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
+// _____________________________________________________________________________
+Awaitable<void> Server::sendStreamableResponse(
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
+    ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet,
+    SharedCancellationHandle cancellationHandle) const {
+  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      plannedQuery.parsedQuery_, qet, mediaType, cancellationHandle);
+
+  auto response = ad_utility::httpUtils::createOkResponse(
+      std::move(responseGenerator), request, mediaType);
+  try {
+    co_await send(std::move(response));
+  } catch (const boost::system::system_error& e) {
+    // "Broken Pipe" errors are thrown and reported by `streamable_body`,
+    // so we can safely ignore these kind of exceptions. In practice this
+    // should only ever "commonly" happen with `CancellationException`s.
+    if (e.code().value() == EPIPE) {
+      co_return;
+    }
+    LOG(ERROR) << "Unexpected error while sending response: " << e.what()
+               << std::endl;
+  } catch (const std::exception& e) {
+    // Even if an exception is thrown here for some unknown reason, don't
+    // propagate it, and log it directly, so the code doesn't try to send
+    // an HTTP response containing the error message onto a HTTP stream
+    // that is already partially written. The only way to pass metadata
+    // after the beginning is by using the trailer mechanism as decribed
+    // here:
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
+    // This won't be treated as an error by any regular HTTP client, so
+    // while it might be worth implementing to have some sort of validation
+    // check, it isn't even shown by curl by default let alone in the
+    // browser. Currently though it looks like boost.beast does simply not
+    // properly terminate the connection if an error occurs which does
+    // provide a somewhat cryptic error message when using curl, but is
+    // better than silently failing.
+    LOG(ERROR) << e.what() << std::endl;
+  }
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -653,45 +694,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-    // Common code for sending responses for the streamable media types
-    // (tsv, csv, octet-stream, turtle).
-    auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
-          plannedQuery.value().parsedQuery_, qet, mediaType,
-          cancellationHandle);
-
-      auto response =
-          createOkResponse(std::move(responseGenerator), request, mediaType);
-      try {
-        co_await send(std::move(response));
-      } catch (const boost::system::system_error& e) {
-        // "Broken Pipe" errors are thrown and reported by `streamable_body`,
-        // so we can safely ignore these kind of exceptions. In practice this
-        // should only ever "commonly" happen with `CancellationException`s.
-        if (e.code().value() == EPIPE) {
-          co_return;
-        }
-        LOG(ERROR) << "Unexpected error while sending response: " << e.what()
-                   << std::endl;
-      } catch (const std::exception& e) {
-        // Even if an exception is thrown here for some unknown reason, don't
-        // propagate it, and log it directly, so the code doesn't try to send
-        // an HTTP response containing the error message onto a HTTP stream
-        // that is already partially written. The only way to pass metadata
-        // after the beginning is by using the trailer mechanism as decribed
-        // here:
-        // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
-        // This won't be treated as an error by any regular HTTP client, so
-        // while it might be worth implementing to have some sort of validation
-        // check, it isn't even shown by curl by default let alone in the
-        // browser. Currently though it looks like boost.beast does simply not
-        // properly terminate the connection if an error occurs which does
-        // provide a somewhat cryptic error message when using curl, but is
-        // better than silently failing.
-        LOG(ERROR) << e.what() << std::endl;
-      }
-    };
-
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
@@ -700,9 +702,11 @@ boost::asio::awaitable<void> Server::processQuery(
       case tsv:
       case octetStream:
       case sparqlXml:
-      case turtle: {
-        co_await sendStreamableResponse(mediaType.value());
-      } break;
+      case turtle:
+        co_await sendStreamableResponse(request, send, mediaType.value(),
+                                        plannedQuery.value(), qet,
+                                        cancellationHandle);
+        break;
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response

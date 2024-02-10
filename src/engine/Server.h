@@ -222,4 +222,12 @@ class Server {
   verifyUserSubmittedQueryTimeout(
       std::optional<std::string_view> userTimeout, bool accessTokenOk,
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
+
+  /// Send response for the streamable media types (tsv, csv, octet-stream,
+  /// turtle).
+  Awaitable<void> sendStreamableResponse(
+      const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
+      ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+      const QueryExecutionTree& qet,
+      SharedCancellationHandle cancellationHandle) const;
 };
