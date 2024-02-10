@@ -60,7 +60,8 @@ class Permutation {
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
-  IdTable getDistinctCol1IdsAndCounts(Id col0Id) const;
+  IdTable getDistinctCol1IdsAndCounts(
+      Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;

@@ -516,7 +516,8 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 // ____________________________________________________________________________
 IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     const CompressedRelationMetadata& relationMetadata,
-    const std::vector<CompressedBlockMetadata>& allBlocksMetadata) const {
+    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
   IdTableStatic<2> table(allocator_);
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
       getBlocksFromMetadata(relationMetadata, std::nullopt, allBlocksMetadata);
@@ -556,6 +557,7 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
                                                blockMetadata, std::nullopt,
                                                columnIndices)
                  : readAndDecompressBlock(blockMetadata, columnIndices);
+      cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
         Id col1Id = block(j, 0);
