@@ -918,7 +918,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   EXPECT_THAT(groupBy.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
   auto expected = makeIdTableFromVector(
-      {{i(1), i(3), i(42), d(54)}, {i(3), i(1), i(13), d(18)}});
+      {{i(1), i(3), i(42), i(54)}, {i(3), i(1), i(13), i(18)}});
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
