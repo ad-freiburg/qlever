@@ -158,11 +158,6 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  //! clear all the contents, but not the settings for prefixes etc
-  void clear() {
-    internalVocabulary_.close();
-    externalVocabulary_.close();
-  }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
@@ -237,13 +232,6 @@ class Vocabulary {
 
   bool shouldLiteralBeExternalized(const string& word) const;
 
-  // only still needed for text vocabulary
-  void externalizeLiteralsFromTextFile(const string& textFileName,
-                                       const string& outFileName) {
-    externalVocabulary_.getUnderlyingVocabulary().buildFromTextFile(
-        textFileName, outFileName);
-  }
-
   static string getLanguage(const string& literal);
 
   // initialize compression with a list of prefixes
@@ -305,7 +293,15 @@ class Vocabulary {
     return internalVocabulary_;
   }
 
-  auto makeUncompressingWordWriter(const std::string& filename) {
+  // Get a writer for the external vocab that has a `push` method to which the
+  // single words have to be pushed one by one to add words to the vocabulary.
+  VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
+      const std::string& filename) const {
+    return VocabularyOnDisk::WordWriter(filename);
+  }
+
+  VocabularyInMemory::WordWriter makeUncompressingWordWriter(
+      const std::string& filename) const {
     return VocabularyInMemory::WordWriter{filename};
   }
 

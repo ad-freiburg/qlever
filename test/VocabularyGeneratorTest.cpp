@@ -10,9 +10,10 @@
 #include "global/Constants.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/Index.h"
-#include "index/VocabularyGenerator.h"
+#include "index/VocabularyMerger.h"
 #include "util/Algorithm.h"
 
+using namespace ad_utility::vocabulary_merger;
 namespace {
 // equality operator used in this test
 bool vocabTestCompare(const IdPairMMapVecView& a,
@@ -31,13 +32,6 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 }
 
 auto V = ad_utility::testing::VocabId;
-
-auto makeItemMapArray = [] {
-  auto alloc = ItemAlloc{std::pmr::get_default_resource()};
-  auto make = [&](auto&&...) { return ItemMapAndBuffer{alloc}; };
-  return ad_utility::transformArray(std::array<int, NUM_PARALLEL_ITEM_MAPS>{},
-                                    make);
-};
 }  // namespace
 
 // Test fixture that sets up the binary files vor partial vocabulary and
@@ -165,15 +159,21 @@ class MergeVocabularyTest : public ::testing::Test {
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
-  VocabularyMerger::VocabularyMetaData res;
+  VocabularyMetaData res;
   {
-    VocabularyMerger m;
     auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
     auto internalVocabularyAction = [&file](const auto& word) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
-    res = m.mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                            internalVocabularyAction, 1_GB);
+    auto fileExternal =
+        ad_utility::makeOfstream(_basePath + EXTERNAL_VOCAB_SUFFIX);
+    auto externalVocabularyAction = [&fileExternal](const auto& word) {
+      fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
+    };
+
+    res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
+                          internalVocabularyAction, externalVocabularyAction,
+                          1_GB);
   }
 
   // No language tags in text file
@@ -186,109 +186,12 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_TRUE(
       areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
   ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
-                                  _basePath + EXTERNAL_LITS_TEXT_FILE_NAME));
+                                  _basePath + EXTERNAL_VOCAB_SUFFIX));
 
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
   IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));
   ASSERT_TRUE(vocabTestCompare(mapping1, _expMapping1));
-}
-
-TEST(VocabularyGenerator, ReadAndWritePartial) {
-  using S = TripleComponentComparator::SplitValNonOwningWithSortKey;
-  {
-    S dummy;
-
-    ItemMapArray arr = makeItemMapArray();
-    auto& s = arr[0].map_;
-    s["A"] = {5, dummy};
-    s["acb"] = {6, dummy};
-    s["b"] = {7, dummy};
-    s["Ba"] = {8, dummy};
-    s["car"] = {9, dummy};
-    TextVocabulary v;
-    std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
-    writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        [&v](const auto& a, const auto& b) {
-          return v.getCaseComparator()(a.first, b.first);
-        },
-        false);
-
-    {
-      VocabularyMerger m;
-      auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word) {
-        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-      };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction, 1_GB);
-    }
-    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(V(0), idMap[V(5)]);
-    EXPECT_EQ(V(1), idMap[V(6)]);
-    EXPECT_EQ(V(2), idMap[V(7)]);
-    EXPECT_EQ(V(3), idMap[V(8)]);
-    EXPECT_EQ(V(4), idMap[V(9)]);
-    auto res = system("rm _tmp_testidx*");
-    (void)res;
-  }
-
-  // Again with the case-insensitive variant.
-  try {
-    RdfsVocabulary v;
-    v.setLocale("en", "US", false);
-    ItemMapArray arr = makeItemMapArray();
-    auto& s = arr[0].map_;
-    // The actual strings are never deallocated, but the
-    // `monotonic_buffer_resource` deallocates them all at once. Note that
-    // simply passing `std::pmr::get_default_resource` to the `alloc` below
-    // would lead to memory leaks.
-    std::pmr::monotonic_buffer_resource buffer;
-    auto alloc = std::pmr::polymorphic_allocator<char>{&buffer};
-    auto assign = [&](std::string_view str, size_t id) {
-      s[str] = {
-          id,
-          v.getCaseComparator().extractAndTransformComparableNonOwning(
-              str, TripleComponentComparator::Level::IDENTICAL, false, &alloc)};
-    };
-    assign("\"A\"", 5);
-    assign("\"a\"", 6);
-    assign("\"Ba\"", 7);
-    assign("\"car\"", 8);
-    assign("\"Ä\"", 9);
-    std::string basename = "_tmp_testidx";
-    auto ptr = std::make_shared<const ItemMapArray>(std::move(arr));
-    writePartialIdMapToBinaryFileForMerging(
-        ptr, basename + PARTIAL_VOCAB_FILE_NAME + "0",
-        [&c = v.getCaseComparator()](const auto& a, const auto& b) {
-          return c(a.second.splitVal_, b.second.splitVal_,
-                   TripleComponentComparator::Level::IDENTICAL);
-        },
-        false);
-
-    {
-      VocabularyMerger m;
-      auto file = ad_utility::makeOfstream(basename + INTERNAL_VOCAB_SUFFIX);
-      auto internalVocabularyAction = [&file](const auto& word) {
-        file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-      };
-      m.mergeVocabulary(basename, 1, v.getCaseComparator(),
-                        internalVocabularyAction, 1_GB);
-    }
-    auto idMap = IdMapFromPartialIdMapFile(basename + PARTIAL_MMAP_IDS + "0");
-    EXPECT_EQ(V(0), idMap[V(6)]);
-    EXPECT_EQ(V(1), idMap[V(5)]);
-    EXPECT_EQ(V(2), idMap[V(9)]);
-    EXPECT_EQ(V(3), idMap[V(7)]);
-    EXPECT_EQ(V(4), idMap[V(8)]);
-    auto res = system("rm _tmp_testidx*");
-    (void)res;
-
-  } catch (const std::bad_cast& b) {
-    std::cerr << "What the fuck\n";
-  }
 }
 
 TEST(VocabularyGeneratorTest, createInternalMapping) {
