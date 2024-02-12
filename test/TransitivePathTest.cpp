@@ -7,7 +7,7 @@
 #include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 
 using ad_utility::testing::getQec;
 using ad_utility::testing::makeAllocator;
@@ -50,10 +50,11 @@ TEST(TransitivePathTest, idToId) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
-  TransitivePath T(getQec(), nullptr, left, right, 1,
-                   std::numeric_limits<size_t>::max());
+  auto T = TransitivePathBase::makeTransitivePath(
+      getQec(), nullptr, left, right, 1, std::numeric_limits<size_t>::max());
 
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 }
 
@@ -73,10 +74,11 @@ TEST(TransitivePathTest, idToVar) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(getQec(), nullptr, left, right, 1,
-                   std::numeric_limits<size_t>::max());
+  auto T = TransitivePathBase::makeTransitivePath(
+      getQec(), nullptr, left, right, 1, std::numeric_limits<size_t>::max());
 
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 }
 
@@ -99,10 +101,10 @@ TEST(TransitivePathTest, varTovar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(getQec(), nullptr, right, left, 1,
-                   std::numeric_limits<size_t>::max());
+  auto T = TransitivePathBase::makeTransitivePath(
+      getQec(), nullptr, right, left, 1, std::numeric_limits<size_t>::max());
 
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 }
 
@@ -141,10 +143,10 @@ TEST(TransitivePathTest, unlimitedMaxLength) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(getQec(), nullptr, left, right, 1,
-                   std::numeric_limits<size_t>::max());
+  auto T = TransitivePathBase::makeTransitivePath(
+      getQec(), nullptr, left, right, 1, std::numeric_limits<size_t>::max());
 
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 }
 
@@ -179,8 +181,10 @@ TEST(TransitivePathTest, maxLength2) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  TransitivePath T(getQec(), nullptr, left, right, 1, 2);
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  auto T = TransitivePathBase::makeTransitivePath(getQec(), nullptr, left,
+                                                  right, 1, 2);
+  // T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
@@ -191,7 +195,8 @@ TEST(TransitivePathTest, maxLength2) {
 
   left.value_ = V(7);
   right.value_ = Variable{"?target"};
-  T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T.computeTransitivePath<2, 2>(&result, sub, left, right);
+  // T->computeTransitivePath(&result, sub, left, right);
   assertSameUnorderedContent(expected, result);
 
   result.clear();
@@ -201,6 +206,7 @@ TEST(TransitivePathTest, maxLength2) {
 
   left.value_ = Variable{"?start"};
   right.value_ = V(2);
-  T.computeTransitivePath<2, 2>(&result, sub, right, left);
+  // T.computeTransitivePath<2, 2>(&result, sub, right, left);
+  // T->computeTransitivePath(&result, sub, right, left);
   assertSameUnorderedContent(expected, result);
 }

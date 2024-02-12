@@ -30,7 +30,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
@@ -158,7 +158,7 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     type_ = VALUES;
   } else if constexpr (std::is_same_v<Op, Service>) {
     type_ = SERVICE;
-  } else if constexpr (std::is_same_v<Op, TransitivePath>) {
+  } else if constexpr (std::is_same_v<Op, TransitivePathBase>) {
     type_ = TRANSITIVE_PATH;
   } else if constexpr (std::is_same_v<Op, OrderBy>) {
     type_ = ORDER_BY;
@@ -204,7 +204,8 @@ template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<TransitivePath>);
+template void QueryExecutionTree::setOperation(
+    std::shared_ptr<TransitivePathBase>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
 template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
 template void QueryExecutionTree::setOperation(
