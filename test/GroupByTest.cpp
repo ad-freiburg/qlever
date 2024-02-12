@@ -333,12 +333,21 @@ struct GroupByOptimizations : ::testing::Test {
   Variable varA{"?a"};
 
   std::string turtleInput =
-      "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
-      "<a> <is-a> <f> . <a> <is> 20 . <b> <is-a> <f> . <b> <is> 40.0 . <c> "
-      "<is-a> <g> . <c> <is> 100 . <x> <is-a> <f> . <x> <is> \"A\" . "
-      "<x> "
-      "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-      "\"zz\"@en";
+      "<x> <label> \"alpha\" . "
+      "<x> <label> \"älpha\" . "
+      "<x> <label> \"A\" . "
+      "<a> <is-a> <f> . "
+      "<a> <is> 20 . "
+      "<b> <is-a> <f> . "
+      "<b> <is> 40.0 . "
+      "<c> <is-a> <g> . "
+      "<c> <is> 100 . "
+      "<x> <is-a> <f> . "
+      "<x> <is> \"A\" . "
+      "<x> <label> \"Beta\" . "
+      "<x> <is-a> <y> . "
+      "<y> <is-a> <x> . "
+      "<z> <label> \"zz\"@en .";
 
   QueryExecutionContext* qec = getQec(turtleInput);
   SparqlTriple xyzTriple{Variable{"?x"}, "?y", Variable{"?z"}};
@@ -352,9 +361,15 @@ struct GroupByOptimizations : ::testing::Test {
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
-  Tree xScanEmptyResult = makeExecutionTree<IndexScan>(
+  Tree yxScan = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::POS,
+      SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
+  Tree xScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{"<x>"}, {"<notInKg>"}, Variable{"?x"}});
+      SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
+  Tree xyScanIriNotInVocab = makeExecutionTree<IndexScan>(
+      qec, Permutation::Enum::PSO,
+      SparqlTriple{Variable{"?x"}, {"<notInVocab>"}, Variable{"?y"}});
 
   Tree invalidJoin = makeExecutionTree<Join>(qec, xScan, xScan, 0, 0);
   Tree validJoinWhenGroupingByX =
@@ -433,11 +448,13 @@ struct GroupByOptimizations : ::testing::Test {
   SparqlExpression::Ptr varXExpression2 =
       std::make_unique<VariableExpression>(varX);
   SparqlExpressionPimpl countXPimpl = makeCountPimpl(varX, false);
+  SparqlExpressionPimpl countYPimpl = makeCountPimpl(varY, false);
   SparqlExpressionPimpl countDistinctXPimpl = makeCountPimpl(varX, true);
   std::vector<Alias> aliasesXAsV{Alias{varxExpressionPimpl, Variable{"?v"}}};
   std::vector<Alias> aliasesCountDistinctX{
       Alias{countDistinctXPimpl, Variable{"?count"}}};
   std::vector<Alias> aliasesCountX{Alias{countXPimpl, Variable{"?count"}}};
+  std::vector<Alias> aliasesCountY{Alias{countYPimpl, Variable{"?count"}}};
 
   std::vector<Alias> aliasesCountXTwice{
       Alias{makeCountPimpl(varX, false), Variable{"?count"}},
@@ -1175,8 +1192,8 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
 
   // Test the case that the input is empty.
   {
-    auto join =
-        makeExecutionTree<Join>(qec, xScanEmptyResult, xyzScanSortedByX, 0, 0);
+    auto join = makeExecutionTree<Join>(qec, xScanIriNotInVocab,
+                                        xyzScanSortedByX, 0, 0);
     IdTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
@@ -1203,7 +1220,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   testFailure(variablesOnlyX, aliasesCountX, xyzScanSortedByX);
 
   // Must (currently) have exactly one alias that is a count.
-  // A distinct count is only supporte if the triple has three variables.
+  // A distinct count is only supported if the triple has three variables.
   testFailure(emptyVariables, emptyAliases, xyzScanSortedByX);
   testFailure(emptyVariables, aliasesCountDistinctX, xyScan);
   testFailure(emptyVariables, aliasesXAsV, xyzScanSortedByX);
@@ -1249,6 +1266,74 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
     ASSERT_EQ(result(0, 0), Id::makeFromInt(6));
+  }
+}
+// _____________________________________________________________________________
+TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
+  // Construct a GROUP BY operation from the given GROUP BY variables, aliases,
+  // and index scan. Return `true` if and only if the optimization from
+  // `computeGroupByForSingleIndexScan` is suited or this operation.
+  //
+  // TODO: This appears similarly in each TEST_F(GroupByOptimizations, ...)
+  // separately. Define it once and use it in all tests. Also note the
+  // `callSpecializedMethod`, which serves the same purpose as the
+  // `testWithBothInterfaces` in the other tests, but with much less code.
+  auto isSuited = [this](const auto& groupByVariables, const auto& aliases,
+                         const auto& indexScan,
+                         bool callSpecializedMethod = true) {
+    auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
+    IdTable result{qec->getAllocator()};
+    return callSpecializedMethod
+               ? groupBy.computeGroupByObjectWithCount(&result)
+               : groupBy.computeOptimizedGroupByIfPossible(&result);
+  };
+
+  // The index scan must have exactly two variables, the IRI must be in the
+  // vocabulary, there must be exactly one GROUP BY variable, and there must be
+  // exactly one alias that is a non-DISTINCT count.
+  ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, true));
+  ASSERT_TRUE(isSuited(variablesOnlyX, aliasesCountX, xyScan, false));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xyzScanSortedByX));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountX, xyScanIriNotInVocab));
+  ASSERT_FALSE(isSuited(emptyVariables, aliasesCountX, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, emptyAliases, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesXAsV, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountDistinctX, xyScan));
+  ASSERT_FALSE(isSuited(variablesOnlyX, aliasesCountXTwice, xyScan));
+
+  // The following two checks use a scan of the `<label>` predicate from the
+  // test index; see `turtleInput` above. There are five triples, four with
+  // subject `<x>` and one with subject `<z>`. The objects are all different.
+  //
+  // NOTE: The method we are testing here always produces its result sorted by
+  // the first column (although the SPARQL standard does not require this).
+
+  // TODO: When constructing the `GroupBy` operations below with a scan that
+  // does not macht the group by variables (e.g., `variablesOnlyY` with
+  // `xyScan`), the child of the `GroupBy` operation is not even an `IndexScan`.
+  // Why is that?.
+
+  // Group by subject.
+  auto getId = makeGetId(qec->getIndex());
+  {
+    IdTable result{qec->getAllocator()};
+    auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
+    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
+    ASSERT_EQ(result, makeIdTableFromVector(
+                          {{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
+  }
+
+  // Group by object.
+  {
+    IdTable result{qec->getAllocator()};
+    auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
+    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
+    ASSERT_EQ(result, makeIdTableFromVector({{getId("\"A\""), I(1)},
+                                             {getId("\"alpha\""), I(1)},
+                                             {getId("\"älpha\""), I(1)},
+                                             {getId("\"Beta\""), I(1)},
+                                             {getId("\"zz\"@en"), I(1)}}));
   }
 }
 
