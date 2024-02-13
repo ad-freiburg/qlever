@@ -316,24 +316,23 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   visibleVariables_.clear();
   // TODO<joka921> We also have to change this for Service clauses and possibly
   // other places.
-  auto parsedQuerySoFar = std::move(parsedQuery_);
-  parsedQuery_ = ParsedQuery{};
   auto mergeVariables =
       ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-          [this, &visibleVariablesSoFar, &parsedQuerySoFar]() {
+          [this, &visibleVariablesSoFar]() {
             std::swap(visibleVariables_, visibleVariablesSoFar);
             visibleVariables_.insert(visibleVariables_.end(),
                                      visibleVariablesSoFar.begin(),
                                      visibleVariablesSoFar.end());
-            parsedQuery_ = std::move(parsedQuerySoFar);
           });
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
+    auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
     auto [subquery, valuesOpt] = visit(ctx->subSelect());
     pattern._graphPatterns.emplace_back(std::move(subquery));
     if (valuesOpt.has_value()) {
       pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
     }
+    parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   } else {
     AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
@@ -1091,12 +1090,11 @@ vector<TripleWithPropertyPath> Visitor::visit(
     return triples;
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
-    auto result = visit(ctx->triplesNodePath());
+    auto [subject, result] = visit(ctx->triplesNodePath());
     auto additionalTriples = visit(ctx->propertyListPath());
     if (additionalTriples.has_value()) {
       auto& [tuples, triples] = additionalTriples.value();
       std::ranges::copy(triples, std::back_inserter(result));
-      auto subject = result.at(0).subject_;
       for (auto& [predicate, object] : tuples) {
         result.emplace_back(subject, std::move(predicate), std::move(object));
       }
@@ -1298,21 +1296,19 @@ Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<TripleWithPropertyPath> Visitor::visit(
-    Parser::TriplesNodePathContext* ctx) {
-  return visitAlternative<std::vector<TripleWithPropertyPath>>(
-      ctx->blankNodePropertyListPath(), ctx->collectionPath());
+NodePath Visitor::visit(Parser::TriplesNodePathContext* ctx) {
+  return visitAlternative<NodePath>(ctx->blankNodePropertyListPath(),
+                                    ctx->collectionPath());
 }
 
 // ____________________________________________________________________________________
-std::vector<TripleWithPropertyPath> Visitor::visit(
-    Parser::BlankNodePropertyListPathContext* ctx) {
+NodePath Visitor::visit(Parser::BlankNodePropertyListPathContext* ctx) {
   auto subject = parsedQuery_.getNewInternalVariable();
   auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
   for (auto& [predicate, object] : predicateObjects) {
     triples.emplace_back(subject, std::move(predicate), std::move(object));
   }
-  return triples;
+  return {std::move(subject), triples};
 }
 
 // ____________________________________________________________________________________
@@ -1343,8 +1339,7 @@ Node Visitor::visit(Parser::CollectionContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-std::vector<TripleWithPropertyPath> Visitor::visit(
-    Parser::CollectionPathContext* ctx) {
+NodePath Visitor::visit(Parser::CollectionPathContext* ctx) {
   throwCollectionsNotSupported(ctx);
 }
 
@@ -1364,9 +1359,7 @@ NodePath Visitor::visit(Parser::GraphNodePathContext* ctx) {
     return {visit(ctx->varOrTerm()), {}};
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
-    auto triples = visit(ctx->triplesNodePath());
-    auto subject = triples.at(0).subject_;
-    return {subject, std::move(triples)};
+    return visit(ctx->triplesNodePath());
   }
 }
 

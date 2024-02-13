@@ -316,16 +316,13 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] Node visit(Parser::BlankNodePropertyListContext* ctx);
 
-  std::vector<TripleWithPropertyPath> visit(
-      Parser::TriplesNodePathContext* ctx);
+  NodePath visit(Parser::TriplesNodePathContext* ctx);
 
-  std::vector<TripleWithPropertyPath> visit(
-      Parser::BlankNodePropertyListPathContext* ctx);
+  NodePath visit(Parser::BlankNodePropertyListPathContext* ctx);
 
   [[nodiscard]] Node visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] std::vector<TripleWithPropertyPath> visit(
-      Parser::CollectionPathContext* ctx);
+  [[noreturn]] NodePath visit(Parser::CollectionPathContext* ctx);
 
   [[nodiscard]] Node visit(Parser::GraphNodeContext* ctx);
 
