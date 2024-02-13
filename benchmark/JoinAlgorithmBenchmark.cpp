@@ -497,8 +497,8 @@ struct ConfigVariables {
   float overlapChance_;
   float smallerTableJoinColumnSampleSizeRatio_;
   float biggerTableJoinColumnSampleSizeRatio_;
-  size_t minRatioRows_;
-  size_t maxRatioRows_;
+  float minRatioRows_;
+  float maxRatioRows_;
   std::vector<float> benchmarkSampleSizeRatios_;
 
   /*
@@ -661,7 +661,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "tables stays the same.'. Also used for the calculation of the number "
         "of rows in the smaller table in 'Benchmarktables, where only the "
         "sample size ratio changes.'.",
-        &configVariables_.minRatioRows_, 10UL);
+        &configVariables_.minRatioRows_, 10.f);
     decltype(auto) maxRatioRows = config.addOption(
         "max-ratio-rows",
         "The maximum row ratio between the smaller and the "
@@ -671,7 +671,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "number of rows for the smaller table in 'Benchmarktables, where the "
         "smaller table grows and the size of the bigger table remains the "
         "same.'.",
-        &configVariables_.maxRatioRows_, 1000UL);
+        &configVariables_.maxRatioRows_, 1000.f);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
         "max-memory",
@@ -948,13 +948,13 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         maxTimeSingleMeasurement);
 
     // Is the ratio of rows at least 10?
-    config.addValidator(generateBiggerEqualLambda(10UL, true),
-                        generateBiggerEqualLambdaDesc(minRatioRows, 10UL, true),
-                        generateBiggerEqualLambdaDesc(minRatioRows, 10UL, true),
+    config.addValidator(generateBiggerEqualLambda(10.f, true),
+                        generateBiggerEqualLambdaDesc(minRatioRows, 10.f, true),
+                        generateBiggerEqualLambdaDesc(minRatioRows, 10.f, true),
                         minRatioRows);
 
     // Is `min-ratio-rows` smaller than `max-ratio-rows`?
-    config.addValidator(lessEqualLambda,
+    config.addValidator(std::less_equal<float>{},
                         generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
                         generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
                         minRatioRows, maxRatioRows);
@@ -976,10 +976,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               },
               descriptor, descriptor, option);
         };
-    std::ranges::for_each(
-        std::vector{smallerTableNumRows, minBiggerTableRows, maxBiggerTableRows,
-                    minRatioRows, maxRatioRows},
-        addCastableValidator);
+    std::ranges::for_each(std::vector{smallerTableNumRows, minBiggerTableRows,
+                                      maxBiggerTableRows},
+                          addCastableValidator);
   }
 
   /*
@@ -1033,10 +1032,11 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   - How many rows the result of joining the tables has.
   - How much faster the hash join is. For example: Two times faster.
 
-  @tparam T1, T6, T7 Must be a float, or a function, that takes the row number
-  of the next to be generated row as `const size_t&`, and returns a float. Can
-  only be a function, if all other template `T` parameter are vectors.
-  @tparam T2, T3, T4, T5 Must be a size_t, or a function, that takes the row
+  @tparam T1, T2, T6, T7 Must be a float, or a function, that takes the row
+  number of the next to be generated row as `const size_t&`, and returns a
+  float. Can only be a function, if all other template `T` parameter are
+  vectors.
+  @tparam T3, T4, T5 Must be a size_t, or a function, that takes the row
   number of the next to be generated row as `const size_t&`, and returns a
   size_t. Can only be a function, if all other template `T` parameter are
   vectors.
@@ -1072,7 +1072,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @param ratioRows How many more rows than the smaller table should the
   bigger table have? In more mathematical words: Number of rows of the
   bigger table divided by the number of rows of the smaller table is equal
-  to ratioRows.
+  to `ratioRows`.
   @param smallerTableNumRows How many rows should the smaller table have?
   @param smallerTableNumColumns, biggerTableNumColumns How many columns
   should the bigger/smaller tables have?
@@ -1086,7 +1086,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   template <ad_utility::InvocableWithExactReturnType<
                 bool, float, size_t, size_t, size_t, size_t, float, float>
                 StopFunction,
-            isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<size_t> T2,
+            isTypeOrGrowthFunction<float> T1, isTypeOrGrowthFunction<float> T2,
             isTypeOrGrowthFunction<size_t> T3,
             isTypeOrGrowthFunction<size_t> T4,
             isTypeOrGrowthFunction<size_t> T5,
@@ -1256,7 +1256,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                                float> auto stopFunction,
       const float overlap, const std::optional<size_t>& resultTableNumRows,
       ad_utility::RandomSeed randomSeed, const bool smallerTableSorted,
-      const bool biggerTableSorted, const size_t& ratioRows,
+      const bool biggerTableSorted, const float& ratioRows,
       const size_t& smallerTableNumRows, const size_t& smallerTableNumColumns,
       const size_t& biggerTableNumColumns,
       const float smallerTableJoinColumnSampleSizeRatio,
@@ -1272,7 +1272,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Make sure, that things can be casted (in later calculations) without
     // changing values.
     AD_CORRECTNESS_CHECK(isValuePreservingCast<double>(smallerTableNumRows));
-    AD_CORRECTNESS_CHECK(isValuePreservingCast<double>(ratioRows));
 
     // Nothing to do, if the stop function returns true.
     if (std::invoke(stopFunction, overlap, ratioRows, smallerTableNumRows,
@@ -1290,9 +1289,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
             getConfigVariables().maxMemoryBiggerTable()};
         approximateMemoryNeededByIdTable(
             smallerTableNumRows, smallerTableNumColumns) > maxSizeInputTable ||
-        approximateMemoryNeededByIdTable(smallerTableNumRows * ratioRows,
-                                         biggerTableNumColumns) >
-            maxSizeInputTable) {
+        approximateMemoryNeededByIdTable(
+            static_cast<size_t>(smallerTableNumRows *
+                                static_cast<double>(ratioRows)),
+            biggerTableNumColumns) > maxSizeInputTable) {
       return false;
     }
 
@@ -1363,16 +1363,16 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     */
     if (static_cast<double>(smallerTableNumRows) >
         getMaxValue<double>() / static_cast<double>(ratioRows)) {
-      throwOverflowError<double>(
-          absl::StrCat(" the number of bigger table rows (",
-                       smallerTableNumRows * ratioRows, ")"));
+      throwOverflowError<double>(absl::StrCat(
+          " the number of bigger table rows (",
+          smallerTableNumRows * static_cast<double>(ratioRows), ")"));
     } else if (static_cast<double>(smallerTableNumRows) *
                    static_cast<double>(ratioRows) >
                std::floor(getMaxValue<double>()) /
                    biggerTableJoinColumnSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of bigger table rows (",
-                       smallerTableNumRows * ratioRows,
+                       smallerTableNumRows * static_cast<double>(ratioRows),
                        ") with 'bigger-table-join-column-sample-size-ratio' (",
                        biggerTableJoinColumnSampleSizeRatio, ")"));
     } else if (biggerTableJoinColumnLowerBound - 1 >
@@ -1390,7 +1390,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           "), minus 1, added to the multiplication (rounded up) of the "
           "number "
           "of bigger table rows (",
-          smallerTableNumRows * ratioRows,
+          smallerTableNumRows * static_cast<double>(ratioRows),
           ") with 'bigger-table-join-column-sample-size-ratio' (",
           biggerTableJoinColumnSampleSizeRatio,
           ") is bigger than the size_t type maximum ", getMaxValue<size_t>(),
@@ -1419,7 +1419,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         0};
     IdTableAndJoinColumn biggerTable{
         createRandomlyFilledIdTable(
-            smallerTableNumRows * ratioRows, biggerTableNumColumns,
+            smallerTableNumRows * static_cast<double>(ratioRows),
+            biggerTableNumColumns,
             JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
                                 biggerTableJoinColumnUpperBound, seeds.at(2)},
             seeds.at(3)),
@@ -1539,12 +1540,15 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 @brief Returns a lambda function, which calculates and returns
 $base^(x+rowIdx)$. With $rowIdx$ being the single `size_t` argument of the
 function and $x$ being $log_base(startingPoint)$ rounded up.
+
+@tparam ReturnType The return type of the created lambda function.
 */
+template <typename ReturnType = size_t>
 auto createDefaultGrowthLambda(const size_t& base,
                                const size_t& startingPoint) {
   return [base, startingExponent{calculateNextWholeExponent(
                     base, startingPoint)}](const size_t& rowIdx) {
-    return static_cast<size_t>(std::pow(base, startingExponent + rowIdx));
+    return static_cast<ReturnType>(std::pow(base, startingExponent + rowIdx));
   };
 }
 
@@ -1568,7 +1572,7 @@ class BmOnlyBiggerTableSizeChanges final
         " rows, ratio to rows of bigger table grows.");
 
     // Returns the ratio used for the measurements in a given row.
-    auto growthFunction = createDefaultGrowthLambda(
+    auto growthFunction = createDefaultGrowthLambda<float>(
         10, getConfigVariables().minBiggerTableRows_ /
                 getConfigVariables().smallerTableNumRows_);
 
@@ -1629,7 +1633,7 @@ class BmOnlySmallerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
-        for (const size_t ratioRows : createExponentVectorUntilSize(
+        for (const float ratioRows : createExponentVectorUntilSize(
                  10, getConfigVariables().minRatioRows_,
                  getConfigVariables().maxRatioRows_)) {
           const std::string tableName = absl::StrCat(
@@ -1640,7 +1644,8 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10, getConfigVariables().minBiggerTableRows_ / ratioRows);
+              10, static_cast<size_t>(getConfigVariables().minBiggerTableRows_ /
+                                      ratioRows));
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
@@ -1705,7 +1710,7 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
             &results, tableName, "Amount of rows", alwaysFalse,
             getConfigVariables().overlapChance_, std::nullopt,
             getConfigVariables().randomSeed(), smallerTableSorted,
-            biggerTableSorted, 1UL, growthFunction,
+            biggerTableSorted, 1.f, growthFunction,
             getConfigVariables().smallerTableNumColumns_,
             getConfigVariables().biggerTableNumColumns_,
             getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
@@ -1754,17 +1759,17 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     any difference in execution time easier to find.
     Note: Strings are for the generation of error messages.
     */
-    const size_t ratioRows{getConfigVariables().minRatioRows_};
+    const float ratioRows{getConfigVariables().minRatioRows_};
     constexpr std::string_view ratioRowsDescription{"'min-ratio-rows'"};
     size_t smallerTableNumRows{};
     std::string smallerTableNumRowsDescription{};
     std::string smallerTableNumRowsConfigurationOptions{};
     if (const auto& maxMemory{getConfigVariables().maxMemory()};
         maxMemory.has_value()) {
-      smallerTableNumRows =
+      smallerTableNumRows = static_cast<size_t>(
           approximateNumIdTableRows(
               maxMemory.value(), getConfigVariables().biggerTableNumColumns_) /
-          getConfigVariables().minRatioRows_;
+          static_cast<double>(getConfigVariables().minRatioRows_));
       smallerTableNumRowsDescription =
           "division of the maximum number of rows, under the given "
           "'max-memory' "
@@ -1772,8 +1777,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       smallerTableNumRowsConfigurationOptions =
           "'max-memory' and 'bigger-table-num-columns'";
     } else {
-      smallerTableNumRows = getConfigVariables().maxBiggerTableRows_ /
-                            getConfigVariables().minRatioRows_;
+      smallerTableNumRows = static_cast<size_t>(
+          getConfigVariables().maxBiggerTableRows_ /
+          static_cast<double>(getConfigVariables().minRatioRows_));
       smallerTableNumRowsDescription =
           "divison of 'max-bigger-table-rows' with 'min-ratio-rows'";
       smallerTableNumRowsConfigurationOptions = "'max-bigger-table-rows'";
@@ -1846,7 +1852,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           absl::StrCat(smallerTableNumRowsDescription,
                        " ,multiplied with the biggest entry in "
                        "'benchmark-sample-size-ratios'"));
-    } else if (static_cast<double>(smallerTableNumRows * ratioRows) >
+    } else if (static_cast<double>(smallerTableNumRows) *
+                   static_cast<double>(ratioRows) >
                getMaxValue<double>() / maxSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat(smallerTableNumRowsDescription,
@@ -1856,9 +1863,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     } else if (std::ceil(static_cast<double>(smallerTableNumRows) *
                          maxSampleSizeRatio) >
                getMaxValue<double>() -
-                   std::ceil(
-                       static_cast<double>(smallerTableNumRows * ratioRows) *
-                       maxSampleSizeRatio)) {
+                   std::ceil(static_cast<double>(smallerTableNumRows) *
+                             static_cast<double>(ratioRows) *
+                             maxSampleSizeRatio)) {
       throwOverflowError<double>(absl::StrCat(
           "addition of the ", smallerTableNumRowsDescription,
           ",multiplied with the biggest entry in "
@@ -1866,14 +1873,15 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           smallerTableNumRowsDescription, ", multiplied with ",
           ratioRowsDescription,
           " and the biggest entry in 'benchmark-sample-size-ratios',"));
-    } else if (!isValuePreservingCast<size_t>(std::floor(
-                   static_cast<double>(smallerTableNumRows *
-                                       smallerTableNumRows * ratioRows) /
+    } else if (!isValuePreservingCast<size_t>(
+                   std::floor(static_cast<double>(smallerTableNumRows) *
+                              static_cast<double>(smallerTableNumRows) *
+                              static_cast<double>(ratioRows)) /
                    (std::ceil(static_cast<double>(smallerTableNumRows) *
                               maxSampleSizeRatio) +
-                    std::ceil(
-                        static_cast<double>(smallerTableNumRows * ratioRows) *
-                        maxSampleSizeRatio))))) {
+                    std::ceil(static_cast<double>(smallerTableNumRows) *
+                              static_cast<double>(ratioRows) *
+                              maxSampleSizeRatio)))) {
       throw std::runtime_error(absl::StrCat(
           "size_t casting error: The calculated wanted result size in '",
           name(),
@@ -1890,10 +1898,11 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     */
     auto resultWantedNumRows{static_cast<size_t>(
         static_cast<double>(smallerTableNumRows * smallerTableNumRows *
-                            ratioRows) /
+                            static_cast<double>(ratioRows)) /
         (std::ceil(static_cast<double>(smallerTableNumRows) *
                    maxSampleSizeRatio) +
-         std::ceil(static_cast<double>(smallerTableNumRows * ratioRows) *
+         std::ceil(static_cast<double>(smallerTableNumRows *
+                                       static_cast<double>(ratioRows)) *
                    maxSampleSizeRatio)))};
     const size_t resultNumColumns{getConfigVariables().smallerTableNumColumns_ +
                                   getConfigVariables().biggerTableNumColumns_ -
@@ -1961,9 +1970,10 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
     // Start with the smallest possible smaller table.
-    auto growthFunction =
-        createDefaultGrowthLambda(10, getConfigVariables().minBiggerTableRows_ /
-                                          getConfigVariables().maxRatioRows_);
+    auto growthFunction = createDefaultGrowthLambda(
+        10, static_cast<size_t>(
+                getConfigVariables().minBiggerTableRows_ /
+                static_cast<double>(getConfigVariables().maxRatioRows_)));
 
     // Making a benchmark table for all combination of IdTables being sorted and
     // all possibles sizes for the bigger table.
@@ -2047,8 +2057,6 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     ResultTable& table = initializeBenchmarkTable(
         results, tableDescriptor, "Amount of rows in the smaller table");
 
-    // TODO Ich brauche eine Stopfunktion, wenn die kleinere Tabelle >= größere
-    // Tabelle wird.
     /*
     Stop function, so that the smaller table doesn't becomes bigger than the
     bigger table.
@@ -2066,7 +2074,8 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
         smallerTableIsSmallerThanBiggerTable,
         getConfigVariables().overlapChance_, std::nullopt,
         std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
-        biggerTableNumRows / smallerTableNumRows(table.numRows()),
+        static_cast<float>(biggerTableNumRows) /
+            smallerTableNumRows(table.numRows()),
         smallerTableNumRows(table.numRows()),
         getConfigVariables().smallerTableNumColumns_,
         getConfigVariables().biggerTableNumColumns_,
