@@ -79,8 +79,8 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   Id searchId = matchingBlock->firstTriple_.col0Id_ > id1
                     ? matchingBlock->firstTriple_.col0Id_
                     : id1;
-  const auto& it = meta._data.lower_bound(searchId);
-  AD_CORRECTNESS_CHECK(it != meta._data.end());
+  const auto& it = meta.data().lower_bound(searchId);
+  AD_CORRECTNESS_CHECK(it != meta.data().end());
   Id id = it.getId();
   const auto& relationMetadata = meta.getMetaData(id);
   size_t offsetBegin = relationMetadata.offsetInBlock_;

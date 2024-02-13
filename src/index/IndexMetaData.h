@@ -87,10 +87,8 @@ class IndexMetaData {
   // name and the variable name are terrible.
 
   // For each relation, its meta data.
- public:
   MapType _data;
 
- private:
   // For each compressed block, its meta data.
   BlocksType _blockData;
 

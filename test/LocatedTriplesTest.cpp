@@ -47,6 +47,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   ASSERT_EQ(locatedTriplesPerBlock.numBlocks(), 3);
   ASSERT_EQ(locatedTriplesPerBlock.numTriples(), 7);
 
+  // Shorthand for creating a pair of counts.
   auto P = [](size_t n1, size_t n2) -> std::pair<size_t, size_t> {
     return {n1, n2};
   };
@@ -201,7 +202,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         IndexImpl indexBuilder(testAllocator);
         indexBuilder.setOnDiskBase(testIndexBasename);
         indexBuilder.blocksizePermutationPerColumn() = blockSize;
-        // The
+        // The function `createPermutationPair` expects a generator.
         IndexImpl::BlocksOfTriples blocksOfTriples =
             [&triplesInIndex]() -> cppcoro::generator<IdTableStatic<0>> {
           co_yield triplesInIndex.clone();

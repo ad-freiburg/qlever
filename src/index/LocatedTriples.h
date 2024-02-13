@@ -121,9 +121,10 @@ class LocatedTriplesPerBlock {
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
   // Return a handle to where it was added (`LocatedTriples` is a sorted set,
   // see above). We need this handle so that we can easily remove the
-  // `locatedTriple` again from the set in case we need to.
+  // `locatedTriple` from the set again in case we need to.
   //
-  // The `locatedTriple` must not already exist in `LocatedTriplesPerBlock`.
+  // Precondition: The `locatedTriple` must not already exist in
+  // `LocatedTriplesPerBlock`.
   LocatedTriples::iterator add(const LocatedTriple& locatedTriple) {
     LocatedTriples& locatedTriples = map_[locatedTriple.blockIndex];
     auto [handle, wasInserted] = locatedTriples.emplace(locatedTriple);
@@ -133,7 +134,7 @@ class LocatedTriplesPerBlock {
     return handle;
   };
 
-  // Get the total number of `LocatedTriple` objects (for all blocks).
+  // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }
 
   // Get the number of blocks with a non-empty set of located triples.
@@ -180,7 +181,7 @@ std::ostream& operator<<(std::ostream& os, const IdTable& idTable);
 // 1. The position is defined by the index of a block in the permutation and the
 // index of a row within that block.
 //
-// 2. If the triple in contained in the permutation, it is contained exactly
+// 2. If the triple is contained in the permutation, it is contained exactly
 // once and so there is a well defined block and position in that block.
 //
 // 2. If there is a block, where the first triple is smaller and the last triple
