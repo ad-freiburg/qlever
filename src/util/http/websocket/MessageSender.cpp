@@ -41,6 +41,8 @@ MessageSender::MessageSender(
 
 net::awaitable<MessageSender> MessageSender::create(OwningQueryId owningQueryId,
                                                     QueryHub& queryHub) {
+  LOG(INFO) << "Creating message sender" << std::endl;
+  auto x = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding([]{LOG(INFO) << "Finished message sender" << std::endl;});
   co_return MessageSender{
       DistributorAndOwningQueryId{
           co_await queryHub.createOrAcquireDistributorForSending(

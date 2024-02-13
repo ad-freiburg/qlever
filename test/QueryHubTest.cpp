@@ -73,6 +73,7 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
     EXPECT_EQ(distributor1, distributor2);
     co_await distributor2->signalEnd();
   }
+  std::this_thread::sleep_for(std::chrono::milliseconds(10));
   auto senderNewId =
       co_await queryHub.createOrAcquireDistributorForSending(queryId);
   EXPECT_NE(distributor1, senderNewId);

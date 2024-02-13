@@ -263,6 +263,8 @@ if (RUN_EXPENSIVE_TESTS)
     add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
 endif()
 
+add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")

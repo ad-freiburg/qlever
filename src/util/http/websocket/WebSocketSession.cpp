@@ -94,16 +94,14 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // for more information
     auto ex = co_await net::this_coro::executor;
 
-    LOG(INFO) << "Before await" << std::endl;
     co_await (waitForServerEvents() && handleClientCommands());
-      LOG(INFO) << "After await" << std::endl;
   } catch (const net::multiple_exceptions& e) {
-    // TODO<joka921> We actually have to check, if BOTH the exceptions have the correct type.
+    // TODO<joka921> We actually have to check, if BOTH the exceptions have the
+    // correct type.
     if (cancelOnClose_) {
       tryToCancelQuery();
     }
-      LOG(INFO) << "Multiple exceptions" << std::endl;
-      co_return;
+    co_return;
 
   } catch (boost::system::system_error& error) {
     if (cancelOnClose_) {

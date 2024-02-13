@@ -781,6 +781,14 @@ boost::asio::awaitable<void> Server::processQuery(
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
+  auto inner = [function = std::move(function),
+                handle = std::move(handle)]() mutable -> decltype(auto) {
+    handle->resetWatchDogState();
+    return std::invoke(std::move(function));
+  };
+  return ad_utility::runFunctionOnStrand(threadPool_.get_executor(),
+                                         std::move(inner), net::use_awaitable);
+  /*
   auto runOnExecutor =
       [](auto executor, Function func,
          SharedCancellationHandle handle) -> net::awaitable<T> {
@@ -793,6 +801,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
   };
   return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
       threadPool_.get_executor(), std::move(function), std::move(handle)));
+      */
 }
 
 // _____________________________________________________________________________
@@ -800,9 +809,9 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
-  return computeInNewThread(
+  auto optionalRes = co_await computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit]() mutable {
+       handle = std::move(handle), timeLimit]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
@@ -818,6 +827,7 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
         return plannedQuery;
       },
       std::move(handleCopy));
+  co_return std::move(optionalRes.value());
 }
 
 // _____________________________________________________________________________

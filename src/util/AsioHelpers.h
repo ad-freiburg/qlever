@@ -6,7 +6,9 @@
 #define QLEVER_ASIOHELPERS_H
 
 #include <boost/asio/awaitable.hpp>
+#include <boost/asio/deferred.hpp>
 #include <boost/asio/post.hpp>
+#include <absl/cleanup/cleanup.h>
 #include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/cancellation_signal.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
@@ -19,154 +21,63 @@
 namespace ad_utility {
 
 namespace net = boost::asio;
-/*
-template <typename Strand>
-struct Canceller {
-  Strand strand_;
-  net::cancellation_signal signal_{};
 
-  void operator()(net::cancellation_type type) {
-    // LOG(INFO) << "Got a cancellation request" << std::endl;
-    net::dispatch(strand_, [this, type]() { signal_.emit(type); });
-  }
-
-  Canceller(Strand strand, std::optional<net::cancellation_slot>& slotTarget)
-      : strand_{strand} {
-    slotTarget = signal_.slot();
-  }
-};
-
-template <ad_utility::isInstantiation<net::strand> Strand>
-auto changeStrandInitiation = [](auto handler, Strand strand, auto&& initiation,
-                                 auto&&... initArgs) {
-  auto inputSlot = net::get_associated_cancellation_slot(handler);
-  std::optional<net::cancellation_slot> slotTarget;
-  // LOG(INFO) << "Size of signatures == " << sizeof...(Signatures) << std::endl;
-  if (inputSlot.is_connected()) {
-    inputSlot.template emplace<Canceller<Strand>>(strand, slotTarget);
-    auto actualHandler = net::bind_executor(
-        strand,
-        net::bind_cancellation_slot(slotTarget.value(), AD_FWD(handler)));
-    return AD_FWD(initiation)(std::move(actualHandler), AD_FWD(initArgs)...);
-  } else {
-    return AD_FWD(initiation)(std::move(handler), AD_FWD(initArgs)...);
-  }
-};
-
-template <ad_utility::isInstantiation<net::strand> Strand>
-auto awaitableOnStrandInitiation =
-    [](auto handler, Strand strand, auto awaitable) {
-      auto inputSlot = net::get_associated_cancellation_slot(handler);
-      std::optional<net::cancellation_slot> slotTarget;
-      // LOG(INFO) << "Size of signatures == " << sizeof...(Signatures) <<
-      // std::endl;
-
-      if (inputSlot.is_connected()) {
-        inputSlot.template emplace<Canceller<Strand>>(strand, slotTarget);
-        net::co_spawn(
-            strand, std::move(awaitable),
-            net::bind_cancellation_slot(slotTarget.value(), AD_FWD(handler)));
-      } else {
-        net::co_spawn(strand, std::move(awaitable), AD_FWD(handler));
-      }
-    };
-
-template <typename Strand, typename CompletionToken>
-struct ChangeStrandToken {
-  Strand strand;
-  CompletionToken& token;
-};
-
-template <typename Strand, typename CompletionToken>
-ChangeStrandToken(Strand, CompletionToken&)
-    -> ChangeStrandToken<Strand, CompletionToken>;
-}  // namespace ad_utility;
-
-namespace boost::asio {
-template <typename Strand, typename CompletionToken, typename... Signatures>
-struct async_result<ad_utility::ChangeStrandToken<Strand, CompletionToken>,
-                    Signatures...> {
-  template <typename Initiation, typename... InitArgs>
-  static auto initiate(
-      Initiation&& init,
-      ad_utility::ChangeStrandToken<Strand, CompletionToken> token,
-      InitArgs&&... initArgs) {
-    return async_initiate<CompletionToken, Signatures...>(
-        ad_utility::changeStrandInitiation<Strand>, token.token, token.strand,
-        AD_FWD(init), AD_FWD(initArgs)...);
-  }
-};
-
-}  // namespace boost::asio
-
-namespace ad_utility {
-
-template <typename Strand, typename CompletionToken>
-auto runOnStrand(Strand strand, CompletionToken& token) {
-  //return net::post(net::bind_executor(strand, token));
-  return net::post(ChangeStrandToken{strand, token});
-}
- */
-
-    template <typename Strand, typename CompletionToken, typename T>
-auto runAwaitableOnStrand(Strand strand, net::awaitable<T> awaitable,
-                          CompletionToken& token) {
-  auto innerAwaitable = [](auto awaitable, auto strand) -> net::awaitable<T> {
-      co_await net::post(net::bind_executor(strand, net::use_awaitable));
-      if constexpr (std::is_void_v<T>) {
-        co_await net::co_spawn(strand, std::move(awaitable),
-                               net::bind_executor(strand, net::use_awaitable));
-        co_await net::post(net::use_awaitable);
-      } else {
-          decltype(auto) res = co_await net::co_spawn(strand, std::move(awaitable),
-                                 net::bind_executor(strand, net::use_awaitable));
-          co_await net::post(net::use_awaitable);
-          co_return res;
-      }
-  };
-  //return net::co_spawn(strand, innerAwaitable(std::move(awaitable), strand), net::bind_executor(strand, token));
-  return net::co_spawn(strand, innerAwaitable(std::move(awaitable), strand), token);
-}
-
-    template <typename Strand, typename CompletionToken,
-              std::invocable Function>
-    auto runFunctionOnStrand(Strand strand, Function function,
-                             CompletionToken& token) {
+template <typename Strand, typename CompletionToken, std::invocable Function>
+auto runFunctionOnStrand(Strand strand, Function function,
+                         CompletionToken& token) {
+  LOG(INFO) << "Run on strandd" << std::endl;
   auto awaitable =
       [](auto function) -> net::awaitable<std::invoke_result_t<Function>> {
     co_return std::invoke(function);
   };
-  auto innerAwaitable = [](auto awaitable,
-                           auto strand) -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand, net::use_awaitable));
-    co_await net::co_spawn(strand, std::move(awaitable),
-                           net::bind_executor(strand, net::use_awaitable));
-    co_await net::post(net::use_awaitable);
+  auto innerAwaitable =
+      [](auto awaitable,
+         auto strand) -> net::awaitable<std::invoke_result_t<Function>> {
+    co_return (co_await net::co_spawn(strand, std::move(awaitable), net::use_awaitable));
   };
-  return net::co_spawn(strand,
-                       innerAwaitable(awaitable(std::move(function)), strand),
-                       net::bind_executor(strand, token));
-    }
+  return net::co_spawn(
+      strand, innerAwaitable(awaitable(std::move(function)), strand), token);
+}
 
-    template <typename Strand, typename T>
-    net::awaitable<T> runAwaitableOnStrandAwaitable(
-        Strand strand, net::awaitable<T> awaitable) {
-  co_await net::post(net::bind_executor(strand, net::use_awaitable));
+template <typename Strand, typename T>
+net::awaitable<T> runAwaitableOnStrandAwaitable(Strand strand,
+                                                net::awaitable<T> awaitable) {
+  auto inner = [](auto strand, auto f) -> net::awaitable<T> {
+    co_await net::post(net::use_awaitable);
+    // auto state = co_await net::this_coro::cancellation_state;
+    // absl::Cleanup c{[&](){state.slot().clear(); LOG(INFO) << "After clear" <<
+    // std::endl;} }; LOG(INFO) << "before spawn" << std::endl;
+    co_return (
+        co_await net::co_spawn(strand, std::move(f), net::use_awaitable));
+  };
   if constexpr (std::is_void_v<T>) {
-    co_await net::co_spawn(strand, std::move(awaitable),
-                           net::bind_executor(strand, net::use_awaitable));
+    // co_await net::co_spawn(strand, std::move(awaitable), net::deferred);
+    // LOG(INFO) << "before spawn" << std::endl;
+    co_await net::co_spawn(strand, inner(strand, std::move(awaitable)),
+                           net::use_awaitable);
+    // auto state = co_await net::this_coro::cancellation_state;
+    // state.slot().clear();
+    // LOG(INFO) << "After clear" << std::endl;
     co_await net::post(net::use_awaitable);
   } else {
-    decltype(auto) res =
-        co_await net::co_spawn(strand, std::move(awaitable),
-                               net::bind_executor(strand, net::use_awaitable));
+    /*
+    decltype(auto) res = co_await net::co_spawn(strand, std::move(awaitable),
+                                                net::use_awaitable);
+                                                */
+    // LOG(INFO) << "before spawn" << std::endl;
+    decltype(auto) res = co_await net::co_spawn(
+        strand, inner(strand, std::move(awaitable)), net::use_awaitable);
+    // auto state = co_await net::this_coro::cancellation_state;
+    // state.slot().clear();
+    // LOG(INFO) << "After clear" << std::endl;
+
     co_await net::post(net::use_awaitable);
     co_return res;
-    co_await net::post(net::bind_executor(strand, net::use_awaitable));
   }
-    }
+}
 
-    /// Helper function that ensures that co_await resumes on the executor
+/*
+/// Helper function that ensures that co_await resumes on the executor
 /// this coroutine was co_spawned on.
 /// IMPORTANT: If the coroutine is cancelled, no guarantees are given. Make
 /// sure to keep that in mind when handling cancellation errors!
@@ -190,10 +101,6 @@ inline net::awaitable<T> resumeOnOriginalExecutor(net::awaitable<T> awaitable) {
   std::rethrow_exception(exceptionPtr);
 }
 
-
-
-
-
 /// Helper function that ensures that co_await resumes on the executor
 /// this coroutine was co_spawned on. Overload for void.
 inline net::awaitable<void> resumeOnOriginalExecutor(
@@ -214,6 +121,7 @@ inline net::awaitable<void> resumeOnOriginalExecutor(
     std::rethrow_exception(exceptionPtr);
   }
 }
+ */
 }  // namespace ad_utility
 
 #endif  // QLEVER_ASIOHELPERS_H
