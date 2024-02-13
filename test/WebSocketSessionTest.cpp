@@ -86,7 +86,6 @@ struct WebSocketTestContainer {
   auto serverLogic() { return serverLogic(net::use_awaitable); }
 
   WebSocketTestContainer(WebSocketTestContainer&&) = default;
-  WebSocketTestContainer& operator=(WebSocketTestContainer&&) = default;
   ~WebSocketTestContainer() {
     if (!isActive_) {
       return;

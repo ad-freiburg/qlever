@@ -55,6 +55,7 @@ net::awaitable<std::invoke_result_t<F>> runOnExecutor(Executor exec, F f) {
     co_return std::invoke(f);
   };
 
+
   co_return std::move(
       (co_await net::co_spawn(exec, run(std::move(f)), net::use_awaitable))
           .value());
