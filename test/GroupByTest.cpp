@@ -906,9 +906,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationMinMaxSumIntegers) {
   const auto& table = result->idTable();
 
   // Check the result.
-  auto d = DoubleId;
   auto i = IntId;
-  auto undef = ValueId::makeUndefined();
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{
       {Variable{"?a"}, {0, AlwaysDefined}},
