@@ -13,7 +13,7 @@
 #include "./Iri.h"
 #include "./Literal.h"
 
-using GraphTermBase = std::variant<Literal, BlankNode, Iri>;
+using GraphTermBase = std::variant<Literal, BlankNode, Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {

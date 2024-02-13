@@ -218,11 +218,13 @@ class ParsedQuery {
   void addOrderByClause(OrderClause orderClause, bool isGroupBy,
                         std::string_view noteForImplicitGroupBy);
 
+ public:
   // Return the next internal variable. Used e.g. by `addInternalBind` and
   // `addInternalAlias`
   Variable getNewInternalVariable();
 
- public:
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
+
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
   // an `InvalidQueryException` if the modifiers are invalid. This might happen
   // if one of the modifiers uses a variable that is either not visible in the

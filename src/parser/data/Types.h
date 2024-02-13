@@ -16,7 +16,6 @@ using Objects = std::vector<VarOrTerm>;
 using Tuples = std::vector<std::array<VarOrTerm, 2>>;
 using VarOrPath = std::variant<Variable, PropertyPath>;
 using PredicateAndObject = std::pair<VarOrPath, VarOrTerm>;
-using PathTuples = std::vector<PredicateAndObject>;
 using Triples = std::vector<std::array<VarOrTerm, 3>>;
 struct TripleWithPropertyPath {
   VarOrTerm subject_;
@@ -25,8 +24,13 @@ struct TripleWithPropertyPath {
 
   bool operator==(const TripleWithPropertyPath&) const = default;
 };
+using PathTuples = std::vector<PredicateAndObject>;
+using PathTuplesAndTriples =
+    std::pair<PathTuples, std::vector<TripleWithPropertyPath>>;
 using Node = std::pair<VarOrTerm, Triples>;
+using NodePath = std::pair<VarOrTerm, std::vector<TripleWithPropertyPath>>;
 using ObjectList = std::pair<Objects, Triples>;
+using ObjectListPath = std::pair<Objects, std::vector<TripleWithPropertyPath>>;
 using PropertyList = std::pair<Tuples, Triples>;
 using VarOrAlias = std::variant<Variable, Alias>;
 }  // namespace ad_utility::sparql_types

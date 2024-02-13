@@ -633,3 +633,11 @@ Variable ParsedQuery::getNewInternalVariable() {
   numInternalVariables_++;
   return variable;
 }
+
+Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
+  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+  return Variable{
+      absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, blankNode.substr(2))};
+  // This variable is currently not visible in the query body, check whether
+  // this is correct.
+}

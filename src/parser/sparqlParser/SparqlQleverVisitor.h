@@ -52,11 +52,14 @@ class SparqlQleverVisitor {
   using Objects = ad_utility::sparql_types::Objects;
   using Tuples = ad_utility::sparql_types::Tuples;
   using PathTuples = ad_utility::sparql_types::PathTuples;
+  using PathTuplesAndTriples = ad_utility::sparql_types::PathTuplesAndTriples;
   using TripleWithPropertyPath =
       ad_utility::sparql_types::TripleWithPropertyPath;
   using Triples = ad_utility::sparql_types::Triples;
   using Node = ad_utility::sparql_types::Node;
+  using NodePath = ad_utility::sparql_types::NodePath;
   using ObjectList = ad_utility::sparql_types::ObjectList;
+  using ObjectListPath = ad_utility::sparql_types::ObjectListPath;
   using PropertyList = ad_utility::sparql_types::PropertyList;
   using OperationsAndFilters =
       std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
@@ -92,9 +95,13 @@ class SparqlQleverVisitor {
 
   DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
 
+  // Currently this is only used for getting internal variables.
+  ParsedQuery parsedQuery_;
+  bool isInsideConstructTriples_ = false;
+
  public:
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(
+  explicit SparqlQleverVisitor(
       PrefixMap prefixMap,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
@@ -260,10 +267,11 @@ class SparqlQleverVisitor {
   [[nodiscard]] vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  [[nodiscard]] std::optional<PathTuples> visit(
+  [[nodiscard]] std::optional<PathTuplesAndTriples> visit(
       Parser::PropertyListPathContext* ctx);
 
-  [[nodiscard]] PathTuples visit(Parser::PropertyListPathNotEmptyContext* ctx);
+  [[nodiscard]] PathTuplesAndTriples visit(
+      Parser::PropertyListPathNotEmptyContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
 
@@ -271,14 +279,14 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] PathTuples visit(Parser::TupleWithoutPathContext* ctx);
 
-  [[nodiscard]] PathTuples visit(Parser::TupleWithPathContext* ctx);
+  [[nodiscard]] PathTuplesAndTriples visit(Parser::TupleWithPathContext* ctx);
 
   [[nodiscard]] ad_utility::sparql_types::VarOrPath visit(
       Parser::VerbPathOrSimpleContext* ctx);
 
-  [[nodiscard]] ObjectList visit(Parser::ObjectListPathContext* ctx);
+  [[nodiscard]] ObjectListPath visit(Parser::ObjectListPathContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::ObjectPathContext* ctx);
+  [[nodiscard]] NodePath visit(Parser::ObjectPathContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::PathContext* ctx);
 
@@ -308,17 +316,20 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] Node visit(Parser::BlankNodePropertyListContext* ctx);
 
-  [[noreturn]] void visit(Parser::TriplesNodePathContext* ctx);
+  std::vector<TripleWithPropertyPath> visit(
+      Parser::TriplesNodePathContext* ctx);
 
-  [[noreturn]] void visit(Parser::BlankNodePropertyListPathContext* ctx);
+  std::vector<TripleWithPropertyPath> visit(
+      Parser::BlankNodePropertyListPathContext* ctx);
 
   [[nodiscard]] Node visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] void visit(Parser::CollectionPathContext* ctx);
+  [[noreturn]] std::vector<TripleWithPropertyPath> visit(
+      Parser::CollectionPathContext* ctx);
 
   [[nodiscard]] Node visit(Parser::GraphNodeContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::GraphNodePathContext* ctx);
+  [[nodiscard]] NodePath visit(Parser::GraphNodePathContext* ctx);
 
   [[nodiscard]] VarOrTerm visit(Parser::VarOrTermContext* ctx);
 
@@ -424,7 +435,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] string visit(Parser::PrefixedNameContext* ctx);
 
-  [[nodiscard]] BlankNode visit(Parser::BlankNodeContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::BlankNodeContext* ctx);
 
   [[nodiscard]] string visit(Parser::PnameLnContext* ctx);
 
@@ -460,9 +471,8 @@ class SparqlQleverVisitor {
 
   void addVisibleVariable(Variable var);
 
-  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    reportError(
-        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
+  [[noreturn]] void throwCollectionsNotSupported(auto* ctx) {
+    reportError(ctx, "( ... ) in triples is not yet supported by QLever.");
   }
 
   // Return the `SparqlExpressionPimpl` for a context that returns a

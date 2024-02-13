@@ -704,12 +704,13 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPathFails =
       ExpectParseFails<&Parser::propertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
-  expectPropertyListPath("<bar> ?foo", {{Iri("<bar>"), Var{"?foo"}}});
+  expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
       "<bar> ?foo ; <mehr> ?f",
-      {{Iri("<bar>"), Var{"?foo"}}, {Iri("<mehr>"), Var{"?f"}}});
-  expectPropertyListPath("<bar> ?foo , ?baz", {{Iri("<bar>"), Var{"?foo"}},
-                                               {Iri("<bar>"), Var{"?baz"}}});
+      {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<mehr>"), Var{"?f"}}}, {}});
+  expectPropertyListPath(
+      "<bar> ?foo , ?baz",
+      {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<bar>"), Var{"?baz"}}}, {}});
   // Currently unsupported by QLever
   expectPropertyListPathFails("<bar> ( ?foo ?baz )");
   expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
