@@ -45,14 +45,14 @@ jobs:
         compiler: "clang"
         compiler-version: "16"
     - name: Create build directory
-      run: mkdir ${{github.workspace}}/build
+      run: mkdir ${{github.workspace}}/qlever-code/build
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
+      run: cmake -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
 
     - name: Build
-      run: cmake --build ${{github.workspace}}/build --config ${{env.build-type}} -- -j $(nproc)
+      run: cmake --build ${{github.workspace}}/qlever-code/build --config ${{env.build-type}} -- -j $(nproc)
     - name: Execute test suite
       run: |
-          python testsuite.py config http://0.0.0.0 7001 ./sparql-test-suite-files/sparql/sparql11/ ../qlever-code/build/ listOfTests.csv
-          python3 testsuite.py extract
-          python3 testsuite.py ${{ github.sha }}
+          python ./qlever-test-suite/testsuite.py config http://0.0.0.0 7001 ./sparql-test-suite-files/sparql/sparql11/ ../qlever-code/build/ listOfTests.csv
+          python ./qlever-test-suite/testsuite.py extract
+          python3 ./qlever-test-suite/testsuite.py ${{ github.sha }}
