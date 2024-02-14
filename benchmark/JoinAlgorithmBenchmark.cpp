@@ -1763,15 +1763,14 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     */
     const float ratioRows{getConfigVariables().minRatioRows_};
     constexpr std::string_view ratioRowsDescription{"'min-ratio-rows'"};
-    size_t smallerTableNumRows{};
+    const size_t smallerTableNumRows{
+        static_cast<size_t>(static_cast<double>(approximateNumIdTableRows(
+                                getConfigVariables().maxMemoryBiggerTable(),
+                                getConfigVariables().biggerTableNumColumns_)) /
+                            getConfigVariables().minRatioRows_)};
     std::string smallerTableNumRowsDescription{};
     std::string smallerTableNumRowsConfigurationOptions{};
-    if (const auto& maxMemory{getConfigVariables().maxMemory()};
-        maxMemory.has_value()) {
-      smallerTableNumRows = static_cast<size_t>(
-          static_cast<double>(approximateNumIdTableRows(
-              maxMemory.value(), getConfigVariables().biggerTableNumColumns_)) /
-          getConfigVariables().minRatioRows_);
+    if (getConfigVariables().maxMemory().has_value()) {
       smallerTableNumRowsDescription =
           "division of the maximum number of rows, under the given "
           "'max-memory' "
@@ -1779,9 +1778,6 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
       smallerTableNumRowsConfigurationOptions =
           "'max-memory' and 'bigger-table-num-columns'";
     } else {
-      smallerTableNumRows = static_cast<size_t>(
-          static_cast<double>(getConfigVariables().maxBiggerTableRows_) /
-          getConfigVariables().minRatioRows_);
       smallerTableNumRowsDescription =
           "divison of 'max-bigger-table-rows' with 'min-ratio-rows'";
       smallerTableNumRowsConfigurationOptions = "'max-bigger-table-rows'";
