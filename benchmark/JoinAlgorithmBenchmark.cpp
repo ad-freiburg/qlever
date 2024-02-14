@@ -398,26 +398,29 @@ static size_t calculateNextWholeExponent(const size_t& base,
 }
 
 /*
- * @brief Returns a vector of exponents $base^x$, with $x$ being a natural
- * number and $base^x$ being all possible numbers of this type in a given
- * range.
- *
- * @param base The base of the exponents.
- * @param startingPoint What the smalles exponent must at minimum be.
- * @param stoppingPoint What the biggest exponent is allowed to be.
- *
- * @return `{base^i, base^(i+1), ...., base^(i+n)}` with
- * `base^(i-1) < startingPoint`, `startingPoint <= base^i`,
- * `base^(i+n) <= stoppingPoint`and
- * `stoppingPoint < base^(i+n+1)`.
- */
-static std::vector<size_t> createExponentVectorUntilSize(
-    const size_t& base, const size_t& startingPoint,
-    const size_t& stoppingPoint) {
+@brief Returns a vector of exponents $base^x$, with $x$ being a natural
+number and $base^x$ being all possible numbers of this type in a given
+range.
+
+@tparam ReturnValueType The value type in the `std::vector`, that will be
+returned.
+
+@param base The base of the exponents.
+@param startingPoint What the smalles exponent must at minimum be.
+@param stoppingPoint What the biggest exponent is allowed to be.
+
+@return `{base^i, base^(i+1), ...., base^(i+n)}` with `base^(i-1) <
+startingPoint`, `startingPoint <= base^i`, `base^(i+n) <= stoppingPoint`and
+`stoppingPoint < base^(i+n+1)`.
+*/
+template <typename ReturnValueType = size_t>
+static std::vector<ReturnValueType> createExponentVectorUntilSize(
+    const size_t& base, const ReturnValueType startingPoint,
+    const ReturnValueType stoppingPoint) {
   // Quick check, if the given arguments make sense.
   AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
 
-  std::vector<size_t> exponentVector{};
+  std::vector<ReturnValueType> exponentVector{};
 
   /*
   We can calculate our first exponent by using the logarithm.
@@ -425,7 +428,7 @@ static std::vector<size_t> createExponentVectorUntilSize(
   round up. This should give us the $x$ of the first $base^x$ bigger
   than `startingPoint`.
   */
-  auto currentExponent = static_cast<size_t>(
+  auto currentExponent = static_cast<ReturnValueType>(
       std::pow(base, calculateNextWholeExponent(base, startingPoint)));
 
   // The rest of the exponents.
@@ -1194,10 +1197,10 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   @param changingParameterColumnDesc Name/Description for the first column.
   */
   static ResultTable& initializeBenchmarkTable(
-      BenchmarkResults* results, std::string tableDescriptor,
+      BenchmarkResults* results, const std::string& tableDescriptor,
       std::string changingParameterColumnDesc) {
     return results->addTable(
-        std::move(tableDescriptor), {},
+        tableDescriptor, {},
         {std::move(changingParameterColumnDesc), "Time for sorting",
          "Merge/Galloping join", "Sorting + merge/galloping join", "Hash join",
          "Number of rows in resulting IdTable", "Speedup of hash join"});
@@ -1212,24 +1215,22 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   */
   static void addPostMeasurementInformationsToBenchmarkTable(
       ResultTable* table) {
+    using enum GeneratedTableColumn;
     // Adding together the time for sorting the `IdTables` and then joining
     // them via merge/galloping join.
     sumUpColumns(
         table,
-        ColumnNumWithType<float>{toUnderlying(
-            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)},
         ColumnNumWithType<float>{
-            toUnderlying(GeneratedTableColumn::TimeForSorting)},
-        ColumnNumWithType<float>{
-            toUnderlying(GeneratedTableColumn::TimeForMergeGallopingJoin)});
+            toUnderlying(TimeForSortingAndMergeGallopingJoin)},
+        ColumnNumWithType<float>{toUnderlying(TimeForSorting)},
+        ColumnNumWithType<float>{toUnderlying(TimeForMergeGallopingJoin)});
 
     // Calculate, how much of a speedup the hash join algorithm has in
     // comparison to the merge/galloping join algrithm.
     calculateSpeedupOfColumn(
-        table, {toUnderlying(GeneratedTableColumn::JoinAlgorithmSpeedup)},
-        {toUnderlying(GeneratedTableColumn::TimeForHashJoin)},
-        {toUnderlying(
-            GeneratedTableColumn::TimeForSortingAndMergeGallopingJoin)});
+        table, {toUnderlying(JoinAlgorithmSpeedup)},
+        {toUnderlying(TimeForHashJoin)},
+        {toUnderlying(TimeForSortingAndMergeGallopingJoin)});
   }
 
   /*
@@ -1290,8 +1291,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         approximateMemoryNeededByIdTable(
             smallerTableNumRows, smallerTableNumColumns) > maxSizeInputTable ||
         approximateMemoryNeededByIdTable(
-            static_cast<size_t>(smallerTableNumRows *
-                                static_cast<double>(ratioRows)),
+            static_cast<size_t>(static_cast<double>(smallerTableNumRows) *
+                                ratioRows),
             biggerTableNumColumns) > maxSizeInputTable) {
       return false;
     }
@@ -1362,25 +1363,23 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     to check, that `std::ceil(...)` is neither overflow, nor underflow.
     */
     if (static_cast<double>(smallerTableNumRows) >
-        getMaxValue<double>() / static_cast<double>(ratioRows)) {
+        getMaxValue<double>() / ratioRows) {
       throwOverflowError<double>(absl::StrCat(
           " the number of bigger table rows (",
-          smallerTableNumRows * static_cast<double>(ratioRows), ")"));
-    } else if (static_cast<double>(smallerTableNumRows) *
-                   static_cast<double>(ratioRows) >
+          static_cast<double>(smallerTableNumRows) * ratioRows, ")"));
+    } else if (static_cast<double>(smallerTableNumRows) * ratioRows >
                std::floor(getMaxValue<double>()) /
                    biggerTableJoinColumnSampleSizeRatio) {
       throwOverflowError<double>(
           absl::StrCat("multiplication of the number of bigger table rows (",
-                       smallerTableNumRows * static_cast<double>(ratioRows),
+                       static_cast<double>(smallerTableNumRows) * ratioRows,
                        ") with 'bigger-table-join-column-sample-size-ratio' (",
                        biggerTableJoinColumnSampleSizeRatio, ")"));
     } else if (biggerTableJoinColumnLowerBound - 1 >
                getMaxValue<size_t>() -
-                   static_cast<size_t>(
-                       std::ceil(static_cast<double>(smallerTableNumRows) *
-                                 static_cast<double>(ratioRows) *
-                                 biggerTableJoinColumnSampleSizeRatio))) {
+                   static_cast<size_t>(std::ceil(
+                       static_cast<double>(smallerTableNumRows) * ratioRows *
+                       biggerTableJoinColumnSampleSizeRatio))) {
       throw std::runtime_error(absl::StrCat(
           "size_t overflow error: The multiplication (rounded up) of the "
           "number of smaller table rows (",
@@ -1390,7 +1389,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
           "), minus 1, added to the multiplication (rounded up) of the "
           "number "
           "of bigger table rows (",
-          smallerTableNumRows * static_cast<double>(ratioRows),
+          static_cast<double>(smallerTableNumRows) * ratioRows,
           ") with 'bigger-table-join-column-sample-size-ratio' (",
           biggerTableJoinColumnSampleSizeRatio,
           ") is bigger than the size_t type maximum ", getMaxValue<size_t>(),
@@ -1398,9 +1397,9 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     }
     const size_t biggerTableJoinColumnUpperBound =
         biggerTableJoinColumnLowerBound +
-        static_cast<size_t>(std::ceil(static_cast<double>(smallerTableNumRows) *
-                                      static_cast<double>(ratioRows) *
-                                      biggerTableJoinColumnSampleSizeRatio)) -
+        static_cast<size_t>(
+            std::ceil(static_cast<double>(smallerTableNumRows) * ratioRows *
+                      biggerTableJoinColumnSampleSizeRatio)) -
         1;
 
     // Seeds for the random generators, so that things are less similiar
@@ -1419,7 +1418,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         0};
     IdTableAndJoinColumn biggerTable{
         createRandomlyFilledIdTable(
-            smallerTableNumRows * static_cast<double>(ratioRows),
+            static_cast<size_t>(static_cast<double>(smallerTableNumRows) *
+                                ratioRows),
             biggerTableNumColumns,
             JoinColumnAndBounds{0, biggerTableJoinColumnLowerBound,
                                 biggerTableJoinColumnUpperBound, seeds.at(2)},
@@ -1633,7 +1633,7 @@ class BmOnlySmallerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
-        for (const float ratioRows : createExponentVectorUntilSize(
+        for (const float ratioRows : createExponentVectorUntilSize<float>(
                  10, getConfigVariables().minRatioRows_,
                  getConfigVariables().maxRatioRows_)) {
           const std::string tableName = absl::StrCat(
@@ -1644,8 +1644,10 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10, static_cast<size_t>(getConfigVariables().minBiggerTableRows_ /
-                                      ratioRows));
+              10, static_cast<size_t>(
+                      static_cast<double>(
+                          getConfigVariables().minBiggerTableRows_) /
+                      ratioRows));
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
@@ -1767,9 +1769,9 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     if (const auto& maxMemory{getConfigVariables().maxMemory()};
         maxMemory.has_value()) {
       smallerTableNumRows = static_cast<size_t>(
-          approximateNumIdTableRows(
-              maxMemory.value(), getConfigVariables().biggerTableNumColumns_) /
-          static_cast<double>(getConfigVariables().minRatioRows_));
+          static_cast<double>(approximateNumIdTableRows(
+              maxMemory.value(), getConfigVariables().biggerTableNumColumns_)) /
+          getConfigVariables().minRatioRows_);
       smallerTableNumRowsDescription =
           "division of the maximum number of rows, under the given "
           "'max-memory' "
@@ -1778,8 +1780,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           "'max-memory' and 'bigger-table-num-columns'";
     } else {
       smallerTableNumRows = static_cast<size_t>(
-          getConfigVariables().maxBiggerTableRows_ /
-          static_cast<double>(getConfigVariables().minRatioRows_));
+          static_cast<double>(getConfigVariables().maxBiggerTableRows_) /
+          getConfigVariables().minRatioRows_);
       smallerTableNumRowsDescription =
           "divison of 'max-bigger-table-rows' with 'min-ratio-rows'";
       smallerTableNumRowsConfigurationOptions = "'max-bigger-table-rows'";
@@ -1873,23 +1875,20 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           smallerTableNumRowsDescription, ", multiplied with ",
           ratioRowsDescription,
           " and the biggest entry in 'benchmark-sample-size-ratios',"));
-    } else if (!isValuePreservingCast<size_t>(
-                   std::floor(static_cast<double>(smallerTableNumRows) *
-                              static_cast<double>(smallerTableNumRows) *
-                              static_cast<double>(ratioRows)) /
+    } else if (!isValuePreservingCast<size_t>(std::floor(
+                   static_cast<double>(smallerTableNumRows) *
+                   static_cast<double>(smallerTableNumRows) * ratioRows /
                    (std::ceil(static_cast<double>(smallerTableNumRows) *
                               maxSampleSizeRatio) +
                     std::ceil(static_cast<double>(smallerTableNumRows) *
-                              static_cast<double>(ratioRows) *
-                              maxSampleSizeRatio)))) {
+                              ratioRows * maxSampleSizeRatio))))) {
       throw std::runtime_error(absl::StrCat(
           "size_t casting error: The calculated wanted result size in '",
           name(),
           "' has to be castable to size_t. Try increasing the values for the "
           "configuration options 'min-ratio-rows' or the biggest entry in "
-          "'benchmark-sample-size-ratios'. Or decreasing the value of "
-          "'",
-          smallerTableNumRowsConfigurationOptions, "'."));
+          "'benchmark-sample-size-ratios'. Or decreasing the value of ",
+          smallerTableNumRowsConfigurationOptions, "."));
     }
     /*
     If 'maxMemory' was set and our normal result is to big, we simply calculate
@@ -1897,12 +1896,11 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     would have.
     */
     auto resultWantedNumRows{static_cast<size_t>(
-        static_cast<double>(smallerTableNumRows * smallerTableNumRows *
-                            static_cast<double>(ratioRows)) /
+        static_cast<double>(smallerTableNumRows) *
+        static_cast<double>(smallerTableNumRows) * ratioRows /
         (std::ceil(static_cast<double>(smallerTableNumRows) *
                    maxSampleSizeRatio) +
-         std::ceil(static_cast<double>(smallerTableNumRows *
-                                       static_cast<double>(ratioRows)) *
+         std::ceil(static_cast<double>(smallerTableNumRows) * ratioRows *
                    maxSampleSizeRatio)))};
     const size_t resultNumColumns{getConfigVariables().smallerTableNumColumns_ +
                                   getConfigVariables().biggerTableNumColumns_ -
@@ -1957,8 +1955,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
   }
 };
 
-// TODO Transform into a class, where the bigger table has a static size and the
-// smaller table grows.
+// Benchmark tables, where the smaller table grows and the bigger table has a
+// static number of rows.
 class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     : public GeneralInterfaceImplementation {
  public:
@@ -1972,8 +1970,8 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     // Start with the smallest possible smaller table.
     auto growthFunction = createDefaultGrowthLambda(
         10, static_cast<size_t>(
-                getConfigVariables().minBiggerTableRows_ /
-                static_cast<double>(getConfigVariables().maxRatioRows_)));
+                static_cast<double>(getConfigVariables().minBiggerTableRows_) /
+                getConfigVariables().maxRatioRows_));
 
     // Making a benchmark table for all combination of IdTables being sorted and
     // all possibles sizes for the bigger table.
@@ -2074,13 +2072,15 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
         smallerTableIsSmallerThanBiggerTable,
         getConfigVariables().overlapChance_, std::nullopt,
         std::invoke(seedGenerator), smallerTableSorted, biggerTableSorted,
-        static_cast<float>(biggerTableNumRows) /
-            smallerTableNumRows(table.numRows()),
+        static_cast<float>(
+            static_cast<double>(biggerTableNumRows) /
+            static_cast<double>(smallerTableNumRows(table.numRows()))),
         smallerTableNumRows(table.numRows()),
         getConfigVariables().smallerTableNumColumns_,
         getConfigVariables().biggerTableNumColumns_,
         getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
         getConfigVariables().biggerTableJoinColumnSampleSizeRatio_)) {
+      // Nothing to actually do here.
     }
     addPostMeasurementInformationsToBenchmarkTable(&table);
     return table;
