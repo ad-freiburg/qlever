@@ -415,7 +415,7 @@ startingPoint`, `startingPoint <= base^i`, `base^(i+n) <= stoppingPoint`and
 */
 template <typename ReturnValueType = size_t>
 static std::vector<ReturnValueType> createExponentVectorUntilSize(
-    const size_t& base, const ReturnValueType startingPoint,
+    const ReturnValueType& base, const ReturnValueType startingPoint,
     const ReturnValueType stoppingPoint) {
   // Quick check, if the given arguments make sense.
   AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
@@ -1974,7 +1974,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         for (const size_t biggerTableNumRows : createExponentVectorUntilSize(
-                 10, getConfigVariables().minBiggerTableRows_,
+                 10UL, getConfigVariables().minBiggerTableRows_,
                  approximateNumIdTableRows(
                      getConfigVariables().maxMemoryBiggerTable(),
                      getConfigVariables().biggerTableNumColumns_))) {
