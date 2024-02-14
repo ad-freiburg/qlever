@@ -38,9 +38,9 @@ jobs:
         python -m pip install --upgrade pip
         pip install requests
     - name: Install dependencies
-      uses: ./.github/workflows/install-dependencies-ubuntu
+      uses: ./qlever-code/.github/workflows/install-dependencies-ubuntu
     - name: Install compiler
-      uses: ./.github/workflows/install-compiler-ubuntu
+      uses: ./qlever-code/.github/workflows/install-compiler-ubuntu
       with:
         compiler: "clang"
         compiler-version: "16"
