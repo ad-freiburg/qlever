@@ -62,7 +62,7 @@ jobs:
       run: |
         git config --global user.email "andrisrico@gmail.com"
         git config --global user.name "SIRDNARch"
-        git clone https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/SIRDNAR/test-web
+        git clone https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/SIRDNARch/test-web
         cd test-web
         cp ../qlever-test-suite/results/${{ github.sha }}.json ./results/
         git add .
