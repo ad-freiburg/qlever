@@ -47,7 +47,7 @@ jobs:
     - name: Create build directory
       run: mkdir ${{github.workspace}}/qlever-code/build
     - name: Configure CMake
-      run: cmake -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
+      run: cmake -S ${{github.workspace}}/qlever-code/ -B ${{github.workspace}}/qlever-code/build ${{env.cmake-flags}} -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=INFO -DUSE_PARALLEL=false
 
     - name: Build
       run: cmake --build ${{github.workspace}}/qlever-code/build --config ${{env.build-type}} -- -j $(nproc)
