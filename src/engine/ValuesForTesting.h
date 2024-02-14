@@ -26,12 +26,14 @@ class ValuesForTesting : public Operation {
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
-                            std::vector<std::optional<Variable>> variables,
-                            bool supportsLimit = false,
-                            std::vector<ColumnIndex> sortedColumns = {},
-                            LocalVocab localVocab = LocalVocab{},
-                            std::string cacheKey = "")
+  explicit ValuesForTesting(
+      QueryExecutionContext* ctx, IdTable table,
+      std::vector<std::optional<Variable>> variables,
+      bool supportsLimit = false,
+      std::string cacheKey =
+          std::to_string(ad_utility::FastRandomIntGenerator<int64_t>{}()),
+      std::vector<ColumnIndex> sortedColumns = {},
+      LocalVocab localVocab = LocalVocab{})
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
