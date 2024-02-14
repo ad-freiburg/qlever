@@ -277,7 +277,8 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
-  [[nodiscard]] PathTuples visit(Parser::TupleWithoutPathContext* ctx);
+  [[nodiscard]] PathTuplesAndTriples visit(
+      Parser::TupleWithoutPathContext* ctx);
 
   [[nodiscard]] PathTuplesAndTriples visit(Parser::TupleWithPathContext* ctx);
 

@@ -1116,10 +1116,16 @@ std::optional<PathTuplesAndTriples> Visitor::visit(
 PathTuplesAndTriples Visitor::visit(
     Parser::PropertyListPathNotEmptyContext* ctx) {
   PathTuplesAndTriples tuples = visit(ctx->tupleWithPath());
-  vector<PathTuples> tuplesWithoutPaths = visitVector(ctx->tupleWithoutPath());
+  vector<PathTuplesAndTriples> tuplesWithoutPaths =
+      visitVector(ctx->tupleWithoutPath());
+  if (ctx->tupleWithoutPath().size() > 0) {
+    LOG(INFO) << ctx->tupleWithoutPath().front()->getText() << std::endl;
+  }
   for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
-    tuples.first.insert(tuples.first.end(), tuplesWithoutPath.begin(),
-                        tuplesWithoutPath.end());
+    tuples.first.insert(tuples.first.end(), tuplesWithoutPath.first.begin(),
+                        tuplesWithoutPath.first.end());
+    tuples.second.insert(tuples.second.end(), tuplesWithoutPath.second.begin(),
+                         tuplesWithoutPath.second.end());
   }
   return tuples;
 }
@@ -1138,10 +1144,22 @@ Variable Visitor::visit(Parser::VerbSimpleContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PathTuples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
+PathTuplesAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
   VarOrPath predicate = visit(ctx->verbPathOrSimple());
   ObjectList objectList = visit(ctx->objectList());
-  return joinPredicateAndObject(predicate, objectList);
+  auto predicateObjectPairs = joinPredicateAndObject(predicate, objectList);
+  std::vector<TripleWithPropertyPath> triples;
+  auto toPath = [](VarOrTerm voT) -> VarOrPath {
+    if (std::holds_alternative<Variable>(voT)) {
+      return std::get<Variable>(voT);
+    } else {
+      return PropertyPath::fromIri(std::get<GraphTerm>(voT).toSparql());
+    }
+  };
+  for (auto& triple : objectList.second) {
+    triples.emplace_back(triple[0], toPath(triple[1]), triple[2]);
+  }
+  return {std::move(predicateObjectPairs), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
