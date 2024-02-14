@@ -22,7 +22,6 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 }
 
 TEST(ParserTest, testParse) {
-#if false
   {
     auto pq = SparqlParser::parseQuery("SELECT ?x WHERE {?x ?y ?z}");
     ASSERT_TRUE(pq.hasSelectClause());
@@ -458,8 +457,6 @@ TEST(ParserTest, testParse) {
     vector<string> vvars = {"?movie", "?director"};
     ASSERT_EQ(vvars, sc.getSelectedVariablesAsStrings());
   }
-
-#endif
 
   {
     auto pq = SparqlParser::parseQuery(

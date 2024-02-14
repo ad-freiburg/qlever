@@ -48,24 +48,6 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
 }
 
 // _____________________________________________________________________________
-
-inline std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
-  std::visit(
-      [&]<typename T>(const T& object) {
-        if constexpr (ad_utility::isSimilar<T, GraphTerm>) {
-          out << object;
-        } else if constexpr (ad_utility::isSimilar<T, Variable>) {
-          out << "Variable " << object.name();
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>, "unknown type");
-        }
-      },
-      static_cast<const VarOrTermBase&>(varOrTerm));
-  return out;
-}
-
-// _____________________________________________________________________________
-
 namespace parsedQuery {
 inline std::ostream& operator<<(std::ostream& out,
                                 const parsedQuery::Bind& bind) {
@@ -280,17 +262,17 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
       variant_matcher::MultiVariantMatcher<Ts...>(matcher));
 }
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Iri`.
+// Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::Iri>(
+  return MultiVariantWith<GraphTerm, ::Iri>(
       AD_PROPERTY(::Iri, iri, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `BlankNode`.
+// Returns a matcher that accepts a `GraphTerm` or `BlankNode`.
 inline auto BlankNode = [](bool generated, const std::string& label) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::BlankNode>(testing::AllOf(
+  return MultiVariantWith<GraphTerm, ::BlankNode>(testing::AllOf(
       AD_PROPERTY(::BlankNode, isGenerated, testing::Eq(generated)),
       AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
 };
@@ -310,9 +292,9 @@ inline auto VariableVariant = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Literal`.
+// Returns a matcher that accepts a `GraphTerm` or `Literal`.
 inline auto Literal = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::Literal>(
+  return MultiVariantWith<GraphTerm, ::Literal>(
       AD_PROPERTY(::Literal, literal, testing::Eq(value)));
 };
 

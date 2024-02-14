@@ -505,8 +505,8 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   if (std::holds_alternative<Variable>(varOrIri)) {
     reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
   }
-  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(std::get<GraphTerm>(varOrIri)));
-  Iri serviceIri = std::get<Iri>(std::get<GraphTerm>(varOrIri));
+  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
+  Iri serviceIri = std::get<Iri>(varOrIri);
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -1041,40 +1041,39 @@ vector<TripleWithPropertyPath> Visitor::visit(
   // Similarly if a triple `?var ql:contains-word "words"` is contained in the
   // query, then the variable `ql_matchingword_var` is implicitly created and
   // visible in the query body.
-  auto setMatchingWordAndScoreVisibleIfPresent = [this, ctx](
-                                                     VarOrTerm& subject,
-                                                     VarOrPath& predicate,
-                                                     VarOrTerm& object) {
-    auto* var = std::get_if<Variable>(&subject);
-    auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+  auto setMatchingWordAndScoreVisibleIfPresent =
+      [this, ctx](VarOrTerm& subject, VarOrPath& predicate, VarOrTerm& object) {
+        auto* var = std::get_if<Variable>(&subject);
+        auto* propertyPath = std::get_if<PropertyPath>(&predicate);
 
-    if (!var || !propertyPath) {
-      return;
-    }
-
-    if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-      string name = object.toSparql();
-      if (!((name.starts_with('"') && name.ends_with('"')) ||
-            (name.starts_with('\'') && name.ends_with('\'')))) {
-        reportError(
-            ctx, "ql:contains-word has to be followed by a string in quotes");
-      }
-      for (std::string_view s : std::vector<std::string>(
-               absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-        if (!s.ends_with('*')) {
-          continue;
+        if (!var || !propertyPath) {
+          return;
         }
-        addVisibleVariable(var->getMatchingWordVariable(
-            ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
-      }
-    } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-      if (const auto* entVar = std::get_if<Variable>(&object)) {
-        addVisibleVariable(var->getScoreVariable(*entVar));
-      } else if (const auto* fixedEntity = std::get_if<GraphTerm>(&object)) {
-        addVisibleVariable(var->getScoreVariable(fixedEntity->toSparql()));
-      }
-    }
-  };
+
+        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          string name = object.toSparql();
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
+                "ql:contains-word has to be followed by a string in quotes");
+          }
+          for (std::string_view s : std::vector<std::string>(
+                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+            if (!s.ends_with('*')) {
+              continue;
+            }
+            addVisibleVariable(var->getMatchingWordVariable(
+                ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
+          }
+        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+          if (const auto* entVar = std::get_if<Variable>(&object)) {
+            addVisibleVariable(var->getScoreVariable(*entVar));
+          } else {
+            addVisibleVariable(var->getScoreVariable(object.toSparql()));
+          }
+        }
+      };
 
   if (ctx->varOrTerm()) {
     auto subject = visit(ctx->varOrTerm());
@@ -1153,7 +1152,7 @@ PathTuplesAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
     if (std::holds_alternative<Variable>(voT)) {
       return std::get<Variable>(voT);
     } else {
-      return PropertyPath::fromIri(std::get<GraphTerm>(voT).toSparql());
+      return PropertyPath::fromIri(voT.toSparql());
     }
   };
   for (auto& triple : objectList.second) {
