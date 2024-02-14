@@ -389,8 +389,9 @@ concept exactlyOneGrowthFunction =
 @brief Calculates the smalles whole exponent, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-static size_t calculateNextWholeExponent(const size_t& base,
-                                         const auto& startingPoint) {
+template <typename T>
+static size_t calculateNextWholeExponent(const T& base,
+                                         const T& startingPoint) {
   // This is a rather simple calculation: We calculate
   // $log_(base)(startingPoint)$ and round up.
   return static_cast<size_t>(
