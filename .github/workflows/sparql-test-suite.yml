@@ -53,6 +53,18 @@ jobs:
       run: cmake --build ${{github.workspace}}/qlever-code/build --config ${{env.build-type}} -- -j $(nproc)
     - name: Execute test suite
       run: |
-          python ./qlever-test-suite/testsuite.py config http://0.0.0.0 7001 ./sparql-test-suite-files/sparql/sparql11/ ../qlever-code/build/ listOfTests.csv
-          python ./qlever-test-suite/testsuite.py extract
-          python3 ./qlever-test-suite/testsuite.py ${{ github.sha }}
+          cd qlever-test-suite
+          python testsuite.py config http://0.0.0.0 7001 ./sparql-test-suite-files/sparql/sparql11/ ../qlever-code/build/ listOfTests.csv
+          python testsuite.py extract
+          python testsuite.py ${{ github.sha }}
+          cd ..
+    - name: Commit to test-web
+      run: |
+        git config --global user.email "andrisrico@gmail.com"
+        git config --global user.name "SIRDNARch"
+        git clone https://x-access-token:${{ secrets.REPO_ACCESS_TOKEN }}@github.com/SIRDNAR/test-web
+        cd test-web
+        cp ../qlever-test-suite/results/${{ github.sha }}.json ./results/
+        git add .
+        git commit -m "Add ${{ github.sha }}"
+        git push
