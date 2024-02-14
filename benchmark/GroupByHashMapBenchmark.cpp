@@ -330,7 +330,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
       sortedColumns = {0};
     }
     auto valueTree = ad_utility::makeExecutionTree<ValuesForTesting>(
-        qec, std::move(table), variables, false, sortedColumns,
+        qec, std::move(table), variables, false, "", sortedColumns,
         std::move(localVocab));
 
     for (size_t i = 0; i < numMeasurements; i++)
