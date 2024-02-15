@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 
 #include "engine/CallFixedSize.h"
@@ -65,9 +66,12 @@ void TransitivePathGraphblas::computeTransitivePathBound(
   auto fillTime = timer.msecs();
 
   LOG(DEBUG) << "GraphBLAS Timing measurements:" << std::endl;
-  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
-  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
-  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << std::to_string(initTime.count())
+             << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << std::to_string(hullTime.count())
+             << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << std::to_string(fillTime.count())
+             << "ms" << std::endl;
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -127,9 +131,12 @@ void TransitivePathGraphblas::computeTransitivePath(
   auto fillTime = timer.msecs();
 
   LOG(DEBUG) << "GraphBLAS Timing measurements:" << std::endl;
-  LOG(DEBUG) << "Initialization time: " << initTime << "ms" << std::endl;
-  LOG(DEBUG) << "Hull computation time: " << hullTime << "ms" << std::endl;
-  LOG(DEBUG) << "IdTable fill time: " << fillTime << "ms" << std::endl;
+  LOG(DEBUG) << "Initialization time: " << std::to_string(initTime.count())
+             << "ms" << std::endl;
+  LOG(DEBUG) << "Hull computation time: " << std::to_string(hullTime.count())
+             << "ms" << std::endl;
+  LOG(DEBUG) << "IdTable fill time: " << std::to_string(fillTime.count())
+             << "ms" << std::endl;
 
   *dynRes = std::move(res).toDynamic();
 }
