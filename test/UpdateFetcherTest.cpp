@@ -22,10 +22,9 @@ ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
   QueryHub queryHub{ioContext};
   UpdateFetcher updateFetcher{queryHub, queryId};
 
-  auto distributor =
-      co_await queryHub.createOrAcquireDistributorForSending(queryId);
-  co_await distributor->addQueryStatusUpdate("1");
-  co_await distributor->addQueryStatusUpdate("2");
+  auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);
+  distributor->addQueryStatusUpdate("1");
+  distributor->addQueryStatusUpdate("2");
 
   auto payload = co_await updateFetcher.waitForEvent();
   EXPECT_THAT(payload, Pointee("1"s));

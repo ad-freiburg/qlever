@@ -6,11 +6,12 @@
 
 #include <boost/asio/as_tuple.hpp>
 #include <boost/asio/bind_executor.hpp>
-#include <boost/asio/use_awaitable.hpp>
 #include <boost/asio/deferred.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/use_future.hpp>
 
-#include "util/Exception.h"
 #include "util/AsioHelpers.h"
+#include "util/Exception.h"
 
 namespace ad_utility::websocket {
 
@@ -47,29 +48,39 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 
 // _____________________________________________________________________________
 
-net::awaitable<void> QueryToSocketDistributor::addQueryStatusUpdate(
-    std::string payload) {
+void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  auto impl = [this, sharedPayload=std::move(sharedPayload)]() {
-    AD_CONTRACT_CHECK(!finished_);
+  auto impl = [this, sharedPayload = std::move(sharedPayload)]() {
+    AD_CONTRACT_CHECK(!finished_.test());
     data_.push_back(std::move(sharedPayload));
     wakeUpWaitingListeners();
   };
-  return ad_utility::runFunctionOnStrand(strand_, impl, net::use_awaitable);
+  net::post(strand_, std::move(impl));
 }
 
 // _____________________________________________________________________________
 
-net::awaitable<void> QueryToSocketDistributor::signalEnd() {
-  auto impl = [this]() {
-    AD_CONTRACT_CHECK(!finished_);
-    finished_ = true;
+void QueryToSocketDistributor::signalEnd() {
+  auto impl = [self = shared_from_this(), this]() {
+    (void)self;
     wakeUpWaitingListeners();
-    // Invoke cleanup pre-emptively
-    signalEndCall_();
-    std::move(cleanupCall_).cancel();
+    // signalEndCall_();
+    // std::move(cleanupCall_).cancel();
   };
-  co_await ad_utility::runFunctionOnStrand(strand_, impl, net::deferred);
+  if (finished_.test_and_set()) {
+    // Only one call to signal end is allowed.
+    AD_FAIL();
+  }
+  signalEndCall_();
+  std::move(cleanupCall_).cancel();
+  net::post(strand_, std::move(impl));
+  /*
+  if (strand_.running_in_this_thread()) {
+    impl();
+  } else {
+    net::post(strand_, std::move(impl));
+  }
+   */
 }
 
 // _____________________________________________________________________________
@@ -78,7 +89,7 @@ net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPieceUnguarded(size_t index) const {
   if (index < data_.size()) {
     co_return data_.at(index);
-  } else if (finished_) {
+  } else if (finished_.test()) {
     co_return nullptr;
   }
 

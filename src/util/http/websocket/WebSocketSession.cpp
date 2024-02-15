@@ -43,20 +43,20 @@ bool WebSocketSession::tryToCancelQuery() const {
 net::awaitable<void> WebSocketSession::handleClientCommands() {
   beast::flat_buffer buffer;
 
-    while (ws_.is_open()) {
-      co_await ws_.async_read(buffer, net::use_awaitable);
-      if (ws_.got_text()) {
-        auto data = buffer.data();
-        std::string_view dataAsString{static_cast<char*>(data.data()),
-                                      data.size()};
-        if (dataAsString == "cancel_on_close") {
-          cancelOnClose_ = true;
-        } else if (dataAsString == "cancel" && tryToCancelQuery()) {
-          break;
-        }
+  while (ws_.is_open()) {
+    co_await ws_.async_read(buffer, net::use_awaitable);
+    if (ws_.got_text()) {
+      auto data = buffer.data();
+      std::string_view dataAsString{static_cast<char*>(data.data()),
+                                    data.size()};
+      if (dataAsString == "cancel_on_close") {
+        cancelOnClose_ = true;
+      } else if (dataAsString == "cancel" && tryToCancelQuery()) {
+        break;
       }
-      buffer.clear();
     }
+    buffer.clear();
+  }
 }
 
 // _____________________________________________________________________________

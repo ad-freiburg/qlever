@@ -10,8 +10,7 @@ namespace ad_utility::websocket {
 
 net::awaitable<UpdateFetcher::PayloadType> UpdateFetcher::waitForEvent() {
   if (!distributor_) {
-    distributor_ =
-        co_await queryHub_.createOrAcquireDistributorForReceiving(queryId_);
+    distributor_ = queryHub_.createOrAcquireDistributorForReceiving(queryId_);
   }
 
   auto data = co_await distributor_->waitForNextDataPiece(nextIndex_);

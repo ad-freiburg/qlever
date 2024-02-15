@@ -24,7 +24,8 @@ namespace net = boost::asio;
 /// to be synchronized globally. The public API is thread-safe, but you
 /// will end up on a different executor when awaiting it, so make sure
 /// to use a wrapper like `resumeOnOriginalExecutor()` to stay on your executor!
-class QueryToSocketDistributor {
+class QueryToSocketDistributor
+    : public std::enable_shared_from_this<QueryToSocketDistributor> {
   /// Strand to synchronize all operations on this class
   net::strand<net::any_io_executor> strand_;
   mutable net::deadline_timer infiniteTimer_;
@@ -32,7 +33,7 @@ class QueryToSocketDistributor {
   /// their own pace.
   std::vector<std::shared_ptr<const std::string>> data_{};
   /// Flag to indicate if a query ended and won't receive any more updates.
-  bool finished_ = false;
+  std::atomic_flag finished_ = false;
 
   /// Function to remove this distributor from the `QueryHub` when it is
   /// destructed.
@@ -58,20 +59,23 @@ class QueryToSocketDistributor {
 
   /// Appends specified data to the vector and signals all waiting websockets
   /// that new data is available
-  net::awaitable<void> addQueryStatusUpdate(std::string payload);
+  void addQueryStatusUpdate(std::string payload);
 
   /// Sets the signal that no new updates will be pushed. This causes any
   /// subsequent calls to waitForUpdate to return immediately if all data
   /// has already been consumed
-  net::awaitable<void> signalEnd();
+  void signalEnd();
+
+  auto strand() const { return strand_; }
 
   /// Awaitable object to wait for and fetch the next available piece of data
   /// for the websocket. co_returns a nullptr if no more data is available
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index) const;
+
  private:
-    net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPieceUnguarded(
-            size_t index) const;
+  net::awaitable<std::shared_ptr<const std::string>>
+  waitForNextDataPieceUnguarded(size_t index) const;
 };
 }  // namespace ad_utility::websocket
 

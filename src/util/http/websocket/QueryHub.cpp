@@ -32,8 +32,7 @@ inline auto makeDeleteFromDistributors =
 
 // _____________________________________________________________________________
 template <bool isSender>
-net::awaitable<std::shared_ptr<
-    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   auto& distributors = socketDistributors_.get();
   if (distributors.contains(queryId)) {
@@ -44,7 +43,7 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
         AD_CONTRACT_CHECK(!reference.started_);
         reference.started_ = true;
       }
-      co_return ptr;
+      return ptr;
     } else {
       distributors.erase(queryId);
     }
@@ -54,57 +53,48 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
   // We pass a weak_ptr version of `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
-  auto cleanupCall = [globalStrand = globalStrand_,
-                      socketDistributors = socketDistributors_.getWeak(),
-                      queryId,
-                      alreadyCalled = false](bool alwaysDelete) mutable {
-    AD_CORRECTNESS_CHECK(!alreadyCalled);
-    alreadyCalled = true;
-    // This if-clause causes `guard_` to prevent destruction of
-    // the io_context backing the global strand which is used here for
-    // scheduling. Otherwise, if the QueryHub is already destroyed, then
-    // just do nothing, no need for cleanup in this case.
-    auto pointer = socketDistributors.lock();
-    if (!pointer) {
-      return;
-    }
-    net::dispatch(globalStrand,
-                  makeDeleteFromDistributors(std::move(socketDistributors),
-                                             std::move(queryId), alwaysDelete));
-    // We don't wait for the deletion to complete here, but only for its
-    // scheduling. We still get the expected behavior because all accesses
-    // to the `socketDistributor` are synchronized via a strand and
-    // BOOST::asio schedules in a FIFO manner.
-  };
+  auto cleanupCall =
+      [&mutex = mutex_, socketDistributors = socketDistributors_.getWeak(),
+       queryId, alreadyCalled = false](bool alwaysDelete) mutable {
+        AD_CORRECTNESS_CHECK(!alreadyCalled);
+        alreadyCalled = true;
+        // This if-clause causes `guard_` to prevent destruction of
+        // the io_context backing the global strand which is used here for
+        // scheduling. Otherwise, if the QueryHub is already destroyed, then
+        // just do nothing, no need for cleanup in this case.
+        auto pointer = socketDistributors.lock();
+        if (!pointer) {
+          return;
+        }
+        std::lock_guard l{mutex};
+        // TODO<joka921> Make this an ordinary function.
+        makeDeleteFromDistributors(std::move(socketDistributors),
+                                   std::move(queryId), alwaysDelete)();
+      };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
   distributors.emplace(queryId, WeakReferenceHolder{distributor, isSender});
-  co_return distributor;
+  return distributor;
 }
 
 // _____________________________________________________________________________
 template <bool isSender>
-net::awaitable<std::shared_ptr<
-    QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
-  auto res = co_await ad_utility::runAwaitableOnStrandAwaitable(
-      globalStrand_,
-      createOrAcquireDistributorInternalUnsafe<isSender>(std::move(queryId)));
-  AD_CORRECTNESS_CHECK(!globalStrand_.running_in_this_thread());
-  co_return res;
+  std::lock_guard l{mutex_};
+  return createOrAcquireDistributorInternalUnsafe<isSender>(std::move(queryId));
 }
 
 // _____________________________________________________________________________
-net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+std::shared_ptr<QueryToSocketDistributor>
 QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
   return createOrAcquireDistributorInternal<true>(std::move(queryId));
 }
 
 // _____________________________________________________________________________
 
-net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
+std::shared_ptr<const QueryToSocketDistributor>
 QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
   return createOrAcquireDistributorInternal<false>(std::move(queryId));
 }

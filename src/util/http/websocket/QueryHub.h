@@ -38,8 +38,8 @@ class QueryHub {
   using MapType = absl::flat_hash_map<QueryId, WeakReferenceHolder>;
 
   net::io_context& ioContext_;
-  /// Strand for synchronization
-  net::strand<net::any_io_executor> globalStrand_;
+  /// Mutex for synchronization.
+  std::mutex mutex_;
   /// Guard to block destruction of the underlying io_context, to allow
   /// to gracefully destroy objects that might depend on the io_context.
   ad_utility::PointerGuard<MapType> socketDistributors_{
@@ -61,31 +61,29 @@ class QueryHub {
   /// createOrAcquireDistributorForReceiving, without thread safety,
   /// exposed for testing
   template <bool isSender>
-  net::awaitable<std::shared_ptr<
-      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>>
+  std::shared_ptr<
+      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
   createOrAcquireDistributorInternalUnsafe(QueryId queryId);
 
   /// createOrAcquireDistributorInternalUnsafe, but dispatched on global strand
   template <bool isSender>
-  net::awaitable<
-      std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>>
+  std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>
       createOrAcquireDistributorInternal(QueryId);
 
  public:
-  explicit QueryHub(net::io_context& ioContext)
-      : ioContext_{ioContext}, globalStrand_{net::make_strand(ioContext)} {}
+  explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}
 
   /// Create a new `QueryToSocketDistributor` or return a pre-existing one for
   /// the provided query id if there already is one. This can only ever be
   /// called once per query session, otherwise there will be an exception. There
   /// can only ever be one sender.
-  net::awaitable<std::shared_ptr<QueryToSocketDistributor>>
+  std::shared_ptr<QueryToSocketDistributor>
       createOrAcquireDistributorForSending(QueryId);
 
   /// Returns a const `QueryToSocketDistributor` that can only used to receive
   /// messages. In contrast to `createOrAcquireDistributorForSending` this can
   /// be called arbitrarily often during the lifetime of a single query session.
-  net::awaitable<std::shared_ptr<const QueryToSocketDistributor>>
+  std::shared_ptr<const QueryToSocketDistributor>
       createOrAcquireDistributorForReceiving(QueryId);
 };
 }  // namespace ad_utility::websocket

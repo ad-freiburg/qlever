@@ -6,12 +6,12 @@
 
 #include <thread>
 
-#include "util/http/beast.h"
 #include "./HttpTestHelpers.h"
 #include "absl/strings/str_cat.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
 #include "util/jthread.h"
 
 using namespace ad_utility::httpUtils;
@@ -92,7 +92,6 @@ TEST(HttpServer, HttpTest) {
     }
      */
 
-
     // Test if websocket is correctly opened and closed
     for (size_t i = 0; i < 20; ++i) {
       {
@@ -105,7 +104,7 @@ TEST(HttpServer, HttpTest) {
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    //LOG(INFO) << "After websocket" << std::endl;
+    // LOG(INFO) << "After websocket" << std::endl;
     /*
 
     // Test if websocket is denied on wrong paths
@@ -127,9 +126,9 @@ TEST(HttpServer, HttpTest) {
       {
         Url url{
             absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-        ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(), "GET\n/target\n");
-        ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post, "body").str(),
-                  "POST\n/target\nbody");
+        ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(),
+    "GET\n/target\n"); ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post,
+    "body").str(), "POST\n/target\nbody");
       }
       */
 

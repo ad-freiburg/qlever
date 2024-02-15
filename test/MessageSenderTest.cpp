@@ -28,10 +28,10 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   OwningQueryId queryId = queryRegistry.uniqueId("my-query");
   QueryHub queryHub{ioContext};
 
-  auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
-      queryId.toQueryId());
+  auto distributor =
+      queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
 
-  co_await MessageSender::create(std::move(queryId), queryHub);
+  MessageSender::create(std::move(queryId), queryHub);
 
   net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
@@ -51,11 +51,10 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
   QueryHub queryHub{ioContext};
 
   {
-    auto distributor = co_await queryHub.createOrAcquireDistributorForReceiving(
-        queryId.toQueryId());
+    auto distributor =
+        queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
 
-    auto updateWrapper =
-        co_await MessageSender::create(std::move(queryId), queryHub);
+    auto updateWrapper = MessageSender::create(std::move(queryId), queryHub);
 
     updateWrapper("Still");
     updateWrapper("Dre");
@@ -90,8 +89,7 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryHub queryHub{ioContext};
 
   {
-    auto messageSender =
-        co_await MessageSender::create(std::move(queryId), queryHub);
+    auto messageSender = MessageSender::create(std::move(queryId), queryHub);
     EXPECT_EQ(reference, messageSender.getQueryId());
   }
   // The destructor of `MessageSender` calls `signalEnd` on the underlying

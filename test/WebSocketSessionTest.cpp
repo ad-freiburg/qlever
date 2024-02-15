@@ -64,17 +64,18 @@ TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
 
 struct WebSocketTestContainer {
   net::strand<net::io_context::executor_type> strand_;
-  QueryHub queryHub_;
+  std::unique_ptr<QueryHub> queryHub_;
   QueryRegistry registry_;
   tcp::socket server_;
   tcp::socket client_;
+  QueryHub& queryHub() { return *queryHub_; }
 
   net::awaitable<void> serverLogic(auto&& completionToken) {
     boost::beast::tcp_stream stream{std::move(server_)};
     boost::beast::flat_buffer buffer;
     http::request<http::string_body> request;
     co_await http::async_read(stream, buffer, request, completionToken);
-    co_await WebSocketSession::handleSession(queryHub_, registry_, request,
+    co_await WebSocketSession::handleSession(queryHub(), registry_, request,
                                              std::move(stream.socket()));
   }
 
@@ -84,8 +85,9 @@ struct WebSocketTestContainer {
 net::awaitable<WebSocketTestContainer> createTestContainer(
     net::io_context& ioContext) {
   auto strand = net::make_strand(ioContext);
-  WebSocketTestContainer container{strand, QueryHub{ioContext}, QueryRegistry{},
-                                   tcp::socket{strand}, tcp::socket{strand}};
+  WebSocketTestContainer container{
+      strand, std::make_unique<QueryHub>(ioContext), QueryRegistry{},
+      tcp::socket{strand}, tcp::socket{strand}};
   co_await connect(container.server_, container.client_);
   co_return std::move(container);
 }
@@ -98,10 +100,10 @@ net::awaitable<WebSocketTestContainer> createTestContainer(
 ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto distributor = co_await c.queryHub_.createOrAcquireDistributorForSending(
+  auto distributor = c.queryHub().createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
 
-  co_await distributor->addQueryStatusUpdate("my-event");
+  distributor->addQueryStatusUpdate("my-event");
 
   auto controllerActions = [&]() -> net::awaitable<void> {
     boost::beast::websocket::stream<tcp::socket> webSocket{
@@ -148,10 +150,10 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
 ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto distributor = co_await c.queryHub_.createOrAcquireDistributorForSending(
+  auto distributor = c.queryHub().createOrAcquireDistributorForSending(
       QueryId::idFromString("some-id"));
 
-  co_await distributor->addQueryStatusUpdate("my-event");
+  distributor->addQueryStatusUpdate("my-event");
 
   auto controllerActions = [&]() -> net::awaitable<void> {
     boost::beast::websocket::stream<tcp::socket> webSocket{
@@ -166,7 +168,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
     std::string_view view{static_cast<const char*>(data.data()), data.size()};
     EXPECT_EQ(view, "my-event");
     // Expect socket will be closed
-    co_await distributor->signalEnd();
+    distributor->signalEnd();
     EXPECT_THROW(co_await webSocket.async_read(buffer, net::use_awaitable),
                  boost::system::system_error);
   };
@@ -220,8 +222,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
 
     {
       // Trigger connection close by creating and destroying message sender
-      co_await ad_utility::websocket::MessageSender::create(
-          std::move(queryId).value(), c.queryHub_);
+      ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
+                                                   c.queryHub());
       co_await net::post(net::use_awaitable);
     }
 
@@ -333,8 +335,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 
     {
       // Trigger connection close by creating and destroying message sender
-      co_await ad_utility::websocket::MessageSender::create(
-          std::move(queryId).value(), c.queryHub_);
+      ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
+                                                   c.queryHub());
       co_await net::post(net::use_awaitable);
     }
 

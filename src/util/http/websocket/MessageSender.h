@@ -5,7 +5,7 @@
 #ifndef QLEVER_MESSAGESENDER_H
 #define QLEVER_MESSAGESENDER_H
 
-//#include <boost/asio/co_spawn.hpp>
+// #include <boost/asio/co_spawn.hpp>
 
 #include "util/UniqueCleanup.h"
 #include "util/http/websocket/QueryHub.h"
@@ -41,7 +41,7 @@ class MessageSender {
 
   // This constructor is private because this instance should only ever be
   // created asynchronously. Use the public factory function `create` instead.
-  MessageSender(DistributorAndOwningQueryId, net::any_io_executor);
+  explicit MessageSender(DistributorAndOwningQueryId);
 
  public:
   MessageSender(MessageSender&&) noexcept = default;
@@ -50,8 +50,7 @@ class MessageSender {
   /// Asynchronously creates an instance of this class. This is because because
   /// creating a distributor for this class needs to be done in a synchronized
   /// way.
-  static net::awaitable<MessageSender> create(OwningQueryId owningQueryId,
-                                              QueryHub& queryHub);
+  static MessageSender create(OwningQueryId owningQueryId, QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;

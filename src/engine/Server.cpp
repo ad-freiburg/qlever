@@ -626,7 +626,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
-    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
+    auto messageSender = ad_utility::websocket::MessageSender::create(
         getQueryId(request, query), *queryHub);
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
@@ -811,7 +811,8 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
   auto handleCopy = handle;
   auto optionalRes = co_await computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit]() mutable -> std::optional<PlannedQuery> {
+       handle = std::move(handle),
+       timeLimit]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
