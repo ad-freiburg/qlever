@@ -24,7 +24,6 @@ class GrbMatrix {
   using MatrixPtr = std::unique_ptr<GrB_Matrix, MatrixDeleter>;
   MatrixPtr matrix_ =
       std::unique_ptr<GrB_Matrix, MatrixDeleter>(new GrB_Matrix());
-  static bool isInitialized_;
 
  public:
   /**
@@ -167,10 +166,6 @@ class GrbMatrix {
    * @return
    */
   GrbMatrix multiply(const GrbMatrix& otherMatrix) const;
-
-  // TODO: Move to singleton class
-  static void initialize();
-  static void finalize();
 
   /**
    * @brief Get a reference to the internal matrix.

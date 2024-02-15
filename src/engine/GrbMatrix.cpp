@@ -244,24 +244,3 @@ void GrbMatrix::handleError(GrB_Info info) {
   }
   AD_FAIL();
 }
-
-bool GrbMatrix::isInitialized_ = []() {
-  GrB_init(GrB_NONBLOCKING);
-  return true;
-}();
-
-// _____________________________________________________________________________
-void GrbMatrix::initialize() {
-  if (!GrbMatrix::isInitialized_) {
-    GrB_init(GrB_NONBLOCKING);
-    GrbMatrix::isInitialized_ = true;
-  }
-}
-
-// _____________________________________________________________________________
-void GrbMatrix::finalize() {
-  if (GrbMatrix::isInitialized_) {
-    GrB_finalize();
-    GrbMatrix::isInitialized_ = false;
-  }
-}

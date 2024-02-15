@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include "engine/GrbGlobalContext.h"
 #include "engine/GrbMatrix.h"
 #include "gmock/gmock.h"
 
@@ -23,17 +24,15 @@ void checkMatrix(GrbMatrix& matrix, size_t numRows, size_t numCols,
 }
 
 TEST(GrbMatrixTest, constructor) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix = GrbMatrix(2, 3);
 
   checkMatrix(matrix, 2, 3, 0, {});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, clone) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix1 = GrbMatrix(2, 2);
   matrix1.setElement(0, 0, true);
@@ -44,24 +43,20 @@ TEST(GrbMatrixTest, clone) {
 
   checkMatrix(matrix2, 2, 2, 1,
               {{0, 0, true}, {0, 1, false}, {1, 0, false}, {1, 1, false}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, getSetElement) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix = GrbMatrix(3, 3);
   matrix.setElement(1, 0, true);
   matrix.setElement(0, 2, true);
 
   checkMatrix(matrix, 3, 3, 2, {{1, 0, true}, {0, 2, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, build) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   std::vector<size_t> rowIndices{0, 0, 1};
   std::vector<size_t> colIndices{1, 2, 2};
@@ -69,22 +64,18 @@ TEST(GrbMatrixTest, build) {
   GrbMatrix matrix = GrbMatrix::build(rowIndices, colIndices, 3, 3);
 
   checkMatrix(matrix, 3, 3, 3, {{0, 1, true}, {0, 2, true}, {1, 2, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, diag) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   auto matrix = GrbMatrix::diag(3);
 
   checkMatrix(matrix, 3, 3, 3, {{0, 0, true}, {1, 1, true}, {2, 2, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, extractTuples) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix = GrbMatrix(3, 3);
 
@@ -93,8 +84,6 @@ TEST(GrbMatrixTest, extractTuples) {
   matrix.setElement(1, 2, true);
 
   auto [rowIndices, colIndices] = matrix.extractTuples();
-
-  GrbMatrix::finalize();
 
   std::vector<size_t> expectedRowIndices{0, 0, 1};
   std::vector<size_t> expectedColIndices{1, 2, 2};
@@ -105,7 +94,7 @@ TEST(GrbMatrixTest, extractTuples) {
 }
 
 TEST(GrbMatrixTest, extractColumn) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix = GrbMatrix(3, 3);
 
@@ -114,15 +103,13 @@ TEST(GrbMatrixTest, extractColumn) {
 
   std::vector<size_t> colIndices = matrix.extractColumn(1);
 
-  GrbMatrix::finalize();
-
   std::vector<size_t> expected{0, 2};
 
   EXPECT_THAT(colIndices, testing::UnorderedElementsAreArray(expected));
 }
 
 TEST(GrbMatrixTest, extractRow) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix = GrbMatrix(3, 3);
 
@@ -131,15 +118,13 @@ TEST(GrbMatrixTest, extractRow) {
 
   std::vector<size_t> rowIndices = matrix.extractRow(1);
 
-  GrbMatrix::finalize();
-
   std::vector<size_t> expected{0, 2};
 
   EXPECT_THAT(rowIndices, testing::UnorderedElementsAreArray(expected));
 }
 
 TEST(GrbMatrixTest, multiplySquareMatrices) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix1 = GrbMatrix(2, 2);
   matrix1.setElement(0, 0, true);
@@ -152,12 +137,10 @@ TEST(GrbMatrixTest, multiplySquareMatrices) {
   GrbMatrix matrix3 = matrix1.multiply(matrix2);
 
   checkMatrix(matrix3, 2, 2, 2, {{0, 0, true}, {1, 0, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, multiplyShapedMatrices) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix1 = GrbMatrix(2, 3);
   matrix1.setElement(0, 0, true);
@@ -171,12 +154,10 @@ TEST(GrbMatrixTest, multiplyShapedMatrices) {
   GrbMatrix matrix3 = matrix1.multiply(matrix2);
 
   checkMatrix(matrix3, 2, 2, 2, {{0, 0, true}, {1, 0, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, transpose) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   auto matrix = GrbMatrix(2, 3);
 
@@ -187,12 +168,10 @@ TEST(GrbMatrixTest, transpose) {
   GrbMatrix result = matrix.transpose();
 
   checkMatrix(result, 3, 2, 3, {{0, 0, true}, {1, 0, true}, {2, 0, true}});
-
-  GrbMatrix::finalize();
 }
 
 TEST(GrbMatrixTest, accumulateMultiply) {
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
 
   GrbMatrix matrix1 = GrbMatrix(2, 2);
   matrix1.setElement(0, 0, true);
@@ -206,6 +185,4 @@ TEST(GrbMatrixTest, accumulateMultiply) {
 
   checkMatrix(matrix1, 2, 2, 4,
               {{0, 0, true}, {0, 1, true}, {1, 0, true}, {1, 1, true}});
-
-  GrbMatrix::finalize();
 }

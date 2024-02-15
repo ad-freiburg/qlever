@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "engine/CallFixedSize.h"
+#include "engine/GrbGlobalContext.h"
 #include "engine/TransitivePathBase.h"
 #include "util/Exception.h"
 #include "util/Timer.h"
@@ -35,7 +36,7 @@ void TransitivePathGraphblas::computeTransitivePathBound(
   auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
   timer.start();
 
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
 
   std::span<const Id> startNodes =
@@ -90,7 +91,7 @@ void TransitivePathGraphblas::computeTransitivePath(
   auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
   timer.start();
 
-  GrbMatrix::initialize();
+  GrbGlobalContext::getContext();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
 
   timer.stop();
