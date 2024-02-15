@@ -39,6 +39,8 @@ void TransitivePathGraphblas::computeTransitivePathBound(
   GrbGlobalContext::getContext();
   auto [graph, mapping] = setupMatrix(startCol, targetCol, sub.size());
 
+  checkCancellation();
+
   std::span<const Id> startNodes =
       startSideTable.getColumn(startSide.treeAndCol_->second);
   GrbMatrix startNodeMatrix =
@@ -325,6 +327,7 @@ std::tuple<GrbMatrix, IdMapping> TransitivePathGraphblas::setupMatrix(
 
     rowIndices.push_back(startIndex);
     colIndices.push_back(targetIndex);
+    checkCancellation();
   }
 
   auto matrix =
@@ -347,6 +350,7 @@ GrbMatrix TransitivePathGraphblas::setupStartNodeMatrix(
     size_t colIndex = mapping.getIndex(id);
     startMatrix.setElement(rowIndex, colIndex, true);
     rowIndex++;
+    checkCancellation();
   }
   return startMatrix;
 }
