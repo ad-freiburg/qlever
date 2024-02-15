@@ -1131,15 +1131,15 @@ PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
   ObjectsAndTriples objectList = visit(ctx->objectList());
   auto predicateObjectPairs = joinPredicateAndObject(predicate, objectList);
   std::vector<TripleWithPropertyPath> triples;
-  auto toPath = [](GraphTerm voT) -> VarOrPath {
-    if (std::holds_alternative<Variable>(voT)) {
-      return std::get<Variable>(voT);
+  auto toVarOrPath = [](GraphTerm term) -> VarOrPath {
+    if (std::holds_alternative<Variable>(term)) {
+      return std::get<Variable>(term);
     } else {
-      return PropertyPath::fromIri(voT.toSparql());
+      return PropertyPath::fromIri(term.toSparql());
     }
   };
   for (auto& triple : objectList.second) {
-    triples.emplace_back(triple[0], toPath(triple[1]), triple[2]);
+    triples.emplace_back(triple[0], toVarOrPath(triple[1]), triple[2]);
   }
   return {std::move(predicateObjectPairs), std::move(triples)};
 }
@@ -1280,7 +1280,7 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(
     Parser::BlankNodePropertyListContext* ctx) {
-  GraphTerm var = [this]() -> GraphTerm {
+  GraphTerm term = [this]() -> GraphTerm {
     if (isInsideConstructTriples_) {
       return GraphTerm{newBlankNode()};
     } else {
@@ -1290,10 +1290,10 @@ SubjectOrObjectAndTriples Visitor::visit(
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
   for (auto& tuple : propertyList.first) {
-    triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
+    triples.push_back({term, std::move(tuple[0]), std::move(tuple[1])});
   }
   ad_utility::appendVector(triples, std::move(propertyList.second));
-  return {std::move(var), std::move(triples)};
+  return {std::move(term), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
@@ -1317,26 +1317,25 @@ SubjectOrObjectAndPathTriples Visitor::visit(
 // ____________________________________________________________________________________
 SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   Triples triples;
-  GraphTerm nextElement{
-      GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
+  GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
   auto nodes = ctx->graphNode();
   for (auto context : Reversed{nodes}) {
-    GraphTerm currentVar{GraphTerm{newBlankNode()}};
+    GraphTerm currentTerm{newBlankNode()};
     auto graphNode = visit(context);
 
     triples.push_back(
-        {currentVar,
+        {currentTerm,
          GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}},
          std::move(graphNode.first)});
     triples.push_back(
-        {currentVar,
+        {currentTerm,
          GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}},
-         std::move(nextElement)});
-    nextElement = std::move(currentVar);
+         std::move(nextTerm)});
+    nextTerm = std::move(currentTerm);
 
     ad_utility::appendVector(triples, std::move(graphNode.second));
   }
-  return {std::move(nextElement), std::move(triples)};
+  return {std::move(nextTerm), std::move(triples)};
 }
 
 // ____________________________________________________________________________________

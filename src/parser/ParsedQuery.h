@@ -224,8 +224,8 @@ class ParsedQuery {
 
   // Turn a blank node `_:someBlankNode` into an internal variable
   // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
-  // SPARQL parser, because blank nodes in the bodies of SPARQL queries are
-  // actually variables.
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
   static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw

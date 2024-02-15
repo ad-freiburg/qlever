@@ -98,8 +98,8 @@ class SparqlQleverVisitor {
 
   DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
 
-  // This is the parsed query so far. Currently the only information we need is
-  // the number of internal variables that have already been assigned.
+  // This is the parsed query so far. Currently, this only contains information
+  // about the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
 
   // This is set to true if and only if we are only inside the template of a
@@ -292,7 +292,7 @@ class SparqlQleverVisitor {
   [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
   [[nodiscard]] PathObjectPairsAndTriples visit(
-      Parser::TupleWithoutPathContext* ctx);
+      Parser::TupleWithoutPathContext* term);
 
   [[nodiscard]] PathObjectPairsAndTriples visit(
       Parser::TupleWithPathContext* ctx);
