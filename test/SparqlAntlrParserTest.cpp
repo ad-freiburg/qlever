@@ -354,6 +354,15 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
           ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil))));
 }
 
+TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
+  auto internal = m::InternalVariable("0");
+  auto var = m::VariableVariant;
+  expectCompleteParse(
+      parseTriplesSameSubject("[ ?x ?y ] ?a ?b"),
+      UnorderedElementsAre(ElementsAre(internal, var("?x"), var("?y")),
+                           ElementsAre(internal, var("?a"), var("?b"))));
+}
+
 TEST(SparqlParser, PropertyList) {
   expectCompleteParse(
       parsePropertyList("a ?a"),
@@ -733,10 +742,22 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   expectPropertyListPath(
       "<bar> ?foo , ?baz",
       {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<bar>"), Var{"?baz"}}}, {}});
-  // Currently unsupported by QLever
+
+  // A more complex example.
   expectPropertyListPathFails("<bar> ( ?foo ?baz )");
-  // TODO<joka921> Write proper matchers here and test this.
-  // expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
+  auto V = m::VariableVariant;
+  auto internal0 = m::InternalVariable("0");
+  auto internal1 = m::InternalVariable("1");
+  auto bar = m::Predicate("<bar>");
+  expectPropertyListPath(
+      "?x [?y ?z; <bar> ?b, ?p, [?d ?e]]; ?u ?v",
+      Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
+           UnorderedElementsAre(
+               ::testing::FieldsAre(internal0, V("?y"), V("?z")),
+               ::testing::FieldsAre(internal0, bar, V("?b")),
+               ::testing::FieldsAre(internal0, bar, internal1),
+               ::testing::FieldsAre(internal1, V("?d"), V("?e")),
+               ::testing::FieldsAre(internal0, bar, V("?p")))));
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {
@@ -761,7 +782,6 @@ TEST(SparqlParser, triplesSameSubjectPath) {
   expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
                 {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
                  {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
-  // TODO<joka921> Use proper matchers.
   auto expectTriplesConstruct =
       ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
   expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),

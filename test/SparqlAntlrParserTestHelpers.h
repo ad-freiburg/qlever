@@ -268,6 +268,12 @@ inline auto Iri = [](const std::string& value) {
       AD_PROPERTY(::Iri, iri, testing::Eq(value)));
 };
 
+// Returns a matcher that accepts a `GraphTerm` or `Iri`.
+inline auto Predicate = [](const std::string& value) {
+  return MultiVariantWith<ad_utility::sparql_types::VarOrPath, ::PropertyPath>(
+      AD_PROPERTY(::PropertyPath, getIri, testing::Eq(value)));
+};
+
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `GraphTerm` or `BlankNode`.

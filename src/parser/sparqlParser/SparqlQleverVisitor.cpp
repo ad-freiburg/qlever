@@ -412,7 +412,7 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
         literal.toSparql());
   };
   auto visitVariable = [](Variable var) -> TripleComponent {
-    return std::move(var);
+    return var;
   };
   auto visitGraphTerm = [&visitIri, &visitBlankNode, &visitLiteral,
                          &visitVariable](const GraphTerm& graphTerm) {
