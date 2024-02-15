@@ -111,6 +111,10 @@ class SparqlQleverVisitor {
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
 
+  void setParseModeToInsideConstructTemplateForTesting() {
+    isInsideConstructTriples_ = true;
+  }
+
   // ___________________________________________________________________________
   [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);
 

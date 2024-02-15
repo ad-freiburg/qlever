@@ -72,7 +72,7 @@ static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
 constexpr std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
-    "?_QLever_internal_blanknode_variable_";
+    "?_QLever_internal_variable_bn_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
 static constexpr std::string_view ENTITY_VARIABLE_PREFIX = "?ql_entity_";

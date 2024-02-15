@@ -277,6 +277,13 @@ inline auto BlankNode = [](bool generated, const std::string& label) {
       AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
 };
 
+inline auto InternalVariable = [](const std::string& label) {
+  return MultiVariantWith<GraphTerm, ::Variable>(
+      testing::AllOf(AD_PROPERTY(::Variable, name,
+                                 testing::StartsWith(INTERNAL_VARIABLE_PREFIX)),
+                     AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
+};
+
 // _____________________________________________________________________________
 
 inline auto Variable =

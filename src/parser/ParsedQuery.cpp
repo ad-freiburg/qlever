@@ -312,7 +312,9 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    clause.addVisibleVariable(variable);
+    if (!variable.name().starts_with(INTERNAL_VARIABLE_PREFIX)) {
+      clause.addVisibleVariable(variable);
+    }
   };
   std::visit(addVariable, _clause);
 }
