@@ -24,7 +24,6 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 #include "parser/data/Types.h"
-#include "parser/data/VarOrTerm.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generator.h"
@@ -223,6 +222,10 @@ class ParsedQuery {
   // `addInternalAlias`
   Variable getNewInternalVariable();
 
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries are
+  // actually variables.
   static Variable blankNodeToInternalVariable(std::string_view blankNode);
 
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw

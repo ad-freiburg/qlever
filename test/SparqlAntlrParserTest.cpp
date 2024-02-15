@@ -355,12 +355,26 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
 }
 
 TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
-  auto internal = m::InternalVariable("0");
-  auto var = m::VariableVariant;
-  expectCompleteParse(
-      parseTriplesSameSubject("[ ?x ?y ] ?a ?b"),
-      UnorderedElementsAre(ElementsAre(internal, var("?x"), var("?y")),
-                           ElementsAre(internal, var("?a"), var("?b"))));
+  auto doTest = []<bool allowPath>() {
+    auto input = "[ ?x ?y ] ?a ?b";
+    auto [output, internal] = [&input]() {
+      if constexpr (allowPath) {
+        return std::pair(parse<&Parser::triplesSameSubjectPath>(input),
+                         m::InternalVariable("0"));
+      } else {
+        return std::pair(parse<&Parser::triplesSameSubject, true>(input),
+                         m::BlankNode(true, "0"));
+      }
+    }();
+
+    auto var = m::VariableVariant;
+    expectCompleteParse(
+        output, UnorderedElementsAre(
+                    ::testing::FieldsAre(internal, var("?x"), var("?y")),
+                    ::testing::FieldsAre(internal, var("?a"), var("?b"))));
+  };
+  doTest.template operator()<true>();
+  doTest.template operator()<false>();
 }
 
 TEST(SparqlParser, PropertyList) {
@@ -755,9 +769,9 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
            UnorderedElementsAre(
                ::testing::FieldsAre(internal0, V("?y"), V("?z")),
                ::testing::FieldsAre(internal0, bar, V("?b")),
+               ::testing::FieldsAre(internal0, bar, V("?p")),
                ::testing::FieldsAre(internal0, bar, internal1),
-               ::testing::FieldsAre(internal1, V("?d"), V("?e")),
-               ::testing::FieldsAre(internal0, bar, V("?p")))));
+               ::testing::FieldsAre(internal1, V("?d"), V("?e")))));
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {

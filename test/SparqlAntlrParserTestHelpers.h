@@ -19,7 +19,6 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
-#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
@@ -202,9 +201,9 @@ namespace variant_matcher {
 // Implements a matcher that checks the value of arbitrarily deeply nested
 // variants that contain a value with the last Type of the Ts. The variant may
 // also be an suffix of the Ts so to speak. E.g.
-// `MultiVariantMatcher<VarOrTerm, GraphTerm, Iri>` can match on a `Iri`,
+// `MultiVariantMatcher<GraphTerm, GraphTerm, Iri>` can match on a `Iri`,
 // `GraphTerm=std::variant<Literal, BlankNode, Iri>` and
-// `VarOrTerm=std::variant<Variable, GraphTerm>`.
+// `GraphTerm=std::variant<Variable, GraphTerm>`.
 template <typename... Ts>
 class MultiVariantMatcher {
  public:
@@ -314,7 +313,7 @@ inline auto Literal = [](const std::string& value) {
 // _____________________________________________________________________________
 
 inline auto ConstructClause =
-    [](const std::vector<std::array<VarOrTerm, 3>>& elems)
+    [](const std::vector<std::array<GraphTerm, 3>>& elems)
     -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
   return testing::Optional(
       AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems)));
@@ -820,7 +819,7 @@ inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
 // _____________________________________________________________________________
-inline auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
+inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
                            const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ParsedQuery&> {
   return testing::AllOf(

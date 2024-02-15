@@ -22,7 +22,6 @@
 #include "parser/data/Iri.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/Types.h"
-#include "parser/data/VarOrTerm.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
@@ -50,17 +49,21 @@ class SparqlQleverVisitor {
  public:
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
-  using Tuples = ad_utility::sparql_types::Tuples;
-  using PathTuples = ad_utility::sparql_types::PathTuples;
-  using PathTuplesAndTriples = ad_utility::sparql_types::PathTuplesAndTriples;
+  using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
+  using PathObjectPairsAndTriples =
+      ad_utility::sparql_types::PathObjectPairsAndTriples;
   using TripleWithPropertyPath =
       ad_utility::sparql_types::TripleWithPropertyPath;
   using Triples = ad_utility::sparql_types::Triples;
-  using Node = ad_utility::sparql_types::Node;
-  using NodePath = ad_utility::sparql_types::NodePath;
-  using ObjectList = ad_utility::sparql_types::ObjectList;
-  using ObjectListPath = ad_utility::sparql_types::ObjectListPath;
-  using PropertyList = ad_utility::sparql_types::PropertyList;
+  using SubjectOrObjectAndTriples =
+      ad_utility::sparql_types::SubjectOrObjectAndTriples;
+  using SubjectOrObjectAndPathTriples =
+      ad_utility::sparql_types::SubjectOrObjectAndPathTriples;
+  using ObjectsAndTriples = ad_utility::sparql_types::ObjectsAndTriples;
+  using ObjectsAndPathTriples = ad_utility::sparql_types::ObjectsAndPathTriples;
+  using PredicateObjectPairsAndTriples =
+      ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
       std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
@@ -95,8 +98,13 @@ class SparqlQleverVisitor {
 
   DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
 
-  // Currently this is only used for getting internal variables.
+  // This is the parsed query so far. Currently the only information we need is
+  // the number of internal variables that have already been assigned.
   ParsedQuery parsedQuery_;
+
+  // This is set to true if and only if we are only inside the template of a
+  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
+  // meaning of blank and anonymous nodes is different.
   bool isInsideConstructTriples_ = false;
 
  public:
@@ -258,40 +266,44 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] Triples visit(Parser::TriplesSameSubjectContext* ctx);
 
-  [[nodiscard]] PropertyList visit(Parser::PropertyListContext* ctx);
+  [[nodiscard]] PredicateObjectPairsAndTriples visit(
+      Parser::PropertyListContext* ctx);
 
-  [[nodiscard]] PropertyList visit(Parser::PropertyListNotEmptyContext* ctx);
+  [[nodiscard]] PredicateObjectPairsAndTriples visit(
+      Parser::PropertyListNotEmptyContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VerbContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VerbContext* ctx);
 
-  [[nodiscard]] ObjectList visit(Parser::ObjectListContext* ctx);
+  [[nodiscard]] ObjectsAndTriples visit(Parser::ObjectListContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::ObjectRContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
 
   [[nodiscard]] vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  [[nodiscard]] std::optional<PathTuplesAndTriples> visit(
+  [[nodiscard]] std::optional<PathObjectPairsAndTriples> visit(
       Parser::PropertyListPathContext* ctx);
 
-  [[nodiscard]] PathTuplesAndTriples visit(
+  [[nodiscard]] PathObjectPairsAndTriples visit(
       Parser::PropertyListPathNotEmptyContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
 
   [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
-  [[nodiscard]] PathTuplesAndTriples visit(
+  [[nodiscard]] PathObjectPairsAndTriples visit(
       Parser::TupleWithoutPathContext* ctx);
 
-  [[nodiscard]] PathTuplesAndTriples visit(Parser::TupleWithPathContext* ctx);
+  [[nodiscard]] PathObjectPairsAndTriples visit(
+      Parser::TupleWithPathContext* ctx);
 
   [[nodiscard]] ad_utility::sparql_types::VarOrPath visit(
       Parser::VerbPathOrSimpleContext* ctx);
 
-  [[nodiscard]] ObjectListPath visit(Parser::ObjectListPathContext* ctx);
+  [[nodiscard]] ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
 
-  [[nodiscard]] NodePath visit(Parser::ObjectPathContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
+      Parser::ObjectPathContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::PathContext* ctx);
 
@@ -317,25 +329,30 @@ class SparqlQleverVisitor {
   /// integers without an explicit sign.
   [[nodiscard]] static uint64_t visit(Parser::IntegerContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::TriplesNodeContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(
+      Parser::TriplesNodeContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::BlankNodePropertyListContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(
+      Parser::BlankNodePropertyListContext* ctx);
 
-  NodePath visit(Parser::TriplesNodePathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::TriplesNodePathContext* ctx);
 
-  NodePath visit(Parser::BlankNodePropertyListPathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(
+      Parser::BlankNodePropertyListPathContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::CollectionContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] NodePath visit(Parser::CollectionPathContext* ctx);
+  [[noreturn]] SubjectOrObjectAndPathTriples visit(
+      Parser::CollectionPathContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::GraphNodeContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
 
-  [[nodiscard]] NodePath visit(Parser::GraphNodePathContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
+      Parser::GraphNodePathContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VarOrTermContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VarOrIriContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VarOrIriContext* ctx);
 
   [[nodiscard]] static Variable visit(Parser::VarContext* ctx);
 
