@@ -25,7 +25,8 @@ static constexpr auto noop = ad_utility::noop;
 #define return co_return
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
+  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
   queryToSocketDistributor.signalEnd();
   EXPECT_THROW(queryToSocketDistributor.addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
@@ -36,8 +37,9 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
-  QueryToSocketDistributor queryToSocketDistributor{
-      ioContext, [&](bool signalEndCalled) { executed = signalEndCalled; }};
+  auto ptr = std::make_shared<QueryToSocketDistributor>(
+      ioContext, [&](bool signalEndCalled) { executed = signalEndCalled; });
+  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
   EXPECT_FALSE(executed);
   queryToSocketDistributor.signalEnd();
   EXPECT_TRUE(executed);
@@ -71,7 +73,8 @@ ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
+  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
   bool waiting = false;
   auto listener = [&]() -> net::awaitable<void> {
     waiting = true;
@@ -144,7 +147,8 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
+  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
   queryToSocketDistributor.addQueryStatusUpdate("Abc");
   queryToSocketDistributor.addQueryStatusUpdate("Def");
   queryToSocketDistributor.signalEnd();
@@ -160,7 +164,8 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
-  QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
+  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
 
   queryToSocketDistributor.addQueryStatusUpdate("Abc");
   queryToSocketDistributor.addQueryStatusUpdate("Def");

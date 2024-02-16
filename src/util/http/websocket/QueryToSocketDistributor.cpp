@@ -51,10 +51,10 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
   auto impl = [this, sharedPayload = std::move(sharedPayload)]() {
-    AD_CONTRACT_CHECK(!finished_.test());
     data_.push_back(std::move(sharedPayload));
     wakeUpWaitingListeners();
   };
+  AD_CONTRACT_CHECK(!finished_.test());
   net::post(strand_, std::move(impl));
 }
 

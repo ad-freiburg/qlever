@@ -108,27 +108,25 @@ TEST(AsioHelpers, correctStrandScheduling) {
 
 TEST(AsioHelpers, CancellationSegfault) {
   auto run = [](auto strand) -> net::awaitable<void> {
-    /*
     co_await [](auto strand) -> net::awaitable<void> {
       co_await ad_utility::runAwaitableOnStrandAwaitable(
           strand, []() -> net::awaitable<void> { co_return; }());
     }(strand);
-     */
-    co_await net::co_spawn(
-        strand,
-        []() -> net::awaitable<void> {
-          co_await stallUntilCancelled();
-          co_return;
-        }(),
-        net::use_awaitable);
-    /*
-      co_await ad_utility::runAwaitableOnStrandAwaitable(
-              strand, []() -> net::awaitable<void> { co_return; }());
-              */
     co_await stallUntilCancelled();
   };
+  auto run2 = []() -> net::awaitable<void> {
+    auto exec = co_await net::this_coro::executor;
+    net::steady_timer t{exec, std::chrono::milliseconds(1)};
+    co_await t.async_wait(net::use_awaitable);
+    throw std::runtime_error{"blim"};
+  };
 
-  Context ctx;
+  auto runComplete = [&run, &run2](auto innerStrand) ->net::awaitable<void> {
+    co_await (run(innerStrand) && run2());
+  };
+
+  //Context ctx;
+  /*
   for (size_t i = 0; i < 200; ++i) {
     net::cancellation_signal sig;
 
@@ -140,6 +138,21 @@ TEST(AsioHelpers, CancellationSegfault) {
       net::dispatch(ctx.strand1_,
                     [&]() { sig.emit(net::cancellation_type::terminal); });
     }
+  }
+   */
+    for (size_t i = 0; i < 2000; ++i) {
+        Context ctx;
+        net::co_spawn(ctx.strand1_, runComplete(ctx.strand2_), net::detached);
+        ctx.ctx_.run();
+
+        /*
+        {
+            ad_utility::JThread t{[&] { ctx.ctx_.run(); }};
+            std::this_thread::sleep_for(std::chrono::milliseconds(2));
+            net::dispatch(ctx.strand1_,
+                          [&]() { sig.emit(net::cancellation_type::terminal); });
+        }
+         */
   }
 }
 /*
