@@ -23,6 +23,7 @@ using namespace std::string_literals;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
+using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
@@ -109,7 +110,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       LOG(INFO) << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
       co_return co_await sendWithAccessControlHeaders(
-          createOkResponse("", request, ad_utility::MediaType::textPlain));
+          createOkResponse("", request, MediaType::textPlain));
     }
     // Process the request using the `process` method and if it throws an
     // exception, log the error message and send a HTTP/1.1 400 Bad Request
@@ -316,8 +317,8 @@ Awaitable<void> Server::process(
     response = createJsonResponse(RuntimeParameters().toMap(), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
-    response = createOkResponse(index_.getIndexId(), request,
-                                ad_utility::MediaType::textPlain);
+    response =
+        createOkResponse(index_.getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");
@@ -337,7 +338,7 @@ Awaitable<void> Server::process(
       LOG(INFO) << "Alive check without message" << std::endl;
     }
     response = createOkResponse("This QLever server is up and running\n",
-                                request, ad_utility::MediaType::textPlain);
+                                request, MediaType::textPlain);
   }
 
   // Set description of KB index.
@@ -542,11 +543,11 @@ auto Server::setupCancellationHandle(
 // _____________________________________________________________________________
 Awaitable<void> Server::sendStreamableResponse(
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
-    ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
+    MediaType mediaType, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet,
     SharedCancellationHandle cancellationHandle) const {
   auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
-      plannedQuery.parsedQuery_, qet, mediaType, cancellationHandle);
+      plannedQuery.parsedQuery_, qet, mediaType, std::move(cancellationHandle));
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -627,7 +628,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // result. The media type is either determined by the "Accept:" header of
     // the request or by the URL parameter "action=..." (for TSV and CSV export,
     // for QLever-historical reasons).
-    using ad_utility::MediaType;
 
     std::optional<MediaType> mediaType = std::nullopt;
 

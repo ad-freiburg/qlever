@@ -646,7 +646,7 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, uint64_t maxSend,
+    const ad_utility::Timer& requestTimer, uint64_t maxSend,
     CancellationHandle cancellationHandle) {
   shared_ptr<const ResultTable> resultTable = qet.getResult();
   resultTable->logResultSize();
@@ -729,8 +729,7 @@ ExportQueryExecutionTrees::computeResultAsStream(
 
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    [[maybe_unused]] ad_utility::Timer& requestTimer, uint64_t maxSend,
+    const ParsedQuery& query, const QueryExecutionTree& qet, uint64_t maxSend,
     CancellationHandle cancellationHandle) {
   if (!query.hasSelectClause()) {
     AD_THROW(
@@ -760,8 +759,7 @@ nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
                                               std::move(cancellationHandle));
       case ad_utility::MediaType::sparqlJson:
         return computeSelectQueryResultAsSparqlJSON(
-            parsedQuery, qet, requestTimer, maxSend,
-            std::move(cancellationHandle));
+            parsedQuery, qet, maxSend, std::move(cancellationHandle));
       default:
         AD_FAIL();
     }

@@ -35,8 +35,8 @@ class ExportQueryExecutionTrees {
   // TSV, Turtle, Binary. Note that the Binary format can only be used with
   // SELECT queries and the Turtle format can only be used with CONSTRUCT
   // queries. Invalid `mediaType`s and invalid combinations of `mediaType` and
-  // the query type will throw. The result is returned as a `stream_generator`
-  // that lazily computes the serialized result in large chunks of bytes.
+  // the query type will throw. The result is returned as a `generator` that
+  // lazily computes the serialized result in large chunks of bytes.
   static cppcoro::generator<std::string> computeResultAsStream(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, CancellationHandle cancellationHandle);
@@ -99,12 +99,11 @@ class ExportQueryExecutionTrees {
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
   static nlohmann::json computeQueryResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, uint64_t maxSend,
+      const ad_utility::Timer& requestTimer, uint64_t maxSend,
       CancellationHandle cancellationHandle);
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
   static nlohmann::json computeSelectQueryResultAsSparqlJSON(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, uint64_t maxSend,
+      const ParsedQuery& query, const QueryExecutionTree& qet, uint64_t maxSend,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
