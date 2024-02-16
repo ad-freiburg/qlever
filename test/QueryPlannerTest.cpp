@@ -908,6 +908,6 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(qp.createExecutionTree(pq),
-                                        HasSubstr("Stream query export"),
+                                        HasSubstr("Query planning"),
                                         ad_utility::CancellationException);
 }
