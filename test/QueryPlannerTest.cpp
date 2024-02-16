@@ -11,6 +11,7 @@
 
 namespace h = queryPlannerTestHelpers;
 using Var = Variable;
+using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{nullptr,
@@ -894,4 +895,19 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   // TODO<joka921> Add a test for the case with subtrees with and without
   // rewriting of triples.
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  QueryPlanner qp{ad_utility::testing::getQec(), cancellationHandle};
+  auto pq = SparqlParser::parseQuery("SELECT * WHERE { ?x ?y ?z }");
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(qp.createExecutionTree(pq),
+                                        HasSubstr("Stream query export"),
+                                        ad_utility::CancellationException);
 }
