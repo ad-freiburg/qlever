@@ -20,6 +20,7 @@
 #include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -215,3 +216,8 @@ IdTable createRandomlyFilledIdTable(
     const size_t numberRows, const size_t numberColumns,
     const ad_utility::RandomSeed randomSeed = ad_utility::RandomSeed::make(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
+
+/// Turn a given `IdTable` into a `QueryExecutionTree` by cloning the table
+/// and filling it with dummy variables.
+std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
+    QueryExecutionContext*, const IdTable&);

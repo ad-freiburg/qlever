@@ -24,8 +24,6 @@ class MultiColumnJoin : public Operation {
   MultiColumnJoin(QueryExecutionContext* qec,
                   std::shared_ptr<QueryExecutionTree> t1,
                   std::shared_ptr<QueryExecutionTree> t2);
-  // Only used for testing
-  using Operation::Operation;
 
  protected:
   string getCacheKeyImpl() const override;

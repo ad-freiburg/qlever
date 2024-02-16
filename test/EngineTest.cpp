@@ -64,12 +64,14 @@ TEST(EngineTest, distinctWithEmptyInput) {
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
   {
-    // TODO<joka921> Let this use the proper constructor of OptionalJoin.
+    auto* qec = ad_utility::testing::getQec();
     IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                    makeAllocator()};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
     // a have to equal those of column 2 of b and vice versa).
-    OptionalJoin{}.optionalJoin(inputA, inputB, jcls, &result);
+    OptionalJoin{qec, idTableToExecutionTree(qec, inputA),
+                 idTableToExecutionTree(qec, inputB)}
+        .optionalJoin(inputA, inputB, jcls, &result);
     ASSERT_EQ(expectedResult, result);
   }
 

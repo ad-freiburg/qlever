@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <utility>
 
+#include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -237,4 +238,15 @@ IdTable createRandomlyFilledIdTable(const size_t numberRows,
   return createRandomlyFilledIdTable(numberRows, numberColumns,
                                      std::vector<JoinColumnAndBounds>{},
                                      randomSeed);
+}
+
+// ____________________________________________________________________________
+std::shared_ptr<QueryExecutionTree> idTableToExecutionTree(
+    QueryExecutionContext* qec, const IdTable& input) {
+  size_t i = 0;
+  auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
+  std::vector<std::optional<Variable>> vars;
+  std::generate_n(std::back_inserter(vars), input.numColumns(), std::ref(v));
+  return ad_utility::makeExecutionTree<ValuesForTesting>(qec, input.clone(),
+                                                         std::move(vars));
 }

@@ -33,8 +33,6 @@ class OptionalJoin : public Operation {
   OptionalJoin(QueryExecutionContext* qec,
                std::shared_ptr<QueryExecutionTree> t1,
                std::shared_ptr<QueryExecutionTree> t2);
-  // Only used for testing
-  using Operation::Operation;
 
  private:
   string getCacheKeyImpl() const override;
