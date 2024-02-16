@@ -71,6 +71,9 @@ static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
 
+constexpr std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
+    "?_QLever_internal_variable_bn_";
+
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
 static constexpr std::string_view ENTITY_VARIABLE_PREFIX = "?ql_entity_";
 static constexpr std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
