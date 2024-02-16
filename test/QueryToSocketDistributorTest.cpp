@@ -75,60 +75,72 @@ ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
   QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  bool waiting = false;
-  auto listener = [&]() -> net::awaitable<void> {
-    waiting = true;
-    EXPECT_EQ(nullptr,
-              co_await queryToSocketDistributor.waitForNextDataPiece(0));
-  };
+  auto impl = [&]() -> net::awaitable<void> {
+    bool waiting = false;
+    auto listener = [&]() -> net::awaitable<void> {
+      waiting = true;
+      EXPECT_EQ(nullptr,
+                co_await queryToSocketDistributor.waitForNextDataPiece(0));
+    };
 
-  auto broadcaster = [&]() -> net::awaitable<void> {
-    // Ensure correct order of execution
-    ASSERT_TRUE(waiting);
-    queryToSocketDistributor.signalEnd();
-    co_return;
+    auto broadcaster = [&]() -> net::awaitable<void> {
+      // Ensure correct order of execution
+      ASSERT_TRUE(waiting);
+      queryToSocketDistributor.signalEnd();
+      co_return;
+    };
+    co_await (listener() && broadcaster());
   };
-  co_await (listener() && broadcaster());
+  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
-  bool waiting = false;
-  auto listener = [&]() -> net::awaitable<void> {
-    waiting = true;
-    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-    EXPECT_THAT(result, Pointee("Abc"s));
-  };
+  auto impl = [&]() -> net::awaitable<void> {
+    bool waiting = false;
+    auto listener = [&]() -> net::awaitable<void> {
+      waiting = true;
+      auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+      EXPECT_THAT(result, Pointee("Abc"s));
+    };
 
-  auto broadcaster = [&]() -> net::awaitable<void> {
-    // Ensure correct order of execution
-    ASSERT_TRUE(waiting);
-    queryToSocketDistributor.addQueryStatusUpdate("Abc");
-    co_return;
+    auto broadcaster = [&]() -> net::awaitable<void> {
+      // Ensure correct order of execution
+      ASSERT_TRUE(waiting);
+      queryToSocketDistributor.addQueryStatusUpdate("Abc");
+      co_return;
+    };
+    co_await (listener() && broadcaster());
   };
-  co_await (listener() && broadcaster());
+  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
-  bool waiting = false;
-  auto listener = [&]() -> net::awaitable<void> {
-    waiting = true;
-    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-    EXPECT_THAT(result, Pointee("Abc"s));
-  };
+  auto impl = [&]() -> net::awaitable<void> {
+    bool waiting = false;
+    auto listener = [&]() -> net::awaitable<void> {
+      waiting = true;
+      auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+      EXPECT_THAT(result, Pointee("Abc"s));
+    };
 
-  auto broadcaster = [&]() -> net::awaitable<void> {
-    // Ensure correct order of execution
-    ASSERT_TRUE(waiting);
-    queryToSocketDistributor.addQueryStatusUpdate("Abc");
-    co_return;
+    auto broadcaster = [&]() -> net::awaitable<void> {
+      // Ensure correct order of execution
+      ASSERT_TRUE(waiting);
+      queryToSocketDistributor.addQueryStatusUpdate("Abc");
+      co_return;
+    };
+    co_await (listener() && broadcaster());
   };
-  co_await (listener() && broadcaster());
+  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
@@ -136,12 +148,16 @@ ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
   QueryToSocketDistributor queryToSocketDistributor{ioContext, noop};
 
-  queryToSocketDistributor.addQueryStatusUpdate("Abc");
-  queryToSocketDistributor.addQueryStatusUpdate("Def");
-  auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-  EXPECT_THAT(result, Pointee("Abc"s));
-  result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
-  EXPECT_THAT(result, Pointee("Def"s));
+  auto impl = [&]() -> net::awaitable<void> {
+    queryToSocketDistributor.addQueryStatusUpdate("Abc");
+    queryToSocketDistributor.addQueryStatusUpdate("Def");
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    EXPECT_THAT(result, Pointee("Abc"s));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    EXPECT_THAT(result, Pointee("Def"s));
+  };
+  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
@@ -153,12 +169,16 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
   queryToSocketDistributor.addQueryStatusUpdate("Def");
   queryToSocketDistributor.signalEnd();
 
-  auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-  EXPECT_THAT(result, Pointee("Abc"s));
-  result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
-  EXPECT_THAT(result, Pointee("Def"s));
-  result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
-  ASSERT_FALSE(result);
+  auto impl = [&]() -> net::awaitable<void> {
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    EXPECT_THAT(result, Pointee("Abc"s));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    EXPECT_THAT(result, Pointee("Def"s));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
+    ASSERT_FALSE(result);
+  };
+  co_await (net::co_spawn(queryToSocketDistributor.strand(), impl,
+                          net::use_awaitable));
 }
 
 // _____________________________________________________________________________
@@ -171,10 +191,14 @@ ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
   queryToSocketDistributor.addQueryStatusUpdate("Def");
   queryToSocketDistributor.signalEnd();
 
-  auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-  EXPECT_THAT(result, Pointee("Abc"s));
-  result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
-  EXPECT_THAT(result, Pointee("Def"s));
-  result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
-  EXPECT_FALSE(result);
+  auto impl = [&]() -> net::awaitable<void> {
+    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    EXPECT_THAT(result, Pointee("Abc"s));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    EXPECT_THAT(result, Pointee("Def"s));
+    result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
+    EXPECT_FALSE(result);
+  };
+  co_await (net::co_spawn(queryToSocketDistributor.strand(), impl,
+                          net::use_awaitable));
 }

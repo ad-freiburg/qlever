@@ -64,8 +64,6 @@ void QueryToSocketDistributor::signalEnd() {
   auto impl = [self = shared_from_this(), this]() {
     (void)self;
     wakeUpWaitingListeners();
-    // signalEndCall_();
-    // std::move(cleanupCall_).cancel();
   };
   if (finished_.test_and_set()) {
     // Only one call to signal end is allowed.
@@ -74,13 +72,6 @@ void QueryToSocketDistributor::signalEnd() {
   signalEndCall_();
   std::move(cleanupCall_).cancel();
   net::post(strand_, std::move(impl));
-  /*
-  if (strand_.running_in_this_thread()) {
-    impl();
-  } else {
-    net::post(strand_, std::move(impl));
-  }
-   */
 }
 
 // _____________________________________________________________________________
@@ -104,7 +95,7 @@ QueryToSocketDistributor::waitForNextDataPieceUnguarded(size_t index) const {
 
 net::awaitable<std::shared_ptr<const std::string>>
 QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  return ad_utility::runAwaitableOnStrandAwaitable(
-      strand_, waitForNextDataPieceUnguarded(index));
+  AD_EXPENSIVE_CHECK(strand_.running_in_this_thread());
+  return waitForNextDataPieceUnguarded(index);
 }
 }  // namespace ad_utility::websocket

@@ -93,8 +93,25 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
     auto ex = co_await net::this_coro::executor;
+    auto slot = (co_await net::this_coro::cancellation_state).slot();
+      auto strand = updateFetcher_.strand();
+    AD_CORRECTNESS_CHECK(
+        !slot.is_connected() || strand.running_in_this_thread(),
+        "We are going to reschedule onto another strand via `co_spawn` this "
+        "leads to race conditions when the cancellation slot is connected (the "
+        "emitting of the signal itself is probably fine, but the resetting of "
+        "the cancellation slot is probably not.");
 
-    co_await (waitForServerEvents() && handleClientCommands());
+    if (strand.running_in_this_thread()) {
+        co_await (waitForServerEvents() && handleClientCommands());
+    } else {
+        co_await (net::co_spawn(
+            strand,
+            [this]() -> net::awaitable<void> {
+              co_await (waitForServerEvents() && handleClientCommands());
+            },
+            net::deferred));
+    }
   } catch (const net::multiple_exceptions& e) {
     // TODO<joka921> We actually have to check, if BOTH the exceptions have the
     // correct type.

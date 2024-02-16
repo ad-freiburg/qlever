@@ -33,14 +33,19 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
 
   MessageSender::create(std::move(queryId), queryHub);
 
-  net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
+  auto impl = [&]() -> net::awaitable<void> {
 
-  auto result = co_await (distributor->waitForNextDataPiece(0) ||
-                          timer.async_wait(net::use_awaitable));
+    net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
-  using PayloadType = std::shared_ptr<const std::string>;
+    auto result = co_await (distributor->waitForNextDataPiece(0) ||
+                            timer.async_wait(net::use_awaitable));
 
-  EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{}));
+    using PayloadType = std::shared_ptr<const std::string>;
+
+    EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{}));
+  };
+
+  co_await (net::co_spawn(distributor->strand(), impl(), net::deferred));
 }
 
 // _____________________________________________________________________________
@@ -61,17 +66,20 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 
     net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
-    auto result = co_await (distributor->waitForNextDataPiece(0) ||
-                            timer.async_wait(net::use_awaitable));
+    auto impl = [&]() -> net::awaitable<void> {
+      auto result = co_await (distributor->waitForNextDataPiece(0) ||
+                              timer.async_wait(net::use_awaitable));
 
-    using PayloadType = std::shared_ptr<const std::string>;
+      using PayloadType = std::shared_ptr<const std::string>;
 
-    EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Still"s)));
+      EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Still"s)));
 
-    result = co_await (distributor->waitForNextDataPiece(1) ||
-                       timer.async_wait(net::use_awaitable));
+      result = co_await (distributor->waitForNextDataPiece(1) ||
+                         timer.async_wait(net::use_awaitable));
 
-    EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+      EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
+    };
+    co_await (net::co_spawn(distributor->strand(), impl, net::deferred));
   }
 
   // The destructor of `MessageSender` calls `signalEnd` on the distributor

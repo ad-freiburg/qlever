@@ -19,13 +19,17 @@ class UpdateFetcher {
 
   QueryHub& queryHub_;
   QueryId queryId_;
-  std::shared_ptr<const QueryToSocketDistributor> distributor_{nullptr};
-  // Counter to ensure sequential processing
+  std::shared_ptr<const QueryToSocketDistributor> distributor_ = queryHub_.createOrAcquireDistributorForReceiving(queryId_);
+    // Counter to ensure sequential processing
   size_t nextIndex_ = 0;
 
  public:
   UpdateFetcher(QueryHub& queryHub, QueryId queryId)
       : queryHub_{queryHub}, queryId_{std::move(queryId)} {}
+
+  auto strand() {
+    return distributor_->strand();
+  }
 
   /// If an update occurred for the given query since the last time this was
   /// called this resumes immediately. Otherwise it will wait

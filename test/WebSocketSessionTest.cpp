@@ -121,7 +121,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
                                    net::use_awaitable);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
+  co_await net::co_spawn(distributor->strand(), c.serverLogic() && controllerActions(),
                          net::use_awaitable);
 }
 
