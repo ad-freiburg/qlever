@@ -2,17 +2,18 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "./IndexTestHelpers.h"
-#include "./util/GTestHelpers.h"
-#include "./util/IdTestHelpers.h"
+#include "IndexTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
 #include "parser/SparqlParser.h"
+#include "util/GTestHelpers.h"
+#include "util/IdTestHelpers.h"
 
 using namespace std::string_literals;
+using ::testing::HasSubstr;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
@@ -806,6 +807,63 @@ TEST(ExportQueryExecutionTree, CornerCases) {
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
 }
+
+using enum ad_utility::MediaType;
+
+// ____________________________________________________________________________
+
+class JsonMediaTypesFixture
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<ad_utility::MediaType> {};
+
+TEST_P(JsonMediaTypesFixture, CancellationCancelsJson) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  auto* qec = ad_utility::testing::getQec(
+      "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
+  QueryPlanner qp{qec, cancellationHandle};
+  auto pq = SparqlParser::parseQuery("SELECT * WHERE { ?x ?y ?z }");
+  auto qet = qp.createExecutionTree(pq);
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      ExportQueryExecutionTrees::computeResultAsJSON(
+          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, 200,
+          GetParam(), std::move(cancellationHandle)),
+      HasSubstr("Query export"), ad_utility::CancellationException);
+}
+INSTANTIATE_TEST_SUITE_P(JsonMediaTypes, JsonMediaTypesFixture,
+                         ::testing::Values(sparqlJson, qleverJson));
+
+// ____________________________________________________________________________
+class StreamableMediaTypesFixture
+    : public ::testing::Test,
+      public ::testing::WithParamInterface<ad_utility::MediaType> {};
+
+TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  auto* qec = ad_utility::testing::getQec(
+      "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
+  QueryPlanner qp{qec, cancellationHandle};
+  auto pq = SparqlParser::parseQuery(
+      GetParam() == turtle ? "CONSTRUCT { ?x ?y ?z } WHERE { ?x ?y ?z }"
+                           : "SELECT * WHERE { ?x ?y ?z }");
+  auto qet = qp.createExecutionTree(pq);
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  auto generator = ExportQueryExecutionTrees::computeResultAsStream(
+      pq, qet, GetParam(), std::move(cancellationHandle));
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(generator.begin(),
+                                        HasSubstr("Stream query export"),
+                                        ad_utility::CancellationException);
+}
+INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
+                         ::testing::Values(turtle, sparqlXml, tsv, csv,
+                                           octetStream));
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
 // between constants and stuff from the knowledge graph).
