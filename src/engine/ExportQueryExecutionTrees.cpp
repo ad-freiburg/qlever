@@ -749,7 +749,7 @@ nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::Timer& requestTimer, uint64_t maxSend,
+    const ad_utility::Timer& requestTimer, uint64_t maxSend,
     ad_utility::MediaType mediaType, CancellationHandle cancellationHandle) {
   try {
     switch (mediaType) {

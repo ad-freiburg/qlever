@@ -52,11 +52,11 @@ class ExportQueryExecutionTrees {
   // The `requestTimer` is used to report timing statistics on the query. It
   // must have already run during the query planning to produce the expected
   // results. If `maxSend` is smaller than the size of the query result, then
-  // only the first `maxSend` rows are// returned.
+  // only the first `maxSend` rows are returned.
   static nlohmann::json computeResultAsJSON(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, uint64_t maxSend, MediaType mediaType,
-      CancellationHandle cancellationHandle);
+      const ad_utility::Timer& requestTimer, uint64_t maxSend,
+      MediaType mediaType, CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
