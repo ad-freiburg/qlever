@@ -762,16 +762,19 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto V = m::VariableVariant;
   auto internal0 = m::InternalVariable("0");
   auto internal1 = m::InternalVariable("1");
+  auto internal2 = m::InternalVariable("2");
   auto bar = m::Predicate("<bar>");
   expectPropertyListPath(
-      "?x [?y ?z; <bar> ?b, ?p, [?d ?e]]; ?u ?v",
+      "?x [?y ?z; <bar> ?b, ?p, [?d ?e], [<bar> ?e]]; ?u ?v",
       Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
            UnorderedElementsAre(
                ::testing::FieldsAre(internal0, V("?y"), V("?z")),
                ::testing::FieldsAre(internal0, bar, V("?b")),
                ::testing::FieldsAre(internal0, bar, V("?p")),
                ::testing::FieldsAre(internal0, bar, internal1),
-               ::testing::FieldsAre(internal1, V("?d"), V("?e")))));
+               ::testing::FieldsAre(internal1, V("?d"), V("?e")),
+               ::testing::FieldsAre(internal0, bar, internal2),
+               ::testing::FieldsAre(internal2, bar, V("?e")))));
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {

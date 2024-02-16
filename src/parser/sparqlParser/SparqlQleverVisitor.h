@@ -490,7 +490,7 @@ class SparqlQleverVisitor {
 
   void addVisibleVariable(Variable var);
 
-  [[noreturn]] void throwCollectionsNotSupported(auto* ctx) {
+  [[noreturn]] static void throwCollectionsNotSupported(auto* ctx) {
     reportError(ctx, "( ... ) in triples is not yet supported by QLever.");
   }
 
@@ -567,4 +567,12 @@ class SparqlQleverVisitor {
   // they have the same structure.
   template <typename Context>
   [[nodiscard]] Triples parseTriplesConstruction(Context* ctx);
+
+  // If the triple is a special triple for the text index (i.e. its predicate is
+  // either `ql:contains-word` or `ql:contains-entity`, register the magic
+  // variables for the matching word and the score that will be created when
+  // processing those triples in the query body, s.t. they can be selected as
+  // part of the query result.
+  void setMatchingWordAndScoreVisibleIfPresent(
+      auto* ctx, const TripleWithPropertyPath& triple);
 };

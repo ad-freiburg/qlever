@@ -32,9 +32,7 @@ class GraphTerm : public GraphTermBase,
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const {
-    // TODO<C++23>: Use std::visit when it is possible
-    return visit([]<typename T>(const T& object) -> std::string {
-      return object.toSparql();
-    });
+    return visit(
+        [](const auto& object) -> std::string { return object.toSparql(); });
   }
 };

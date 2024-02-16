@@ -1019,9 +1019,52 @@ SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
 }
 
+// ____________________________________________________________________________________
+void Visitor::setMatchingWordAndScoreVisibleIfPresent(
+    // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
+    // <entity>` is contained in the query, then the variable
+    // `?ql_textscore_var` is implicitly created and visible in the query body.
+    // Similarly, if a triple `?var ql:contains-word "words"` is contained in
+    // the query, then the variable `ql_matchingword_var` is implicitly created
+    // and visible in the query body.
+    auto* ctx, const TripleWithPropertyPath& triple) {
+  const auto& [subject, predicate, object] = triple;
+
+  auto* var = std::get_if<Variable>(&subject);
+  auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+
+  if (!var || !propertyPath) {
+    return;
+  }
+
+  if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+    string name = object.toSparql();
+    if (!((name.starts_with('"') && name.ends_with('"')) ||
+          (name.starts_with('\'') && name.ends_with('\'')))) {
+      reportError(ctx,
+                  "ql:contains-word has to be followed by a string in quotes");
+    }
+    for (std::string_view s : std::vector<std::string>(
+             absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+      if (!s.ends_with('*')) {
+        continue;
+      }
+      addVisibleVariable(var->getMatchingWordVariable(
+          ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
+    }
+  } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+    if (const auto* entVar = std::get_if<Variable>(&object)) {
+      addVisibleVariable(var->getScoreVariable(*entVar));
+    } else {
+      addVisibleVariable(var->getScoreVariable(object.toSparql()));
+    }
+  }
+}
+
 // ___________________________________________________________________________
 vector<TripleWithPropertyPath> Visitor::visit(
     Parser::TriplesSameSubjectPathContext* ctx) {
+  /*
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
@@ -1061,34 +1104,40 @@ vector<TripleWithPropertyPath> Visitor::visit(
           }
         }
       };
+      */
 
+  // Assemble the final result from a set of given `triples` and possibly empty
+  // `additionalTriples`, the given `subject` and the given pairs of
+  // `[predicate, object]`
+  using TripleVec = std::vector<TripleWithPropertyPath>;
+  auto assembleResult = [this, ctx](TripleVec triples, GraphTerm subject,
+                                    PathObjectPairs predicateObjectPairs,
+                                    TripleVec additionalTriples) {
+    for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
+      triples.emplace_back(subject, std::move(predicate), std::move(object));
+    }
+    std::ranges::copy(additionalTriples, std::back_inserter(triples));
+    for (const auto& triple : triples) {
+      setMatchingWordAndScoreVisibleIfPresent(ctx, triple);
+    }
+    return triples;
+  };
   if (ctx->varOrTerm()) {
     auto subject = visit(ctx->varOrTerm());
     auto [tuples, triples] = visit(ctx->propertyListPathNotEmpty());
-    for (auto& [predicate, object] : tuples) {
-      triples.emplace_back(subject, std::move(predicate), std::move(object));
-    }
-    // TODO<joka921> Can't we move this setting of the matchingWordBla several
-    // levels up?
-    for (auto& [s, p, o] : triples) {
-      setMatchingWordAndScoreVisibleIfPresent(s, p, o);
-    }
-    return triples;
+    return assembleResult(std::move(triples), std::move(subject),
+                          std::move(tuples), {});
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
     auto [subject, result] = visit(ctx->triplesNodePath());
     auto additionalTriples = visit(ctx->propertyListPath());
     if (additionalTriples.has_value()) {
       auto& [tuples, triples] = additionalTriples.value();
-      std::ranges::copy(triples, std::back_inserter(result));
-      for (auto& [predicate, object] : tuples) {
-        result.emplace_back(subject, std::move(predicate), std::move(object));
-      }
+      return assembleResult(std::move(result), std::move(subject),
+                            std::move(tuples), std::move(triples));
+    } else {
+      return assembleResult(std::move(result), std::move(subject), {}, {});
     }
-    for (auto& [s, p, o] : result) {
-      setMatchingWordAndScoreVisibleIfPresent(s, p, o);
-    }
-    return result;
   }
 }
 
@@ -1289,8 +1338,8 @@ SubjectOrObjectAndTriples Visitor::visit(
   }();
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
-  for (auto& tuple : propertyList.first) {
-    triples.push_back({term, std::move(tuple[0]), std::move(tuple[1])});
+  for (auto& [predicate, object] : propertyList.first) {
+    triples.push_back({term, std::move(predicate), std::move(object)});
   }
   ad_utility::appendVector(triples, std::move(propertyList.second));
   return {std::move(term), std::move(triples)};
