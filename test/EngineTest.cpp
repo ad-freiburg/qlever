@@ -102,21 +102,6 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
   }
 }
 
-// TODO<joka921> This function already exists in another PR in a better version,
-// merge them.
-IdTable makeTable(const std::vector<std::vector<Id>>& input) {
-  size_t numCols = input[0].size();
-  IdTable table{numCols, makeAllocator()};
-  table.reserve(input.size());
-  for (const auto& row : input) {
-    table.emplace_back();
-    for (size_t i = 0; i < table.numColumns(); ++i) {
-      table.back()[i] = row.at(i);
-    }
-  }
-  return table;
-}
-
 TEST(OptionalJoin, singleColumnRightIsEmpty) {
   auto a = makeIdTableFromVector({{U}, {2}, {3}});
   IdTable b(1, makeAllocator());
