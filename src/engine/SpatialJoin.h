@@ -3,8 +3,17 @@
 #include "Operation.h"
 #include "parser/ParsedQuery.h"
 
+// This class is implementing a SpatialJoin operation. This operations joins
+// two tables, using their positional column. If the distance of the two
+// positions is less than a given maximum distance, the pair will be in the
+// result table.
 class SpatialJoin : public Operation {
   public:
+    // creates a SpatialJoin operation. The triple is needed, to get the
+    // variable names. Those are the names of the children, which get added
+    // later. In addition to that, the SpatialJoin operation needs a maximum
+    // distance, which two objects can be apart, which will still be accepted
+    // as a match and therefore be part of the result table.
     SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
         std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
         std::optional<std::shared_ptr<QueryExecutionTree>> childRight_,
@@ -15,7 +24,12 @@ class SpatialJoin : public Operation {
     size_t getResultWidth() const override;
     size_t getCostEstimate() override;
     uint64_t getSizeEstimateBeforeLimit() override;
+
+    // this function assumes, that the complete cross product is build and
+    // returned. If the SpatialJoin does not have both children yet, it just
+    // returns one as a dummy return.
     float getMultiplicity(size_t col) override;
+    
     bool knownEmptyResult() override;
     [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
     ResultTable computeResult() override;
@@ -46,11 +60,12 @@ class SpatialJoin : public Operation {
             ad_utility::makeAllocatorWithLimit<ValueId>(_limit);
     std::optional<Variable> leftChildVariable = std::nullopt;
     std::optional<Variable> rightChildVariable = std::nullopt;
-    std::shared_ptr<QueryExecutionTree> childLeft = nullptr;
-    std::shared_ptr<QueryExecutionTree> childRight = nullptr;
-    std::optional<SparqlTriple> triple = std::nullopt;
-    int maxDist = 0;  // max distance in meters, 0 encodes an infinite distance
+    std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
+    std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
+    std::optional<SparqlTriple> triple_ = std::nullopt;
+    int maxDist_ = 0;  // max distance in meters, 0 encodes an infinite distance
     // adds an extra column to the result, which contains the actual distance,
     // between the two objects
     bool addDistToResult = true;
+    const string nameDistanceInternal = "?distOfTheTwoObjectsAddedInternally";
 };

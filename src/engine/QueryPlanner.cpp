@@ -1795,8 +1795,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   }
 
   // if one of the inputs is the spatial join and the other input is a matching
-  // geometry, add the geometry as a child to the spatial join instead of
-  // creating a normal join
+  // geometry, add the geometry as a child to the spatial join. As unbound
+  // SpatialJoin operations are incompatible with normal join operations, we
+  // return immediately instead of creating a normal join below as well.
   if (auto opt = createSpatialJoin(a, b, jcs)) {
     candidates.push_back(std::move(opt.value()));
     return candidates;
@@ -1821,8 +1822,7 @@ auto QueryPlanner::createSpatialJoin(
   const bool aIsSpatialJoin = a._qet->getType() == SPATIAL_JOIN;
   const bool bIsSpatialJoin = b._qet->getType() == SPATIAL_JOIN;
   
-  if (!(aIsSpatialJoin || bIsSpatialJoin)
-      || (aIsSpatialJoin && bIsSpatialJoin)) {
+  if ((aIsSpatialJoin ^ bIsSpatialJoin)) {
     return std::nullopt;
   }
 
@@ -1836,6 +1836,9 @@ auto QueryPlanner::createSpatialJoin(
     return std::nullopt;
   }
 
+  if (jcs.size() > 1) {
+    AD_THROW("in its current implementation only one pair is allowed");
+  }
   ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
   Variable var = otherSubtreePlan._qet->
                       getVariableAndInfoByColumnIndex(ind).first;
