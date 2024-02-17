@@ -303,7 +303,8 @@ void OptionalJoin::optionalJoin(
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
+      cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                  beginRight = joinColumnsRight.begin()](const auto& itLeft,
                                                         const auto& itRight) {

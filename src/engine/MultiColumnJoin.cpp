@@ -227,7 +227,8 @@ void MultiColumnJoin::computeMultiColumnJoin(
       right.asColumnSubsetView(joinColumnData.permutationRight());
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
+      cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = leftJoinColumns.begin(),
                  beginRight = rightJoinColumns.begin()](const auto& itLeft,
                                                         const auto& itRight) {

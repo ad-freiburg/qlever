@@ -151,8 +151,9 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
   IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
-      1, std::move(outputTable), BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP,
-      resultCallback};
+      1, std::move(outputTable),
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP, resultCallback};
 
   ad_utility::zipperJoinForBlocksWithoutUndef(leftInput, rightInput, comparator,
                                               rowAdder, projection, projection,
