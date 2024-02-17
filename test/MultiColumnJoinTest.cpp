@@ -7,11 +7,10 @@
 #include <array>
 #include <vector>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
-#include "engine/CallFixedSize.h"
 #include "engine/MultiColumnJoin.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;

@@ -7,26 +7,20 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdio>
-#include <fstream>
-#include <sstream>
-#include <tuple>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/GTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/Forward.h"
+#include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Random.h"
-#include "util/SourceLocation.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
