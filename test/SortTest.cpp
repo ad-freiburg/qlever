@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;

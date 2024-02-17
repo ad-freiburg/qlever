@@ -4,13 +4,13 @@
 
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/QueryPlanner.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
 
