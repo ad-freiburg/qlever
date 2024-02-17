@@ -201,6 +201,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
@@ -318,7 +319,6 @@ class AddCombinedRowToIdTable {
     optionalIndexBuffer_.clear();
     nextIndex_ = 0;
     std::invoke(blockwiseCallback_, result);
-    cancellationHandle_->throwIfCancelled();
   }
   const IdTableView<0>& inputLeft() const {
     return inputLeftAndRight_.value()[0];

@@ -186,3 +186,15 @@ TEST(AddCombinedRowToTable, cornerCases) {
   };
   testWithAllBuffersizes(testWithBufferSize);
 }
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
+  auto result = makeIdTableFromVector({});
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ad_utility::AddCombinedRowToIdTable adder{0, std::move(result),
+                                            cancellationHandle, 10};
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(adder.flush(), ad_utility::CancellationException);
+}
