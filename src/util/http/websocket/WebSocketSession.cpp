@@ -92,26 +92,7 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
-    auto ex = co_await net::this_coro::executor;
-    auto slot = (co_await net::this_coro::cancellation_state).slot();
-      auto strand = updateFetcher_.strand();
-    AD_CORRECTNESS_CHECK(
-        !slot.is_connected() || strand.running_in_this_thread(),
-        "We are going to reschedule onto another strand via `co_spawn` this "
-        "leads to race conditions when the cancellation slot is connected (the "
-        "emitting of the signal itself is probably fine, but the resetting of "
-        "the cancellation slot is probably not.");
-
-    if (strand.running_in_this_thread()) {
         co_await (waitForServerEvents() && handleClientCommands());
-    } else {
-        co_await (net::co_spawn(
-            strand,
-            [this]() -> net::awaitable<void> {
-              co_await (waitForServerEvents() && handleClientCommands());
-            },
-            net::deferred));
-    }
   } catch (const net::multiple_exceptions& e) {
     // TODO<joka921> We actually have to check, if BOTH the exceptions have the
     // correct type.
@@ -144,21 +125,23 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
 net::awaitable<void> WebSocketSession::handleSession(
     QueryHub& queryHub, const QueryRegistry& queryRegistry,
     const http::request<http::string_body>& request, tcp::socket socket) {
-  // Make sure access to new websocket is on a strand and therefore thread safe
-  auto executor = co_await net::this_coro::executor;
-  auto strandExecutor =
-      executor.target<net::strand<net::io_context::executor_type>>();
-  AD_CONTRACT_CHECK(strandExecutor);
-  AD_CONTRACT_CHECK(strandExecutor->running_in_this_thread());
-  AD_CONTRACT_CHECK(socket.get_executor() == *strandExecutor);
 
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   auto queryId = QueryId::idFromString(queryIdString);
   UpdateFetcher fetcher{queryHub, queryId};
+  auto strand = fetcher.strand();
   WebSocketSession webSocketSession{std::move(fetcher), std::move(socket),
                                     queryRegistry, std::move(queryId)};
-  co_await webSocketSession.acceptAndWait(request);
+  auto slot = (co_await net::this_coro::cancellation_state).slot();
+  AD_CORRECTNESS_CHECK(!slot.is_connected() || strand.running_in_this_thread());
+  if (strand.running_in_this_thread()) {
+      co_await webSocketSession.acceptAndWait(request);
+  } else {
+      co_await (net::co_spawn(strand,
+                              webSocketSession.acceptAndWait(request),
+                              net::deferred));
+  }
 }
 // _____________________________________________________________________________
 

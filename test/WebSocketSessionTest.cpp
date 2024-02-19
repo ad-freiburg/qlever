@@ -346,8 +346,12 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
                  boost::system::system_error);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
-                         net::use_awaitable);
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
+
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
 }
 
 // _____________________________________________________________________________
@@ -397,8 +401,12 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringDoesNotThrowWithoutHandle) {
                                    net::use_awaitable);
   };
 
-  EXPECT_NO_THROW(co_await net::co_spawn(
-      c.strand_, c.serverLogic() && controllerActions(), net::use_awaitable));
+    auto fut = std::async(std::launch::async, [&]() {
+        net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+    });
+
+    EXPECT_NO_THROW(co_await c.serverLogic());
+    EXPECT_NO_THROW(fut.get());
 }
 
 // _____________________________________________________________________________
@@ -425,7 +433,10 @@ ASYNC_TEST(WebSocketSession,
       throw;
     }
   };
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
 
-  EXPECT_NO_THROW(co_await net::co_spawn(
-      c.strand_, c.serverLogic() && controllerActions(), net::use_awaitable));
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
 }

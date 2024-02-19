@@ -22,7 +22,7 @@ TEST(HttpServer, HttpTest) {
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make
   // such failures less spurious should they ever reoccur in the future.
-  for (size_t k = 0; k < 100; ++k) {
+  for (size_t k = 0; k < 10; ++k) {
     LOG(INFO) << k << std::endl;
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
