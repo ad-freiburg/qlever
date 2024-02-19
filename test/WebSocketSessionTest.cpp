@@ -141,8 +141,12 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
                                    net::use_awaitable);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
-                         net::use_awaitable);
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
+
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
 }
 
 // _____________________________________________________________________________
@@ -173,8 +177,12 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
                  boost::system::system_error);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
-                         net::use_awaitable);
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
+
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
 }
 
 // _____________________________________________________________________________
@@ -213,6 +221,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     co_await timer.async_wait(net::use_awaitable);
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
+    //cancellationHandle->throwIfCancelled();
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
         ad_utility::CancellationException);
@@ -224,7 +233,6 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
       // Trigger connection close by creating and destroying message sender
       ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
                                                    c.queryHub());
-      co_await net::post(net::use_awaitable);
     }
 
     // Expect socket will be closed
@@ -233,8 +241,12 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
                  boost::system::system_error);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
-                         net::use_awaitable);
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
+
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
 }
 
 // _____________________________________________________________________________
@@ -337,7 +349,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
       // Trigger connection close by creating and destroying message sender
       ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
                                                    c.queryHub());
-      co_await net::post(net::use_awaitable);
+      //co_await net::post(net::use_awaitable);
     }
 
     // Expect socket will be closed
@@ -377,9 +389,12 @@ ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
   };
 
-  co_await net::co_spawn(c.strand_, c.serverLogic() && controllerActions(),
-                         net::use_awaitable);
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
+  });
 
+  EXPECT_NO_THROW(co_await c.serverLogic());
+  EXPECT_NO_THROW(fut.get());
   EXPECT_FALSE(cancellationHandle->isCancelled());
 }
 
