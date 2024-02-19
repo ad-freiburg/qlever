@@ -23,6 +23,7 @@ using namespace std::string_literals;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
+using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
@@ -109,7 +110,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       LOG(INFO) << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
       co_return co_await sendWithAccessControlHeaders(
-          createOkResponse("", request, ad_utility::MediaType::textPlain));
+          createOkResponse("", request, MediaType::textPlain));
     }
     // Process the request using the `process` method and if it throws an
     // exception, log the error message and send a HTTP/1.1 400 Bad Request
@@ -316,8 +317,8 @@ Awaitable<void> Server::process(
     response = createJsonResponse(RuntimeParameters().toMap(), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
-    response = createOkResponse(index_.getIndexId(), request,
-                                ad_utility::MediaType::textPlain);
+    response =
+        createOkResponse(index_.getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");
@@ -337,7 +338,7 @@ Awaitable<void> Server::process(
       LOG(INFO) << "Alive check without message" << std::endl;
     }
     response = createOkResponse("This QLever server is up and running\n",
-                                request, ad_utility::MediaType::textPlain);
+                                request, MediaType::textPlain);
   }
 
   // Set description of KB index.
@@ -539,6 +540,47 @@ auto Server::setupCancellationHandle(
       std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
+// _____________________________________________________________________________
+Awaitable<void> Server::sendStreamableResponse(
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
+    MediaType mediaType, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet,
+    SharedCancellationHandle cancellationHandle) const {
+  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      plannedQuery.parsedQuery_, qet, mediaType, std::move(cancellationHandle));
+
+  auto response = ad_utility::httpUtils::createOkResponse(
+      std::move(responseGenerator), request, mediaType);
+  try {
+    co_await send(std::move(response));
+  } catch (const boost::system::system_error& e) {
+    // "Broken Pipe" errors are thrown and reported by `streamable_body`,
+    // so we can safely ignore these kind of exceptions. In practice this
+    // should only ever "commonly" happen with `CancellationException`s.
+    if (e.code().value() == EPIPE) {
+      co_return;
+    }
+    LOG(ERROR) << "Unexpected error while sending response: " << e.what()
+               << std::endl;
+  } catch (const std::exception& e) {
+    // Even if an exception is thrown here for some unknown reason, don't
+    // propagate it, and log it directly, so the code doesn't try to send
+    // an HTTP response containing the error message onto a HTTP stream
+    // that is already partially written. The only way to pass metadata
+    // after the beginning is by using the trailer mechanism as decribed
+    // here:
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
+    // This won't be treated as an error by any regular HTTP client, so
+    // while it might be worth implementing to have some sort of validation
+    // check, it isn't even shown by curl by default let alone in the
+    // browser. Currently though it looks like boost.beast does simply not
+    // properly terminate the connection if an error occurs which does
+    // provide a somewhat cryptic error message when using curl, but is
+    // better than silently failing.
+    LOG(ERROR) << e.what() << std::endl;
+  }
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -586,7 +628,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // result. The media type is either determined by the "Accept:" header of
     // the request or by the URL parameter "action=..." (for TSV and CSV export,
     // for QLever-historical reasons).
-    using ad_utility::MediaType;
 
     std::optional<MediaType> mediaType = std::nullopt;
 
@@ -653,36 +694,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-    // Common code for sending responses for the streamable media types
-    // (tsv, csv, octet-stream, turtle).
-    auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread(
-          [&plannedQuery, &qet, mediaType] {
-            return ExportQueryExecutionTrees::computeResultAsStream(
-                plannedQuery.value().parsedQuery_, qet, mediaType);
-          },
-          cancellationHandle);
-
-      // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the results into "broken pipe". We store the
-      // actual exceptions and manually rethrow them to propagate the correct
-      // error messages to the user.
-      // TODO<joka921> What happens, when part of the TSV export has already
-      // been sent and an exception occurs after that?
-      std::exception_ptr exceptionPtr;
-      responseGenerator.assignExceptionToThisPointer(&exceptionPtr);
-      try {
-        auto response =
-            createOkResponse(std::move(responseGenerator), request, mediaType);
-        co_await send(std::move(response));
-      } catch (...) {
-        if (exceptionPtr) {
-          std::rethrow_exception(exceptionPtr);
-        }
-        throw;
-      }
-    };
-
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
@@ -691,17 +702,20 @@ boost::asio::awaitable<void> Server::processQuery(
       case tsv:
       case octetStream:
       case sparqlXml:
-      case turtle: {
-        co_await sendStreamableResponse(mediaType.value());
-      } break;
+      case turtle:
+        co_await sendStreamableResponse(request, send, mediaType.value(),
+                                        plannedQuery.value(), qet,
+                                        cancellationHandle);
+        break;
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
+             &cancellationHandle] {
               return ExportQueryExecutionTrees::computeResultAsJSON(
                   plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-                  mediaType.value());
+                  mediaType.value(), cancellationHandle);
             },
             cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
@@ -739,9 +753,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    if (!e.operation_.empty()) {
-      *exceptionErrorMsg += " Last operation: " + e.operation_;
-    }
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
