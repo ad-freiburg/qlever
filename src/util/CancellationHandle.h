@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <type_traits>
 
@@ -89,19 +90,30 @@ constexpr auto printNothing = []() constexpr { return ""; };
 }  // namespace detail
 
 /// An exception signalling an cancellation
-class CancellationException : public std::runtime_error {
+class CancellationException : public std::exception {
+  std::string message_;
+
  public:
-  using std::runtime_error::runtime_error;
+  explicit CancellationException(std::string message)
+      : message_{std::move(message)} {}
   explicit CancellationException(CancellationState reason)
-      : std::runtime_error{reason == CancellationState::TIMEOUT
-                               ? "Query timed out."
-                               : "Query was manually cancelled."} {
+      : message_{reason == CancellationState::TIMEOUT
+                     ? "Query timed out."
+                     : "Query was manually cancelled."} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
 
-  /// Field that stores some metadata, that can be set and passed with this
-  /// rethrown exception
-  std::string operation_{};
+  const char* what() const noexcept override { return message_.c_str(); }
+
+  /// Set optional operation information, if not already set.
+  void setOperation(std::string_view operation) {
+    constexpr std::string_view operationPrefix = " Last operation: ";
+    // Don't set operation twice.
+    if (message_.find(operationPrefix) == std::string::npos) {
+      message_ += operationPrefix;
+      message_ += operation;
+    }
+  }
 };
 
 /// Trim everything but the filename of a given file path.

@@ -11,13 +11,14 @@
 
 namespace h = queryPlannerTestHelpers;
 using Var = Variable;
+using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{nullptr,
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
-TEST(QueryPlannerTest, createTripleGraph) {
+TEST(QueryPlanner, createTripleGraph) {
   using TripleGraph = QueryPlanner::TripleGraph;
   using Node = QueryPlanner::TripleGraph::Node;
   using std::vector;
@@ -102,7 +103,7 @@ TEST(QueryPlannerTest, createTripleGraph) {
   }
 }
 
-TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
+TEST(QueryPlanner, testCpyCtorWithKeepNodes) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
@@ -158,7 +159,7 @@ TEST(QueryPlannerTest, testCpyCtorWithKeepNodes) {
   }
 }
 
-TEST(QueryPlannerTest, testBFSLeaveOut) {
+TEST(QueryPlanner, testBFSLeaveOut) {
   {
     ParsedQuery pq = SparqlParser::parseQuery(
         "SELECT ?x WHERE {?x ?p <X>. ?x ?p2 <Y>. <X> ?p <Y>}");
@@ -200,7 +201,7 @@ TEST(QueryPlannerTest, testBFSLeaveOut) {
   }
 }
 
-TEST(QueryPlannerTest, indexScanOneVariable) {
+TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
   h::expect(
@@ -218,7 +219,7 @@ TEST(QueryPlannerTest, indexScanOneVariable) {
            "?x", {PSO}));
 }
 
-TEST(QueryPlannerTest, indexScanTwoVariables) {
+TEST(QueryPlanner, indexScanTwoVariables) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
 
@@ -229,7 +230,7 @@ TEST(QueryPlannerTest, indexScanTwoVariables) {
       scan("?x", "<http://rdf.myprefix.com/myrel>", "?y", {POS, PSO}));
 }
 
-TEST(QueryPlannerTest, joinOfTwoScans) {
+TEST(QueryPlanner, joinOfTwoScans) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
   h::expect(
@@ -252,7 +253,7 @@ TEST(QueryPlannerTest, joinOfTwoScans) {
       h::Join(scan("?y", "<pre/r>", "?x"), scan("?z", "<pre/r>", "?x")));
 }
 
-TEST(QueryPlannerTest, testActorsBornInEurope) {
+TEST(QueryPlanner, testActorsBornInEurope) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
@@ -269,7 +270,7 @@ TEST(QueryPlannerTest, testActorsBornInEurope) {
             "POS with P = \"<pre/in>\", O = \"<pre/Europe>\" join-column: [0]");
 }
 
-TEST(QueryPlannerTest, testStarTwoFree) {
+TEST(QueryPlanner, testStarTwoFree) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "PREFIX : <http://rdf.myprefix.com/>\n"
@@ -284,7 +285,7 @@ TEST(QueryPlannerTest, testStarTwoFree) {
           scan("?y", "<http://rdf.myprefix.com/xxx/rel2>", "<http://abc.de>")));
 }
 
-TEST(QueryPlannerTest, testFilterAfterSeed) {
+TEST(QueryPlanner, testFilterAfterSeed) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
@@ -298,7 +299,7 @@ TEST(QueryPlannerTest, testFilterAfterSeed) {
             "omparators10ComparisonE3EEE#column_1##column_0#");
 }
 
-TEST(QueryPlannerTest, testFilterAfterJoin) {
+TEST(QueryPlanner, testFilterAfterJoin) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
@@ -312,7 +313,7 @@ TEST(QueryPlannerTest, testFilterAfterJoin) {
             "omparators10ComparisonE3EEE#column_1##column_2#");
 }
 
-TEST(QueryPlannerTest, threeVarTriples) {
+TEST(QueryPlanner, threeVarTriples) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;
 
@@ -335,7 +336,7 @@ TEST(QueryPlannerTest, threeVarTriples) {
               scan("?s", "?p", "?o", {PSO, POS})));
 }
 
-TEST(QueryPlannerTest, threeVarTriplesTCJ) {
+TEST(QueryPlanner, threeVarTriplesTCJ) {
   auto qec = ad_utility::testing::getQec("<s> <p> <x>");
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -352,7 +353,7 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
       qec);
 }
 
-TEST(QueryPlannerTest, threeVarXthreeVarException) {
+TEST(QueryPlanner, threeVarXthreeVarException) {
   h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
@@ -565,7 +566,7 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
   ASSERT_TRUE(qet.isVariableCovered(Variable{"?0"}));
 }
 
-TEST(QueryPlannerTest, testSimpleOptional) {
+TEST(QueryPlanner, testSimpleOptional) {
   QueryPlanner qp = makeQueryPlanner();
 
   ParsedQuery pq = SparqlParser::parseQuery(
@@ -587,7 +588,7 @@ TEST(QueryPlannerTest, testSimpleOptional) {
             "join-columns: [0]");
 }
 
-TEST(QueryPlannerTest, SimpleTripleOneVariable) {
+TEST(QueryPlanner, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
   // With only one variable, there are always two permutations that will yield
@@ -601,7 +602,7 @@ TEST(QueryPlannerTest, SimpleTripleOneVariable) {
             h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO}));
 }
 
-TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
+TEST(QueryPlanner, SimpleTripleTwoVariables) {
   using enum Permutation::Enum;
 
   // In the following tests we need the query planner to be aware that the index
@@ -640,7 +641,7 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
             h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}), qec);
 }
 
-TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
+TEST(QueryPlanner, SimpleTripleThreeVariables) {
   using enum Permutation::Enum;
 
   // Fixed predicate.
@@ -672,7 +673,7 @@ TEST(QueryPlannerTest, SimpleTripleThreeVariables) {
             h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}, {POS}));
 }
 
-TEST(QueryPlannerTest, CartesianProductJoin) {
+TEST(QueryPlanner, CartesianProductJoin) {
   auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
@@ -692,7 +693,7 @@ TEST(QueryPlannerTest, CartesianProductJoin) {
           scan("?x", "<b>", "?c")));
 }
 
-TEST(QueryPlannerTest, TransitivePathUnbound) {
+TEST(QueryPlanner, TransitivePathUnbound) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
@@ -705,7 +706,7 @@ TEST(QueryPlannerTest, TransitivePathUnbound) {
                "?_qlever_internal_variable_query_planner_1")));
 }
 
-TEST(QueryPlannerTest, TransitivePathLeftId) {
+TEST(QueryPlanner, TransitivePathLeftId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
@@ -723,7 +724,7 @@ TEST(QueryPlannerTest, TransitivePathLeftId) {
       qec);
 }
 
-TEST(QueryPlannerTest, TransitivePathRightId) {
+TEST(QueryPlanner, TransitivePathRightId) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
 
@@ -741,7 +742,7 @@ TEST(QueryPlannerTest, TransitivePathRightId) {
       qec);
 }
 
-TEST(QueryPlannerTest, TransitivePathBindLeft) {
+TEST(QueryPlanner, TransitivePathBindLeft) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
@@ -756,7 +757,7 @@ TEST(QueryPlannerTest, TransitivePathBindLeft) {
                "?_qlever_internal_variable_query_planner_1")));
 }
 
-TEST(QueryPlannerTest, TransitivePathBindRight) {
+TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
   TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
@@ -780,7 +781,7 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
 }
 
 // __________________________________________________________________________
-TEST(QueryPlannerTest, TextIndexScanForWord) {
+TEST(QueryPlanner, TextIndexScanForWord) {
   auto qec = ad_utility::testing::getQec(
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
       "<p> \"testEntity\" . <a> <p> \"picking the right text can be a hard "
@@ -810,7 +811,7 @@ TEST(QueryPlannerTest, TextIndexScanForWord) {
 }
 
 // __________________________________________________________________________
-TEST(QueryPlannerTest, TextIndexScanForEntity) {
+TEST(QueryPlanner, TextIndexScanForEntity) {
   auto qec = ad_utility::testing::getQec(
       "<a> <p> \"this text contains some words and is part of the test\" . <a> "
       "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
@@ -866,7 +867,7 @@ TEST(QueryPlannerTest, TextIndexScanForEntity) {
 }
 
 // __________________________________________________________________________
-TEST(QueryPlannerTest, TooManyTriples) {
+TEST(QueryPlanner, TooManyTriples) {
   std::string query = "SELECT * WHERE {";
   for (size_t i = 0; i < 65; i++) {
     query = absl::StrCat(query, " ?x <p> ?y .");
@@ -894,4 +895,19 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   // TODO<joka921> Add a test for the case with subtrees with and without
   // rewriting of triples.
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  QueryPlanner qp{ad_utility::testing::getQec(), cancellationHandle};
+  auto pq = SparqlParser::parseQuery("SELECT * WHERE { ?x ?y ?z }");
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(qp.createExecutionTree(pq),
+                                        HasSubstr("Query planning"),
+                                        ad_utility::CancellationException);
 }
