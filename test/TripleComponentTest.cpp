@@ -5,10 +5,10 @@
 
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "parser/TripleComponent.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::literals;
 using namespace ad_utility::testing;

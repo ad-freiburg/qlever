@@ -28,7 +28,7 @@ TEST(AddCombinedRowToTable, OneJoinColumn) {
     result.setNumColumns(4);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
     adder.addRow(1, 0);
     adder.setOnlyLeftInputForOptionalJoin(left);
     adder.addOptionalRow(2);
@@ -57,7 +57,7 @@ TEST(AddCombinedRowToTable, TwoJoinColumns) {
     result.setNumColumns(3);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         2, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
     adder.addRow(1, 0);
     adder.addOptionalRow(2);
     adder.addRow(3, 2);
@@ -83,7 +83,7 @@ TEST(AddCombinedRowToTable, UndefInInput) {
     result.setNumColumns(2);
     auto adder = ad_utility::AddCombinedRowToIdTable(
         1, left.asStaticView<0>(), right.asStaticView<0>(), std::move(result),
-        bufferSize);
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
     adder.addRow(0, 0);
     adder.addRow(0, 1);
     adder.addRow(2, 1);
@@ -109,8 +109,9 @@ TEST(AddCombinedRowToTable, setInput) {
     {
       auto result = makeIdTableFromVector({});
       result.setNumColumns(2);
-      auto adder =
-          ad_utility::AddCombinedRowToIdTable(1, std::move(result), bufferSize);
+      auto adder = ad_utility::AddCombinedRowToIdTable(
+          1, std::move(result),
+          std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
       // It is okay to flush even if no inputs were specified, as long as we
       // haven't pushed any rows yet.
       EXPECT_NO_THROW(adder.flush());
@@ -124,8 +125,9 @@ TEST(AddCombinedRowToTable, setInput) {
 
     auto result = makeIdTableFromVector({});
     result.setNumColumns(3);
-    auto adder =
-        ad_utility::AddCombinedRowToIdTable(1, std::move(result), bufferSize);
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        1, std::move(result),
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
     auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
     adder.setInput(left, right);
@@ -166,8 +168,9 @@ TEST(AddCombinedRowToTable, cornerCases) {
   auto testWithBufferSize = [](size_t bufferSize) {
     auto result = makeIdTableFromVector({});
     result.setNumColumns(3);
-    auto adder =
-        ad_utility::AddCombinedRowToIdTable(2, std::move(result), bufferSize);
+    auto adder = ad_utility::AddCombinedRowToIdTable(
+        2, std::move(result),
+        std::make_shared<ad_utility::CancellationHandle<>>(), bufferSize);
     auto left = makeIdTableFromVector({{U, 5}, {2, U}, {3, U}, {4, U}});
     auto right = makeIdTableFromVector({{1, 2}, {3, 4}, {4, 7}, {U, 8}});
     // We have specified two join columns and our inputs have two columns each,
@@ -182,4 +185,16 @@ TEST(AddCombinedRowToTable, cornerCases) {
     EXPECT_ANY_THROW(adder.setInput(right, left));
   };
   testWithAllBuffersizes(testWithBufferSize);
+}
+
+// _______________________________________________________________________________
+TEST(AddCombinedRowToTable, flushDoesCheckCancellation) {
+  auto result = makeIdTableFromVector({});
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  ad_utility::AddCombinedRowToIdTable adder{0, std::move(result),
+                                            cancellationHandle, 10};
+
+  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  EXPECT_THROW(adder.flush(), ad_utility::CancellationException);
 }

@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -22,6 +21,7 @@
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::source_location;
 

@@ -5,10 +5,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;

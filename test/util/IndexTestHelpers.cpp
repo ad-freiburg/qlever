@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "../IndexTestHelpers.h"
+#include "IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
 #include "global/SpecialIds.h"
