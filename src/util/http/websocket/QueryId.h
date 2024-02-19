@@ -70,8 +70,15 @@ static_assert(!std::is_copy_assignable_v<OwningQueryId>);
 
 /// A factory class to create unique query ids within each individual instance.
 class QueryRegistry {
+  struct CancellationHandleWithQuery {
+    SharedCancellationHandle cancellationHandle_ =
+        std::make_shared<CancellationHandle<>>();
+    std::string query_;
+    explicit CancellationHandleWithQuery(std::string_view query)
+        : query_{query} {}
+  };
   using SynchronizedType = ad_utility::Synchronized<
-      ad_utility::HashMap<QueryId, SharedCancellationHandle>>;
+      ad_utility::HashMap<QueryId, CancellationHandleWithQuery>>;
   // Technically no shared pointer is required because the registry lives
   // for the entire lifetime of the application, but since the instances of
   // `OwningQueryId` need to deregister themselves again they need some
@@ -84,15 +91,14 @@ class QueryRegistry {
 
   /// Tries to create a new unique OwningQueryId object from the given string.
   /// \param id The id representation of the potential candidate.
+  /// \param query The string representation of the associated SPARQL query.
   /// \return A std::optional<OwningQueryId> object wrapping the passed string
   ///         if it was not present in the registry before. An empty
   ///         std::optional if the id already existed before.
-  std::optional<OwningQueryId> uniqueIdFromString(std::string id) {
+  std::optional<OwningQueryId> uniqueIdFromString(std::string id,
+                                                  std::string_view query) {
     auto queryId = QueryId::idFromString(std::move(id));
-    bool success =
-        registry_->wlock()
-            ->emplace(queryId, std::make_shared<CancellationHandle<>>())
-            .second;
+    bool success = registry_->wlock()->try_emplace(queryId, query).second;
     if (success) {
       // Avoid undefined behavior when the registry is no longer alive at the
       // time the `OwningQueryId` is destroyed.
@@ -111,25 +117,25 @@ class QueryRegistry {
   }
 
   /// Generates a unique pseudo-random OwningQueryId object for this registry
-  OwningQueryId uniqueId() {
+  /// and associates it with the given query.
+  OwningQueryId uniqueId(std::string_view query) {
     static thread_local std::mt19937 generator(std::random_device{}());
     std::uniform_int_distribution<uint64_t> distrib{};
     std::optional<OwningQueryId> result;
     do {
-      result = uniqueIdFromString(std::to_string(distrib(generator)));
+      result = uniqueIdFromString(std::to_string(distrib(generator)), query);
     } while (!result.has_value());
     return std::move(result.value());
   }
 
   /// Member function that acquires a read lock and returns a vector
   /// of all currently registered queries.
-  std::vector<QueryId> getActiveQueries() const {
+  ad_utility::HashMap<QueryId, std::string> getActiveQueries() const {
     return registry_->withReadLock([](const auto& map) {
-      // TODO<C++23> Use `ranges::to` to transform map keys into vector
-      std::vector<QueryId> result;
+      ad_utility::HashMap<QueryId, std::string> result;
       result.reserve(map.size());
       for (const auto& entry : map) {
-        result.emplace_back(entry.first);
+        result.emplace(entry.first, entry.second.query_);
       }
       return result;
     });
@@ -140,7 +146,7 @@ class QueryRegistry {
   SharedCancellationHandle getCancellationHandle(const QueryId& queryId) const {
     return registry_->withReadLock([&queryId](const auto& map) {
       auto it = map.find(queryId);
-      return it != map.end() ? it->second : nullptr;
+      return it != map.end() ? it->second.cancellationHandle_ : nullptr;
     });
   }
 };

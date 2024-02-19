@@ -119,7 +119,7 @@ class Index {
 
   bool getId(const std::string& element, Id* id) const;
 
-  [[nodiscard]] std::pair<Id, Id> prefix_range(const std::string& prefix) const;
+  [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**

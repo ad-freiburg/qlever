@@ -49,6 +49,7 @@ IdTable Permutation::scan(
 
   if (!meta_.col0IdExists(col0Id)) {
     size_t numColumns = col1Id.has_value() ? 1 : 2;
+    cancellationHandle->throwIfCancelled();
     return IdTable{numColumns, reader().allocator()};
   }
   const auto& metaData = meta_.getMetaData(col0Id);
@@ -65,6 +66,20 @@ size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
   const auto& metaData = meta_.getMetaData(col0Id);
 
   return reader().getResultSizeOfScan(metaData, col1Id, meta_.blockData());
+}
+
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol1IdsAndCounts(
+    Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
+  // TODO: It's a recurring pattern here and in other methods in this file,
+  // that it is first checked whether the `col0Id` exists in the metadata and
+  // subsequently the metadata is retrieved. Shoulnd't we avoid this because
+  // each of these is a binary search on disk, so not for free?
+  AD_CONTRACT_CHECK(meta_.col0IdExists(col0Id));
+  const auto& relationMetadata = meta_.getMetaData(col0Id);
+  const auto& allBlocksMetadata = meta_.blockData();
+  return reader().getDistinctCol1IdsAndCounts(
+      relationMetadata, allBlocksMetadata, cancellationHandle);
 }
 
 // _____________________________________________________________________

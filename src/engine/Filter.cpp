@@ -47,6 +47,7 @@ ResultTable Filter::computeResult() {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   shared_ptr<const ResultTable> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
+  checkCancellation();
 
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(subRes->idTable().numColumns());
@@ -54,6 +55,7 @@ ResultTable Filter::computeResult() {
   size_t width = idTable.numColumns();
   CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
   LOG(DEBUG) << "Filter result computation done." << endl;
+  checkCancellation();
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
@@ -65,7 +67,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.
@@ -76,21 +78,27 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
   auto output = std::move(*outputIdTable).toStatic<WIDTH>();
+  // Clang 17 seems to incorrectly deduce the type, so try to trick it
+  std::remove_const_t<decltype(output)>& output2 = output;
 
   auto visitor =
-      [&]<sparqlExpression::SingleExpressionResult T>(T&& singleResult) {
+      [this, &output2, &input,
+       &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+          T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
           auto totalSize = std::accumulate(
               singleResult._intervals.begin(), singleResult._intervals.end(),
               0ul, [](const auto& sum, const auto& interval) {
                 return sum + (interval.second - interval.first);
               });
-          output.reserve(totalSize);
+          output2.reserve(totalSize);
+          checkCancellation();
           for (auto [beg, end] : singleResult._intervals) {
             AD_CONTRACT_CHECK(end <= input.size());
-            output.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            output2.insertAtEnd(input.cbegin() + beg, input.cbegin() + end);
+            checkCancellation();
           }
-          AD_CONTRACT_CHECK(output.size() == totalSize);
+          AD_CONTRACT_CHECK(output2.size() == totalSize);
         } else {
           // All other results are converted to boolean values via the
           // `EffectiveBooleanValueGetter`. This means for example, that zero,
@@ -105,8 +113,9 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
           using EBV = sparqlExpression::detail::EffectiveBooleanValueGetter;
           for (auto&& resultValue : resultGenerator) {
             if (EBV{}(resultValue, &evaluationContext) == EBV::Result::True) {
-              output.push_back(input[i]);
+              output2.push_back(input[i]);
             }
+            checkCancellation();
             ++i;
           }
         }

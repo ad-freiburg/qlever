@@ -13,7 +13,7 @@
 #include "./Iri.h"
 #include "./Literal.h"
 
-using GraphTermBase = std::variant<Literal, BlankNode, Iri>;
+using GraphTermBase = std::variant<Literal, BlankNode, Iri, Variable>;
 
 class GraphTerm : public GraphTermBase,
                   public VisitMixin<GraphTerm, GraphTermBase> {
@@ -24,14 +24,15 @@ class GraphTerm : public GraphTermBase,
   [[nodiscard]] std::optional<std::string> evaluate(
       const ConstructQueryExportContext& context, PositionInTriple role) const {
     // TODO<C++23>: Use std::visit when it is possible
-    return visit([&context, &role](const auto& object) {
+    return visit([&context, &role]<typename T>(
+                     const T& object) -> std::optional<std::string> {
       return object.evaluate(context, role);
     });
   }
 
   // ___________________________________________________________________________
   [[nodiscard]] std::string toSparql() const {
-    // TODO<C++23>: Use std::visit when it is possible
-    return visit([](const auto& object) { return object.toSparql(); });
+    return visit(
+        [](const auto& object) -> std::string { return object.toSparql(); });
   }
 };

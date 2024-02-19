@@ -161,7 +161,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
 };
 
 // Compare two elements that are either strings or IDs in some way (see the
-// `StoresStringOrId` concept) according to the sepcified comparison (see
+// `StoresStringOrId` concept) according to the specified comparison (see
 // `ValueIdComparators.h` for details). The `EvaluationContext` is required to
 // compare strings to Ids.
 template <valueIdComparators::Comparison Comp,

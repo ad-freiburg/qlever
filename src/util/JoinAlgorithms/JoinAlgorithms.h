@@ -75,6 +75,10 @@ concept BinaryIteratorFunction =
  * @param elFromFirstNotFoundAction This function is called for each iterator in
  * `left` for which no corresponding match in `right` was found. This is `noop`
  * for "normal` joins, but can be set to implement `OPTIONAL` or `MINUS`.
+ * @param checkCancellation Is called many times during processing to allow
+ * cancelling this join operation at arbitrary times. It is supposed to throw
+ * a proper exception. Typically implementations will just
+ * CancellationHandle::throwIfCancelled().
  * @return 0 if the result is sorted, > 0 if the result is not sorted. `Sorted`
  * means that all the calls to `compatibleRowAction` were ordered wrt
  * `lessThan`. A result being out of order can happen if two rows with UNDEF
@@ -87,13 +91,15 @@ template <std::ranges::random_access_range Range1,
           std::ranges::random_access_range Range2, typename LessThan,
           typename FindSmallerUndefRangesLeft,
           typename FindSmallerUndefRangesRight,
-          typename ElFromFirstNotFoundAction = decltype(noop)>
+          typename ElFromFirstNotFoundAction = decltype(noop),
+          typename CheckCancellation = decltype(noop)>
 [[nodiscard]] auto zipperJoinWithUndef(
     const Range1& left, const Range2& right, const LessThan& lessThan,
     const auto& compatibleRowAction,
     const FindSmallerUndefRangesLeft& findSmallerUndefRangesLeft,
     const FindSmallerUndefRangesRight& findSmallerUndefRangesRight,
-    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {}) {
+    ElFromFirstNotFoundAction elFromFirstNotFoundAction = {},
+    CheckCancellation checkCancellation = {}) {
   // If this is not an OPTIONAL join or a MINUS we can apply several
   // optimizations, so we store this information.
   static constexpr bool hasNotFoundAction =
@@ -136,6 +142,7 @@ template <std::ranges::random_access_range Range1,
   // `left.end()`, but passing in smaller ranges is more efficient.
   auto mergeWithUndefLeft = [&](auto itFromRight, auto leftBegin,
                                 auto leftEnd) {
+    checkCancellation();
     if constexpr (!isSimilar<FindSmallerUndefRangesLeft, Noop>) {
       // We need to bind the const& to a variable, else it will be
       // dangling inside the `findSmallerUndefRangesLeft` generator.
@@ -176,6 +183,7 @@ template <std::ranges::random_access_range Range1,
   // element in `right` that is only discovered later.
   auto mergeWithUndefRight = [&](auto itFromLeft, auto beginRight,
                                  auto endRight, bool hasNoMatch) {
+    checkCancellation();
     if constexpr (!isSimilar<FindSmallerUndefRangesRight, Noop>) {
       bool compatibleWasFound = false;
       // We need to bind the const& to a variable, else it will be
@@ -224,6 +232,7 @@ template <std::ranges::random_access_range Range1,
           return;
         }
       }
+      checkCancellation();
 
       // Find the following ranges in `left` and `right` where the elements are
       // equal.
@@ -237,6 +246,7 @@ template <std::ranges::random_access_range Range1,
           it1, end1, [&](const auto& row) { return eq(row, *it2); });
       auto endSame2 = std::find_if_not(
           it2, end2, [&](const auto& row) { return eq(*it1, row); });
+      checkCancellation();
 
       for (auto it = it1; it != endSame1; ++it) {
         mergeWithUndefRight(it, std::begin(right), it2, false);
@@ -246,6 +256,7 @@ template <std::ranges::random_access_range Range1,
       }
 
       for (; it1 != endSame1; ++it1) {
+        checkCancellation();
         cover(it1);
         for (auto innerIt2 = it2; innerIt2 != endSame2; ++innerIt2) {
           compatibleRowAction(it1, innerIt2);
@@ -255,6 +266,7 @@ template <std::ranges::random_access_range Range1,
       it2 = endSame2;
     }
   }();
+  checkCancellation();
 
   // Deal with the remaining elements that have no exact match in the other
   // input.
@@ -273,6 +285,7 @@ template <std::ranges::random_access_range Range1,
   if constexpr (hasNotFoundAction) {
     for (size_t i = 0; i < coveredFromLeft.size(); ++i) {
       if (!coveredFromLeft[i]) {
+        checkCancellation();
         elFromFirstNotFoundAction(std::begin(left) + i);
         ++numOutOfOrderAtEnd;
       }
@@ -308,14 +321,20 @@ template <std::ranges::random_access_range Range1,
  * `smaller` that has no matching counterpart in `larger`. Can be used to
  * implement very efficient OPTIONAL or MINUS if neither of the inputs contains
  * UNDEF values, and if the left operand is much smaller.
+ * @param checkCancellation Is called many times during processing to allow
+ * cancelling this join operation at arbitrary times. It is supposed to throw
+ * a proper exception. Typically implementations will just
+ * CancellationHandle::throwIfCancelled().
  */
 template <std::ranges::random_access_range RangeSmaller,
           std::ranges::random_access_range RangeLarger,
-          typename ElementFromSmallerNotFoundAction = Noop>
+          typename ElementFromSmallerNotFoundAction = Noop,
+          typename CheckCancellation = Noop>
 void gallopingJoin(
     const RangeSmaller& smaller, const RangeLarger& larger,
     auto const& lessThan, auto const& action,
-    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {}) {
+    ElementFromSmallerNotFoundAction elementFromSmallerNotFoundAction = {},
+    CheckCancellation checkCancellation = {}) {
   auto itSmall = std::begin(smaller);
   auto endSmall = std::end(smaller);
   auto itLarge = std::begin(larger);
@@ -331,7 +350,9 @@ void gallopingJoin(
   // case the second iterator will be `endLarge`. This is defined in a way, s.t.
   // a subsequent `std::lower_bound(lower, upper)` will either find the element
   // or will return `upper` and `upper == endLarge`.
-  auto exponentialSearch = [&lessThan, &endLarge](auto itL, auto itS) {
+  auto exponentialSearch = [&checkCancellation, &lessThan, &endLarge](
+                               auto itL, auto itS) {
+    checkCancellation();
     size_t step = 1;
     auto lower = itL;
     while (lessThan(*itL, *itS)) {
@@ -348,6 +369,7 @@ void gallopingJoin(
     return std::pair{lower, itL + 1};
   };
   while (itSmall < endSmall && itLarge < endLarge) {
+    checkCancellation();
     const auto& elLarge = *itLarge;
     // Linear search in the smaller input.
     while (lessThan(*itSmall, elLarge)) {
@@ -371,6 +393,7 @@ void gallopingJoin(
     if (itLarge == endLarge) {
       break;
     }
+    checkCancellation();
 
     // Find the ranges where both inputs are equal and add them to the result.
     auto endSameSmall = std::find_if_not(
@@ -379,6 +402,7 @@ void gallopingJoin(
         itLarge, endLarge, [&](const auto& row) { return eq(row, *itSmall); });
 
     for (; itSmall != endSameSmall; ++itSmall) {
+      checkCancellation();
       for (auto innerItLarge = itLarge; innerItLarge != endSameLarge;
            ++innerItLarge) {
         action(itSmall, innerItLarge);

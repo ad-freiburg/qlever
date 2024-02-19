@@ -101,13 +101,9 @@ class TripleComponent {
   TripleComponent(FirstArg&& firstArg, Args&&... args)
       : _variant(AD_FWD(firstArg), AD_FWD(args)...) {
     if (isString()) {
-      // Previously we stored variables as strings, so this check is a way
-      // to easily track places where this old behavior is accidentally still
-      // in place.
+      // Storing variables and literals as strings is deprecated. The following
+      // checks help find places, where this is accidentally still done.
       AD_CONTRACT_CHECK(!getString().starts_with("?"));
-
-      // We also used to store literals as `std::string`, so we use a similar
-      // check here.
       AD_CONTRACT_CHECK(!getString().starts_with('"'));
       AD_CONTRACT_CHECK(!getString().starts_with("'"));
     }

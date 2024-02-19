@@ -122,7 +122,7 @@ void Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab());
+      inputResultTable.localVocab(), cancellationHandle_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);
@@ -140,6 +140,7 @@ void Bind::computeExpressionBind(
     for (size_t j = 0; j < inCols; ++j) {
       output(i, j) = input(i, j);
     }
+    checkCancellation();
   }
 
   auto visitor = [&]<sparqlExpression::SingleExpressionResult T>(
@@ -152,18 +153,20 @@ void Bind::computeExpressionBind(
           getInternallyVisibleVariableColumns().at(singleResult).columnIndex_;
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = output(i, column);
+        checkCancellation();
       }
     } else if constexpr (isStrongId) {
       for (size_t i = 0; i < inSize; ++i) {
         output(i, inCols) = singleResult;
+        checkCancellation();
       }
     } else {
-      bool isConstant = sparqlExpression::isConstantResult<T>;
+      constexpr bool isConstant = sparqlExpression::isConstantResult<T>;
 
       auto resultGenerator = sparqlExpression::detail::makeGenerator(
           std::forward<T>(singleResult), inSize, &evaluationContext);
 
-      if (isConstant) {
+      if constexpr (isConstant) {
         auto it = resultGenerator.begin();
         if (it != resultGenerator.end()) {
           Id constantId =
@@ -171,6 +174,7 @@ void Bind::computeExpressionBind(
                   std::move(*it), *outputLocalVocab);
           for (size_t i = 0; i < inSize; ++i) {
             output(i, inCols) = constantId;
+            checkCancellation();
           }
         }
       } else {
@@ -181,6 +185,7 @@ void Bind::computeExpressionBind(
               sparqlExpression::detail::constantExpressionResultToId(
                   std::move(resultValue), *outputLocalVocab);
           i++;
+          checkCancellation();
         }
       }
     }
