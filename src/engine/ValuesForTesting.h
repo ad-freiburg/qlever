@@ -44,7 +44,7 @@ class ValuesForTesting : public Operation {
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
         cacheKey_{std::move(cacheKey)},
-        multiplicity_{multiplicity}  {
+        multiplicity_{multiplicity} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
