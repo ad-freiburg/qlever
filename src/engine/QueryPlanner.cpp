@@ -173,7 +173,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
     LOG(DEBUG) << "Done creating execution plan.\n";
     return *lastRow[minInd]._qet;
   } catch (ad_utility::CancellationException& e) {
-    e.operation_ = "Query planning";
+    e.setOperation("Query planning");
     throw;
   }
 }
