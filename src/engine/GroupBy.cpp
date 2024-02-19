@@ -731,8 +731,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 
     // Find all aggregates in the expression of the current alias.
     auto foundAggregates = findAggregates(expr);
-
-    // TODO<kcaliban> Remove as soon as all aggregates are supported
     if (!foundAggregates.has_value()) return std::nullopt;
 
     for (auto& aggregate : foundAggregates.value()) {
