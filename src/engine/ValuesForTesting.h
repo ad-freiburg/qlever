@@ -33,7 +33,8 @@ class ValuesForTesting : public Operation {
       std::string cacheKey =
           std::to_string(ad_utility::FastRandomIntGenerator<int64_t>{}()),
       std::vector<ColumnIndex> sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{})
+      LocalVocab localVocab = LocalVocab{},
+      std::optional<float> multiplicity = std::nullopt)
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
@@ -42,7 +43,8 @@ class ValuesForTesting : public Operation {
         costEstimate_{table_.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
-        cacheKey_{std::move(cacheKey)} {
+        cacheKey_{std::move(cacheKey)},
+        multiplicity_{multiplicity}  {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
 
@@ -95,6 +97,7 @@ class ValuesForTesting : public Operation {
   // For unit testing purposes it is useful that the columns have different
   // multiplicities to find bugs in functions that use the multiplicity.
   float getMultiplicity(size_t col) override {
+    if (multiplicity_.has_value()) return multiplicity_.value();
     (void)col;
     return static_cast<float>(col + 1) * 42.0f;
   }
@@ -120,10 +123,9 @@ class ValuesForTesting : public Operation {
   }
 
   std::vector<ColumnIndex> resultSortedColumns_;
-
   LocalVocab localVocab_;
-
   std::string cacheKey_;
+  std::optional<float> multiplicity_;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns
