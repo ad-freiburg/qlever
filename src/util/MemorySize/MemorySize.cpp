@@ -71,7 +71,7 @@ MemorySize MemorySize::parse(std::string_view str) {
     auto unitString = matcher.get<"unit">().to_view();
     switch (std::tolower(unitString.at(0))) {
       case 'b':
-        if (ad_utility::contains(amountString, '.')) {
+        if (amountString.contains('.')) {
           throw std::runtime_error(absl::StrCat(
               "'", str,
               "' could not be parsed as a memory size. When using bytes as "
