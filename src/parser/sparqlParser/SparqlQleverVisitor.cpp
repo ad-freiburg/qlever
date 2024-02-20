@@ -425,18 +425,35 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
             varOrPath);
       };
 
-  auto registerIfVariable = [this](const auto& variant) {
+  auto registerIfVariable = [this](const auto& variant) -> bool {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
+      return true;
     }
+    return false;
   };
 
   auto convertAndRegisterTriple =
-      [&visitGraphTerm, &visitVarOrPath, &registerIfVariable](
-          const TripleWithPropertyPath& triple) -> SparqlTriple {
-    registerIfVariable(triple.subject_);
-    registerIfVariable(triple.predicate_);
-    registerIfVariable(triple.object_);
+      [&visitGraphTerm, &visitVarOrPath, &registerIfVariable,
+       &ctx](const TripleWithPropertyPath& triple) -> SparqlTriple {
+    // This does not only count the variables, but also registers them.
+    size_t numVariables = registerIfVariable(triple.subject_) +
+                          registerIfVariable(triple.predicate_) +
+                          registerIfVariable(triple.object_);
+
+    // Check if the triple has three distinct variables.
+    if (numVariables == 3) {
+      const auto& s = std::get<Variable>(triple.subject_);
+      const auto& p = std::get<Variable>(triple.predicate_);
+      const auto& o = std::get<Variable>(triple.object_);
+      if (s == p || s == o || p == o) {
+        reportError(ctx,
+                    "Encountered a triple with three variables that are not "
+                    "all different. This is currently not supported by QLever. "
+                    "Use three different variables and a FILTER instead "
+                    "(however, this requires enough RAM to hold all triples).");
+      }
+    }
 
     return {visitGraphTerm(triple.subject_), visitVarOrPath(triple.predicate_),
             visitGraphTerm(triple.object_)};

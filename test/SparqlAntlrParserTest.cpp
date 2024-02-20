@@ -871,6 +871,12 @@ TEST(SparqlParser, GroupGraphPattern) {
   expectGroupGraphPatternFails("{ }");
   expectGroupGraphPatternFails("{ SELECT *  WHERE { } }");
 
+  // Triples with three variables that are not all different are not supported.
+  expectGroupGraphPatternFails("{ ?y ?x ?x }");
+  expectGroupGraphPatternFails("{ ?x ?y ?x }");
+  expectGroupGraphPatternFails("{ ?x ?x ?y }");
+  expectGroupGraphPatternFails("{ ?x ?x ?x }");
+
   SparqlTriple abc{Var{"?a"}, "?b", Var{"?c"}};
   SparqlTriple def{Var{"?d"}, "?e", Var{"?f"}};
   // Test the Components alone.
