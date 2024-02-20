@@ -28,9 +28,11 @@ class Iri {
   Iri(const Iri& prefix, NormalizedStringView suffix);
 
  public:
+  // A default constructed IRI is empty.
+  Iri() = default;
   template <typename H>
   friend H AbslHashValue(H h, const std::same_as<Iri> auto& iri) {
-    return H::combine(std::move(h), iri.iri_);
+    return H::combine(std::move(h), asStringViewUnsafe(NormalizedStringView(iri.iri_)));
   }
   bool operator==(const Iri&) const = default;
   static Iri fromInternalRepresentation(std::string_view s) {

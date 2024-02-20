@@ -92,4 +92,10 @@ Literal Literal::literalWithNormalizedContent(
       std::move(descriptor.value()));
 }
 
+void Literal::addLanguageTag(std::string_view languageTag) {
+  descriptor_ = RdfEscaping::normalizeLanguageTag(languageTag);
+}
+
+void Literal::addDatatype(Iri datatype) { descriptor_ = std::move(datatype); }
+
 }  // namespace ad_utility::triple_component

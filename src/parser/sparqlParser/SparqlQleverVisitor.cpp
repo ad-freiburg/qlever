@@ -1575,7 +1575,7 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
         visit(ctx->rdfLiteral()));
     if (tripleComponent.isString()) {
       return make_unique<IriExpression>(tripleComponent.getString());
-    } else if (tripleComponent.isLiteralOrIri()) {
+    } else if (tripleComponent.isLiteral() || tripleComponent.isIri()) {
       AD_FAIL();
       // TODO<joka921> Reinstate.
       // return

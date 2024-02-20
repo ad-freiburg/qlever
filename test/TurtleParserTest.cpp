@@ -19,6 +19,9 @@ using CtreParser = TurtleStringParser<TokenizerCtre>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::iriref(s);
+};
 }
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
@@ -66,7 +69,7 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.predicate_ << " " << tr.object_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_.toInternalRepresentation() << " " << tr.object_ << ")";
   return os;
 }
 TEST(TurtleParserTest, prefixedName) {
@@ -247,13 +250,13 @@ TEST(TurtleParserTest, blankNode) {
 
 TEST(TurtleParserTest, blankNodePropertyList) {
   auto testPropertyListAsObject = [](auto p) {
-    p.activeSubject_ = "<s>";
-    p.activePredicate_ = "<p1>";
+    p.activeSubject_ = iri("<s>");
+    p.activePredicate_ = iri("<p1>");
 
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
-    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
-                                     {"_:g_5_0", "<p3>", "<ob3>"},
-                                     {"<s>", "<p1>", "_:g_5_0"}};
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", iri("<p2>"), iri("<ob2>")},
+                                     {"_:g_5_0", iri("<p3>"), iri("<ob3>")},
+                                     {"<s>", iri("<p1>"), "_:g_5_0"}};
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
     ASSERT_TRUE(p.object());
@@ -270,9 +273,9 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
   auto testPropertyListAsSubject = [](auto p) {
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>] <p1> <ob1>";
-    std::vector<TurtleTriple> exp = {{"_:g_5_0", "<p2>", "<ob2>"},
-                                     {"_:g_5_0", "<p3>", "<ob3>"},
-                                     {"_:g_5_0", "<p1>", "<ob1>"}};
+    std::vector<TurtleTriple> exp = {{"_:g_5_0", iri("<p2>"), iri("<ob2>")},
+                                     {"_:g_5_0", iri("<p3>"), iri("<ob3>")},
+                                     {"_:g_5_0", iri("<p1>"), iri("<ob1>")}};
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
     ASSERT_TRUE(p.triples());
@@ -290,8 +293,8 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 
 TEST(TurtleParserTest, object) {
   auto runCommonTests = [](auto p) {
-    string sub = "<sub>";
-    string pred = "<pred>";
+    auto sub = iri("<sub>");
+    auto pred = iri("<pred>");
     p.activeSubject_ = sub;
     p.activePredicate_ = pred;
     p.prefixMap_["b"] = "bla/";
@@ -323,13 +326,13 @@ TEST(TurtleParserTest, object) {
 
 TEST(TurtleParserTest, objectList) {
   auto runCommonTests = [](auto parser) {
-    parser.activeSubject_ = "<s>";
-    parser.activePredicate_ = "<p>";
+    parser.activeSubject_ = iri("<s>");
+    parser.activePredicate_ = iri("<p>");
     string objectL = " <ob1>, <ob2>, <ob3>";
     std::vector<TurtleTriple> exp;
-    exp.push_back({"<s>", "<p>", "<ob1>"});
-    exp.push_back({"<s>", "<p>", "<ob2>"});
-    exp.push_back({"<s>", "<p>", "<ob3>"});
+    exp.push_back({iri("<s>"), iri("<p>"), iri("<ob1>")});
+    exp.push_back({iri("<s>"), iri("<p>"), iri("<ob2>")});
+    exp.push_back({iri("<s>"), iri("<p>"), iri("<ob3>")});
     parser.setInputStream(objectL);
     ASSERT_TRUE(parser.objectList());
     ASSERT_EQ(parser.triples_, exp);
@@ -350,9 +353,9 @@ TEST(TurtleParserTest, predicateObjectList) {
     parser.activeSubject_ = "<s>";
     string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
     std::vector<TurtleTriple> exp;
-    exp.push_back({"<s>", "<p1>", "<ob1>"});
-    exp.push_back({"<s>", "<p2>", lit("\"ob2\"")});
-    exp.push_back({"<s>", "<p2>", "<ob3>"});
+    exp.push_back({iri("<s>"), iri("<p1>"), iri("<ob1>")});
+    exp.push_back({iri("<s>"), iri("<p2>"), lit("\"ob2\"")});
+    exp.push_back({iri("<s>"), iri("<p2>"), iri("<ob3>")});
     parser.setInputStream(predL);
     ASSERT_TRUE(parser.predicateObjectList());
     ASSERT_EQ(parser.triples_, exp);
@@ -499,8 +502,8 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
       // behavior.
       std::string input{
           "<a> <b> 123. <c> <d> 99999999999999999999999. <e> <f> 234"};
-      std::vector<TurtleTriple> expected{{"<a>", "<b>", 123},
-                                         {"<e>", "<f>", 234}};
+      std::vector<TurtleTriple> expected{{iri("<a>"), iri("<b>"), 123},
+                                         {iri("<e>"), iri("<f>"), 234}};
       Parser parser;
       parser.invalidLiteralsAreSkipped() = true;
       auto result = parseAllTriples(parser, input);
@@ -513,7 +516,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer . "
           "<e> <f> 234"};
       std::vector<TurtleTriple> expected{
-          {"<a>", "<b>", 99999999999999999999999.0}, {"<e>", "<f>", 234}};
+          {iri("<a>"), iri("<b>"), 99999999999999999999999.0}, {iri("<e>"), iri("<f>"), 234}};
       Parser parser;
       parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
       parser.invalidLiteralsAreSkipped() = true;
@@ -591,16 +594,16 @@ TEST(TurtleParserTest, collection) {
   auto runCommonTests = [](const auto& checker) {
     using TC = TripleComponent;
     using TT = TurtleTriple;
-    std::string nil = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>";
-    std::string first = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>";
-    std::string rest = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>";
+    auto nil = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    auto first = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>");
+    auto rest = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>");
 
     checker("()", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
 
     checker("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
             std::vector<TT>{{"_:g_22_0", first, 42},
                             {"_:g_22_0", rest, "_:g_22_1"},
-                            {"_:g_22_1", first, "<alpha>"},
+                            {"_:g_22_1", first, iri("<alpha>")},
                             {"_:g_22_1", rest, "_:g_22_2"},
                             {"_:g_22_2", first, lit("\"me\"")},
                             {"_:g_22_2", rest, nil}});
@@ -614,7 +617,8 @@ void sortTriples(std::vector<TurtleTriple>& triples) {
   auto toRef = [](const TurtleTriple& t) {
     return std::tie(t.subject_, t.predicate_, t.object_.getString());
   };
-  std::ranges::sort(triples, std::less{}, toRef);
+  // TODO<joka921> Reinstate
+  //std::ranges::sort(triples, std::less{}, toRef);
 }
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
@@ -675,7 +679,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
       auto predicate = absl::StrCat("<", i / 100, ">");
       auto object = absl::StrCat("<", i / 10, ">");
       of << subject << ' ' << predicate << ' ' << object << ".\n";
-      expectedTriples.emplace_back(subject, predicate, object);
+      expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
     }
   }
   // The order of triples in not necessarily the same, so we sort them.
@@ -684,7 +688,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
   FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
-    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
   };
 
   forAllParsers(testWithParser);
@@ -723,7 +727,7 @@ TEST(TurtleParserTest, multilineComments) {
       of << input;
     }
     auto result = parseFromFile<Parser>(filename, useBatchInterface);
-    EXPECT_THAT(result, ::testing::ElementsAreArray(expectedTriples));
+    EXPECT_THAT(result, ::testing::UnorderedElementsAreArray(expectedTriples));
     ad_utility::deleteFile(filename);
   };
 
@@ -757,8 +761,8 @@ TEST(TurtleParserTest, multilineComments) {
 <s> <p> <o2> .
 
 )";
-  std::vector<TurtleTriple> expected{{"<s>", "<p>", "<o>"},
-                                     {"<s>", "<p>", "<o2>"}};
+  std::vector<TurtleTriple> expected{{iri("<s>"), iri("<p>"), iri("<o>")},
+                                     {iri("<s>"), iri("<p>"), iri("<o2>")}};
   sortTriples(expected);
   forAllParsers(testWithParser, input, expected);
 }

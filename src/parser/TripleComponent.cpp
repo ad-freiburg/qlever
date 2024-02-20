@@ -17,7 +17,9 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
         } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
           stream << "UNDEF";
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-          stream << value.rawContent();
+          stream << value.toInternalRepresentation();
+        } else if constexpr (std::is_same_v<T, TripleComponent::Iri>) {
+          stream << value.toInternalRepresentation();
         } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
           stream << "DATE: " << value.toStringAndType().first;
         } else if constexpr (std::is_same_v<T, bool>) {
@@ -41,7 +43,7 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 std::optional<Id> TripleComponent::toValueIdIfNotString() const {
   auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
     if constexpr (std::is_same_v<T, std::string> ||
-                  std::is_same_v<T, LiteralOrIri>) {
+                  std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);
@@ -69,8 +71,10 @@ std::string TripleComponent::toRdfLiteral() const {
     return getVariable().name();
   } else if (isString()) {
     return getString();
-  } else if (isLiteralOrIri()) {
-    return getLiteralOrIri().toInternalRepresentation();
+  } else if (isLiteral()) {
+    return getLiteral().toInternalRepresentation();
+  } else if (isIri()) {
+    return getIri().toInternalRepresentation();
   } else {
     auto [value, type] =
         ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(

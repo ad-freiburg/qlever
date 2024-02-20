@@ -38,8 +38,9 @@ enum class TurtleParserIntegerOverflowBehavior {
 };
 
 struct TurtleTriple {
-  std::string subject_;
-  std::string predicate_;
+  // TODO<joka921> The subject can only be IRI or BlankNode.
+  TripleComponent subject_;
+  TripleComponent::Iri predicate_;
   TripleComponent object_;
 
   bool operator==(const TurtleTriple&) const = default;
@@ -173,8 +174,8 @@ class TurtleParser : public TurtleParserBase {
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
   std::string activePrefix_;
-  std::string activeSubject_;
-  std::string activePredicate_;
+  TripleComponent activeSubject_ ;
+  TripleComponent::Iri activePredicate_;
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -194,8 +195,8 @@ class TurtleParser : public TurtleParserBase {
   void clear() {
     lastParseResult_ = "";
 
-    activeSubject_.clear();
-    activePredicate_.clear();
+    activeSubject_ = TripleComponent::Iri::iriref("<>");
+    activePredicate_ = TripleComponent::Iri::iriref("<>");
     activePrefix_.clear();
 
     prefixMap_.clear();

@@ -31,6 +31,7 @@ class TripleComponent {
  public:
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -46,7 +47,7 @@ class TripleComponent {
  private:
   // The underlying variant type.
   using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
-                               Variable, LiteralOrIri, DateOrLargeYear>;
+                               Variable, Literal, Iri, DateOrLargeYear>;
   Variant _variant;
 
  public:
@@ -140,14 +141,31 @@ class TripleComponent {
     return std::holds_alternative<Variable>(_variant);
   }
 
+  /*
   bool isLiteralOrIri() const {
     return std::holds_alternative<LiteralOrIri>(_variant);
   }
+   */
 
-  const LiteralOrIri& getLiteralOrIri() const {
-    return std::get<LiteralOrIri>(_variant);
+  bool isLiteral() const {
+    return std::holds_alternative<Literal>(_variant);
   }
+  Literal& getLiteral() {
+    return std::get<Literal>(_variant);
+  }
+  const Literal& getLiteral() const {
+    return std::get<Literal>(_variant);
+  }
+
+  bool isIri() const { return std::holds_alternative<Iri>(_variant); }
+
+  Iri& getIri() { return std::get<Iri>(_variant); }
+  const Iri& getIri() const { return std::get<Iri>(_variant); }
+
+  /*
   LiteralOrIri& getLiteralOrIri() { return std::get<LiteralOrIri>(_variant); }
+  const LiteralOrIri& getLiteralOrIri() const { return std::get<LiteralOrIri>(_variant); }
+   */
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
@@ -191,11 +209,20 @@ class TripleComponent {
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
-    if (isString() || isLiteralOrIri()) {
+    if (isString() || isLiteral() || isIri()) {
       VocabIndex idx;
-      const std::string& content =
-          isString() ? getString()
-                     : getLiteralOrIri().toInternalRepresentation();
+      // TODO<joka921> This is inefficient and half wrong
+      const std::string content = [&]() -> std::string {
+        if (isString()) {
+          return getString();
+        } else {
+          if (isLiteral()) {
+            return getLiteral().toInternalRepresentation();
+          } else {
+            return getIri().toInternalRepresentation();
+          }
+        }
+      }();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else if (qlever::specialIds.contains(content)) {
@@ -221,12 +248,21 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isString() || isLiteralOrIri());
+      AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
+      // TODO<joka921> Code duplication + newWord can be moved.
+      std::string newWord = [&]() -> std::string {
+        if (isString()) {
+          return getString();
+        } else {
+          if (isLiteral()) {
+            return getLiteral().toInternalRepresentation();
+          } else {
+            return getIri().toInternalRepresentation();
+          }
+        }
+      }();
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
       // Otherwise, `newWord` would be copied here despite the `std::move`.
-      std::string&& newWord =
-          isString() ? std::move(getString())
-                     : std::move(getLiteralOrIri()).toInternalRepresentation();
       id = Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
     }

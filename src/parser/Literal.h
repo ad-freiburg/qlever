@@ -43,7 +43,7 @@ class Literal {
  public:
   template <typename H>
   friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
-    return H::combine(std::move(h), literal.getContent());
+    return H::combine(std::move(h), asStringViewUnsafe(literal.getContent()));
   }
   bool operator==(const Literal&) const = default;
 
@@ -108,6 +108,9 @@ class Literal {
   static Literal literalWithQuotes(
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+
+  void addLanguageTag(std::string_view languageTag);
+  void addDatatype(Iri datatype);
 
   // For documentation, see documentation of function
   // LiteralORIri::literalWithoutQuotes
