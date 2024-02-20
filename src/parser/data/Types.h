@@ -8,25 +8,39 @@
 #include <tuple>
 #include <vector>
 
-#include "../PropertyPath.h"
-#include "./VarOrTerm.h"
+#include "parser/Alias.h"
+#include "parser/PropertyPath.h"
+#include "parser/data/GraphTerm.h"
 
 namespace ad_utility::sparql_types {
-using Objects = std::vector<VarOrTerm>;
-using Tuples = std::vector<std::array<VarOrTerm, 2>>;
+// In the following, `Path` stands for `property path` (which can also be a
+// single predicate). More precisely, in a type that has `Path` in its name, all
+// the stored predicates can be property paths. This is in accordance with the
+// terminology of the SPARQL 1.1 grammar. The types without `Path` are used in
+// the templates of CONSTRUCT queries where no property paths are allowed.
+using Objects = std::vector<GraphTerm>;
+using PredicateObjectPairs = std::vector<std::array<GraphTerm, 2>>;
+using Triples = std::vector<std::array<GraphTerm, 3>>;
+using PredicateObjectPairsAndTriples = std::pair<PredicateObjectPairs, Triples>;
+using ObjectsAndTriples = std::pair<Objects, Triples>;
+using SubjectOrObjectAndTriples = std::pair<GraphTerm, Triples>;
+
 using VarOrPath = std::variant<Variable, PropertyPath>;
-using PredicateAndObject = std::pair<VarOrPath, VarOrTerm>;
-using PathTuples = std::vector<PredicateAndObject>;
-using Triples = std::vector<std::array<VarOrTerm, 3>>;
+using PathObjectPair = std::pair<VarOrPath, GraphTerm>;
+using PathObjectPairs = std::vector<PathObjectPair>;
 struct TripleWithPropertyPath {
-  VarOrTerm subject_;
+  GraphTerm subject_;
   VarOrPath predicate_;
-  VarOrTerm object_;
+  GraphTerm object_;
 
   bool operator==(const TripleWithPropertyPath&) const = default;
 };
-using Node = std::pair<VarOrTerm, Triples>;
-using ObjectList = std::pair<Objects, Triples>;
-using PropertyList = std::pair<Tuples, Triples>;
+using PathObjectPairsAndTriples =
+    std::pair<PathObjectPairs, std::vector<TripleWithPropertyPath>>;
+using SubjectOrObjectAndPathTriples =
+    std::pair<GraphTerm, std::vector<TripleWithPropertyPath>>;
+using ObjectsAndPathTriples =
+    std::pair<Objects, std::vector<TripleWithPropertyPath>>;
+
 using VarOrAlias = std::variant<Variable, Alias>;
 }  // namespace ad_utility::sparql_types

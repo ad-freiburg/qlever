@@ -10,6 +10,7 @@
 
 #include <atomic>
 #include <condition_variable>
+#include <exception>
 #include <mutex>
 #include <type_traits>
 
@@ -18,6 +19,7 @@
 #include "util/Exception.h"
 #include "util/Log.h"
 #include "util/ParseableDuration.h"
+#include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/jthread.h"
 
@@ -75,21 +77,52 @@ struct PseudoStopToken {
   bool running_;
   explicit PseudoStopToken(bool running) : running_{running} {}
 };
+
+/// Helper function to print a warning if `executionStage` is not empty.
+inline std::string printAdditionalDetails(std::string_view executionStage) {
+  if (executionStage.empty()) {
+    return ".";
+  }
+  return absl::StrCat(" at stage \"", executionStage, "\".");
+}
+
+constexpr auto printNothing = []() constexpr { return ""; };
 }  // namespace detail
 
 /// An exception signalling an cancellation
-class CancellationException : public std::runtime_error {
+class CancellationException : public std::exception {
+  std::string message_;
+
  public:
-  using std::runtime_error::runtime_error;
-  CancellationException(CancellationState reason, std::string_view details)
-      : std::runtime_error{absl::StrCat("Cancelled due to ",
-                                        reason == CancellationState::TIMEOUT
-                                            ? "timeout"
-                                            : "manual cancellation",
-                                        ". Stage: ", details)} {
+  explicit CancellationException(std::string message)
+      : message_{std::move(message)} {}
+  explicit CancellationException(CancellationState reason)
+      : message_{reason == CancellationState::TIMEOUT
+                     ? "Query timed out."
+                     : "Query was manually cancelled."} {
     AD_CONTRACT_CHECK(detail::isCancelled(reason));
   }
+
+  const char* what() const noexcept override { return message_.c_str(); }
+
+  /// Set optional operation information, if not already set.
+  void setOperation(std::string_view operation) {
+    constexpr std::string_view operationPrefix = " Last operation: ";
+    // Don't set operation twice.
+    if (message_.find(operationPrefix) == std::string::npos) {
+      message_ += operationPrefix;
+      message_ += operation;
+    }
+  }
 };
+
+/// Trim everything but the filename of a given file path.
+constexpr std::string_view trimFileName(std::string_view fileName) {
+  // Safe to do, because unsigned overflow is not UB and in case of
+  // npos this will overflow back to zero.
+  static_assert(std::string_view::npos + 1 == 0);
+  return fileName.substr(fileName.rfind('/') + 1);
+}
 
 // Ensure no locks are used
 static_assert(std::atomic<CancellationState>::is_always_lock_free);
@@ -121,27 +154,46 @@ class CancellationHandle {
   /// Make sure internal state is set back to
   /// `CancellationState::NOT_CANCELLED`, in order to prevent logging warnings
   /// in the console that would otherwise be triggered by the watchdog.
-  template <typename... ArgTypes>
+  /// NOTE: The parameter state is expected to be one of `CHECK_WINDOW_MISSED`
+  /// or `WAITING_FOR_CHECK`, otherwise it will violate the correctness check.
   void pleaseWatchDog(CancellationState state,
-                      const InvocableWithConvertibleReturnType<
-                          std::string_view, ArgTypes...> auto& detailSupplier,
-                      ArgTypes&&... argTypes) requires WatchDogEnabled {
+                      ad_utility::source_location location,
+                      const ad_utility::InvocableWithConvertibleReturnType<
+                          std::string_view> auto& stageInvocable)
+      requires WatchDogEnabled {
     using DurationType =
         std::remove_const_t<decltype(DESIRED_CANCELLATION_CHECK_INTERVAL)>;
+    AD_CORRECTNESS_CHECK(!detail::isCancelled(state) &&
+                         state != CancellationState::NOT_CANCELLED);
 
-    if (state == CancellationState::CHECK_WINDOW_MISSED) {
-      LOG(WARN) << "Cancellation check missed deadline of "
-                << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
-                << " by "
-                << ParseableDuration{duration_cast<DurationType>(
-                       steady_clock::now() - startTimeoutWindow_.load())}
-                << ". Stage: "
-                << std::invoke(detailSupplier, AD_FWD(argTypes)...)
-                << std::endl;
-    }
-
-    cancellationState_.compare_exchange_strong(
-        state, CancellationState::NOT_CANCELLED, std::memory_order_relaxed);
+    bool windowMissed = state == CancellationState::CHECK_WINDOW_MISSED;
+    // Because we know `state` will be one of `CHECK_WINDOW_MISSED` or
+    // `WAITING_FOR_CHECK` at this point, we can skip the initial check.
+    do {
+      if (cancellationState_.compare_exchange_weak(
+              state, CancellationState::NOT_CANCELLED,
+              std::memory_order_relaxed)) {
+        if (windowMissed) {
+          LOG(WARN) << "No timeout check has been performed for at least "
+                    << ParseableDuration{duration_cast<DurationType>(
+                                             steady_clock::now() -
+                                             startTimeoutWindow_.load()) +
+                                         DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << ", should be at most "
+                    << ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
+                    << ". Checked at " << trimFileName(location.file_name())
+                    << ":" << location.line()
+                    << detail::printAdditionalDetails(
+                           std::invoke(stageInvocable))
+                    << std::endl;
+        }
+        break;
+      }
+      // If state is NOT_CANCELLED this means another thread already reported
+      // the missed deadline, so we don't report a second time or a cancellation
+      // kicked in and there is no need to continue the loop.
+    } while (!detail::isCancelled(state) &&
+             state != CancellationState::NOT_CANCELLED);
   }
 
   /// Internal function that starts the watch dog. It will set this
@@ -159,24 +211,16 @@ class CancellationHandle {
   /// throw. No-op if this instance is already in a cancelled state.
   void cancel(CancellationState reason);
 
-  /// Overload for static exception messages, make sure the string is a constant
-  /// expression, or computed in advance. If that's not the case do not use
-  /// this overload and use the overload that takes a callable that creates
-  /// the exception message (see below).
-  AD_ALWAYS_INLINE void throwIfCancelled(std::string_view detail) {
-    throwIfCancelled(std::identity{}, detail);
-  }
-
   /// Throw an `CancellationException` when this handle has been cancelled. Do
-  /// nothing otherwise. The arg types are passed to the `detailSupplier` only
-  /// if an exception is about to be thrown. If no exception is thrown,
-  /// `detailSupplier` will not be evaluated. If `WatchDogEnabled` is true,
-  /// this will log a warning if this check is not called frequently enough.
-  template <typename... ArgTypes>
+  /// nothing otherwise. If `WatchDogEnabled` is true, this will log a warning
+  /// if this check is not called frequently enough. It will contain the
+  /// filename and line of the caller of this method.
+  template <ad_utility::InvocableWithConvertibleReturnType<std::string_view>
+                Func = decltype(detail::printNothing)>
   AD_ALWAYS_INLINE void throwIfCancelled(
-      [[maybe_unused]] const InvocableWithConvertibleReturnType<
-          std::string_view, ArgTypes...> auto& detailSupplier,
-      [[maybe_unused]] ArgTypes&&... argTypes) {
+      [[maybe_unused]] ad_utility::source_location location =
+          ad_utility::source_location::current(),
+      const Func& stageInvocable = detail::printNothing) {
     if constexpr (CancellationEnabled) {
       auto state = cancellationState_.load(std::memory_order_relaxed);
       if (state == CancellationState::NOT_CANCELLED) [[likely]] {
@@ -184,24 +228,31 @@ class CancellationHandle {
       }
       if constexpr (WatchDogEnabled) {
         if (!detail::isCancelled(state)) {
-          pleaseWatchDog(state, detailSupplier, AD_FWD(argTypes)...);
+          pleaseWatchDog(state, location, stageInvocable);
           return;
         }
       }
-      throw CancellationException{
-          state, std::invoke(detailSupplier, AD_FWD(argTypes)...)};
+      throw CancellationException{state};
     }
   }
 
   /// Return true if this cancellation handle has been cancelled, false
   /// otherwise. Note: Make sure to not use this value to set any other atomic
   /// value with relaxed memory ordering, as this may lead to out-of-thin-air
-  /// values. It also does not interact with the watchdog at all, prefer
-  /// `throwIfCancelled` if possible.
-  AD_ALWAYS_INLINE bool isCancelled() const {
+  /// values. If the watchdog is enabled, this will please it and print
+  /// a warning with the filename and line of the caller.
+  AD_ALWAYS_INLINE bool isCancelled(
+      [[maybe_unused]] ad_utility::source_location location =
+          ad_utility::source_location::current()) {
     if constexpr (CancellationEnabled) {
-      return detail::isCancelled(
-          cancellationState_.load(std::memory_order_relaxed));
+      auto state = cancellationState_.load(std::memory_order_relaxed);
+      bool isCancelled = detail::isCancelled(state);
+      if constexpr (WatchDogEnabled) {
+        if (!isCancelled && state != CancellationState::NOT_CANCELLED) {
+          pleaseWatchDog(state, location, detail::printNothing);
+        }
+      }
+      return isCancelled;
     } else {
       return false;
     }
@@ -215,7 +266,8 @@ class CancellationHandle {
 
   /// If this `CancellationHandle` is not cancelled, reset the internal
   /// `cancellationState_` to `CancellationState::NOT_CANCELED`.
-  /// Useful to ignore expected gaps in the execution flow.
+  /// Useful to ignore expected gaps in the execution flow, but typically
+  /// indicates that there's code that cannot be interrupted, so use with care!
   void resetWatchDogState();
 
   // Explicit move-semantics
@@ -234,6 +286,10 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle,
               verifyCheckAfterDeadlineMissDoesReportProperly);
   FRIEND_TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel);
+  FRIEND_TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary);
+  FRIEND_TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog);
+  FRIEND_TEST(CancellationHandle,
+              verifyPleaseWatchDogDoesNotAcceptInvalidState);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;

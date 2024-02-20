@@ -6,11 +6,11 @@
 
 #include <array>
 
-#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/TransitivePath.h"
 #include "global/Id.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
 using ad_utility::testing::makeAllocator;

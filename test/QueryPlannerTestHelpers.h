@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -22,6 +21,7 @@
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::source_location;
 
@@ -241,7 +241,8 @@ QueryExecutionTree parseAndPlan(std::string query, QueryExecutionContext* qec) {
   ParsedQuery pq = SparqlParser::parseQuery(std::move(query));
   // TODO<joka921> make it impossible to pass `nullptr` here, properly mock a
   // queryExecutionContext.
-  return QueryPlanner{qec}.createExecutionTree(pq);
+  return QueryPlanner{qec, std::make_shared<ad_utility::CancellationHandle<>>()}
+      .createExecutionTree(pq);
 }
 
 // Check that the `QueryExecutionTree` that is obtained by parsing and planning

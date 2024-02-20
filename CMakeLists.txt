@@ -216,13 +216,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 
-
-################################
-# NLOHNMANN-JSON
-################################
-# Header only, nothing to include
-include_directories(third_party/json/)
-
 ################################
 # CTRE, Compile-Time-Regular-Expressions
 ################################
@@ -288,7 +281,7 @@ set(STXXL_CXX_FLAGS "${STXXL_CXX_FLAGS} -Wno-deprecated-declarations")
 FetchContent_Declare(
         stxxl
         GIT_REPOSITORY https://github.com/ad-freiburg/stxxl.git
-        GIT_TAG 1ce7ff62e8896ee3673c7302bb537971b5d33f12
+        GIT_TAG 449a8fed095ffd5c10560714b446895e54c65486
 )
 
 ################################

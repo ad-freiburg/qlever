@@ -6,12 +6,10 @@
 // File `CompilationInfo.cpp` which is created and linked by CMake.
 
 #pragma once
-#include <string>
+#include <string_view>
 namespace qlever::version {
-// The git hash of the commit that was used to  QLever.
-extern const char* GitHash;
+// Short version of the hash of the commit that was used to QLever.
+extern const std::string_view GitShortHash;
 // The date and time at which QLever was compiled.
-extern const char* DatetimeOfCompilation;
-
-inline std::string GitShortHash() { return std::string{GitHash}.substr(0, 6); }
+extern const std::string_view DatetimeOfCompilation;
 }  // namespace qlever::version

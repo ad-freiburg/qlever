@@ -5,10 +5,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "IndexTestHelpers.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/OperationTestHelpers.h"
 
 using namespace ad_utility::testing;
@@ -152,10 +152,9 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
     std::this_thread::sleep_for(5ms);
     handle->cancel(CancellationState::TIMEOUT);
   }};
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      operation.computeResult(),
-      ::testing::HasSubstr("Cancelled due to timeout"),
-      ad_utility::AbortException);
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(),
+                                        ::testing::HasSubstr("timed out"),
+                                        ad_utility::CancellationException);
 }
 
 // _____________________________________________________________________________

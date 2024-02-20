@@ -180,7 +180,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
 ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());
@@ -212,8 +212,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        cancellationHandle->throwIfCancelled(""),
-        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+        cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
+        ad_utility::CancellationException);
 
     // Cancel should not close connection immediately
     EXPECT_TRUE(webSocket.is_open());
@@ -285,7 +285,7 @@ ASYNC_TEST(WebSocketSession, verifyWrongExecutorConfigThrows) {
 ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());
@@ -328,8 +328,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        cancellationHandle->throwIfCancelled(""),
-        HasSubstr("manual cancellation"), ad_utility::CancellationException);
+        cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
+        ad_utility::CancellationException);
 
     {
       // Trigger connection close by creating and destroying message sender
@@ -353,7 +353,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
   auto c = co_await createTestContainer(ioContext);
 
-  auto queryId = c.registry_.uniqueIdFromString("some-id");
+  auto queryId = c.registry_.uniqueIdFromString("some-id", "my-query");
   ASSERT_TRUE(queryId.has_value());
   auto cancellationHandle =
       c.registry_.getCancellationHandle(queryId->toQueryId());

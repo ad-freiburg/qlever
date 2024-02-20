@@ -24,7 +24,6 @@
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/SparqlFilter.h"
 #include "parser/data/Types.h"
-#include "parser/data/VarOrTerm.h"
 #include "util/Algorithm.h"
 #include "util/Exception.h"
 #include "util/Generator.h"
@@ -218,11 +217,17 @@ class ParsedQuery {
   void addOrderByClause(OrderClause orderClause, bool isGroupBy,
                         std::string_view noteForImplicitGroupBy);
 
+ public:
   // Return the next internal variable. Used e.g. by `addInternalBind` and
   // `addInternalAlias`
   Variable getNewInternalVariable();
 
- public:
+  // Turn a blank node `_:someBlankNode` into an internal variable
+  // `?<prefixForInternalVariables>_someBlankNode`. This is required by the
+  // SPARQL parser, because blank nodes in the bodies of SPARQL queries behave
+  // like variables.
+  static Variable blankNodeToInternalVariable(std::string_view blankNode);
+
   // Add the `modifiers` (like GROUP BY, HAVING, ORDER BY) to the query. Throw
   // an `InvalidQueryException` if the modifiers are invalid. This might happen
   // if one of the modifiers uses a variable that is either not visible in the

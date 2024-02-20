@@ -7,10 +7,10 @@
 #include <ctre-unicode.hpp>
 #include <regex>
 
-#include "IndexTestHelpers.h"
 #include "engine/Service.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/IdTableHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the

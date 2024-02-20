@@ -116,17 +116,22 @@ TEST(VocabularyTest, IncompleteLiterals) {
 }
 
 TEST(Vocabulary, PrefixFilter) {
-  RdfsVocabulary voc;
-  voc.setLocale("en", "US", true);
-  ad_utility::HashSet<string> s;
+  RdfsVocabulary vocabulary;
+  vocabulary.setLocale("en", "US", true);
+  ad_utility::HashSet<string> words;
 
-  s.insert("\"exa\"");
-  s.insert("\"exp\"");
-  s.insert("\"ext\"");
-  s.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
-  voc.createFromSet(s);
+  words.insert("\"exa\"");
+  words.insert("\"exp\"");
+  words.insert("\"ext\"");
+  words.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
+  vocabulary.createFromSet(words);
 
-  auto x = voc.prefix_range("\"exp");
-  ASSERT_EQ(x.first.get(), 1u);
-  ASSERT_EQ(x.second.get(), 2u);
+  // Found in internal but not in external vocabulary.
+  auto ranges = vocabulary.prefixRanges("\"exp");
+  auto firstIndexExternal =
+      VocabIndex::make(vocabulary.getInternalVocab().size());
+  RdfsVocabulary::PrefixRanges expectedRanges{
+      {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)},
+       {std::pair{firstIndexExternal, firstIndexExternal}}}};
+  ASSERT_EQ(ranges, expectedRanges);
 }

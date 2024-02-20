@@ -11,13 +11,16 @@
 #include <utility>
 #include <vector>
 
+#include "engine/GroupByHashMapOptimization.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "gtest/gtest.h"
 #include "parser/Alias.h"
 #include "parser/ParsedQuery.h"
+#include "util/TypeIdentity.h"
 
 using std::string;
 using std::vector;
@@ -108,23 +111,22 @@ class GroupBy : public Operation {
   // of tests to write.
 
   // For certain combinations of `_groupByColumns`, `_aliases` and `_subtree`,
-  // it is not necessary to fully materialize the `_subtree`'s result to compute
-  // the GROUP BY, but the result can simply be read from the index meta data.
-  // An example for such a combination is the query
-  //  SELECT ((COUNT ?x) as ?cnt) WHERE {
-  //    ?x <somePredicate> ?y
-  //  }
-  // This function checks whether such a case applies. In this case the result
-  // is computed and stored in `result` and `true` is returned. If no such case
-  // applies, `false` is returned and the `result` is untouched. Precondition:
-  // The `result` must be empty.
-  bool computeOptimizedGroupByIfPossible(IdTable*);
+  // it is not necessary to fully materialize the `_subtree`'s result, but the
+  // result of the GROUP BY can be computed directly from the index meta data.
+  // See the functions below for examples and details.
+  //
+  // This function takes an empty `result` as input and checks whether such a
+  // case applies. In this case the result is computed and stored in `result`
+  // and `true` is returned. If no such case applies, `false` is returned and
+  // `result` remains empty.
+  bool computeOptimizedGroupByIfPossible(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT (COUNT (?x) as ?cnt) WHERE {
-  //    ?x <somePredicate> ?y
-  //  }
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT (COUNT (?x) as ?count) WHERE {
+  //     ?x <somePredicate> ?y
+  //   }
+  //
   // The single triple must contain two or three variables, and the fixed value
   // in the two variable case might also be the subject or object of the triple.
   // The COUNT may be computed on any of the variables in the triple. If the
@@ -133,11 +135,23 @@ class GroupBy : public Operation {
   // `result` is left untouched, and `false` is returned.
   bool computeGroupByForSingleIndexScan(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT ?x (COUNT(?x) as ?cnt) WHERE {
-  //    ?x ?y ?z
-  //  } GROUP BY ?x
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?y (COUNT(?y) as ?count) WHERE {
+  //     ?x <somePredicate> ?y
+  //   } GROUP BY ?y
+  //
+  // NOTE: This is exactly what we need for a context-sensitive object AC query
+  // without connected triples. The GROUP BY variable can also be ommitted in
+  // the SELECT clause.
+  bool computeGroupByObjectWithCount(IdTable* result);
+
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?x (COUNT(?x) as ?count) WHERE {
+  //     ?x ?y ?z
+  //   } GROUP BY ?x
+  //
   // The single triple must contain three variables. The grouped variable and
   // the selected variable must be the same, but may be either one of `?x, `?y`,
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
@@ -145,55 +159,17 @@ class GroupBy : public Operation {
   // `COUNT`.
   bool computeGroupByForFullIndexScan(IdTable* result);
 
-  // First, check if the query represented by this GROUP BY is of the following
-  // form:
-  //  SELECT ?x (COUNT (?x) as ?cnt) WHERE {
-  //    %arbitrary graph pattern that contains `?x`, but neither `?y`, nor `?z`.
-  //    ?x ?y ?z
-  //  } GROUP BY ?x
+  // Check if the query represented by this GROUP BY is of the following form:
+  //
+  //   SELECT ?x (COUNT (?x) as ?count) WHERE {
+  //     %any graph pattern that contains `?x`, but neither `?y`, nor `?z`.
+  //     ?x ?y ?z
+  //   } GROUP BY ?x
+  //
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
   bool computeGroupByForJoinWithFullScan(IdTable* result);
-
-  // Data to perform the AVG aggregation using the HashMap optimization.
-  struct AverageAggregationData {
-    using ValueGetter = sparqlExpression::detail::NumericValueGetter;
-    bool error_ = false;
-    double sum_ = 0;
-    int64_t count_ = 0;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
-      auto val = ValueGetter{}(AD_FWD(value), ctx);
-
-      if (const int64_t* intval = std::get_if<int64_t>(&val))
-        sum_ += static_cast<double>(*intval);
-      else if (const double* dval = std::get_if<double>(&val))
-        sum_ += *dval;
-      else
-        error_ = true;
-      ++count_;
-    };
-    [[nodiscard]] ValueId calculateResult() const {
-      if (error_)
-        return ValueId::makeUndefined();
-      else
-        return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
-    }
-  };
-
-  // Data to perform the COUNT aggregation using the HashMap optimization.
-  struct CountAggregationData {
-    using ValueGetter = sparqlExpression::detail::IsValidValueGetter;
-    int64_t count_ = 0;
-    void increment(auto&& value,
-                   const sparqlExpression::EvaluationContext* ctx) {
-      if (ValueGetter{}(AD_FWD(value), ctx)) count_++;
-    }
-    [[nodiscard]] ValueId calculateResult() const {
-      return ValueId::makeFromInt(count_);
-    }
-  };
 
   using KeyType = ValueId;
   using ValueType = size_t;
@@ -212,7 +188,13 @@ class GroupBy : public Operation {
   };
 
   // Used to store the kind of aggregate.
-  enum class HashMapAggregateType { AVG, COUNT };
+  enum class HashMapAggregateType { AVG, COUNT, MIN, MAX, SUM, GROUP_CONCAT };
+
+  // `GROUP_CONCAT` requires additional data.
+  struct HashMapAggregateTypeWithData {
+    HashMapAggregateType type_;
+    std::optional<std::string> separator_ = std::nullopt;
+  };
 
   // Stores information required for evaluation of an aggregate as well
   // as the alias containing it.
@@ -226,16 +208,16 @@ class GroupBy : public Operation {
     // appears in the parents' children, so that it may be substituted away.
     std::optional<ParentAndChildIndex> parentAndIndex_ = std::nullopt;
     // Which kind of aggregate expression.
-    HashMapAggregateType aggregateType_;
+    HashMapAggregateTypeWithData aggregateType_;
 
     HashMapAggregateInformation(
         sparqlExpression::SparqlExpression* expr, size_t aggregateDataIndex,
-        HashMapAggregateType aggregateType,
+        HashMapAggregateTypeWithData aggregateType,
         std::optional<ParentAndChildIndex> parentAndIndex = std::nullopt)
         : expr_{expr},
           aggregateDataIndex_{aggregateDataIndex},
           parentAndIndex_{parentAndIndex},
-          aggregateType_{aggregateType} {
+          aggregateType_{std::move(aggregateType)} {
       AD_CONTRACT_CHECK(expr != nullptr);
     }
   };
@@ -265,8 +247,14 @@ class GroupBy : public Operation {
       IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
       const IdTable& subresult, size_t columnIndex, LocalVocab* localVocab);
 
-  using Aggregations = std::variant<std::vector<AverageAggregationData>,
-                                    std::vector<CountAggregationData>>;
+  using AggregationData =
+      std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
+                   MaxAggregationData, SumAggregationData,
+                   GroupConcatAggregationData>;
+
+  using AggregationDataVectors =
+      ad_utility::LiftedVariant<AggregationData,
+                                sparqlExpression::VectorWithMemoryLimit>;
 
   // Stores the map which associates Ids with vector offsets and
   // the vectors containing the aggregation data.
@@ -275,17 +263,34 @@ class GroupBy : public Operation {
     HashMapAggregationData(
         const ad_utility::AllocatorWithLimit<Id>& alloc,
         const std::vector<HashMapAliasInformation>& aggregateAliases)
-        : map_{alloc} {
+        : alloc_{alloc}, map_{alloc} {
+      using enum HashMapAggregateType;
       size_t numAggregates = 0;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
           ++numAggregates;
 
-          if (aggregate.aggregateType_ == HashMapAggregateType::AVG)
-            aggregationData_.emplace_back(
-                std::vector<AverageAggregationData>{});
-          if (aggregate.aggregateType_ == HashMapAggregateType::COUNT)
-            aggregationData_.emplace_back(std::vector<CountAggregationData>{});
+          using namespace ad_utility::use_type_identity;
+          auto addIf = [this, &aggregate]<typename T>(
+                           TI<T>, HashMapAggregateType target) {
+            if (aggregate.aggregateType_.type_ == target)
+              aggregationData_.emplace_back(
+                  sparqlExpression::VectorWithMemoryLimit<T>{alloc_});
+          };
+
+          auto aggregationDataSize = aggregationData_.size();
+
+          addIf(ti<AvgAggregationData>, AVG);
+          addIf(ti<CountAggregationData>, COUNT);
+          addIf(ti<MinAggregationData>, MIN);
+          addIf(ti<MaxAggregationData>, MAX);
+          addIf(ti<SumAggregationData>, SUM);
+          addIf(ti<GroupConcatAggregationData>, GROUP_CONCAT);
+
+          AD_CORRECTNESS_CHECK(aggregationData_.size() ==
+                               aggregationDataSize + 1);
+
+          aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
       }
       AD_CONTRACT_CHECK(numAggregates > 0);
@@ -299,13 +304,14 @@ class GroupBy : public Operation {
     [[nodiscard]] size_t getIndex(Id id) const { return map_.at(id); }
 
     // Get vector containing the aggregation data at `aggregationDataIndex`.
-    Aggregations& getAggregationDataVariant(size_t aggregationDataIndex) {
+    AggregationDataVectors& getAggregationDataVariant(
+        size_t aggregationDataIndex) {
       return aggregationData_.at(aggregationDataIndex);
     }
 
     // Get vector containing the aggregation data at `aggregationDataIndex`,
     // but const.
-    [[nodiscard]] const Aggregations& getAggregationDataVariant(
+    [[nodiscard]] const AggregationDataVectors& getAggregationDataVariant(
         size_t aggregationDataIndex) const {
       return aggregationData_.at(aggregationDataIndex);
     }
@@ -317,10 +323,14 @@ class GroupBy : public Operation {
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
 
    private:
+    // Allocator used for creating new vectors.
+    const ad_utility::AllocatorWithLimit<Id>& alloc_;
     // Maps `Id` to vector offsets.
     ad_utility::HashMapWithMemoryLimit<KeyType, ValueType> map_;
     // Stores the actual aggregation data.
-    std::vector<Aggregations> aggregationData_;
+    std::vector<AggregationDataVectors> aggregationData_;
+    // For `GROUP_CONCAT`, we require the type information.
+    std::vector<HashMapAggregateTypeWithData> aggregateTypeWithData_;
   };
 
   // Returns the aggregation results between `beginIndex` and `endIndex`
@@ -328,7 +338,8 @@ class GroupBy : public Operation {
   // based on the groups stored in the first column of `resultTable`
   sparqlExpression::VectorWithMemoryLimit<ValueId> getHashMapAggregationResults(
       IdTable* resultTable, const HashMapAggregationData& aggregationData,
-      size_t dataIndex, size_t beginIndex, size_t endIndex);
+      size_t dataIndex, size_t beginIndex, size_t endIndex,
+      LocalVocab* localVocab);
 
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
@@ -371,7 +382,7 @@ class GroupBy : public Operation {
   void substituteAllAggregates(std::vector<HashMapAggregateInformation>& info,
                                size_t beginIndex, size_t endIndex,
                                const HashMapAggregationData& aggregationData,
-                               IdTable* resultTable);
+                               IdTable* resultTable, LocalVocab* localVocab);
 
   // Check if an expression is of a certain type.
   template <class T>
@@ -382,8 +393,8 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  static std::optional<GroupBy::HashMapAggregateType> isSupportedAggregate(
-      sparqlExpression::SparqlExpression* expr);
+  static std::optional<GroupBy::HashMapAggregateTypeWithData>
+  isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
 
   // Determines whether the grouped by variable appears at the top of an
   // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.

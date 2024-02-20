@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "../IndexTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "./TextIndexScanTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "engine/TextIndexScanForEntity.h"

@@ -17,9 +17,16 @@ namespace ad_utility {
 
 // Wrapper type for std::chrono::duration<> to avoid having to declare
 // this in the std::chrono namespace.
-template <typename DurationType>
+template <typename DT>
 class ParseableDuration {
+ public:
+  using DurationType = DT;
+
+ private:
   DurationType duration_{};
+
+  template <typename Other>
+  friend class ParseableDuration;
 
  public:
   ParseableDuration() = default;
@@ -32,6 +39,13 @@ class ParseableDuration {
   // supports it.
   auto operator<=>(const ParseableDuration& other) const noexcept {
     return duration_.count() <=> other.duration_.count();
+  }
+
+  template <typename Other>
+  auto operator<=>(const ParseableDuration<Other>& other) const noexcept {
+    using CommonType = std::common_type_t<DurationType, Other>;
+    return CommonType{duration_}.count() <=>
+           CommonType{other.duration_}.count();
   }
 
   bool operator==(const ParseableDuration&) const noexcept = default;

@@ -11,6 +11,7 @@
 #include <string>
 
 #include "global/TypedIndex.h"
+#include "parser/NormalizedString.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
@@ -140,6 +141,29 @@ std::string escapeForTsv(std::string input);
 
 // Escape a string to be compatible with XML.
 std::string escapeForXml(std::string input);
+
+// Create the content for a Literal based on a string that contains
+// the surrounding quotation marks. Escaped characters are stored in
+// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
+// The surrounding quotes are removed
+NormalizedString normalizeLiteralWithQuotes(std::string_view input);
+
+// Create the content for a Literal based on a string that does not contain
+// the surrounding quotation marks. Escaped characters are stored in
+// their unescaped format, e.g. "Hello \' World" -> "Hello' World".
+NormalizedString normalizeLiteralWithoutQuotes(std::string_view input);
+
+// Created the content for an Iri based on a string that contains
+// the surrounding angled brackets. The angled brackets are removed
+NormalizedString normalizeIriWithBrackets(std::string_view input);
+
+// Created the content for an Iri based on a string that does not contain
+// the surrounding angled brackets.
+NormalizedString normalizeIriWithoutBrackets(std::string_view input);
+
+// Created a normalized representation of the language tag.
+// If it starts with an @, the leading @ character will be removed.
+NormalizedString normalizeLanguageTag(std::string_view input);
 
 }  // namespace RdfEscaping
 

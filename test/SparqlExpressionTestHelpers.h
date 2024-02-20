@@ -2,12 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/IndexTestHelpers.h"
 
 #pragma once
 
@@ -40,37 +40,58 @@ using ad_utility::testing::IntId;
 // `QueryExecutionContext` from `getQec()` (see above), and  has an `inputTable`
 // that refers to a previous partial query result with multiple columns of
 // various types. For details see the constructor.
+// It is possible to add additional IDs to the vocab and the local vocab by
+// adding corresponding triples to the `turtleInput` and appropriate calls to
+// `localVocab.getIndexAndAddIfNotContained` (see below), but the contents of
+// the `table` should remain unchanged, because several unit tests rely on its
+// exact contents.
 struct TestContext {
-  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  static const inline std::string turtleInput =
+      "<x> <label> \"alpha\" . "
+      "<x> <label> \"Alpha\" . "
+      "<x> <label> \"älpha\" . "
+      "<x> <label> \"A\" . "
+      "<x> <label> \"Beta\" . "
+      "<x> <is-a> <y> . "
+      "<y> <is-a> <x> . "
+      "<z> <is-a> _:blank . "
+      "<z> <label> \"zz\"@en";
+  QueryExecutionContext* qec = ad_utility::testing::getQec(turtleInput);
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
-  sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
-                                              qec->getAllocator(), localVocab};
+  sparqlExpression::EvaluationContext context{
+      *qec,       varToColMap,
+      table,      qec->getAllocator(),
+      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
+  std::function<Id(const std::string&)> getId =
+      ad_utility::testing::makeGetId(qec->getIndex());
+  // IDs of literals and entities in the vocabulary of the index.
+  Id x, label, alpha, aelpha, A, Beta, zz, blank;
+  // IDs of literals (the first two) and entities (the latter two) in the local
+  // vocab.
+  Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha;
   TestContext() {
-    // First get some IDs for strings from the vocabulary to later reuse them
-    Id alpha;
-    Id aelpha;
-    Id x;
-    Id Beta;
+    // First get some IDs for strings from the vocabulary to later reuse them.
+    // Note the `u_` inserted for the blank node (see 'BlankNode.cpp').
+    x = getId("<x>");
+    alpha = getId("\"alpha\"");
+    aelpha = getId("\"älpha\"");
+    A = getId("\"A\"");
+    Beta = getId("\"Beta\"");
+    zz = getId("\"zz\"@en");
+    blank = getId("_:u_blank");
 
-    bool b = qec->getIndex().getId("\"alpha\"", &alpha);
-    AD_CONTRACT_CHECK(b);
-    b = qec->getIndex().getId("\"älpha\"", &aelpha);
-    AD_CONTRACT_CHECK(b);
-    b = qec->getIndex().getId("<x>", &x);
-    AD_CONTRACT_CHECK(b);
-    b = qec->getIndex().getId("\"Beta\"", &Beta);
-    AD_CONTRACT_CHECK(b);
-
-    Id notInVocabA = Id::makeFromLocalVocabIndex(
+    notInVocabA = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));
-    Id notInVocabB = Id::makeFromLocalVocabIndex(
+    notInVocabB = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("\"notInVocabB\""));
-    Id notInVocabC = Id::makeFromLocalVocabIndex(
+    notInVocabC = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("<notInVocabC>"));
-    Id notInVocabD = Id::makeFromLocalVocabIndex(
+    notInVocabD = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("<notInVocabD>"));
+    notInVocabAelpha = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained("\"notInVocabÄlpha\""));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
