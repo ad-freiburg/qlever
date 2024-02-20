@@ -493,7 +493,6 @@ struct ConfigVariables {
   For an explanation, what a member variables does, see the created
   `ConfigOption`s in `GeneralInterfaceImplementation`.
   */
-  size_t smallerTableNumRows_;
   size_t minBiggerTableRows_;
   size_t maxBiggerTableRows_;
   size_t smallerTableNumColumns_;
@@ -596,14 +595,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   GeneralInterfaceImplementation() {
     ad_utility::ConfigManager& config = getConfigManager();
 
-    decltype(auto) smallerTableNumRows =
-        config.addOption("smaller-table-num-rows",
-                         "Amount of rows for the smaller 'IdTable' in "
-                         "the benchmarking class 'Benchmarktables, where the "
-                         "smaller table stays at the same amount  of rows and "
-                         "the bigger tables keeps getting bigger.'.",
-                         &configVariables_.smallerTableNumRows_, 1000UL);
-
     decltype(auto) minBiggerTableRows = config.addOption(
         "min-bigger-table-rows",
         "The minimum amount of rows for the bigger 'IdTable' in benchmarking "
@@ -659,22 +650,25 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 
     decltype(auto) minRatioRows = config.addOption(
         "min-ratio-rows",
-        "The minimum row ratio between the smaller and the "
-        "bigger 'IdTable' for a benchmark table in the benchmark class "
-        "'Benchmarktables, where the smaller table grows and the ratio between "
-        "tables stays the same.'. Also used for the calculation of the number "
-        "of rows in the smaller table in 'Benchmarktables, where only the "
-        "sample size ratio changes.'.",
+        "The minimum row ratio between the smaller and the bigger 'IdTable' "
+        "for a benchmark table in the benchmark class 'Benchmarktables, where "
+        "the smaller table grows and the ratio between tables stays the "
+        "same.' and 'Benchmarktables, where the smaller table stays at the "
+        "same amount of rows and the bigger tables keeps getting bigger.'. "
+        "Also used for the calculation of the number of rows in the smaller "
+        "table in 'Benchmarktables, where only the sample size ratio "
+        "changes.'.",
         &configVariables_.minRatioRows_, 10.f);
     decltype(auto) maxRatioRows = config.addOption(
         "max-ratio-rows",
-        "The maximum row ratio between the smaller and the "
-        "bigger 'IdTable' for a benchmark table in the benchmark class "
-        "'Benchmarktables, where the smaller table grows and the ratio between "
-        "tables stays the same.'. Also used for the calculation of the minimum "
-        "number of rows for the smaller table in 'Benchmarktables, where the "
-        "smaller table grows and the size of the bigger table remains the "
-        "same.'.",
+        "The maximum row ratio between the smaller and the bigger 'IdTable' "
+        "for a benchmark table in the benchmark class 'Benchmarktables, where "
+        "the smaller table grows and the ratio between tables stays the same.' "
+        "and 'Benchmarktables, where the smaller table stays at the same "
+        "amount of rows and the bigger tables keeps getting bigger.'. Also "
+        "used for the calculation of the minimum number of rows for the "
+        "smaller table in 'Benchmarktables, where the smaller table grows and "
+        "the size of the bigger table remains the same.'.",
         &configVariables_.maxRatioRows_, 1000.f);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
@@ -814,20 +808,6 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      "' must be big enough, for at least one row in the result "
                      "of joining the smaller and bigger table."),
         maxMemoryInStringFormat, smallerTableNumColumns, biggerTableNumColumns);
-
-    // Is `smaller-table-num-rows` a valid value?
-    config.addValidator(
-        generateBiggerEqualLambda(1UL, true),
-        generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
-        generateBiggerEqualLambdaDesc(smallerTableNumRows, 1UL, true),
-        smallerTableNumRows);
-
-    // Is `smaller-table-num-rows` smaller than `min-bigger-table-rows`?
-    config.addValidator(
-        lessEqualLambda,
-        generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
-        generateLessEqualLambdaDesc(smallerTableNumRows, minBiggerTableRows),
-        smallerTableNumRows, minBiggerTableRows);
 
     // Is `min-bigger-table-rows` big enough, to deliver interesting
     // measurements?
@@ -980,8 +960,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               },
               descriptor, descriptor, option);
         };
-    std::ranges::for_each(std::vector{smallerTableNumRows, minBiggerTableRows,
-                                      maxBiggerTableRows},
+    std::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows},
                           addCastableValidator);
   }
 
@@ -1568,42 +1547,51 @@ class BmOnlyBiggerTableSizeChanges final
 
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
-    const std::string& tableName = absl::StrCat(
-        "Smaller table stays at ", getConfigVariables().smallerTableNumRows_,
-        " rows, ratio to rows of bigger table grows.");
-
-    // Returns the ratio used for the measurements in a given row.
-    auto growthFunction = createDefaultGrowthLambda<float>(
-        10, getConfigVariables().minBiggerTableRows_ /
-                getConfigVariables().smallerTableNumRows_);
-
-    // Making a benchmark table for all combination of IdTables being sorted.
+    /*
+    Making a benchmark table for all combination of IdTables being sorted and
+    any possible number of rows for the smaller `IdTable`.
+    */
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        ResultTable& table = makeGrowingBenchmarkTable(
-            &results, tableName, "Row ratio", alwaysFalse,
-            getConfigVariables().overlapChance_, std::nullopt,
-            getConfigVariables().randomSeed(), smallerTableSorted,
-            biggerTableSorted, growthFunction,
-            getConfigVariables().smallerTableNumRows_,
-            getConfigVariables().smallerTableNumColumns_,
-            getConfigVariables().biggerTableNumColumns_,
-            getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
-            getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
+        for (const size_t smallerTableNumRows : createExponentVectorUntilSize(
+                 10UL,
+                 static_cast<size_t>(
+                     static_cast<double>(
+                         getConfigVariables().minBiggerTableRows_) /
+                     getConfigVariables().maxRatioRows_),
+                 static_cast<size_t>(
+                     static_cast<double>(
+                         getConfigVariables().minBiggerTableRows_) /
+                     getConfigVariables().minRatioRows_))) {
+          const std::string& tableName =
+              absl::StrCat("Smaller table stays at ", smallerTableNumRows,
+                           " rows, ratio to rows of bigger table grows.");
+          auto growthFunction = createDefaultGrowthLambda<float>(
+              10,
+              getConfigVariables().minBiggerTableRows_ / smallerTableNumRows);
+          ResultTable& table = makeGrowingBenchmarkTable(
+              &results, tableName, "Row ratio", alwaysFalse,
+              getConfigVariables().overlapChance_, std::nullopt,
+              getConfigVariables().randomSeed(), smallerTableSorted,
+              biggerTableSorted, growthFunction, smallerTableNumRows,
+              getConfigVariables().smallerTableNumColumns_,
+              getConfigVariables().biggerTableNumColumns_,
+              getConfigVariables().smallerTableJoinColumnSampleSizeRatio_,
+              getConfigVariables().biggerTableJoinColumnSampleSizeRatio_);
 
-        // Add the metadata, that changes with every call and can't be
-        // generalized.
-        BenchmarkMetadata& meta = table.metadata();
-        meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
-        meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
+          // Add the metadata, that changes with every call and can't be
+          // generalized.
+          BenchmarkMetadata& meta = table.metadata();
+          meta.addKeyValuePair("smaller-table-num-rows", smallerTableNumRows);
+          meta.addKeyValuePair("smaller-table-sorted", smallerTableSorted);
+          meta.addKeyValuePair("bigger-table-sorted", biggerTableSorted);
+        }
       }
     }
 
     // Add the general metadata.
     BenchmarkMetadata& meta{getGeneralMetadata()};
     meta.addKeyValuePair("value-changing-with-every-row", "ratio-rows");
-    meta.addKeyValuePair("smaller-table-num-rows",
-                         getConfigVariables().smallerTableNumRows_);
     meta.addKeyValuePair(
         "smaller-table-join-column-sample-size-ratio",
         getConfigVariables().smallerTableJoinColumnSampleSizeRatio_);
