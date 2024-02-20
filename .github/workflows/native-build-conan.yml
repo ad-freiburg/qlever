@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        warnings: [  "-Wall -Wextra -Werror " ]
+        warnings: [  "-Wall -Wextra -Werror -fsanitize-address"  ]
         build-type: [Release]
     runs-on: ubuntu-22.04
 
