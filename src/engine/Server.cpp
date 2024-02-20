@@ -799,20 +799,6 @@ Awaitable<T> Server::computeInNewThread(Function function,
   };
   return ad_utility::runFunctionOnExecutorUncancellable(
       threadPool_.get_executor(), std::move(inner), net::use_awaitable);
-  /*
-  auto runOnExecutor =
-      [](auto executor, Function func,
-         SharedCancellationHandle handle) -> net::awaitable<T> {
-    co_await net::post(net::bind_executor(executor, net::use_awaitable));
-    // It might take some time until the thread pool is ready,
-    // so reset the state here. Ideally waiting for the thread pool
-    // would periodically check the cancellation state
-    handle->resetWatchDogState();
-    co_return std::invoke(func);
-  };
-  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
-      threadPool_.get_executor(), std::move(function), std::move(handle)));
-      */
 }
 
 // _____________________________________________________________________________

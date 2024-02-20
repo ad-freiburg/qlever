@@ -46,9 +46,6 @@ class QueryHub {
       std::make_shared<MapType>()};
 
   // Expose internal API for testing
-  friend net::awaitable<void>
-  QueryHub_testCorrectReschedulingForEmptyPointerOnDestruct_coroutine(
-      net::io_context&);
   friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_coroutine(
       net::io_context&);
   friend net::awaitable<void>
@@ -57,17 +54,15 @@ class QueryHub {
   friend net::awaitable<void>
   QueryHub_verifyNoErrorWhenQueryIdMissing_coroutine(net::io_context&);
 
-  /// Implementation of createOrAcquireDistributorForSending and
-  /// createOrAcquireDistributorForReceiving, without thread safety,
-  /// exposed for testing
+  template <bool isSender>
+  using DistributorPtr = std::shared_ptr<
+      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>;
+
+  /// Implementation of `createOrAcquireDistributorForSending` and
+  /// `createOrAcquireDistributorForReceiving`.
   template <bool isSender>
   std::shared_ptr<
       QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-  createOrAcquireDistributorInternalUnsafe(QueryId queryId);
-
-  /// createOrAcquireDistributorInternalUnsafe, but dispatched on global strand
-  template <bool isSender>
-  std::shared_ptr<ConditionalConst<isSender, QueryToSocketDistributor>>
       createOrAcquireDistributorInternal(QueryId);
 
  public:

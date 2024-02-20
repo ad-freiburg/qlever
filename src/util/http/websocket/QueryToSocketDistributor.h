@@ -72,10 +72,6 @@ class QueryToSocketDistributor
   /// for the websocket. co_returns a nullptr if no more data is available
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index) const;
-
- private:
-  net::awaitable<std::shared_ptr<const std::string>>
-  waitForNextDataPieceUnguarded(size_t index) const;
 };
 }  // namespace ad_utility::websocket
 

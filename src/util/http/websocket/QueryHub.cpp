@@ -10,30 +10,26 @@ namespace ad_utility::websocket {
 
 // Return a lambda that deletes the `queryId` from the `socketDistributors`, but
 // only if it is either expired or `alwaysDelete` was specified.
-inline auto makeDeleteFromDistributors =
-    [](auto socketDistributors, QueryId queryId, bool alwaysDelete) {
-      return [socketDistributors = std::move(socketDistributors),
-              queryId = std::move(queryId), alwaysDelete]() {
-        if (auto pointer = socketDistributors.lock()) {
-          auto it = pointer->find(queryId);
-          if (it == pointer->end()) {
-            return;
-          }
-          bool expired = it->second.pointer_.expired();
-          // The branch `both of them are true` is currently not covered by
-          // tests and also not coverable, because the manual `signalEnd` call
-          // always comes before the destructor.
-          if (alwaysDelete || expired) {
-            pointer->erase(it);
-          }
-        }
-      };
-    };
+void deleteFromDistributors(auto socketDistributors, QueryId queryId,
+                            bool alwaysDelete) {
+  auto it = socketDistributors->find(queryId);
+  if (it == socketDistributors->end()) {
+    return;
+  }
+  bool expired = it->second.pointer_.expired();
+  // The branch `both of them are true` is currently not covered by
+  // tests and also not coverable, because the manual `signalEnd` call
+  // always comes before the destructor.
+  if (alwaysDelete || expired) {
+    socketDistributors->erase(it);
+  }
+}
 
 // _____________________________________________________________________________
 template <bool isSender>
 std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
+QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
+  std::lock_guard l{mutex_};
   auto& distributors = socketDistributors_.get();
   if (distributors.contains(queryId)) {
     auto& reference = distributors.at(queryId);
@@ -44,8 +40,6 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
         reference.started_ = true;
       }
       return ptr;
-    } else {
-      distributors.erase(queryId);
     }
   }
 
@@ -59,31 +53,23 @@ QueryHub::createOrAcquireDistributorInternalUnsafe(QueryId queryId) {
         AD_CORRECTNESS_CHECK(!alreadyCalled);
         alreadyCalled = true;
         // This if-clause causes `guard_` to prevent destruction of
-        // the io_context backing the global strand which is used here for
-        // scheduling. Otherwise, if the QueryHub is already destroyed, then
+        // the complete `this` object and therefore also the `mutex_`.
+        // Otherwise, if the QueryHub is already destroyed, then
         // just do nothing, no need for cleanup in this case.
         auto pointer = socketDistributors.lock();
         if (!pointer) {
           return;
         }
         std::lock_guard l{mutex};
-        // TODO<joka921> Make this an ordinary function.
-        makeDeleteFromDistributors(std::move(socketDistributors),
-                                   std::move(queryId), alwaysDelete)();
+        deleteFromDistributors(std::move(pointer), std::move(queryId),
+                               alwaysDelete);
       };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
-  distributors.emplace(queryId, WeakReferenceHolder{distributor, isSender});
+  distributors.insert_or_assign(queryId,
+                                WeakReferenceHolder{distributor, isSender});
   return distributor;
-}
-
-// _____________________________________________________________________________
-template <bool isSender>
-std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
-  std::lock_guard l{mutex_};
-  return createOrAcquireDistributorInternalUnsafe<isSender>(std::move(queryId));
 }
 
 // _____________________________________________________________________________

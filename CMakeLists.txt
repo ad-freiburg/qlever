@@ -256,6 +256,14 @@ if (RUN_EXPENSIVE_TESTS)
     add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
 endif()
 
+# Boost::ASIO currently seems to have a bug when multiple coroutine streams are
+# concurrently in flight because there were multiple calls to `co_spawn`.
+# `ASIO` recycles the memory for awaitable frames, but there seems to only be
+# one global unsynchronized memory pool for this recycling, which leads to all
+# kinds of race conditions. The following constant disables the memory
+# recycling and gets rid of all of those errors and crashes.
+# TODO<joka921> Further analyze and then report this bug to the ASIO
+# developers.
 add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 if (ENABLE_EXPENSIVE_CHECKS)

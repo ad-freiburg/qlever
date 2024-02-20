@@ -50,7 +50,7 @@ void QueryToSocketDistributor::wakeUpWaitingListeners() {
 
 void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
   auto sharedPayload = std::make_shared<const std::string>(std::move(payload));
-  auto impl = [this, sharedPayload = std::move(sharedPayload)]() {
+  auto impl = [this, sharedPayload = std::move(sharedPayload)]() mutable {
     data_.push_back(std::move(sharedPayload));
     wakeUpWaitingListeners();
   };
@@ -59,7 +59,6 @@ void QueryToSocketDistributor::addQueryStatusUpdate(std::string payload) {
 }
 
 // _____________________________________________________________________________
-
 void QueryToSocketDistributor::signalEnd() {
   auto impl = [self = shared_from_this(), this]() {
     (void)self;
@@ -75,9 +74,9 @@ void QueryToSocketDistributor::signalEnd() {
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<std::shared_ptr<const std::string>>
-QueryToSocketDistributor::waitForNextDataPieceUnguarded(size_t index) const {
+QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
+  AD_EXPENSIVE_CHECK(strand_.running_in_this_thread());
   if (index < data_.size()) {
     co_return data_.at(index);
   } else if (finished_.test()) {
@@ -91,11 +90,5 @@ QueryToSocketDistributor::waitForNextDataPieceUnguarded(size_t index) const {
   } else {
     co_return nullptr;
   }
-}
-
-net::awaitable<std::shared_ptr<const std::string>>
-QueryToSocketDistributor::waitForNextDataPiece(size_t index) const {
-  AD_EXPENSIVE_CHECK(strand_.running_in_this_thread());
-  return waitForNextDataPieceUnguarded(index);
 }
 }  // namespace ad_utility::websocket

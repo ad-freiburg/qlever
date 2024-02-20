@@ -106,38 +106,18 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
 
 namespace ad_utility::websocket {
 
-/* TODO<joka921> fix this
 // Ensures that nothing is scheduled when QueryHub is already destroyed
 ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
-  {
-    std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
-    auto distributor = queryHub->createOrAcquireDistributorForSending(
-        QueryId::idFromString("abc"));
-    std::atomic_flag blocker = false;
-    std::atomic_flag started = false;
-    // Add task to "block" execution
-    EXPECT_FALSE(queryHub->globalStrand_.running_in_this_thread());
-    net::post(queryHub->globalStrand_, [&blocker, &started]() {
-      started.test_and_set();
-      started.notify_all();
-      blocker.wait(false);
-    });
-    ad_utility::JThread thread{
-        [&ioContext]() { EXPECT_EQ(1, ioContext.poll_one()); }};
-    // Destroy object
-    queryHub.reset();
+  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+  auto distributor = queryHub->createOrAcquireDistributorForSending(
+      QueryId::idFromString("abc"));
+  queryHub.reset();
 
-    // Wait for thread to start
-    started.wait(false);
-
-    co_await distributor->signalEnd();
-
-    // unblock global strand
-    blocker.test_and_set();
-    blocker.notify_all();
-  }
+  distributor->signalEnd();
+  co_await net::post(net::use_awaitable);
   // Ensure no scheduled tasks left to run
   EXPECT_EQ(ioContext.poll(), 0);
+  co_return;
 }
 
 // _____________________________________________________________________________
@@ -146,38 +126,19 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
 // of the QueryHub.
 ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
   std::weak_ptr<QueryHub::MapType> distributorMap;
-  {
-    std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
-    auto distributor = co_await queryHub->createOrAcquireDistributorForSending(
-        QueryId::idFromString("abc"));
-    std::atomic_flag blocker = false;
-    std::atomic_flag started = false;
-    // Add task to "block" execution
-    net::post(queryHub->globalStrand_, [&blocker, &started]() {
-      started.test_and_set();
-      started.notify_all();
-      blocker.wait(false);
-    });
-    ad_utility::JThread thread{
-        [&ioContext]() { EXPECT_EQ(1, ioContext.poll_one()); }};
+  std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
+  auto distributor = queryHub->createOrAcquireDistributorForSending(
+      QueryId::idFromString("abc"));
+  distributor->signalEnd();
+  distributorMap = queryHub->socketDistributors_.getWeak();
+  // Destroy object
+  queryHub.reset();
 
-    // Wait for thread to start
-    started.wait(false);
-
-    co_await distributor->signalEnd();
-    distributorMap = queryHub->socketDistributors_.getWeak();
-    // Destroy object
-    queryHub.reset();
-
-    // unblock global strand
-    blocker.test_and_set();
-    blocker.notify_all();
-  }
+  EXPECT_TRUE(distributorMap.expired());
   // Ensure 1 scheduled task left to run
   EXPECT_EQ(ioContext.poll(), 1);
-  EXPECT_TRUE(distributorMap.expired());
+  co_return;
 }
-*/
 
 // _____________________________________________________________________________
 
@@ -197,39 +158,6 @@ ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   EXPECT_TRUE(queryHub.socketDistributors_.get().empty());
   co_return;
 }
-
-// _____________________________________________________________________________
-
-/*
-ASYNC_TEST_N(QueryHub, testCorrectReschedulingForEmptyPointerOnDestruct, 2) {
-  QueryHub queryHub{ioContext};
-  QueryId queryId = QueryId::idFromString("abc");
-
-  auto distributor =
-      queryHub.createOrAcquireDistributorForReceiving(queryId);
-  std::weak_ptr<const QueryToSocketDistributor> comparison = distributor;
-
-  co_await net::dispatch(
-      net::bind_executor(queryHub.globalStrand_, net::use_awaitable));
-  net::post(
-      ioContext,
-      std::packaged_task{[distributor = std::move(distributor)]() mutable {
-        // Invoke destructor while the strand of
-        // queryHub is still in use
-        distributor.reset();
-      }})
-      .get();
-
-  distributor = co_await
-queryHub.createOrAcquireDistributorInternalUnsafe<false>( queryId);
-  EXPECT_FALSE(!comparison.owner_before(distributor) &&
-               !distributor.owner_before(comparison));
-
-  // First run the cleanupCall of the initial distributor which now sees a
-  // non-expired pointer, which is therefore not to be erased.
-  co_await net::post(ioContext, net::use_awaitable);
-}
- */
 
 }  // namespace ad_utility::websocket
 
