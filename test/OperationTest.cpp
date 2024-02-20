@@ -188,7 +188,7 @@ TEST(OperationTest, estimatesForCachedResults) {
     auto qet = ad_utility::makeExecutionTree<ValuesForTesting>(
         getQec(), std::move(idTable),
         std::vector<std::optional<Variable>>{Variable{"?x"}, Variable{"?y"}},
-        false, "cacheKey");
+        false);
     auto& op = dynamic_cast<ValuesForTesting&>(*qet->getRootOperation());
     // Set those to some arbitrary values so we can test them.
     op.sizeEstimate() = 24;

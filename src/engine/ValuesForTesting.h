@@ -26,15 +26,12 @@ class ValuesForTesting : public Operation {
   // Create an operation that has as its result the given `table` and the given
   // `variables`. The number of variables must be equal to the number
   // of columns in the table.
-  explicit ValuesForTesting(
-      QueryExecutionContext* ctx, IdTable table,
-      std::vector<std::optional<Variable>> variables,
-      bool supportsLimit = false,
-      std::string cacheKey =
-          std::to_string(ad_utility::FastRandomIntGenerator<int64_t>{}()),
-      std::vector<ColumnIndex> sortedColumns = {},
-      LocalVocab localVocab = LocalVocab{},
-      std::optional<float> multiplicity = std::nullopt)
+  explicit ValuesForTesting(QueryExecutionContext* ctx, IdTable table,
+                            std::vector<std::optional<Variable>> variables,
+                            bool supportsLimit = false,
+                            std::vector<ColumnIndex> sortedColumns = {},
+                            LocalVocab localVocab = LocalVocab{},
+                            std::optional<float> multiplicity = std::nullopt)
       : Operation{ctx},
         table_{std::move(table)},
         variables_{std::move(variables)},
@@ -43,7 +40,6 @@ class ValuesForTesting : public Operation {
         costEstimate_{table_.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
-        cacheKey_{std::move(cacheKey)},
         multiplicity_{multiplicity} {
     AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
   }
@@ -69,9 +65,17 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    str << "Values for testing with " << table_.numColumns()
-        << " columns. Key: " << cacheKey_
-        << " Supports limit: " << supportsLimit_;
+    str << "Values for testing with " << table_.numColumns() << " columns. ";
+    if (table_.numRows() > 1000) {
+      str << ad_utility::FastRandomIntGenerator<int64_t>{}();
+    } else {
+      for (size_t i = 0; i < table_.numColumns(); ++i) {
+        for (Id entry : table_.getColumn(i)) {
+          str << entry << ' ';
+        }
+      }
+    }
+    str << " Supports limit: " << supportsLimit_;
     return std::move(str).str();
   }
 
@@ -124,7 +128,6 @@ class ValuesForTesting : public Operation {
 
   std::vector<ColumnIndex> resultSortedColumns_;
   LocalVocab localVocab_;
-  std::string cacheKey_;
   std::optional<float> multiplicity_;
 };
 
