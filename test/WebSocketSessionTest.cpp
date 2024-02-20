@@ -37,6 +37,24 @@ auto toBuffer(std::string_view view) {
   return net::const_buffer{view.data(), view.size()};
 }
 
+net::awaitable<void> runTest(auto executor, net::awaitable<void> serverLogic,
+                             net::awaitable<void> clientLogic) {
+  auto fut = std::async(std::launch::async, [&]() {
+    net::co_spawn(executor, std::move(clientLogic), net::use_future).get();
+  });
+  EXPECT_NO_THROW(co_await std::move(serverLogic));
+  while (true) {
+    auto status = fut.wait_for(std::chrono::milliseconds(0));
+    if (status == std::future_status::ready) {
+      EXPECT_NO_THROW(fut.get());
+      break;
+    }
+    auto exec = co_await net::this_coro::executor;
+    net::steady_timer timer{exec, std::chrono::milliseconds(10)};
+    co_await timer.async_wait(net::use_awaitable);
+  }
+}
+
 // _____________________________________________________________________________
 
 TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
@@ -121,7 +139,8 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientCloseWhileTransmitting) {
                                    net::use_awaitable);
   };
 
-  co_await net::co_spawn(distributor->strand(), c.serverLogic() && controllerActions(),
+  co_await net::co_spawn(distributor->strand(),
+                         c.serverLogic() && controllerActions(),
                          net::use_awaitable);
 }
 
@@ -141,12 +160,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsOnClientClose) {
                                    net::use_awaitable);
   };
 
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
 
 // _____________________________________________________________________________
@@ -177,12 +191,7 @@ ASYNC_TEST(WebSocketSession, verifySessionEndsWhenServerIsDoneSending) {
                  boost::system::system_error);
   };
 
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
 
 // _____________________________________________________________________________
@@ -221,7 +230,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     co_await timer.async_wait(net::use_awaitable);
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
-    //cancellationHandle->throwIfCancelled();
+    // cancellationHandle->throwIfCancelled();
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
         ad_utility::CancellationException);
@@ -240,13 +249,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     EXPECT_THROW(co_await webSocket.async_read(buffer, net::use_awaitable),
                  boost::system::system_error);
   };
-
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
 
 // _____________________________________________________________________________
@@ -349,7 +352,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
       // Trigger connection close by creating and destroying message sender
       ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
                                                    c.queryHub());
-      //co_await net::post(net::use_awaitable);
+      co_await net::post(net::use_awaitable);
     }
 
     // Expect socket will be closed
@@ -357,13 +360,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
     EXPECT_THROW(co_await webSocket.async_read(buffer, net::use_awaitable),
                  boost::system::system_error);
   };
-
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
 
 // _____________________________________________________________________________
@@ -389,12 +386,7 @@ ASYNC_TEST(WebSocketSession, verifyWithoutClientActionNoCancelDoesHappen) {
     co_await webSocket.async_write(toBuffer("other"), net::use_awaitable);
   };
 
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
   EXPECT_FALSE(cancellationHandle->isCancelled());
 }
 
@@ -416,12 +408,7 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringDoesNotThrowWithoutHandle) {
                                    net::use_awaitable);
   };
 
-    auto fut = std::async(std::launch::async, [&]() {
-        net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-    });
-
-    EXPECT_NO_THROW(co_await c.serverLogic());
-    EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }
 
 // _____________________________________________________________________________
@@ -444,14 +431,8 @@ ASYNC_TEST(WebSocketSession,
       co_await webSocket.async_close(
           boost::beast::websocket::close_code::normal, net::use_awaitable);
     } catch (const std::exception& e) {
-      LOG(ERROR) << "caught " << e.what() << std::endl;
       throw;
     }
   };
-  auto fut = std::async(std::launch::async, [&]() {
-    net::co_spawn(c.strand_, controllerActions, net::use_future).get();
-  });
-
-  EXPECT_NO_THROW(co_await c.serverLogic());
-  EXPECT_NO_THROW(fut.get());
+  co_await runTest(c.strand_, c.serverLogic(), controllerActions());
 }

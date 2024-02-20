@@ -23,7 +23,6 @@ TEST(HttpServer, HttpTest) {
   // `util/http/beast.h` for details). Repeat this test several times to make
   // such failures less spurious should they ever reoccur in the future.
   for (size_t k = 0; k < 10; ++k) {
-    LOG(INFO) << k << std::endl;
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
     // target (might be empty), and a copy of the request body (might be empty).
@@ -52,12 +51,11 @@ TEST(HttpServer, HttpTest) {
     // issues using the thread sanitizer. However, these constants can't be
     // higher by default because the checks on GitHub actions will run forever
     // if they are.
-    /*
     {
       std::vector<ad_utility::JThread> threads;
-      for (size_t i = 0; i < 100; ++i) {
+      for (size_t i = 0; i < 2; ++i) {
         threads.emplace_back([&]() {
-          for (size_t j = 0; j < 200; ++j) {
+          for (size_t j = 0; j < 20; ++j) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
@@ -75,10 +73,7 @@ TEST(HttpServer, HttpTest) {
         });
       }
     }
-    LOG(INFO) << "Finished all threads" << std::endl;
-     */
 
-    /*
     // Do the same thing in a second session (to check if everything is still
     // fine with the server after we have communicated with it for one session).
     {
@@ -90,7 +85,6 @@ TEST(HttpServer, HttpTest) {
               .str(),
           "POST\ntarget2\nbody2");
     }
-     */
 
     // Test if websocket is correctly opened and closed
     for (size_t i = 0; i < 20; ++i) {
@@ -104,8 +98,6 @@ TEST(HttpServer, HttpTest) {
       }
       std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
-    // LOG(INFO) << "After websocket" << std::endl;
-    /*
 
     // Test if websocket is denied on wrong paths
     for (size_t i = 0; i < 1; ++i) {
@@ -118,19 +110,16 @@ TEST(HttpServer, HttpTest) {
         ASSERT_EQ(response.base().result(), http::status::not_found);
       }
     }
-    std::this_thread::sleep_for(std::chrono::milliseconds(2));
-     //LOG(INFO) << "After websocket 2" << std::endl;
 
-      // Also test the convenience function `sendHttpOrHttpsRequest` (which
-      // creates an own client for each request).
-      {
-        Url url{
-            absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-        ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(),
-    "GET\n/target\n"); ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post,
-    "body").str(), "POST\n/target\nbody");
-      }
-      */
+    // Also test the convenience function `sendHttpOrHttpsRequest` (which
+    // creates an own client for each request).
+    {
+      Url url{
+          absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
+      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(), "GET\n/target\n");
+      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post, "body").str(),
+                "POST\n/target\nbody");
+    }
 
     // Check that after shutting down, no more new connections are accepted.
     httpServer.shutDown();

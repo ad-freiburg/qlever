@@ -92,7 +92,7 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // Experimental operators, see
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
-        co_await (waitForServerEvents() && handleClientCommands());
+    co_await (waitForServerEvents() && handleClientCommands());
   } catch (const net::multiple_exceptions& e) {
     // TODO<joka921> We actually have to check, if BOTH the exceptions have the
     // correct type.
@@ -125,7 +125,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
 net::awaitable<void> WebSocketSession::handleSession(
     QueryHub& queryHub, const QueryRegistry& queryRegistry,
     const http::request<http::string_body>& request, tcp::socket socket) {
-
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   auto queryId = QueryId::idFromString(queryIdString);
@@ -136,11 +135,10 @@ net::awaitable<void> WebSocketSession::handleSession(
   auto slot = (co_await net::this_coro::cancellation_state).slot();
   AD_CORRECTNESS_CHECK(!slot.is_connected() || strand.running_in_this_thread());
   if (strand.running_in_this_thread()) {
-      co_await webSocketSession.acceptAndWait(request);
+    co_await webSocketSession.acceptAndWait(request);
   } else {
-      co_await (net::co_spawn(strand,
-                              webSocketSession.acceptAndWait(request),
-                              net::deferred));
+    co_await (net::co_spawn(strand, webSocketSession.acceptAndWait(request),
+                            net::deferred));
   }
 }
 // _____________________________________________________________________________

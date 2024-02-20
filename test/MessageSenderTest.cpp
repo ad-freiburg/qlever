@@ -34,7 +34,6 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   MessageSender::create(std::move(queryId), queryHub);
 
   auto impl = [&]() -> net::awaitable<void> {
-
     net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
 
     auto result = co_await (distributor->waitForNextDataPiece(0) ||

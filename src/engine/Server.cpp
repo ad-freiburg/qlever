@@ -786,8 +786,8 @@ Awaitable<T> Server::computeInNewThread(Function function,
     handle->resetWatchDogState();
     return std::invoke(std::move(function));
   };
-  return ad_utility::runFunctionOnStrand(threadPool_.get_executor(),
-                                         std::move(inner), net::use_awaitable);
+  return ad_utility::runFunctionOnExecutorUncancellable(
+      threadPool_.get_executor(), std::move(inner), net::use_awaitable);
   /*
   auto runOnExecutor =
       [](auto executor, Function func,

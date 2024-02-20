@@ -26,7 +26,7 @@ ASYNC_TEST(UpdateFetcher, checkIndexIncrements) {
   distributor->addQueryStatusUpdate("1");
   distributor->addQueryStatusUpdate("2");
 
-  auto impl = [&]() -> net::awaitable<void>{
+  auto impl = [&]() -> net::awaitable<void> {
     auto payload = co_await updateFetcher.waitForEvent();
     EXPECT_THAT(payload, Pointee("1"s));
     payload = co_await updateFetcher.waitForEvent();

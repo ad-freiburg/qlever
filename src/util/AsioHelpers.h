@@ -22,10 +22,12 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
+// Run
 template <typename Strand, typename CompletionToken, std::invocable Function>
-auto runFunctionOnStrand(Strand strand, Function function,
-                         CompletionToken& token) {
-  LOG(INFO) << "Run on strandd" << std::endl;
+auto runFunctionOnExecutorUncancellable(Strand strand, Function function,
+                                        CompletionToken& token) {
+  // TODO<joka921> Use the generic facilities of boost asio.
+  // TODO<joka921> Add tests that strands are correctly given up etc.
   auto awaitable =
       [](auto function) -> net::awaitable<std::invoke_result_t<Function>> {
     co_return std::invoke(function);
@@ -33,61 +35,14 @@ auto runFunctionOnStrand(Strand strand, Function function,
   auto innerAwaitable =
       [](auto awaitable,
          auto strand) -> net::awaitable<std::invoke_result_t<Function>> {
-    co_return (co_await net::co_spawn(strand, std::move(awaitable),
-                                      net::use_awaitable));
+    co_return (co_await net::co_spawn(
+        strand, std::move(awaitable),
+        net::bind_cancellation_slot(net::cancellation_slot{},
+                                    net::use_awaitable)));
   };
   return net::co_spawn(
-      strand, innerAwaitable(awaitable(std::move(function)), strand), token);
-}
-
-/*
-template <typename Strand, typename T>
-net::awaitable<T> runAwaitableOnStrandAwaitable(Strand strand,
-                                                net::awaitable<T> awaitable) {
-  auto state = co_await net::this_coro::cancellation_state;
-  auto slot = state.slot();
-  net::cancellation_signal signal;
-  if (slot.is_connected()) {
-    slot.assign([&signal, &strand](auto type) {
-      net::dispatch(strand, [&signal, type]() { signal.emit(type); });
-    });
-  }
-  absl::Cleanup c{[&slot]() { slot.clear(); }};
-  auto token = net::bind_executor(
-      strand, net::bind_cancellation_slot(signal.slot(), net::use_awaitable));
-  co_await net::post(token);
-  if constexpr (std::is_void_v<T>) {
-    co_await std::move(awaitable);
-    slot.clear();
-    co_await net::post(net::use_awaitable);
-    co_return;
-  } else {
-    auto res = co_await std::move(awaitable);
-    slot.clear();
-    co_await net::post(net::use_awaitable);
-    co_return res;
-  }
-}
- */
-
-template <typename Strand, typename T>
-net::awaitable<T> runAwaitableOnStrandAwaitable(Strand strand,
-                                                net::awaitable<T> awaitable) {
-  auto inner = [](auto strand, auto f) -> net::awaitable<T> {
-    co_await net::post(net::use_awaitable);
-    co_return (
-        co_await net::co_spawn(strand, std::move(f), net::use_awaitable));
-  };
-  if constexpr (std::is_void_v<T>) {
-    co_await net::co_spawn(strand, inner(strand, std::move(awaitable)),
-                           net::use_awaitable);
-    co_await net::post(net::use_awaitable);
-  } else {
-    decltype(auto) res = co_await net::co_spawn(
-        strand, inner(strand, std::move(awaitable)), net::use_awaitable);
-    co_await net::post(net::use_awaitable);
-    co_return res;
-  }
+      strand, innerAwaitable(awaitable(std::move(function)), strand),
+      net::bind_cancellation_slot(net::cancellation_slot{}, token));
 }
 }  // namespace ad_utility
 
