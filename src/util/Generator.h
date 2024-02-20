@@ -5,15 +5,13 @@
 #ifndef CPPCORO_GENERATOR_HPP_INCLUDED
 #define CPPCORO_GENERATOR_HPP_INCLUDED
 
+#include <coroutine>
 #include <exception>
 #include <functional>
 #include <iterator>
 #include <type_traits>
 #include <utility>
 
-// Coroutines are still experimental in clang libcpp, therefore adapt the
-// appropriate namespaces by including the convenience header.
-#include "util/Coroutines.h"
 #include "util/Exception.h"
 #include "util/TypeTraits.h"
 

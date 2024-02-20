@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "../IndexTestHelpers.h"
+#include "IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
 #include "global/SpecialIds.h"
@@ -15,7 +15,10 @@ Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
+  // Decrease some default batch sizes s.t. the very small indices from the test
+  // cases also consist of multiple batches which improves the test coverage.
   BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
+  BATCH_SIZE_VOCABULARY_MERGE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }

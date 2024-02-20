@@ -34,8 +34,6 @@ class ConfigOptionProxyImplementation {
   ConfigOptionType* option_;
 
  public:
-  using Type = T;
-
   // Custom constructor.
   explicit ConfigOptionProxyImplementation(ConfigOptionType& opt)
       : option_(&opt) {
@@ -81,6 +79,9 @@ class ConstConfigOptionProxy
       ConfigManagerImpl::ConfigOptionProxyImplementation<T, const ConfigOption>;
 
  public:
+  using value_type = T;
+
+  // Construct proxy for the given option.
   explicit ConstConfigOptionProxy(const ConfigOption& opt) : Base(opt) {}
 };
 
@@ -94,6 +95,9 @@ class ConfigOptionProxy
       ConfigManagerImpl::ConfigOptionProxyImplementation<T, ConfigOption>;
 
  public:
+  using value_type = T;
+
+  // Construct proxy for the given option.
   explicit ConfigOptionProxy(ConfigOption& opt) : Base(opt) {}
 
   // Implicit conversion from not const to const is allowed.

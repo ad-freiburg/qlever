@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/Sort.h"
 #include "engine/ValuesForTesting.h"
 #include "global/ValueIdComparators.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
 using namespace std::chrono_literals;
@@ -194,5 +194,5 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
-      ad_utility::AbortException);
+      ad_utility::CancellationException);
 }

@@ -10,6 +10,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 
 #include "util/MemorySize/MemorySize.h"
 #include "util/Parameters.h"
@@ -69,6 +70,9 @@ static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
+
+constexpr std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
+    "?_QLever_internal_variable_bn_";
 
 static constexpr std::string_view TEXTSCORE_VARIABLE_PREFIX = "?ql_textscore_";
 static constexpr std::string_view ENTITY_VARIABLE_PREFIX = "?ql_entity_";
@@ -267,4 +271,8 @@ auto parallel_sort([[maybe_unused]] Args&&... args) {
 using parallel_tag = int;
 }  // namespace ad_utility
 #endif
-static constexpr size_t NUM_SORT_THREADS = 4;
+constexpr size_t NUM_SORT_THREADS = 4;
+/// ANSI escape sequence for bold text in the console
+constexpr std::string_view EMPH_ON = "\033[1m";
+/// ANSI escape sequence to print "normal" text again in the console.
+constexpr std::string_view EMPH_OFF = "\033[22m";

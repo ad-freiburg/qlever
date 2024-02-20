@@ -2,10 +2,10 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/ValuesForTesting.h"
 #include "gtest/gtest.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
 TEST(ValuesForTesting, valuesForTesting) {

@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
 #include "util/GTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/SourceLocation.h"

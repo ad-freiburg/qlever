@@ -219,18 +219,12 @@ class Operation {
   // Check if the cancellation flag has been set and throw an exception if
   // that's the case. This will be called at strategic places on code that
   // potentially can take a (too) long time. This function is designed to be
-  // as lightweight as possible because of that. The `detailSupplier` allows to
-  // pass a message to add to any potential exception that might be thrown.
+  // as lightweight as possible because of that.
   AD_ALWAYS_INLINE void checkCancellation(
-      const ad_utility::InvocableWithConvertibleReturnType<
-          std::string_view> auto& detailSupplier) const {
-    cancellationHandle_->throwIfCancelled(detailSupplier);
-  }
-
-  // Same as checkCancellation, but with the descriptor of this operation
-  // as string.
-  AD_ALWAYS_INLINE void checkCancellation() const {
-    cancellationHandle_->throwIfCancelled(&Operation::getDescriptor, this);
+      ad_utility::source_location location =
+          ad_utility::source_location::current()) const {
+    cancellationHandle_->throwIfCancelled(location,
+                                          [this]() { return getDescriptor(); });
   }
 
   std::chrono::milliseconds remainingTime() const;

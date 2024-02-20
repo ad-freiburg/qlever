@@ -2,12 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/IndexTestHelpers.h"
 
 #pragma once
 
@@ -60,8 +60,10 @@ struct TestContext {
   VariableToColumnMap varToColMap;
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
-  sparqlExpression::EvaluationContext context{*qec, varToColMap, table,
-                                              qec->getAllocator(), localVocab};
+  sparqlExpression::EvaluationContext context{
+      *qec,       varToColMap,
+      table,      qec->getAllocator(),
+      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
