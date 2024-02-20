@@ -330,8 +330,7 @@ ResultTable GroupBy::computeResult() {
       checkIfHashMapOptimizationPossible(aggregates);
 
   std::shared_ptr<const ResultTable> subresult;
-  if (hashMapOptimizationParams.has_value() &&
-      hashMapOptimizationParams.value().topOpIsSort_) {
+  if (hashMapOptimizationParams.has_value()) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
     subresult = child->getResult();
@@ -710,11 +709,8 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-  bool topOpIsSort = sort != nullptr;
-
-  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">() &&
-      !topOpIsSort) {
+  if (auto sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+      sort == nullptr) {
     return std::nullopt;
   }
 
@@ -743,16 +739,10 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 
   const Variable& groupByVariable = _groupByVariables.front();
 
-  size_t columnIndex;
-  if (RuntimeParameters().get<"group-by-hash-map-only-if-sort">()) {
-    auto child = _subtree->getRootOperation()->getChildren().at(0);
-    columnIndex = child->getVariableColumn(groupByVariable);
-  } else {
-    columnIndex = _subtree->getVariableColumn(groupByVariable);
-  }
+  auto child = _subtree->getRootOperation()->getChildren().at(0);
+  size_t columnIndex = child->getVariableColumn(groupByVariable);
 
-  return HashMapOptimizationData{columnIndex, aliasesWithAggregateInfo,
-                                 topOpIsSort};
+  return HashMapOptimizationData{columnIndex, aliasesWithAggregateInfo};
 }
 
 // _____________________________________________________________________________
@@ -1139,13 +1129,12 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = RuntimeParameters().get<"group-by-hash-map-block-size">();
-
-  for (size_t i = 0; i < numberOfGroups; i += blockSize) {
+  for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, numberOfGroups);
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, numberOfGroups);
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, result, evaluationContext, aggregationData,
@@ -1199,13 +1188,12 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = RuntimeParameters().get<"group-by-hash-map-block-size">();
-
-  for (size_t i = 0; i < subresult.size(); i += blockSize) {
+  for (size_t i = 0; i < subresult.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, subresult.size());
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, subresult.size());
 
     auto currentBlockSize =
         evaluationContext._endIndex - evaluationContext._beginIndex;

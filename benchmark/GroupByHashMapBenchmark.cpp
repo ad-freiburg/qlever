@@ -132,43 +132,41 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   void runNumericBenchmarks(BenchmarkResults& results) {
     for (int i = 0; i < 2; i++) {
       for (auto multiplicity : multiplicities) {
-        for (auto blockSize : blockSizes) {
-          for (auto valueIdType : numericValueIdTypes) {
-            //-----------------------------------------------------------------------------------------------------
-            runTests<AvgExpression>(results, multiplicity, blockSize,
-                                    valueIdType, false, static_cast<bool>(i));
+        for (auto valueIdType : numericValueIdTypes) {
+          //-----------------------------------------------------------------------------------------------------
+          runTests<AvgExpression>(results, multiplicity, valueIdType, false,
+                                  static_cast<bool>(i));
 
-            runTests<AvgExpression>(results, multiplicity, blockSize,
-                                    valueIdType, true, static_cast<bool>(i));
+          runTests<AvgExpression>(results, multiplicity, valueIdType, true,
+                                  static_cast<bool>(i));
 
-            //-----------------------------------------------------------------------------------------------------
-            runTests<SumExpression>(results, multiplicity, blockSize,
-                                    valueIdType, false, static_cast<bool>(i));
+          //-----------------------------------------------------------------------------------------------------
+          runTests<SumExpression>(results, multiplicity, valueIdType, false,
+                                  static_cast<bool>(i));
 
-            runTests<SumExpression>(results, multiplicity, blockSize,
-                                    valueIdType, true, static_cast<bool>(i));
+          runTests<SumExpression>(results, multiplicity, valueIdType, true,
+                                  static_cast<bool>(i));
 
-            //-----------------------------------------------------------------------------------------------------
-            runTests<CountExpression>(results, multiplicity, blockSize,
-                                      valueIdType, false, static_cast<bool>(i));
+          //-----------------------------------------------------------------------------------------------------
+          runTests<CountExpression>(results, multiplicity, valueIdType, false,
+                                    static_cast<bool>(i));
 
-            runTests<CountExpression>(results, multiplicity, blockSize,
-                                      valueIdType, true, static_cast<bool>(i));
+          runTests<CountExpression>(results, multiplicity, valueIdType, true,
+                                    static_cast<bool>(i));
 
-            //-----------------------------------------------------------------------------------------------------
-            runTests<MinExpression>(results, multiplicity, blockSize,
-                                    valueIdType, false, static_cast<bool>(i));
+          //-----------------------------------------------------------------------------------------------------
+          runTests<MinExpression>(results, multiplicity, valueIdType, false,
+                                  static_cast<bool>(i));
 
-            runTests<MinExpression>(results, multiplicity, blockSize,
-                                    valueIdType, true, static_cast<bool>(i));
+          runTests<MinExpression>(results, multiplicity, valueIdType, true,
+                                  static_cast<bool>(i));
 
-            //-----------------------------------------------------------------------------------------------------
-            runTests<MaxExpression>(results, multiplicity, blockSize,
-                                    valueIdType, false, static_cast<bool>(i));
+          //-----------------------------------------------------------------------------------------------------
+          runTests<MaxExpression>(results, multiplicity, valueIdType, false,
+                                  static_cast<bool>(i));
 
-            runTests<MaxExpression>(results, multiplicity, blockSize,
-                                    valueIdType, true, static_cast<bool>(i));
-          }
+          runTests<MaxExpression>(results, multiplicity, valueIdType, true,
+                                  static_cast<bool>(i));
         }
       }
     }
@@ -177,14 +175,12 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   void runStringBenchmarks(BenchmarkResults& results) {
     for (int i = 0; i < 2; i++) {
       for (auto multiplicity : multiplicities) {
-        for (auto blockSize : blockSizes) {
-          runTests<GroupConcatExpression>(results, multiplicity, blockSize,
-                                          ValueIdType::Strings, false,
-                                          static_cast<bool>(i));
-          runTests<GroupConcatExpression>(results, multiplicity, blockSize,
-                                          ValueIdType::Strings, true,
-                                          static_cast<bool>(i));
-        }
+        runTests<GroupConcatExpression>(results, multiplicity,
+                                        ValueIdType::Strings, false,
+                                        static_cast<bool>(i));
+        runTests<GroupConcatExpression>(results, multiplicity,
+                                        ValueIdType::Strings, true,
+                                        static_cast<bool>(i));
       }
     }
   }
@@ -205,16 +201,13 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   static constexpr size_t numMeasurements = 4;
   static constexpr size_t multiplicities[] = {5'000'000, 500'000, 50'000, 5'000,
                                               500,       50,      5};
-  static constexpr size_t blockSizes[] = {1048576, 262144, 65536, 16384, 4096};
   static constexpr size_t randomStringLength = 3;
 
   template <typename T>
   static void computeGroupBy(QueryExecutionContext* qec,
                              std::shared_ptr<QueryExecutionTree> subtree,
-                             bool useOptimization, size_t blockSize) {
+                             bool useOptimization) {
     RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
-    RuntimeParameters().set<"group-by-hash-map-only-if-sort">(!useOptimization);
-    RuntimeParameters().set<"group-by-hash-map-block-size">(blockSize);
 
     using namespace sparqlExpression;
 
@@ -248,14 +241,13 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
   template <typename T>
   void runTests(BenchmarkResults& results, size_t multiplicity,
-                size_t blockSize, ValueIdType valueTypes,
-                bool optimizationEnabled, bool sorted) {
+                ValueIdType valueTypes, bool optimizationEnabled, bool sorted) {
     // For coin flipping if `ValueIdType` is `RandomlyMixed`
     std::uniform_int_distribution<uint8_t> distribution(0, 1);
 
     // Initialize benchmark results group
     std::ostringstream buffer;
-    buffer << "M: " << multiplicity << ", B: " << blockSize
+    buffer << "M: " << multiplicity
            << ", T: " << determineTypeString(valueTypes)
            << ", OP: " << determineAggregateString(ti<T>)
            << ", MAP: " << std::boolalpha << optimizationEnabled
@@ -265,7 +257,6 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     group.metadata().addKeyValuePair("Multiplicity", multiplicity);
     group.metadata().addKeyValuePair("Type", determineTypeString(valueTypes));
     group.metadata().addKeyValuePair("Sorted", sorted);
-    group.metadata().addKeyValuePair("Blocksize", blockSize);
     group.metadata().addKeyValuePair("HashMap", optimizationEnabled);
     group.metadata().addKeyValuePair("Operation",
                                      determineAggregateString(ti<T>));
@@ -335,7 +326,7 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     for (size_t i = 0; i < numMeasurements; i++)
       group.addMeasurement(std::to_string(i), [&]() {
-        computeGroupBy<T>(qec, valueTree, optimizationEnabled, blockSize);
+        computeGroupBy<T>(qec, valueTree, optimizationEnabled);
       });
   };
 };

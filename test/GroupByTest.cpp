@@ -612,7 +612,6 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testFailure(emptyVariables, aliasesAvgX, subtreeWithSort, avgAggregate);
   testFailure(variablesXAndY, aliasesAvgX, subtreeWithSort, avgAggregate);
   // Top operation must be SORT
-  RuntimeParameters().set<"group-by-hash-map-only-if-sort">(true);
   testFailure(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
               avgAggregate);
   // Can not be a nested aggregate
@@ -630,11 +629,6 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   testSuccess(variablesOnlyX, aliasesMaxX, subtreeWithSort, maxAggregate);
   testSuccess(variablesOnlyX, aliasesMinX, subtreeWithSort, minAggregate);
   testSuccess(variablesOnlyX, aliasesSumX, subtreeWithSort, sumAggregate);
-
-  // Top operation may not be SORT
-  RuntimeParameters().set<"group-by-hash-map-only-if-sort">(false);
-  testSuccess(variablesOnlyX, aliasesAvgX, validJoinWhenGroupingByX,
-              avgAggregate);
 
   // Check details of data structure are correct.
   GroupBy groupBy{qec, variablesOnlyX, aliasesAvgX, subtreeWithSort};

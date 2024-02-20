@@ -29,6 +29,9 @@ using std::vector;
 class IndexScan;
 class Join;
 
+// Block size for when using the hash map optimization
+static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
+
 class GroupBy : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
@@ -227,9 +230,6 @@ class GroupBy : public Operation {
     size_t subtreeColumnIndex_;
     // All aliases and the aggregates they contain.
     std::vector<HashMapAliasInformation> aggregateAliases_;
-    // Determine whether the top operation is `SORT`. Used to determine whether
-    // we skip this operation.
-    bool topOpIsSort_;
   };
 
   // Create result IdTable by using a HashMap mapping groups to aggregation data
