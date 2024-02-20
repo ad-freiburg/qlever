@@ -2,7 +2,9 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.roland.herrmann@mars.uni-freiburg.de)
 
+extern "C" {
 #include <GraphBLAS.h>
+}
 
 /**
  * @class GrbGlobalContext

@@ -2,11 +2,11 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.roland.herrmann@mars.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include "engine/GrbGlobalContext.h"
 #include "engine/GrbMatrix.h"
-#include "gmock/gmock.h"
 
 // This helper function checks all important proprties of a matrix.
 // One matrix consists of row index, column index and value in this order.
