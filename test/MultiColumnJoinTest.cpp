@@ -7,11 +7,11 @@
 #include <array>
 #include <vector>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
-#include "engine/CallFixedSize.h"
 #include "engine/MultiColumnJoin.h"
+#include "util/AllocatorTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IdTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::makeAllocator;
 namespace {
@@ -31,9 +31,13 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back(array<ColumnIndex, 2>{{1, 2}});
   jcls.push_back(array<ColumnIndex, 2>{{2, 1}});
 
+  auto* qec = ad_utility::testing::getQec();
+
   // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
   // a have to equal those of column 2 of b and vice versa).
-  MultiColumnJoin::computeMultiColumnJoin(a, b, jcls, &res);
+  MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
+                  idTableToExecutionTree(qec, b)}
+      .computeMultiColumnJoin(a, b, jcls, &res);
 
   auto expected = makeIdTableFromVector({{2, 1, 3, 3}, {1, 3, 1, 1}});
   ASSERT_EQ(expected, res);
@@ -54,7 +58,9 @@ TEST(EngineTest, multiColumnJoinTest) {
   jcls.push_back({1, 0});
   jcls.push_back({2, 1});
 
-  MultiColumnJoin::computeMultiColumnJoin(va, vb, jcls, &vres);
+  MultiColumnJoin{qec, idTableToExecutionTree(qec, a),
+                  idTableToExecutionTree(qec, b)}
+      .computeMultiColumnJoin(va, vb, jcls, &vres);
 
   ASSERT_EQ(4u, vres.size());
   ASSERT_EQ(7u, vres.numColumns());

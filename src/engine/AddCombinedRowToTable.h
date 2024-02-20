@@ -10,6 +10,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
@@ -64,19 +65,25 @@ class AddCombinedRowToIdTable {
   using BlockwiseCallback = std::function<void(IdTable&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+  CancellationHandle cancellationHandle_;
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
-      IdTable output, size_t bufferSize = 100'000,
+      IdTable output, CancellationHandle cancellationHandle,
+      size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
-        blockwiseCallback_{std::move(blockwiseCallback)} {
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
     checkNumColumns();
     indexBuffer_.reserve(bufferSize);
   }
@@ -85,14 +92,17 @@ class AddCombinedRowToIdTable {
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
-      size_t numJoinColumns, IdTable output, size_t bufferSize = 100'000,
+      size_t numJoinColumns, IdTable output,
+      CancellationHandle cancellationHandle, size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
-        blockwiseCallback_{std::move(blockwiseCallback)} {
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
     indexBuffer_.reserve(bufferSize);
   }
 
@@ -191,6 +201,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==

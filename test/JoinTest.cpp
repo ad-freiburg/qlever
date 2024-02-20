@@ -12,7 +12,6 @@
 #include <sstream>
 #include <tuple>
 
-#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
@@ -27,6 +26,7 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "util/Forward.h"
+#include "util/IndexTestHelpers.h"
 #include "util/Random.h"
 #include "util/SourceLocation.h"
 

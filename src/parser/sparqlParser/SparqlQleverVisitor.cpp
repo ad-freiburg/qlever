@@ -131,9 +131,9 @@ void Visitor::addVisibleVariable(Variable var) {
 }
 
 // ___________________________________________________________________________
-PathTuples joinPredicateAndObject(const VarOrPath& predicate,
-                                  ObjectList objectList) {
-  PathTuples tuples;
+PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
+                                       auto objectList) {
+  PathObjectPairs tuples;
   tuples.reserve(objectList.first.size());
   for (auto& object : objectList.first) {
     tuples.emplace_back(predicate, std::move(object));
@@ -325,11 +325,13 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
           });
   pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
+    auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
     auto [subquery, valuesOpt] = visit(ctx->subSelect());
     pattern._graphPatterns.emplace_back(std::move(subquery));
     if (valuesOpt.has_value()) {
       pattern._graphPatterns.emplace_back(std::move(valuesOpt.value()));
     }
+    parsedQuery_ = std::move(parsedQuerySoFar);
     return pattern;
   } else {
     AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
@@ -398,30 +400,18 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto visitIri = [](const Iri& iri) -> TripleComponent {
-    return iri.toSparql();
+  auto visitGraphTerm = [](const GraphTerm& graphTerm) {
+    return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
+      if constexpr (std::is_same_v<T, Variable>) {
+        return element;
+      } else if constexpr (std::is_same_v<T, Literal>) {
+        return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+            element.toSparql());
+      } else {
+        return element.toSparql();
+      }
+    });
   };
-  auto visitBlankNode = [](const BlankNode& blankNode) -> TripleComponent {
-    return blankNode.toSparql();
-  };
-  auto visitLiteral = [](const Literal& literal) {
-    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-        literal.toSparql());
-  };
-  auto visitGraphTerm = [&visitIri, &visitBlankNode,
-                         &visitLiteral](const GraphTerm& graphTerm) {
-    return graphTerm.visit(ad_utility::OverloadCallOperator{
-        visitIri, visitBlankNode, visitLiteral});
-  };
-  auto varToTripleComponent = [](const Variable& var) {
-    return TripleComponent{var};
-  };
-  auto visitVarOrTerm = [&varToTripleComponent,
-                         &visitGraphTerm](const VarOrTerm& varOrTerm) {
-    return varOrTerm.visit(
-        ad_utility::OverloadCallOperator{varToTripleComponent, visitGraphTerm});
-  };
-
   auto varToPropertyPath = [](const Variable& var) {
     return PropertyPath::fromVariable(var);
   };
@@ -442,14 +432,14 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   };
 
   auto convertAndRegisterTriple =
-      [&visitVarOrTerm, &visitVarOrPath, &registerIfVariable](
+      [&visitGraphTerm, &visitVarOrPath, &registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
 
-    return {visitVarOrTerm(triple.subject_), visitVarOrPath(triple.predicate_),
-            visitVarOrTerm(triple.object_)};
+    return {visitGraphTerm(triple.subject_), visitVarOrPath(triple.predicate_),
+            visitGraphTerm(triple.object_)};
   };
 
   BasicGraphPattern triples = {ad_utility::transform(
@@ -495,12 +485,12 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   //
   // TODO: Also support variables. The semantics is to make a connection for
   // each IRI matching the variable and take the union of the results.
-  VarOrTerm varOrIri = visit(ctx->varOrIri());
+  GraphTerm varOrIri = visit(ctx->varOrIri());
   if (std::holds_alternative<Variable>(varOrIri)) {
     reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
   }
-  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(std::get<GraphTerm>(varOrIri)));
-  Iri serviceIri = std::get<Iri>(std::get<GraphTerm>(varOrIri));
+  AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
+  Iri serviceIri = std::get<Iri>(varOrIri);
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -610,6 +600,9 @@ vector<GroupKey> Visitor::visit(Parser::GroupClauseContext* ctx) {
 std::optional<parsedQuery::ConstructClause> Visitor::visit(
     Parser::ConstructTemplateContext* ctx) {
   if (ctx->constructTriples()) {
+    isInsideConstructTriples_ = true;
+    auto cleanup =
+        absl::Cleanup{[this]() { isInsideConstructTriples_ = false; }};
     return parsedQuery::ConstructClause{visit(ctx->constructTriples())};
   } else {
     return std::nullopt;
@@ -695,20 +688,18 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
-  ParsedQuery query;
-  query._clause = visit(ctx->selectClause());
+  parsedQuery_._clause = visit(ctx->selectClause());
   visitVector(ctx->datasetClause());
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
-  query._rootGraphPattern = std::move(pattern);
-  query.registerVariablesVisibleInQueryBody(visibleVariables);
-  query.addSolutionModifiers(visit(ctx->solutionModifier()));
-
-  return query;
+  parsedQuery_._rootGraphPattern = std::move(pattern);
+  parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);
+  parsedQuery_.addSolutionModifiers(visit(ctx->solutionModifier()));
+  return parsedQuery_;
 }
 
 // ____________________________________________________________________________________
 Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
-  ParsedQuery query;
+  ParsedQuery& query = parsedQuery_;
   query._clause = visit(ctx->selectClause());
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   query._rootGraphPattern = std::move(pattern);
@@ -950,7 +941,7 @@ Triples Visitor::visit(Parser::TriplesTemplateContext* ctx) {
 Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
   Triples triples;
   if (ctx->varOrTerm()) {
-    VarOrTerm subject = visit(ctx->varOrTerm());
+    GraphTerm subject = visit(ctx->varOrTerm());
     AD_CONTRACT_CHECK(ctx->propertyListNotEmpty());
     auto propertyList = visit(ctx->propertyListNotEmpty());
     for (auto& tuple : propertyList.first) {
@@ -973,14 +964,17 @@ Triples Visitor::visit(Parser::TriplesSameSubjectContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PropertyList Visitor::visit(Parser::PropertyListContext* ctx) {
+PredicateObjectPairsAndTriples Visitor::visit(
+    Parser::PropertyListContext* ctx) {
   return ctx->propertyListNotEmpty() ? visit(ctx->propertyListNotEmpty())
-                                     : PropertyList{Tuples{}, Triples{}};
+                                     : PredicateObjectPairsAndTriples{
+                                           PredicateObjectPairs{}, Triples{}};
 }
 
 // ____________________________________________________________________________________
-PropertyList Visitor::visit(Parser::PropertyListNotEmptyContext* ctx) {
-  Tuples triplesWithoutSubject;
+PredicateObjectPairsAndTriples Visitor::visit(
+    Parser::PropertyListNotEmptyContext* ctx) {
+  PredicateObjectPairs triplesWithoutSubject;
   Triples additionalTriples;
   auto verbs = ctx->verb();
   auto objectLists = ctx->objectList();
@@ -997,7 +991,7 @@ PropertyList Visitor::visit(Parser::PropertyListNotEmptyContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-VarOrTerm Visitor::visit(Parser::VerbContext* ctx) {
+GraphTerm Visitor::visit(Parser::VerbContext* ctx) {
   if (ctx->varOrIri()) {
     return visit(ctx->varOrIri());
   } else {
@@ -1008,7 +1002,7 @@ VarOrTerm Visitor::visit(Parser::VerbContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ObjectList Visitor::visit(Parser::ObjectListContext* ctx) {
+ObjectsAndTriples Visitor::visit(Parser::ObjectListContext* ctx) {
   Objects objects;
   Triples additionalTriples;
   auto objectContexts = ctx->objectR();
@@ -1021,83 +1015,150 @@ ObjectList Visitor::visit(Parser::ObjectListContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::ObjectRContext* ctx) {
+SubjectOrObjectAndTriples Visitor::visit(Parser::ObjectRContext* ctx) {
   return visit(ctx->graphNode());
+}
+
+// ____________________________________________________________________________________
+void Visitor::setMatchingWordAndScoreVisibleIfPresent(
+    // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
+    // <entity>` is contained in the query, then the variable
+    // `?ql_textscore_var` is implicitly created and visible in the query body.
+    // Similarly, if a triple `?var ql:contains-word "words"` is contained in
+    // the query, then the variable `ql_matchingword_var` is implicitly created
+    // and visible in the query body.
+    auto* ctx, const TripleWithPropertyPath& triple) {
+  const auto& [subject, predicate, object] = triple;
+
+  auto* var = std::get_if<Variable>(&subject);
+  auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+
+  if (!var || !propertyPath) {
+    return;
+  }
+
+  if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+    string name = object.toSparql();
+    if (!((name.starts_with('"') && name.ends_with('"')) ||
+          (name.starts_with('\'') && name.ends_with('\'')))) {
+      reportError(ctx,
+                  "ql:contains-word has to be followed by a string in quotes");
+    }
+    for (std::string_view s : std::vector<std::string>(
+             absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+      if (!s.ends_with('*')) {
+        continue;
+      }
+      addVisibleVariable(var->getMatchingWordVariable(
+          ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
+    }
+  } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+    if (const auto* entVar = std::get_if<Variable>(&object)) {
+      addVisibleVariable(var->getScoreVariable(*entVar));
+    } else {
+      addVisibleVariable(var->getScoreVariable(object.toSparql()));
+    }
+  }
 }
 
 // ___________________________________________________________________________
 vector<TripleWithPropertyPath> Visitor::visit(
     Parser::TriplesSameSubjectPathContext* ctx) {
+  /*
   // If a triple `?var ql:contains-word "words"` or `?var ql:contains-entity
   // <entity>` is contained in the query, then the variable `?ql_textscore_var`
   // is implicitly created and visible in the query body.
   // Similarly if a triple `?var ql:contains-word "words"` is contained in the
   // query, then the variable `ql_matchingword_var` is implicitly created and
   // visible in the query body.
-  auto setMatchingWordAndScoreVisibleIfPresent = [this, ctx](
-                                                     VarOrTerm& subject,
-                                                     VarOrPath& predicate,
-                                                     VarOrTerm& object) {
-    auto* var = std::get_if<Variable>(&subject);
-    auto* propertyPath = std::get_if<PropertyPath>(&predicate);
+  auto setMatchingWordAndScoreVisibleIfPresent =
+      [this, ctx](GraphTerm& subject, VarOrPath& predicate, GraphTerm& object) {
+        auto* var = std::get_if<Variable>(&subject);
+        auto* propertyPath = std::get_if<PropertyPath>(&predicate);
 
-    if (!var || !propertyPath) {
-      return;
-    }
-
-    if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
-      string name = object.toSparql();
-      if (!((name.starts_with('"') && name.ends_with('"')) ||
-            (name.starts_with('\'') && name.ends_with('\'')))) {
-        reportError(
-            ctx, "ql:contains-word has to be followed by a string in quotes");
-      }
-      for (std::string_view s : std::vector<std::string>(
-               absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-        if (!s.ends_with('*')) {
-          continue;
+        if (!var || !propertyPath) {
+          return;
         }
-        addVisibleVariable(var->getMatchingWordVariable(
-            ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
-      }
-    } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
-      if (const auto* entVar = std::get_if<Variable>(&object)) {
-        addVisibleVariable(var->getScoreVariable(*entVar));
-      } else if (const auto* fixedEntity = std::get_if<GraphTerm>(&object)) {
-        addVisibleVariable(var->getScoreVariable(fixedEntity->toSparql()));
-      }
-    }
-  };
 
-  if (ctx->varOrTerm()) {
-    vector<TripleWithPropertyPath> triples;
-    auto subject = visit(ctx->varOrTerm());
-    auto tuples = visit(ctx->propertyListPathNotEmpty());
-    for (auto& [predicate, object] : tuples) {
-      setMatchingWordAndScoreVisibleIfPresent(subject, predicate, object);
+        if (propertyPath->asString() == CONTAINS_WORD_PREDICATE) {
+          string name = object.toSparql();
+          if (!((name.starts_with('"') && name.ends_with('"')) ||
+                (name.starts_with('\'') && name.ends_with('\'')))) {
+            reportError(
+                ctx,
+                "ql:contains-word has to be followed by a string in quotes");
+          }
+          for (std::string_view s : std::vector<std::string>(
+                   absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
+            if (!s.ends_with('*')) {
+              continue;
+            }
+            addVisibleVariable(var->getMatchingWordVariable(
+                ad_utility::utf8ToLower(s.substr(0, s.size() - 1))));
+          }
+        } else if (propertyPath->asString() == CONTAINS_ENTITY_PREDICATE) {
+          if (const auto* entVar = std::get_if<Variable>(&object)) {
+            addVisibleVariable(var->getScoreVariable(*entVar));
+          } else {
+            addVisibleVariable(var->getScoreVariable(object.toSparql()));
+          }
+        }
+      };
+      */
+
+  // Assemble the final result from a set of given `triples` and possibly empty
+  // `additionalTriples`, the given `subject` and the given pairs of
+  // `[predicate, object]`
+  using TripleVec = std::vector<TripleWithPropertyPath>;
+  auto assembleResult = [this, ctx](TripleVec triples, GraphTerm subject,
+                                    PathObjectPairs predicateObjectPairs,
+                                    TripleVec additionalTriples) {
+    for (auto&& [predicate, object] : std::move(predicateObjectPairs)) {
       triples.emplace_back(subject, std::move(predicate), std::move(object));
     }
+    std::ranges::copy(additionalTriples, std::back_inserter(triples));
+    for (const auto& triple : triples) {
+      setMatchingWordAndScoreVisibleIfPresent(ctx, triple);
+    }
     return triples;
+  };
+  if (ctx->varOrTerm()) {
+    auto subject = visit(ctx->varOrTerm());
+    auto [tuples, triples] = visit(ctx->propertyListPathNotEmpty());
+    return assembleResult(std::move(triples), std::move(subject),
+                          std::move(tuples), {});
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
-    visit(ctx->triplesNodePath());
+    auto [subject, result] = visit(ctx->triplesNodePath());
+    auto additionalTriples = visit(ctx->propertyListPath());
+    if (additionalTriples.has_value()) {
+      auto& [tuples, triples] = additionalTriples.value();
+      return assembleResult(std::move(result), std::move(subject),
+                            std::move(tuples), std::move(triples));
+    } else {
+      return assembleResult(std::move(result), std::move(subject), {}, {});
+    }
   }
 }
 
 // ___________________________________________________________________________
-std::optional<PathTuples> Visitor::visit(Parser::PropertyListPathContext* ctx) {
+std::optional<PathObjectPairsAndTriples> Visitor::visit(
+    Parser::PropertyListPathContext* ctx) {
   return visitOptional(ctx->propertyListPathNotEmpty());
 }
 
 // ___________________________________________________________________________
-PathTuples Visitor::visit(Parser::PropertyListPathNotEmptyContext* ctx) {
-  PathTuples tuples = visit(ctx->tupleWithPath());
-  vector<PathTuples> tuplesWithoutPaths = visitVector(ctx->tupleWithoutPath());
-  for (auto& tuplesWithoutPath : tuplesWithoutPaths) {
-    tuples.insert(tuples.end(), tuplesWithoutPath.begin(),
-                  tuplesWithoutPath.end());
+PathObjectPairsAndTriples Visitor::visit(
+    Parser::PropertyListPathNotEmptyContext* ctx) {
+  PathObjectPairsAndTriples result = visit(ctx->tupleWithPath());
+  auto& [pairs, triples] = result;
+  vector<PathObjectPairsAndTriples> pairsAndTriples =
+      visitVector(ctx->tupleWithoutPath());
+  for (auto& [newPairs, newTriples] : pairsAndTriples) {
+    std::ranges::move(newPairs, std::back_inserter(pairs));
+    std::ranges::move(newTriples, std::back_inserter(triples));
   }
-  return tuples;
+  return result;
 }
 
 // ____________________________________________________________________________________
@@ -1114,17 +1175,30 @@ Variable Visitor::visit(Parser::VerbSimpleContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-PathTuples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
+PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithoutPathContext* ctx) {
   VarOrPath predicate = visit(ctx->verbPathOrSimple());
-  ObjectList objectList = visit(ctx->objectList());
-  return joinPredicateAndObject(predicate, objectList);
+  ObjectsAndTriples objectList = visit(ctx->objectList());
+  auto predicateObjectPairs = joinPredicateAndObject(predicate, objectList);
+  std::vector<TripleWithPropertyPath> triples;
+  auto toVarOrPath = [](GraphTerm term) -> VarOrPath {
+    if (std::holds_alternative<Variable>(term)) {
+      return std::get<Variable>(term);
+    } else {
+      return PropertyPath::fromIri(term.toSparql());
+    }
+  };
+  for (auto& triple : objectList.second) {
+    triples.emplace_back(triple[0], toVarOrPath(triple[1]), triple[2]);
+  }
+  return {std::move(predicateObjectPairs), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
-PathTuples Visitor::visit(Parser::TupleWithPathContext* ctx) {
+PathObjectPairsAndTriples Visitor::visit(Parser::TupleWithPathContext* ctx) {
   VarOrPath predicate = visit(ctx->verbPathOrSimple());
-  ObjectList objectList = visit(ctx->objectListPath());
-  return joinPredicateAndObject(predicate, objectList);
+  ObjectsAndPathTriples objectList = visit(ctx->objectListPath());
+  auto predicateObjectPairs = joinPredicateAndObject(predicate, objectList);
+  return {predicateObjectPairs, std::move(objectList.second)};
 }
 
 // ____________________________________________________________________________________
@@ -1134,15 +1208,25 @@ VarOrPath Visitor::visit(Parser::VerbPathOrSimpleContext* ctx) {
 }
 
 // ___________________________________________________________________________
-ObjectList Visitor::visit(Parser::ObjectListPathContext* ctx) {
-  // The second parameter is empty because collections and blank not paths,
-  // which might add additional triples, are currently not supported.
-  // When this is implemented they will be returned by visit(ObjectPathContext).
-  return {visitVector(ctx->objectPath()), {}};
+ObjectsAndPathTriples Visitor::visit(Parser::ObjectListPathContext* ctx) {
+  auto objectAndTriplesVec = visitVector(ctx->objectPath());
+  // First collect all the objects.
+  std::vector<GraphTerm> objects;
+  std::ranges::copy(
+      objectAndTriplesVec | std::views::transform(ad_utility::first),
+      std::back_inserter(objects));
+
+  // Collect all the triples. Node: `views::join` flattens the input.
+  std::vector<TripleWithPropertyPath> triples;
+  std::ranges::copy(objectAndTriplesVec |
+                        std::views::transform(ad_utility::second) |
+                        std::views::join,
+                    std::back_inserter(triples));
+  return {std::move(objects), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
-VarOrTerm Visitor::visit(Parser::ObjectPathContext* ctx) {
+SubjectOrObjectAndPathTriples Visitor::visit(Parser::ObjectPathContext* ctx) {
   return visit(ctx->graphNodePath());
 }
 
@@ -1237,69 +1321,80 @@ uint64_t Visitor::visit(Parser::IntegerContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::TriplesNodeContext* ctx) {
-  return visitAlternative<Node>(ctx->collection(),
-                                ctx->blankNodePropertyList());
+SubjectOrObjectAndTriples Visitor::visit(Parser::TriplesNodeContext* ctx) {
+  return visitAlternative<SubjectOrObjectAndTriples>(
+      ctx->collection(), ctx->blankNodePropertyList());
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::BlankNodePropertyListContext* ctx) {
-  VarOrTerm var{GraphTerm{newBlankNode()}};
+SubjectOrObjectAndTriples Visitor::visit(
+    Parser::BlankNodePropertyListContext* ctx) {
+  GraphTerm term = [this]() -> GraphTerm {
+    if (isInsideConstructTriples_) {
+      return GraphTerm{newBlankNode()};
+    } else {
+      return parsedQuery_.getNewInternalVariable();
+    }
+  }();
   Triples triples;
   auto propertyList = visit(ctx->propertyListNotEmpty());
-  for (auto& tuple : propertyList.first) {
-    triples.push_back({var, std::move(tuple[0]), std::move(tuple[1])});
+  for (auto& [predicate, object] : propertyList.first) {
+    triples.push_back({term, std::move(predicate), std::move(object)});
   }
   ad_utility::appendVector(triples, std::move(propertyList.second));
-  return {std::move(var), std::move(triples)};
+  return {std::move(term), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::TriplesNodePathContext* ctx) {
-  visitAlternative<void>(ctx->blankNodePropertyListPath(),
-                         ctx->collectionPath());
-  AD_FAIL();
+SubjectOrObjectAndPathTriples Visitor::visit(
+    Parser::TriplesNodePathContext* ctx) {
+  return visitAlternative<SubjectOrObjectAndPathTriples>(
+      ctx->blankNodePropertyListPath(), ctx->collectionPath());
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::BlankNodePropertyListPathContext* ctx) {
-  throwCollectionsAndBlankNodePathsNotSupported(ctx);
+SubjectOrObjectAndPathTriples Visitor::visit(
+    Parser::BlankNodePropertyListPathContext* ctx) {
+  auto subject = parsedQuery_.getNewInternalVariable();
+  auto [predicateObjects, triples] = visit(ctx->propertyListPathNotEmpty());
+  for (auto& [predicate, object] : predicateObjects) {
+    triples.emplace_back(subject, std::move(predicate), std::move(object));
+  }
+  return {std::move(subject), triples};
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::CollectionContext* ctx) {
+SubjectOrObjectAndTriples Visitor::visit(Parser::CollectionContext* ctx) {
   Triples triples;
-  VarOrTerm nextElement{
-      GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}}};
+  GraphTerm nextTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"}};
   auto nodes = ctx->graphNode();
   for (auto context : Reversed{nodes}) {
-    VarOrTerm currentVar{GraphTerm{newBlankNode()}};
+    GraphTerm currentTerm{newBlankNode()};
     auto graphNode = visit(context);
 
     triples.push_back(
-        {currentVar,
-         VarOrTerm{GraphTerm{
-             Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}}},
+        {currentTerm,
+         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>"}},
          std::move(graphNode.first)});
     triples.push_back(
-        {currentVar,
-         VarOrTerm{GraphTerm{
-             Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}}},
-         std::move(nextElement)});
-    nextElement = std::move(currentVar);
+        {currentTerm,
+         GraphTerm{Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>"}},
+         std::move(nextTerm)});
+    nextTerm = std::move(currentTerm);
 
     ad_utility::appendVector(triples, std::move(graphNode.second));
   }
-  return {std::move(nextElement), std::move(triples)};
+  return {std::move(nextTerm), std::move(triples)};
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::CollectionPathContext* ctx) {
-  throwCollectionsAndBlankNodePathsNotSupported(ctx);
+SubjectOrObjectAndPathTriples Visitor::visit(
+    Parser::CollectionPathContext* ctx) {
+  throwCollectionsNotSupported(ctx);
 }
 
 // ____________________________________________________________________________________
-Node Visitor::visit(Parser::GraphNodeContext* ctx) {
+SubjectOrObjectAndTriples Visitor::visit(Parser::GraphNodeContext* ctx) {
   if (ctx->varOrTerm()) {
     return {visit(ctx->varOrTerm()), Triples{}};
   } else {
@@ -1309,27 +1404,28 @@ Node Visitor::visit(Parser::GraphNodeContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-VarOrTerm Visitor::visit(Parser::GraphNodePathContext* ctx) {
+SubjectOrObjectAndPathTriples Visitor::visit(
+    Parser::GraphNodePathContext* ctx) {
   if (ctx->varOrTerm()) {
-    return visit(ctx->varOrTerm());
+    return {visit(ctx->varOrTerm()), {}};
   } else {
     AD_CORRECTNESS_CHECK(ctx->triplesNodePath());
-    visit(ctx->triplesNodePath());
+    return visit(ctx->triplesNodePath());
   }
 }
 
 // ____________________________________________________________________________________
-VarOrTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
-  return visitAlternative<VarOrTerm>(ctx->var(), ctx->graphTerm());
+GraphTerm Visitor::visit(Parser::VarOrTermContext* ctx) {
+  return visitAlternative<GraphTerm>(ctx->var(), ctx->graphTerm());
 }
 
 // ____________________________________________________________________________________
-VarOrTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
+GraphTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
   if (ctx->var()) {
     return visit(ctx->var());
   } else {
     AD_CORRECTNESS_CHECK(ctx->iri());
-    // TODO<qup42> If `visit` returns an `Iri` and `VarOrTerm` can be
+    // TODO<qup42> If `visit` returns an `Iri` and `GraphTerm` can be
     // constructed from an `Iri`, this whole function becomes
     // `visitAlternative`.
     return GraphTerm{Iri{visit(ctx->iri())}};
@@ -1922,16 +2018,26 @@ bool Visitor::visit(Parser::BooleanLiteralContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-BlankNode Visitor::visit(Parser::BlankNodeContext* ctx) {
+GraphTerm Visitor::visit(Parser::BlankNodeContext* ctx) {
   if (ctx->ANON()) {
-    return newBlankNode();
+    if (isInsideConstructTriples_) {
+      return newBlankNode();
+    } else {
+      return parsedQuery_.getNewInternalVariable();
+    }
   } else {
     AD_CORRECTNESS_CHECK(ctx->BLANK_NODE_LABEL());
-    // strip _: prefix from string
-    constexpr size_t length = std::string_view{"_:"}.length();
-    const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
-    // false means the query explicitly contains a blank node label
-    return {false, label};
+    if (isInsideConstructTriples_) {
+      // Strip `_:` prefix from string.
+      constexpr size_t length = std::string_view{"_:"}.length();
+      const string label = ctx->BLANK_NODE_LABEL()->getText().substr(length);
+      // `False` means the blank node is not automatically generated, but
+      // explicitly specified in the query.
+      return BlankNode{false, label};
+    } else {
+      return ParsedQuery::blankNodeToInternalVariable(
+          ctx->BLANK_NODE_LABEL()->getText());
+    }
   }
 }
 

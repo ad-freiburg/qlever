@@ -8,7 +8,6 @@
 #include <cstdio>
 #include <fstream>
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
@@ -16,6 +15,7 @@
 #include "global/Pattern.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
 

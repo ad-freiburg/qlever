@@ -7,7 +7,6 @@
 #include <sstream>
 #include <string>
 
-#include "./IndexTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CountAvailablePredicates.h"
@@ -29,6 +28,7 @@
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Id.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.

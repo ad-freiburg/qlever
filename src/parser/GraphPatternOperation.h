@@ -11,7 +11,6 @@
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
-#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/Algorithm.h"
 #include "util/VisitMixin.h"

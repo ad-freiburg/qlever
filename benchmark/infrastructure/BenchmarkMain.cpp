@@ -31,11 +31,11 @@ using namespace ad_benchmark;
 
 /*
 @brief Transform the given benchmark classes and corresponding results to
-json, and write them to the specified file.
+json, and write them to the specified json file.
 
 @param benchmarkClassAndResults The benchmark classes togehter with their
 results of running `runAllBenchmarks`.
-@param fileName The name of the file, where the json informationen
+@param jsonFileName The name of the json file, where the json informationen
 should be written in.
 @param appendToJsonInFile Should the json informationen be appended to the end
 of the json structure in the file, or should the previous content be
@@ -46,7 +46,9 @@ be treated as `false`.
 static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
     const std::vector<std::pair<const BenchmarkInterface*, BenchmarkResults>>&
         benchmarkClassAndResults,
-    const std::string& fileName, bool appendToJsonInFile = false) {
+    const std::filesystem::path& jsonFileName,
+    bool appendToJsonInFile = false) {
+  AD_CORRECTNESS_CHECK(jsonFileName.extension() == ".json");
   // Convert to json.
   nlohmann::ordered_json benchmarkClassAndBenchmarkResultsAsJson(
       zipBenchmarkClassAndBenchmarkResultsToJson(benchmarkClassAndResults));
@@ -56,8 +58,8 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
   Add the old json arry entries to the new json array entries, if a non empty
   file exists. Otherwise, we create/fill the file.
   */
-  if (appendToJsonInFile && std::filesystem::exists(fileName) &&
-      !std::filesystem::is_empty(fileName)) {
+  if (appendToJsonInFile && std::filesystem::exists(jsonFileName) &&
+      !std::filesystem::is_empty(jsonFileName)) {
     /*
     By parsing the file as json and working with `nlohmann::ordered_json`,
     instead of the json string representation, we first make sure, that the file
@@ -66,10 +68,10 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
     don't have to risk errors for a better performance.
     */
     const nlohmann::ordered_json fileAsJson(
-        fileToJson<nlohmann::ordered_json>(fileName));
+        fileToJson<nlohmann::ordered_json>(jsonFileName.string()));
     if (!fileAsJson.is_array()) {
       throw std::runtime_error(
-          absl::StrCat("The contents of the file ", fileName,
+          absl::StrCat("The contents of the file ", jsonFileName.string(),
                        " do not describe an array json value. Therefore no "
                        "values can be appended."));
     }
@@ -80,7 +82,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
         fileAsJson.end());
   }
 
-  ad_utility::makeOfstream(fileName)
+  ad_utility::makeOfstream(jsonFileName)
       << benchmarkClassAndBenchmarkResultsAsJson << std::endl;
 }
 
@@ -121,11 +123,12 @@ int main(int argc, char** argv) {
   options.add_options()("help,h", "Print the help message.")(
       "print,p", "Roughly prints all benchmarks.")(
       "write,w", po::value<std::string>(&writeFileName),
-      "Writes the benchmarks as json to a file, overriding the previous"
+      "Writes the benchmarks as json to a json file, overriding the previous"
       " content of the file.")(
       "append,a",
       "Causes the json option to append to the end of the json arry in the "
-      "file, if there is one, instead of overriding the previous content of "
+      "json file, if there is one, instead of overriding the previous content "
+      "of "
       "the file.")(
       "configuration-json,j",
       po::value<std::string>(&jsonConfigurationFileName),
@@ -154,6 +157,12 @@ int main(int argc, char** argv) {
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, options), vm);
   po::notify(vm);
+
+  // If write was choosen, then the given file must be a json file.
+  if (vm.count("write") && !writeFileName.ends_with(".json")) {
+    std::cerr << "The file defined via `--write` must be a `.json` file.\n";
+    printUsageAndExit();
+  }
 
   // Did they set any option, that would require anything to actually happen?
   // If not, don't do anything. This should also happen, if they explicitly

@@ -470,8 +470,8 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted,
-                                                      std::move(*result));
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -717,7 +717,8 @@ IdTable Join::computeResultForTwoIndexScans() {
   // class to work correctly.
   AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+      cancellationHandle_};
 
   auto& leftScan = dynamic_cast<IndexScan&>(*_left->getRootOperation());
   auto& rightScan = dynamic_cast<IndexScan&>(*_right->getRootOperation());
@@ -762,7 +763,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jcLeft, jcRight}}, numColsLeft, numColsRight};
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+      cancellationHandle_};
 
   AD_CORRECTNESS_CHECK(joinColScan == 0);
   auto permutationIdTable =

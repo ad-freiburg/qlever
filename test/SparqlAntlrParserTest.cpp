@@ -35,16 +35,20 @@ using Var = Variable;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
 
-template <auto F>
+template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
     [](const string& input, SparqlQleverVisitor::PrefixMap prefixes = {},
        SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks =
            SparqlQleverVisitor::DisableSomeChecksOnlyForTesting::False) {
       ParserAndVisitor p{input, std::move(prefixes), disableSomeChecks};
+      if (testInsideConstructTemplate) {
+        p.visitor_.setParseModeToInsideConstructTemplateForTesting();
+      }
       return p.parseTypesafe(F);
     };
 
 auto parseBlankNode = parse<&Parser::blankNode>;
+auto parseBlankNodeConstruct = parse<&Parser::blankNode, true>;
 auto parseCollection = parse<&Parser::collection>;
 auto parseConstructTriples = parse<&Parser::constructTriples>;
 auto parseGraphNode = parse<&Parser::graphNode>;
@@ -57,7 +61,7 @@ auto parseVariable = parse<&Parser::var>;
 auto parseVarOrTerm = parse<&Parser::varOrTerm>;
 auto parseVerb = parse<&Parser::verb>;
 
-template <auto Clause,
+template <auto Clause, bool parseInsideConstructTemplate = false,
           typename Value = decltype(parse<Clause>("").resultOfParse_)>
 struct ExpectCompleteParse {
   SparqlQleverVisitor::PrefixMap prefixMap_ = {};
@@ -92,7 +96,8 @@ struct ExpectCompleteParse {
     auto tr = generateLocationTrace(l, "successful parsing was expected here");
     EXPECT_NO_THROW({
       return expectCompleteParse(
-          parse<Clause>(input, std::move(prefixMap), disableSomeChecks),
+          parse<Clause, parseInsideConstructTemplate>(
+              input, std::move(prefixMap), disableSomeChecks),
           matcher, l);
     });
   };
@@ -249,7 +254,10 @@ TEST(SparqlParser, GraphTerm) {
   auto expectGraphTerm = ExpectCompleteParse<&Parser::graphTerm>{};
   expectGraphTerm("1337", m::Literal("1337"));
   expectGraphTerm("true", m::Literal("true"));
-  expectGraphTerm("[]", m::BlankNode(true, "0"));
+  expectGraphTerm("[]", m::InternalVariable("0"));
+  auto expectGraphTermConstruct =
+      ExpectCompleteParse<&Parser::graphTerm, true>{};
+  expectGraphTermConstruct("[]", m::BlankNode(true, "0"));
   {
     const std::string iri = "<http://dummy-iri.com#fragment>";
     expectCompleteParse(parse<&Parser::graphTerm>(iri), m::Iri(iri));
@@ -285,12 +293,16 @@ TEST(SparqlParser, RdfCollectionTripleVar) {
 }
 
 TEST(SparqlParser, BlankNodeAnonymous) {
-  expectCompleteParse(parseBlankNode("[ \t\r\n]"), m::BlankNode(true, "0"));
+  expectCompleteParse(parseBlankNodeConstruct("[ \t\r\n]"),
+                      m::BlankNode(true, "0"));
+  expectCompleteParse(parseBlankNode("[ \t\r\n]"), m::InternalVariable("0"));
 }
 
 TEST(SparqlParser, BlankNodeLabelled) {
-  expectCompleteParse(parseBlankNode("_:label123"),
+  expectCompleteParse(parseBlankNodeConstruct("_:label123"),
                       m::BlankNode(false, "label123"));
+  expectCompleteParse(parseBlankNode("_:label123"),
+                      m::InternalVariable("label123"));
 }
 
 TEST(SparqlParser, ConstructTemplateEmpty) {
@@ -342,6 +354,29 @@ TEST(SparqlParser, TriplesSameSubjectTriplesNodeEmptyPropertyList) {
           ElementsAre(m::BlankNode(true, "0"), m::Iri(rest), m::Iri(nil))));
 }
 
+TEST(SparqlParser, TriplesSameSubjectBlankNodePropertyList) {
+  auto doTest = []<bool allowPath>() {
+    auto input = "[ ?x ?y ] ?a ?b";
+    auto [output, internal] = [&input]() {
+      if constexpr (allowPath) {
+        return std::pair(parse<&Parser::triplesSameSubjectPath>(input),
+                         m::InternalVariable("0"));
+      } else {
+        return std::pair(parse<&Parser::triplesSameSubject, true>(input),
+                         m::BlankNode(true, "0"));
+      }
+    }();
+
+    auto var = m::VariableVariant;
+    expectCompleteParse(
+        output, UnorderedElementsAre(
+                    ::testing::FieldsAre(internal, var("?x"), var("?y")),
+                    ::testing::FieldsAre(internal, var("?a"), var("?b"))));
+  };
+  doTest.template operator()<true>();
+  doTest.template operator()<false>();
+}
+
 TEST(SparqlParser, PropertyList) {
   expectCompleteParse(
       parsePropertyList("a ?a"),
@@ -389,15 +424,25 @@ TEST(SparqlParser, ObjectList) {
 }
 
 TEST(SparqlParser, BlankNodePropertyList) {
-  expectCompleteParse(
-      parse<&Parser::blankNodePropertyList>("[ a ?a ; a ?b ; a ?c ]"),
-      Pair(m::BlankNode(true, "0"),
-           ElementsAre(ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
-                                   m::VariableVariant("?a")),
-                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
-                                   m::VariableVariant("?b")),
-                       ElementsAre(m::BlankNode(true, "0"), m::Iri(type),
-                                   m::VariableVariant("?c")))));
+  auto doMatch = []<bool InsideConstruct>() {
+    const auto blank = [] {
+      if constexpr (InsideConstruct) {
+        return m::BlankNode(true, "0");
+      } else {
+        return m::InternalVariable("0");
+      }
+    }();
+    expectCompleteParse(
+        parse<&Parser::blankNodePropertyList, InsideConstruct>(
+            "[ a ?a ; a ?b ; a ?c ]"),
+        Pair(blank,
+             ElementsAre(
+                 ElementsAre(blank, m::Iri(type), m::VariableVariant("?a")),
+                 ElementsAre(blank, m::Iri(type), m::VariableVariant("?b")),
+                 ElementsAre(blank, m::Iri(type), m::VariableVariant("?c")))));
+  };
+  doMatch.template operator()<true>();
+  doMatch.template operator()<false>();
 }
 
 TEST(SparqlParser, GraphNodeVarOrTerm) {
@@ -704,15 +749,32 @@ TEST(SparqlParser, propertyListPathNotEmpty) {
   auto expectPropertyListPathFails =
       ExpectParseFails<&Parser::propertyListPathNotEmpty>();
   auto Iri = &PropertyPath::fromIri;
-  expectPropertyListPath("<bar> ?foo", {{Iri("<bar>"), Var{"?foo"}}});
+  expectPropertyListPath("<bar> ?foo", {{{Iri("<bar>"), Var{"?foo"}}}, {}});
   expectPropertyListPath(
       "<bar> ?foo ; <mehr> ?f",
-      {{Iri("<bar>"), Var{"?foo"}}, {Iri("<mehr>"), Var{"?f"}}});
-  expectPropertyListPath("<bar> ?foo , ?baz", {{Iri("<bar>"), Var{"?foo"}},
-                                               {Iri("<bar>"), Var{"?baz"}}});
-  // Currently unsupported by QLever
+      {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<mehr>"), Var{"?f"}}}, {}});
+  expectPropertyListPath(
+      "<bar> ?foo , ?baz",
+      {{{Iri("<bar>"), Var{"?foo"}}, {Iri("<bar>"), Var{"?baz"}}}, {}});
+
+  // A more complex example.
   expectPropertyListPathFails("<bar> ( ?foo ?baz )");
-  expectPropertyListPathFails("<bar> [ <foo> ?bar ]");
+  auto V = m::VariableVariant;
+  auto internal0 = m::InternalVariable("0");
+  auto internal1 = m::InternalVariable("1");
+  auto internal2 = m::InternalVariable("2");
+  auto bar = m::Predicate("<bar>");
+  expectPropertyListPath(
+      "?x [?y ?z; <bar> ?b, ?p, [?d ?e], [<bar> ?e]]; ?u ?v",
+      Pair(ElementsAre(Pair(V("?x"), internal0), Pair(V("?u"), V("?v"))),
+           UnorderedElementsAre(
+               ::testing::FieldsAre(internal0, V("?y"), V("?z")),
+               ::testing::FieldsAre(internal0, bar, V("?b")),
+               ::testing::FieldsAre(internal0, bar, V("?p")),
+               ::testing::FieldsAre(internal0, bar, internal1),
+               ::testing::FieldsAre(internal1, V("?d"), V("?e")),
+               ::testing::FieldsAre(internal0, bar, internal2),
+               ::testing::FieldsAre(internal2, bar, V("?e")))));
 }
 
 TEST(SparqlParser, triplesSameSubjectPath) {
@@ -737,8 +799,13 @@ TEST(SparqlParser, triplesSameSubjectPath) {
   expectTriples("<foo> <bar> ?baz ; ?mehr \"a\"",
                 {{Iri("<foo>"), PathIri("<bar>"), Var{"?baz"}},
                  {Iri("<foo>"), Var("?mehr"), Literal("\"a\"")}});
-  expectTriples("_:1 <bar> ?baz",
-                {{BlankNode(false, "1"), PathIri("<bar>"), Var{"?baz"}}});
+  auto expectTriplesConstruct =
+      ExpectCompleteParse<&Parser::triplesSameSubjectPath, true>{};
+  expectTriplesConstruct("_:1 <bar> ?baz", {{BlankNode(false, "1"),
+                                             PathIri("<bar>"), Var{"?baz"}}});
+  expectTriples("_:one <bar> ?baz",
+                {{Var{absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, "one")},
+                  PathIri("<bar>"), Var{"?baz"}}});
   expectTriples("10.0 <bar> true",
                 {{Literal(10.0), PathIri("<bar>"), Literal(true)}});
   expectTriples(

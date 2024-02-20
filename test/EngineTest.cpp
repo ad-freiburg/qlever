@@ -7,26 +7,20 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdio>
-#include <fstream>
-#include <sstream>
-#include <tuple>
 
-#include "./IndexTestHelpers.h"
-#include "./util/AllocatorTestHelpers.h"
-#include "./util/GTestHelpers.h"
-#include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
-#include "engine/Join.h"
 #include "engine/OptionalJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "util/AllocatorTestHelpers.h"
 #include "util/Forward.h"
+#include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
+#include "util/IdTestHelpers.h"
+#include "util/IndexTestHelpers.h"
 #include "util/Random.h"
-#include "util/SourceLocation.h"
 
 using ad_utility::testing::makeAllocator;
 using namespace ad_utility::testing;
@@ -64,12 +58,14 @@ TEST(EngineTest, distinctWithEmptyInput) {
 void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
                       JoinColumns jcls, const IdTable& expectedResult) {
   {
-    // TODO<joka921> Let this use the proper constructor of OptionalJoin.
+    auto* qec = ad_utility::testing::getQec();
     IdTable result{inputA.numColumns() + inputB.numColumns() - jcls.size(),
                    makeAllocator()};
     // Join a and b on the column pairs 1,2 and 2,1 (entries from columns 1 of
     // a have to equal those of column 2 of b and vice versa).
-    OptionalJoin::optionalJoin(inputA, inputB, jcls, &result);
+    OptionalJoin{qec, idTableToExecutionTree(qec, inputA),
+                 idTableToExecutionTree(qec, inputB)}
+        .optionalJoin(inputA, inputB, jcls, &result);
     ASSERT_EQ(expectedResult, result);
   }
 
@@ -98,21 +94,6 @@ void testOptionalJoin(const IdTable& inputA, const IdTable& inputB,
     auto result = opt.computeResultOnlyForTesting();
     ASSERT_EQ(result.idTable(), expectedResult);
   }
-}
-
-// TODO<joka921> This function already exists in another PR in a better version,
-// merge them.
-IdTable makeTable(const std::vector<std::vector<Id>>& input) {
-  size_t numCols = input[0].size();
-  IdTable table{numCols, makeAllocator()};
-  table.reserve(input.size());
-  for (const auto& row : input) {
-    table.emplace_back();
-    for (size_t i = 0; i < table.numColumns(); ++i) {
-      table.back()[i] = row.at(i);
-    }
-  }
-  return table;
 }
 
 TEST(OptionalJoin, singleColumnRightIsEmpty) {
