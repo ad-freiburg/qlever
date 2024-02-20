@@ -1024,8 +1024,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
-  resultTriple[0] = std::move(triple.subject_);
-  resultTriple[1] = std::move(triple.predicate_);
+  resultTriple[0] = std::move(triple.subject_).toRdfLiteral();
+  resultTriple[1] = std::move(triple.predicate_).toInternalRepresentation();
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleComponent`.

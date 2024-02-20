@@ -74,21 +74,21 @@ std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
 }
 TEST(TurtleParserTest, prefixedName) {
   auto runCommonTests = [](auto& parser) {
-    parser.prefixMap_["wd"] = "www.wikidata.org/";
+    parser.prefixMap_["wd"] = iri("<www.wikidata.org/>");
     parser.setInputStream("wd:Q430 someotherContent");
     ASSERT_TRUE(parser.prefixedName());
-    ASSERT_EQ(parser.lastParseResult_, "<www.wikidata.org/Q430>");
+    ASSERT_EQ(parser.lastParseResult_, iri("<www.wikidata.org/Q430>"));
     ASSERT_EQ(parser.getPosition(), size_t(7));
 
     parser.setInputStream(" wd:Q430 someotherContent");
     ASSERT_TRUE(parser.prefixedName());
-    ASSERT_EQ(parser.lastParseResult_, "<www.wikidata.org/Q430>");
+    ASSERT_EQ(parser.lastParseResult_, iri("<www.wikidata.org/Q430>"));
     ASSERT_EQ(parser.getPosition(), 8u);
 
     // empty name
     parser.setInputStream("wd: someotherContent");
     ASSERT_TRUE(parser.prefixedName());
-    ASSERT_EQ(parser.lastParseResult_, "<www.wikidata.org/>");
+    ASSERT_EQ(parser.lastParseResult_, iri("<www.wikidata.org/>"));
     ASSERT_EQ(parser.getPosition(), size_t(3));
 
     parser.setInputStream("<wd.de> rest");
@@ -106,7 +106,7 @@ TEST(TurtleParserTest, prefixedName) {
     runCommonTests(p);
     p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p.lastParseResult_, "<www.wikidata.org/esc,aped>");
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/esc,aped>"));
     ASSERT_EQ(p.getPosition(), 12u);
 
     // escapes at the beginning are illegal, so this is parsed as an empty wd:
@@ -142,12 +142,12 @@ TEST(TurtleParserTest, prefixedName) {
 TEST(TurtleParserTest, prefixID) {
   auto runCommonTests = [](const auto& checker) {
     auto p = checker("@prefix bla:<www.bla.org/> .");
-    ASSERT_EQ(p.prefixMap_["bla"], "www.bla.org/");
+    ASSERT_EQ(p.prefixMap_["bla"], iri("<www.bla.org/>"));
 
     // different spaces that don't change meaning
     std::string s;
     p = checker("@prefix bla: <www.bla.org/>.");
-    ASSERT_EQ(p.prefixMap_["bla"], "www.bla.org/");
+    ASSERT_EQ(p.prefixMap_["bla"], iri("<www.bla.org/>"));
 
     // invalid LL1
     ASSERT_THROW(checker("@prefix bla<www.bla.org/>."),
@@ -219,7 +219,7 @@ TEST(TurtleParserTest, rdfLiteral) {
   }
 
   auto runCommonTests = [](auto p) {
-    p.prefixMap_["doof"] = "www.doof.org/";
+    p.prefixMap_["doof"] = iri("<www.doof.org/>");
 
     string s("\"valuePrefixed\"^^doof:sometype");
     p.setInputStream(s);
@@ -256,7 +256,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
     string blankNodeL = "[<p2> <ob2>; <p3> <ob3>]";
     std::vector<TurtleTriple> exp = {{"_:g_5_0", iri("<p2>"), iri("<ob2>")},
                                      {"_:g_5_0", iri("<p3>"), iri("<ob3>")},
-                                     {"<s>", iri("<p1>"), "_:g_5_0"}};
+                                     {iri("<s>"), iri("<p1>"), "_:g_5_0"}};
     p.setInputStream(blankNodeL);
     p.setBlankNodePrefixOnlyForTesting(5);
     ASSERT_TRUE(p.object());
@@ -297,12 +297,12 @@ TEST(TurtleParserTest, object) {
     auto pred = iri("<pred>");
     p.activeSubject_ = sub;
     p.activePredicate_ = pred;
-    p.prefixMap_["b"] = "bla/";
-    string iri = " b:iri";
-    p.setInputStream(iri);
+    p.prefixMap_["b"] = iri("<bla/>");
+    string input = " b:input";
+    p.setInputStream(input);
     ASSERT_TRUE(p.object());
-    ASSERT_EQ(p.lastParseResult_, "<bla/iri>");
-    auto exp = TurtleTriple{sub, pred, "<bla/iri>"};
+    ASSERT_EQ(p.lastParseResult_, iri("<bla/input>"));
+    auto exp = TurtleTriple{sub, pred, iri("<bla/input>")};
     ASSERT_EQ(p.triples_.back(), exp);
 
     string literal = "\"literal\"";
@@ -350,7 +350,7 @@ TEST(TurtleParserTest, objectList) {
 
 TEST(TurtleParserTest, predicateObjectList) {
   auto runCommonTests = [](auto parser) {
-    parser.activeSubject_ = "<s>";
+    parser.activeSubject_ = iri("<s>");
     string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
     std::vector<TurtleTriple> exp;
     exp.push_back({iri("<s>"), iri("<p1>"), iri("<ob1>")});
@@ -420,7 +420,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:double",
           "<a> <b> \"123kartoffel\"^^xsd:decimal"};
       Parser parser;
-      parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       for (const auto& input : inputs) {
         assertParsingFails(parser, input);
       }
@@ -438,7 +438,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           9999999999999999999999.0, 99999999999999999999E4,
           99999999999999999999E4};
       Parser parser;
-      parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       testTripleObjects(parser, inputs, expectedObjects);
     }
     {
@@ -451,7 +451,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser;
-      parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
       for (const auto& input : nonWorkingInputs) {
@@ -471,7 +471,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           "<a> <b> \"kartoffelsalat\"^^xsd:integer",
           "<a> <b> \"123kartoffel\"^^xsd:integer"};
       Parser parser;
-      parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::AllToDouble;
       for (const auto& input : nonWorkingInputs) {
@@ -518,7 +518,7 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
       std::vector<TurtleTriple> expected{
           {iri("<a>"), iri("<b>"), 99999999999999999999999.0}, {iri("<e>"), iri("<f>"), 234}};
       Parser parser;
-      parser.prefixMap_["xsd"] = "http://www.w3.org/2001/XMLSchema#";
+      parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
       parser.integerOverflowBehavior() =
           TurtleParserIntegerOverflowBehavior::OverflowingToDouble;
@@ -598,7 +598,7 @@ TEST(TurtleParserTest, collection) {
     auto first = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>");
     auto rest = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#rest>");
 
-    checker("()", "<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>");
+    checker("()", nil);
 
     checker("(42 <alpha> \"me\")", TC{"_:g_22_0"}, {},
             std::vector<TT>{{"_:g_22_0", first, 42},

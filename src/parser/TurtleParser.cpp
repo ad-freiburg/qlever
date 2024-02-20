@@ -32,8 +32,7 @@ bool TurtleParser<T>::prefixID() {
     if (check(pnameNS()) && check(iriref()) &&
         check(skip<TurtleTokenId::Dot>())) {
       // strip  the angled brackes <bla> -> bla
-      prefixMap_[activePrefix_] =
-          stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[activePrefix_] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing @prefix definition failed");
@@ -48,7 +47,7 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_[""] = stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[""] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -63,8 +62,7 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      prefixMap_[activePrefix_] =
-          stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[activePrefix_] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing PREFIX definition failed");
@@ -79,7 +77,7 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_[""] = stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[""] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -100,7 +98,7 @@ bool TurtleParser<T>::triples() {
     }
   } else {
     if (blankNodePropertyList()) {
-      activeSubject_ = lastParseResult_.getIri();
+      activeSubject_ = lastParseResult_;
       predicateObjectList();
       return true;
     } else {
@@ -262,8 +260,13 @@ bool TurtleParser<T>::collection() {
     // Add the triples for the linked list structure.
     for (size_t i = 0; i < blankNodes.size(); ++i) {
       triples_.push_back({blankNodes[i], first, objects[i]});
-      triples_.push_back({blankNodes[i], rest,
-                          i + 1 < blankNodes.size() ? blankNodes[i + 1] : nil});
+      if (i+1 < blankNodes.size()) {
+        triples_.push_back({blankNodes[i], rest,
+                             blankNodes[i + 1]});
+      } else {
+        triples_.push_back(
+            {blankNodes[i], rest, nil });
+      }
     }
   }
   check(skip<TurtleTokenId::CloseRound>());
@@ -540,8 +543,7 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  // TODO<joka921> The `activePrefix` should also be an IRI.
-  lastParseResult_ = TripleComponent::Iri::prefixed(TripleComponent::Iri::iriref(activePrefix_), lastParseResult_.getString());
+  lastParseResult_ = TripleComponent::Iri::prefixed(expandPrefix(activePrefix_), lastParseResult_.getString());
   return true;
 }
 

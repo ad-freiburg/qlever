@@ -169,7 +169,7 @@ class TurtleParser : public TurtleParserBase {
 
   // Maps prefixes to their expanded form, initialized with the empty base
   // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, std::string> prefixMap_{{"", ""}};
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
@@ -338,7 +338,7 @@ class TurtleParser : public TurtleParserBase {
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
-  string expandPrefix(const string& prefix) {
+  TripleComponent::Iri expandPrefix(const std::string& prefix) {
     if (!prefixMap_.count(prefix)) {
       raise("Prefix " + prefix +
             " was not previously defined using a PREFIX or @prefix "
