@@ -190,7 +190,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist) {
-  bool useGraphblas = !RuntimeParameters().get<"use-graphblas">();
+  bool useGraphblas = RuntimeParameters().get<"use-graphblas">();
   return makeTransitivePath(qec, child, leftSide, rightSide, minDist, maxDist,
                             useGraphblas);
 }
@@ -256,7 +256,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
 
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
+    AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
     p->variableColumns_[variable] = columnIndexWithType;
+    p->resultWidth_++;
   }
   return p;
 }

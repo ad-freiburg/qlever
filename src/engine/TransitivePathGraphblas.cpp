@@ -322,8 +322,10 @@ std::tuple<GrbMatrix, IdMapping> TransitivePathGraphblas::setupMatrix(
     checkCancellation();
   }
 
+  ad_utility::Timer t{ad_utility::Timer::Started};
   auto matrix =
       GrbMatrix::build(rowIndices, colIndices, mapping.size(), mapping.size());
+  runtimeInfo().addDetail("matrix-build-time-graphblas", t.msecs().count());
   return {std::move(matrix), std::move(mapping)};
 }
 
