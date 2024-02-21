@@ -682,8 +682,11 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
+    LOG(INFO) << "Before planning" << std::endl;
     plannedQuery =
-        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+        //co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+        parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    LOG(INFO) << "After planning" << std::endl;
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();
@@ -802,10 +805,33 @@ Awaitable<T> Server::computeInNewThread(Function function,
 }
 
 // _____________________________________________________________________________
-net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+//net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+Server::PlannedQuery Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
+
+  auto compute =
+           [&query, &qec, enablePatternTrick = enablePatternTrick_,
+            handle = std::move(handle),
+            timeLimit]() mutable -> PlannedQuery {
+    auto pq = SparqlParser::parseQuery(query);
+    handle->throwIfCancelled();
+    QueryPlanner qp(&qec, handle);
+    qp.setEnablePatternTrick(enablePatternTrick);
+    auto qet = qp.createExecutionTree(pq);
+    handle->throwIfCancelled();
+    PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+
+    plannedQuery.queryExecutionTree_.getRootOperation()
+        ->recursivelySetCancellationHandle(std::move(handle));
+    plannedQuery.queryExecutionTree_.getRootOperation()
+        ->recursivelySetTimeConstraint(timeLimit);
+    return plannedQuery;
+  };
+  return compute();
+
+  /*
   auto optionalRes = co_await computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle),
@@ -826,6 +852,7 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
       },
       std::move(handleCopy));
   co_return std::move(optionalRes.value());
+   */
 }
 
 // _____________________________________________________________________________

@@ -12,6 +12,8 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
 endif()
 
+add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
+#set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++

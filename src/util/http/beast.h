@@ -44,6 +44,7 @@
 // recycling and gets rid of all of those errors and crashes.
 // TODO<joka921> Further analyze and then report this bug to the ASIO
 // developers.
+//#define BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING
 #include <boost/asio.hpp>
 #include <boost/asio/ssl/stream.hpp>
 #include <boost/beast.hpp>
