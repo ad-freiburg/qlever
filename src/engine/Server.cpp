@@ -795,6 +795,8 @@ boost::asio::awaitable<void> Server::processQuery(
 template <typename Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
+  co_return std::invoke(std::move(function));
+  /*
   auto inner = [function = std::move(function),
                 handle = std::move(handle)]() mutable -> decltype(auto) {
     handle->resetWatchDogState();
@@ -802,6 +804,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
   };
   return ad_utility::runFunctionOnExecutorUncancellable(
       threadPool_.get_executor(), std::move(inner), net::use_awaitable);
+      */
 }
 
 // _____________________________________________________________________________

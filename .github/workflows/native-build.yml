@@ -2,9 +2,9 @@ name: Native build
 
 on:
   push:
-    branches: [ master ]
+    branches: [ masterx ]
   pull_request:
-    branches: [ master ]
+    branches: [ masterx ]
   merge_group:
 
 concurrency:
