@@ -44,8 +44,6 @@ class GrbMatrix {
   GrbMatrix(const GrbMatrix&) = delete;
   GrbMatrix& operator=(const GrbMatrix&) = delete;
 
-  ~GrbMatrix() { GrB_Matrix_free(matrix_.get()); }
-
   /**
    * @brief Create a matrix and fill it with the data of this matrix.
    *

@@ -15,7 +15,7 @@
 
 // This struct keeps track of the mapping between Ids and matrix indices
 struct IdMapping {
-  bool contains(Id id) { return idMap_.contains(id); }
+  bool contains(Id id) const { return idMap_.contains(id); }
 
   size_t addId(Id id) {
     if (!idMap_.contains(id)) {
@@ -178,7 +178,7 @@ class TransitivePathGraphblas : public TransitivePathBase {
                                 size_t startSideCol, size_t targetSideCol,
                                 size_t skipCol);
 
-  GrbMatrix getTargetRow(GrbMatrix& hull, size_t targetIndex) const;
+  GrbMatrix getTargetRow(const GrbMatrix& hull, size_t targetIndex) const;
 
   /**
    * @brief Create a boolean, sparse adjacency matrix from the given edges. The

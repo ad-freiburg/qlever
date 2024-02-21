@@ -221,8 +221,6 @@ GrbMatrix TransitivePathGraphblas::transitiveHull(
   size_t nvals = result.numNonZero();
   while (nvals > previousNvals && pathLength < maxDist_) {
     previousNvals = result.numNonZero();
-    // TODO: Check effect of matrix orientation (Row major, Column major) on
-    // performance.
     result.accumulateMultiply(graph);
     checkCancellation();
     nvals = result.numNonZero();
@@ -304,9 +302,9 @@ void TransitivePathGraphblas::fillTableWithHull(
 }
 
 // _____________________________________________________________________________
-GrbMatrix TransitivePathGraphblas::getTargetRow(GrbMatrix& hull,
+GrbMatrix TransitivePathGraphblas::getTargetRow(const GrbMatrix& hull,
                                                 size_t targetIndex) const {
-  GrbMatrix transformer = GrbMatrix(hull.numCols(), hull.numCols());
+  auto transformer = GrbMatrix(hull.numCols(), hull.numCols());
   transformer.setElement(targetIndex, targetIndex, true);
   return hull.multiply(transformer);
 }
@@ -341,7 +339,7 @@ GrbMatrix TransitivePathGraphblas::setupStartNodeMatrix(
   // stardIds.size() is the maximum possible number of columns for the
   // startMatrix, but if some start node does not have a link in the graph it
   // will be skipped, resulting in a zero column at the end of the startMatrix
-  GrbMatrix startMatrix = GrbMatrix(startIds.size(), numCols);
+  auto startMatrix = GrbMatrix(startIds.size(), numCols);
   size_t rowIndex = 0;
   for (Id id : startIds) {
     if (!mapping.contains(id)) {

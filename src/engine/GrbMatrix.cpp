@@ -158,6 +158,7 @@ GrbMatrix GrbMatrix::multiply(const GrbMatrix& otherMatrix) const {
   GrbMatrix result;
   auto info = GrB_Matrix_new(result.rawMatrix(), GrB_BOOL, resultNumRows,
                              resultNumCols);
+  handleError(info);
 
   info =
       GrB_mxm(result.matrix(), GrB_NULL, GrB_NULL, GrB_LOR_LAND_SEMIRING_BOOL,

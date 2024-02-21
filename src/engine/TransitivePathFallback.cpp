@@ -17,8 +17,8 @@
 // _____________________________________________________________________________
 TransitivePathFallback::TransitivePathFallback(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist)
+    const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+    size_t minDist, size_t maxDist)
     : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist) {}
 
 // _____________________________________________________________________________

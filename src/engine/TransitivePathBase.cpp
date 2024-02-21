@@ -188,8 +188,8 @@ size_t TransitivePathBase::getCostEstimate() {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist) {
+    const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+    size_t minDist, size_t maxDist) {
   bool useGraphblas = !RuntimeParameters().get<"use-graphblas">();
   return makeTransitivePath(qec, child, leftSide, rightSide, minDist, maxDist,
                             useGraphblas);
@@ -198,14 +198,14 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-    size_t maxDist, bool useGraphblas) {
+    const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+    size_t minDist, size_t maxDist, bool useGraphblas) {
   if (useGraphblas) {
-    return std::make_shared<TransitivePathGraphblas>(TransitivePathGraphblas(
-        qec, child, leftSide, rightSide, minDist, maxDist));
+    return std::make_shared<TransitivePathGraphblas>(
+        qec, child, leftSide, rightSide, minDist, maxDist);
   } else {
-    return std::make_shared<TransitivePathFallback>(TransitivePathFallback(
-        qec, child, leftSide, rightSide, minDist, maxDist));
+    return std::make_shared<TransitivePathFallback>(
+        qec, child, leftSide, rightSide, minDist, maxDist);
   }
 }
 
@@ -257,7 +257,6 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     columnIndexWithType.columnIndex_ += columnIndex > inputCol ? 1 : 2;
 
     p->variableColumns_[variable] = columnIndexWithType;
-    // p->resultWidth_++;
   }
   return p;
 }

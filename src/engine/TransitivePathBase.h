@@ -105,40 +105,70 @@ class TransitivePathBase : public Operation {
   const TransitivePathSide& getRight() const { return rhs_; }
 
  protected:
-  virtual std::string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
  public:
   // virtual void computeTransitivePath(
   //     IdTable* res, const IdTable& sub, const TransitivePathSide& startSide,
   //     const TransitivePathSide& targetSide) const = 0;
 
-  virtual std::string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
-  virtual size_t getResultWidth() const override;
+  size_t getResultWidth() const override;
 
-  virtual vector<ColumnIndex> resultSortedOn() const override;
+  vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override;
+  void setTextLimit(size_t limit) override;
 
-  virtual bool knownEmptyResult() override;
+  bool knownEmptyResult() override;
 
-  virtual float getMultiplicity(size_t col) override;
+  float getMultiplicity(size_t col) override;
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
-  virtual size_t getCostEstimate() override;
+  size_t getCostEstimate() override;
 
+  /**
+   * @brief Make a concrete TransitivePath object using the given parameters.
+   * The concrete object will either be TransitivePathBase or
+   * TransitivePathGraphblas, depending on the useGraphblas flag.
+   *
+   * @param qec QueryExecutionContext for the TransitivePath Operation
+   * @param child QueryExecutionTree for the subquery of the TransitivePath
+   * @param leftSide Settings for the left side of the TransitivePath
+   * @param rightSide Settings for the right side of the TransitivePath
+   * @param minDist Minimum distance a resulting path may have (distance =
+   * number of nodes)
+   * @param maxDist Maximum distance a resulting path may have (distance =
+   * number of nodes)
+   * @param useGraphblas If true, the returned object will be a
+   * TransitivePathGraphblas. Else it will be a TransitivePathFallback
+   */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-      TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist, bool useGraphblas);
+      const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+      size_t minDist, size_t maxDist, bool useGraphblas);
 
+  /**
+   * @brief Make a concrete TransitivePath object using the given parameters.
+   * The concrete object will either be TransitivePathBase or
+   * TransitivePathGraphblas, depending on the runtime constant "use-graphblas".
+   *
+   * @param qec QueryExecutionContext for the TransitivePath Operation
+   * @param child QueryExecutionTree for the subquery of the TransitivePath
+   * @param leftSide Settings for the left side of the TransitivePath
+   * @param rightSide Settings for the right side of the TransitivePath
+   * @param minDist Minimum distance a resulting path may have (distance =
+   * number of nodes)
+   * @param maxDist Maximum distance a resulting path may have (distance =
+   * number of nodes)
+   */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-      TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
-      size_t maxDist);
+      const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+      size_t minDist, size_t maxDist);
 
   vector<QueryExecutionTree*> getChildren() override {
     std::vector<QueryExecutionTree*> res;

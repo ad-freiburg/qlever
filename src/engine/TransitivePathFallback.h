@@ -27,8 +27,8 @@ class TransitivePathFallback : public TransitivePathBase {
  public:
   TransitivePathFallback(QueryExecutionContext* qec,
                          std::shared_ptr<QueryExecutionTree> child,
-                         TransitivePathSide leftSide,
-                         TransitivePathSide rightSide, size_t minDist,
+                         const TransitivePathSide& leftSide,
+                         const TransitivePathSide& rightSide, size_t minDist,
                          size_t maxDist);
 
   /**
