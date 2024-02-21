@@ -1,6 +1,7 @@
 //   Copyright 2023, University of Freiburg,
 //   Chair of Algorithms and Data Structures.
-//   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//   Authors: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
+//            Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #ifndef QLEVER_ASIOHELPERS_H
 #define QLEVER_ASIOHELPERS_H
@@ -22,27 +23,35 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-// Run
 template <typename Strand, typename CompletionToken, std::invocable Function>
 auto runFunctionOnExecutorUncancellable(Strand strand, Function function,
                                         CompletionToken& token) {
-  // TODO<joka921> Use the generic facilities of boost asio.
-  // TODO<joka921> Add tests that strands are correctly given up etc.
-  auto awaitable =
-      [](auto function) -> net::awaitable<std::invoke_result_t<Function>> {
-    co_return std::invoke(function);
+  using Value = std::invoke_result_t<Function>;
+  using Signature = void(std::exception_ptr, Value);
+
+  auto initiatingFunction = [function = std::move(function),
+                             strand](auto&& handler) mutable {
+    auto onExecutor = [function = std::move(function),
+                       handler = AD_FWD(handler)]() mutable {
+      try {
+        // If `function()` throws no exception, we have no
+        // exception_ptr and the return value as the second argument.
+        handler(nullptr, function());
+      } catch (...) {
+        // If `function()` throws, we propagate the exception to the
+        // handler, and have no return value.
+        // TODO<C++23/26> When we get networking+executors, we
+        // hopefully have `setError` method which doesn't need a dummy
+        // return value.
+        Value* ptr = nullptr;
+        handler(std::current_exception(), std::move(*ptr));
+      }
+    };
+
+    net::post(strand, std::move(onExecutor));
   };
-  auto innerAwaitable =
-      [](auto awaitable,
-         auto strand) -> net::awaitable<std::invoke_result_t<Function>> {
-    co_return (co_await net::co_spawn(
-        strand, std::move(awaitable),
-        net::bind_cancellation_slot(net::cancellation_slot{},
-                                    net::use_awaitable)));
-  };
-  return net::co_spawn(
-      strand, innerAwaitable(awaitable(std::move(function)), strand),
-      net::bind_cancellation_slot(net::cancellation_slot{}, token));
+  return net::async_initiate<CompletionToken, Signature>(
+      std::move(initiatingFunction), token);
 }
 }  // namespace ad_utility
 

@@ -177,8 +177,7 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  //net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
-  PlannedQuery parseAndPlan(const std::string& query,
+  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
                                             QueryExecutionContext& qec,
                                             SharedCancellationHandle handle,
                                             TimeLimit timeLimit);
