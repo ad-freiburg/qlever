@@ -93,14 +93,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
     co_await (waitForServerEvents() && handleClientCommands());
-  } catch (const net::multiple_exceptions& e) {
-    // TODO<joka921> We actually have to check, if BOTH the exceptions have the
-    // correct type.
-    if (cancelOnClose_) {
-      tryToCancelQuery();
-    }
-    co_return;
-
   } catch (boost::system::system_error& error) {
     if (cancelOnClose_) {
       tryToCancelQuery();
@@ -132,14 +124,14 @@ net::awaitable<void> WebSocketSession::handleSession(
   auto strand = fetcher.strand();
   WebSocketSession webSocketSession{std::move(fetcher), std::move(socket),
                                     queryRegistry, std::move(queryId)};
+  // There is currently no safe way of which we know that allows us to respawn
+  // the coroutine onto another thread AND make it safely cancellable at the
+  // same time. Therfore we just assert that the cancellation slot is not
+  // connected.
   auto slot = (co_await net::this_coro::cancellation_state).slot();
-  AD_CORRECTNESS_CHECK(!slot.is_connected() || strand.running_in_this_thread());
-  if (strand.running_in_this_thread()) {
-    co_await webSocketSession.acceptAndWait(request);
-  } else {
-    co_await (net::co_spawn(strand, webSocketSession.acceptAndWait(request),
-                            net::deferred));
-  }
+  AD_CORRECTNESS_CHECK(!slot.is_connected());
+  co_await (net::co_spawn(strand, webSocketSession.acceptAndWait(request),
+                          net::deferred));
 }
 // _____________________________________________________________________________
 

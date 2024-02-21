@@ -28,7 +28,7 @@ void deleteFromDistributors(auto socketDistributors, QueryId queryId,
 // _____________________________________________________________________________
 template <bool isSender>
 std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-QueryHub::createOrAcquireDistributorInternal(QueryId queryId) {
+QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
   std::lock_guard l{mutex_};
   auto& distributors = socketDistributors_.get();
   if (distributors.contains(queryId)) {

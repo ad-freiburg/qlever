@@ -799,7 +799,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
     handle->resetWatchDogState();
     return std::invoke(std::move(function));
   };
-  return ad_utility::runFunctionOnExecutorUncancellable(
+  return ad_utility::runFunctionOnExecutor(
       threadPool_.get_executor(), std::move(inner), net::use_awaitable);
 }
 

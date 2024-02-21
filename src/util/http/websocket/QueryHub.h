@@ -63,7 +63,7 @@ class QueryHub {
   template <bool isSender>
   std::shared_ptr<
       QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-      createOrAcquireDistributorInternal(QueryId);
+  createOrAcquireDistributorInternal(const QueryId& queryId);
 
  public:
   explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}

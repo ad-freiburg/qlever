@@ -28,7 +28,7 @@ class UpdateFetcher {
   UpdateFetcher(QueryHub& queryHub, QueryId queryId)
       : queryHub_{queryHub}, queryId_{std::move(queryId)} {}
 
-  auto strand() { return distributor_->strand(); }
+  auto strand() const { return distributor_->strand(); }
 
   /// If an update occurred for the given query since the last time this was
   /// called this resumes immediately. Otherwise it will wait

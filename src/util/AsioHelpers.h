@@ -8,6 +8,7 @@
 
 #include <absl/cleanup/cleanup.h>
 
+#include <boost/asio.hpp>
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/bind_cancellation_slot.hpp>
 #include <boost/asio/cancellation_signal.hpp>
@@ -23,35 +24,68 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
-template <typename Strand, typename CompletionToken, std::invocable Function>
-auto runFunctionOnExecutorUncancellable(Strand strand, Function function,
-                                        CompletionToken& token) {
+// Run the `function` on the `executor` (e.g. a strand for synchronization or
+// the executor of a thread pool). As soon as the function has completed, the
+// completion handler which is obtained from the `completionToken` is posted to
+// its associated executor (which might be different from the `executor`).
+template <typename Executor, typename CompletionToken, std::invocable Function>
+auto runFunctionOnExecutor(Executor executor, Function function,
+                           CompletionToken& completionToken) {
   using Value = std::invoke_result_t<Function>;
-  using Signature = void(std::exception_ptr, Value);
+  static constexpr bool isVoid = std::is_void_v<Value>;
+
+  // Obtain the call signature for the handler.
+  [[maybe_unused]] auto getSignature = []() {
+    if constexpr (isVoid) {
+      return std::type_identity<void(std::exception_ptr)>{};
+    } else {
+      return std::type_identity<void(std::exception_ptr, Value)>{};
+    }
+  };
+  using Signature = typename decltype(getSignature())::type;
 
   auto initiatingFunction = [function = std::move(function),
-                             strand](auto&& handler) mutable {
-    auto onExecutor = [function = std::move(function),
+                             executor](auto&& handler) mutable {
+    auto onExecutor = [executor, function = std::move(function),
                        handler = AD_FWD(handler)]() mutable {
+      auto handlerExec = net::get_associated_executor(handler, executor);
+      auto callHandler = [handlerExec, &handler](auto... args) mutable {
+        auto doCall = [handler = std::move(handler),
+                       ... args = std::move(args)]() mutable {
+          handler(std::move(args)...);
+        };
+        net::post(net::bind_executor(handlerExec, std::move(doCall)));
+      };
       try {
         // If `function()` throws no exception, we have no
         // exception_ptr and the return value as the second argument.
-        handler(nullptr, function());
+        if constexpr (isVoid) {
+          function();
+          callHandler(nullptr);
+        } else {
+          callHandler(nullptr, function());
+        }
       } catch (...) {
         // If `function()` throws, we propagate the exception to the
-        // handler, and have no return value.
-        // TODO<C++23/26> When we get networking+executors, we
-        // hopefully have `setError` method which doesn't need a dummy
-        // return value.
-        Value* ptr = nullptr;
-        handler(std::current_exception(), std::move(*ptr));
+        // handler, and have no return value. Unfortunately we still need to
+        // pass a reference to the handler.
+        if constexpr (isVoid) {
+          callHandler(std::current_exception());
+        } else {
+          auto doCall = [handler = std::move(handler),
+                         ex = std::current_exception()]() mutable {
+            Value* ptr = nullptr;
+            handler(std::move(ex), std::move(*ptr));
+          };
+          net::post(net::bind_executor(handlerExec, std::move(doCall)));
+        }
       }
     };
 
-    net::post(strand, std::move(onExecutor));
+    net::post(executor, std::move(onExecutor));
   };
   return net::async_initiate<CompletionToken, Signature>(
-      std::move(initiatingFunction), token);
+      std::move(initiatingFunction), completionToken);
 }
 }  // namespace ad_utility
 
