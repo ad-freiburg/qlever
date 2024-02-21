@@ -174,7 +174,7 @@ class TurtleParser : public TurtleParserBase {
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
   std::string activePrefix_;
-  TripleComponent activeSubject_ ;
+  TripleComponent activeSubject_;
   TripleComponent::Iri activePredicate_;
   size_t numBlankNodes_ = 0;
 

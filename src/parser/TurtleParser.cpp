@@ -148,7 +148,8 @@ bool TurtleParser<T>::predicateSpecialA() {
   if (auto [success, word] = tok_.template getNextToken<TurtleTokenId::A>();
       success) {
     (void)word;
-    activePredicate_ = TripleComponent::Iri::iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
+    activePredicate_ = TripleComponent::Iri::iriref(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
     return false;
@@ -237,7 +238,8 @@ bool TurtleParser<T>::collection() {
   triples_.resize(triples_.size() - objects.size());
   // TODO<joka921> Move such functionality into a general util.
   auto makeIri = [](std::string_view suffix) {
-    return TripleComponent::Iri::iriref(absl::StrCat("<", RDF_PREFIX, suffix, ">"));
+    return TripleComponent::Iri::iriref(
+        absl::StrCat("<", RDF_PREFIX, suffix, ">"));
   };
   static const auto nil = makeIri("nil");
   static const auto first = makeIri("first");
@@ -260,12 +262,10 @@ bool TurtleParser<T>::collection() {
     // Add the triples for the linked list structure.
     for (size_t i = 0; i < blankNodes.size(); ++i) {
       triples_.push_back({blankNodes[i], first, objects[i]});
-      if (i+1 < blankNodes.size()) {
-        triples_.push_back({blankNodes[i], rest,
-                             blankNodes[i + 1]});
+      if (i + 1 < blankNodes.size()) {
+        triples_.push_back({blankNodes[i], rest, blankNodes[i + 1]});
       } else {
-        triples_.push_back(
-            {blankNodes[i], rest, nil });
+        triples_.push_back({blankNodes[i], rest, nil});
       }
     }
   }
@@ -386,10 +386,10 @@ bool TurtleParser<T>::rdfLiteral() {
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    const auto typeIri = std::move(lastParseResult_.getIri());
+    auto typeIri = std::move(lastParseResult_.getIri());
     std::string_view type = asStringViewUnsafe(typeIri.getContent());
     // TODO<joka921> a `std::string_view` should suffice here.
-    std::string strippedLiteral {asStringViewUnsafe(previous.getContent())};
+    std::string strippedLiteral{asStringViewUnsafe(previous.getContent())};
     try {
       // TODO<joka921> clean this up by moving the check for the types to a
       // separate module.
@@ -428,14 +428,14 @@ bool TurtleParser<T>::rdfLiteral() {
       } else if (type == XSD_GYEAR_TYPE) {
         lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
       } else {
-        previous.addDatatype(std::move(lastParseResult_.getIri()));
+        previous.addDatatype(std::move(typeIri));
         lastParseResult_ = std::move(previous);
       }
       return true;
     } catch (const DateParseException&) {
       LOG(DEBUG)
-          << strippedLiteral
-          << " could not be parsed as a date object of type " << type
+          << strippedLiteral << " could not be parsed as a date object of type "
+          << type
           << ". It is treated as a plain string literal without datatype "
              "instead"
           << std::endl;
@@ -449,7 +449,7 @@ bool TurtleParser<T>::rdfLiteral() {
           << ". It is treated as a plain string literal without datatype "
              "instead"
           << std::endl;
-        lastParseResult_ = std::move(previous);
+      lastParseResult_ = std::move(previous);
       return true;
     } catch (const std::exception& e) {
       raise(e.what());
@@ -517,7 +517,8 @@ bool TurtleParser<T>::stringParse() {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
-  lastParseResult_ = TripleComponent::Literal::literalWithQuotes(view.substr(0, endPos + startPos));
+  lastParseResult_ = TripleComponent::Literal::literalWithQuotes(
+      view.substr(0, endPos + startPos));
   tok_.remove_prefix(endPos + startPos);
   return true;
 }
@@ -543,7 +544,8 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  lastParseResult_ = TripleComponent::Iri::prefixed(expandPrefix(activePrefix_), lastParseResult_.getString());
+  lastParseResult_ = TripleComponent::Iri::prefixed(
+      expandPrefix(activePrefix_), lastParseResult_.getString());
   return true;
 }
 
@@ -642,7 +644,8 @@ bool TurtleParser<T>::iriref() {
         raise("Parsing IRI ref (IRI without prefix) failed");
       } else {
         tok_.remove_prefix(endPos + 1);
-        lastParseResult_ = TripleComponent::Iri::iriref(view.substr(0, endPos + 1));
+        lastParseResult_ =
+            TripleComponent::Iri::iriref(view.substr(0, endPos + 1));
         return true;
       }
     } else {
@@ -652,7 +655,8 @@ bool TurtleParser<T>::iriref() {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
       return false;
     }
-    lastParseResult_ = TripleComponent::Iri::iriref(lastParseResult_.getString());
+    lastParseResult_ =
+        TripleComponent::Iri::iriref(lastParseResult_.getString());
     return true;
   }
 }

@@ -12,18 +12,19 @@ namespace ad_utility::testing {
 // `TripleComponent`. The contents of the literal are obtained by normalizing
 // `literal` (which must be enclosed in double quotes) and the optional
 // `langtagOrDatatype` (which must start with `@` or `^^`).
-inline auto tripleComponentLiteral =
-    [](const std::string& literal, std::string_view langtagOrDatatype = "") {
-      if (langtagOrDatatype.starts_with("@")) {
-        return TripleComponent::Literal::literalWithQuotes(literal, std::string(langtagOrDatatype));
-      } else if (langtagOrDatatype.starts_with("^^")) {
-        auto iri = ad_utility::triple_component::Iri::iriref(
-            langtagOrDatatype.substr(2));
-        return TripleComponent::Literal::literalWithQuotes(literal,
-                                                                std::move(iri));
-      } else {
-        AD_CONTRACT_CHECK(langtagOrDatatype.empty());
-        return TripleComponent::Literal::literalWithQuotes(literal);
-      }
-    };
+inline auto tripleComponentLiteral = [](const std::string& literal,
+                                        std::string_view langtagOrDatatype =
+                                            "") {
+  if (langtagOrDatatype.starts_with("@")) {
+    return TripleComponent::Literal::literalWithQuotes(
+        literal, std::string(langtagOrDatatype));
+  } else if (langtagOrDatatype.starts_with("^^")) {
+    auto iri =
+        ad_utility::triple_component::Iri::iriref(langtagOrDatatype.substr(2));
+    return TripleComponent::Literal::literalWithQuotes(literal, std::move(iri));
+  } else {
+    AD_CONTRACT_CHECK(langtagOrDatatype.empty());
+    return TripleComponent::Literal::literalWithQuotes(literal);
+  }
+};
 }  // namespace ad_utility::testing

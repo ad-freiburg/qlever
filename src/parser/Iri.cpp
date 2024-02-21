@@ -26,8 +26,8 @@ Iri Iri::iriref(std::string_view stringWithBrackets) {
 
 // __________________________________________
 Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
-  return Iri{std::move(prefix),
-             RdfEscaping::normalizeIriWithoutBrackets(suffix)};
+  auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
+  return Iri{std::move(prefix), asNormalizedStringViewUnsafe(suffixNormalized)};
 }
 
 }  // namespace ad_utility::triple_component

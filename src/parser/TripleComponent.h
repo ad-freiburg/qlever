@@ -147,15 +147,9 @@ class TripleComponent {
   }
    */
 
-  bool isLiteral() const {
-    return std::holds_alternative<Literal>(_variant);
-  }
-  Literal& getLiteral() {
-    return std::get<Literal>(_variant);
-  }
-  const Literal& getLiteral() const {
-    return std::get<Literal>(_variant);
-  }
+  bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
+  Literal& getLiteral() { return std::get<Literal>(_variant); }
+  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
 
   bool isIri() const { return std::holds_alternative<Iri>(_variant); }
 
@@ -164,7 +158,8 @@ class TripleComponent {
 
   /*
   LiteralOrIri& getLiteralOrIri() { return std::get<LiteralOrIri>(_variant); }
-  const LiteralOrIri& getLiteralOrIri() const { return std::get<LiteralOrIri>(_variant); }
+  const LiteralOrIri& getLiteralOrIri() const { return
+  std::get<LiteralOrIri>(_variant); }
    */
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }

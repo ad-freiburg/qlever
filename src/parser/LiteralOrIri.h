@@ -16,12 +16,12 @@ class LiteralOrIri {
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
 
-public:
+ public:
   // Return contained Iri object if available, throw exception otherwise
- const Iri& getIri() const;
- Iri& getIri();
+  const Iri& getIri() const;
+  Iri& getIri();
 
- // Return contained Literal object if available, throw exception
+  // Return contained Literal object if available, throw exception
   // otherwise
   const Literal& getLiteral() const;
   Literal& getLiteral();

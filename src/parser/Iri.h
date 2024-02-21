@@ -32,7 +32,8 @@ class Iri {
   Iri() = default;
   template <typename H>
   friend H AbslHashValue(H h, const std::same_as<Iri> auto& iri) {
-    return H::combine(std::move(h), asStringViewUnsafe(NormalizedStringView(iri.iri_)));
+    return H::combine(std::move(h),
+                      asStringViewUnsafe(NormalizedStringView(iri.iri_)));
   }
   bool operator==(const Iri&) const = default;
   static Iri fromInternalRepresentation(std::string_view s) {

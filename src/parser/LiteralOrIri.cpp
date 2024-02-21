@@ -57,14 +57,14 @@ const Literal& LiteralOrIri::getLiteral() const {
   return std::get<Literal>(data_);
 }
 // __________________________________________
-    Literal& LiteralOrIri::getLiteral() {
-        if (!isLiteral()) {
-            AD_THROW(
-                    "LiteralOrIri object does not contain an Literal object and "
-                    "thus cannot return it");
-        }
-        return std::get<Literal>(data_);
-    }
+Literal& LiteralOrIri::getLiteral() {
+  if (!isLiteral()) {
+    AD_THROW(
+        "LiteralOrIri object does not contain an Literal object and "
+        "thus cannot return it");
+  }
+  return std::get<Literal>(data_);
+}
 
 // __________________________________________
 bool LiteralOrIri::hasLanguageTag() const {
@@ -123,7 +123,7 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
   return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
                                                     std::move(descriptor)));
 }
-void LiteralOrIri:: addLanguageTag(std::string_view languageTag) {
+void LiteralOrIri::addLanguageTag(std::string_view languageTag) {
   getLiteral().addLanguageTag(languageTag);
 }
 

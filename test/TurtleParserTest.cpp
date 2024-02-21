@@ -19,10 +19,8 @@ using CtreParser = TurtleStringParser<TokenizerCtre>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = [](std::string_view s) {
-  return TripleComponent::Iri::iriref(s);
-};
-}
+auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
+}  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
 // of this file. Set up a `Parser` with the given `input` and call the given
@@ -69,7 +67,8 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.predicate_.toInternalRepresentation() << " " << tr.object_ << ")";
+  os << "( " << tr.subject_ << " " << tr.predicate_.toInternalRepresentation()
+     << " " << tr.object_ << ")";
   return os;
 }
 TEST(TurtleParserTest, prefixedName) {
@@ -112,12 +111,12 @@ TEST(TurtleParserTest, prefixedName) {
     // escapes at the beginning are illegal, so this is parsed as an empty wd:
     p.setInputStream(R"(wd:\\esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p.lastParseResult_, "<www.wikidata.org/>");
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/>"));
     ASSERT_EQ(p.getPosition(), 3u);
 
     p.setInputStream(R"(wd:esc\,aped\.)");
     ASSERT_TRUE(p.prefixedName());
-    ASSERT_EQ(p.lastParseResult_, "<www.wikidata.org/esc,aped.>");
+    ASSERT_EQ(p.lastParseResult_, iri("<www.wikidata.org/esc,aped.>"));
     ASSERT_EQ(p.getPosition(), 14u);
   }
 
@@ -516,7 +515,8 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
           "<a> <b> 99999999999999999999999. <c> <d> \"invalid\"^^xsd:integer . "
           "<e> <f> 234"};
       std::vector<TurtleTriple> expected{
-          {iri("<a>"), iri("<b>"), 99999999999999999999999.0}, {iri("<e>"), iri("<f>"), 234}};
+          {iri("<a>"), iri("<b>"), 99999999999999999999999.0},
+          {iri("<e>"), iri("<f>"), 234}};
       Parser parser;
       parser.prefixMap_["xsd"] = iri("<http://www.w3.org/2001/XMLSchema#>");
       parser.invalidLiteralsAreSkipped() = true;
@@ -618,7 +618,7 @@ void sortTriples(std::vector<TurtleTriple>& triples) {
     return std::tie(t.subject_, t.predicate_, t.object_.getString());
   };
   // TODO<joka921> Reinstate
-  //std::ranges::sort(triples, std::less{}, toRef);
+  // std::ranges::sort(triples, std::less{}, toRef);
 }
 
 // Parse the file at `filename` using a parser of type `Parser` and return the
