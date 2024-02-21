@@ -38,7 +38,7 @@ class Literal {
   // already be normalized
   static Literal literalWithNormalizedContent(
       NormalizedString normalizedRdfContent,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
  public:
   template <typename H>
@@ -47,48 +47,10 @@ class Literal {
   }
   bool operator==(const Literal&) const = default;
 
-  std::string toInternalRepresentation() const {
-    char c = 0;
-    auto first = std::string_view{&c, 1};
-    uint64_t sz = getContent().size();
-    if (hasLanguageTag()) {
-      sz |= (1ul << 63);
-    }
-    std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
-    if (hasLanguageTag()) {
-      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()),
-                          asStringViewUnsafe(getLanguageTag()));
-    } else if (hasDatatype()) {
-      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()),
-                          asStringViewUnsafe(getDatatype().getContent()));
-    } else {
-      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()));
-    }
-  }
+  std::string toInternalRepresentation() const;
 
-  static Literal fromInternalRepresentation(std::string_view internal) {
-    // TODO<joka921> checkSizes.
-    // TODO<joka921> Check that it is indeed a literal.
-    internal.remove_prefix(1);
-    uint64_t sz;
-    std::memcpy(&sz, internal.data(), sizeof(sz));
-    internal.remove_prefix(sizeof(sz));
-    bool hasLanguageTag = sz &= (1ul << 63);
-    sz ^= (1ul << 63);
-    bool hasDatatype = !hasLanguageTag && internal.size() > sz;
+  static Literal fromInternalRepresentation(std::string_view internal);
 
-    auto content = internal.substr(0, sz);
-    auto remainder = internal.substr(sz);
-    if (hasLanguageTag) {
-      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                     NormalizedString{asNormalizedStringViewUnsafe(remainder)}};
-    } else if (hasDatatype) {
-      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                     Iri::fromInternalRepresentation(remainder)};
-    } else {
-      return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)}};
-    }
-  }
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
 
@@ -111,7 +73,7 @@ class Literal {
   // LiteralORIri::literalWithQuotes
   static Literal literalWithQuotes(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);
   void addDatatype(Iri datatype);
@@ -120,6 +82,6 @@ class Literal {
   // LiteralORIri::literalWithoutQuotes
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 };
 }  // namespace ad_utility::triple_component

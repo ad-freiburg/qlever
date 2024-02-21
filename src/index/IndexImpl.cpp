@@ -1024,8 +1024,14 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     TurtleTriple&& triple) const {
   LangtagAndTriple result{"", {}};
   auto& resultTriple = result.triple_;
-  resultTriple[0] = std::move(triple.subject_).toRdfLiteral();
-  resultTriple[1] = std::move(triple.predicate_).toInternalRepresentation();
+  resultTriple[0] = std::move(triple.subject_);
+  resultTriple[1] = TripleComponent{std::move(triple.predicate_)};
+  if (triple.object_.isLiteral()) {
+    const auto& lit = triple.object_.getLiteral();
+    if (lit.hasLanguageTag()) {
+      result.langtag_ = std::string(asStringViewUnsafe(lit.getLanguageTag()));
+    }
+  }
 
   // If the object of the triple can be directly folded into an ID, do so. Note
   // that the actual folding is done by the `TripleComponent`.
@@ -1037,7 +1043,7 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     resultTriple[2] = idIfNotString.value();
   } else {
     // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple.object_).toRdfLiteral();
+    resultTriple[2] = std::move(triple.object_);
   }
 
   for (size_t i = 0; i < 3; ++i) {
@@ -1048,13 +1054,11 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
     auto& iriOrLiteral = component.iriOrLiteral_;
-    iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    if (vocab_.shouldBeExternalized(iriOrLiteral)) {
+    // TODO<joka921> Perform this normalization inside the `IriOrLiteralClass`.
+    // iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    // TODO<joka921> Fix this, and make it work.
+    if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
-    }
-    // Only the third element (the object) might contain a language tag.
-    if (i == 2 && isLiteral(iriOrLiteral)) {
-      result.langtag_ = decltype(vocab_)::getLanguage(iriOrLiteral);
     }
   }
   return result;

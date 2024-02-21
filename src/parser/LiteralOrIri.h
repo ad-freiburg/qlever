@@ -4,12 +4,19 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
+
 #include <variant>
 
 #include "parser/Iri.h"
 #include "parser/Literal.h"
+#include "util/Exception.h"
 
 namespace ad_utility::triple_component {
+static constexpr char literalPrefixChar = 1;
+static constexpr char iriPrefixChar = 2;
+static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
+static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // A wrapper class that can contain either an Iri or a Literal object.
 class LiteralOrIri {
  private:
@@ -40,10 +47,11 @@ class LiteralOrIri {
   }
 
   static LiteralOrIri fromInternalRepresentation(std::string_view internal) {
-    bool isIri = internal.front();
-    if (isIri) {
+    char tag = internal.front();
+    if (tag == iriPrefixChar) {
       return LiteralOrIri{Iri::fromInternalRepresentation(internal)};
     } else {
+      AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
       return LiteralOrIri{Literal::fromInternalRepresentation(internal)};
     }
   }
@@ -101,13 +109,13 @@ class LiteralOrIri {
   //   without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Similar to `literalWithQuotes`, except the rdfContent is expected to NOT BE
   // surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets
   static LiteralOrIri iriref(const std::string& stringWithBrackets);

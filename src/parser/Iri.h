@@ -36,16 +36,10 @@ class Iri {
                       asStringViewUnsafe(NormalizedStringView(iri.iri_)));
   }
   bool operator==(const Iri&) const = default;
-  static Iri fromInternalRepresentation(std::string_view s) {
-    // TODO<joka921> check the tag.
-    s.remove_prefix(1);
-    return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
-  }
-  std::string toInternalRepresentation() const {
-    char c = 1;
-    std::string_view first {&c, 1};
-    return absl::StrCat(first, asStringViewUnsafe(getContent()));
-  }
+  static Iri fromInternalRepresentation(std::string_view s);
+
+  std::string toInternalRepresentation() const;
+
   // Create a new iri given an iri with brackets
   static Iri iriref(std::string_view stringWithBrackets);
 

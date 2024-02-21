@@ -8,6 +8,8 @@
 #include <string>
 #include <string_view>
 
+#include "parser/LiteralOrIri.h"
+
 namespace ad_utility {
 
 //! Convert a language tag like "@en" to the corresponding entity uri
@@ -15,4 +17,6 @@ namespace ad_utility {
 std::string convertLangtagToEntityUri(const std::string& tag);
 std::string convertToLanguageTaggedPredicate(const std::string& pred,
                                              const std::string& langtag);
+triple_component::Iri convertToLanguageTaggedPredicate(
+    const triple_component::Iri& pred, const std::string& langtag);
 }  // namespace ad_utility

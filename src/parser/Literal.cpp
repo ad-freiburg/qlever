@@ -7,6 +7,8 @@
 #include <utility>
 #include <variant>
 
+#include "parser/LiteralOrIri.h"
+
 namespace ad_utility::triple_component {
 // __________________________________________
 Literal::Literal(NormalizedString content) : content_{std::move(content)} {}
@@ -97,5 +99,48 @@ void Literal::addLanguageTag(std::string_view languageTag) {
 }
 
 void Literal::addDatatype(Iri datatype) { descriptor_ = std::move(datatype); }
+
+std::string Literal::toInternalRepresentation() const {
+  auto first = literalPrefix;
+  uint64_t sz = getContent().size();
+  if (hasLanguageTag()) {
+    sz |= (1ul << 63);
+  }
+  std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
+  if (hasLanguageTag()) {
+    return absl::StrCat(first, asStringViewUnsafe(getContent()),
+                        asStringViewUnsafe(getLanguageTag()), metaData);
+  } else if (hasDatatype()) {
+    return absl::StrCat(first, asStringViewUnsafe(getContent()),
+                        asStringViewUnsafe(getDatatype().getContent()),
+                        metaData);
+  } else {
+    return absl::StrCat(first, asStringViewUnsafe(getContent()), metaData);
+  }
+}
+
+Literal Literal::fromInternalRepresentation(std::string_view internal) {
+  // TODO<joka921> checkSizes.
+  // TODO<joka921> Check that it is indeed a literal.
+  internal.remove_prefix(1);
+  uint64_t sz;
+  std::memcpy(&sz, internal.data() + internal.size() - sizeof(sz), sizeof(sz));
+  internal.remove_suffix(sizeof(sz));
+  bool hasLanguageTag = sz &= (1ul << 63);
+  sz ^= (1ul << 63);
+  bool hasDatatype = !hasLanguageTag && internal.size() > sz;
+
+  auto content = internal.substr(0, sz);
+  auto remainder = internal.substr(sz);
+  if (hasLanguageTag) {
+    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                   NormalizedString{asNormalizedStringViewUnsafe(remainder)}};
+  } else if (hasDatatype) {
+    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                   Iri::fromInternalRepresentation(remainder)};
+  } else {
+    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)}};
+  }
+}
 
 }  // namespace ad_utility::triple_component

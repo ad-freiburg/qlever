@@ -339,13 +339,14 @@ TEST(IndexTest, emptyIndex) {
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
-MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
-  if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(arg)) {
-    return false;
-  }
-  const auto& el = std::get<PossiblyExternalizedIriOrLiteral>(arg);
-  return (el.iriOrLiteral_ == content) && (isExternal == el.isExternal_);
-}
+
+auto IsPossiblyExternalString = [](std::string_view content, bool isExternal) {
+  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
+      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
+                                ::testing::Eq(content)),
+                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
+                                ::testing::Eq(isExternal))));
+};
 
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
@@ -354,10 +355,16 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                               lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", false));
-    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
-    EXPECT_THAT(res.triple_[2], IsPossiblyExternalString("\"literal\"", false));
+    EXPECT_TRUE(res.langtag_.empty());
+    EXPECT_THAT(res.triple_[0],
+                IsPossiblyExternalString(
+                    iri("<subject>").toInternalRepresentation(), false));
+    EXPECT_THAT(res.triple_[1],
+                IsPossiblyExternalString(
+                    iri("<predicate>").toInternalRepresentation(), false));
+    EXPECT_THAT(res.triple_[2],
+                IsPossiblyExternalString(
+                    lit("\"literal\"").toInternalRepresentation(), false));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -367,19 +374,25 @@ TEST(IndexTest, TripleToInternalRepresentation) {
                               lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", true));
-    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
+    EXPECT_EQ(res.langtag_, "fr");
+    EXPECT_THAT(res.triple_[0],
+                IsPossiblyExternalString(
+                    iri("<subject>").toInternalRepresentation(), true));
+    EXPECT_THAT(res.triple_[1],
+                IsPossiblyExternalString(
+                    iri("<predicate>").toInternalRepresentation(), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(res.triple_[2],
-                IsPossiblyExternalString("\"literal\"@fr", true));
+    EXPECT_THAT(
+        res.triple_[2],
+        IsPossiblyExternalString(
+            lit("\"literal\"", "@fr").toInternalRepresentation(), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
   }
 }
 
@@ -395,14 +408,15 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return id;
   };
 
-  Id qlLangtag =
-      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
-  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
-  Id enLabel = getId("@en@<label>");
   Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
   Id lastLiteral = getId("\"zz\"@en");
   Id x = getId("<x>");
+  Id enLabel =
+      getId(ad_utility::convertToLanguageTaggedPredicate("<label>", "en"));
+  Id qlLangtag =
+      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
+  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
 
   auto increment = [](Id id) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());

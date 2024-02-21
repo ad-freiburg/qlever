@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "parser/LiteralOrIri.h"
 #include "util/StringUtils.h"
 
 namespace ad_utility::triple_component {
@@ -28,6 +29,16 @@ Iri Iri::iriref(std::string_view stringWithBrackets) {
 Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
   return Iri{std::move(prefix), asNormalizedStringViewUnsafe(suffixNormalized)};
+}
+
+Iri Iri::fromInternalRepresentation(std::string_view s) {
+  // TODO<joka921> check the tag.
+  s.remove_prefix(1);
+  return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
+}
+std::string Iri::toInternalRepresentation() const {
+  auto first = iriPrefix;
+  return absl::StrCat(first, asStringViewUnsafe(getContent()));
 }
 
 }  // namespace ad_utility::triple_component
