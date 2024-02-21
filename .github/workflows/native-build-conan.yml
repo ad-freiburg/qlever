@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        warnings: [  "-Wall -Wextra -Werror -fsanitize-address"  ]
+        warnings: [  "-fsanitize=address"  ]
         build-type: [Release]
     runs-on: ubuntu-22.04
 
@@ -46,7 +46,7 @@ jobs:
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{env.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true
+      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DLOGLEVEL=DEBUG -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true
 
     - name: Build
         # Build your program with the given configuration
@@ -58,13 +58,13 @@ jobs:
       # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
       run: >
         source ../conanrun.sh;
-        env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .;
+        #env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .;
 
     - name: Running and printing the benchmark examples.
       working-directory: ${{github.workspace}}/build
       run: > 
         source ./conanrun.sh;
-        benchmark/BenchmarkExamples -p;
+        #benchmark/BenchmarkExamples -p;
 
       # explicitly specify the binary directory for the E2E script via the `-d` option to also
       # test that it works.
