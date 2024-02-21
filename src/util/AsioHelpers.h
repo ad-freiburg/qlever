@@ -48,7 +48,11 @@ auto runFunctionOnExecutor(Executor executor, Function function,
                              executor](auto&& handler) mutable {
     auto onExecutor = [executor, function = std::move(function),
                        handler = AD_FWD(handler)]() mutable {
+      // Get the executor of the completion handler, to which we will post the
+      // handler.
       auto handlerExec = net::get_associated_executor(handler, executor);
+      // Call the completion handler with the given arguments, but post this
+      // calling to the `handlerExec`.
       auto callHandler = [handlerExec, &handler](auto... args) mutable {
         auto doCall = [handler = std::move(handler),
                        ... args = std::move(args)]() mutable {
