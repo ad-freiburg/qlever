@@ -56,13 +56,10 @@ void TransitivePathFallback::computeTransitivePathBound(
   timer.stop();
   auto fillTime = timer.msecs();
 
-  LOG(DEBUG) << "Fallback Timing measurements:" << std::endl;
-  LOG(DEBUG) << "Initialization time: " << std::to_string(initTime.count())
-             << "ms" << std::endl;
-  LOG(DEBUG) << "Hull computation time: " << std::to_string(hullTime.count())
-             << "ms" << std::endl;
-  LOG(DEBUG) << "IdTable fill time: " << std::to_string(fillTime.count())
-             << "ms" << std::endl;
+  auto& info = runtimeInfo();
+  info.addDetail("Initialization time", initTime.count());
+  info.addDetail("Hull time", hullTime.count());
+  info.addDetail("IdTable fill time", fillTime.count());
 
   *dynRes = std::move(res).toDynamic();
 }
@@ -101,13 +98,10 @@ void TransitivePathFallback::computeTransitivePath(
   timer.stop();
   auto fillTime = timer.msecs();
 
-  LOG(DEBUG) << "Fallback Timing measurements:" << std::endl;
-  LOG(DEBUG) << "Initialization time: " << std::to_string(initTime.count())
-             << "ms" << std::endl;
-  LOG(DEBUG) << "Hull computation time: " << std::to_string(hullTime.count())
-             << "ms" << std::endl;
-  LOG(DEBUG) << "IdTable fill time: " << std::to_string(fillTime.count())
-             << "ms" << std::endl;
+  auto& info = runtimeInfo();
+  info.addDetail("Initialization time", initTime.count());
+  info.addDetail("Hull time", hullTime.count());
+  info.addDetail("IdTable fill time", fillTime.count());
 
   *dynRes = std::move(res).toDynamic();
 }
