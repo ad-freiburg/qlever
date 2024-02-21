@@ -48,24 +48,28 @@ class Literal {
   bool operator==(const Literal&) const = default;
 
   std::string toInternalRepresentation() const {
+    char c = 0;
+    auto first = std::string_view{&c, 1};
     uint64_t sz = getContent().size();
     if (hasLanguageTag()) {
       sz |= (1ul << 63);
     }
     std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
     if (hasLanguageTag()) {
-      return absl::StrCat(metaData, asStringViewUnsafe(getContent()),
+      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()),
                           asStringViewUnsafe(getLanguageTag()));
     } else if (hasDatatype()) {
-      return absl::StrCat(metaData, asStringViewUnsafe(getContent()),
+      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()),
                           asStringViewUnsafe(getDatatype().getContent()));
     } else {
-      return absl::StrCat(metaData, asStringViewUnsafe(getContent()));
+      return absl::StrCat(first, metaData, asStringViewUnsafe(getContent()));
     }
   }
 
   static Literal fromInternalRepresentation(std::string_view internal) {
     // TODO<joka921> checkSizes.
+    // TODO<joka921> Check that it is indeed a literal.
+    internal.remove_prefix(1);
     uint64_t sz;
     std::memcpy(&sz, internal.data(), sizeof(sz));
     internal.remove_prefix(sizeof(sz));

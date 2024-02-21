@@ -33,21 +33,18 @@ class LiteralOrIri {
   explicit LiteralOrIri(Iri iri);
 
   std::string toInternalRepresentation() const {
-    char c = static_cast<char>(isLiteral());
-    std::string_view first{&c, 1};
-    auto impl = [first](const auto& val) {
-      return absl::StrCat(first, val.toInternalRepresentation());
+    auto impl = [](const auto& val) {
+      return absl::StrCat(val.toInternalRepresentation());
     };
     return std::visit(impl, data_);
   }
 
   static LiteralOrIri fromInternalRepresentation(std::string_view internal) {
-    bool isLiteral = internal.front();
-    internal.remove_prefix(1);
-    if (isLiteral) {
-      return LiteralOrIri{Literal::fromInternalRepresentation(internal)};
-    } else {
+    bool isIri = internal.front();
+    if (isIri) {
       return LiteralOrIri{Iri::fromInternalRepresentation(internal)};
+    } else {
+      return LiteralOrIri{Literal::fromInternalRepresentation(internal)};
     }
   }
   template <typename H>
