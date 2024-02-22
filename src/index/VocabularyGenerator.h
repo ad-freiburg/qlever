@@ -72,7 +72,8 @@ class VocabularyMerger {
 
     size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
                                 // the vocabulary)
-    IdRangeForPrefix langTaggedPredicates_{"@"};
+    IdRangeForPrefix langTaggedPredicates_{
+        std::string{ad_utility::languageTaggedPredicatePrefix}};
     IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
 
     // Return true iff the `id` belongs to one of the two ranges that contain

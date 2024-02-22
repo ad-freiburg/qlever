@@ -9,9 +9,12 @@
 #include <string_view>
 
 #include "parser/LiteralOrIri.h"
+#include "util/StringUtils.h"
 
 namespace ad_utility {
 
+static constexpr std::string_view languageTaggedPredicatePrefix =
+    "<ql:langtagged";
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
 std::string convertLangtagToEntityUri(const std::string& tag);

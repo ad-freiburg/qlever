@@ -871,8 +871,8 @@ TEST(SparqlExpression, ReplaceExpression) {
 // ______________________________________________________________________________
 TEST(SparqlExpression, literalExpression) {
   TestContext ctx;
-  StringLiteralExpression expr{TripleComponent::Literal{
-      RdfEscaping::normalizeRDFLiteral("\"notInTheVocabulary\"")}};
+  StringLiteralExpression expr{
+      TripleComponent::Literal::literalWithQuotes("\"notInTheVocabulary\"")};
   // Evaluate multiple times to test the caching behavior.
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),

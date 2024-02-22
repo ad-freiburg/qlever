@@ -54,7 +54,10 @@ class LiteralExpression : public SparqlExpression {
       return result;
     };
     if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
-      return getIdOrString(_value.rawContent());
+      AD_FAIL();
+      // TODO<joka921> We need a `getId` method that directly takes an IRI or a
+      // literal.
+      // return getIdOrString(_value.rawContent());
     } else if constexpr (std::is_same_v<string, T>) {
       return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
@@ -99,7 +102,7 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-      return absl::StrCat("#literal: ", _value.rawContent());
+      return absl::StrCat("#literal: ", _value.toInternalRepresentation());
     } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<ValueId>>) {
       // We should never cache this, as objects of this type of expression are
       // used exactly *once* in the HashMap optimization of the GROUP BY

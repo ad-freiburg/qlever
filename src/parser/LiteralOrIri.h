@@ -13,8 +13,8 @@
 #include "util/Exception.h"
 
 namespace ad_utility::triple_component {
-static constexpr char literalPrefixChar = 1;
-static constexpr char iriPrefixChar = 2;
+static constexpr char literalPrefixChar = '"';
+static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
 static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // A wrapper class that can contain either an Iri or a Literal object.

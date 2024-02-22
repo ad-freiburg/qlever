@@ -108,38 +108,34 @@ std::string Literal::toInternalRepresentation() const {
   }
   std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
   if (hasLanguageTag()) {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()),
-                        asStringViewUnsafe(getLanguageTag()), metaData);
+    return absl::StrCat(first, asStringViewUnsafe(getContent()), first, "@",
+                        asStringViewUnsafe(getLanguageTag()));
   } else if (hasDatatype()) {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()),
-                        asStringViewUnsafe(getDatatype().getContent()),
-                        metaData);
+    return absl::StrCat(first, asStringViewUnsafe(getContent()), first, "^^<",
+                        asStringViewUnsafe(getDatatype().getContent()), ">");
   } else {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()), metaData);
+    return absl::StrCat(first, asStringViewUnsafe(getContent()), first);
   }
 }
 
-Literal Literal::fromInternalRepresentation(std::string_view internal) {
+Literal Literal::fromInternalRepresentation(std::string_view input) {
+  // TODO<joka921> handle the escaping correctly.
   // TODO<joka921> checkSizes.
   // TODO<joka921> Check that it is indeed a literal.
-  internal.remove_prefix(1);
-  uint64_t sz;
-  std::memcpy(&sz, internal.data() + internal.size() - sizeof(sz), sizeof(sz));
-  internal.remove_suffix(sizeof(sz));
-  bool hasLanguageTag = sz &= (1ul << 63);
-  sz ^= (1ul << 63);
-  bool hasDatatype = !hasLanguageTag && internal.size() > sz;
-
-  auto content = internal.substr(0, sz);
-  auto remainder = internal.substr(sz);
-  if (hasLanguageTag) {
-    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                   NormalizedString{asNormalizedStringViewUnsafe(remainder)}};
-  } else if (hasDatatype) {
-    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                   Iri::fromInternalRepresentation(remainder)};
-  } else {
+  auto posLastQuote = static_cast<int64_t>(input.rfind('"'));
+  AD_CORRECTNESS_CHECK(posLastQuote > 0 && posLastQuote < input.size());
+  std::string_view content = input.substr(1, posLastQuote - 1);
+  if (posLastQuote + 1 == input.size()) {
     return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)}};
+  } else if (input[posLastQuote + 1] == '@') {
+    std::string_view langtag = input.substr(posLastQuote + 2);
+    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                   NormalizedString{asNormalizedStringViewUnsafe(langtag)}};
+  } else {
+    AD_CORRECTNESS_CHECK(input[posLastQuote + 1] == '^');
+    auto datatype = input.substr(posLastQuote + 3);
+    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
+                   Iri::fromInternalRepresentation(datatype)};
   }
 }
 

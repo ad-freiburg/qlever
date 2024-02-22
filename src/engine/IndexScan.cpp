@@ -20,9 +20,12 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     : Operation(qec),
       permutation_(permutation),
       subject_(triple._s),
-      predicate_(triple._p.getIri().starts_with("?")
-                     ? TripleComponent(Variable{triple._p.getIri()})
-                     : TripleComponent(triple._p.getIri())),
+      predicate_(
+          triple._p.getIri().starts_with("?")
+              ? TripleComponent(Variable{triple._p.getIri()})
+              // TODO<joka921> make the `getIri` also return a `IRI` directly.
+              : TripleComponent(
+                    TripleComponent::Iri::iriref(triple._p.getIri()))),
       object_(triple._o),
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +

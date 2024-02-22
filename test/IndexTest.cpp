@@ -422,6 +422,10 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
   };
 
+  for (size_t i = 0; i < 13; ++i) {
+    LOG(INFO) << index.getVocab().at(VocabIndex::make(i)) << std::endl;
+  }
+
   // The range of all entities that start with
   // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
@@ -555,6 +559,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 12.0 / 5.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
 
+  // TODO<joka921> Fix the multiplicity stuff.
   multiplicities = index.getMultiplicities("<x>", Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);

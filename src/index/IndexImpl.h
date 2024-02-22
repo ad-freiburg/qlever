@@ -663,10 +663,13 @@ class IndexImpl {
     std::vector<std::pair<Id, Id>> ignoredRanges;
     ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
-    auto literalRanges = getVocab().prefixRanges("\"");
-    auto taggedPredicatesRanges = getVocab().prefixRanges("@");
-    auto internalEntitiesRanges =
-        getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
+    auto literalRanges =
+        getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
+    auto taggedPredicatesRanges =
+        getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
+    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    internal[0] = ad_utility::triple_component::iriPrefixChar;
+    auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 
     auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
       for (const auto& range : ranges.ranges()) {
