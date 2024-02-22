@@ -232,21 +232,25 @@ class QueryPlanner {
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
   // ql:contains-word nor a special pattern trick triple.
-  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  template <typename PushPlanFunction, typename AddedIndexScanFunction,
+            typename AddFilterFunction>
   void seedFromOrdinaryTriple(const TripleGraph::Node& node,
                               const PushPlanFunction& pushPlan,
-                              const AddedIndexScanFunction& addIndexScan);
+                              const AddedIndexScanFunction& addIndexScan,
+                              const AddFilterFunction& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename PushPlanFunction, typename AddedIndexScanFunction>
   void indexScanSingleVarCase(const TripleGraph::Node& node,
                               const PushPlanFunction& pushPlan,
-                              const AddedIndexScanFunction& addIndexScan);
+                              const AddedIndexScanFunction& addIndexScan,
+                              const auto& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
   void indexScanTwoVarsCase(const TripleGraph::Node& node,
-                            const AddedIndexScanFunction& addIndexScan) const;
+                            const AddedIndexScanFunction& addIndexScan,
+                            const auto& addFilter) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
@@ -257,7 +261,12 @@ class QueryPlanner {
    * @brief Fills children with all operations that are associated with a single
    * node in the triple graph (e.g. IndexScans).
    */
-  [[nodiscard]] vector<SubtreePlan> seedWithScansAndText(
+  struct PlansAndFilters {
+    std::vector<SubtreePlan> plans_;
+    std::vector<SparqlFilter> filters_;
+  };
+
+  [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
@@ -430,7 +439,7 @@ class QueryPlanner {
    * it as a filter later on).
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
-      const TripleGraph& graph, const vector<SparqlFilter>& fs,
+      const TripleGraph& graph, std::vector<SparqlFilter> fs,
       const vector<vector<SubtreePlan>>& children);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
