@@ -11,7 +11,7 @@ MessageSender::MessageSender(
     DistributorAndOwningQueryId distributorAndOwningQueryId)
     : distributorAndOwningQueryId_{
           std::move(distributorAndOwningQueryId),
-          [](auto&& distributorAndOwningQueryId) {
+          [](DistributorAndOwningQueryId&& distributorAndOwningQueryId) {
             distributorAndOwningQueryId.distributor_->signalEnd();
           }} {}
 

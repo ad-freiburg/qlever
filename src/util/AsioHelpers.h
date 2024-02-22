@@ -24,6 +24,72 @@ namespace ad_utility {
 
 namespace net = boost::asio;
 
+// Internal implementation for `runFunctionOnExecutor`.
+namespace detail {
+// Call  `function()`. If this call doesn't throw, call `handler(nullptr,
+// resultOfTheCall)`, Else call `handler(current_exeption(), *nullptr)`. The
+// function is called directly, but the invocation of the handler is posted to
+// the associated executor of the `handler`, or to the `executor` if no such
+// associated executor exists.
+template <typename Executor, std::invocable Function, typename Handler>
+struct CallFunctionAndPassToHandler {
+  Executor executor_;
+  Function function_;
+  Handler handler_;
+  using Value = std::invoke_result_t<Function>;
+  static constexpr bool isVoid = std::is_void_v<Value>;
+  void operator()() {
+    // Get the executor of the completion handler, to which we will post the
+    // handler.
+    auto handlerExec = net::get_associated_executor(handler_, executor_);
+    // Call the completion handler with the given arguments, but post this
+    // calling to the `handlerExec`.
+    auto callHandler = [&handlerExec,
+                        &handler = handler_](auto... args) mutable {
+      auto doCall = [handler = std::move(handler),
+                     ... args = std::move(args)]() mutable {
+        handler(std::move(args)...);
+      };
+      net::post(net::bind_executor(handlerExec, std::move(doCall)));
+    };
+    try {
+      // If `function_()` throws no exception, we have no
+      // exception_ptr and the return value as the second argument.
+      if constexpr (isVoid) {
+        function_();
+        callHandler(nullptr);
+      } else {
+        callHandler(nullptr, function_());
+      }
+    } catch (...) {
+      // If `function_()` throws, we propagate the exception to the
+      // handler, and have no return value.
+      if constexpr (isVoid) {
+        callHandler(std::current_exception());
+      } else {
+        // Unfortunately, in the non-void case we still have to pass a
+        // `Value&` as the second argument to the `handler` even if an
+        // exception occurs. We currently implement this by dereferencing a
+        // `nullptr`, which works in practice, but not if we use the
+        // `callHandler` indirection.
+        auto doCall = [handler = std::move(handler_),
+                       ex = std::current_exception()]() mutable {
+          Value* ptr = nullptr;
+          handler(std::move(ex), std::move(*ptr));
+        };
+        net::post(net::bind_executor(handlerExec, std::move(doCall)));
+      }
+    }
+  }
+};
+// Explicit deduction guides, we need objects and not references as the template
+// parameters.
+template <typename Executor, std::invocable Function, typename Handler>
+CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
+    -> CallFunctionAndPassToHandler<
+        std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
+}  // namespace detail
+
 // Run the `function` on the `executor` (e.g. a strand for synchronization or
 // the executor of a thread pool). As soon as the function has completed, the
 // completion handler which is obtained from the `completionToken` is posted to
@@ -46,46 +112,8 @@ auto runFunctionOnExecutor(Executor executor, Function function,
 
   auto initiatingFunction = [function = std::move(function),
                              executor](auto&& handler) mutable {
-    auto onExecutor = [executor, function = std::move(function),
-                       handler = AD_FWD(handler)]() mutable {
-      // Get the executor of the completion handler, to which we will post the
-      // handler.
-      auto handlerExec = net::get_associated_executor(handler, executor);
-      // Call the completion handler with the given arguments, but post this
-      // calling to the `handlerExec`.
-      auto callHandler = [handlerExec, &handler](auto... args) mutable {
-        auto doCall = [handler = std::move(handler),
-                       ... args = std::move(args)]() mutable {
-          handler(std::move(args)...);
-        };
-        net::post(net::bind_executor(handlerExec, std::move(doCall)));
-      };
-      try {
-        // If `function()` throws no exception, we have no
-        // exception_ptr and the return value as the second argument.
-        if constexpr (isVoid) {
-          function();
-          callHandler(nullptr);
-        } else {
-          callHandler(nullptr, function());
-        }
-      } catch (...) {
-        // If `function()` throws, we propagate the exception to the
-        // handler, and have no return value. Unfortunately we still need to
-        // pass a reference to the handler.
-        if constexpr (isVoid) {
-          callHandler(std::current_exception());
-        } else {
-          auto doCall = [handler = std::move(handler),
-                         ex = std::current_exception()]() mutable {
-            Value* ptr = nullptr;
-            handler(std::move(ex), std::move(*ptr));
-          };
-          net::post(net::bind_executor(handlerExec, std::move(doCall)));
-        }
-      }
-    };
-
+    auto onExecutor = detail::CallFunctionAndPassToHandler{
+        executor, std::move(function), AD_FWD(handler)};
     net::post(executor, std::move(onExecutor));
   };
   return net::async_initiate<CompletionToken, Signature>(

@@ -106,9 +106,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     }
     // There was an unexpected error, rethrow
     throw;
-  } catch (const std::exception& e) {
-    LOG(ERROR) << e.what() << std::endl;
-    throw;
   }
 }
 

@@ -10,10 +10,20 @@ namespace ad_utility::websocket {
 
 // Return a lambda that deletes the `queryId` from the `socketDistributors`, but
 // only if it is either expired or `alwaysDelete` was specified.
-void deleteFromDistributors(auto socketDistributors, QueryId queryId,
-                            bool alwaysDelete) {
-  auto it = socketDistributors->find(queryId);
-  if (it == socketDistributors->end()) {
+void deleteFromDistributors(std::mutex& mutex,
+                            std::weak_ptr<QueryHub::MapType> socketDistributors,
+                            const QueryId& queryId, bool alwaysDelete) {
+  // This if-clause causes `guard_` to prevent destruction of
+  // the complete `this` object and therefore also the `mutex_`.
+  // Otherwise, if the QueryHub is already destroyed, then
+  // just do nothing, no need for cleanup in this case.
+  auto pointer = socketDistributors.lock();
+  if (!pointer) {
+    return;
+  }
+  std::lock_guard l{mutex};
+  auto it = pointer->find(queryId);
+  if (it == pointer->end()) {
     return;
   }
   bool expired = it->second.pointer_.expired();
@@ -21,7 +31,7 @@ void deleteFromDistributors(auto socketDistributors, QueryId queryId,
   // tests and also not coverable, because the manual `signalEnd` call
   // always comes before the destructor.
   if (alwaysDelete || expired) {
-    socketDistributors->erase(it);
+    pointer->erase(it);
   }
 }
 
@@ -52,16 +62,7 @@ QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
        queryId, alreadyCalled = false](bool alwaysDelete) mutable {
         AD_CORRECTNESS_CHECK(!alreadyCalled);
         alreadyCalled = true;
-        // This if-clause causes `guard_` to prevent destruction of
-        // the complete `this` object and therefore also the `mutex_`.
-        // Otherwise, if the QueryHub is already destroyed, then
-        // just do nothing, no need for cleanup in this case.
-        auto pointer = socketDistributors.lock();
-        if (!pointer) {
-          return;
-        }
-        std::lock_guard l{mutex};
-        deleteFromDistributors(std::move(pointer), std::move(queryId),
+        deleteFromDistributors(mutex, std::move(socketDistributors), queryId,
                                alwaysDelete);
       };
 
@@ -74,15 +75,15 @@ QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
 
 // _____________________________________________________________________________
 std::shared_ptr<QueryToSocketDistributor>
-QueryHub::createOrAcquireDistributorForSending(QueryId queryId) {
-  return createOrAcquireDistributorInternal<true>(std::move(queryId));
+QueryHub::createOrAcquireDistributorForSending(const QueryId& queryId) {
+  return createOrAcquireDistributorInternal<true>(queryId);
 }
 
 // _____________________________________________________________________________
 
 std::shared_ptr<const QueryToSocketDistributor>
-QueryHub::createOrAcquireDistributorForReceiving(QueryId queryId) {
-  return createOrAcquireDistributorInternal<false>(std::move(queryId));
+QueryHub::createOrAcquireDistributorForReceiving(const QueryId& queryId) {
+  return createOrAcquireDistributorInternal<false>(queryId);
 }
 
 }  // namespace ad_utility::websocket

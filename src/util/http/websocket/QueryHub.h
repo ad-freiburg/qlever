@@ -35,8 +35,10 @@ class QueryHub {
         : pointer_{std::move(pointer)}, started_{started} {}
   };
 
+ public:
   using MapType = absl::flat_hash_map<QueryId, WeakReferenceHolder>;
 
+ private:
   net::io_context& ioContext_;
   /// Mutex for synchronization.
   std::mutex mutex_;
@@ -73,13 +75,13 @@ class QueryHub {
   /// called once per query session, otherwise there will be an exception. There
   /// can only ever be one sender.
   std::shared_ptr<QueryToSocketDistributor>
-      createOrAcquireDistributorForSending(QueryId);
+  createOrAcquireDistributorForSending(const QueryId& queryId);
 
   /// Returns a const `QueryToSocketDistributor` that can only used to receive
   /// messages. In contrast to `createOrAcquireDistributorForSending` this can
   /// be called arbitrarily often during the lifetime of a single query session.
   std::shared_ptr<const QueryToSocketDistributor>
-      createOrAcquireDistributorForReceiving(QueryId);
+  createOrAcquireDistributorForReceiving(const QueryId& queryId);
 };
 }  // namespace ad_utility::websocket
 
