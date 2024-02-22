@@ -99,6 +99,8 @@ ResultTable OptionalJoin::computeResult() {
   const auto leftResult = _left->getResult();
   const auto rightResult = _right->getResult();
 
+  checkCancellation();
+
   LOG(DEBUG) << "OptionalJoin subresult computation done." << std::endl;
 
   LOG(DEBUG) << "Computing optional join between results of size "
@@ -106,6 +108,8 @@ ResultTable OptionalJoin::computeResult() {
 
   optionalJoin(leftResult->idTable(), rightResult->idTable(), _joinColumns,
                &idTable, implementation_);
+
+  checkCancellation();
 
   LOG(DEBUG) << "OptionalJoin result computation done." << endl;
   // If only one of the two operands has a non-empty local vocabulary, share
@@ -290,6 +294,8 @@ void OptionalJoin::optionalJoin(
   IdTableView<0> joinColumnsRight =
       right.asColumnSubsetView(joinColumnData.jcsRight());
 
+  checkCancellation();
+
   auto leftPermuted = left.asColumnSubsetView(joinColumnData.permutationLeft());
   auto rightPermuted =
       right.asColumnSubsetView(joinColumnData.permutationRight());
@@ -297,7 +303,8 @@ void OptionalJoin::optionalJoin(
   auto lessThanBoth = std::ranges::lexicographical_compare;
 
   auto rowAdder = ad_utility::AddCombinedRowToIdTable(
-      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result));
+      joinColumns.size(), leftPermuted, rightPermuted, std::move(*result),
+      cancellationHandle_);
   auto addRow = [&rowAdder, beginLeft = joinColumnsLeft.begin(),
                  beginRight = joinColumnsRight.begin()](const auto& itLeft,
                                                         const auto& itRight) {
@@ -315,25 +322,29 @@ void OptionalJoin::optionalJoin(
   };
 
   const size_t numOutOfOrder = [&]() {
+    auto checkCancellationLambda = [this] { checkCancellation(); };
     if (implementation == Implementation::OnlyUndefInLastJoinColumnOfLeft) {
       ad_utility::specialOptionalJoin(joinColumnsLeft, joinColumnsRight, addRow,
-                                      addOptionalRow);
+                                      addOptionalRow, checkCancellationLambda);
       return 0UL;
     } else if (implementation == Implementation::NoUndef) {
       if (right.size() / left.size() > GALLOP_THRESHOLD) {
         ad_utility::gallopingJoin(joinColumnsLeft, joinColumnsRight,
-                                  lessThanBoth, addRow, addOptionalRow);
+                                  lessThanBoth, addRow, addOptionalRow,
+                                  checkCancellationLambda);
       } else {
         auto shouldBeZero = ad_utility::zipperJoinWithUndef(
             joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
-            ad_utility::noop, ad_utility::noop, addOptionalRow);
+            ad_utility::noop, ad_utility::noop, addOptionalRow,
+            checkCancellationLambda);
         AD_CORRECTNESS_CHECK(shouldBeZero == 0UL);
       }
       return 0UL;
     } else {
       return ad_utility::zipperJoinWithUndef(
           joinColumnsLeft, joinColumnsRight, lessThanBoth, addRow,
-          findUndefDispatch, findUndefDispatch, addOptionalRow);
+          findUndefDispatch, findUndefDispatch, addOptionalRow,
+          checkCancellationLambda);
     }
   }();
   // The column order in the result is now
@@ -354,7 +365,9 @@ void OptionalJoin::optionalJoin(
     for (size_t i = 0; i < joinColumns.size(); ++i) {
       cols.push_back(i);
     }
+    checkCancellation();
     Engine::sort(*result, cols);
   }
   result->setColumnSubset(joinColumnData.permutationResult());
+  checkCancellation();
 }

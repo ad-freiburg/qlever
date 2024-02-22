@@ -6,7 +6,6 @@
 
 #include <cstdio>
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/GroupBy.h"
@@ -22,6 +21,7 @@
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
 

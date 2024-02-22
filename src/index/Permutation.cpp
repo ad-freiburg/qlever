@@ -55,7 +55,7 @@ IdTable Permutation::scan(
   const auto& metaData = meta_.getMetaData(col0Id);
 
   return reader().scan(metaData, col1Id, meta_.blockData(), additionalColumns,
-                       cancellationHandle);
+                       std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________

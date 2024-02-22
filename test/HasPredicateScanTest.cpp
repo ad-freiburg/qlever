@@ -7,13 +7,13 @@
 
 #include <algorithm>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
 #include "engine/ValuesForTesting.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 using ad_utility::testing::makeAllocator;
