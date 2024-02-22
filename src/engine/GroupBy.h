@@ -219,6 +219,22 @@ class GroupBy : public Operation {
     }
   };
 
+  // Determines whether the grouped by variable appears at the top of an
+  // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.
+  struct OccurenceAsRoot {};
+
+  // Stores information required to substitute away all
+  // grouped variables occurring inside an alias.
+  struct HashMapGroupedVariableInformation {
+    // The variable itself.
+    Variable var_;
+    // The column index in the final result.
+    size_t resultColumnIndex_;
+    // The occurrences of the grouped variable inside an alias.
+    std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>
+        occurrences_;
+  };
+
   // Stores alias information, especially all aggregates contained
   // in an alias.
   struct HashMapAliasInformation {
@@ -228,6 +244,8 @@ class GroupBy : public Operation {
     size_t outCol_;
     // Information about all aggregates contained in this alias.
     std::vector<HashMapAggregateInformation> aggregateInfo_;
+    // Information about all grouped variables contained in this alias.
+    std::vector<HashMapGroupedVariableInformation> groupedVariables_;
   };
 
   // Required data to perform HashMap optimization.
@@ -389,7 +407,8 @@ class GroupBy : public Operation {
   // Substitute the group values for all occurrences of a group variable.
   void substituteGroupVariable(
       const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-      IdTable* resultTable, size_t columnIndex) const;
+      IdTable* resultTable, size_t beginIndex, size_t count,
+      size_t columnIndex) const;
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
@@ -411,10 +430,6 @@ class GroupBy : public Operation {
   // Check if an expression is a currently supported aggregate.
   static std::optional<GroupBy::HashMapAggregateTypeWithData>
   isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
-
-  // Determines whether the grouped by variable appears at the top of an
-  // alias, e.g. `SELECT (?a as ?x) WHERE {...} GROUP BY ?a`.
-  struct OccurenceAsRoot {};
 
   // Find all occurrences of grouped by variable for expression `expr`.
   std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>

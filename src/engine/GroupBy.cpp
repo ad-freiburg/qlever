@@ -780,16 +780,25 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 
     // Find all aggregates in the expression of the current alias.
     auto foundAggregates = findAggregates(expr);
-
-    // TODO<kcaliban> Remove as soon as all aggregates are supported
     if (!foundAggregates.has_value()) return std::nullopt;
 
     for (auto& aggregate : foundAggregates.value()) {
       aggregate.aggregateDataIndex_ = numAggregates++;
     }
 
+    // Find all grouped variables occurring in the alias expression
+    std::vector<HashMapGroupedVariableInformation> groupedVariables;
+    groupedVariables.reserve(_groupByVariables.size());
+    // TODO<C++23> use views::enumerate
+    size_t i = 0;
+    for (const auto& groupedVariable : _groupByVariables) {
+      groupedVariables.emplace_back(groupedVariable, i++,
+                                    findGroupedVariable(expr, groupedVariable));
+    }
+
     aliasesWithAggregateInfo.emplace_back(alias._expression, alias._outCol,
-                                          foundAggregates.value());
+                                          foundAggregates.value(),
+                                          groupedVariables);
   }
 
   return HashMapOptimizationData{aliasesWithAggregateInfo};
@@ -928,8 +937,7 @@ void GroupBy::extractValues(
                   &outCol]<sparqlExpression::SingleExpressionResult T>(
                      T&& singleResult) mutable {
     auto generator = sparqlExpression::detail::makeGenerator(
-        std::forward<T>(singleResult),
-        evaluationContext._endIndex - evaluationContext._beginIndex,
+        std::forward<T>(singleResult), evaluationContext.size(),
         &evaluationContext);
 
     auto targetIterator =
@@ -961,7 +969,6 @@ GroupBy::getHashMapAggregationResults(
 
   using B = HashMapAggregationData<GROUPED_COLUMNS>::template T<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
-    // TODO: Something like this appears twice in code, can we abstract it away?
     B mapKey;
     if constexpr (requires {
                     mapKey.resize(aggregationData.numOfGroupedColumns_);
@@ -986,8 +993,10 @@ GroupBy::getHashMapAggregationResults(
 // _____________________________________________________________________________
 void GroupBy::substituteGroupVariable(
     const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-    IdTable* resultTable, size_t columnIndex) const {
-  decltype(auto) groupValues = resultTable->getColumn(columnIndex);
+    IdTable* resultTable, size_t beginIndex, size_t count,
+    size_t columnIndex) const {
+  decltype(auto) groupValues =
+      resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
   for (const auto& occurrence : occurrences) {
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(
@@ -1128,37 +1137,30 @@ void GroupBy::evaluateAlias(
     LocalVocab* localVocab) {
   auto& info = alias.aggregateInfo_;
 
-  // Find all grouped variables occurring in the alias expression
-  using PairType = std::pair<
-      size_t, std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>>;
-  std::vector<PairType> substitutions;
-  substitutions.reserve(_groupByVariables.size());
-
-  // TODO<C++23> use views::enumerate
-  size_t i = 0;
-  for (const auto& groupedVariable : _groupByVariables) {
-    substitutions.emplace_back(
-        i++, findGroupedVariable(alias.expr_.getPimpl(), groupedVariable));
-  }
-
   // Either:
   // - One of the variables occurs at the top. This can be copied as the result
   // - There is only one aggregate, and it appears at the top. No substitutions
   // necessary, can evaluate aggregate and copy results
   // - Possibly multiple aggregates and occurrences of grouped variables. All
   // have to be substituted away before evaluation
-  auto topLevelGroupedVariable = std::find_if(
-      substitutions.begin(), substitutions.end(),
-      [](PairType& val) { return std::get_if<OccurenceAsRoot>(&val.second); });
+
+  auto substitutions = alias.groupedVariables_;
+  auto topLevelGroupedVariable =
+      std::find_if(substitutions.begin(), substitutions.end(),
+                   [](HashMapGroupedVariableInformation& val) {
+                     return std::get_if<OccurenceAsRoot>(&val.occurrences_);
+                   });
 
   if (topLevelGroupedVariable != substitutions.end()) {
     // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
     // WHERE {...} GROUP BY ?a`, we can copy values directly from the column
     // of the grouped variable
     decltype(auto) groupValues =
-        result->getColumn(topLevelGroupedVariable->first);
+        result->getColumn(topLevelGroupedVariable->resultColumnIndex_)
+            .subspan(evaluationContext._beginIndex, evaluationContext.size());
     decltype(auto) outValues = result->getColumn(alias.outCol_);
-    std::ranges::copy(groupValues, outValues.begin());
+    std::ranges::copy(groupValues,
+                      outValues.begin() + evaluationContext._beginIndex);
 
     // We also need to store it for possible future use
     sparqlExpression::VectorWithMemoryLimit<ValueId> values(
@@ -1192,9 +1194,11 @@ void GroupBy::evaluateAlias(
   } else {
     for (const auto& substitution : substitutions) {
       const auto& occurrences =
-          get<std::vector<ParentAndChildIndex>>(substitution.second);
+          get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
       // Substitute in the values of the grouped variable
-      substituteGroupVariable(occurrences, result, substitution.first);
+      substituteGroupVariable(
+          occurrences, result, evaluationContext._beginIndex,
+          evaluationContext.size(), substitution.resultColumnIndex_);
     }
 
     // Substitute in the results of all aggregates contained in the
@@ -1318,8 +1322,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
     evaluationContext._beginIndex = i;
     evaluationContext._endIndex = std::min(i + blockSize, subresult.size());
 
-    auto currentBlockSize =
-        evaluationContext._endIndex - evaluationContext._beginIndex;
+    auto currentBlockSize = evaluationContext.size();
 
     // Perform HashMap lookup once for all groups in current block
     using U = HashMapAggregationData<GROUPED_COLUMNS>::template T<
