@@ -126,23 +126,27 @@ float SpatialJoin::getMultiplicity(size_t col) {
     auto left = varColsLeftMap.find(var);
     if (left != varColsLeftMap.end()) {
       // multiplicity of var times size of right
+      LOG(INFO) << "=============MULTIPLICITY 1" << childLeft_->getMultiplicity(
+                    varColsLeftMap[var].columnIndex_) * sizeRight << std::endl;
       return childLeft_->getMultiplicity(
                         varColsLeftMap[var].columnIndex_) * sizeRight;
-      test these cases
     } else {
       auto right = varColsRightMap.find(var);
       if (right != varColsRightMap.end()) {
         // multiplicity of right times size of left
+        LOG(INFO) << "==========MULTIPLICITY 2" << childRight_->getMultiplicity(
+                varColsRightMap[var].columnIndex_) * sizeLeft << std::endl;
         return childRight_->getMultiplicity(
                 varColsRightMap[var].columnIndex_) * sizeLeft;
-        test these cases
       } else if (var.name().compare(nameDistanceInternal) == 0) {
+        LOG(INFO) << "==============MULTIPLICITY 3" << std::endl;
         return 1;  // dummy return for now
       } else {
-        AD_THROW('Variable does not match');
+        AD_THROW("Variable does not match");
       }
     }
   } else {
+    LOG(INFO) << "==============MULTIPLICITY 4" << std::endl;
     return 1;  // dummy return, as the class does not have its children yet
   }
 }

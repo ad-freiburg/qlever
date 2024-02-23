@@ -1739,6 +1739,18 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+
+  // if one of the inputs is the spatial join and the other input is a matching
+  // geometry, add the geometry as a child to the spatial join. As unbound
+  // SpatialJoin operations are incompatible with normal join operations, we
+  // return immediately instead of creating a normal join below as well.
+  // Note, that this if statement should be evaluated first, such that no other
+  // join options get considered, when one of the candidates is a SpatialJoin.
+  if (auto opt = createSpatialJoin(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -1794,15 +1806,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
-  // if one of the inputs is the spatial join and the other input is a matching
-  // geometry, add the geometry as a child to the spatial join. As unbound
-  // SpatialJoin operations are incompatible with normal join operations, we
-  // return immediately instead of creating a normal join below as well.
-  if (auto opt = createSpatialJoin(a, b, jcs)) {
-    candidates.push_back(std::move(opt.value()));
-    return candidates;
-  }
-
   // "NORMAL" CASE:
   // The join class takes care of sorting the subtrees if necessary
   SubtreePlan plan =
@@ -1822,7 +1825,7 @@ auto QueryPlanner::createSpatialJoin(
   const bool aIsSpatialJoin = a._qet->getType() == SPATIAL_JOIN;
   const bool bIsSpatialJoin = b._qet->getType() == SPATIAL_JOIN;
   
-  if ((aIsSpatialJoin ^ bIsSpatialJoin)) {
+  if (!(aIsSpatialJoin ^ bIsSpatialJoin)) {
     return std::nullopt;
   }
 
