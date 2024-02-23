@@ -764,12 +764,12 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
 GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
-  if (!RuntimeParameters().get<"use-group-by-hash-map-optimization">()) {
+  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
     return std::nullopt;
   }
 
-  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-  if (!sort) {
+  if (auto sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+      sort == nullptr) {
     return std::nullopt;
   }
 
@@ -1260,15 +1260,14 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
-
   ad_utility::Timer evaluationAndResultsTimer{
       ad_utility::timer::Timer::InitialStatus::Started};
-  for (size_t i = 0; i < numberOfGroups; i += blockSize) {
+  for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, numberOfGroups);
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, numberOfGroups);
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, result, evaluationContext, aggregationData,
@@ -1329,17 +1328,16 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
-
   ad_utility::Timer lookupTimer{
       ad_utility::timer::Timer::InitialStatus::Stopped};
   ad_utility::Timer aggregationTimer{
       ad_utility::timer::Timer::InitialStatus::Stopped};
-  for (size_t i = 0; i < subresult.size(); i += blockSize) {
+  for (size_t i = 0; i < subresult.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, subresult.size());
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, subresult.size());
 
     auto currentBlockSize = evaluationContext.size();
 

@@ -791,7 +791,12 @@ TEST(SparqlExpression, ifAndCoalesce) {
                 std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                            IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
 
+  // Check COALESCE with no arguments or empty arguments.
   checkCoalesce(IdOrStrings{}, std::tuple{});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}, Ids{}});
+
   auto coalesceExpr =
       makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
                                      std::make_unique<IriExpression>("<bam>"));
