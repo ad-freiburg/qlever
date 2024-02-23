@@ -22,6 +22,7 @@
 #include "parser/Alias.h"
 #include "util/Conversions.h"
 #include "util/HashSet.h"
+#include "util/Timer.h"
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -1233,7 +1234,12 @@ void GroupBy::createResultFromHashMap(
     LocalVocab* localVocab) {
   // Create result table, filling in the group values, since they might be
   // required in evaluation
+  ad_utility::Timer sortingTimer{
+      ad_utility::timer::Timer::InitialStatus::Started};
   auto sortedKeys = aggregationData.getSortedGroupColumns();
+  sortingTimer.stop();
+  runtimeInfo().addDetail("timeResultSorting", sortingTimer.msecs());
+
   size_t numberOfGroups = aggregationData.getNumberOfGroups();
   result->resize(numberOfGroups);
 
@@ -1256,6 +1262,8 @@ void GroupBy::createResultFromHashMap(
 
   size_t blockSize = 65536;
 
+  ad_utility::Timer evaluationAndResultsTimer{
+      ad_utility::timer::Timer::InitialStatus::Started};
   for (size_t i = 0; i < numberOfGroups; i += blockSize) {
     checkCancellation();
 
@@ -1267,6 +1275,10 @@ void GroupBy::createResultFromHashMap(
                     localVocab);
     }
   }
+  evaluationAndResultsTimer.stop();
+
+  runtimeInfo().addDetail("timeEvaluationAndResults",
+                          evaluationAndResultsTimer.msecs());
 }
 
 // _____________________________________________________________________________
@@ -1319,6 +1331,10 @@ void GroupBy::computeGroupByForHashMapOptimization(
 
   size_t blockSize = 65536;
 
+  ad_utility::Timer lookupTimer{
+      ad_utility::timer::Timer::InitialStatus::Stopped};
+  ad_utility::Timer aggregationTimer{
+      ad_utility::timer::Timer::InitialStatus::Stopped};
   for (size_t i = 0; i < subresult.size(); i += blockSize) {
     checkCancellation();
 
@@ -1339,8 +1355,11 @@ void GroupBy::computeGroupByForHashMapOptimization(
       groupValues[j++] = subresult.getColumn(idx).subspan(
           evaluationContext._beginIndex, currentBlockSize);
     }
+    lookupTimer.cont();
     auto hashEntries = aggregationData.getHashEntries(groupValues);
+    lookupTimer.stop();
 
+    aggregationTimer.cont();
     for (auto& aggregateAlias : aggregateAliases) {
       for (auto& aggregate : aggregateAlias.aggregateInfo_) {
         // Evaluate child expression on block
@@ -1357,7 +1376,10 @@ void GroupBy::computeGroupByForHashMapOptimization(
                    std::move(expressionResult), aggregationDataVariant);
       }
     }
+    aggregationTimer.stop();
   }
+  runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
+  runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
 
   createResultFromHashMap(result, aggregationData, aggregateAliases,
                           localVocab);
