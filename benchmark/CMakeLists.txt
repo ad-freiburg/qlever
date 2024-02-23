@@ -32,3 +32,5 @@ addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
 addAndLinkBenchmark(IdTableCompressedWriterBenchmark engine testUtil)
 
 addAndLinkBenchmark(ParallelMergeBenchmark)
+
+addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)
