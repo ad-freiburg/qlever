@@ -33,6 +33,7 @@
 #include "engine/Values.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
+#include "engine/SpatialJoin.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -892,6 +893,23 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
+    const string input = node.triple_._p._iri;
+    if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
+          input[input.size() - 1] == '>' ) {
+      int maxDist = 0;
+      try {
+        maxDist = std::stoi(input.substr(MAX_DIST_IN_METERS.size(),
+          input.size() - MAX_DIST_IN_METERS.size()-1));  // -1: compensate for >
+      } catch(const std::exception& e) {
+        LOG(INFO) << "exception: " << e.what() << std::endl;
+        AD_THROW("parsing of the maximum distance for the SpatialJoin "
+            "operation was not possible");
+      }
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_,
+          std::nullopt, std::nullopt, maxDist));
+      continue;
+    }
+
     if (node.triple_._p._iri == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
@@ -1721,6 +1739,18 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
+
+  // if one of the inputs is the spatial join and the other input is a matching
+  // geometry, add the geometry as a child to the spatial join. As unbound
+  // SpatialJoin operations are incompatible with normal join operations, we
+  // return immediately instead of creating a normal join below as well.
+  // Note, that this if statement should be evaluated first, such that no other
+  // join options get considered, when one of the candidates is a SpatialJoin.
+  if (auto opt = createSpatialJoin(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   if (a.type == SubtreePlan::MINUS) {
     AD_THROW(
         "MINUS can only appear after"
@@ -1784,6 +1814,43 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   candidates.push_back(std::move(plan));
 
   return candidates;
+}
+
+// _____________________________________________________________________________
+auto QueryPlanner::createSpatialJoin(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  using enum QueryExecutionTree::OperationType;
+  const bool aIsSpatialJoin = a._qet->getType() == SPATIAL_JOIN;
+  const bool bIsSpatialJoin = b._qet->getType() == SPATIAL_JOIN;
+  
+  if (!(aIsSpatialJoin ^ bIsSpatialJoin)) {
+    return std::nullopt;
+  }
+
+  SubtreePlan spatialSubtreePlan = aIsSpatialJoin ? a : b;
+  SubtreePlan otherSubtreePlan = aIsSpatialJoin ? b : a;
+
+  std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+
+  if (spatialJoin->isConstructed()) {
+    return std::nullopt;
+  }
+
+  if (jcs.size() > 1) {
+    AD_THROW("in its current implementation only one pair is allowed");
+  }
+  ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
+  Variable var = otherSubtreePlan._qet->
+                      getVariableAndInfoByColumnIndex(ind).first;
+
+  auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
+
+  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(newSpatialJoin);
+  mergeSubtreePlanIds(plan, a, b);
+  return plan;
 }
 
 // __________________________________________________________________________________________________________________
