@@ -11,19 +11,17 @@ using ad_utility::websocket::QueryHub;
 using ad_utility::websocket::QueryId;
 using ad_utility::websocket::QueryToSocketDistributor;
 
-ASYNC_TEST(QueryHub, simulateLifecycleWithoutListeners) {
+ASIO_TEST(QueryHub, simulateLifecycleWithoutListeners) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);
   std::weak_ptr<QueryToSocketDistributor> observer = distributor;
   distributor.reset();
   EXPECT_TRUE(observer.expired());
-  co_return;
 }
 
 // _____________________________________________________________________________
-
-ASYNC_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
+ASIO_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   std::weak_ptr<const QueryToSocketDistributor> observer;
@@ -37,12 +35,10 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithExclusivelyListeners) {
     // Shared pointers will be destroyed here
   }
   EXPECT_TRUE(observer.expired());
-  co_return;
 }
 
 // _____________________________________________________________________________
-
-ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
+ASIO_TEST(QueryHub, simulateStandardLifecycle) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   std::weak_ptr<const QueryToSocketDistributor> observer;
@@ -59,11 +55,10 @@ ASYNC_TEST(QueryHub, simulateStandardLifecycle) {
     // Shared pointers will be destroyed here
   }
   EXPECT_TRUE(observer.expired());
-  co_return;
 }
 
 // _____________________________________________________________________________
-ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
+ASIO_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
   auto distributor1 = queryHub.createOrAcquireDistributorForReceiving(queryId);
@@ -80,12 +75,11 @@ ASYNC_TEST(QueryHub, verifySlowListenerDoesNotPreventCleanup) {
   // resetting it should not impact the registry.
   EXPECT_EQ(senderNewId,
             queryHub.createOrAcquireDistributorForReceiving(queryId));
-  co_return;
 }
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
+ASIO_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
   QueryHub queryHub{ioContext};
   QueryId queryId1 = QueryId::idFromString("abc");
   QueryId queryId2 = QueryId::idFromString("def");
@@ -99,7 +93,6 @@ ASYNC_TEST(QueryHub, simulateLifecycleWithDifferentQueryIds) {
   EXPECT_NE(distributor2, distributor3);
   EXPECT_EQ(distributor2, distributor4);
   EXPECT_NE(distributor3, distributor4);
-  co_return;
 }
 
 // _____________________________________________________________________________
@@ -117,14 +110,13 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHub) {
   co_await net::post(net::use_awaitable);
   // Ensure no scheduled tasks left to run
   EXPECT_EQ(ioContext.poll(), 0);
-  co_return;
 }
 
 // _____________________________________________________________________________
 
 // Ensures that a scheduled task does not modify the map after destruction
 // of the QueryHub.
-ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
+ASIO_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
   std::weak_ptr<QueryHub::MapType> distributorMap;
   std::unique_ptr<QueryHub> queryHub = std::make_unique<QueryHub>(ioContext);
   auto distributor = queryHub->createOrAcquireDistributorForSending(
@@ -137,12 +129,11 @@ ASYNC_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
   EXPECT_TRUE(distributorMap.expired());
   // Ensure 1 scheduled task left to run
   EXPECT_EQ(ioContext.poll(), 1);
-  co_return;
 }
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
+ASIO_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   QueryHub queryHub{ioContext};
   auto queryId = QueryId::idFromString("abc");
   auto distributor = queryHub.createOrAcquireDistributorForSending(queryId);
@@ -156,14 +147,13 @@ ASYNC_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   queryHub.socketDistributors_.get().clear();
   EXPECT_NO_THROW(distributor->signalEnd());
   EXPECT_TRUE(queryHub.socketDistributors_.get().empty());
-  co_return;
 }
 
 }  // namespace ad_utility::websocket
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
+ASIO_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
   QueryHub queryHub{ioContext};
   QueryId queryId = QueryId::idFromString("abc");
 
@@ -171,5 +161,4 @@ ASYNC_TEST(QueryHub, ensureOnlyOneSenderCanExist) {
       queryHub.createOrAcquireDistributorForSending(queryId);
   EXPECT_THROW(queryHub.createOrAcquireDistributorForSending(queryId),
                ad_utility::Exception);
-  co_return;
 }

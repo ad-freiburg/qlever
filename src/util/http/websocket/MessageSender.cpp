@@ -7,24 +7,16 @@
 namespace ad_utility::websocket {
 
 // _____________________________________________________________________________
-MessageSender::MessageSender(
-    DistributorAndOwningQueryId distributorAndOwningQueryId)
+MessageSender::MessageSender(OwningQueryId owningQueryId, QueryHub& queryHub)
     : distributorAndOwningQueryId_{
-          std::move(distributorAndOwningQueryId),
+          {queryHub.createOrAcquireDistributorForSending(
+               owningQueryId.toQueryId()),
+           std::move(owningQueryId)},
           [](DistributorAndOwningQueryId&& distributorAndOwningQueryId) {
             distributorAndOwningQueryId.distributor_->signalEnd();
           }} {}
 
 // _____________________________________________________________________________
-MessageSender MessageSender::create(OwningQueryId owningQueryId,
-                                    QueryHub& queryHub) {
-  return MessageSender{DistributorAndOwningQueryId{
-      queryHub.createOrAcquireDistributorForSending(owningQueryId.toQueryId()),
-      std::move(owningQueryId)}};
-}
-
-// _____________________________________________________________________________
-
 void MessageSender::operator()(std::string json) const {
   distributorAndOwningQueryId_->distributor_->addQueryStatusUpdate(
       std::move(json));

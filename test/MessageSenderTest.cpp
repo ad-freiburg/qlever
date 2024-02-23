@@ -31,7 +31,9 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
   auto distributor =
       queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
 
-  MessageSender::create(std::move(queryId), queryHub);
+  // Create and immediately destroy a `MessageSender` s.t. we can test the side
+  // effects of the destructor.
+  { MessageSender dummy{std::move(queryId), queryHub}; }
 
   auto impl = [&]() -> net::awaitable<void> {
     net::deadline_timer timer{ioContext, boost::posix_time::seconds(2)};
@@ -58,7 +60,7 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
     auto distributor =
         queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
 
-    auto updateWrapper = MessageSender::create(std::move(queryId), queryHub);
+    auto updateWrapper = MessageSender{std::move(queryId), queryHub};
 
     updateWrapper("Still");
     updateWrapper("Dre");
@@ -96,7 +98,7 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryHub queryHub{ioContext};
 
   {
-    auto messageSender = MessageSender::create(std::move(queryId), queryHub);
+    auto messageSender = MessageSender{std::move(queryId), queryHub};
     EXPECT_EQ(reference, messageSender.getQueryId());
   }
   // The destructor of `MessageSender` calls `signalEnd` on the underlying

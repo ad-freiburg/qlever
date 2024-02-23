@@ -67,17 +67,9 @@ struct CallFunctionAndPassToHandler {
       if constexpr (isVoid) {
         callHandler(std::current_exception());
       } else {
-        // Unfortunately, in the non-void case we still have to pass a
-        // `Value&` as the second argument to the `handler` even if an
-        // exception occurs. We currently implement this by dereferencing a
-        // `nullptr`, which works in practice, but not if we use the
-        // `callHandler` indirection.
-        auto doCall = [handler = std::move(handler_),
-                       ex = std::current_exception()]() mutable {
-          Value* ptr = nullptr;
-          handler(std::move(ex), std::move(*ptr));
-        };
-        net::post(net::bind_executor(handlerExec, std::move(doCall)));
+        // Unfortunately we need to pass a `Value{}` even in the case of an
+        // error. This is due to a limitation in Boost::Asio.
+        callHandler(std::current_exception(), Value{});
       }
     }
   }
@@ -95,6 +87,8 @@ CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
 // completion handler which is obtained from the `completionToken` is posted to
 // its associated executor (which might be different from the `executor`).
 template <typename Executor, typename CompletionToken, std::invocable Function>
+requires std::is_default_constructible_v<std::invoke_result_t<Function>> ||
+         std::is_void_v<std::invoke_result_t<Function>>
 auto runFunctionOnExecutor(Executor executor, Function function,
                            CompletionToken& completionToken) {
   using Value = std::invoke_result_t<Function>;

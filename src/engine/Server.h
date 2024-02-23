@@ -145,7 +145,8 @@ class Server {
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// it's completion, wrapping the result.
-  template <typename Function, typename T = std::invoke_result_t<Function>>
+  template <std::invocable Function,
+            typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function,
                                   SharedCancellationHandle handle);
 

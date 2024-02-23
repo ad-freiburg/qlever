@@ -667,8 +667,8 @@ boost::asio::awaitable<void> Server::processQuery(
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
-    auto messageSender = ad_utility::websocket::MessageSender::create(
-        getQueryId(request, query), *queryHub);
+    ad_utility::websocket::MessageSender messageSender{
+        getQueryId(request, query), *queryHub};
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
@@ -682,10 +682,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    LOG(INFO) << "Before planning" << std::endl;
     plannedQuery =
         co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
-    LOG(INFO) << "After planning" << std::endl;
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();
@@ -791,11 +789,11 @@ boost::asio::awaitable<void> Server::processQuery(
 }
 
 // _____________________________________________________________________________
-template <typename Function, typename T>
+template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
   auto inner = [function = std::move(function),
-                handle = std::move(handle)]() mutable -> decltype(auto) {
+                handle = std::move(handle)]() mutable -> T {
     handle->resetWatchDogState();
     return std::invoke(std::move(function));
   };
@@ -809,24 +807,29 @@ net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
 
-  return computeInNewThread(
-      [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit]() mutable {
-        auto pq = SparqlParser::parseQuery(query);
-        handle->throwIfCancelled();
-        QueryPlanner qp(&qec, handle);
-        qp.setEnablePatternTrick(enablePatternTrick);
-        auto qet = qp.createExecutionTree(pq);
-        handle->throwIfCancelled();
-        PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`.
+  co_return (co_await computeInNewThread(
+                 [&query, &qec, enablePatternTrick = enablePatternTrick_,
+                  handle = std::move(handle),
+                  timeLimit]() mutable -> std::optional<PlannedQuery> {
+                   auto pq = SparqlParser::parseQuery(query);
+                   handle->throwIfCancelled();
+                   QueryPlanner qp(&qec, handle);
+                   qp.setEnablePatternTrick(enablePatternTrick);
+                   auto qet = qp.createExecutionTree(pq);
+                   handle->throwIfCancelled();
+                   PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetCancellationHandle(std::move(handle));
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetTimeConstraint(timeLimit);
-        return plannedQuery;
-      },
-      std::move(handleCopy));
+                   plannedQuery.queryExecutionTree_.getRootOperation()
+                       ->recursivelySetCancellationHandle(std::move(handle));
+                   plannedQuery.queryExecutionTree_.getRootOperation()
+                       ->recursivelySetTimeConstraint(timeLimit);
+                   return plannedQuery;
+                 },
+                 std::move(handleCopy)))
+      .value();
 }
 
 // _____________________________________________________________________________

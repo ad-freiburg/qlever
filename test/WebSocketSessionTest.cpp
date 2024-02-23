@@ -228,7 +228,6 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
     co_await timer.async_wait(net::use_awaitable);
 
     EXPECT_TRUE(cancellationHandle->isCancelled());
-    // cancellationHandle->throwIfCancelled();
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         cancellationHandle->throwIfCancelled(), HasSubstr("manually cancelled"),
         ad_utility::CancellationException);
@@ -238,8 +237,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelStringTriggersCancellation) {
 
     {
       // Trigger connection close by creating and destroying message sender
-      ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
-                                                   c.queryHub());
+      ad_utility::websocket::MessageSender{std::move(queryId).value(),
+                                           c.queryHub()};
     }
 
     // Expect socket will be closed
@@ -348,8 +347,8 @@ ASYNC_TEST(WebSocketSession, verifyCancelOnCloseStringTriggersCancellation) {
 
     {
       // Trigger connection close by creating and destroying message sender
-      ad_utility::websocket::MessageSender::create(std::move(queryId).value(),
-                                                   c.queryHub());
+      ad_utility::websocket::MessageSender{std::move(queryId).value(),
+                                           c.queryHub()};
       co_await net::post(net::use_awaitable);
     }
 

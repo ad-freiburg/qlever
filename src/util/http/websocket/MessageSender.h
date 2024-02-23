@@ -37,18 +37,12 @@ class MessageSender {
   UniqueCleanup<DistributorAndOwningQueryId> distributorAndOwningQueryId_;
   net::any_io_executor executor_;
 
-  // This constructor is private because this instance should only ever be
-  // created asynchronously. Use the public factory function `create` instead.
-  explicit MessageSender(DistributorAndOwningQueryId);
-
  public:
+  // Construct from a query ID and a `QueryHub`.
+  MessageSender(OwningQueryId owningQueryId, QueryHub& queryHub);
+
   MessageSender(MessageSender&&) noexcept = default;
   MessageSender& operator=(MessageSender&&) noexcept = default;
-
-  /// Asynchronously creates an instance of this class. This is because because
-  /// creating a distributor for this class needs to be done in a synchronized
-  /// way.
-  static MessageSender create(OwningQueryId owningQueryId, QueryHub& queryHub);
 
   /// Broadcast the string to all listeners of this query asynchronously.
   void operator()(std::string) const;

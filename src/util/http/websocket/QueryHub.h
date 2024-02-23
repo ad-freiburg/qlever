@@ -48,17 +48,11 @@ class QueryHub {
       std::make_shared<MapType>()};
 
   // Expose internal API for testing
-  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_coroutine(
+  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_impl(
       net::io_context&);
-  friend net::awaitable<void>
-  QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_coroutine(
+  friend void QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_impl(
       net::io_context&);
-  friend net::awaitable<void>
-  QueryHub_verifyNoErrorWhenQueryIdMissing_coroutine(net::io_context&);
-
-  template <bool isSender>
-  using DistributorPtr = std::shared_ptr<
-      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>;
+  friend void QueryHub_verifyNoErrorWhenQueryIdMissing_impl(net::io_context&);
 
   /// Implementation of `createOrAcquireDistributorForSending` and
   /// `createOrAcquireDistributorForReceiving`.

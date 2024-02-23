@@ -5,15 +5,12 @@
 #ifndef QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 #define QLEVER_QUERYTOSOCKETDISTRIBUTOR_H
 
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/strand.hpp>
 #include <functional>
 #include <memory>
 #include <vector>
 
 #include "util/UniqueCleanup.h"
+#include "util/http/beast.h"
 
 namespace ad_utility::websocket {
 namespace net = boost::asio;
