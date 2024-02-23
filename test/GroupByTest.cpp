@@ -556,7 +556,7 @@ TEST_F(GroupByOptimizations, findGroupedVariable) {
   GroupBy groupBy{ad_utility::testing::getQec(), {Variable{"?a"}}, {}, values};
 
   auto variableAtTop = groupBy.findGroupedVariable(expr1.get(), Variable{"?a"});
-  ASSERT_TRUE(std::get_if<GroupBy::OccurenceAsRoot>(&variableAtTop));
+  ASSERT_TRUE(std::get_if<GroupBy::OccurAsRoot>(&variableAtTop));
 
   auto variableInExpression =
       groupBy.findGroupedVariable(expr2.get(), Variable{"?a"});

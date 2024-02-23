@@ -805,11 +805,10 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 }
 
 // _____________________________________________________________________________
-std::variant<std::vector<GroupBy::ParentAndChildIndex>,
-             GroupBy::OccurenceAsRoot>
+std::variant<std::vector<GroupBy::ParentAndChildIndex>, GroupBy::OccurAsRoot>
 GroupBy::findGroupedVariable(sparqlExpression::SparqlExpression* expr,
                              const Variable& groupedVariable) {
-  std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot> substitutions;
+  std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot> substitutions;
   findGroupedVariableImpl(expr, std::nullopt, substitutions, groupedVariable);
   return substitutions;
 }
@@ -818,8 +817,7 @@ GroupBy::findGroupedVariable(sparqlExpression::SparqlExpression* expr,
 void GroupBy::findGroupedVariableImpl(
     sparqlExpression::SparqlExpression* expr,
     std::optional<ParentAndChildIndex> parentAndChildIndex,
-    std::variant<std::vector<ParentAndChildIndex>, OccurenceAsRoot>&
-        substitutions,
+    std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>& substitutions,
     const Variable& groupedVariable) {
   if (auto value = hasType<sparqlExpression::VariableExpression>(expr)) {
     auto variable = value.value()->value();
@@ -830,7 +828,7 @@ void GroupBy::findGroupedVariableImpl(
       AD_CONTRACT_CHECK(vector != nullptr);
       vector->emplace_back(parentAndChildIndex.value());
     } else {
-      substitutions = OccurenceAsRoot{};
+      substitutions = OccurAsRoot{};
       return;
     }
   }
@@ -953,11 +951,18 @@ void GroupBy::extractValues(
 }
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+static constexpr auto resizeIfVector = [](auto& val, size_t size) {
+  if constexpr (requires { val.resize(size); }) {
+    val.resize(size);
+  }
+};
+
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
 sparqlExpression::VectorWithMemoryLimit<ValueId>
 GroupBy::getHashMapAggregationResults(
     IdTable* resultTable,
-    const HashMapAggregationData<GROUPED_COLUMNS>& aggregationData,
+    const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
     LocalVocab* localVocab) {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
@@ -967,15 +972,14 @@ GroupBy::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  using B = HashMapAggregationData<GROUPED_COLUMNS>::template T<Id>;
+  using B = HashMapAggregationData<NUM_GROUP_COLUMNS>::template T<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
     B mapKey;
-    if constexpr (requires {
-                    mapKey.resize(aggregationData.numOfGroupedColumns_);
-                  })
-      mapKey.resize(aggregationData.numOfGroupedColumns_);
-    for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx)
+    resizeIfVector(mapKey, aggregationData.numOfGroupedColumns_);
+
+    for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx) {
       mapKey.at(idx) = resultTable->getColumn(idx)[rowIdx];
+    }
     auto vectorIdx = aggregationData.getIndex(mapKey);
 
     auto visitor = [&aggregateResults, vectorIdx, rowIdx, beginIndex,
@@ -1013,11 +1017,11 @@ void GroupBy::substituteGroupVariable(
 }
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS>
 void GroupBy::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
-    const HashMapAggregationData<GROUPED_COLUMNS>& aggregationData,
+    const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     IdTable* resultTable, LocalVocab* localVocab) {
   // Substitute in the results of all aggregates of `info`.
   for (auto& aggregate : info) {
@@ -1042,14 +1046,14 @@ concept SupportedAggregates =
     ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
-GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getHashEntries(
-    const T<std::span<const Id>> ids) {
-  AD_CONTRACT_CHECK(ids.size() > 0);
+GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
+    const T<std::span<const Id>>& groupByCols) {
+  AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
-  size_t numberOfEntries = ids.at(0).size();
+  size_t numberOfEntries = groupByCols.at(0).size();
   hashEntries.reserve(numberOfEntries);
 
   // TODO: We pass the `Id`s column-wise into this function, and then handle
@@ -1057,12 +1061,11 @@ GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getHashEntries(
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
     T<Id> row;
-    if constexpr (requires { row.resize(numOfGroupedColumns_); })
-      row.resize(numOfGroupedColumns_);
+    resizeIfVector(row, numOfGroupedColumns_);
 
     // TODO<C++23> use views::enumerate
     auto idx = 0;
-    for (auto& val : ids) {
+    for (const auto& val : groupByCols) {
       row[idx++] = val[i];
     }
 
@@ -1102,10 +1105,10 @@ GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getHashEntries(
 }
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
-[[nodiscard]] GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::T<
+template <size_t NUM_GROUP_COLUMNS>
+[[nodiscard]] GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::T<
     std::vector<Id>>
-GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getSortedGroupColumns()
+GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
     const {
   // Get data in a row-wise manner.
   std::vector<T<Id>> sortedKeys;
@@ -1118,8 +1121,8 @@ GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getSortedGroupColumns()
 
   // Get data in a column-wise manner.
   T<std::vector<Id>> result;
-  if constexpr (requires { result.resize(numOfGroupedColumns_); })
-    result.resize(numOfGroupedColumns_);
+  resizeIfVector(result, numOfGroupedColumns_);
+
   for (size_t idx = 0; idx < numOfGroupedColumns_; ++idx)
     for (auto& val : sortedKeys) {
       result.at(idx).push_back(val.at(idx));
@@ -1129,11 +1132,11 @@ GroupBy::HashMapAggregationData<GROUPED_COLUMNS>::getSortedGroupColumns()
 }
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS>
 void GroupBy::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
-    const HashMapAggregationData<GROUPED_COLUMNS>& aggregationData,
+    const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     LocalVocab* localVocab) {
   auto& info = alias.aggregateInfo_;
 
@@ -1148,7 +1151,7 @@ void GroupBy::evaluateAlias(
   auto topLevelGroupedVariable =
       std::find_if(substitutions.begin(), substitutions.end(),
                    [](HashMapGroupedVariableInformation& val) {
-                     return std::get_if<OccurenceAsRoot>(&val.occurrences_);
+                     return std::get_if<OccurAsRoot>(&val.occurrences_);
                    });
 
   if (topLevelGroupedVariable != substitutions.end()) {
@@ -1222,10 +1225,10 @@ void GroupBy::evaluateAlias(
 }
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS>
 void GroupBy::createResultFromHashMap(
     IdTable* result,
-    const HashMapAggregationData<GROUPED_COLUMNS>& aggregationData,
+    const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     std::vector<HashMapAliasInformation>& aggregateAliases,
     LocalVocab* localVocab) {
   // Create result table, filling in the group values, since they might be
@@ -1295,13 +1298,13 @@ static constexpr auto makeProcessGroupsVisitor =
     };
 
 // _____________________________________________________________________________
-template <size_t GROUPED_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS>
 void GroupBy::computeGroupByForHashMapOptimization(
     IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
     const IdTable& subresult, const std::vector<size_t> columnIndices,
     LocalVocab* localVocab) {
   // Initialize aggregation data
-  HashMapAggregationData<GROUPED_COLUMNS> aggregationData(
+  HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
       getExecutionContext()->getAllocator(), aggregateAliases,
       columnIndices.size());
 
@@ -1325,11 +1328,11 @@ void GroupBy::computeGroupByForHashMapOptimization(
     auto currentBlockSize = evaluationContext.size();
 
     // Perform HashMap lookup once for all groups in current block
-    using U = HashMapAggregationData<GROUPED_COLUMNS>::template T<
+    using U = HashMapAggregationData<NUM_GROUP_COLUMNS>::template T<
         std::span<const Id>>;
     U groupValues;
-    if constexpr (requires { groupValues.resize(columnIndices.size()); })
-      groupValues.resize(columnIndices.size());
+    resizeIfVector(groupValues, columnIndices.size());
+
     // TODO<C++23> use views::enumerate
     size_t j = 0;
     for (auto& idx : columnIndices) {
