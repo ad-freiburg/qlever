@@ -621,7 +621,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "the smaller 'IdTable' to be the same value as a distinc element in "
         "the join column of the bigger 'IdTable'. Must be in the range "
         "$(0,100]$.",
-        &configVariables_.overlapChance_, 42.f);
+        &configVariables_.overlapChance_, 50.f);
 
     decltype(auto) smallerTableSampleSizeRatio = config.addOption(
         "smaller-table-join-column-sample-size-ratio",
@@ -669,7 +669,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "used for the calculation of the minimum number of rows for the "
         "smaller table in 'Benchmarktables, where the smaller table grows and "
         "the size of the bigger table remains the same.'.",
-        &configVariables_.maxRatioRows_, 1000.f);
+        &configVariables_.maxRatioRows_, 10000.f);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
         "max-memory",
