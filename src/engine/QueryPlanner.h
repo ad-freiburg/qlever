@@ -250,7 +250,7 @@ class QueryPlanner {
   template <typename AddedIndexScanFunction>
   void indexScanTwoVarsCase(const TripleGraph::Node& node,
                             const AddedIndexScanFunction& addIndexScan,
-                            const auto& addFilter) const;
+                            const auto& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>

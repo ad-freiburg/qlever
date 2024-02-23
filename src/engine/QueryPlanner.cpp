@@ -748,7 +748,9 @@ void QueryPlanner::indexScanSingleVarCase(
     addFilter(std::move(filter));
   };
 
-  auto addFilterTwoEls = [&node, this, &addIndexScan, &pushFilter](auto rewritePosition, auto otherVar, auto permutation) {
+  auto addFilterTwoEls = [&node, this, &addIndexScan, &pushFilter](
+                             auto rewritePosition, auto otherVar,
+                             auto permutation) {
     // Need to handle this as IndexScan with a new unique
     // variable + Filter. Works in both directions
     Variable filterVar = generateUniqueVarName();
@@ -797,12 +799,33 @@ void QueryPlanner::indexScanSingleVarCase(
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanTwoVarsCase(
-    const TripleGraph::Node& node,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) const {
+    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
+    const auto& addFilter) {
   using enum Permutation::Enum;
+  auto pushFilter = [&addFilter](Variable var1, Variable var2) {
+    std::string filterString =
+        absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
+    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
+                      .parseTypesafe(&SparqlAutomaticParser::filterR)
+                      .resultOfParse_;
 
-  // TODO: The case that the same variable appears in more than one position
-  // leads (as in indexScanSingleVarCase) to an assertion.
+    addFilter(std::move(filter));
+  };
+
+  auto addFilterTwoEls = [&node, this, &addIndexScan, &pushFilter](
+                             auto rewritePosition, auto otherVar,
+                             auto permutation) mutable {
+    // Need to handle this as IndexScan with a new unique
+    // variable + Filter. Works in both directions
+    Variable filterVar = generateUniqueVarName();
+    auto scanTriple = node.triple_;
+    std::invoke(rewritePosition, scanTriple) = filterVar;
+    addIndexScan(permutation, scanTriple);
+    pushFilter(filterVar, otherVar);
+  };
+
+  //  TODO<joka921> There is a lot of code duplication
+  using Tr = std::decay_t<decltype(node.triple_)>;
   if (!isVariable(node.triple_._p._iri)) {
     addIndexScan(PSO);
     addIndexScan(POS);
@@ -812,6 +835,23 @@ void QueryPlanner::indexScanTwoVarsCase(
   } else if (!isVariable(node.triple_._o)) {
     addIndexScan(OSP);
     addIndexScan(OPS);
+  } else {
+    // Three variables, two of which are identical.
+    if (node.triple_._s == node.triple_._o) {
+      // TODO<joka921> We could also add a second permutation here as a
+      // candidate. Namely OPS.
+      addFilterTwoEls(&Tr::_s, node.triple_._o.getVariable(), POS);
+    } else {
+      auto pred = Variable(node.triple_._p.getIri());
+      if (node.triple_._s == pred) {
+        addFilterTwoEls(&Tr::_s, pred, POS);
+        // TODO<joka921> ADD OPS permutation here.
+      } else {
+        AD_CORRECTNESS_CHECK(node.triple_._o == pred);
+        addFilterTwoEls(&Tr::_o, pred, PSO);
+        // TODO<joka921> Add SPO permutation here.
+      }
+    }
   }
 }
 
@@ -840,7 +880,8 @@ void QueryPlanner::indexScanThreeVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename PushPlanFunction, typename AddedIndexScanFunction, typename AddFilter>
+template <typename PushPlanFunction, typename AddedIndexScanFunction,
+          typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
     const AddedIndexScanFunction& addIndexScan, const AddFilter& addFilter) {
@@ -856,7 +897,8 @@ void QueryPlanner::seedFromOrdinaryTriple(
 // _____________________________________________________________________________
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children) -> PlansAndFilters {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children)
+    -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -879,11 +921,15 @@ auto QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [this, pushPlan, node](Permutation::Enum permutation, std::optional<decltype(node.triple_)> triple = std::nullopt) {
+    auto addIndexScan = [this, pushPlan, node](
+                            Permutation::Enum permutation,
+                            std::optional<decltype(node.triple_)> triple =
+                                std::nullopt) {
       if (!triple.has_value()) {
         pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
       } else {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, std::move(triple.value())));
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
+                                            std::move(triple.value())));
       }
     };
 
