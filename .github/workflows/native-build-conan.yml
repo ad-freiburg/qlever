@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         warnings: [  "-fsanitize=address  -fno-omit-frame-pointer -Wall -Wextra"  ]
-        build-type: [Release]
+        build-type: [RelWithDebInfo]
     runs-on: ubuntu-22.04
 
 
