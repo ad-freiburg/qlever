@@ -76,7 +76,7 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
   auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
   co_await net::co_spawn(
       ptr->strand(),
-      [&, ptr]() -> net::awaitable<void> {
+      [](auto ptr) -> net::awaitable<void> {
         QueryToSocketDistributor& queryToSocketDistributor = *ptr;
         bool waiting = false;
         auto listener = [&]() -> net::awaitable<void> {
@@ -92,7 +92,7 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
           co_return;
         };
         co_await (listener() && broadcaster());
-      },
+      }(ptr),
       net::deferred);
 }
 
