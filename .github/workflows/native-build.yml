@@ -22,7 +22,7 @@ jobs:
       matrix:
         compiler: [gcc, clang]
         compiler-version: [11, 12, 13, 16, 17]
-        warnings: [  "-Wall -Wextra -Werror " ]
+        warnings: [  "-Wall -Wextra -Werror -fsanitize=address -fno-omit-frame-pointer" ]
         build-type: [Release]
         expensive-tests: [true]
         exclude:
