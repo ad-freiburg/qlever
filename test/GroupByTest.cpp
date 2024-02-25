@@ -705,7 +705,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimization) {
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesInExpression) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -760,13 +760,13 @@ TEST_F(GroupByOptimizations,
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariables) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -817,13 +817,13 @@ TEST_F(GroupByOptimizations,
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations,
        correctResultForHashMapOptimizationMultipleVariablesOutOfOrder) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -874,12 +874,12 @@ TEST_F(GroupByOptimizations,
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(true);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(true);
 
   parsedQuery::SparqlValues input;
   using TC = TripleComponent;
@@ -945,7 +945,7 @@ TEST_F(GroupByOptimizations, correctResultForHashMapOptimizationManyVariables) {
   EXPECT_EQ(table, expected);
 
   // Disable optimization for following tests
-  RuntimeParameters().set<"use-group-by-hash-map-optimization">(false);
+  RuntimeParameters().set<"group-by-hash-map-enabled">(false);
 }
 
 // _____________________________________________________________________________
