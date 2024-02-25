@@ -279,7 +279,7 @@ class GroupBy : public Operation {
   class HashMapAggregationData {
    public:
     template <typename A>
-    using T =
+    using ArrayOrVector =
         std::conditional_t<NUM_GROUP_COLUMNS != 0,
                            std::array<A, NUM_GROUP_COLUMNS>, std::vector<A>>;
 
@@ -325,10 +325,10 @@ class GroupBy : public Operation {
     // Returns a vector containing the offsets for all ids of `groupByCols`,
     // inserting entries if necessary.
     std::vector<size_t> getHashEntries(
-        const T<std::span<const Id>>& groupByCols);
+        const ArrayOrVector<std::span<const Id>>& groupByCols);
 
     // Return the index of `id`.
-    [[nodiscard]] size_t getIndex(const T<Id>& ids) const {
+    [[nodiscard]] size_t getIndex(const ArrayOrVector<Id>& ids) const {
       return map_.at(ids);
     }
 
@@ -346,7 +346,7 @@ class GroupBy : public Operation {
     }
 
     // Get the values of the grouped column in ascending order.
-    [[nodiscard]] T<std::vector<Id>> getSortedGroupColumns() const;
+    [[nodiscard]] ArrayOrVector<std::vector<Id>> getSortedGroupColumns() const;
 
     // Returns the number of groups.
     [[nodiscard]] size_t getNumberOfGroups() const { return map_.size(); }
@@ -359,7 +359,7 @@ class GroupBy : public Operation {
     // Allocator used for creating new vectors.
     const ad_utility::AllocatorWithLimit<Id>& alloc_;
     // Maps `Id` to vector offsets.
-    ad_utility::HashMapWithMemoryLimit<T<Id>, size_t> map_;
+    ad_utility::HashMapWithMemoryLimit<ArrayOrVector<Id>, size_t> map_;
     // Stores the actual aggregation data.
     std::vector<AggregationDataVectors> aggregationData_;
     // For `GROUP_CONCAT`, we require the type information.

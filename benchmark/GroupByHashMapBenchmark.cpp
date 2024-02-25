@@ -199,8 +199,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   std::mt19937_64 randomEngine{rd()};
   static constexpr size_t numInputRows = 10'000'000;
   static constexpr size_t numMeasurements = 4;
-  static constexpr size_t multiplicities[] = {5'000'000, 500'000, 50'000, 5'000,
-                                              500,       50,      5};
+  static constexpr size_t multiplicities[] = {
+      5'000'000, 500'000, 50'000, 5'000, 500, 50, 5, 3, 1};
   static constexpr size_t randomStringLength = 3;
 
   template <typename T>

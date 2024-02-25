@@ -973,7 +973,8 @@ GroupBy::getHashMapAggregationResults(
   auto& aggregateDataVariant =
       aggregationData.getAggregationDataVariant(dataIndex);
 
-  using B = HashMapAggregationData<NUM_GROUP_COLUMNS>::template T<Id>;
+  using B =
+      HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
     B mapKey;
     resizeIfVector(mapKey, aggregationData.numOfGroupedColumns_);
@@ -1050,7 +1051,7 @@ concept SupportedAggregates =
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
-    const T<std::span<const Id>>& groupByCols) {
+    const ArrayOrVector<std::span<const Id>>& groupByCols) {
   AD_CONTRACT_CHECK(groupByCols.size() > 0);
 
   std::vector<size_t> hashEntries;
@@ -1061,7 +1062,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   //       them row-wise. Is there any advantage to this, or should we transform
   //       the data into a row-wise format before passing it?
   for (size_t i = 0; i < numberOfEntries; ++i) {
-    T<Id> row;
+    ArrayOrVector<Id> row;
     resizeIfVector(row, numOfGroupedColumns_);
 
     // TODO<C++23> use views::enumerate
@@ -1107,12 +1108,12 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-[[nodiscard]] GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::T<
+[[nodiscard]] GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::ArrayOrVector<
     std::vector<Id>>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
     const {
   // Get data in a row-wise manner.
-  std::vector<T<Id>> sortedKeys;
+  std::vector<ArrayOrVector<Id>> sortedKeys;
   for (const auto& val : map_) {
     sortedKeys.push_back(val.first);
   }
@@ -1121,7 +1122,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   std::ranges::sort(sortedKeys.begin(), sortedKeys.end());
 
   // Get data in a column-wise manner.
-  T<std::vector<Id>> result;
+  ArrayOrVector<std::vector<Id>> result;
   resizeIfVector(result, numOfGroupedColumns_);
 
   for (size_t idx = 0; idx < numOfGroupedColumns_; ++idx)
@@ -1342,7 +1343,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
     auto currentBlockSize = evaluationContext.size();
 
     // Perform HashMap lookup once for all groups in current block
-    using U = HashMapAggregationData<NUM_GROUP_COLUMNS>::template T<
+    using U = HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<
         std::span<const Id>>;
     U groupValues;
     resizeIfVector(groupValues, columnIndices.size());
