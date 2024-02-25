@@ -793,8 +793,9 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     // TODO<C++23> use views::enumerate
     size_t i = 0;
     for (const auto& groupedVariable : _groupByVariables) {
-      groupedVariables.emplace_back(groupedVariable, i++,
+      groupedVariables.emplace_back(groupedVariable, i,
                                     findGroupedVariable(expr, groupedVariable));
+      ++i;
     }
 
     aliasesWithAggregateInfo.emplace_back(alias._expression, alias._outCol,
@@ -1068,7 +1069,8 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
     // TODO<C++23> use views::enumerate
     auto idx = 0;
     for (const auto& val : groupByCols) {
-      row[idx++] = val[i];
+      row[idx] = val[i];
+      ++idx;
     }
 
     auto [iterator, wasAdded] = map_.try_emplace(row, getNumberOfGroups());
@@ -1151,10 +1153,10 @@ void GroupBy::evaluateAlias(
 
   auto substitutions = alias.groupedVariables_;
   auto topLevelGroupedVariable =
-      std::find_if(substitutions.begin(), substitutions.end(),
-                   [](HashMapGroupedVariableInformation& val) {
-                     return std::get_if<OccurAsRoot>(&val.occurrences_);
-                   });
+      std::ranges::find_if(substitutions.begin(), substitutions.end(),
+                           [](HashMapGroupedVariableInformation& val) {
+                             return std::get_if<OccurAsRoot>(&val.occurrences_);
+                           });
 
   if (topLevelGroupedVariable != substitutions.end()) {
     // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
@@ -1313,7 +1315,7 @@ static constexpr auto makeProcessGroupsVisitor =
 template <size_t NUM_GROUP_COLUMNS>
 void GroupBy::computeGroupByForHashMapOptimization(
     IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
-    const IdTable& subresult, const std::vector<size_t> columnIndices,
+    const IdTable& subresult, const std::vector<size_t>& columnIndices,
     LocalVocab* localVocab) {
   // Initialize aggregation data
   HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
@@ -1351,8 +1353,9 @@ void GroupBy::computeGroupByForHashMapOptimization(
     // TODO<C++23> use views::enumerate
     size_t j = 0;
     for (auto& idx : columnIndices) {
-      groupValues[j++] = subresult.getColumn(idx).subspan(
+      groupValues[j] = subresult.getColumn(idx).subspan(
           evaluationContext._beginIndex, currentBlockSize);
+      ++j;
     }
     lookupTimer.cont();
     auto hashEntries = aggregationData.getHashEntries(groupValues);

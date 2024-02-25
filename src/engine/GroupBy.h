@@ -261,7 +261,7 @@ class GroupBy : public Operation {
   template <size_t NUM_GROUP_COLUMNS>
   void computeGroupByForHashMapOptimization(
       IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
-      const IdTable& subresult, std::vector<size_t> columnIndices,
+      const IdTable& subresult, const std::vector<size_t>& columnIndices,
       LocalVocab* localVocab);
 
   using AggregationData =
