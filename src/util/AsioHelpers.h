@@ -6,19 +6,8 @@
 #ifndef QLEVER_ASIOHELPERS_H
 #define QLEVER_ASIOHELPERS_H
 
-#include <absl/cleanup/cleanup.h>
-
-#include <boost/asio.hpp>
-#include <boost/asio/awaitable.hpp>
-#include <boost/asio/bind_cancellation_slot.hpp>
-#include <boost/asio/cancellation_signal.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/deferred.hpp>
-#include <boost/asio/post.hpp>
-#include <boost/asio/use_awaitable.hpp>
-
 #include "util/Exception.h"
-#include "util/Log.h"
+#include "util/http/beast.h"
 
 namespace ad_utility {
 

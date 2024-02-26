@@ -312,7 +312,9 @@ FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
-target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized -Wno-error=unknown-warning-option)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+#endif
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 message(STATUS ---)

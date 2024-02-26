@@ -93,7 +93,6 @@ void runAsyncTest(Func innerRun, size_t numThreads) {
 // use of boost asio's awaitable coroutines. Note that this prevents you
 // from using ASSERT_* macros unless you redefine the return keword with
 // co_return so it works nicely with the coroutine.
-
 #define ASYNC_TEST(test_suite_name, test_name) \
   ASYNC_TEST_N(test_suite_name, test_name, 1)
 

@@ -210,7 +210,7 @@ class TransitivePath : public Operation {
    * using the given Map.
    *
    * @param edges Adjacency lists, mapping Ids (nodes) to their connected
-   * Ids
+   * Ids.
    * @param nodes A list of Ids. These Ids are used as starting points for the
    * transitive hull. Thus, this parameter guides the performance of this
    * algorithm.

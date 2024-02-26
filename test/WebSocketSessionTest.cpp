@@ -37,6 +37,11 @@ auto toBuffer(std::string_view view) {
   return net::const_buffer{view.data(), view.size()};
 }
 
+// Common implementation for the test cases below:
+// Run the `clientLogic` on the `executor` via `co_spawn` and `co_await` the
+// server logic. Note that the client logic and the server logic are run
+// separately, meaning that they can't be cancelled and both have to run to
+// completion on their own.
 net::awaitable<void> runTest(auto executor, net::awaitable<void> serverLogic,
                              net::awaitable<void> clientLogic) {
   auto fut = std::async(std::launch::async, [&]() {
@@ -56,7 +61,6 @@ net::awaitable<void> runTest(auto executor, net::awaitable<void> serverLogic,
 }
 
 // _____________________________________________________________________________
-
 TEST(WebSocketSession, EnsureCorrectPathAcceptAndRejectBehaviour) {
   auto testFunc = WebSocketSession::getErrorResponseIfPathIsInvalid;
 
