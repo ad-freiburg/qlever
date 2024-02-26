@@ -12,6 +12,8 @@ using namespace ad_utility;
 TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   net::io_context ctx;
   bool a = false;
+  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
+      ctx.get_executor()};
   runFunctionOnExecutor(
       ctx.get_executor(), [&]() { a = true; }, net::detached);
   EXPECT_FALSE(a);
@@ -19,14 +21,12 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   EXPECT_TRUE(a);
 
   // The exception disappears into the void, because the result is `detached`.
-  ctx.restart();
   runFunctionOnExecutor(
       ctx.get_executor(), [&]() { throw std::runtime_error{"blim"}; },
       net::detached);
   ctx.poll();
 
   a = false;
-  ctx.restart();
   auto fut = runFunctionOnExecutor(
       ctx.get_executor(), [&]() { a = true; }, net::use_future);
   EXPECT_FALSE(a);
@@ -35,7 +35,6 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   fut.get();
 
   a = false;
-  ctx.restart();
   fut = runFunctionOnExecutor(
       ctx.get_executor(),
       [&]() {
@@ -52,12 +51,13 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
 // _________________________________________________________________________
 TEST(AsioHelpers, runFunctionOnExecutorValue) {
   net::io_context ctx;
+  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
+      ctx.get_executor()};
   auto fut = runFunctionOnExecutor(
       ctx.get_executor(), [&]() { return 12; }, net::use_future);
   EXPECT_EQ(1, ctx.poll());
   EXPECT_EQ(fut.get(), 12);
 
-  ctx.restart();
   fut = runFunctionOnExecutor(
       ctx.get_executor(), [&]() -> int { throw std::runtime_error{"blim"}; },
       net::use_future);
@@ -68,6 +68,10 @@ TEST(AsioHelpers, runFunctionOnExecutorValue) {
 // _________________________________________________________________________
 TEST(AsioHelpers, runFunctionOnExecutorStrands) {
   net::io_context ctx;
+  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
+      ctx.get_executor()};
+  // Used to check that the asynchronous code is run at all.
+  std::atomic<int> sanityCounter = 0;
   auto strand1 = net::make_strand(ctx);
   auto strand2 = net::make_strand(ctx);
 
@@ -76,12 +80,14 @@ TEST(AsioHelpers, runFunctionOnExecutorStrands) {
       [&]() {
         EXPECT_TRUE(strand1.running_in_this_thread());
         EXPECT_FALSE(strand2.running_in_this_thread());
+        ++sanityCounter;
       },
       net::use_future);
   EXPECT_EQ(1, ctx.poll());
   fut.get();
+  EXPECT_EQ(sanityCounter, 1);
+  sanityCounter = 0;
 
-  ctx.restart();
   auto nestedCoroutine = [&]() -> net::awaitable<void> {
     EXPECT_TRUE(strand1.running_in_this_thread());
     EXPECT_FALSE(strand2.running_in_this_thread());
@@ -90,13 +96,16 @@ TEST(AsioHelpers, runFunctionOnExecutorStrands) {
         [&]() {
           EXPECT_TRUE(strand2.running_in_this_thread());
           EXPECT_FALSE(strand1.running_in_this_thread());
+          ++sanityCounter;
         },
         net::use_awaitable);
     EXPECT_TRUE(strand1.running_in_this_thread());
     EXPECT_FALSE(strand2.running_in_this_thread());
+    ++sanityCounter;
   };
 
   fut = net::co_spawn(strand1, nestedCoroutine(), net::use_future);
-  ctx.run();
+  ctx.poll();
   fut.get();
+  EXPECT_EQ(sanityCounter, 2);
 }

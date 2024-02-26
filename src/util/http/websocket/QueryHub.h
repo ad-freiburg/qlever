@@ -7,7 +7,6 @@
 
 #include <absl/container/flat_hash_map.h>
 
-#include "util/PointerGuard.h"
 #include "util/http/beast.h"
 #include "util/http/websocket/QueryId.h"
 #include "util/http/websocket/QueryToSocketDistributor.h"
@@ -21,6 +20,7 @@ namespace ad_utility::websocket {
 /// used once and from then onwards only the `QueryToSocketDistributor` instance
 /// is used.
 class QueryHub {
+ private:
   /// Helper type to make type T const if B is false
   template <bool B, typename T>
   using ConditionalConst = std::conditional_t<B, T, const T>;
@@ -35,31 +35,13 @@ class QueryHub {
         : pointer_{std::move(pointer)}, started_{started} {}
   };
 
- public:
-  using MapType = absl::flat_hash_map<QueryId, WeakReferenceHolder>;
+  using MapType = ad_utility::Synchronized<
+      absl::flat_hash_map<QueryId, WeakReferenceHolder>>;
 
- private:
   net::io_context& ioContext_;
-  /// Mutex for synchronization.
-  std::mutex mutex_;
   /// Guard to block destruction of the underlying io_context, to allow
   /// to gracefully destroy objects that might depend on the io_context.
-  ad_utility::PointerGuard<MapType> socketDistributors_{
-      std::make_shared<MapType>()};
-
-  // Expose internal API for testing
-  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_impl(
-      net::io_context&);
-  friend void QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_impl(
-      net::io_context&);
-  friend void QueryHub_verifyNoErrorWhenQueryIdMissing_impl(net::io_context&);
-
-  /// Implementation of `createOrAcquireDistributorForSending` and
-  /// `createOrAcquireDistributorForReceiving`.
-  template <bool isSender>
-  std::shared_ptr<
-      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
-  createOrAcquireDistributorInternal(const QueryId& queryId);
+  std::shared_ptr<MapType> socketDistributors_{std::make_shared<MapType>()};
 
  public:
   explicit QueryHub(net::io_context& ioContext) : ioContext_{ioContext} {}
@@ -76,6 +58,29 @@ class QueryHub {
   /// be called arbitrarily often during the lifetime of a single query session.
   std::shared_ptr<const QueryToSocketDistributor>
   createOrAcquireDistributorForReceiving(const QueryId& queryId);
+
+ private:
+  /// Implementation of `createOrAcquireDistributorForSending` and
+  /// `createOrAcquireDistributorForReceiving`.
+  template <bool isSender>
+  std::shared_ptr<
+      QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
+  createOrAcquireDistributorInternal(const QueryId& queryId);
+
+  // If the `socketDistributors` are still valid, lock them as well as the
+  // `mutex, and then delete the `queryId` from the `socketDistributor`s, but if
+  // the corresponding distributor is either expired, or if `alwaysDelete` is
+  // set to true.
+  static void deleteFromDistributors(
+      std::weak_ptr<QueryHub::MapType> socketDistributors,
+      const QueryId& queryId, bool alwaysDelete);
+
+  // Expose internal API for testing
+  friend net::awaitable<void> QueryHub_verifyNoOpOnDestroyedQueryHub_impl(
+      net::io_context&);
+  friend void QueryHub_verifyNoOpOnDestroyedQueryHubAfterSchedule_impl(
+      net::io_context&);
+  friend void QueryHub_verifyNoErrorWhenQueryIdMissing_impl(net::io_context&);
 };
 }  // namespace ad_utility::websocket
 

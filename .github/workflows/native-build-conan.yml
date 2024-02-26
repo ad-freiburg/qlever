@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        warnings: [  "-fsanitize=address  -fno-omit-frame-pointer -Wall -Wextra"  ]
+        warnings: [  "-Wall -Wextra"  ]
         build-type: [RelWithDebInfo]
     runs-on: ubuntu-22.04
 

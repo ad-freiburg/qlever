@@ -100,15 +100,12 @@ TEST(HttpServer, HttpTest) {
     }
 
     // Test if websocket is denied on wrong paths
-    for (size_t i = 0; i < 1; ++i) {
-      {
-        HttpClient httpClient("localhost",
-                              std::to_string(httpServer.getPort()));
-        auto response = httpClient.sendWebSocketHandshake(
-            verb::get, "localhost", "/other-path");
-        // Check for not found error
-        ASSERT_EQ(response.base().result(), http::status::not_found);
-      }
+    {
+      HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
+      auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
+                                                        "/other-path");
+      // Check for not found error
+      ASSERT_EQ(response.base().result(), http::status::not_found);
     }
 
     // Also test the convenience function `sendHttpOrHttpsRequest` (which

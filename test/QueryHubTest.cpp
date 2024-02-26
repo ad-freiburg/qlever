@@ -122,7 +122,7 @@ ASIO_TEST(QueryHub, verifyNoOpOnDestroyedQueryHubAfterSchedule) {
   auto distributor = queryHub->createOrAcquireDistributorForSending(
       QueryId::idFromString("abc"));
   distributor->signalEnd();
-  distributorMap = queryHub->socketDistributors_.getWeak();
+  distributorMap = std::weak_ptr{queryHub->socketDistributors_};
   // Destroy object
   queryHub.reset();
 
@@ -144,9 +144,9 @@ ASIO_TEST(QueryHub, verifyNoErrorWhenQueryIdMissing) {
   // case is very hard to simulate under real conditions (dependent on
   // scheduling of the operating system) we just fake it here to check the
   // behaviour we desire.
-  queryHub.socketDistributors_.get().clear();
+  queryHub.socketDistributors_->wlock()->clear();
   EXPECT_NO_THROW(distributor->signalEnd());
-  EXPECT_TRUE(queryHub.socketDistributors_.get().empty());
+  EXPECT_TRUE(queryHub.socketDistributors_->wlock()->empty());
 }
 
 }  // namespace ad_utility::websocket

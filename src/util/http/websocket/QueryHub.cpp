@@ -10,39 +10,39 @@ namespace ad_utility::websocket {
 
 // Return a lambda that deletes the `queryId` from the `socketDistributors`, but
 // only if it is either expired or `alwaysDelete` was specified.
-void deleteFromDistributors(std::mutex& mutex,
-                            std::weak_ptr<QueryHub::MapType> socketDistributors,
-                            const QueryId& queryId, bool alwaysDelete) {
+void QueryHub::deleteFromDistributors(
+    std::weak_ptr<QueryHub::MapType> synchronizedSocketDistributors,
+    const QueryId& queryId, bool alwaysDelete) {
   // This if-clause causes `guard_` to prevent destruction of
   // the complete `this` object and therefore also the `mutex_`.
   // Otherwise, if the QueryHub is already destroyed, then
   // just do nothing, no need for cleanup in this case.
-  auto pointer = socketDistributors.lock();
+  auto pointer = synchronizedSocketDistributors.lock();
   if (!pointer) {
     return;
   }
-  std::lock_guard l{mutex};
-  auto it = pointer->find(queryId);
-  if (it == pointer->end()) {
-    return;
-  }
-  bool expired = it->second.pointer_.expired();
-  // The branch `both of them are true` is currently not covered by
-  // tests and also not coverable, because the manual `signalEnd` call
-  // always comes before the destructor.
-  if (alwaysDelete || expired) {
-    pointer->erase(it);
-  }
+  pointer->withWriteLock([alwaysDelete, &queryId](auto& distributors) {
+    auto it = distributors.find(queryId);
+    if (it == distributors.end()) {
+      return;
+    }
+    bool expired = it->second.pointer_.expired();
+    // The branch `both of them are true` is currently not covered by
+    // tests and also not coverable, because the manual `signalEnd` call
+    // always comes before the destructor.
+    if (alwaysDelete || expired) {
+      distributors.erase(it);
+    }
+  });
 }
 
 // _____________________________________________________________________________
 template <bool isSender>
 std::shared_ptr<QueryHub::ConditionalConst<isSender, QueryToSocketDistributor>>
 QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
-  std::lock_guard l{mutex_};
-  auto& distributors = socketDistributors_.get();
-  if (distributors.contains(queryId)) {
-    auto& reference = distributors.at(queryId);
+  decltype(auto) distributors = socketDistributors_->wlock();
+  if (distributors->contains(queryId)) {
+    auto& reference = distributors->at(queryId);
     if (auto ptr = reference.pointer_.lock()) {
       if (isSender) {
         // Ensure only single sender reference is acquired for a single session
@@ -57,19 +57,19 @@ QueryHub::createOrAcquireDistributorInternal(const QueryId& queryId) {
   // We pass a weak_ptr version of `shared_pointer socketDistributors_` here,
   // because in unit tests the callback might be invoked after this
   // `QueryHub` was destroyed.
-  auto cleanupCall =
-      [&mutex = mutex_, socketDistributors = socketDistributors_.getWeak(),
-       queryId, alreadyCalled = false](bool alwaysDelete) mutable {
-        AD_CORRECTNESS_CHECK(!alreadyCalled);
-        alreadyCalled = true;
-        deleteFromDistributors(mutex, std::move(socketDistributors), queryId,
-                               alwaysDelete);
-      };
+  auto cleanupCall = [socketDistributors = std::weak_ptr{socketDistributors_},
+                      queryId,
+                      alreadyCalled = false](bool alwaysDelete) mutable {
+    AD_CORRECTNESS_CHECK(!alreadyCalled);
+    alreadyCalled = true;
+    deleteFromDistributors(std::move(socketDistributors), queryId,
+                           alwaysDelete);
+  };
 
   auto distributor = std::make_shared<QueryToSocketDistributor>(
       ioContext_, std::move(cleanupCall));
-  distributors.insert_or_assign(queryId,
-                                WeakReferenceHolder{distributor, isSender});
+  distributors->insert_or_assign(queryId,
+                                 WeakReferenceHolder{distributor, isSender});
   return distributor;
 }
 
