@@ -732,9 +732,9 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 }
 
 // _____________________________________________________________________________
-template <typename PushPlanFunction, typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
-    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const TripleGraph::Node& node,
     const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
 
@@ -880,13 +880,13 @@ void QueryPlanner::indexScanThreeVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename PushPlanFunction, typename AddedIndexScanFunction,
+template <typename AddedIndexScanFunction,
           typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
-    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
+    const TripleGraph::Node& node,
     const AddedIndexScanFunction& addIndexScan, const AddFilter& addFilter) {
   if (node._variables.size() == 1) {
-    indexScanSingleVarCase(node, pushPlan, addIndexScan, addFilter);
+    indexScanSingleVarCase(node, addIndexScan, addFilter);
   } else if (node._variables.size() == 2) {
     indexScanTwoVarsCase(node, addIndexScan, addFilter);
   } else {
@@ -919,18 +919,6 @@ auto QueryPlanner::seedWithScansAndText(
     auto pushPlan = [&seeds, i](SubtreePlan plan) {
       plan._idsOfIncludedNodes = (uint64_t(1) << i);
       seeds.push_back(std::move(plan));
-    };
-
-    auto addIndexScan = [this, pushPlan, node](
-                            Permutation::Enum permutation,
-                            std::optional<decltype(node.triple_)> triple =
-                                std::nullopt) {
-      if (!triple.has_value()) {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
-      } else {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
-                                            std::move(triple.value())));
-      }
     };
 
     using enum Permutation::Enum;
@@ -969,10 +957,23 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
+
+    auto addIndexScan = [this, pushPlan, node](
+        Permutation::Enum permutation,
+        std::optional<decltype(node.triple_)> triple =
+        std::nullopt) {
+      if (!triple.has_value()) {
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
+      } else {
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
+                                            std::move(triple.value())));
+      }
+    };
+
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
     };
-    seedFromOrdinaryTriple(node, pushPlan, addIndexScan, addFilter);
+    seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
   return result;
 }

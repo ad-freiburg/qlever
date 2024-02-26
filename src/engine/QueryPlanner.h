@@ -232,17 +232,15 @@ class QueryPlanner {
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
   // ql:contains-word nor a special pattern trick triple.
-  template <typename PushPlanFunction, typename AddedIndexScanFunction,
+  template <typename AddedIndexScanFunction,
             typename AddFilterFunction>
   void seedFromOrdinaryTriple(const TripleGraph::Node& node,
-                              const PushPlanFunction& pushPlan,
                               const AddedIndexScanFunction& addIndexScan,
                               const AddFilterFunction& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
-  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction>
   void indexScanSingleVarCase(const TripleGraph::Node& node,
-                              const PushPlanFunction& pushPlan,
                               const AddedIndexScanFunction& addIndexScan,
                               const auto& addFilter);
 

@@ -866,6 +866,30 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
           "always also needs corresponding ql:contains-word statement."));
 }
 
+TEST(QueryPlanner, NonDistinctVariablesInTriple) {
+  auto internal = [](int i) {
+    return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
+  };
+  auto eq = [](std::string_view l, std::string_view r) {
+    return absl::StrCat(l, "=", r);
+  };
+  h::expect("SELECT * WHERE {?s ?p ?s}",
+            h::Filter(eq(internal(0), "?s"),
+                      h::IndexScanFromStrings(internal(0), "?p", "?s")));
+  h::expect("SELECT * WHERE {?s ?s ?o}",
+            h::Filter(eq(internal(0), "?s"),
+                      h::IndexScanFromStrings(internal(0), "?s", "?o")));
+  h::expect("SELECT * WHERE {?s ?p ?p}",
+            h::Filter(eq(internal(0), "?p"),
+                      h::IndexScanFromStrings("?s", "?p", internal(0))));
+  // TODO<joka921> Make this better.
+  /*
+  h::expect("SELECT * WHERE {?s ?s ?s}",
+            h::Filter(eq(internal(0), "?p"),
+                      h::IndexScanFromStrings("?s", "?p", internal(0))));
+                      */
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, TooManyTriples) {
   std::string query = "SELECT * WHERE {";
