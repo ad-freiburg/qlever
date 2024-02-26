@@ -882,12 +882,20 @@ TEST(QueryPlanner, NonDistinctVariablesInTriple) {
   h::expect("SELECT * WHERE {?s ?p ?p}",
             h::Filter(eq(internal(0), "?p"),
                       h::IndexScanFromStrings("?s", "?p", internal(0))));
-  // TODO<joka921> Make this better.
-  /*
   h::expect("SELECT * WHERE {?s ?s ?s}",
+            h::Filter(eq(internal(1), "?s"),
+                      h::Filter(eq(internal(0), "?s"),
+                                h::IndexScanFromStrings(internal(1), "?s",
+                                                        internal(0)))));
+  h::expect("SELECT * WHERE {?s <is-a> ?s}",
+            h::Filter(eq(internal(0), "?s"),
+                      h::IndexScanFromStrings("?s", "<is-a>", internal(0))));
+  h::expect("SELECT * WHERE {<s> ?p ?p}",
             h::Filter(eq(internal(0), "?p"),
-                      h::IndexScanFromStrings("?s", "?p", internal(0))));
-                      */
+                      h::IndexScanFromStrings("<s>", "?p", internal(0))));
+  h::expect("SELECT * WHERE {?s ?s <o>}",
+            h::Filter(eq(internal(0), "?s"),
+                      h::IndexScanFromStrings(internal(0), "?s", "<o>")));
 }
 
 // __________________________________________________________________________

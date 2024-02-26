@@ -734,8 +734,8 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
-    const TripleGraph::Node& node,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
+    const auto& addFilter) {
   using enum Permutation::Enum;
 
   auto pushFilter = [&addFilter](Variable var1, Variable var2) {
@@ -880,11 +880,10 @@ void QueryPlanner::indexScanThreeVarsCase(
 }
 
 // _____________________________________________________________________________
-template <typename AddedIndexScanFunction,
-          typename AddFilter>
+template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
-    const TripleGraph::Node& node,
-    const AddedIndexScanFunction& addIndexScan, const AddFilter& addFilter) {
+    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
+    const AddFilter& addFilter) {
   if (node._variables.size() == 1) {
     indexScanSingleVarCase(node, addIndexScan, addFilter);
   } else if (node._variables.size() == 2) {
@@ -957,11 +956,10 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-
     auto addIndexScan = [this, pushPlan, node](
-        Permutation::Enum permutation,
-        std::optional<decltype(node.triple_)> triple =
-        std::nullopt) {
+                            Permutation::Enum permutation,
+                            std::optional<decltype(node.triple_)> triple =
+                                std::nullopt) {
       if (!triple.has_value()) {
         pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
       } else {

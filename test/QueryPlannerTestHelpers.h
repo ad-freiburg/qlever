@@ -235,13 +235,14 @@ inline auto TransitivePath =
                       TransitivePathSideMatcher(right))));
     };
 
-// Match a `Filter` operation. The matching of the expression is currently only done via the descriptor.
-constexpr auto Filter = [](std::string_view descriptor, const QetMatcher& childMatcher) {
-  return RootOperation<::Filter>(AllOf(
-      Property("getChildren", &Operation::getChildren,
-               ElementsAre(Pointee(childMatcher))),
-      AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))
-  ));
+// Match a `Filter` operation. The matching of the expression is currently only
+// done via the descriptor.
+constexpr auto Filter = [](std::string_view descriptor,
+                           const QetMatcher& childMatcher) {
+  return RootOperation<::Filter>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
 };
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
