@@ -65,7 +65,8 @@ struct CallFunctionAndPassToHandler {
 };
 // Explicit deduction guides, we need objects and not references as the template
 // parameters.
-template <typename Executor, std::invocable Function, typename Handler>
+template <typename Executor, typename Function, typename Handler>
+requires std::invocable<std::decay_t<Function>>
 CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
     -> CallFunctionAndPassToHandler<
         std::decay_t<Executor>, std::decay_t<Function>, std::decay_t<Handler>>;
