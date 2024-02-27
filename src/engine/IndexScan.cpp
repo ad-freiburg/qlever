@@ -14,19 +14,18 @@
 
 using std::string;
 
-// TODO<joka921> Code duplication, get rid of the other overload.
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
                      const SparqlTripleSimple& triple)
     : Operation(qec),
       permutation_(permutation),
-      subject_(triple._s),
-      predicate_(triple._p),
-      object_(triple._o),
+      subject_(triple.s_),
+      predicate_(triple.p_),
+      object_(triple.o_),
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
-  for (auto& [idx, variable] : triple._additionalScanColumns) {
+  for (auto& [idx, variable] : triple.additionalScanColumns_) {
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }

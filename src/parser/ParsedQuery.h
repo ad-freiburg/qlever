@@ -68,22 +68,17 @@ class SparqlTripleBase {
  public:
   using AdditionalScanColumns = std::vector<std::pair<ColumnIndex, Variable>>;
   SparqlTripleBase(TripleComponent s, Predicate p, TripleComponent o, AdditionalScanColumns additionalScanColumns = {})
-      : _s(std::move(s)), _p(std::move(p)), _o(std::move(o)), _additionalScanColumns(std::move(additionalScanColumns)) {}
+      : s_(std::move(s)), p_(std::move(p)), o_(std::move(o)), additionalScanColumns_(std::move(additionalScanColumns)) {}
 
-  /*
-  bool operator==(const SparqlTripleBase& other) const {
-    return _s == other._s && _p == other._p && _o == other._o;
-  }
-   */
   bool operator==(const SparqlTripleBase& other) const = default;
-  TripleComponent _s;
-  Predicate _p;
-  TripleComponent _o;
+  TripleComponent s_;
+  Predicate p_;
+  TripleComponent o_;
   // The additional columns (e.g. patterns) that are to be attached when
   // performing an index scan using this triple.
   // TODO<joka921> On this level we should not store `ColumnIndex`, but the
   // special predicate IRIs that are to be attached here.
-  std::vector<std::pair<ColumnIndex, Variable>> _additionalScanColumns;
+  std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns_;
 };
 
 // A triple where the predicate is a `TripleComponent`, so a fixed entity or a
@@ -110,10 +105,10 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   // Convert to a simple triple. Fails with an exception if the predicate
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
-    AD_CONTRACT_CHECK(_p.isIri());
-    TripleComponent p = isVariable(_p._iri) ? TripleComponent{Variable{_p._iri}}
-                                            : TripleComponent(_p._iri);
-    return {_s, p, _o, _additionalScanColumns};
+    AD_CONTRACT_CHECK(p_.isIri());
+    TripleComponent p = isVariable(p_._iri) ? TripleComponent{Variable{p_._iri}}
+                                            : TripleComponent(p_._iri);
+    return {s_, p, o_, additionalScanColumns_};
   }
 };
 

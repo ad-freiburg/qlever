@@ -97,7 +97,7 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
+  os << "{s: " << s_ << ", p: " << p_ << ", o: " << o_ << "}";
   return std::move(os).str();
 }
 
@@ -407,10 +407,10 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple._o == variable &&
-          (triple._p._operation == PropertyPath::Operation::IRI &&
-           !isVariable(triple._p)) &&
-          !triple._p._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+      if (triple.o_ == variable &&
+          (triple.p_._operation == PropertyPath::Operation::IRI &&
+           !isVariable(triple.p_)) &&
+          !triple.p_._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
         matchingTriples.push_back(&triple);
       }
     }
@@ -418,7 +418,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->_p._iri = '@' + langTag + '@' + triplePtr->_p._iri;
+    triplePtr->p_._iri = '@' + langTag + '@' + triplePtr->p_._iri;
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this

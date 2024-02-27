@@ -40,14 +40,14 @@ class QueryPlanner {
 
     struct Node {
       Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_._s)) {
-          _variables.insert(triple_._s.getVariable());
+        if (isVariable(triple_.s_)) {
+          _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_._p)) {
-          _variables.insert(Variable{triple_._p._iri});
+        if (isVariable(triple_.p_)) {
+          _variables.insert(Variable{triple_.p_._iri});
         }
-        if (isVariable(triple_._o)) {
-          _variables.insert(triple_._o.getVariable());
+        if (isVariable(triple_.o_)) {
+          _variables.insert(triple_.o_.getVariable());
         }
       }
 
