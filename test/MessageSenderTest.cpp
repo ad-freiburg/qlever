@@ -98,7 +98,7 @@ ASYNC_TEST(MessageSender, testGetQueryIdGetterWorks) {
   QueryHub queryHub{ioContext};
 
   {
-    auto messageSender = MessageSender{std::move(queryId), queryHub};
+    MessageSender messageSender{std::move(queryId), queryHub};
     EXPECT_EQ(reference, messageSender.getQueryId());
   }
   // The destructor of `MessageSender` calls `signalEnd` on the underlying

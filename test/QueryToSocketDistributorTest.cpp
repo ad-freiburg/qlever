@@ -25,10 +25,10 @@ static constexpr auto noop = ad_utility::noop;
 #define return co_return
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  queryToSocketDistributor.signalEnd();
-  EXPECT_THROW(queryToSocketDistributor.addQueryStatusUpdate("Abc"),
+  auto queryToSocketDistributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  queryToSocketDistributor->signalEnd();
+  EXPECT_THROW(queryToSocketDistributor->addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
   co_return;
 }
@@ -37,11 +37,10 @@ ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
-  auto ptr = std::make_shared<QueryToSocketDistributor>(
+  auto queryToSocketDistributor = std::make_shared<QueryToSocketDistributor>(
       ioContext, [&](bool signalEndCalled) { executed = signalEndCalled; });
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
   EXPECT_FALSE(executed);
-  queryToSocketDistributor.signalEnd();
+  queryToSocketDistributor->signalEnd();
   EXPECT_TRUE(executed);
   co_return;
 }
@@ -63,146 +62,146 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  queryToSocketDistributor.signalEnd();
-  EXPECT_THROW(queryToSocketDistributor.signalEnd(), ad_utility::Exception);
+  auto queryToSocketDistributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  queryToSocketDistributor->signalEnd();
+  EXPECT_THROW(queryToSocketDistributor->signalEnd(), ad_utility::Exception);
   co_return;
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndWakesUpListeners) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  co_await net::co_spawn(
-      ptr->strand(),
-      [](auto ptr) -> net::awaitable<void> {
-        QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-        bool waiting = false;
-        auto listener = [&]() -> net::awaitable<void> {
-          waiting = true;
-          EXPECT_EQ(nullptr,
-                    co_await queryToSocketDistributor.waitForNextDataPiece(0));
-        };
+  auto distributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  bool waiting = false;
+  auto listener = [](auto& waiting, auto& distributor) -> net::awaitable<void> {
+    waiting = true;
+    EXPECT_EQ(nullptr, co_await distributor->waitForNextDataPiece(0));
+  };
 
-        auto broadcaster = [&]() -> net::awaitable<void> {
-          // Ensure correct order of execution
-          ASSERT_TRUE(waiting);
-          queryToSocketDistributor.signalEnd();
-          co_return;
-        };
-        co_await (listener() && broadcaster());
-      }(ptr),
+  auto broadcaster = [](auto& waiting,
+                        auto& distributor) -> net::awaitable<void> {
+    // Ensure correct order of execution
+    ASSERT_TRUE(waiting);
+    distributor->signalEnd();
+    co_return;
+  };
+
+  co_await net::co_spawn(
+      distributor->strand(),
+      listener(waiting, distributor) && broadcaster(waiting, distributor),
       net::deferred);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateWakesUpListeners) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  auto impl = [&]() -> net::awaitable<void> {
-    bool waiting = false;
-    auto listener = [&]() -> net::awaitable<void> {
-      waiting = true;
-      auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-      EXPECT_THAT(result, Pointee("Abc"s));
-    };
-
-    auto broadcaster = [&]() -> net::awaitable<void> {
-      // Ensure correct order of execution
-      ASSERT_TRUE(waiting);
-      queryToSocketDistributor.addQueryStatusUpdate("Abc");
-      co_return;
-    };
-    co_await (listener() && broadcaster());
+  auto distributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  bool waiting = false;
+  auto listener = [](auto& waiting,
+                     auto& queryToSocketDistributor) -> net::awaitable<void> {
+    waiting = true;
+    auto result = co_await queryToSocketDistributor->waitForNextDataPiece(0);
+    EXPECT_THAT(result, Pointee("Abc"s));
   };
-  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
-                         net::use_awaitable);
+
+  auto broadcaster =
+      [](auto& waiting,
+         auto& queryToSocketDistributor) -> net::awaitable<void> {
+    // Ensure correct order of execution
+    ASSERT_TRUE(waiting);
+    queryToSocketDistributor->addQueryStatusUpdate("Abc");
+    co_return;
+  };
+  co_await net::co_spawn(
+      distributor->strand(),
+      listener(waiting, distributor) && broadcaster(waiting, distributor),
+      net::deferred);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, listeningBeforeStartWorks) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  auto impl = [&]() -> net::awaitable<void> {
-    bool waiting = false;
-    auto listener = [&]() -> net::awaitable<void> {
-      waiting = true;
-      auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
-      EXPECT_THAT(result, Pointee("Abc"s));
-    };
-
-    auto broadcaster = [&]() -> net::awaitable<void> {
-      // Ensure correct order of execution
-      ASSERT_TRUE(waiting);
-      queryToSocketDistributor.addQueryStatusUpdate("Abc");
-      co_return;
-    };
-    co_await (listener() && broadcaster());
+  auto distributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  bool waiting = false;
+  auto listener = [](auto& waiting, auto& distributor) -> net::awaitable<void> {
+    waiting = true;
+    auto result = co_await distributor->waitForNextDataPiece(0);
+    EXPECT_THAT(result, Pointee("Abc"s));
   };
-  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
-                         net::use_awaitable);
+
+  auto broadcaster = [](auto& waiting,
+                        auto&& distributor) -> net::awaitable<void> {
+    // Ensure correct order of execution
+    ASSERT_TRUE(waiting);
+    distributor->addQueryStatusUpdate("Abc");
+    co_return;
+  };
+  co_await net::co_spawn(
+      distributor->strand(),
+      listener(waiting, distributor) && broadcaster(waiting, distributor),
+      net::deferred);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateBeforeListenersWorks) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-
+  auto queryToSocketDistributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
   auto impl = [&]() -> net::awaitable<void> {
-    queryToSocketDistributor.addQueryStatusUpdate("Abc");
-    queryToSocketDistributor.addQueryStatusUpdate("Def");
-    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    queryToSocketDistributor->addQueryStatusUpdate("Abc");
+    queryToSocketDistributor->addQueryStatusUpdate("Def");
+    auto result = co_await queryToSocketDistributor->waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
-    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    result = co_await queryToSocketDistributor->waitForNextDataPiece(1);
     EXPECT_THAT(result, Pointee("Def"s));
   };
-  co_await net::co_spawn(queryToSocketDistributor.strand(), impl,
+  co_await net::co_spawn(queryToSocketDistributor->strand(), impl,
                          net::use_awaitable);
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
-  queryToSocketDistributor.addQueryStatusUpdate("Abc");
-  queryToSocketDistributor.addQueryStatusUpdate("Def");
-  queryToSocketDistributor.signalEnd();
+  auto queryToSocketDistributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
+  queryToSocketDistributor->addQueryStatusUpdate("Abc");
+  queryToSocketDistributor->addQueryStatusUpdate("Def");
+  queryToSocketDistributor->signalEnd();
 
   auto impl = [&]() -> net::awaitable<void> {
-    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    auto result = co_await queryToSocketDistributor->waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
-    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    result = co_await queryToSocketDistributor->waitForNextDataPiece(1);
     EXPECT_THAT(result, Pointee("Def"s));
-    result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
+    result = co_await queryToSocketDistributor->waitForNextDataPiece(2);
     ASSERT_FALSE(result);
   };
-  co_await (net::co_spawn(queryToSocketDistributor.strand(), impl,
+  co_await (net::co_spawn(queryToSocketDistributor->strand(), impl,
                           net::use_awaitable));
 }
 
 // _____________________________________________________________________________
 
 ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
-  auto ptr = std::make_shared<QueryToSocketDistributor>(ioContext, noop);
-  QueryToSocketDistributor& queryToSocketDistributor = *ptr;
+  auto queryToSocketDistributor =
+      std::make_shared<QueryToSocketDistributor>(ioContext, noop);
 
-  queryToSocketDistributor.addQueryStatusUpdate("Abc");
-  queryToSocketDistributor.addQueryStatusUpdate("Def");
-  queryToSocketDistributor.signalEnd();
+  queryToSocketDistributor->addQueryStatusUpdate("Abc");
+  queryToSocketDistributor->addQueryStatusUpdate("Def");
+  queryToSocketDistributor->signalEnd();
 
   auto impl = [&]() -> net::awaitable<void> {
-    auto result = co_await queryToSocketDistributor.waitForNextDataPiece(0);
+    auto result = co_await queryToSocketDistributor->waitForNextDataPiece(0);
     EXPECT_THAT(result, Pointee("Abc"s));
-    result = co_await queryToSocketDistributor.waitForNextDataPiece(1);
+    result = co_await queryToSocketDistributor->waitForNextDataPiece(1);
     EXPECT_THAT(result, Pointee("Def"s));
-    result = co_await queryToSocketDistributor.waitForNextDataPiece(2);
+    result = co_await queryToSocketDistributor->waitForNextDataPiece(2);
     EXPECT_FALSE(result);
   };
-  co_await (net::co_spawn(queryToSocketDistributor.strand(), impl,
+  co_await (net::co_spawn(queryToSocketDistributor->strand(), impl,
                           net::use_awaitable));
 }

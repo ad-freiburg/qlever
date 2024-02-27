@@ -84,14 +84,11 @@ auto runFunctionOnExecutor(Executor executor, Function function,
   static constexpr bool isVoid = std::is_void_v<Value>;
 
   // Obtain the call signature for the handler.
-  [[maybe_unused]] auto getSignature = []() {
-    if constexpr (isVoid) {
-      return std::type_identity<void(std::exception_ptr)>{};
-    } else {
-      return std::type_identity<void(std::exception_ptr, Value)>{};
-    }
-  };
-  using Signature = typename decltype(getSignature())::type;
+  // Note: The `DummyRes` is needed, because both branches (even the one that is
+  // statically not taken) must be valid types.
+  using DummyRes = std::conditional_t<isVoid, int, Value>;
+  using Signature = std::conditional_t<isVoid, void(std::exception_ptr),
+                                       void(std::exception_ptr, DummyRes)>;
 
   auto initiatingFunction = [function = std::move(function),
                              executor](auto&& handler) mutable {
