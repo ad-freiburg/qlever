@@ -731,67 +731,74 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   return tg;
 }
 
+namespace {
+// Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
+// Used as a helper function below.
+static SparqlFilter createEqualFilter(Variable var1, Variable var2) {
+  std::string filterString =
+      absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
+  return sparqlParserHelpers::ParserAndVisitor{filterString}
+      .parseTypesafe(&SparqlAutomaticParser::filterR)
+      .resultOfParse_;
+};
+
+template <typename F>
+concept TriplePosition =
+    ad_utility::InvocableWithExactReturnType<F, TripleComponent&,
+                                             SparqlTripleSimple&>;
+}  // namespace
+
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
-    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
-    const auto& addFilter) {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
 
-  auto pushFilter = [&addFilter](Variable var1, Variable var2) {
-    std::string filterString =
-        absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
-                      .parseTypesafe(&SparqlAutomaticParser::filterR)
-                      .resultOfParse_;
-
-    addFilter(std::move(filter));
-  };
-
-  auto addFilterTwoEls = [&node, this, &addIndexScan, &pushFilter](
-                             auto rewritePosition, auto otherVar,
-                             auto permutation) {
-    // Need to handle this as IndexScan with a new unique
-    // variable + Filter. Works in both directions
+  // Helper function for `handleRepeatedVariables` below.
+  // Replace a single position of the `scanTriple`, denoted by the
+  // `rewritePosition` by a new variable, and add a filter, that checks the old
+  // and the new value for equality.
+  auto rewriteSingle = [this, &addFilter](TriplePosition auto rewritePosition,
+                                          SparqlTripleSimple& scanTriple) {
     Variable filterVar = generateUniqueVarName();
-    auto scanTriple = node.triple_;
-    std::invoke(rewritePosition, scanTriple) = filterVar;
-    addIndexScan(permutation, scanTriple);
-    pushFilter(filterVar, otherVar);
+    auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+    addFilter(createEqualFilter(filterVar, target));
+    target = filterVar;
   };
 
-  using Tr = std::decay_t<decltype(node.triple_)>;
-  if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
-      node.triple_._s == node.triple_._o) {
-    if (isVariable(node.triple_._p._iri)) {
-      // TODO<joka921> This could be done more elegantly with a single filter
-      // and a little bit of extra code in the helper function above.
-      Variable filterVar1 = generateUniqueVarName();
-      Variable filterVar2 = generateUniqueVarName();
-      auto scanTriple = node.triple_;
-      scanTriple._o = filterVar1;
-      scanTriple._s = filterVar2;
-      addIndexScan(PSO, scanTriple);
-      pushFilter(filterVar1, node.triple_._s.getVariable());
-      pushFilter(filterVar2, node.triple_._s.getVariable());
-      return;
-    } else {
-      addFilterTwoEls(&Tr::_o, node.triple_._s.getVariable(), PSO);
-    }
-  } else if (isVariable(node.triple_._s)) {
-    if (isVariable(node.triple_._p)) {
-      addFilterTwoEls(&Tr::_s, Variable(node.triple_._p.getIri()), OPS);
+  // Replace the positions of the `triple` that are specified by the
+  // `rewritePositions` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for each of these rewrites. Then also
+  // add an index scan for the rewritten triple.
+  auto handleRepeatedVariables = [&triple, &addIndexScan, &rewriteSingle](
+                                     Permutation::Enum permutation,
+                                     TriplePosition auto... rewritePositions) {
+    auto scanTriple = triple;
+    (..., rewriteSingle(rewritePositions, scanTriple));
+    addIndexScan(permutation, scanTriple);
+  };
+
+  using Tr = SparqlTripleSimple;
+  const auto& [s, p, o, _] = triple;
+  if (isVariable(s) && isVariable(p) && isVariable(o)) {
+    handleRepeatedVariables(PSO, &Tr::_o, &Tr::_s);
+  } else if (isVariable(s) && isVariable(o) && s == o) {
+    handleRepeatedVariables(PSO, &Tr::_o);
+  } else if (isVariable(s)) {
+    if (isVariable(p)) {
+      handleRepeatedVariables(OPS, &Tr::_s);
     } else {
       addIndexScan(POS);
     }
-  } else if (isVariable(node.triple_._o)) {
-    if (isVariable(node.triple_._p)) {
-      addFilterTwoEls(&Tr::_o, Variable(node.triple_._p.getIri()), SPO);
+  } else if (isVariable(o)) {
+    if (isVariable(p)) {
+      handleRepeatedVariables(SPO, &Tr::_o);
     } else {
       addIndexScan(PSO);
     }
   } else {
-    AD_CONTRACT_CHECK(isVariable(node.triple_._p));
+    AD_CONTRACT_CHECK(isVariable(p));
     addIndexScan(SOP);
   }
 }
@@ -799,58 +806,51 @@ void QueryPlanner::indexScanSingleVarCase(
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanTwoVarsCase(
-    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
-    const auto& addFilter) {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
-  auto pushFilter = [&addFilter](Variable var1, Variable var2) {
-    std::string filterString =
-        absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
-    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
-                      .parseTypesafe(&SparqlAutomaticParser::filterR)
-                      .resultOfParse_;
 
-    addFilter(std::move(filter));
-  };
+  // Replace the position of the `triple` that is specified by the
+  // `rewritePosition` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for this rewrite. Then also
+  // add an index scan for the rewritten triple.
+  auto handleRepeatedVariables =
+      [&triple, this, &addIndexScan, &addFilter](
+          auto rewritePosition,
+          std::span<const Permutation::Enum> permutations) mutable {
+        // Need to handle this as IndexScan with a new unique
+        // variable + Filter. Works in both directions
+        Variable filterVar = generateUniqueVarName();
+        auto scanTriple = triple;
+        auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+        addFilter(createEqualFilter(filterVar, target));
+        target = filterVar;
+        std::ranges::for_each(permutations, [&addIndexScan, &scanTriple](
+                                                const auto& permutation) {
+          addIndexScan(permutation, scanTriple);
+        });
+      };
 
-  auto addFilterTwoEls = [&node, this, &addIndexScan, &pushFilter](
-                             auto rewritePosition, auto otherVar,
-                             auto permutation) mutable {
-    // Need to handle this as IndexScan with a new unique
-    // variable + Filter. Works in both directions
-    Variable filterVar = generateUniqueVarName();
-    auto scanTriple = node.triple_;
-    std::invoke(rewritePosition, scanTriple) = filterVar;
-    addIndexScan(permutation, scanTriple);
-    pushFilter(filterVar, otherVar);
-  };
-
-  //  TODO<joka921> There is a lot of code duplication
-  using Tr = std::decay_t<decltype(node.triple_)>;
-  if (!isVariable(node.triple_._p._iri)) {
+  const auto& [s, p, o, _] = triple;
+  if (!isVariable(p)) {
     addIndexScan(PSO);
     addIndexScan(POS);
-  } else if (!isVariable(node.triple_._s)) {
+  } else if (!isVariable(s)) {
     addIndexScan(SPO);
     addIndexScan(SOP);
-  } else if (!isVariable(node.triple_._o)) {
+  } else if (!isVariable(o)) {
     addIndexScan(OSP);
     addIndexScan(OPS);
   } else {
+    using Tr = SparqlTripleSimple;
     // Three variables, two of which are identical.
-    if (node.triple_._s == node.triple_._o) {
-      // TODO<joka921> We could also add a second permutation here as a
-      // candidate. Namely OPS.
-      addFilterTwoEls(&Tr::_s, node.triple_._o.getVariable(), POS);
+    if (s == o) {
+      handleRepeatedVariables(&Tr::_s, {{POS, OPS}});
+    } else if (s == p) {
+      handleRepeatedVariables(&Tr::_s, {{POS, OPS}});
     } else {
-      auto pred = Variable(node.triple_._p.getIri());
-      if (node.triple_._s == pred) {
-        addFilterTwoEls(&Tr::_s, pred, POS);
-        // TODO<joka921> ADD OPS permutation here.
-      } else {
-        AD_CORRECTNESS_CHECK(node.triple_._o == pred);
-        addFilterTwoEls(&Tr::_o, pred, PSO);
-        // TODO<joka921> Add SPO permutation here.
-      }
+      AD_CORRECTNESS_CHECK(o == p);
+      handleRepeatedVariables(&Tr::_o, {{PSO, SPO}});
     }
   }
 }
@@ -858,25 +858,18 @@ void QueryPlanner::indexScanTwoVarsCase(
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanThreeVarsCase(
-    const TripleGraph::Node& node,
     const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
-
-  if (!_qec || _qec->getIndex().hasAllPermutations()) {
-    // Add plans for all six permutations.
-    addIndexScan(OPS);
-    addIndexScan(OSP);
-    addIndexScan(PSO);
-    addIndexScan(POS);
-    addIndexScan(SPO);
-    addIndexScan(SOP);
-  } else {
-    AD_THROW(
-        "With only 2 permutations registered (no -a option), "
-        "triples should have at most two variables. "
-        "Not the case in: " +
-        node.triple_.asString());
-  }
+  AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
+                    "With only 2 permutations registered (no -a option), "
+                    "triples should have at most two variables.");
+  // Add plans for all six permutations.
+  addIndexScan(OPS);
+  addIndexScan(OSP);
+  addIndexScan(PSO);
+  addIndexScan(POS);
+  addIndexScan(SPO);
+  addIndexScan(SOP);
 }
 
 // _____________________________________________________________________________
@@ -884,12 +877,13 @@ template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
+  auto triple = node.triple_.getSimple();
   if (node._variables.size() == 1) {
-    indexScanSingleVarCase(node, addIndexScan, addFilter);
+    indexScanSingleVarCase(triple, addIndexScan, addFilter);
   } else if (node._variables.size() == 2) {
-    indexScanTwoVarsCase(node, addIndexScan, addFilter);
+    indexScanTwoVarsCase(triple, addIndexScan, addFilter);
   } else {
-    indexScanThreeVarsCase(node, addIndexScan);
+    indexScanThreeVarsCase(addIndexScan);
   }
 }
 
@@ -958,10 +952,11 @@ auto QueryPlanner::seedWithScansAndText(
 
     auto addIndexScan = [this, pushPlan, node](
                             Permutation::Enum permutation,
-                            std::optional<decltype(node.triple_)> triple =
+                            std::optional<SparqlTripleSimple> triple =
                                 std::nullopt) {
       if (!triple.has_value()) {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
+                                            node.triple_.getSimple()));
       } else {
         pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
                                             std::move(triple.value())));

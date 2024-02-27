@@ -239,20 +239,19 @@ class QueryPlanner {
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
-  void indexScanSingleVarCase(const TripleGraph::Node& node,
+  void indexScanSingleVarCase(const SparqlTripleSimple& triple,
                               const AddedIndexScanFunction& addIndexScan,
                               const auto& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
-  void indexScanTwoVarsCase(const TripleGraph::Node& node,
+  void indexScanTwoVarsCase(const SparqlTripleSimple& triple,
                             const AddedIndexScanFunction& addIndexScan,
                             const auto& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
-  void indexScanThreeVarsCase(const TripleGraph::Node& node,
-                              const AddedIndexScanFunction& addIndexScan) const;
+  void indexScanThreeVarsCase(const AddedIndexScanFunction& addIndexScan) const;
 
   /**
    * @brief Fills children with all operations that are associated with a single

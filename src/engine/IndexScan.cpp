@@ -14,15 +14,14 @@
 
 using std::string;
 
+// TODO<joka921> Code duplication, get rid of the other overload.
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple)
+                     const SparqlTripleSimple& triple)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple._s),
-      predicate_(triple._p.getIri().starts_with("?")
-                     ? TripleComponent(Variable{triple._p.getIri()})
-                     : TripleComponent(triple._p.getIri())),
+      predicate_(triple._p),
       object_(triple._o),
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
@@ -46,6 +45,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
   }
 }
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+                     const SparqlTriple& triple)
+    : IndexScan(qec, permutation, triple.getSimple()) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {

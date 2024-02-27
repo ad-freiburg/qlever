@@ -199,6 +199,7 @@ class TripleComponent {
   [[nodiscard]] const Variable& getVariable() const {
     return std::get<Variable>(_variant);
   }
+  [[nodiscard]] Variable& getVariable() { return std::get<Variable>(_variant); }
 
   const Literal& getLiteral() const { return std::get<Literal>(_variant); }
   Literal& getLiteral() { return std::get<Literal>(_variant); }
