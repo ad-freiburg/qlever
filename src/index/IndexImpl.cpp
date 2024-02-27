@@ -1361,9 +1361,9 @@ Index::NumNormalAndInternal IndexImpl::numDistinctCol0(
 
 // ___________________________________________________________________________
 size_t IndexImpl::getCardinality(Id id, Permutation::Enum permutation) const {
-  if (const auto& p = getPermutation(permutation);
-      p.metaData().col0IdExists(id)) {
-    return p.metaData().getMetaData(id).getNofElements();
+  if (const auto& meta = getPermutation(permutation).getMetadata(id);
+      meta.has_value()) {
+    return meta.value().numRows_;
   }
   return 0;
 }
@@ -1415,18 +1415,14 @@ Index::Vocab::PrefixRanges IndexImpl::prefixRanges(
 // _____________________________________________________________________________
 vector<float> IndexImpl::getMultiplicities(
     const TripleComponent& key, Permutation::Enum permutation) const {
-  const auto& p = getPermutation(permutation);
-  std::optional<Id> keyId = key.toValueId(getVocab());
-  vector<float> res;
-  if (keyId.has_value() && p.meta_.col0IdExists(keyId.value())) {
-    auto metaData = p.meta_.getMetaData(keyId.value());
-    res.push_back(metaData.getCol1Multiplicity());
-    res.push_back(metaData.getCol2Multiplicity());
-  } else {
-    res.push_back(1);
-    res.push_back(1);
+  if (auto keyId = key.toValueId(getVocab()); keyId.has_value()) {
+    auto meta = getPermutation(permutation).getMetadata(keyId.value());
+    if (meta.has_value()) {
+      return {meta.value().getCol1Multiplicity(),
+              meta.value().getCol2Multiplicity()};
+    }
   }
-  return res;
+  return {1.0f, 1.0f};
 }
 
 // ___________________________________________________________________

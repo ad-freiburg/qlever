@@ -456,6 +456,10 @@ class CompressedRelationReader {
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
+  std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      Id col0Id) const;
+
   // Get the contiguous subrange of the given `blockMetadata` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
@@ -527,8 +531,8 @@ class CompressedRelationReader {
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const CompressedRelationMetadata& relationMetadata,
-      std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
+      Id col0Id, std::optional<Id> col1Id,
+      const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices) const;
 

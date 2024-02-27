@@ -86,6 +86,8 @@ class Permutation {
       ColumnIndicesRef additionalColumns,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
+  std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
+
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also
   // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist

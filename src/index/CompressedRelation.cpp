@@ -108,7 +108,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(metadata, col1Id, *it,
+    auto result = readPossiblyIncompleteBlock(metadata.col0Id_, col1Id, *it,
                                               std::ref(details), columnIndices);
     cancellationHandle->throwIfCancelled();
     return result;
@@ -314,8 +314,8 @@ IdTable CompressedRelationReader::scan(
   // set up a lambda which allows us to read these blocks, and returns
   // the result as a vector.
   auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, block, std::nullopt,
-                                       columnIndices);
+    return readPossiblyIncompleteBlock(metadata.col0Id_, col1Id, block,
+                                       std::nullopt, columnIndices);
   };
 
   // The first and the last block might be incomplete, compute
@@ -413,8 +413,8 @@ IdTable CompressedRelationReader::scan(
 
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
-    const CompressedRelationMetadata& relationMetadata,
-    std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
+    Id col0Id, std::optional<Id> col1Id,
+    const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     ColumnIndicesRef columnIndices) const {
   std::vector<ColumnIndex> allColumns;
@@ -436,14 +436,10 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   // Find the range in the blockMetadata, that belongs to the same relation
   // `col0Id`
-  bool containedInOnlyOneBlock =
-      relationMetadata.offsetInBlock_ != std::numeric_limits<uint64_t>::max();
-  auto begin = col1Column.begin();
-  if (containedInOnlyOneBlock) {
-    begin += relationMetadata.offsetInBlock_;
-  }
-  auto end = containedInOnlyOneBlock ? begin + relationMetadata.numRows_
-                                     : col1Column.end();
+  const auto& col0Column = block.getColumn(0);
+  auto col0Range = std::ranges::equal_range(col0Column, col0Id);
+  auto begin = col1Column.begin() + (col0Range.begin() - col0Column.begin());
+  auto end = col1Column.begin() + (col0Range.end() - col0Column.begin());
 
   // If the `col1Id` was specified, we additionally have to filter by it.
   auto subBlock = [&]() {
@@ -487,8 +483,8 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(metadata, col1Id, block, std::nullopt,
-                                       columnIndices)
+    return readPossiblyIncompleteBlock(metadata.col0Id_, col1Id, block,
+                                       std::nullopt, columnIndices)
         .numRows();
   };
 
@@ -553,9 +549,9 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
       // Multiple `col1Id`s in one block.
       std::array<ColumnIndex, 1> columnIndices{1u};
       const auto& block =
-          i == 0 ? readPossiblyIncompleteBlock(relationMetadata, std::nullopt,
-                                               blockMetadata, std::nullopt,
-                                               columnIndices)
+          i == 0 ? readPossiblyIncompleteBlock(relationMetadata.col0Id_,
+                                               std::nullopt, blockMetadata,
+                                               std::nullopt, columnIndices)
                  : readAndDecompressBlock(blockMetadata, columnIndices);
       cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
@@ -689,6 +685,8 @@ void CompressedRelationWriter::compressAndWriteBlock(
         auto numRows = buf->numRows();
         const auto& first = (*buf)[0];
         const auto& last = (*buf)[buf->numRows() - 1];
+        AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
+        AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
         blockBuffer_.wlock()->push_back(
             CompressedBlockMetadata{std::move(offsets),
@@ -771,9 +769,9 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // actually matches the col0 and col1.
-    return readPossiblyIncompleteBlock(metadataAndBlocks.relationMetadata_,
-                                       metadataAndBlocks.col1Id_, block,
-                                       std::nullopt, {{0, 1, 2}});
+    return readPossiblyIncompleteBlock(
+        metadataAndBlocks.relationMetadata_.col0Id_, metadataAndBlocks.col1Id_,
+        block, std::nullopt, {{0, 1, 2}});
   };
 
   auto rowToTriple =
@@ -1051,19 +1049,20 @@ CompressedRelationWriter::createPermutationPair(
       writeMetadata(md1, md2);
     } else {
       // Small relations are written in one go.
-      auto md1 = writer1.addSmallRelation(col0IdCurrentRelation.value(),
-                                          distinctCol1Counter.getAndReset(),
-                                          relation.asStaticView<0>());
+      [[maybe_unused]] auto md1 = writer1.addSmallRelation(
+          col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
+          relation.asStaticView<0>());
       // We don't use the parallel twinRelationSorter to create the twin
       // relation as its overhead is far too high for small relations.
       relation.swapColumns(c1Idx, c2Idx);
       std::ranges::sort(relation, compare);
       std::ranges::for_each(relation.getColumn(c1Idx),
                             std::ref(distinctCol1Counter));
-      auto md2 = writer2.addSmallRelation(col0IdCurrentRelation.value(),
-                                          distinctCol1Counter.getAndReset(),
-                                          relation.asStaticView<0>());
-      writeMetadata(md1, md2);
+      [[maybe_unused]] auto md2 = writer2.addSmallRelation(
+          col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
+          relation.asStaticView<0>());
+      // Ignore the metadata of the small relations, it is wasteful to store.
+      // writeMetadata(md1, md2);
     }
     relation.clear();
     numBlocksCurrentRel = 0;
@@ -1141,4 +1140,33 @@ CompressedRelationWriter::createPermutationPair(
       << std::endl;
   return std::pair{std::move(writer1).getFinishedBlocks(),
                    std::move(writer2).getFinishedBlocks()};
+}
+
+std::optional<CompressedRelationMetadata>
+CompressedRelationReader::getMetadataForSmallRelation(
+    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    Id col0Id) const {
+  CompressedRelationMetadata metadata;
+  metadata.col0Id_ = col0Id;
+  metadata.offsetInBlock_ = 0;
+  auto blocks =
+      getBlocksFromMetadata(metadata, std::nullopt, allBlocksMetadata);
+  AD_CONTRACT_CHECK(blocks.size() <= 1,
+                    "Should only be called for small relations");
+  if (blocks.empty()) {
+    return std::nullopt;
+  }
+  auto block = readPossiblyIncompleteBlock(col0Id, std::nullopt, blocks.front(),
+                                           std::nullopt, {{1}});
+  if (block.empty()) {
+    return std::nullopt;
+  }
+  auto endOfUnique = std::ranges::unique(block.getColumn(0));
+  size_t numDistinct = endOfUnique.begin() - block.getColumn(0).begin();
+  metadata.numRows_ = block.size();
+  metadata.multiplicityCol1_ =
+      CompressedRelationWriter::computeMultiplicity(block.size(), numDistinct);
+  // TODO<joka921> get the correct multiplicity for the col2.
+  metadata.multiplicityCol2_ = 1.0f;
+  return metadata;
 }

@@ -93,21 +93,27 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(
-          Id::makeFromVocabIndex(VocabIndex::make(735))));
-      ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
-      ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+      ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a2).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+      ASSERT_FALSE(
+          index.PSO()
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
+      ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
-      ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
-      ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
-      ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
-      ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(b).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(a2).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+      ASSERT_FALSE(
+          index.POS()
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
 
       // Relation b
       // Pair index
@@ -151,13 +157,13 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c = getId("<c>");
       Id isA = getId("<is-a>");
 
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(isA));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+      ASSERT_TRUE(index.PSO().getMetadata(isA).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
 
-      ASSERT_FALSE(index.PSO().metaData().getMetaData(isA).isFunctional());
+      ASSERT_FALSE(index.PSO().getMetadata(isA).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
-      ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(isA).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(isA).value().isFunctional());
 
       auto testTwo = makeTestScanWidthTwo(index);
       testTwo("<is-a>", Permutation::PSO,
@@ -200,19 +206,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Id a = getId("<a>");
   Id c = getId("<c>");
 
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
+  ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(a).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
 };
 
 TEST(IndexTest, indexId) {

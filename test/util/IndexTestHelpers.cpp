@@ -180,7 +180,7 @@ Index makeTestIndex(const std::string& indexBasename,
   ad_utility::setGlobalLoggingStream(&std::cout);
 
   if (usePatterns && loadAllPermutations) {
-     checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
+    checkConsistencyBetweenPatternPredicateAndAdditionalColumn(index);
   }
   return index;
 }
