@@ -24,30 +24,28 @@ static constexpr auto noop = ad_utility::noop;
 // Hack to allow ASSERT_*() macros to work with ASYNC_TEST
 #define return co_return
 
-ASYNC_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
+ASIO_TEST(QueryToSocketDistributor, addQueryStatusUpdateThrowsWhenFinished) {
   auto queryToSocketDistributor =
       std::make_shared<QueryToSocketDistributor>(ioContext, noop);
   queryToSocketDistributor->signalEnd();
   EXPECT_THROW(queryToSocketDistributor->addQueryStatusUpdate("Abc"),
                ad_utility::Exception);
-  co_return;
 }
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
+ASIO_TEST(QueryToSocketDistributor, signalEndRunsCleanup) {
   bool executed = false;
   auto queryToSocketDistributor = std::make_shared<QueryToSocketDistributor>(
       ioContext, [&](bool signalEndCalled) { executed = signalEndCalled; });
   EXPECT_FALSE(executed);
   queryToSocketDistributor->signalEnd();
   EXPECT_TRUE(executed);
-  co_return;
 }
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
+ASIO_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
   uint32_t counter = 0;
   {
     QueryToSocketDistributor queryToSocketDistributor{ioContext,
@@ -55,18 +53,15 @@ ASYNC_TEST(QueryToSocketDistributor, destructorRunsCleanup) {
     EXPECT_EQ(counter, 0);
   }
   EXPECT_EQ(counter, 1);
-  // Make sure this is interpreted as a coroutine
-  co_return;
 }
 
 // _____________________________________________________________________________
 
-ASYNC_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
+ASIO_TEST(QueryToSocketDistributor, doubleSignalEndThrowsError) {
   auto queryToSocketDistributor =
       std::make_shared<QueryToSocketDistributor>(ioContext, noop);
   queryToSocketDistributor->signalEnd();
   EXPECT_THROW(queryToSocketDistributor->signalEnd(), ad_utility::Exception);
-  co_return;
 }
 
 // _____________________________________________________________________________
@@ -180,8 +175,8 @@ ASYNC_TEST(QueryToSocketDistributor, signalEndDoesNotPreventConsumptionOfRest) {
     result = co_await queryToSocketDistributor->waitForNextDataPiece(2);
     ASSERT_FALSE(result);
   };
-  co_await (net::co_spawn(queryToSocketDistributor->strand(), impl,
-                          net::use_awaitable));
+  co_await net::co_spawn(queryToSocketDistributor->strand(), impl,
+                         net::use_awaitable);
 }
 
 // _____________________________________________________________________________
@@ -202,6 +197,6 @@ ASYNC_TEST(QueryToSocketDistributor, fullConsumptionAfterSignalEndWorks) {
     result = co_await queryToSocketDistributor->waitForNextDataPiece(2);
     EXPECT_FALSE(result);
   };
-  co_await (net::co_spawn(queryToSocketDistributor->strand(), impl,
-                          net::use_awaitable));
+  co_await net::co_spawn(queryToSocketDistributor->strand(), impl,
+                         net::use_awaitable);
 }

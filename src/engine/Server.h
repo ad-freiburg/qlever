@@ -178,9 +178,10 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
-      const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit);
+  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
+                                            QueryExecutionContext& qec,
+                                            SharedCancellationHandle handle,
+                                            TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after

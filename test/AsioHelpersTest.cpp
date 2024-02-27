@@ -8,12 +8,17 @@
 #include "util/http/beast.h"
 
 using namespace ad_utility;
+namespace {
+using WorkGuard = net::executor_work_guard<net::io_context::executor_type>;
+[[nodiscard]] WorkGuard makeWorkGuard(net::io_context& ctx) {
+  return WorkGuard{ctx.get_executor()};
+}
+}  // namespace
 // _________________________________________________________________________
 TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   net::io_context ctx;
   bool a = false;
-  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
-      ctx.get_executor()};
+  auto workGuard = makeWorkGuard(ctx);
   runFunctionOnExecutor(
       ctx.get_executor(), [&]() { a = true; }, net::detached);
   EXPECT_FALSE(a);
@@ -51,8 +56,7 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
 // _________________________________________________________________________
 TEST(AsioHelpers, runFunctionOnExecutorValue) {
   net::io_context ctx;
-  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
-      ctx.get_executor()};
+  auto workGuard = makeWorkGuard(ctx);
   auto fut = runFunctionOnExecutor(
       ctx.get_executor(), [&]() { return 12; }, net::use_future);
   EXPECT_EQ(1, ctx.poll());
@@ -68,8 +72,7 @@ TEST(AsioHelpers, runFunctionOnExecutorValue) {
 // _________________________________________________________________________
 TEST(AsioHelpers, runFunctionOnExecutorStrands) {
   net::io_context ctx;
-  auto workGuard = net::executor_work_guard<decltype(ctx.get_executor())>{
-      ctx.get_executor()};
+  auto workGuard = makeWorkGuard(ctx);
   // Used to check that the asynchronous code is run at all.
   std::atomic<int> sanityCounter = 0;
   auto strand1 = net::make_strand(ctx);

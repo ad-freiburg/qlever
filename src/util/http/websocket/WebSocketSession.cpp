@@ -126,6 +126,13 @@ net::awaitable<void> WebSocketSession::handleSession(
   // connected.
   auto slot = (co_await net::this_coro::cancellation_state).slot();
   AD_CORRECTNESS_CHECK(!slot.is_connected());
+  // We have to spawn this call to the `UpdateFetcher's` strand, because
+  // `acceptAndWait` will await asynchronous methods of this class that require
+  // running on this strand. For the performance this is not an issue, as all
+  // code that is not asynchronously handled by Boost::ASIO is non-blocking and
+  // trivial, so it is not possible, that a slow websocket connection is
+  // starving other connections that listen to the same query. See
+  // `UpdateFetcher.h` and `QueryToSocketDistributor.h` for details.
   co_await net::co_spawn(strand, webSocketSession.acceptAndWait(request),
                          net::deferred);
 }

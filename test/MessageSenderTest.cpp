@@ -46,7 +46,7 @@ ASYNC_TEST(MessageSender, destructorCallsSignalEnd) {
     EXPECT_THAT(result, VariantWith<PayloadType>(PayloadType{}));
   };
 
-  co_await (net::co_spawn(distributor->strand(), impl(), net::deferred));
+  co_await net::co_spawn(distributor->strand(), impl(), net::deferred);
 }
 
 // _____________________________________________________________________________
@@ -60,7 +60,7 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
     auto distributor =
         queryHub.createOrAcquireDistributorForReceiving(queryId.toQueryId());
 
-    auto updateWrapper = MessageSender{std::move(queryId), queryHub};
+    MessageSender updateWrapper{std::move(queryId), queryHub};
 
     updateWrapper("Still");
     updateWrapper("Dre");
@@ -80,7 +80,7 @@ ASYNC_TEST(MessageSender, callingOperatorBroadcastsPayload) {
 
       EXPECT_THAT(result, VariantWith<PayloadType>(Pointee("Dre"s)));
     };
-    co_await (net::co_spawn(distributor->strand(), impl, net::deferred));
+    co_await net::co_spawn(distributor->strand(), impl, net::deferred);
   }
 
   // The destructor of `MessageSender` calls `signalEnd` on the distributor

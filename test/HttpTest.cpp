@@ -96,7 +96,6 @@ TEST(HttpServer, HttpTest) {
         // verify request is upgraded
         ASSERT_EQ(response.base().result(), http::status::switching_protocols);
       }
-      std::this_thread::sleep_for(std::chrono::milliseconds(2));
     }
 
     // Test if websocket is denied on wrong paths

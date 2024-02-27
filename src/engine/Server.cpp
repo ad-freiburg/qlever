@@ -684,7 +684,6 @@ boost::asio::awaitable<void> Server::processQuery(
 
     plannedQuery =
         co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
-    AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();
@@ -803,7 +802,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 }
 
 // _____________________________________________________________________________
-net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
+net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
@@ -811,7 +810,7 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // The usage of an `optional` here is required because of a limitation in
   // Boost::Asio which forces us to use default-constructible result types with
   // `computeInNewThread`.
-  return computeInNewThread(
+  auto optionalQuery = co_await computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
        handle = std::move(handle),
        timeLimit]() mutable -> std::optional<PlannedQuery> {
@@ -830,6 +829,7 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
         return plannedQuery;
       },
       std::move(handleCopy));
+  co_return optionalQuery.value();
 }
 
 // _____________________________________________________________________________

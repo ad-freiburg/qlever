@@ -17,10 +17,11 @@ namespace net = boost::asio;
 
 /// Class that temporarily holds live information of a single query to allow
 /// the individual websockets to query it, and await status updates.
-/// It also provides its own strand so operations on this class do not need
-/// to be synchronized globally. The public API is thread-safe, but you
-/// will end up on a different executor when awaiting it, so make sure
-/// to use a wrapper like `resumeOnOriginalExecutor()` to stay on your executor!
+/// Note: all `awaitable` functions (in particular `waitForNextDataPiece`) must
+/// be awaited on the strand that is exposed via the `strand()` member function.
+/// Otherwise, an exception is thrown because the thread-safety would be
+/// violated and because there is no good way in Boost::ASIO to change the
+/// executor of a coroutine stack.
 class QueryToSocketDistributor
     : public std::enable_shared_from_this<QueryToSocketDistributor> {
   /// Strand to synchronize all operations on this class
@@ -63,10 +64,14 @@ class QueryToSocketDistributor
   /// has already been consumed
   void signalEnd();
 
+  /// Expose the strand that is used to synchronize access to this class. All
+  /// calls to `waitForNextDataPiece` must be awaited on the returned `strand`.
   auto strand() const { return strand_; }
 
   /// Awaitable object to wait for and fetch the next available piece of data
-  /// for the websocket. co_returns a nullptr if no more data is available
+  /// for the websocket. co_returns a nullptr if no more data is available.
+  /// Must be awaited on the strand returned by `strand()`, else an exception is
+  /// thrown.
   net::awaitable<std::shared_ptr<const std::string>> waitForNextDataPiece(
       size_t index) const;
 };

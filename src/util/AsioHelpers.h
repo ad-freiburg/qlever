@@ -76,6 +76,9 @@ CallFunctionAndPassToHandler(Executor&&, Function&&, Handler&&)
 // the executor of a thread pool). As soon as the function has completed, the
 // completion handler which is obtained from the `completionToken` is posted to
 // its associated executor (which might be different from the `executor`).
+// Note: If no executor is associated with the `completionToken`, then the
+// handler will also be run on the `executor` that is passed to this function as
+// there is no other way of running it.
 template <typename Executor, typename CompletionToken, std::invocable Function>
 requires std::is_default_constructible_v<std::invoke_result_t<Function>> ||
          std::is_void_v<std::invoke_result_t<Function>>
