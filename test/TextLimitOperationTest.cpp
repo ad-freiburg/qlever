@@ -5,11 +5,11 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TextLimit.h"
 #include "engine/ValuesForTesting.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
@@ -17,14 +17,15 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const ColumnIndex& entityColumn,
                         const ColumnIndex& scoreColumn) {
   auto qec = ad_utility::testing::getQec();
+  qec->_textLimit = n;
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return TextLimit{
-      qec, n, std::move(subtree), textRecordColumn, entityColumn, scoreColumn};
+  return TextLimit{qec, std::move(subtree), textRecordColumn, entityColumn,
+                   scoreColumn};
 }
 
 bool testSorted(IdTable result, const ColumnIndex& textRecordColumn,

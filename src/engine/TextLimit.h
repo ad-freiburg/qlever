@@ -8,14 +8,14 @@
 
 class TextLimit : public Operation {
  private:
-  const size_t n_;
+  const QueryExecutionContext* qec_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
   const ColumnIndex entityColumn_;
   const ColumnIndex scoreColumn_;
 
  public:
-  TextLimit(QueryExecutionContext* qec, const size_t& n,
+  TextLimit(QueryExecutionContext* qec,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
             const ColumnIndex& entityColumn, const ColumnIndex& scoreColumn);
@@ -29,7 +29,7 @@ class TextLimit : public Operation {
   size_t getResultWidth() const override;
 
   void setTextLimit(size_t) override {
-    // QUESTION: is this function deprecated?
+    // TODO: this is deprecated
   }
 
   size_t getCostEstimate() override;
@@ -42,7 +42,7 @@ class TextLimit : public Operation {
   }
 
   bool knownEmptyResult() override {
-    return n_ == 0 || child_->knownEmptyResult();
+    return qec_->_textLimit == 0 || child_->knownEmptyResult();
   }
 
   vector<ColumnIndex> resultSortedOn() const override;

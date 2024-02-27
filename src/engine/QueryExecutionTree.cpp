@@ -30,6 +30,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
+#include "engine/TextLimit.h"
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
@@ -176,6 +177,8 @@ void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
     type_ = TEXT_INDEX_SCAN_FOR_WORD;
   } else if constexpr (std::is_same_v<Op, TextIndexScanForEntity>) {
     type_ = TEXT_INDEX_SCAN_FOR_ENTITY;
+  } else if constexpr (std::is_same_v<Op, TextLimit>) {
+    type_ = TEXT_LIMIT;
   } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
     type_ = COUNT_AVAILABLE_PREDICATES;
   } else if constexpr (std::is_same_v<Op, Minus>) {
@@ -215,6 +218,7 @@ template void QueryExecutionTree::setOperation(
 template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextIndexScanForWord>);
+template void QueryExecutionTree::setOperation(std::shared_ptr<TextLimit>);
 template void QueryExecutionTree::setOperation(
     std::shared_ptr<TextIndexScanForEntity>);
 template void QueryExecutionTree::setOperation(

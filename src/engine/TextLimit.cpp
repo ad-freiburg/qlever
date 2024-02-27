@@ -5,13 +5,13 @@
 #include "./TextLimit.h"
 
 // _____________________________________________________________________________
-TextLimit::TextLimit(QueryExecutionContext* qec, const size_t& n,
+TextLimit::TextLimit(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
                      const ColumnIndex& entityColumn,
                      const ColumnIndex& scoreColumn)
     : Operation(qec),
-      n_(n),
+      qec_(qec),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
       entityColumn_(entityColumn),
@@ -21,7 +21,7 @@ TextLimit::TextLimit(QueryExecutionContext* qec, const size_t& n,
 ResultTable TextLimit::computeResult() {
   shared_ptr<const ResultTable> childRes = child_->getResult();
 
-  if (n_ == 0) {
+  if (qec_->_textLimit == 0) {
     return {IdTable(childRes->width(), getExecutionContext()->getAllocator()),
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
@@ -56,7 +56,7 @@ ResultTable TextLimit::computeResult() {
     } else if (idTable[i][textRecordColumn_] !=
                idTable[i - 1][textRecordColumn_]) {
       // Case: new text record.
-      if (currentEntityCount >= n_) {
+      if (currentEntityCount >= qec_->_textLimit) {
         // Case: new text record and reached the limit.
         idTable.erase(idTable.begin() + i);
         --i;
@@ -110,7 +110,7 @@ vector<ColumnIndex> TextLimit::resultSortedOn() const {
 // _____________________________________________________________________________
 string TextLimit::getDescriptor() const {
   std::ostringstream os;
-  os << "TextLimit with limit n: " << n_;
+  os << "TextLimit with limit n: " << qec_->_textLimit;
   return os.str();
 }
 
@@ -118,7 +118,8 @@ string TextLimit::getDescriptor() const {
 string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
-     << " with n: " << n_ << ", with child: " << child_->getCacheKey()
+     << " with n: " << qec_->_textLimit
+     << ", with child: " << child_->getCacheKey()
      << "and ColumnIndices: " << textRecordColumn_ << ", " << entityColumn_
      << ", " << scoreColumn_;
   return std::move(os).str();
