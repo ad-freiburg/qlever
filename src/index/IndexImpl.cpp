@@ -685,11 +685,9 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
-  CompressedRelationWriter writer1{numColumns - 1,
-                                   ad_utility::File(fileName1, "w"),
+  CompressedRelationWriter writer1{numColumns, ad_utility::File(fileName1, "w"),
                                    blocksizePermutationPerColumn_};
-  CompressedRelationWriter writer2{numColumns - 1,
-                                   ad_utility::File(fileName2, "w"),
+  CompressedRelationWriter writer2{numColumns, ad_utility::File(fileName2, "w"),
                                    blocksizePermutationPerColumn_};
 
   // Lift a callback that works on single elements to a callback that works on
