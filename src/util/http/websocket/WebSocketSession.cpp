@@ -127,7 +127,7 @@ net::awaitable<void> WebSocketSession::handleSession(
   auto slot = (co_await net::this_coro::cancellation_state).slot();
   AD_CORRECTNESS_CHECK(!slot.is_connected());
   co_await net::co_spawn(strand, webSocketSession.acceptAndWait(request),
-                          net::deferred);
+                         net::deferred);
 }
 // _____________________________________________________________________________
 // TODO<C++23> use std::expected<void, ErrorResponse>
