@@ -63,6 +63,13 @@ IdTable Permutation::getDistinctCol1IdsAndCounts(
                                               cancellationHandle);
 }
 
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol0IdsAndCounts(
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
+  return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
+                                              cancellationHandle);
+}
+
 // _____________________________________________________________________
 std::array<size_t, 3> Permutation::toKeyOrder(Permutation::Enum permutation) {
   using enum Permutation::Enum;

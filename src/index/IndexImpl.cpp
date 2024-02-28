@@ -671,8 +671,8 @@ IndexImpl::convertPartialToGlobalIds(
 }
 
 // _____________________________________________________________________________
-std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      const string& fileName2,
                                      auto&& sortedTriples,
@@ -705,10 +705,12 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   std::vector<std::function<void(const IdTableStatic<0>&)>> perBlockCallbacks{
       liftCallback(perTripleCallbacks)...};
 
-  std::tie(metaData1.blockData(), metaData2.blockData()) =
+  auto [numDistinctCol0, blockData1, blockData2] =
       CompressedRelationWriter::createPermutationPair(
           fileName1, {writer1, callback1}, {writer2, callback2},
           AD_FWD(sortedTriples), permutation, perBlockCallbacks);
+  metaData1.blockData() = std::move(blockData1);
+  metaData2.blockData() = std::move(blockData2);
 
   // There previously was a bug in the CompressedIdTableSorter that lead to
   // semantically correct blocks, but with too large block sizes for the twin
@@ -716,12 +718,12 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   AD_CORRECTNESS_CHECK(metaData1.blockData().size() ==
                        metaData2.blockData().size());
 
-  return {std::move(metaData1), std::move(metaData2)};
+  return {numDistinctCol0, std::move(metaData1), std::move(metaData2)};
 }
 
 // ________________________________________________________________________
-std::pair<IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
-          IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
+std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
+           IndexImpl::IndexMetaDataMmapDispatcher::WriteType>
 IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
@@ -730,20 +732,21 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
       onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
       p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
 
+  const auto& [_, meta1, meta2] = metaData;
   LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
-            << metaData.first.statistics() << std::endl;
+            << meta1.statistics() << std::endl;
   LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
-            << metaData.second.statistics() << std::endl;
+            << meta2.statistics() << std::endl;
 
   return metaData;
 }
 
 // ________________________________________________________________________
-void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
-                                      const Permutation& p1,
-                                      const Permutation& p2,
-                                      auto&&... perTripleCallbacks) {
-  auto [metaData1, metaData2] = createPermutations(
+size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
+                                        const Permutation& p1,
+                                        const Permutation& p2,
+                                        auto&&... perTripleCallbacks) {
+  auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
   // NOTE: When `setKbName` was called, it set the name of pso_.meta_,
@@ -759,6 +762,7 @@ void IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
             << p2.readableName_ << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
+  return numDistinctC0;
 }
 
 // _____________________________________________________________________________
@@ -998,24 +1002,28 @@ void IndexImpl::readConfiguration() {
             "was built with an older version of QLever and should be rebuilt")};
       }
     } else {
-      target = Target{*it};
+      target = static_cast<Target>(*it);
     }
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
   loadDataMember("num-predicates-normal", numPredicatesNormal_);
   // These might be missing if there are only two permutations.
-  loadDataMember("num-subjects-normal", numSubjectsNormal_, 0);
-  loadDataMember("num-objects-normal", numObjectsNormal_, 0);
-  loadDataMember("num-triples-normal", numTriplesNormal_);
+  loadDataMember("num-subjects-normal", numSubjectsNormal_,
+                 NumNormalAndInternal{});
+  loadDataMember("num-objects-normal", numObjectsNormal_,
+                 NumNormalAndInternal{});
+  loadDataMember("num-triples-normal", numTriplesNormal_,
+                 NumNormalAndInternal{});
 
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
   // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_, ".",
-                          numSubjectsNormal_, ".", numPredicatesNormal_, ".",
-                          numObjectsNormal_);
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_.normal_, ".",
+                          numSubjectsNormal_.normal_, ".",
+                          numPredicatesNormal_.normal_, ".",
+                          numObjectsNormal_.normal_);
 }
 
 // ___________________________________________________________________________
@@ -1285,7 +1293,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 // ____________________________________________________________________________
 IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
-  return {numTriplesNormal_, PSO().meta_.getNofTriples() - numTriplesNormal_};
+  return numTriplesNormal_;
 }
 
 // ____________________________________________________________________________
@@ -1320,8 +1328,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
       "Can only get # distinct subjects if all 6 permutations "
       "have been registered on sever start (and index build time) "
       "with the -a option.");
-  auto numActually = numSubjectsNormal_;
-  return {numActually, spo_.metaData().getNofDistinctC1() - numActually};
+  return numSubjectsNormal_;
 }
 
 // __________________________________________________________________________
@@ -1331,15 +1338,12 @@ Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
       "Can only get # distinct objects if all 6 permutations "
       "have been registered on sever start (and index build time) "
       "with the -a option.");
-  auto numActually = numObjectsNormal_;
-  return {numActually, osp_.metaData().getNofDistinctC1() - numActually};
+  return numObjectsNormal_;
 }
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
-  auto numActually = numPredicatesNormal_;
-  // TODO<joka921> This is wrong, as not everybody has correct metadata.
-  return {numActually, pso_.metaData().getNofDistinctC1() - numActually};
+  return numPredicatesNormal_;
 }
 
 // __________________________________________________________________________
@@ -1520,18 +1524,25 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 
 {
   size_t numTriplesNormal = 0;
-  auto countTriplesNormal = [&numTriplesNormal,
+  size_t numTriplesTotal = 0;
+  auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
                              &isInternalId](const auto& triple) mutable {
+    ++numTriplesTotal;
     numTriplesNormal += std::ranges::none_of(triple, isInternalId);
   };
   size_t numPredicatesNormal = 0;
-  createPermutationPair(
-      numColumns, AD_FWD(sortedTriples), pso_, pos_,
-      nextSorter.makePushCallback()...,
-      makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId),
-      countTriplesNormal);
-  configurationJson_["num-predicates-normal"] = numPredicatesNormal;
-  configurationJson_["num-triples-normal"] = numTriplesNormal;
+  auto predicateCounter =
+      makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId);
+  size_t numPredicatesTotal =
+      createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
+                            nextSorter.makePushCallback()...,
+                            std::ref(predicateCounter), countTriplesNormal);
+  configurationJson_["num-predicates-normal"] =
+      NumNormalAndInternal::fromNormalAndTotal(numPredicatesNormal,
+                                               numPredicatesTotal);
+  configurationJson_["num-triples-normal"] =
+      NumNormalAndInternal::fromNormalAndTotal(numTriplesNormal,
+                                               numTriplesTotal);
   writeConfiguration();
 };
 
@@ -1542,6 +1553,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
     NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
+  size_t numSubjectsTotal = 0;
   auto numSubjectCounter =
       makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
   std::optional<PatternCreator::TripleSorter> result;
@@ -1559,19 +1571,28 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
       auto tripleArr = std::array{triple[0], triple[1], triple[2]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
-    createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
-                          nextSorter.makePushCallback()...,
-                          pushTripleToPatterns, numSubjectCounter);
+    numSubjectsTotal = createPermutationPair(
+        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        nextSorter.makePushCallback()..., pushTripleToPatterns,
+        std::ref(numSubjectCounter));
     patternCreator.finish();
-    configurationJson_["num-subjects-normal"] = numSubjectsNormal;
+    configurationJson_["num-subjects-normal"] =
+        NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
+                                                 numSubjectsTotal);
     writeConfiguration();
     result = std::move(patternCreator).getTripleSorter();
   } else {
     AD_CORRECTNESS_CHECK(sizeof...(nextSorter) == 1);
-    createPermutationPair(numColumns, AD_FWD(sortedTriples), spo_, sop_,
-                          nextSorter.makePushCallback()..., numSubjectCounter);
+    numSubjectsTotal = createPermutationPair(
+        numColumns, AD_FWD(sortedTriples), spo_, sop_,
+        nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
+    configurationJson_["num-subjects-normal"] =
+        NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
+                                                 numSubjectsTotal);
   }
-  configurationJson_["num-subjects-normal"] = numSubjectsNormal;
+  configurationJson_["num-subjects-normal"] =
+      NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
+                                               numSubjectsTotal);
   writeConfiguration();
   return result;
 };
@@ -1585,11 +1606,14 @@ void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
-  createPermutationPair(
+  auto objectCounter =
+      makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId);
+  size_t numObjectsTotal = createPermutationPair(
       numColumns, AD_FWD(sortedTriples), osp_, ops_,
-      nextSorter.makePushCallback()...,
-      makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId));
-  configurationJson_["num-objects-normal"] = numObjectsNormal;
+      nextSorter.makePushCallback()..., std::ref(objectCounter));
+  configurationJson_["num-objects-normal"] =
+      NumNormalAndInternal::fromNormalAndTotal(numObjectsNormal,
+                                               numObjectsTotal);
   configurationJson_["has-all-permutations"] = true;
   writeConfiguration();
 };

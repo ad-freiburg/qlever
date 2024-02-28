@@ -64,6 +64,9 @@ class Permutation {
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const;
 
+  IdTable getDistinctCol0IdsAndCounts(
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
+
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
 

@@ -297,9 +297,12 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
   const IndexImpl& index = s.getIndex().getImpl();
-  Id col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+  std::optional<Id> col0Id;
+  if (s.numVariables_ < 3) {
+    col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+  }
   std::optional<Id> col1Id;
-  if (s.numVariables_ == 1) {
+  if (s.numVariables_ < 2) {
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   return index.getPermutation(s.permutation())
@@ -312,35 +315,52 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
     const IndexScan& s) {
   auto permutedTriple = s.getPermutedTriple();
   const IndexImpl& index = s.getIndex().getImpl();
-  std::optional<Id> col0Id = permutedTriple[0]->toValueId(index.getVocab());
+  auto numVars = s.numVariables_;
+  std::optional<Id> col0Id =
+      numVars == 3 ? std::nullopt
+                   : permutedTriple[0]->toValueId(index.getVocab());
   std::optional<Id> col1Id =
-      s.numVariables_ == 2 ? std::nullopt
-                           : permutedTriple[1]->toValueId(index.getVocab());
-  if (!col0Id.has_value() || (!col1Id.has_value() && s.numVariables_ == 1)) {
+      numVars >= 2 ? std::nullopt
+                   : permutedTriple[1]->toValueId(index.getVocab());
+  if ((!col0Id.has_value() && numVars < 3) ||
+      (!col1Id.has_value() && numVars < 2)) {
     return std::nullopt;
   }
 
   return index.getPermutation(s.permutation())
-      .getMetadataAndBlocks({col0Id.value(), col1Id, std::nullopt});
+      .getMetadataAndBlocks({col0Id, col1Id, std::nullopt});
 };
 
 // ________________________________________________________________
 std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
-  AD_CONTRACT_CHECK(s1.numVariables_ < 3 && s2.numVariables_ < 3);
+  AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
 
   // This function only works for single column joins. This means that the first
   // variable of both scans must be equal, but the second variables of the scans
   // (if present) must be different.
   const auto& getFirstVariable = [](const IndexScan& scan) {
-    return scan.numVariables_ == 2 ? *scan.getPermutedTriple()[1]
-                                   : *scan.getPermutedTriple()[2];
+    auto numVars = scan.numVariables();
+    switch (numVars) {
+      case 1:
+        return *scan.getPermutedTriple()[2];
+      case 2:
+        return *scan.getPermutedTriple()[1];
+      case 3:
+        return *scan.getPermutedTriple()[0];
+      default:
+        AD_FAIL();
+    }
   };
 
   AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
+  // TODO<joka921> This check could be reinstated,
+  // it tests that we only have a single join column
+  /*
   if (s1.numVariables_ == 2 && s2.numVariables_ == 2) {
     AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
   }
+   */
 
   auto metaBlocks1 = getMetadataForScan(s1);
   auto metaBlocks2 = getMetadataForScan(s2);
@@ -361,7 +381,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
     std::span<const Id> joinColumn, const IndexScan& s) {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
-  AD_CONTRACT_CHECK(s.numVariables_ == 1 || s.numVariables_ == 2);
+  AD_CORRECTNESS_CHECK(s.numVariables_ <= 3);
 
   auto metaBlocks1 = getMetadataForScan(s);
 

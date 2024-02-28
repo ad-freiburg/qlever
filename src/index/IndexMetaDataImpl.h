@@ -99,12 +99,6 @@ string IndexMetaData<MapType>::statistics() const {
   return std::move(os).str();
 }
 
-// ______________________________________________
-template <class MapType>
-size_t IndexMetaData<MapType>::getNofDistinctC1() const {
-  return _data.size();
-}
-
 // __________________________________________________________________
 template <class MapType>
 void IndexMetaData<MapType>::calculateExpensiveStatistics() {

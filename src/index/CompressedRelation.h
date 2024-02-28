@@ -216,9 +216,12 @@ class CompressedRelationWriter {
    * @param permutation The permutation to be build (as a permutation of the
    * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
    */
-  static std::pair<std::vector<CompressedBlockMetadata>,
-                   std::vector<CompressedBlockMetadata>>
-  createPermutationPair(
+  struct PermutationPairResult {
+    size_t numDistinctCol0_;
+    std::vector<CompressedBlockMetadata> blockMetadata_;
+    std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
+  };
+  static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       cppcoro::generator<IdTableStatic<0>> sortedTriples,
@@ -462,6 +465,12 @@ class CompressedRelationReader {
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
+
+  // For all `col0Ids` determine their counts. This is
+  // used for `computeGroupByForFullScan`.
+  IdTable getDistinctCol0IdsAndCounts(
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(

@@ -95,7 +95,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
   std::string filename = testCaseName + ".dat";
 
   // First create the on-disk permutation.
-  size_t numColumns = getNumColumns(inputs);
+  size_t numColumns = getNumColumns(inputs) + 1;
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
   vector<CompressedRelationMetadata> metaData;
@@ -117,7 +117,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
         ++numBlocks;
       };
       for (const auto& arr : input.col1And2_) {
-        buffer.push_back(std::views::transform(arr, V));
+        std::vector row{V(input.col0_)};
+        std::ranges::transform(arr, std::back_inserter(row), V);
+        buffer.push_back(row);
         if (buffer.numRows() > writer.blocksize()) {
           addBlock();
         }
@@ -159,7 +161,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                                   ad_utility::File{filename, "r"}};
   // TODO<C++23> `std::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  std::ranges::copy(std::views::iota(2ul, getNumColumns(inputs)),
+  std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
                     std::back_inserter(additionalColumns));
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
@@ -240,7 +242,7 @@ TEST(CompressedRelationWriter, SmallRelations) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 200; ++i) {
     inputs.push_back(RelationInput{
-        i, {{i, i - 1, i + 1}, {i, i - 1, i + 2}, {i, i, i - 1}}});
+        i, {{i - 1, i + 1}, { i - 1, i + 2}, {i, i - 1}}});
   }
   testWithDifferentBlockSizes(inputs, "smallRelations");
 }

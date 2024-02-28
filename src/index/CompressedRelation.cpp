@@ -584,6 +584,64 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
 }
 
 // ____________________________________________________________________________
+IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
+    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
+  IdTableStatic<2> table(allocator_);
+  // TODO<joka921> How good can we unify this with the above function?
+  ScanSpecification ids{std::nullopt, std::nullopt, std::nullopt};
+  std::span<const CompressedBlockMetadata> relationBlocksMetadata =
+      getRelevantBlocks(ids, allBlocksMetadata);
+
+  // Iterate over the blocks and only read (and decompress) those which
+  // contain more than one different `col1Id`. For the others, we can determine
+  // the count from the metadata.
+  std::optional<Id> currentCol1Id;
+  size_t currentCount = 0;
+  // Helper lambda that processes a single `col1Id` (with `howMany`
+  // occurrences). If it's new, a row with the previous `col1Id` and
+  // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
+  // are reset.
+  auto processCol1Id = [&table, &currentCol1Id, &currentCount](
+      std::optional<Id> col1Id, size_t howMany) {
+    if (col1Id != currentCol1Id) {
+      if (currentCol1Id.has_value()) {
+        table.push_back({currentCol1Id.value(), Id::makeFromInt(currentCount)});
+      }
+      currentCol1Id = col1Id;
+      currentCount = 0;
+    }
+    currentCount += howMany;
+  };
+  for (size_t i = 0; i < relationBlocksMetadata.size(); ++i) {
+    const auto& blockMetadata = relationBlocksMetadata[i];
+    // TODO<joka921> This is one of the places that is actually different.
+    Id firstCol1Id = blockMetadata.firstTriple_.col0Id_;
+    Id lastCol1Id = blockMetadata.lastTriple_.col0Id_;
+    if (firstCol1Id == lastCol1Id) {
+      // The whole block has the same `col1Id`.
+      processCol1Id(firstCol1Id, blockMetadata.numRows_);
+    } else {
+      // Multiple `col1Id`s in one block.
+      std::array<ColumnIndex, 1> columnIndices{1u};
+      const auto& block =
+          i == 0 ? readPossiblyIncompleteBlock(ids, blockMetadata, std::nullopt,
+                                               columnIndices)
+                 : readAndDecompressBlock(blockMetadata, columnIndices);
+      cancellationHandle->throwIfCancelled();
+      // TODO<C++23>: use `std::views::chunk_by`.
+      for (size_t j = 0; j < block.numRows(); ++j) {
+        Id col1Id = block(j, 0);
+        processCol1Id(col1Id, 1);
+      }
+    }
+  }
+  // Don't forget to add the last `col1Id` and its count.
+  processCol1Id(std::nullopt, 0);
+  return std::move(table).toDynamic();
+}
+
+// ____________________________________________________________________________
 float CompressedRelationWriter::computeMultiplicity(
     size_t numElements, size_t numDistinctElements) {
   bool functional = numElements == numDistinctElements;
@@ -960,16 +1018,15 @@ CompressedRelationMetadata CompressedRelationWriter::addCompleteLargeRelation(
 }
 
 // _____________________________________________________________________________
-std::pair<std::vector<CompressedBlockMetadata>,
-          std::vector<CompressedBlockMetadata>>
-CompressedRelationWriter::createPermutationPair(
+auto CompressedRelationWriter::createPermutationPair(
     const std::string& basename, WriterAndCallback writerAndCallback1,
     WriterAndCallback writerAndCallback2,
     cppcoro::generator<IdTableStatic<0>> sortedTriples,
     std::array<size_t, 3> permutation,
     const std::vector<std::function<void(const IdTableStatic<0>&)>>&
-        perBlockCallbacks) {
+        perBlockCallbacks) -> PermutationPairResult {
   auto [c0, c1, c2] = permutation;
+  size_t numDistinctCol0 = 0;
   auto& writer1 = writerAndCallback1.writer_;
   auto& writer2 = writerAndCallback2.writer_;
   const size_t blocksize = writer1.blocksize();
@@ -1029,11 +1086,12 @@ CompressedRelationWriter::createPermutationPair(
     ++numBlocksCurrentRel;
   };
 
-  auto finishRelation = [&twinRelationSorter, &writer2, &writer1,
-                         &numBlocksCurrentRel, &col0IdCurrentRelation,
+  auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
+                         &writer1, &numBlocksCurrentRel, &col0IdCurrentRelation,
                          &relation, &distinctCol1Counter,
                          &addBlockForLargeRelation, &compare, &blocksize,
                          &writeMetadata, &largeTwinRelationTimer]() {
+    ++numDistinctCol0;
     if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
                                        0.8 * static_cast<double>(blocksize)) {
       // The relation is large;
@@ -1137,8 +1195,8 @@ CompressedRelationWriter::createPermutationPair(
       << "Time spent waiting for triple callbacks (e.g. the next sorter) "
       << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
       << std::endl;
-  return std::pair{std::move(writer1).getFinishedBlocks(),
-                   std::move(writer2).getFinishedBlocks()};
+  return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
+          std::move(writer2).getFinishedBlocks()};
 }
 
 std::optional<CompressedRelationMetadata>

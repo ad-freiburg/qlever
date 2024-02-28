@@ -170,8 +170,6 @@ class IndexMetaData {
 
   const string& getName() const { return _name; }
 
-  size_t getNofDistinctC1() const;
-
   size_t getVersion() const { return _version; }
 
   const MapType& data() const { return _data; }
