@@ -177,8 +177,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
 
     table.clear();
     for (const auto& block :
-         reader.lazyScan(metaData[i], std::nullopt, blocks, additionalColumns,
-                         cancellationHandle)) {
+         reader.lazyScan(metaData[i], std::nullopt, std::optional<Id>(), blocks,
+                         additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -199,9 +199,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block :
-           reader.lazyScan(metaData[i], V(lastCol1Id), blocks,
-                           Permutation::ColumnIndices{}, cancellationHandle)) {
+      for (const auto& block : reader.lazyScan(
+               metaData[i], V(lastCol1Id), std::optional<Id>(), blocks,
+               Permutation::ColumnIndices{}, cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);

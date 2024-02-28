@@ -36,6 +36,8 @@ class Permutation {
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
 
+  using ScanSpecification = CompressedRelationReader::ScanSpecification;
+
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -53,7 +55,7 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+  IdTable scan(const ScanSpecification& ids,
                ColumnIndicesRef additionalColumns,
                ad_utility::SharedCancellationHandle cancellationHandle) const;
 
@@ -81,7 +83,7 @@ class Permutation {
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
-      Id col0Id, std::optional<Id> col1Id,
+      ScanSpecification ids,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
@@ -93,11 +95,11 @@ class Permutation {
   // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
   // in this permutation, `nullopt` is returned.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      Id col0Id, std::optional<Id> col1Id) const;
+      const ScanSpecification& ids) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(Id col0Id, Id col1Id) const;
+  size_t getResultSizeOfScan(const ScanSpecification& ids) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }

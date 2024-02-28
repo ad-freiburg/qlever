@@ -334,13 +334,24 @@ class CompressedRelationReader {
   using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
 
+  // TODO<joka921> Document and think of name.
+  class ScanSpecification {
+   public:
+    std::optional<Id> col0Id_;
+    std::optional<Id> col1Id_;
+    std::optional<Id> col2Id_;
+
+    const std::optional<Id>& col0Id() const { return col0Id_; }
+    const std::optional<Id>& col1Id() const { return col1Id_; }
+    const std::optional<Id>& col2Id() const { return col2Id_; }
+  };
+
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
   // the input to several functions below that take such an input.
   struct MetadataAndBlocks {
-    const CompressedRelationMetadata relationMetadata_;
+    ScanSpecification ids_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
-    std::optional<Id> col1Id_;
 
     // If set, `firstAndLastTriple_` contains the first and the last triple
     // of the specified relation (and being filtered by the `col1Id` if
@@ -363,6 +374,7 @@ class CompressedRelationReader {
   };
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
+
 
  private:
   // This cache stores a small number of decompressed blocks. Its current
@@ -425,8 +437,7 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const CompressedRelationMetadata& metadata,
-               std::optional<Id> col1Id,
+  IdTable scan(ScanSpecification ids,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                ad_utility::SharedCancellationHandle cancellationHandle) const;
@@ -434,8 +445,8 @@ class CompressedRelationReader {
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata, std::optional<Id> col1Id,
+  CompressedRelationReader::IdTableGenerator lazyScan(
+      ScanSpecification ids,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
@@ -446,13 +457,13 @@ class CompressedRelationReader {
   // these scans can be retrieved from the `CompressedRelationMetadata`
   // directly.
   size_t getResultSizeOfScan(
-      const CompressedRelationMetadata& metaData, Id col1Id,
+      ScanSpecification ids,
       const vector<CompressedBlockMetadata>& blocks) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
-      const CompressedRelationMetadata& relationMetadata,
+      Id col0Id,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
@@ -464,8 +475,8 @@ class CompressedRelationReader {
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
-  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
+      ScanSpecification ids,
       std::span<const CompressedBlockMetadata> blockMetadata);
 
   // The same function, but specify the arguments as the `MetadataAndBlocks`
@@ -556,7 +567,7 @@ class CompressedRelationReader {
   // These are exactly the columns that are returned by a scan depending on
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
-      const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns);
+      const ScanSpecification& ids, ColumnIndicesRef additionalColumns);
 };
 
 // TODO<joka921>

@@ -90,12 +90,11 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 
 // _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
-    CompressedRelationMetadata metadata, std::optional<Id> col1Id,
-    std::vector<CompressedBlockMetadata> blockMetadata,
+    ScanSpecification ids, std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   AD_CONTRACT_CHECK(cancellationHandle);
-  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blockMetadata);
+  auto relevantBlocks = getRelevantBlocks(ids, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
 
   LazyScanMetadata& details = co_await cppcoro::getDetails;
@@ -105,10 +104,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     co_return;
   }
 
-  auto columnIndices = prepareColumnIndices(col1Id, additionalColumns);
+  auto columnIndices = prepareColumnIndices(ids, additionalColumns);
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(metadata.col0Id_, col1Id, *it,
+    auto result = readPossiblyIncompleteBlock(ids, *it,
                                               std::ref(details), columnIndices);
     cancellationHandle->throwIfCancelled();
     return result;
@@ -305,7 +304,8 @@ IdTable CompressedRelationReader::scan(
 
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
-  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
+  auto relevantBlocks =
+      getRelevantBlocks(metadata, col1Id, std::optional<Id>(), blocks);
   auto beginBlock = relevantBlocks.begin();
   auto endBlock = relevantBlocks.end();
 
@@ -474,7 +474,8 @@ size_t CompressedRelationReader::getResultSizeOfScan(
     const vector<CompressedBlockMetadata>& blocks) const {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
-  auto relevantBlocks = getBlocksFromMetadata(metadata, col1Id, blocks);
+  auto relevantBlocks =
+      getRelevantBlocks(metadata, col1Id, std::optional<Id>(), blocks);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
   std::array<ColumnIndex, 1> columnIndices{0u};
 
@@ -516,7 +517,8 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   IdTableStatic<2> table(allocator_);
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
-      getBlocksFromMetadata(relationMetadata, std::nullopt, allBlocksMetadata);
+      getRelevantBlocks(relationMetadata, std::nullopt, std::optional<Id>(),
+                        allBlocksMetadata);
 
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `col1Id`. For the others, we can determine
@@ -698,65 +700,43 @@ void CompressedRelationWriter::compressAndWriteBlock(
 
 // _____________________________________________________________________________
 std::span<const CompressedBlockMetadata>
-CompressedRelationReader::getBlocksFromMetadata(
-    const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
+CompressedRelationReader::getRelevantBlocks(
+    Id col0Id, std::optional<Id> col1Id, std::optional<Id> col2Id,
     std::span<const CompressedBlockMetadata> blockMetadata) {
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
-  Id col0Id = metadata.col0Id_;
   CompressedBlockMetadata key;
   key.firstTriple_.col0Id_ = col0Id;
   key.lastTriple_.col0Id_ = col0Id;
   key.firstTriple_.col1Id_ = col1Id.value_or(Id::min());
   key.lastTriple_.col1Id_ = col1Id.value_or(Id::max());
+  key.firstTriple_.col2Id_ = col2Id.value_or(Id::min());
+  key.lastTriple_.col2Id_ = col2Id.value_or(Id::max());
 
   auto comp = [](const auto& a, const auto& b) {
-    bool endBeforeBegin = a.lastTriple_.col0Id_ < b.firstTriple_.col0Id_;
-    endBeforeBegin =
-        endBeforeBegin || (a.lastTriple_.col0Id_ == b.firstTriple_.col0Id_ &&
-                           a.lastTriple_.col1Id_ < b.firstTriple_.col1Id_);
+    auto eq = [&a, &b](auto f) {
+      return std::invoke(f, a.lastTriple_) == std::invoke(f, b.firstTriple_);
+    };
+    auto less = [&a, &b](auto f) {
+      return std::invoke(f, a.lastTriple_) < std::invoke(f, b.firstTriple_);
+    };
+    using Tr = decltype(a.lastTriple_);
+    bool endBeforeBegin = less(&Tr::col0Id_);
+    endBeforeBegin = endBeforeBegin || (eq(&Tr::col0Id_) && less(&Tr::col1Id_));
+    endBeforeBegin = endBeforeBegin || (eq(&Tr::col0Id_) && eq(&Tr::col1Id_) &&
+                                        less(&Tr::col2Id_));
     return endBeforeBegin;
   };
 
-  auto result = std::ranges::equal_range(blockMetadata, key, comp);
-
-  // Invariant: The col0Id is completely stored in a single block, or it is
-  // contained in multiple blocks that only contain this col0Id,
-  bool col0IdHasExclusiveBlocks =
-      metadata.offsetInBlock_ == std::numeric_limits<uint64_t>::max();
-  // `result` might also be empty if no block was found at all.
-  AD_CORRECTNESS_CHECK(col0IdHasExclusiveBlocks || result.size() <= 1);
-
-  if (!result.empty()) {
-    // Check some invariants of the splitting of the relations.
-    bool firstIncomplete = result.front().firstTriple_.col0Id_ < col0Id ||
-                           result.front().lastTriple_.col0Id_ > col0Id;
-
-    auto lastBlock = result.end() - 1;
-
-    bool lastIncomplete = result.begin() < lastBlock &&
-                          (lastBlock->firstTriple_.col0Id_ < col0Id ||
-                           lastBlock->lastTriple_.col0Id_ > col0Id);
-
-    // Invariant: A relation spans multiple blocks exclusively or several
-    // entities are stored completely in the same Block.
-    if (!col1Id.has_value()) {
-      AD_CORRECTNESS_CHECK(!firstIncomplete || (result.begin() == lastBlock));
-      AD_CORRECTNESS_CHECK(!lastIncomplete);
-    }
-    if (firstIncomplete) {
-      AD_CORRECTNESS_CHECK(!col0IdHasExclusiveBlocks);
-    }
-  }
-  return result;
+  return std::ranges::equal_range(blockMetadata, key, comp);
 }
 
 // _____________________________________________________________________________
 std::span<const CompressedBlockMetadata>
 CompressedRelationReader::getBlocksFromMetadata(
     const MetadataAndBlocks& metadata) {
-  return getBlocksFromMetadata(metadata.relationMetadata_, metadata.col1Id_,
-                               metadata.blockMetadata_);
+  return getRelevantBlocks(metadata.relationMetadata_, metadata.col1Id_,
+                           std::optional<Id>(), metadata.blockMetadata_);
 }
 
 // _____________________________________________________________________________
@@ -800,11 +780,16 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
-    const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns) {
-  if (col1Id.has_value()) {
+    const ScanSpecification& ids,
+     ColumnIndicesRef additionalColumns) {
+  if (ids.col2Id().has_value()) {
+    return prepareColumnIndices({}, additionalColumns);
+  } else if (ids.col1Id.has_value()) {
     return prepareColumnIndices({2}, additionalColumns);
-  } else {
+  } else if (ids.col0Id.has_value()) {
     return prepareColumnIndices({1, 2}, additionalColumns);
+  } else {
+    return prepareColumnIndices({0, 1, 2}, additionalColumns);
   }
 }
 
@@ -1149,8 +1134,8 @@ CompressedRelationReader::getMetadataForSmallRelation(
   CompressedRelationMetadata metadata;
   metadata.col0Id_ = col0Id;
   metadata.offsetInBlock_ = 0;
-  auto blocks =
-      getBlocksFromMetadata(metadata, std::nullopt, allBlocksMetadata);
+  auto blocks = getRelevantBlocks(metadata, std::nullopt, std::optional<Id>(),
+                                  allBlocksMetadata);
   AD_CONTRACT_CHECK(blocks.size() <= 1,
                     "Should only be called for small relations");
   if (blocks.empty()) {

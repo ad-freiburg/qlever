@@ -72,7 +72,7 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
     for (auto it = begin; it != end; ++it) {
       Id id = it.getId();
       auto blockGenerator = permutation.lazyScan(
-          id, std::nullopt, std::nullopt,
+          id, std::nullopt, std::optional<Id>(), std::nullopt,
           CompressedRelationReader::ColumnIndices{}, cancellationHandle);
       for (const IdTable& col1And2 : blockGenerator) {
         AD_CORRECTNESS_CHECK(col1And2.numColumns() == 2);
