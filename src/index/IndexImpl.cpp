@@ -1338,6 +1338,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
   auto numActually = numPredicatesNormal_;
+  // TODO<joka921> This is wrong, as not everybody has correct metadata.
   return {numActually, pso_.metaData().getNofDistinctC1() - numActually};
 }
 

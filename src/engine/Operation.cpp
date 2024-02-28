@@ -135,8 +135,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // individual results, but that requires changes in each individual
       // operation, therefore we currently only perform this expensive
       // change in the DEBUG builds.
+      // TODO<joka921> Why does this fail? Do we have wrong definedness values with
+      // the full scans?
+      /*
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
+          */
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as

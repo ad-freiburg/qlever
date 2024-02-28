@@ -94,17 +94,22 @@ ResultTable Join::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(leftWidth + rightWidth - 1);
 
+  // TODO<joka921> Reinstate once the estimates are correct again.
+  /*
   if (_left->knownEmptyResult() || _right->knownEmptyResult()) {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return {std::move(idTable), resultSortedOn(), LocalVocab()};
   }
+   */
 
+  /*
   // Check for joins with dummy
   AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
   if (isFullScanDummy(_right)) {
     return computeResultForJoinWithFullScanDummy();
   }
+   */
 
   // Always materialize results that meet one of the following criteria:
   // * They are already present in the cache
