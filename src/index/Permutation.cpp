@@ -61,7 +61,7 @@ size_t Permutation::getResultSizeOfScan(const ScanSpecification& ids) const {
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
   return reader().getDistinctCol1IdsAndCounts(
-      col0Id, allBlocksMetadata, cancellationHandle);
+      col0Id, meta_.blockData(), cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -135,7 +135,6 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return reader().lazyScan(relationMetadata.value(), col1Id,
-                           std::optional<Id>(), std::move(blocks.value()),
-                           std::move(columns), cancellationHandle);
+  return reader().lazyScan(ids, std::move(blocks.value()), std::move(columns),
+                           cancellationHandle);
 }

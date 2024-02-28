@@ -437,7 +437,7 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(ScanSpecification ids,
+  IdTable scan(const ScanSpecification& ids,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                ad_utility::SharedCancellationHandle cancellationHandle) const;
@@ -457,7 +457,7 @@ class CompressedRelationReader {
   // these scans can be retrieved from the `CompressedRelationMetadata`
   // directly.
   size_t getResultSizeOfScan(
-      ScanSpecification ids,
+      const ScanSpecification& ids,
       const vector<CompressedBlockMetadata>& blocks) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -476,7 +476,7 @@ class CompressedRelationReader {
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
   static std::span<const CompressedBlockMetadata> getRelevantBlocks(
-      ScanSpecification ids,
+      const ScanSpecification& ids,
       std::span<const CompressedBlockMetadata> blockMetadata);
 
   // The same function, but specify the arguments as the `MetadataAndBlocks`
@@ -541,8 +541,7 @@ class CompressedRelationReader {
   // NOTE: When all triples in the block match the `col1Id`, this method makes
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
-  DecompressedBlock readPossiblyIncompleteBlock(
-      Id col0Id, std::optional<Id> col1Id,
+  DecompressedBlock readPossiblyIncompleteBlock( const ScanSpecification& ids,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices) const;
