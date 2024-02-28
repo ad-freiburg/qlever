@@ -241,8 +241,8 @@ void testWithDifferentBlockSizes(const std::vector<RelationInput>& inputs,
 TEST(CompressedRelationWriter, SmallRelations) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 200; ++i) {
-    inputs.push_back(RelationInput{
-        i, {{i - 1, i + 1}, { i - 1, i + 2}, {i, i - 1}}});
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
   }
   testWithDifferentBlockSizes(inputs, "smallRelations");
 }

@@ -66,9 +66,9 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
           ignoreLow = Id::max();
           ignoreHigh = Id::max();
         }
-        if (triple[0] >= ignoreLow && triple[0] < ignoreHigh) {
-          continue;
-        }
+      }
+      if (triple[0] >= ignoreLow && triple[0] < ignoreHigh) {
+        continue;
       }
       co_yield triple;
     }

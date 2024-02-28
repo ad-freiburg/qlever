@@ -603,7 +603,7 @@ IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
   // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
   // are reset.
   auto processCol1Id = [&table, &currentCol1Id, &currentCount](
-      std::optional<Id> col1Id, size_t howMany) {
+                           std::optional<Id> col1Id, size_t howMany) {
     if (col1Id != currentCol1Id) {
       if (currentCol1Id.has_value()) {
         table.push_back({currentCol1Id.value(), Id::makeFromInt(currentCount)});
