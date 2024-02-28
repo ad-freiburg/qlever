@@ -67,8 +67,12 @@ template <typename Predicate>
 class SparqlTripleBase {
  public:
   using AdditionalScanColumns = std::vector<std::pair<ColumnIndex, Variable>>;
-  SparqlTripleBase(TripleComponent s, Predicate p, TripleComponent o, AdditionalScanColumns additionalScanColumns = {})
-      : s_(std::move(s)), p_(std::move(p)), o_(std::move(o)), additionalScanColumns_(std::move(additionalScanColumns)) {}
+  SparqlTripleBase(TripleComponent s, Predicate p, TripleComponent o,
+                   AdditionalScanColumns additionalScanColumns = {})
+      : s_(std::move(s)),
+        p_(std::move(p)),
+        o_(std::move(o)),
+        additionalScanColumns_(std::move(additionalScanColumns)) {}
 
   bool operator==(const SparqlTripleBase& other) const = default;
   TripleComponent s_;
