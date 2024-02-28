@@ -22,12 +22,12 @@ jobs:
       uses: actions/github-script@v6
       with:
         script: |
-          github.rest.issues.createComment({
+            github.rest.issues.createComment({
             issue_number: context.issue.number,
             owner: context.repo.owner,
             repo: context.repo.repo,
             body: 'Failed -- 4 -- > Passed'
-          })
+            })
     - name: Checkout sparql-test-suite-files
       uses: actions/checkout@v3
       with:
