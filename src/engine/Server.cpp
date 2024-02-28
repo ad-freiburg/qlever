@@ -667,8 +667,8 @@ boost::asio::awaitable<void> Server::processQuery(
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
-    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request, query), *queryHub);
+    ad_utility::websocket::MessageSender messageSender{
+        getQueryId(request, query), *queryHub};
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
@@ -684,6 +684,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     plannedQuery =
         co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();
@@ -789,31 +790,33 @@ boost::asio::awaitable<void> Server::processQuery(
 }
 
 // _____________________________________________________________________________
-template <typename Function, typename T>
+template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
-  auto runOnExecutor =
-      [](auto executor, Function func,
-         SharedCancellationHandle handle) -> net::awaitable<T> {
-    co_await net::post(net::bind_executor(executor, net::use_awaitable));
-    // It might take some time until the thread pool is ready,
-    // so reset the state here. Ideally waiting for the thread pool
-    // would periodically check the cancellation state
+  auto inner = [function = std::move(function),
+                handle = std::move(handle)]() mutable -> T {
     handle->resetWatchDogState();
-    co_return std::invoke(func);
+    return std::invoke(std::move(function));
   };
-  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
-      threadPool_.get_executor(), std::move(function), std::move(handle)));
+  return ad_utility::runFunctionOnExecutor(
+      threadPool_.get_executor(), std::move(inner), net::use_awaitable);
 }
 
 // _____________________________________________________________________________
-net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
+
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit]() mutable {
+       handle = std::move(handle),
+       timeLimit]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);

@@ -18,8 +18,10 @@ jobs:
       matrix:
         compiler: [gcc]
         compiler-version: [11]
+        # We deliberately set `Release` and then `O1`, s.t. we get faster compile times (O1, less optimizations), but
+        # smaller binaries (no debug info), because otherwise we run out of memory on GitHub actions.
         warnings: [  "-Wall -Wextra -O1 " ]
-        build-type: [Debug]
+        build-type: [Release]
 
     runs-on: ubuntu-22.04
 
@@ -51,7 +53,11 @@ jobs:
 
     - name: Build master
         # Build your program with the given configuration
-      run:  cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} -- -j $(nproc)
+        # Only build the actually required executables to save space on the device.
+      run: |
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
 
     - name: E2E on Master
       working-directory: ${{github.workspace}}/master
@@ -69,7 +75,11 @@ jobs:
     - name: Clean master
       run:  cmake --build ${{github.workspace}}/master/build --target clean
     - name: BuildPr
-      run:    cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} -- -j $(nproc)
+      # also only build the required executables here.
+      run: |  
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
     - name: Get index version PR
       working-directory: ${{github.workspace}}/pr/build
       run: |

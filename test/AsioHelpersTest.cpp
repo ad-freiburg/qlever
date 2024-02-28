@@ -4,269 +4,111 @@
 
 #include <gtest/gtest.h>
 
-#include <boost/asio/bind_executor.hpp>
-#include <boost/asio/co_spawn.hpp>
-#include <boost/asio/deadline_timer.hpp>
-#include <boost/asio/detached.hpp>
-#include <boost/asio/experimental/awaitable_operators.hpp>
-#include <boost/asio/io_context.hpp>
-#include <boost/asio/steady_timer.hpp>
-#include <boost/asio/strand.hpp>
-
 #include "util/AsioHelpers.h"
+#include "util/http/beast.h"
 
-namespace net = boost::asio;
+using namespace ad_utility;
+namespace {
+using WorkGuard = net::executor_work_guard<net::io_context::executor_type>;
+[[nodiscard]] WorkGuard makeWorkGuard(net::io_context& ctx) {
+  return WorkGuard{ctx.get_executor()};
+}
+}  // namespace
+// _________________________________________________________________________
+TEST(AsioHelpers, runFunctionOnExecutorVoid) {
+  net::io_context ctx;
+  bool a = false;
+  auto workGuard = makeWorkGuard(ctx);
+  runFunctionOnExecutor(
+      ctx.get_executor(), [&]() { a = true; }, net::detached);
+  EXPECT_FALSE(a);
+  ctx.poll();
+  EXPECT_TRUE(a);
 
-using ad_utility::resumeOnOriginalExecutor;
-using namespace boost::asio::experimental::awaitable_operators;
+  // The exception disappears into the void, because the result is `detached`.
+  runFunctionOnExecutor(
+      ctx.get_executor(), [&]() { throw std::runtime_error{"blim"}; },
+      net::detached);
+  ctx.poll();
 
-TEST(AsioHelpers, resumeOnOriginalExecutor) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
+  a = false;
+  auto fut = runFunctionOnExecutor(
+      ctx.get_executor(), [&]() { a = true; }, net::use_future);
+  EXPECT_FALSE(a);
+  EXPECT_EQ(1, ctx.poll());
+  EXPECT_TRUE(a);
+  fut.get();
 
-  uint32_t sanityCounter = 0;
-
-  auto innerAwaitable = [&sanityCounter, strand1,
-                         strand2]() -> net::awaitable<int> {
-    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
-    // sanity check
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_TRUE(strand2.running_in_this_thread());
-    sanityCounter++;
-    co_return 1337;
-  };
-
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
-                         strand2]() -> net::awaitable<void> {
-    // Sanity check
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    auto value = co_await resumeOnOriginalExecutor(innerAwaitable());
-    // Verify we're back on the same strand
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_EQ(value, 1337);
-    sanityCounter++;
-  };
-
-  net::co_spawn(strand1, outerAwaitable(), net::detached);
-
-  ioContext.run();
-
-  EXPECT_EQ(sanityCounter, 2);
+  a = false;
+  fut = runFunctionOnExecutor(
+      ctx.get_executor(),
+      [&]() {
+        a = true;
+        throw std::runtime_error{"blim"};
+      },
+      net::use_future);
+  EXPECT_FALSE(a);
+  EXPECT_EQ(1, ctx.poll());
+  EXPECT_TRUE(a);
+  EXPECT_THROW(fut.get(), std::runtime_error);
 }
 
-// _____________________________________________________________________________
+// _________________________________________________________________________
+TEST(AsioHelpers, runFunctionOnExecutorValue) {
+  net::io_context ctx;
+  auto workGuard = makeWorkGuard(ctx);
+  auto fut = runFunctionOnExecutor(
+      ctx.get_executor(), [&]() { return 12; }, net::use_future);
+  EXPECT_EQ(1, ctx.poll());
+  EXPECT_EQ(fut.get(), 12);
 
-TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverload) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
-
-  bool sanityFlag = false;
-
-  auto outerAwaitable = [&sanityFlag, strand1,
-                         strand2]() -> net::awaitable<void> {
-    // Sanity check
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    co_await resumeOnOriginalExecutor(
-        net::post(net::bind_executor(strand2, net::use_awaitable)));
-    // Verify we're back on the same strand
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    sanityFlag = true;
-  };
-
-  net::co_spawn(strand1, outerAwaitable(), net::detached);
-
-  ioContext.run();
-
-  EXPECT_TRUE(sanityFlag);
+  fut = runFunctionOnExecutor(
+      ctx.get_executor(), [&]() -> int { throw std::runtime_error{"blim"}; },
+      net::use_future);
+  EXPECT_EQ(1, ctx.poll());
+  EXPECT_THROW(fut.get(), std::runtime_error);
 }
 
-// _____________________________________________________________________________
+// _________________________________________________________________________
+TEST(AsioHelpers, runFunctionOnExecutorStrands) {
+  net::io_context ctx;
+  auto workGuard = makeWorkGuard(ctx);
+  // Used to check that the asynchronous code is run at all.
+  std::atomic<int> sanityCounter = 0;
+  auto strand1 = net::make_strand(ctx);
+  auto strand2 = net::make_strand(ctx);
 
-TEST(AsioHelpers, resumeOnOriginalExecutorWhenException) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
+  auto fut = runFunctionOnExecutor(
+      strand1,
+      [&]() {
+        EXPECT_TRUE(strand1.running_in_this_thread());
+        EXPECT_FALSE(strand2.running_in_this_thread());
+        ++sanityCounter;
+      },
+      net::use_future);
+  EXPECT_EQ(1, ctx.poll());
+  fut.get();
+  EXPECT_EQ(sanityCounter, 1);
+  sanityCounter = 0;
 
-  uint32_t sanityCounter = 0;
-
-  auto innerAwaitable = [&sanityCounter, strand1,
-                         strand2]() -> net::awaitable<int> {
-    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
-    // sanity check
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_TRUE(strand2.running_in_this_thread());
-    sanityCounter++;
-    throw std::runtime_error{"Expected"};
-  };
-
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
-                         strand2]() -> net::awaitable<void> {
-    // Sanity check
+  auto nestedCoroutine = [&]() -> net::awaitable<void> {
     EXPECT_TRUE(strand1.running_in_this_thread());
     EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
-                 std::runtime_error);
-    // Verify we're back on the same strand
+    co_await runFunctionOnExecutor(
+        strand2,
+        [&]() {
+          EXPECT_TRUE(strand2.running_in_this_thread());
+          EXPECT_FALSE(strand1.running_in_this_thread());
+          ++sanityCounter;
+        },
+        net::use_awaitable);
     EXPECT_TRUE(strand1.running_in_this_thread());
     EXPECT_FALSE(strand2.running_in_this_thread());
-    sanityCounter++;
+    ++sanityCounter;
   };
 
-  net::co_spawn(strand1, outerAwaitable(), net::detached);
-
-  ioContext.run();
-
-  EXPECT_EQ(sanityCounter, 2);
-}
-
-// _____________________________________________________________________________
-
-TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverloadWhenException) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
-
-  uint32_t sanityCounter = 0;
-
-  auto innerAwaitable = [&sanityCounter, strand1,
-                         strand2]() -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
-    // sanity check
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_TRUE(strand2.running_in_this_thread());
-    sanityCounter++;
-    throw std::runtime_error{"Expected"};
-  };
-
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1,
-                         strand2]() -> net::awaitable<void> {
-    // Sanity check
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
-                 std::runtime_error);
-    // Verify we're back on the same strand
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    sanityCounter++;
-  };
-
-  net::co_spawn(strand1, outerAwaitable(), net::detached);
-
-  ioContext.run();
-
-  EXPECT_EQ(sanityCounter, 2);
-}
-
-// _____________________________________________________________________________
-
-template <typename T, typename Rep, typename Period>
-net::awaitable<T> cancelAfter(net::awaitable<T> coroutine,
-                              std::chrono::duration<Rep, Period> duration) {
-  net::steady_timer timer{co_await net::this_coro::executor, duration};
-  co_await (std::move(coroutine) || timer.async_wait(net::use_awaitable));
-}
-// _____________________________________________________________________________
-
-// Checks that behavior is consistent for cancellation case
-TEST(AsioHelpers, resumeOnOriginalExecutorWhenCancelled) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
-  auto strand3 = net::make_strand(ioContext);
-  net::deadline_timer infiniteTimer{ioContext,
-                                    static_cast<net::deadline_timer::time_type>(
-                                        boost::posix_time::pos_infin)};
-
-  uint32_t sanityCounter = 0;
-
-  auto innerAwaitable = [&sanityCounter, strand1, strand2,
-                         &infiniteTimer]() -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
-    // sanity check
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_TRUE(strand2.running_in_this_thread());
-    sanityCounter++;
-    co_await infiniteTimer.async_wait(net::use_awaitable);
-  };
-
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1, strand2,
-                         strand3]() -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand1, net::use_awaitable));
-    // Sanity check
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_FALSE(strand3.running_in_this_thread());
-    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
-                 boost::system::system_error);
-    // Verify we're on the strand the cancellation happened
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_TRUE(strand3.running_in_this_thread());
-    sanityCounter++;
-  };
-
-  net::co_spawn(strand3,
-                cancelAfter(outerAwaitable(), std::chrono::milliseconds(10)),
-                net::detached);
-
-  ioContext.run();
-
-  EXPECT_EQ(sanityCounter, 2);
-}
-
-// _____________________________________________________________________________
-
-// Checks that behavior is consistent for cancellation case
-TEST(AsioHelpers, resumeOnOriginalExecutorVoidOverloadWhenCancelled) {
-  net::io_context ioContext{};
-  auto strand1 = net::make_strand(ioContext);
-  auto strand2 = net::make_strand(ioContext);
-  auto strand3 = net::make_strand(ioContext);
-  net::deadline_timer infiniteTimer{ioContext,
-                                    static_cast<net::deadline_timer::time_type>(
-                                        boost::posix_time::pos_infin)};
-
-  uint32_t sanityCounter = 0;
-
-  auto innerAwaitable = [&sanityCounter, strand1, strand2, strand3,
-                         &infiniteTimer]() -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand2, net::use_awaitable));
-    // sanity check
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_TRUE(strand2.running_in_this_thread());
-    EXPECT_FALSE(strand3.running_in_this_thread());
-    sanityCounter++;
-    co_await infiniteTimer.async_wait(net::use_awaitable);
-  };
-
-  auto outerAwaitable = [&sanityCounter, &innerAwaitable, strand1, strand2,
-                         strand3]() -> net::awaitable<void> {
-    co_await net::post(net::bind_executor(strand1, net::use_awaitable));
-    // Sanity check
-    EXPECT_TRUE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_FALSE(strand3.running_in_this_thread());
-    EXPECT_THROW(co_await resumeOnOriginalExecutor(innerAwaitable()),
-                 boost::system::system_error);
-    // Verify we're on the strand the cancellation happened
-    EXPECT_FALSE(strand1.running_in_this_thread());
-    EXPECT_FALSE(strand2.running_in_this_thread());
-    EXPECT_TRUE(strand3.running_in_this_thread());
-    sanityCounter++;
-  };
-
-  net::co_spawn(strand3,
-                cancelAfter(outerAwaitable(), std::chrono::milliseconds(10)),
-                net::detached);
-
-  ioContext.run();
-
+  fut = net::co_spawn(strand1, nestedCoroutine(), net::use_future);
+  ctx.poll();
+  fut.get();
   EXPECT_EQ(sanityCounter, 2);
 }

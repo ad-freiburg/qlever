@@ -145,7 +145,8 @@ class Server {
 
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// it's completion, wrapping the result.
-  template <typename Function, typename T = std::invoke_result_t<Function>>
+  template <std::invocable Function,
+            typename T = std::invoke_result_t<Function>>
   Awaitable<T> computeInNewThread(Function function,
                                   SharedCancellationHandle handle);
 
@@ -177,10 +178,12 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
-                                            QueryExecutionContext& qec,
-                                            SharedCancellationHandle handle,
-                                            TimeLimit timeLimit);
+  /// Note: This function *never* returns `nullopt`. It either returns a value
+  /// or throws an exception. We still need to return an `optional` though for
+  /// technical reasons that are described in the definition of this function.
+  net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
+      const std::string& query, QueryExecutionContext& qec,
+      SharedCancellationHandle handle, TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after

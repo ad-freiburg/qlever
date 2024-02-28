@@ -29,6 +29,9 @@ using std::vector;
 class IndexScan;
 class Join;
 
+// Block size for when using the hash map optimization
+static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
+
 class GroupBy : public Operation {
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
