@@ -324,9 +324,9 @@ TEST(IndexScan, additionalColumn) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
   SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?xpattern"});
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN, V{"?ypattern"});
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);

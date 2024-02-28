@@ -124,7 +124,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
    * } GROUP BY ?predicate
    */
   auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
@@ -144,7 +144,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
    * } GROUP BY ?predicate
    */
   auto triple = SparqlTriple{V{"?x"}, "<p3>", "<o4>"};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::POS, triple);
