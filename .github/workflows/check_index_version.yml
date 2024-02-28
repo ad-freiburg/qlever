@@ -56,7 +56,7 @@ jobs:
         # Only build the actually required executables to save space on the device.
       run: |
         cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
-        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target ServerMainMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
 
     - name: E2E on Master
       working-directory: ${{github.workspace}}/master
