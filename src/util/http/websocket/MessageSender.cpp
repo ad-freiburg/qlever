@@ -12,7 +12,7 @@ MessageSender::MessageSender(OwningQueryId owningQueryId, QueryHub& queryHub)
           {queryHub.createOrAcquireDistributorForSending(
                owningQueryId.toQueryId()),
            std::move(owningQueryId)},
-          [](DistributorAndOwningQueryId&& distributorAndOwningQueryId) {
+          [](DistributorAndOwningQueryId distributorAndOwningQueryId) {
             distributorAndOwningQueryId.distributor_->signalEnd();
           }} {}
 

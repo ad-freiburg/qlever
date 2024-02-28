@@ -178,10 +178,12 @@ class Server {
 
   /// Run the SPARQL parser and then the query planner on the `query`. All
   /// computation is performed on the `threadPool_`.
-  net::awaitable<PlannedQuery> parseAndPlan(const std::string& query,
-                                            QueryExecutionContext& qec,
-                                            SharedCancellationHandle handle,
-                                            TimeLimit timeLimit);
+  /// Note: This function *never* returns `nullopt`. It either returns a value
+  /// or throws an exception. We still need to return an `optional` though for
+  /// technical reasons that are described in the definition of this function.
+  net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
+      const std::string& query, QueryExecutionContext& qec,
+      SharedCancellationHandle handle, TimeLimit timeLimit);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after
