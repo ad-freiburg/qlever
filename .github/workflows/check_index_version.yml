@@ -57,6 +57,7 @@ jobs:
       run: |
         cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
         cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/master/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
 
     - name: E2E on Master
       working-directory: ${{github.workspace}}/master
@@ -78,6 +79,7 @@ jobs:
       run: |  
         cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target IndexBuilderMain -- -j $(nproc)
         cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target ServerMain -- -j $(nproc)
+        cmake --build ${{github.workspace}}/pr/build --config ${{matrix.build-type}} --target PrintIndexVersionMain -- -j $(nproc)
     - name: Get index version PR
       working-directory: ${{github.workspace}}/pr/build
       run: |
