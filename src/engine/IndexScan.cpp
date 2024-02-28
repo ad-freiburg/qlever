@@ -303,8 +303,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
   return index.getPermutation(s.permutation())
-      .lazyScan(col0Id, col1Id, std::move(blocks), s.additionalColumns(),
-                s.cancellationHandle_);
+      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(blocks),
+                s.additionalColumns(), s.cancellationHandle_);
 };
 
 // ________________________________________________________________
@@ -321,7 +321,7 @@ std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
   }
 
   return index.getPermutation(s.permutation())
-      .getMetadataAndBlocks(col0Id.value(), col1Id);
+      .getMetadataAndBlocks({col0Id.value(), col1Id, std::nullopt});
 };
 
 // ________________________________________________________________

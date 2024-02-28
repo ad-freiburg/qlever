@@ -107,8 +107,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto columnIndices = prepareColumnIndices(ids, additionalColumns);
 
   auto getIncompleteBlock = [&](auto it) {
-    auto result = readPossiblyIncompleteBlock(ids, *it,
-                                              std::ref(details), columnIndices);
+    auto result =
+        readPossiblyIncompleteBlock(ids, *it, std::ref(details), columnIndices);
     cancellationHandle->throwIfCancelled();
     return result;
   };
@@ -156,7 +156,7 @@ auto getRelevantIdFromTriple(
   };
 
   const auto& ids = metadataAndBlocks.ids_;
-  AD_CORRECTNESS_CHECK(ids.col2Id().has_value());
+  AD_CORRECTNESS_CHECK(!ids.col2Id().has_value());
 
   auto [minKey, maxKey] = [&]() {
     if (!metadataAndBlocks.firstAndLastTriple_.has_value()) {
@@ -176,9 +176,8 @@ auto getRelevantIdFromTriple(
     return triple.col0Id_;
   }
 
-  if (auto optId = idForNonMatchingBlock(
-      triple.col0Id_, ids.col0Id().value(), minKey,
-      maxKey)) {
+  if (auto optId = idForNonMatchingBlock(triple.col0Id_, ids.col0Id().value(),
+                                         minKey, maxKey)) {
     return optId.value();
   }
 
@@ -323,8 +322,7 @@ IdTable CompressedRelationReader::scan(
   // set up a lambda which allows us to read these blocks, and returns
   // the result as a vector.
   auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(ids, block,
-                                       std::nullopt, columnIndices);
+    return readPossiblyIncompleteBlock(ids, block, std::nullopt, columnIndices);
   };
 
   // The first and the last block might be incomplete, compute
@@ -422,8 +420,7 @@ IdTable CompressedRelationReader::scan(
 
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
-    const ScanSpecification& ids,
-    const CompressedBlockMetadata& blockMetadata,
+    const ScanSpecification& ids, const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     ColumnIndicesRef columnIndices) const {
   std::vector<ColumnIndex> allColumns;
@@ -452,21 +449,25 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const auto& col0Column = block.getColumn(0);
     auto col0Range = std::ranges::equal_range(col0Column, ids.col0Id().value());
     beginIdx = col0Range.begin() - col0Column.begin();
-    beginIdx = col0Range.end() - col0Column.begin();
+    endIdx = col0Range.end() - col0Column.begin();
   }
 
   if (ids.col1Id().has_value()) {
     const auto& col1Column = block.getColumn(1);
-    auto col1Range = std::ranges::equal_range(col1Column.begin() + beginIdx, col1Column.begin() + endIdx, ids.col1Id().value());
+    auto col1Range = std::ranges::equal_range(col1Column.begin() + beginIdx,
+                                              col1Column.begin() + endIdx,
+                                              ids.col1Id().value());
     beginIdx = col1Range.begin() - col1Column.begin();
-    beginIdx = col1Range.end() - col1Column.begin();
+    endIdx = col1Range.end() - col1Column.begin();
   }
 
   if (ids.col2Id().has_value()) {
     const auto& col2Column = block.getColumn(2);
-    auto col2Range = std::ranges::equal_range(col2Column.begin() + beginIdx, col2Column.begin() + endIdx, ids.col2Id().value());
+    auto col2Range = std::ranges::equal_range(col2Column.begin() + beginIdx,
+                                              col2Column.begin() + endIdx,
+                                              ids.col2Id().value());
     beginIdx = col2Range.begin() - col2Column.begin();
-    beginIdx = col2Range.end() - col2Column.begin();
+    endIdx = col2Range.end() - col2Column.begin();
   }
 
   auto numResults = endIdx - beginIdx;
@@ -475,8 +476,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   result.resize(numResults);
   for (auto i : ad_utility::integerRange(columnIndices.size())) {
     const auto& inputCol = block.getColumn(columnIndices[i]);
-    std::ranges::copy(inputCol.begin() + beginIdx,
-                      inputCol.begin() + endIdx, result.getColumn(i).begin());
+    std::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
+                      result.getColumn(i).begin());
   }
   if (scanMetadata.has_value()) {
     auto& details = scanMetadata.value().get();
@@ -501,8 +502,7 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
   auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(ids, block,
-                                       std::nullopt, columnIndices)
+    return readPossiblyIncompleteBlock(ids, block, std::nullopt, columnIndices)
         .numRows();
   };
 
@@ -532,10 +532,9 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
     Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   IdTableStatic<2> table(allocator_);
-  ScanSpecification ids {col0Id, std::nullopt, std::nullopt};
+  ScanSpecification ids{col0Id, std::nullopt, std::nullopt};
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
-      getRelevantBlocks(ids,
-                        allBlocksMetadata);
+      getRelevantBlocks(ids, allBlocksMetadata);
 
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `col1Id`. For the others, we can determine
@@ -766,14 +765,13 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // actually matches the col0 and col1.
-    return readPossiblyIncompleteBlock(
-        ids,
-        block, std::nullopt, {{0, 1, 2}});
+    return readPossiblyIncompleteBlock(ids, block, std::nullopt, {{0, 1, 2}});
   };
 
   auto rowToTriple =
       [&](const auto& row) -> CompressedBlockMetadata::PermutedTriple {
-    AD_CORRECTNESS_CHECK(!ids.col0Id().has_value() || row[0] == ids.col0Id().value());
+    AD_CORRECTNESS_CHECK(!ids.col0Id().has_value() ||
+                         row[0] == ids.col0Id().value());
     return {row[0], row[1], row[2]};
   };
 
@@ -797,8 +795,7 @@ std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
 
 // ____________________________________________________________________________
 std::vector<ColumnIndex> CompressedRelationReader::prepareColumnIndices(
-    const ScanSpecification& ids,
-     ColumnIndicesRef additionalColumns) {
+    const ScanSpecification& ids, ColumnIndicesRef additionalColumns) {
   if (ids.col2Id().has_value()) {
     return prepareColumnIndices({}, additionalColumns);
   } else if (ids.col1Id().has_value()) {

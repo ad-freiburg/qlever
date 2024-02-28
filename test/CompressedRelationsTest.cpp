@@ -170,9 +170,10 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    CompressedRelationReader::ScanSpecification ids{metaData[i].col0Id_, std::nullopt, std::nullopt};
-    IdTable table = reader.scan(ids, blocks,
-                                additionalColumns, cancellationHandle);
+    CompressedRelationReader::ScanSpecification ids{metaData[i].col0Id_,
+                                                    std::nullopt, std::nullopt};
+    IdTable table =
+        reader.scan(ids, blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
@@ -190,19 +191,17 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      CompressedRelationReader::ScanSpecification ids{metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size =
-          reader.getResultSizeOfScan(ids, blocks);
-      IdTable tableWidthOne =
-          reader.scan(ids, blocks,
-                      Permutation::ColumnIndicesRef{}, cancellationHandle);
+      CompressedRelationReader::ScanSpecification ids{
+          metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
+      auto size = reader.getResultSizeOfScan(ids, blocks);
+      IdTable tableWidthOne = reader.scan(
+          ids, blocks, Permutation::ColumnIndicesRef{}, cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block : reader.lazyScan(ids,
-                blocks,
-               Permutation::ColumnIndices{}, cancellationHandle)) {
+      for (const auto& block : reader.lazyScan(
+               ids, blocks, Permutation::ColumnIndices{}, cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -386,7 +385,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-    {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -432,7 +431,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-    {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
 
   CompressedBlockMetadata blockB1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
@@ -453,7 +452,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-    {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
+      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&

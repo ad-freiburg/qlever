@@ -55,8 +55,7 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(const ScanSpecification& ids,
-               ColumnIndicesRef additionalColumns,
+  IdTable scan(const ScanSpecification& ids, ColumnIndicesRef additionalColumns,
                ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is

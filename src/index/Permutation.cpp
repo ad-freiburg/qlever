@@ -47,21 +47,20 @@ IdTable Permutation::scan(
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(ids, meta_.blockData(),
-                       additionalColumns, std::move(cancellationHandle));
+  return reader().scan(ids, meta_.blockData(), additionalColumns,
+                       std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(const ScanSpecification& ids) const {
-  return reader().getResultSizeOfScan(ids,
-                                      meta_.blockData());
+  return reader().getResultSizeOfScan(ids, meta_.blockData());
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(
-      col0Id, meta_.blockData(), cancellationHandle);
+  return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
+                                              cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -129,9 +128,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   if (!blocks.has_value()) {
-    auto blockSpan = CompressedRelationReader::getRelevantBlocks(
-        ids,
-        meta_.blockData());
+    auto blockSpan =
+        CompressedRelationReader::getRelevantBlocks(ids, meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};

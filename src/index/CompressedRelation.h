@@ -375,7 +375,6 @@ class CompressedRelationReader {
 
   using IdTableGenerator = cppcoro::generator<IdTable, LazyScanMetadata>;
 
-
  private:
   // This cache stores a small number of decompressed blocks. Its current
   // purpose is to make the e2e-tests run fast. They contain many SPARQL queries
@@ -446,8 +445,7 @@ class CompressedRelationReader {
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
   CompressedRelationReader::IdTableGenerator lazyScan(
-      ScanSpecification ids,
-      std::vector<CompressedBlockMetadata> blockMetadata,
+      ScanSpecification ids, std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
@@ -463,8 +461,7 @@ class CompressedRelationReader {
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
-      Id col0Id,
-      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       ad_utility::SharedCancellationHandle cancellationHandle) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
@@ -541,7 +538,8 @@ class CompressedRelationReader {
   // NOTE: When all triples in the block match the `col1Id`, this method makes
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
-  DecompressedBlock readPossiblyIncompleteBlock( const ScanSpecification& ids,
+  DecompressedBlock readPossiblyIncompleteBlock(
+      const ScanSpecification& ids,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices) const;

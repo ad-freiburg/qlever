@@ -1461,7 +1461,8 @@ IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  return getPermutation(p).scan(col0Id, col1Id, additionalColumns,
+  return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
+                                additionalColumns,
                                 std::move(cancellationHandle));
 }
 
@@ -1475,7 +1476,7 @@ size_t IndexImpl::getResultSizeOfScan(
     return 0;
   }
   const Permutation& p = getPermutation(permutation);
-  return p.getResultSizeOfScan(col0Id.value(), col1Id.value());
+  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), std::nullopt});
 }
 
 // _____________________________________________________________________________
