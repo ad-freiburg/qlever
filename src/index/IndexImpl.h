@@ -154,10 +154,10 @@ class IndexImpl {
 
   // These statistics all do *not* include the triples that are added by
   // QLever for more efficient query processing.
-  NumNormalAndInternal numSubjectsNormal_;
-  NumNormalAndInternal numPredicatesNormal_;
-  NumNormalAndInternal numObjectsNormal_;
-  NumNormalAndInternal numTriplesNormal_;
+  NumNormalAndInternal numSubjects_;
+  NumNormalAndInternal numPredicates_;
+  NumNormalAndInternal numObjects_;
+  NumNormalAndInternal numTriples_;
   string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.

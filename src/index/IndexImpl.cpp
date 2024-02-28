@@ -1007,23 +1007,21 @@ void IndexImpl::readConfiguration() {
   };
 
   loadDataMember("has-all-permutations", loadAllPermutations_, true);
-  loadDataMember("num-predicates-normal", numPredicatesNormal_);
+  loadDataMember("num-predicates", numPredicates_);
   // These might be missing if there are only two permutations.
-  loadDataMember("num-subjects-normal", numSubjectsNormal_,
+  loadDataMember("num-subjects", numSubjects_,
                  NumNormalAndInternal{});
-  loadDataMember("num-objects-normal", numObjectsNormal_,
+  loadDataMember("num-objects", numObjects_,
                  NumNormalAndInternal{});
-  loadDataMember("num-triples-normal", numTriplesNormal_,
+  loadDataMember("num-triples", numTriples_,
                  NumNormalAndInternal{});
 
   // Compute unique ID for this index.
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
   // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriplesNormal_.normal_, ".",
-                          numSubjectsNormal_.normal_, ".",
-                          numPredicatesNormal_.normal_, ".",
-                          numObjectsNormal_.normal_);
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal_, ".",
+                   numSubjects_.normal_, ".", numPredicates_.normal_, ".", numObjects_.normal_);
 }
 
 // ___________________________________________________________________________
@@ -1293,7 +1291,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
 // ____________________________________________________________________________
 IndexImpl::NumNormalAndInternal IndexImpl::numTriples() const {
-  return numTriplesNormal_;
+  return numTriples_;
 }
 
 // ____________________________________________________________________________
@@ -1328,7 +1326,7 @@ Index::NumNormalAndInternal IndexImpl::numDistinctSubjects() const {
       "Can only get # distinct subjects if all 6 permutations "
       "have been registered on sever start (and index build time) "
       "with the -a option.");
-  return numSubjectsNormal_;
+  return numSubjects_;
 }
 
 // __________________________________________________________________________
@@ -1338,12 +1336,12 @@ Index::NumNormalAndInternal IndexImpl::numDistinctObjects() const {
       "Can only get # distinct objects if all 6 permutations "
       "have been registered on sever start (and index build time) "
       "with the -a option.");
-  return numObjectsNormal_;
+  return numObjects_;
 }
 
 // __________________________________________________________________________
 Index::NumNormalAndInternal IndexImpl::numDistinctPredicates() const {
-  return numPredicatesNormal_;
+  return numPredicates_;
 }
 
 // __________________________________________________________________________
@@ -1537,10 +1535,10 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
       createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
                             nextSorter.makePushCallback()...,
                             std::ref(predicateCounter), countTriplesNormal);
-  configurationJson_["num-predicates-normal"] =
+  configurationJson_["num-predicates"] =
       NumNormalAndInternal::fromNormalAndTotal(numPredicatesNormal,
                                                numPredicatesTotal);
-  configurationJson_["num-triples-normal"] =
+  configurationJson_["num-triples"] =
       NumNormalAndInternal::fromNormalAndTotal(numTriplesNormal,
                                                numTriplesTotal);
   writeConfiguration();
@@ -1576,7 +1574,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         nextSorter.makePushCallback()..., pushTripleToPatterns,
         std::ref(numSubjectCounter));
     patternCreator.finish();
-    configurationJson_["num-subjects-normal"] =
+    configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
                                                  numSubjectsTotal);
     writeConfiguration();
@@ -1586,11 +1584,11 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     numSubjectsTotal = createPermutationPair(
         numColumns, AD_FWD(sortedTriples), spo_, sop_,
         nextSorter.makePushCallback()..., std::ref(numSubjectCounter));
-    configurationJson_["num-subjects-normal"] =
+    configurationJson_["num-subjects"] =
         NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
                                                  numSubjectsTotal);
   }
-  configurationJson_["num-subjects-normal"] =
+  configurationJson_["num-subjects"] =
       NumNormalAndInternal::fromNormalAndTotal(numSubjectsNormal,
                                                numSubjectsTotal);
   writeConfiguration();
@@ -1611,7 +1609,7 @@ void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
   size_t numObjectsTotal = createPermutationPair(
       numColumns, AD_FWD(sortedTriples), osp_, ops_,
       nextSorter.makePushCallback()..., std::ref(objectCounter));
-  configurationJson_["num-objects-normal"] =
+  configurationJson_["num-objects"] =
       NumNormalAndInternal::fromNormalAndTotal(numObjectsNormal,
                                                numObjectsTotal);
   configurationJson_["has-all-permutations"] = true;
