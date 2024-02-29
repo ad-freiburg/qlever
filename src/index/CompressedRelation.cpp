@@ -451,12 +451,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     if (!relevantId.has_value()) {
       return;
     }
-    const auto& col0Column = block.getColumn(columnIdx);
-    auto col0Range = std::ranges::equal_range(col0Column.begin() + beginIdx,
-                                              col0Column.begin() + endIdx,
+    const auto& column = block.getColumn(columnIdx);
+    auto matchingRange = std::ranges::equal_range(
+        column.begin() + beginIdx, column.begin() + endIdx,
                                               relevantId.value());
-    beginIdx = col0Range.begin() - col0Column.begin();
-    endIdx = col0Range.end() - col0Column.begin();
+    beginIdx = matchingRange.begin() - column.begin();
+    endIdx = matchingRange.end() - column.begin();
   };
 
   // The order of the calls is important because the block is sorted by [col0Id,

@@ -575,7 +575,8 @@ class CompressedRelationReader {
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& ids, ColumnIndicesRef additionalColumns);
 
-  // ____________________________________________________________________________
+  // The common implementation for `getDistinctCol0IdsAndCounts` and
+  // `getCol1IdsAndCounts`.
   IdTable getDistinctColIdsAndCountsImpl(
       auto idGetter, ScanSpecification ids,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
