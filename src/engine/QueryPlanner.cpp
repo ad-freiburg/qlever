@@ -750,10 +750,10 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       .resultOfParse_;
 };
 
-// Helper function for `handleRepeatedVariables` below.
-// Replace a single position of the `scanTriple`, denoted by the
-// `rewritePosition` by a new variable, and add a filter, that checks the old
-// and the new value for equality.
+// Helper function for `handleRepeatedVariables` below. Replace a single
+// position of the `scanTriple`, denoted by the `rewritePosition` by a new
+// variable, and add a filter, that checks the old and the new value for
+// equality.
 constexpr auto rewriteSingle =
     [](TriplePosition auto rewritePosition, SparqlTripleSimple& scanTriple,
        const auto& addFilter, const auto& generateUniqueVarName) {
