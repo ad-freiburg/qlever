@@ -410,7 +410,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
-  metadataAndBlocks.ids_.col1Id_ = V(4);
+  metadataAndBlocks.ids_.setCol1Id(V(4));
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
@@ -486,18 +486,18 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // Test for only the `col0Id` fixed.
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
-  metadataAndBlocks.ids_.col1Id_ = V(20);
-  metadataAndBlocksB.ids_.col1Id_ = V(38);
+  metadataAndBlocks.ids_.setCol1Id(V(20));
+  metadataAndBlocksB.ids_.setCol1Id(V(38));
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
-  metadataAndBlocks.ids_.col1Id_ = V(4);
-  metadataAndBlocksB.ids_.col1Id_ = std::nullopt;
+  metadataAndBlocks.ids_.setCol1Id(V(4));
+  metadataAndBlocksB.ids_.setCol1Id(std::nullopt);
   test({std::vector{block2}, std::vector{blockB2, blockB3}});
 
   // Fix only the col1Id of the right input.
-  metadataAndBlocks.ids_.col1Id_ = std::nullopt;
-  metadataAndBlocksB.ids_.col1Id_ = V(7);
+  metadataAndBlocks.ids_.setCol1Id(std::nullopt);
+  metadataAndBlocksB.ids_.setCol1Id(V(7));
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 

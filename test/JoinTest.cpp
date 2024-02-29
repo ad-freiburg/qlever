@@ -286,8 +286,13 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto x = id("<x>");
+  auto p = id("<p>");
+  auto a = id("<a>");
+  auto o = id("<o>");
   auto expected = makeIdTableFromVector(
-      {{id("<a>"), id("<x>"), I(3)}, {id("<o>"), id("<x>"), id("<x>")}});
+      {{a, x, I(3)}, {o, x, x}});
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?s"}, makeAlwaysDefinedColumn(1)},
@@ -304,14 +309,15 @@ TEST(JoinTest, joinWithFullScanPSO) {
         qec, SPO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
     auto fullScanOPS = ad_utility::makeExecutionTree<IndexScan>(
         qec, OPS, SparqlTriple{Var{"?s2"}, "?p2", Var{"?s"}});
+    // The knowledge graph is "<x> <p> 1 . <x> <o> <x> . <x> <a> 3 ."
     auto expected = makeIdTableFromVector(
-        {{id("<a>"), id("<x>"), I(3)}, {id("<o>"), id("<x>"), id("<x>")}});
+        {{x, a, I(3), o, x}, {x, o, x, o, x}, {x, p,  I(1), o, x}});
     VariableToColumnMap expectedVariables {
       {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
           {Variable{"?p"}, makeAlwaysDefinedColumn(1)},
           {Variable{"?o"}, makeAlwaysDefinedColumn(2)},
-          {Variable{"?s2"}, makeAlwaysDefinedColumn(0)},
-          {Variable{"?p2"}, makeAlwaysDefinedColumn(1)}};
+          {Variable{"?p2"}, makeAlwaysDefinedColumn(3)},
+          {Variable{"?s2"}, makeAlwaysDefinedColumn(4)}};
           auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 0};
       testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
     }

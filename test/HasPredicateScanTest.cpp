@@ -42,7 +42,12 @@ class HasPredicateScanTest : public ::testing::Test {
   // Expect that the result of the `operation` matches the `expectedElements`.
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(operation.getResult()->idTable(),
+    auto res = operation.getResult();
+    for (auto &[key, value] : operation.getExternallyVisibleVariableColumns()) {
+      LOG(INFO) << key.name() << ' ' << value.columnIndex_ << std::endl;
+
+    }
+    EXPECT_THAT(res->idTable(),
                 ::testing::ElementsAreArray(expected));
   }
 

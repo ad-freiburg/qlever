@@ -205,7 +205,7 @@ vector<ColumnIndex> Join::resultSortedOn() const {
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
-  if (_multiplicities.size() == 0) {
+  if (_multiplicities.empty()) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }

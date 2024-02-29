@@ -15,6 +15,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
+#include "engine/OrderBy.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePath.h"
@@ -234,6 +235,9 @@ inline auto TransitivePath =
           AD_PROPERTY(TransitivePath, getRight,
                       TransitivePathSideMatcher(right))));
     };
+
+// TODO<joka921> We also have to match the sorted variables etc.
+constexpr auto OrderBy = MatchTypeAndOrderedChildren<::OrderBy>;
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
