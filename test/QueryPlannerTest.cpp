@@ -867,35 +867,36 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
 }
 
 TEST(QueryPlanner, NonDistinctVariablesInTriple) {
-  auto internal = [](int i) {
+  auto internalVar = [](int i) {
     return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
   };
   auto eq = [](std::string_view l, std::string_view r) {
     return absl::StrCat(l, "=", r);
   };
+
   h::expect("SELECT * WHERE {?s ?p ?s}",
-            h::Filter(eq(internal(0), "?s"),
-                      h::IndexScanFromStrings(internal(0), "?p", "?s")));
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?p", "?s")));
   h::expect("SELECT * WHERE {?s ?s ?o}",
-            h::Filter(eq(internal(0), "?s"),
-                      h::IndexScanFromStrings(internal(0), "?s", "?o")));
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "?o")));
   h::expect("SELECT * WHERE {?s ?p ?p}",
-            h::Filter(eq(internal(0), "?p"),
-                      h::IndexScanFromStrings("?s", "?p", internal(0))));
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("?s", "?p", internalVar(0))));
   h::expect("SELECT * WHERE {?s ?s ?s}",
-            h::Filter(eq(internal(1), "?s"),
-                      h::Filter(eq(internal(0), "?s"),
-                                h::IndexScanFromStrings(internal(1), "?s",
-                                                        internal(0)))));
+            h::Filter(eq(internalVar(1), "?s"),
+                      h::Filter(eq(internalVar(0), "?s"),
+                                h::IndexScanFromStrings(internalVar(1), "?s",
+                                                        internalVar(0)))));
   h::expect("SELECT * WHERE {?s <is-a> ?s}",
-            h::Filter(eq(internal(0), "?s"),
-                      h::IndexScanFromStrings("?s", "<is-a>", internal(0))));
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings("?s", "<is-a>", internalVar(0))));
   h::expect("SELECT * WHERE {<s> ?p ?p}",
-            h::Filter(eq(internal(0), "?p"),
-                      h::IndexScanFromStrings("<s>", "?p", internal(0))));
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("<s>", "?p", internalVar(0))));
   h::expect("SELECT * WHERE {?s ?s <o>}",
-            h::Filter(eq(internal(0), "?s"),
-                      h::IndexScanFromStrings(internal(0), "?s", "<o>")));
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "<o>")));
 }
 
 // __________________________________________________________________________

@@ -742,9 +742,12 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       .resultOfParse_;
 };
 
-template <typename F>
+// A `TriplePosition` is a function that takes a triple and returns a
+// `TripleComponent`, typically the subject, predicate, or object of the triple,
+// hence the name.
+template <typename Function>
 concept TriplePosition =
-    ad_utility::InvocableWithExactReturnType<F, TripleComponent&,
+    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
                                              SparqlTripleSimple&>;
 }  // namespace
 
@@ -768,7 +771,7 @@ void QueryPlanner::indexScanSingleVarCase(
   };
 
   // Replace the positions of the `triple` that are specified by the
-  // `rewritePositions` with a new variable, and add a filter, that checks the
+  // `rewritePositions` with a new variable, and add a filter, which checks the
   // old and the new value for equality for each of these rewrites. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables = [&triple, &addIndexScan, &rewriteSingle](
