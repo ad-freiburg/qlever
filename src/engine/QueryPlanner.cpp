@@ -732,6 +732,14 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
 }
 
 namespace {
+// A `TriplePosition` is a function that takes a triple and returns a
+// `TripleComponent`, typically the subject, predicate, or object of the triple,
+// hence the name.
+template <typename Function>
+concept TriplePosition =
+    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
+                                             SparqlTripleSimple&>;
+
 // Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
 // Used as a helper function below.
 SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
@@ -742,13 +750,36 @@ SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
       .resultOfParse_;
 };
 
-// A `TriplePosition` is a function that takes a triple and returns a
-// `TripleComponent`, typically the subject, predicate, or object of the triple,
-// hence the name.
-template <typename Function>
-concept TriplePosition =
-    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
-                                             SparqlTripleSimple&>;
+// Helper function for `handleRepeatedVariables` below.
+// Replace a single position of the `scanTriple`, denoted by the
+// `rewritePosition` by a new variable, and add a filter, that checks the old
+// and the new value for equality.
+constexpr auto rewriteSingle =
+    [](TriplePosition auto rewritePosition, SparqlTripleSimple& scanTriple,
+       const auto& addFilter, const auto& generateUniqueVarName) {
+      Variable filterVar = generateUniqueVarName();
+      auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+      addFilter(createEqualFilter(filterVar, target));
+      target = filterVar;
+    };
+
+// Replace the positions of the `triple` that are specified by the
+// `rewritePositions` with a new variable, and add a filter, which checks the
+// old and the new value for equality for each of these rewrites. Then also
+// add an index scan for the rewritten triple.
+constexpr auto handleRepeatedVariablesImpl =
+    [](const auto& triple, auto& addIndexScan,
+       const auto& generateUniqueVarName, const auto& addFilter,
+       std::span<const Permutation::Enum> permutations,
+       TriplePosition auto... rewritePositions) {
+      auto scanTriple = triple;
+      (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
+                          generateUniqueVarName));
+      for (const auto& permutation : permutations) {
+        addIndexScan(permutation, scanTriple);
+      }
+    };
+
 }  // namespace
 
 // _____________________________________________________________________________
@@ -778,21 +809,14 @@ void QueryPlanner::indexScanTwoVarsCase(
   // `rewritePosition` with a new variable, and add a filter, that checks the
   // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
+  auto generate = [this]() { return generateUniqueVarName(); };
   auto handleRepeatedVariables =
-      [&triple, this, &addIndexScan, &addFilter](
-          auto rewritePosition,
-          std::span<const Permutation::Enum> permutations) mutable {
-        // Need to handle this as IndexScan with a new unique
-        // variable + Filter. Works in both directions
-        Variable filterVar = generateUniqueVarName();
-        auto scanTriple = triple;
-        auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-        addFilter(createEqualFilter(filterVar, target));
-        target = filterVar;
-        std::ranges::for_each(permutations, [&addIndexScan, &scanTriple](
-                                                const auto& permutation) {
-          addIndexScan(permutation, scanTriple);
-        });
+      [&triple, &addIndexScan, &addFilter, &generate](
+          std::span<const Permutation::Enum> permutations,
+          TriplePosition auto... rewritePositions) {
+        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                           addFilter, permutations,
+                                           rewritePositions...);
       };
 
   const auto& [s, p, o, _] = triple;
@@ -800,14 +824,14 @@ void QueryPlanner::indexScanTwoVarsCase(
   using Tr = SparqlTripleSimple;
   if (!isVariable(s)) {
     if (p == o) {
-      handleRepeatedVariables(&Tr::o_, {{SPO}});
+      handleRepeatedVariables({{SPO}}, &Tr::o_);
     } else {
       addIndexScan(SPO);
       addIndexScan(SOP);
     }
   } else if (!isVariable(p)) {
     if (s == o) {
-      handleRepeatedVariables(&Tr::o_, {{PSO}});
+      handleRepeatedVariables({{PSO}}, &Tr::o_);
     } else {
       addIndexScan(PSO);
       addIndexScan(POS);
@@ -815,7 +839,7 @@ void QueryPlanner::indexScanTwoVarsCase(
   } else {
     AD_CORRECTNESS_CHECK(!isVariable(o));
     if (s == p) {
-      handleRepeatedVariables(&Tr::s_, {{OPS}});
+      handleRepeatedVariables({{OPS}}, &Tr::s_);
     } else {
       addIndexScan(OSP);
       addIndexScan(OPS);
@@ -832,31 +856,19 @@ void QueryPlanner::indexScanThreeVarsCase(
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
-  // Helper function for `handleRepeatedVariables` below.
-  // Replace a single position of the `scanTriple`, denoted by the
-  // `rewritePosition` by a new variable, and add a filter, that checks the old
-  // and the new value for equality.
-  auto rewriteSingle = [this, &addFilter](TriplePosition auto rewritePosition,
-                                          SparqlTripleSimple& scanTriple) {
-    Variable filterVar = generateUniqueVarName();
-    auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-    addFilter(createEqualFilter(filterVar, target));
-    target = filterVar;
-  };
+  auto generate = [this]() { return generateUniqueVarName(); };
 
-  // Replace the positions of the `triple` that are specified by the
-  // `rewritePositions` with a new variable, and add a filter, which checks the
-  // old and the new value for equality for each of these rewrites. Then also
+  // Replace the position of the `triple` that is specified by the
+  // `rewritePosition` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for this rewrite. Then also
   // add an index scan for the rewritten triple.
   auto handleRepeatedVariables =
-      [&triple, &addIndexScan, &rewriteSingle](
+      [&triple, &addIndexScan, &addFilter, &generate](
           std::span<const Permutation::Enum> permutations,
           TriplePosition auto... rewritePositions) {
-        auto scanTriple = triple;
-        (..., rewriteSingle(rewritePositions, scanTriple));
-        for (const auto& permutation : permutations) {
-          addIndexScan(permutation, scanTriple);
-        }
+        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                           addFilter, permutations,
+                                           rewritePositions...);
       };
 
   using Tr = SparqlTripleSimple;
@@ -889,14 +901,11 @@ template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
-  size_t numVars = 0;
-  auto addIfVariable = [&numVars](const auto& el) {
-    numVars += static_cast<size_t>(isVariable(el));
-  };
   auto triple = node.triple_.getSimple();
-  addIfVariable(triple.s_);
-  addIfVariable(triple.p_);
-  addIfVariable(triple.o_);
+  auto isVar = [](const auto& el) {
+    return static_cast<size_t>(isVariable(el));
+  };
+  size_t numVars = isVar(triple.s_) + isVar(triple.p_) + isVar(triple.o_);
   if (numVars == 1) {
     indexScanSingleVarCase(triple, addIndexScan);
   } else if (numVars == 2) {
