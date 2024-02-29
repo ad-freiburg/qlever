@@ -902,10 +902,9 @@ void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
   auto triple = node.triple_.getSimple();
-  auto isVar = [](const auto& el) {
-    return static_cast<size_t>(isVariable(el));
-  };
-  size_t numVars = isVar(triple.s_) + isVar(triple.p_) + isVar(triple.o_);
+  const size_t numVars = static_cast<size_t>(isVariable(triple.s_)) +
+                         static_cast<size_t>(isVariable(triple.p_)) +
+                         static_cast<size_t>(isVariable(triple.o_));
   if (numVars == 1) {
     indexScanSingleVarCase(triple, addIndexScan);
   } else if (numVars == 2) {
