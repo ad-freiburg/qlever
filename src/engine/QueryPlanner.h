@@ -240,8 +240,7 @@ class QueryPlanner {
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
   void indexScanSingleVarCase(const SparqlTripleSimple& triple,
-                              const AddedIndexScanFunction& addIndexScan,
-                              const auto& addFilter);
+                              const AddedIndexScanFunction& addIndexScan) const;
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
@@ -251,7 +250,9 @@ class QueryPlanner {
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
-  void indexScanThreeVarsCase(const AddedIndexScanFunction& addIndexScan) const;
+  void indexScanThreeVarsCase(const SparqlTripleSimple& triple,
+                              const AddedIndexScanFunction& addIndexScan,
+                              const auto& addFilter);
 
   /**
    * @brief Fills children with all operations that are associated with a single

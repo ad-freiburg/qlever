@@ -755,54 +755,15 @@ concept TriplePosition =
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
     const SparqlTripleSimple& triple,
-    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
+    const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
-  // Helper function for `handleRepeatedVariables` below.
-  // Replace a single position of the `scanTriple`, denoted by the
-  // `rewritePosition` by a new variable, and add a filter, that checks the old
-  // and the new value for equality.
-  auto rewriteSingle = [this, &addFilter](TriplePosition auto rewritePosition,
-                                          SparqlTripleSimple& scanTriple) {
-    Variable filterVar = generateUniqueVarName();
-    auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
-    addFilter(createEqualFilter(filterVar, target));
-    target = filterVar;
-  };
-
-  // Replace the positions of the `triple` that are specified by the
-  // `rewritePositions` with a new variable, and add a filter, which checks the
-  // old and the new value for equality for each of these rewrites. Then also
-  // add an index scan for the rewritten triple.
-  auto handleRepeatedVariables = [&triple, &addIndexScan, &rewriteSingle](
-                                     Permutation::Enum permutation,
-                                     TriplePosition auto... rewritePositions) {
-    auto scanTriple = triple;
-    (..., rewriteSingle(rewritePositions, scanTriple));
-    addIndexScan(permutation, scanTriple);
-  };
-
-  using Tr = SparqlTripleSimple;
-  const auto& [s, p, o, _] = triple;
-  if (isVariable(s) && isVariable(p) && isVariable(o)) {
-    handleRepeatedVariables(PSO, &Tr::o_, &Tr::s_);
-  } else if (isVariable(s) && isVariable(o) && s == o) {
-    handleRepeatedVariables(PSO, &Tr::o_);
-  } else if (isVariable(s)) {
-    if (isVariable(p)) {
-      handleRepeatedVariables(OPS, &Tr::s_);
-    } else {
-      addIndexScan(POS);
-    }
-  } else if (isVariable(o)) {
-    if (isVariable(p)) {
-      handleRepeatedVariables(SPO, &Tr::o_);
-    } else {
-      addIndexScan(PSO);
-    }
-  } else {
-    AD_CONTRACT_CHECK(isVariable(p));
+  if (isVariable(triple.s_)) {
+    addIndexScan(POS);
+  } else if (isVariable(triple.p_)) {
     addIndexScan(SOP);
+  } else {
+    addIndexScan(PSO);
   }
 }
 
@@ -835,25 +796,29 @@ void QueryPlanner::indexScanTwoVarsCase(
       };
 
   const auto& [s, p, o, _] = triple;
-  if (!isVariable(p)) {
-    addIndexScan(PSO);
-    addIndexScan(POS);
-  } else if (!isVariable(s)) {
-    addIndexScan(SPO);
-    addIndexScan(SOP);
-  } else if (!isVariable(o)) {
-    addIndexScan(OSP);
-    addIndexScan(OPS);
-  } else {
-    using Tr = SparqlTripleSimple;
-    // Three variables, two of which are identical.
-    if (s == o) {
-      handleRepeatedVariables(&Tr::s_, {{POS, OPS}});
-    } else if (s == p) {
-      handleRepeatedVariables(&Tr::s_, {{POS, OPS}});
+
+  using Tr = SparqlTripleSimple;
+  if (!isVariable(s)) {
+    if (p == o) {
+      handleRepeatedVariables(&Tr::o_, {{SPO}});
     } else {
-      AD_CORRECTNESS_CHECK(o == p);
-      handleRepeatedVariables(&Tr::o_, {{PSO, SPO}});
+      addIndexScan(SPO);
+      addIndexScan(SOP);
+    }
+  } else if (!isVariable(p)) {
+    if (s == o) {
+      handleRepeatedVariables(&Tr::o_, {{PSO}});
+    } else {
+      addIndexScan(PSO);
+      addIndexScan(POS);
+    }
+  } else {
+    AD_CORRECTNESS_CHECK(!isVariable(o));
+    if (s == p) {
+      handleRepeatedVariables(&Tr::s_, {{OPS}});
+    } else {
+      addIndexScan(OSP);
+      addIndexScan(OPS);
     }
   }
 }
@@ -861,18 +826,62 @@ void QueryPlanner::indexScanTwoVarsCase(
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanThreeVarsCase(
-    const AddedIndexScanFunction& addIndexScan) const {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
   AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
                     "With only 2 permutations registered (no -a option), "
                     "triples should have at most two variables.");
-  // Add plans for all six permutations.
-  addIndexScan(OPS);
-  addIndexScan(OSP);
-  addIndexScan(PSO);
-  addIndexScan(POS);
-  addIndexScan(SPO);
-  addIndexScan(SOP);
+  // Helper function for `handleRepeatedVariables` below.
+  // Replace a single position of the `scanTriple`, denoted by the
+  // `rewritePosition` by a new variable, and add a filter, that checks the old
+  // and the new value for equality.
+  auto rewriteSingle = [this, &addFilter](TriplePosition auto rewritePosition,
+                                          SparqlTripleSimple& scanTriple) {
+    Variable filterVar = generateUniqueVarName();
+    auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+    addFilter(createEqualFilter(filterVar, target));
+    target = filterVar;
+  };
+
+  // Replace the positions of the `triple` that are specified by the
+  // `rewritePositions` with a new variable, and add a filter, which checks the
+  // old and the new value for equality for each of these rewrites. Then also
+  // add an index scan for the rewritten triple.
+  auto handleRepeatedVariables =
+      [&triple, &addIndexScan, &rewriteSingle](
+          std::span<const Permutation::Enum> permutations,
+          TriplePosition auto... rewritePositions) {
+        auto scanTriple = triple;
+        (..., rewriteSingle(rewritePositions, scanTriple));
+        for (const auto& permutation : permutations) {
+          addIndexScan(permutation, scanTriple);
+        }
+      };
+
+  using Tr = SparqlTripleSimple;
+  const auto& [s, p, o, _] = triple;
+
+  if (s == o) {
+    if (s == p) {
+      handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
+    } else {
+      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
+    }
+  } else if (s == p) {
+    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
+  } else if (o == p) {
+    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
+  } else {
+    // Three distinct variables
+    // Add plans for all six permutations.
+    addIndexScan(OPS);
+    addIndexScan(OSP);
+    addIndexScan(PSO);
+    addIndexScan(POS);
+    addIndexScan(SPO);
+    addIndexScan(SOP);
+  }
 }
 
 // _____________________________________________________________________________
@@ -880,13 +889,21 @@ template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
     const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
     const AddFilter& addFilter) {
+  size_t numVars = 0;
+  auto addIfVariable = [&numVars](const auto& el) {
+    numVars += static_cast<size_t>(isVariable(el));
+  };
   auto triple = node.triple_.getSimple();
-  if (node._variables.size() == 1) {
-    indexScanSingleVarCase(triple, addIndexScan, addFilter);
-  } else if (node._variables.size() == 2) {
+  addIfVariable(triple.s_);
+  addIfVariable(triple.p_);
+  addIfVariable(triple.o_);
+  if (numVars == 1) {
+    indexScanSingleVarCase(triple, addIndexScan);
+  } else if (numVars == 2) {
     indexScanTwoVarsCase(triple, addIndexScan, addFilter);
   } else {
-    indexScanThreeVarsCase(addIndexScan);
+    AD_CORRECTNESS_CHECK(numVars == 3);
+    indexScanThreeVarsCase(triple, addIndexScan, addFilter);
   }
 }
 
