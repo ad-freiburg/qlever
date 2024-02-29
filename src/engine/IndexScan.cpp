@@ -188,31 +188,7 @@ size_t IndexScan::computeSizeEstimate() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::getCostEstimate() {
-  if (numVariables_ != 3) {
-    return getSizeEstimateBeforeLimit();
-  } else {
-    // The computation of the `full scan` estimate must be consistent with the
-    // full scan dummy joins in `Join.cpp` for correct query planning.
-    // The following calculation is done in a way that makes materializing a
-    // full index scan always more expensive than implicitly computing it in the
-    // so-called "dummy joins" (see `Join.h` and `Join.cpp`). The assumption is,
-    // that materializing a single triple via a full index scan is 10'000 more
-    // expensive than materializing it via some other means.
-
-    // Note that we cannot set the cost to `infinity` or `max`, because this
-    // might lead to overflows in upstream operations when the cost estimate is
-    // an integer (this currently is the case). When implementing them as
-    // floating point numbers, a cost estimate of `infinity` would
-    // remove the ability to distinguish the costs of plans that perform full
-    // scans but still have different overall costs.
-    // TODO<joka921> The conceptually right way to do this is to make the cost
-    // estimate a tuple `(numFullIndexScans, costEstimateForRemainder)`.
-    // Implement this functionality.
-
-    return getSizeEstimateBeforeLimit() * 10'000;
-  }
-}
+size_t IndexScan::getCostEstimate() { return getSizeEstimateBeforeLimit(); }
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
