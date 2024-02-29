@@ -444,36 +444,29 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
 
   size_t beginIdx = 0;
   size_t endIdx = block.numRows();
-  // TODO<joka921> The following three blocks have a lot of code duplication.
-  if (ids.col0Id().has_value()) {
-    const auto& col0Column = block.getColumn(0);
-    auto col0Range = std::ranges::equal_range(col0Column, ids.col0Id().value());
+  // Set `beginIdx` and `endIdx` s.t. that they only represent the range in
+  // `block` where the column with the `columnIdx` matches the `relevantId`.
+  auto filterColumn = [&block, &beginIdx, &endIdx](std::optional<Id> relevantId,
+                                                   size_t columnIdx) {
+    if (!relevantId.has_value()) {
+      return;
+    }
+    const auto& col0Column = block.getColumn(columnIdx);
+    auto col0Range = std::ranges::equal_range(col0Column.begin() + beginIdx,
+                                              col0Column.begin() + endIdx,
+                                              relevantId.value());
     beginIdx = col0Range.begin() - col0Column.begin();
     endIdx = col0Range.end() - col0Column.begin();
-  }
+  };
 
-  if (ids.col1Id().has_value()) {
-    const auto& col1Column = block.getColumn(1);
-    auto col1Range = std::ranges::equal_range(col1Column.begin() + beginIdx,
-                                              col1Column.begin() + endIdx,
-                                              ids.col1Id().value());
-    beginIdx = col1Range.begin() - col1Column.begin();
-    endIdx = col1Range.end() - col1Column.begin();
-  }
-
-  if (ids.col2Id().has_value()) {
-    const auto& col2Column = block.getColumn(2);
-    auto col2Range = std::ranges::equal_range(col2Column.begin() + beginIdx,
-                                              col2Column.begin() + endIdx,
-                                              ids.col2Id().value());
-    beginIdx = col2Range.begin() - col2Column.begin();
-    endIdx = col2Range.end() - col2Column.begin();
-  }
-
-  auto numResults = endIdx - beginIdx;
+  // The order of the calls is important because the block is sorted by [col0Id,
+  // col1Id, col2Id].
+  filterColumn(ids.col0Id(), 0);
+  filterColumn(ids.col1Id(), 1);
+  filterColumn(ids.col2Id(), 2);
 
   DecompressedBlock result{columnIndices.size(), allocator_};
-  result.resize(numResults);
+  result.resize(endIdx - beginIdx);
   for (auto i : ad_utility::integerRange(columnIndices.size())) {
     const auto& inputCol = block.getColumn(columnIndices[i]);
     std::ranges::copy(inputCol.begin() + beginIdx, inputCol.begin() + endIdx,
@@ -528,11 +521,11 @@ size_t CompressedRelationReader::getResultSizeOfScan(
 }
 
 // ____________________________________________________________________________
-IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
-    Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
+    auto idGetter, ScanSpecification ids,
+    const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
   IdTableStatic<2> table(allocator_);
-  ScanSpecification ids{col0Id, std::nullopt, std::nullopt};
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
       getRelevantBlocks(ids, allBlocksMetadata);
 
@@ -558,8 +551,8 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
   };
   for (size_t i = 0; i < relationBlocksMetadata.size(); ++i) {
     const auto& blockMetadata = relationBlocksMetadata[i];
-    Id firstCol1Id = blockMetadata.firstTriple_.col1Id_;
-    Id lastCol1Id = blockMetadata.lastTriple_.col1Id_;
+    Id firstCol1Id = std::invoke(idGetter, blockMetadata.firstTriple_);
+    Id lastCol1Id = std::invoke(idGetter, blockMetadata.lastTriple_);
     if (firstCol1Id == lastCol1Id) {
       // The whole block has the same `col1Id`.
       processCol1Id(firstCol1Id, blockMetadata.numRows_);
@@ -587,58 +580,21 @@ IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
 IdTable CompressedRelationReader::getDistinctCol0IdsAndCounts(
     const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  IdTableStatic<2> table(allocator_);
-  // TODO<joka921> How good can we unify this with the above function?
   ScanSpecification ids{std::nullopt, std::nullopt, std::nullopt};
-  std::span<const CompressedBlockMetadata> relationBlocksMetadata =
-      getRelevantBlocks(ids, allBlocksMetadata);
+  return getDistinctColIdsAndCountsImpl(
+      &CompressedBlockMetadata::PermutedTriple::col0Id_, ids, allBlocksMetadata,
+      cancellationHandle);
+}
 
-  // Iterate over the blocks and only read (and decompress) those which
-  // contain more than one different `col1Id`. For the others, we can determine
-  // the count from the metadata.
-  std::optional<Id> currentCol1Id;
-  size_t currentCount = 0;
-  // Helper lambda that processes a single `col1Id` (with `howMany`
-  // occurrences). If it's new, a row with the previous `col1Id` and
-  // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
-  // are reset.
-  auto processCol1Id = [&table, &currentCol1Id, &currentCount](
-                           std::optional<Id> col1Id, size_t howMany) {
-    if (col1Id != currentCol1Id) {
-      if (currentCol1Id.has_value()) {
-        table.push_back({currentCol1Id.value(), Id::makeFromInt(currentCount)});
-      }
-      currentCol1Id = col1Id;
-      currentCount = 0;
-    }
-    currentCount += howMany;
-  };
-  for (size_t i = 0; i < relationBlocksMetadata.size(); ++i) {
-    const auto& blockMetadata = relationBlocksMetadata[i];
-    // TODO<joka921> This is one of the places that is actually different.
-    Id firstCol1Id = blockMetadata.firstTriple_.col0Id_;
-    Id lastCol1Id = blockMetadata.lastTriple_.col0Id_;
-    if (firstCol1Id == lastCol1Id) {
-      // The whole block has the same `col1Id`.
-      processCol1Id(firstCol1Id, blockMetadata.numRows_);
-    } else {
-      // Multiple `col1Id`s in one block.
-      std::array<ColumnIndex, 1> columnIndices{1u};
-      const auto& block =
-          i == 0 ? readPossiblyIncompleteBlock(ids, blockMetadata, std::nullopt,
-                                               columnIndices)
-                 : readAndDecompressBlock(blockMetadata, columnIndices);
-      cancellationHandle->throwIfCancelled();
-      // TODO<C++23>: use `std::views::chunk_by`.
-      for (size_t j = 0; j < block.numRows(); ++j) {
-        Id col1Id = block(j, 0);
-        processCol1Id(col1Id, 1);
-      }
-    }
-  }
-  // Don't forget to add the last `col1Id` and its count.
-  processCol1Id(std::nullopt, 0);
-  return std::move(table).toDynamic();
+// ____________________________________________________________________________
+IdTable CompressedRelationReader::getDistinctCol1IdsAndCounts(
+    Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+    ad_utility::SharedCancellationHandle cancellationHandle) const {
+  ScanSpecification ids{col0Id, std::nullopt, std::nullopt};
+
+  return getDistinctColIdsAndCountsImpl(
+      &CompressedBlockMetadata::PermutedTriple::col1Id_, ids, allBlocksMetadata,
+      cancellationHandle);
 }
 
 // ____________________________________________________________________________

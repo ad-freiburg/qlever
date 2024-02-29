@@ -574,6 +574,12 @@ class CompressedRelationReader {
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
       const ScanSpecification& ids, ColumnIndicesRef additionalColumns);
+
+  // ____________________________________________________________________________
+  IdTable getDistinctColIdsAndCountsImpl(
+      auto idGetter, ScanSpecification ids,
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      ad_utility::SharedCancellationHandle cancellationHandle) const;
 };
 
 // TODO<joka921>
