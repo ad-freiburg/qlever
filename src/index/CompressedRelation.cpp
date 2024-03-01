@@ -453,8 +453,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     }
     const auto& column = block.getColumn(columnIdx);
     auto matchingRange = std::ranges::equal_range(
-        column.begin() + beginIdx, column.begin() + endIdx,
-                                              relevantId.value());
+        column.begin() + beginIdx, column.begin() + endIdx, relevantId.value());
     beginIdx = matchingRange.begin() - column.begin();
     endIdx = matchingRange.end() - column.begin();
   };

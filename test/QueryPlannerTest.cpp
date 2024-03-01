@@ -261,7 +261,8 @@ TEST(QueryPlanner, testActorsBornInEurope) {
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
       "ORDER BY ?a",
-      h::OrderBy({{Variable{"?a"}, Asc}},
+      h::OrderBy(
+          {{Variable{"?a"}, Asc}},
           h::UnorderedJoins(scan("?a", "<pre/profession>", "<pre/Actor>"),
                             scan("?a", "<pre/born-in>", "?c"),
                             scan("?c", "<pre/in>", "<pre/Europe>"))));

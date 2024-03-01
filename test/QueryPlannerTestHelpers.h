@@ -12,10 +12,10 @@
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
-#include "engine/OrderBy.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePath.h"
@@ -247,13 +247,13 @@ constexpr auto Filter = [](std::string_view descriptor,
 };
 
 // Match an `OrderBy` operation
-constexpr auto OrderBy =
-    [](const ::OrderBy::SortedVariables& sortedVariables, const QetMatcher& childMatcher) {
-      return RootOperation<::OrderBy>(AllOf(
-          Property("getChildren", &Operation::getChildren,
-                   ElementsAre(Pointee(childMatcher))),
-          AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
-    };
+constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
+                            const QetMatcher& childMatcher) {
+  return RootOperation<::OrderBy>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
+};
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

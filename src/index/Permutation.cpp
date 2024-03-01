@@ -130,7 +130,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 
 // _____________________________________________________________________
 Permutation::IdTableGenerator Permutation::lazyScan(
-    ScanSpecification ids,
+    const ScanSpecification& ids,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {

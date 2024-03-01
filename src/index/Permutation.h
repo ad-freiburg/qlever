@@ -85,7 +85,7 @@ class Permutation {
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
-      ScanSpecification ids,
+      const ScanSpecification& ids,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns,
       ad_utility::SharedCancellationHandle cancellationHandle) const;

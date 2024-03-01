@@ -199,9 +199,7 @@ size_t Join::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Join::resultSortedOn() const {
-  return {_leftJoinCol};
-}
+vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
@@ -218,9 +216,7 @@ size_t Join::getCostEstimate() {
 
   // TODO<joka921> once the `getCostEstimate` functions are `const`,
   // the argument can also be `const auto`
-  auto costOfSubtree = [](auto& subtree) {
-    return subtree->getCostEstimate();
-  };
+  auto costOfSubtree = [](auto& subtree) { return subtree->getCostEstimate(); };
 
   return getSizeEstimateBeforeLimit() + costJoin + costOfSubtree(_left) +
          costOfSubtree(_right);
@@ -264,8 +260,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
              << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
              << std::endl;
 
-  for (auto i = ColumnIndex{0};
-       i < _left->getResultWidth(); ++i) {
+  for (auto i = ColumnIndex{0}; i < _left->getResultWidth(); ++i) {
     double oldMult = _left->getMultiplicity(i);
     double m = std::max(
         1.0, oldMult * _right->getMultiplicity(_rightJoinCol) * corrFactor);
@@ -277,7 +272,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     _multiplicities.emplace_back(m);
   }
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
-    if (i == _rightJoinCol)   {
+    if (i == _rightJoinCol) {
       continue;
     }
     double oldMult = _right->getMultiplicity(i);

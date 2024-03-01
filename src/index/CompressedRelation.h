@@ -339,8 +339,9 @@ class CompressedRelationReader {
 
   // TODO<joka921> Document and think of name.
   class ScanSpecification {
-    using T = std::optional<Id>;
    private:
+    using T = std::optional<Id>;
+
     T col0Id_;
     T col1Id_;
     T col2Id_;
@@ -358,7 +359,8 @@ class CompressedRelationReader {
     }
 
    public:
-    ScanSpecification(T col0Id, T col1Id, T col2Id) :  col0Id_{col0Id}, col1Id_{col1Id}, col2Id_{col2Id} {
+    ScanSpecification(T col0Id, T col1Id, T col2Id)
+        : col0Id_{col0Id}, col1Id_{col1Id}, col2Id_{col2Id} {
       validate();
     }
     const T& col0Id() const { return col0Id_; }
