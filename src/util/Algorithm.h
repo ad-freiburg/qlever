@@ -158,6 +158,54 @@ auto transformArray(Array&& input, Function function) {
       AD_FWD(input));
 }
 
+template <typename ForwardIterator, typename Tp, typename Compare>
+constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
+                                                    ForwardIterator last,
+                                                    const Tp& val,
+                                                    Compare comp) {
+  typedef
+      typename std::iterator_traits<ForwardIterator>::difference_type DistanceType;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(middle, val)) {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    } else
+      len = half;
+  }
+  return first;
+}
+
+template <typename ForwardIterator, typename Tp, typename Compare>
+constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
+                                               ForwardIterator last,
+                                               const Tp& val, Compare comp) {
+  typedef
+      typename std::iterator_traits<ForwardIterator>::difference_type DistanceType;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(val, middle))
+      len = half;
+    else {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    }
+  }
+  return first;
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALGORITHM_H

@@ -118,12 +118,26 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  template <typename Comparator>
+  WordAndIndex lower_bound_iterator(const auto& word, Comparator comparator) const {
+    auto it =
+        ad_utility::lower_bound_iterator(begin(), end(), word, transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename Comparator>
   WordAndIndex upper_bound(const auto& word, Comparator comparator) const {
+    auto it =
+        std::upper_bound(begin(), end(), word, transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
+  template <typename Comparator>
+  WordAndIndex upper_bound_iterator(const auto& word, Comparator comparator) const {
     auto it =
         std::upper_bound(begin(), end(), word, transformComparator(comparator));
     return iteratorToWordAndIndex(it);
@@ -168,7 +182,7 @@ class VocabularyOnDisk {
   auto transformComparator(auto comparator) const {
     // For a `WordAndIndex`, return the word, else (for string types) just
     // return the input.
-    auto getString = [&](const auto& input) {
+    auto getString = [&](const auto& input) -> decltype(auto) {
       if constexpr (ad_utility::isSimilar<decltype(input), WordAndIndex>) {
         AD_CONTRACT_CHECK(input._word.has_value());
         return input._word.value();

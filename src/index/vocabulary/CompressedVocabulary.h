@@ -24,7 +24,7 @@ class CompressedVocabulary {
       : _compressor{std::move(compressor)} {}
 
   auto operator[](uint64_t id) const {
-    return _compressor.decompress(_underlyingVocabulary[id]);
+    return _compressor.decompress(id, _underlyingVocabulary[id]);
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }

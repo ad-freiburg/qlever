@@ -294,6 +294,16 @@ FetchContent_Declare(
 )
 
 ################################
+# FSST
+################################
+FetchContent_Declare(
+        fsst
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG c541ffdc2be43443c6a772eb6207eec1b587dbe8
+)
+
+
+################################
 # RE2
 ################################
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
@@ -308,7 +318,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
