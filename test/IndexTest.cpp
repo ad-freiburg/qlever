@@ -333,10 +333,10 @@ TEST(IndexTest, emptyIndex) {
   const IndexImpl& emptyIndexWithoutCompression =
       getQec("", true, true, false)->getIndex().getImpl();
 
-  EXPECT_EQ(emptyIndexWithCompression.numTriples().normal_, 0u);
-  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal_, 0u);
-  EXPECT_EQ(emptyIndexWithCompression.numTriples().internal_, 0u);
-  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal_, 0u);
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().normal, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal, 0u);
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().internal, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
   auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
   // Test that scanning an empty index works, but yields an empty permutation.
   test("<x>", Permutation::PSO, {});
@@ -511,35 +511,35 @@ TEST(IndexTest, NumDistinctEntities) {
   // TODO<joka921> Also check the number of triples and the number of
   // added things.
   auto subjects = index.numDistinctSubjects();
-  EXPECT_EQ(subjects.normal_, 3);
+  EXPECT_EQ(subjects.normal, 3);
   // All literals with language tags are added subjects.
-  EXPECT_EQ(subjects.internal_, 1);
+  EXPECT_EQ(subjects.internal, 1);
   EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SPO));
   EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SOP));
 
   auto predicates = index.numDistinctPredicates();
-  EXPECT_EQ(predicates.normal_, 2);
+  EXPECT_EQ(predicates.normal, 2);
   // The added predicates are `ql:has-pattern`, `ql:langtag`, and one added
   // predicate for each combination of predicate+language that is actually used
   // (e.g. `@en@label`).
-  EXPECT_EQ(predicates.internal_, 3);
+  EXPECT_EQ(predicates.internal, 3);
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
-  EXPECT_EQ(objects.normal_, 7);
+  EXPECT_EQ(objects.normal, 7);
   // One added object for each language that is used.
   // Note: The pattern indices from the `ql:has-pattern` predicate are currently
-  // not part of `objects.internal_`, but they are also not very important.
-  EXPECT_EQ(objects.internal_, 1);
+  // not part of `objects.internal`, but they are also not very important.
+  EXPECT_EQ(objects.internal, 1);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
 
   auto numTriples = index.numTriples();
-  EXPECT_EQ(numTriples.normal_, 7);
+  EXPECT_EQ(numTriples.normal, 7);
   // Two added triples for each triple that has an object with a language tag
   // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal_, 5);
+  EXPECT_EQ(numTriples.internal, 5);
 
   auto multiplicities = index.getMultiplicities(Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 12.0 / 4.0);

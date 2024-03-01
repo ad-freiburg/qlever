@@ -56,7 +56,8 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(const ScanSpecification& ids, ColumnIndicesRef additionalColumns,
+  IdTable scan(const ScanSpecification& scanSpec,
+               ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -86,7 +87,7 @@ class Permutation {
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
-      const ScanSpecification& ids,
+      const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns,
       CancellationHandle cancellationHandle) const;
@@ -98,11 +99,11 @@ class Permutation {
   // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
   // in this permutation, `nullopt` is returned.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      const ScanSpecification& ids) const;
+      const ScanSpecification& scanSpec) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(const ScanSpecification& ids) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpec) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
@@ -123,7 +124,7 @@ class Permutation {
   const array<size_t, 3>& keyOrder() const { return keyOrder_; };
 
   // _______________________________________________________
-  const bool& isLoaded() const {return isLoaded_;}
+  const bool& isLoaded() const { return isLoaded_; }
 
  private:
   // for Log output, e.g. "POS"

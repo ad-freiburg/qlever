@@ -83,7 +83,6 @@ struct CompressedBlockMetadata {
     bool operator==(const PermutedTriple&) const = default;
     auto operator<=>(const PermutedTriple&) const = default;
 
-
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
@@ -381,7 +380,7 @@ class CompressedRelationReader {
   // blocks and possibly a `col1Id` for additional filtering. This is used as
   // the input to several functions below that take such an input.
   struct MetadataAndBlocks {
-    ScanSpecification ids_;
+    ScanSpecification scanSpec_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
 
     // If set, `firstAndLastTriple_` contains the first and the last triple
@@ -467,7 +466,7 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const ScanSpecification& ids,
+  IdTable scan(const ScanSpecification& scanSpec,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle) const;
@@ -476,7 +475,8 @@ class CompressedRelationReader {
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
   CompressedRelationReader::IdTableGenerator lazyScan(
-      ScanSpecification ids, std::vector<CompressedBlockMetadata> blockMetadata,
+      ScanSpecification scanSpec,
+      std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
       CancellationHandle cancellationHandle) const;
 
@@ -486,7 +486,7 @@ class CompressedRelationReader {
   // these scans can be retrieved from the `CompressedRelationMetadata`
   // directly.
   size_t getResultSizeOfScan(
-      const ScanSpecification& ids,
+      const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
@@ -576,7 +576,7 @@ class CompressedRelationReader {
   // an unnecessary copy of the block. Therefore, if you know that you need the
   // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const ScanSpecification& ids,
+      const ScanSpecification& scanSpec,
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices) const;
@@ -601,13 +601,14 @@ class CompressedRelationReader {
   // These are exactly the columns that are returned by a scan depending on
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
-      const ScanSpecification& ids, ColumnIndicesRef additionalColumns);
+      const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
 
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
   IdTable getDistinctColIdsAndCountsImpl(
-      ad_utility::InvocableWithConvertibleReturnType<Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
-      const ScanSpecification& ids,
+      ad_utility::InvocableWithConvertibleReturnType<
+          Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
+      const ScanSpecification& scanSpec,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       const CancellationHandle& cancellationHandle) const;
 };

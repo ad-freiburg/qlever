@@ -104,12 +104,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
 
-  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(cancellationHandle);
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto predicates =
+      index.getImpl().PSO().getDistinctCol0IdsAndCounts(cancellationHandle);
   for (const auto& predicate : predicates.getColumn(0)) {
     checkConsistencyForPredicate(predicate);
   }
-  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(cancellationHandle);
+  auto objects =
+      index.getImpl().OSP().getDistinctCol0IdsAndCounts(cancellationHandle);
   for (const auto& object : objects.getColumn(0)) {
     checkConsistencyForObject(object);
   }

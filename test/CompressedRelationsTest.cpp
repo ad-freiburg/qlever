@@ -172,16 +172,16 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    CompressedRelationReader::ScanSpecification ids{metaData[i].col0Id_,
-                                                    std::nullopt, std::nullopt};
+    CompressedRelationReader::ScanSpecification scanSpec{
+        metaData[i].col0Id_, std::nullopt, std::nullopt};
     IdTable table =
-        reader.scan(ids, blocks, additionalColumns, cancellationHandle);
+        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block :
-         reader.lazyScan(ids, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block : reader.lazyScan(
+             scanSpec, blocks, additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -193,17 +193,19 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      CompressedRelationReader::ScanSpecification ids{
+      CompressedRelationReader::ScanSpecification scanSpec{
           metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size = reader.getResultSizeOfScan(ids, blocks);
-      IdTable tableWidthOne = reader.scan(
-          ids, blocks, Permutation::ColumnIndicesRef{}, cancellationHandle);
+      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      IdTable tableWidthOne =
+          reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
+                      cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
-      for (const auto& block : reader.lazyScan(
-               ids, blocks, Permutation::ColumnIndices{}, cancellationHandle)) {
+      for (const auto& block :
+           reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
+                           cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -410,7 +412,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
-  metadataAndBlocks.ids_.setCol1Id(V(4));
+  metadataAndBlocks.scanSpec_.setCol1Id(V(4));
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
@@ -486,18 +488,18 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // Test for only the `col0Id` fixed.
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
-  metadataAndBlocks.ids_.setCol1Id(V(20));
-  metadataAndBlocksB.ids_.setCol1Id(V(38));
+  metadataAndBlocks.scanSpec_.setCol1Id(V(20));
+  metadataAndBlocksB.scanSpec_.setCol1Id(V(38));
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
-  metadataAndBlocks.ids_.setCol1Id(V(4));
-  metadataAndBlocksB.ids_.setCol1Id(std::nullopt);
+  metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocksB.scanSpec_.setCol1Id(std::nullopt);
   test({std::vector{block2}, std::vector{blockB2, blockB3}});
 
   // Fix only the col1Id of the right input.
-  metadataAndBlocks.ids_.setCol1Id(std::nullopt);
-  metadataAndBlocksB.ids_.setCol1Id(V(7));
+  metadataAndBlocks.scanSpec_.setCol1Id(std::nullopt);
+  metadataAndBlocksB.scanSpec_.setCol1Id(V(7));
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 

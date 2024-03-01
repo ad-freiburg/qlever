@@ -52,8 +52,8 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
   for (const IdTable& cols : blockGenerator) {
     AD_CORRECTNESS_CHECK(cols.numColumns() == 3);
     for (const auto& row : cols) {
-      // TODO<joka921> This can be much more efficient without copying etc. and
-      // with prefiltering.
+      // TODO<joka921> This can be done much more efficient without copying etc.
+      // and with prefiltering.
       std::array<Id, 3> triple{row[0], row[1], row[2]};
       if (isTripleIgnored(triple)) [[unlikely]] {
         continue;

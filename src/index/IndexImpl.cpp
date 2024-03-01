@@ -732,7 +732,9 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
       onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
       p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
 
-  const auto& [_, meta1, meta2] = metaData;
+  auto& [numDistinctCol0, meta1, meta2] = metaData;
+  meta1.calculateStatistics(numDistinctCol0);
+  meta2.calculateStatistics(numDistinctCol0);
   LOG(INFO) << "Statistics for " << p1.readableName() << ": "
             << meta1.statistics() << std::endl;
   LOG(INFO) << "Statistics for " << p2.readableName() << ": "
@@ -1017,9 +1019,9 @@ void IndexImpl::readConfiguration() {
   //
   // TODO: This is a simplistic way. It would be better to incorporate bytes
   // from the index files.
-  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal_, ".",
-                          numSubjects_.normal_, ".", numPredicates_.normal_,
-                          ".", numObjects_.normal_);
+  indexId_ = absl::StrCat("#", getKbName(), ".", numTriples_.normal, ".",
+                          numSubjects_.normal, ".", numPredicates_.normal, ".",
+                          numObjects_.normal);
 }
 
 // ___________________________________________________________________________

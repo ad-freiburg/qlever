@@ -35,16 +35,16 @@ class Index {
   // statistics (number of triples, distinct number of subjects, etc.) for which
   // the value differs when you also consider the added triples.
   struct NumNormalAndInternal {
-    size_t normal_{};
-    size_t internal_{};
-    size_t normalAndInternal_() const { return normal_ + internal_; }
+    size_t normal{};
+    size_t internal{};
+    size_t normalAndInternal_() const { return normal + internal; }
     bool operator==(const NumNormalAndInternal&) const = default;
     static NumNormalAndInternal fromNormalAndTotal(size_t normal,
                                                    size_t total) {
       AD_CONTRACT_CHECK(total >= normal);
       return {normal, total - normal};
     }
-    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal_, internal_);
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
 
   // Store all information about possible search results from the text index in

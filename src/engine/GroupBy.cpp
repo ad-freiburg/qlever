@@ -438,9 +438,9 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
       table(0, 0) = Id::makeFromInt(
-          getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
+          getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
     } else {
-      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
+      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
     }
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the

@@ -235,7 +235,7 @@ void IndexScan::computeFullScan(IdTable* result,
 
   // This implementation computes the complete knowledge graph, except the
   // internal triples.
-  uint64_t resultSize = getIndex().numTriples().normal_;
+  uint64_t resultSize = getIndex().numTriples().normal;
   if (getLimit()._limit.has_value() && getLimit()._limit < resultSize) {
     resultSize = getLimit()._limit.value();
   }

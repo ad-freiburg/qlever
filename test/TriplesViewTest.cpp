@@ -30,12 +30,11 @@ struct DummyPermutation {
   }
 
   cppcoro::generator<IdTable> lazyScan(
-      CompressedRelationReader::ScanSpecification ids,
+      CompressedRelationReader::ScanSpecification scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       std::span<const ColumnIndex>, const auto&) const {
     AD_CORRECTNESS_CHECK(!blocks.has_value());
-    // TODO<joka921> These tests have to be rewritten.
-    auto table = scan(ids.col0Id(), ids.col1Id());
+    auto table = scan(scanSpec.col0Id(), scanSpec.col1Id());
     co_yield table;
   }
 
