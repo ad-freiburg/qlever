@@ -88,7 +88,6 @@ void testLazyScanForJoinOfTwoScans(
 
 // Test that setting up the lazy partial scans between `tripleLeft` and
 // `tripleRight` on the given `kg` throws an exception.
-/*
 void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
                         const SparqlTriple& tripleRight,
                         source_location l = source_location::current()) {
@@ -98,7 +97,6 @@ void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
   IndexScan s2{qec, Permutation::PSO, tripleRight};
   EXPECT_ANY_THROW(IndexScan::lazyScanForJoinOfTwoScans(s1, s2));
 }
- */
 
 // Test that a lazy partial scan for a join of the `scanTriple` with a
 // materialized join column result that is specified by the `columnEntries`
@@ -136,8 +134,6 @@ void testLazyScanWithColumnThrows(
         TripleComponent{entry}.toValueId(qec->getIndex().getVocab()).value());
   }
 
-  // TODO<joka921> This works now, test it
-  /*
   // We need this to suppress the warning about a [[nodiscard]] return value
   // being unused.
   auto makeScan = [&column, &s1]() {
@@ -145,7 +141,6 @@ void testLazyScanWithColumnThrows(
         IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
   };
   EXPECT_ANY_THROW(makeScan());
-   */
 }
 }  // namespace
 
@@ -235,12 +230,10 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
   }
 
   // Corner cases
-  // TODO<joka921> These work now, test them.
-  /*
   {
     std::string kg = "<a> <b> <c> .";
-    // Triples with three variables are not supported.
     SparqlTriple xyz{Tc{Var{"?x"}}, "?y", Tc{Var{"?z"}}};
+    testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xyz);
     testLazyScanThrows(kg, xqz, xyz);
@@ -253,7 +246,6 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
     // match.
     testLazyScanThrows(kg, abc, abc);
   }
-   */
 }
 
 TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
@@ -316,9 +308,11 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
       "<b> <p> <B2> ."
       "<b> <q> <xb>. <b> <q> <xb2> .";
 
-  // Full index scans (three variables) are not supported.
+  // Full index scan (three variables).
   std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
-  testLazyScanWithColumnThrows(kg, threeVars, column);
+  // only `<q>` matches (we join on the predicate), so we only get the last
+  // block.
+  testLazyScanForJoinWithColumn(kg, threeVars, column, {{5, 7}});
 
   // The join column must be sorted.
   if constexpr (ad_utility::areExpensiveChecksEnabled) {

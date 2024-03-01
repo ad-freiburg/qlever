@@ -16,7 +16,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
+  if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
@@ -48,7 +48,7 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
   }
 
   return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
-                       std::move(cancellationHandle));
+                       cancellationHandle);
 }
 
 // _____________________________________________________________________

@@ -316,26 +316,32 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
 
   // This function only works for single column joins. This means that the first
-  // variable of both scans must be equal, but the second variables of the scans
+  // variable of both scans must be equal, but all other variables of the scans
   // (if present) must be different.
   const auto& getFirstVariable = [](const IndexScan& scan) {
     auto numVars = scan.numVariables();
-    switch (numVars) {
-      case 1:
-        return *scan.getPermutedTriple()[2];
-      case 2:
-        return *scan.getPermutedTriple()[1];
-      case 3:
-        return *scan.getPermutedTriple()[0];
-      default:
-        AD_FAIL();
+    AD_CORRECTNESS_CHECK(numVars <= 3);
+    size_t indexOfFirstVar = 3 - numVars;
+    ad_utility::HashSet<Variable> otherVars;
+    for (size_t i = indexOfFirstVar + 1; i < 3; ++i) {
+      const auto& el = *scan.getPermutedTriple()[i];
+      if (el.isVariable()) {
+        otherVars.insert(el.getVariable());
+      }
     }
+    return std::pair{*scan.getPermutedTriple()[3 - numVars],
+                     std::move(otherVars)};
   };
 
-  AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
-  if (s1.numVariables_ == 2 && s2.numVariables_ == 2) {
-    AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
+  auto [first1, other1] = getFirstVariable(s1);
+  auto [first2, other2] = getFirstVariable(s2);
+  AD_CONTRACT_CHECK(first1 == first2);
+
+  size_t numTotal = other1.size() + other2.size();
+  for (auto& var : other1) {
+    other2.insert(var);
   }
+  AD_CONTRACT_CHECK(other2.size() == numTotal);
 
   auto metaBlocks1 = getMetadataForScan(s1);
   auto metaBlocks2 = getMetadataForScan(s2);

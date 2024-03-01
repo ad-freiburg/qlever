@@ -80,7 +80,6 @@ struct CompressedBlockMetadata {
     Id col0Id_;
     Id col1Id_;
     Id col2Id_;
-    bool operator==(const PermutedTriple&) const = default;
     auto operator<=>(const PermutedTriple&) const = default;
 
     // Formatted output for debugging.
@@ -339,7 +338,12 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // TODO<joka921> Document and think of name.
+  // The specification of a scan operation for a given permutation.
+  // Can either be a full scan (all three elements are `std::nullopt`),
+  // a scan for a fixed `col0Id`, a scan for a fixed `col0Id` and `col1Id`,
+  // or even a scan for a single triple to check whether it is contained in
+  // the knowledge graph at all. The values which are `nullopt` become variables
+  // and are returned as columns in the result of the scan.
   class ScanSpecification {
    private:
     using T = std::optional<Id>;

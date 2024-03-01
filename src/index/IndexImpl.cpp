@@ -681,7 +681,7 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
   LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
-  static_assert(MetaData::_isMmapBased);
+  static_assert(MetaData::isMmapBased_);
   metaData1.setup(fileName1 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
   metaData2.setup(fileName2 + MMAP_FILE_SUFFIX, ad_utility::CreateTag{});
 
@@ -1446,7 +1446,7 @@ IdTable IndexImpl::scan(
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
       col1String.has_value() ? col1String.value().get().toValueId(getVocab())
@@ -1457,16 +1457,15 @@ IdTable IndexImpl::scan(
     return IdTable{numColumns, allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,
-              std::move(cancellationHandle));
+              cancellationHandle);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
-                                additionalColumns,
-                                std::move(cancellationHandle));
+                                additionalColumns, cancellationHandle);
 }
 
 // _____________________________________________________________________________
