@@ -254,20 +254,18 @@ TEST(QueryPlanner, joinOfTwoScans) {
 }
 
 TEST(QueryPlanner, testActorsBornInEurope) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  using enum ::OrderBy::AscOrDesc;
+  h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
-      "ORDER BY ?a");
-  QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(27493u, qet.getCostEstimate());
-  ASSERT_EQ(qet.getCacheKey(),
-            "ORDER BY on columns:asc(0) \nJOIN\nSORT(internal) on "
-            "columns:asc(1) \nJOIN\nSCAN POS with P = \"<pre/profession>\", O "
-            "= \"<pre/Actor>\" join-column: [0]\n|X|\nSCAN PSO with P = "
-            "\"<pre/born-in>\" join-column: [0] join-column: [1]\n|X|\nSCAN "
-            "POS with P = \"<pre/in>\", O = \"<pre/Europe>\" join-column: [0]");
+      "ORDER BY ?a",
+      h::OrderBy(
+          {{Variable{"?a"}, Asc}},
+          h::UnorderedJoins(scan("?a", "<pre/profession>", "<pre/Actor>"),
+                            scan("?a", "<pre/born-in>", "?c"),
+                            scan("?c", "<pre/in>", "<pre/Europe>"))));
 }
 
 TEST(QueryPlanner, testStarTwoFree) {

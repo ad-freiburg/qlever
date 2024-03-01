@@ -14,23 +14,27 @@ auto V = ad_utility::testing::VocabId;
 // This struct mocks the structure of the actual `Permutation::Enum` types used
 // in QLever for testing the `TriplesView`.
 struct DummyPermutation {
-  IdTable scan(Id col0Id, std::optional<Id> col1Id) const {
-    IdTable result(2, ad_utility::makeUnlimitedAllocator<Id>());
+  IdTable scan(std::optional<Id> col0IdDummy, std::optional<Id> col1Id) const {
+    IdTable result(3, ad_utility::makeUnlimitedAllocator<Id>());
     AD_CORRECTNESS_CHECK(!col1Id.has_value());
-    result.reserve(col0Id.getVocabIndex().get());
-    for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
-      result.push_back(std::array{V((i + 1) * col0Id.getVocabIndex().get()),
-                                  V((i + 2) * col0Id.getVocabIndex().get())});
+    AD_CORRECTNESS_CHECK(!col0IdDummy.has_value());
+    std::vector<Id> ids{V(1), V(3), V(5), V(7), V(8), V(10), V(13)};
+    for (auto col0Id : ids) {
+      for (size_t i = 0; i < col0Id.getVocabIndex().get(); ++i) {
+        result.push_back(std::array{col0Id,
+                                    V((i + 1) * col0Id.getVocabIndex().get()),
+                                    V((i + 2) * col0Id.getVocabIndex().get())});
+      }
     }
     return result;
   }
 
   cppcoro::generator<IdTable> lazyScan(
-      Id col0Id, std::optional<Id> col1Id,
+      CompressedRelationReader::ScanSpecification scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       std::span<const ColumnIndex>, const auto&) const {
     AD_CORRECTNESS_CHECK(!blocks.has_value());
-    auto table = scan(col0Id, col1Id);
+    auto table = scan(scanSpec.col0Id(), scanSpec.col1Id());
     co_yield table;
   }
 

@@ -30,17 +30,17 @@ using std::vector;
 // meta data or vice versa.
 class WrongFormatException : public std::exception {
  public:
-  WrongFormatException(std::string msg) : _msg(std::move(msg)) {}
-  const char* what() const throw() { return _msg.c_str(); }
+  WrongFormatException(std::string msg) : msg_(std::move(msg)) {}
+  const char* what() const throw() { return msg_.c_str(); }
 
  private:
-  std::string _msg;
+  std::string msg_;
 };
 
 // Struct so that we can return this in a single variable.
 struct VersionInfo {
-  uint64_t _version;
-  size_t _nOfBytes;
+  uint64_t version_;
+  size_t nOfBytes_;
 };
 
 // Magic numbers to separate different types of meta data.
@@ -77,23 +77,22 @@ class IndexMetaData {
 
   // Private member variables.
  private:
-  off_t _offsetAfter = 0;
+  off_t offsetAfter_ = 0;
 
-  string _name;
-  string _filename;
+  string name_;
+  string filename_;
 
-  // TODO: For each of the following two (_data and _blockData), both the type
+  // TODO: For each of the following two (data_ and blockData_), both the type
   // name and the variable name are terrible.
 
   // For each relation, its meta data.
-  MapType _data;
+  MapType data_;
   // For each compressed block, its meta data.
-  BlocksType _blockData;
+  BlocksType blockData_;
 
-  size_t _totalElements = 0;
-  size_t _totalBytes = 0;
-  size_t _totalBlocks = 0;
-  uint64_t _version = V_CURRENT;
+  size_t totalElements_ = 0;
+  size_t numDistinctCol0_ = 0;
+  uint64_t version_ = V_CURRENT;
 
   // Public methods.
  public:
@@ -102,14 +101,14 @@ class IndexMetaData {
   IndexMetaData() = default;
 
   // Pass all arguments that are needed for initialization to the underlying
-  // implementation of `_data` (which is of type `MapType`).
+  // implementation of `data_` (which is of type `MapType`).
   template <typename... dataArgs>
   void setup(dataArgs&&... args) {
-    _data.setup(std::forward<dataArgs>(args)...);
+    data_.setup(std::forward<dataArgs>(args)...);
   }
 
   // `isPersistentMetaData` is true when we do not need to add relation meta
-  // data to _data, but assume that it is already contained in _data. This must
+  // data to data_, but assume that it is already contained in data_. This must
   // be a compile time parameter because we have to avoid instantation of member
   // function set() when `MapType` is read only  (e.g., when based on
   // MmapVectorView).
@@ -133,13 +132,13 @@ class IndexMetaData {
                               std::is_same<MetaWrapperMmapView, T>::value;
   };
   // Compile time information whether this instatiation if MMapBased or not
-  static constexpr bool _isMmapBased = IsMmapBased<MapType>::value;
+  static constexpr bool isMmapBased_ = IsMmapBased<MapType>::value;
 
   // This magic number is written when serializing the IndexMetaData to a file.
   // This is used to check whether this is a really old index that requires
   // rebuilding.
   static constexpr uint64_t MAGIC_NUMBER_FOR_SERIALIZATION =
-      _isMmapBased ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
+      isMmapBased_ ? MAGIC_NUMBER_MMAP_META_DATA_VERSION
                    : MAGIC_NUMBER_SPARSE_META_DATA_VERSION;
 
   // Write meta data to file with given name (contents will be overwritten if
@@ -161,23 +160,22 @@ class IndexMetaData {
 
   // Calculate and save statistics that are expensive to calculate so we only
   // have to do this once during the index build and not at server start.
-  void calculateExpensiveStatistics();
+  void calculateStatistics(size_t numDistinctCol0);
+
+  // The number of distinct Col0Ids has to be passed in manually, as it cannot
+  // be computed.
   string statistics() const;
 
-  size_t getNofTriples() const { return _totalElements; }
+  void setName(const string& name) { name_ = name; }
 
-  void setName(const string& name) { _name = name; }
+  const string& getName() const { return name_; }
 
-  const string& getName() const { return _name; }
+  size_t getVersion() const { return version_; }
 
-  size_t getNofDistinctC1() const;
+  const MapType& data() const { return data_; }
 
-  size_t getVersion() const { return _version; }
-
-  const MapType& data() const { return _data; }
-
-  BlocksType& blockData() { return _blockData; }
-  const BlocksType& blockData() const { return _blockData; }
+  BlocksType& blockData() { return blockData_; }
+  const BlocksType& blockData() const { return blockData_; }
 
   // Symmetric serialization function for the ad_utility::serialization module.
   AD_SERIALIZE_FRIEND_FUNCTION(IndexMetaData) {
@@ -197,7 +195,7 @@ class IndexMetaData {
           "Please rebuild the index.");
     }
 
-    serializer | arg._version;
+    serializer | arg.version_;
     // This check might only become false, if we are reading from the serializer
     if (arg.getVersion() != V_CURRENT) {
       throw WrongFormatException(
@@ -206,18 +204,16 @@ class IndexMetaData {
     }
 
     // Serialize the rest of the data members
-    serializer | arg._name;
-    serializer | arg._data;
-    serializer | arg._blockData;
-
-    serializer | arg._offsetAfter;
-    serializer | arg._totalElements;
-    serializer | arg._totalBytes;
-    serializer | arg._totalBlocks;
+    serializer | arg.name_;
+    serializer | arg.data_;
+    serializer | arg.blockData_;
+    serializer | arg.offsetAfter_;
+    serializer | arg.totalElements_;
+    serializer | arg.numDistinctCol0_;
   }
 };
 
-// ____________________________________________________________________________
+// ___________________________________________________________________________
 template <class MapType>
 ad_utility::File& operator<<(ad_utility::File& f,
                              const IndexMetaData<MapType>& imd);

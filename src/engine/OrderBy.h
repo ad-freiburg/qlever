@@ -45,6 +45,12 @@ class OrderBy : public Operation {
 
   void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
 
+  // Expose the variables on which this OrderBy is performed. Currently mostly
+  // used for testing.
+  enum class AscOrDesc { Asc, Desc };
+  using SortedVariables = std::vector<std::pair<Variable, AscOrDesc>>;
+  SortedVariables getSortedVariables() const;
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
