@@ -380,7 +380,7 @@ class IndexImpl {
 
   const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return pso_.metaData().getName(); }
+  const string& getKbName() const { return pso_.getKbName(); }
 
   const string& getIndexId() const { return indexId_; }
 
@@ -390,7 +390,7 @@ class IndexImpl {
     return textMeta_.getNofEntityPostings();
   }
 
-  bool hasAllPermutations() const { return SPO().isLoaded_; }
+  bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,

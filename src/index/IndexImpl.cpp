@@ -728,14 +728,14 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
   auto metaData = createPermutationPairImpl(
-      numColumns, onDiskBase_ + ".index" + p1.fileSuffix_,
-      onDiskBase_ + ".index" + p2.fileSuffix_, AD_FWD(sortedTriples),
-      p1.keyOrder_, AD_FWD(perTripleCallbacks)...);
+      numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
+      onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
+      p1.keyOrder(), AD_FWD(perTripleCallbacks)...);
 
   const auto& [_, meta1, meta2] = metaData;
-  LOG(INFO) << "Statistics for " << p1.readableName_ << ": "
+  LOG(INFO) << "Statistics for " << p1.readableName() << ": "
             << meta1.statistics() << std::endl;
-  LOG(INFO) << "Statistics for " << p2.readableName_ << ": "
+  LOG(INFO) << "Statistics for " << p2.readableName() << ": "
             << meta2.statistics() << std::endl;
 
   return metaData;
@@ -755,11 +755,11 @@ size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
   auto writeMetadata = [this](auto& metaData, const auto& permutation) {
     metaData.setName(getKbName());
     ad_utility::File f(
-        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix_), "r+");
+        absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
     metaData.appendToFile(&f);
   };
-  LOG(INFO) << "Writing meta data for " << p1.readableName_ << " and "
-            << p2.readableName_ << " ..." << std::endl;
+  LOG(INFO) << "Writing meta data for " << p1.readableName() << " and "
+            << p2.readableName() << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
   return numDistinctC0;
@@ -1435,7 +1435,7 @@ vector<float> IndexImpl::getMultiplicities(
       numTriples / numDistinctSubjects().normalAndInternal_(),
       numTriples / numDistinctPredicates().normalAndInternal_(),
       numTriples / numDistinctObjects().normalAndInternal_()};
-  return {m[p.keyOrder_[0]], m[p.keyOrder_[1]], m[p.keyOrder_[2]]};
+  return {m[p.keyOrder()[0]], m[p.keyOrder()[1]], m[p.keyOrder()[2]]};
 }
 
 // _____________________________________________________________________________

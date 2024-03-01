@@ -81,6 +81,8 @@ struct CompressedBlockMetadata {
     Id col1Id_;
     Id col2Id_;
     bool operator==(const PermutedTriple&) const = default;
+    auto operator<=>(const PermutedTriple&) const = default;
+
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -336,6 +338,7 @@ class CompressedRelationReader {
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // TODO<joka921> Document and think of name.
   class ScanSpecification {
@@ -467,7 +470,7 @@ class CompressedRelationReader {
   IdTable scan(const ScanSpecification& ids,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+               const CancellationHandle& cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -475,7 +478,7 @@ class CompressedRelationReader {
   CompressedRelationReader::IdTableGenerator lazyScan(
       ScanSpecification ids, std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      CancellationHandle cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -490,25 +493,25 @@ class CompressedRelationReader {
   // used for `computeGroupByObjectWithCount`.
   IdTable getDistinctCol1IdsAndCounts(
       Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const CancellationHandle& cancellationHandle) const;
 
   // For all `col0Ids` determine their counts. This is
   // used for `computeGroupByForFullScan`.
   IdTable getDistinctCol0IdsAndCounts(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const CancellationHandle& cancellationHandle) const;
 
   std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
       Id col0Id) const;
 
-  // Get the contiguous subrange of the given `blockMetadata` for the blocks
+  // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
   static std::span<const CompressedBlockMetadata> getRelevantBlocks(
-      const ScanSpecification& ids,
-      std::span<const CompressedBlockMetadata> blockMetadata);
+      const ScanSpecification& blockA,
+      std::span<const CompressedBlockMetadata> blockB);
 
   // The same function, but specify the arguments as the `MetadataAndBlocks`
   // struct.
@@ -585,7 +588,7 @@ class CompressedRelationReader {
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      CancellationHandle cancellationHandle) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
@@ -603,9 +606,10 @@ class CompressedRelationReader {
   // The common implementation for `getDistinctCol0IdsAndCounts` and
   // `getCol1IdsAndCounts`.
   IdTable getDistinctColIdsAndCountsImpl(
-      auto idGetter, ScanSpecification ids,
+      ad_utility::InvocableWithConvertibleReturnType<Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
+      const ScanSpecification& ids,
       const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const CancellationHandle& cancellationHandle) const;
 };
 
 // TODO<joka921>

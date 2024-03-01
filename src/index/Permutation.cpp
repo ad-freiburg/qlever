@@ -41,7 +41,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 // _____________________________________________________________________
 IdTable Permutation::scan(
     const ScanSpecification& ids, ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const CancellationHandle& cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -58,14 +58,14 @@ size_t Permutation::getResultSizeOfScan(const ScanSpecification& ids) const {
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
-    Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
+    Id col0Id, const CancellationHandle& cancellationHandle) const {
   return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
                                               cancellationHandle);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const CancellationHandle& cancellationHandle) const {
   return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
                                               cancellationHandle);
 }
@@ -110,6 +110,7 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
   AD_FAIL();
 }
 
+// _____________________________________________________________________
 std::optional<CompressedRelationMetadata> Permutation::getMetadata(
     Id col0Id) const {
   if (meta_.col0IdExists(col0Id)) {
@@ -117,6 +118,7 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
   }
   return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id);
 }
+
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& ids) const {
@@ -141,5 +143,5 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   return reader().lazyScan(ids, std::move(blocks.value()), std::move(columns),
-                           cancellationHandle);
+                           std::move(cancellationHandle));
 }

@@ -103,13 +103,15 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
-  const auto& predicates = index.getImpl().PSO().metaData().data();
-  for (const auto& predicate : predicates) {
-    checkConsistencyForPredicate(predicate.col0Id_);
+
+  auto cancellationHandle = std::make_shared<ad_utility::CancellationHandle<>>();
+  auto predicates = index.getImpl().PSO().getDistinctCol0IdsAndCounts(cancellationHandle);
+  for (const auto& predicate : predicates.getColumn(0)) {
+    checkConsistencyForPredicate(predicate);
   }
-  const auto& objects = index.getImpl().OSP().metaData().data();
-  for (const auto& object : objects) {
-    checkConsistencyForObject(object.col0Id_);
+  auto objects = index.getImpl().OSP().getDistinctCol0IdsAndCounts(cancellationHandle);
+  for (const auto& object : objects.getColumn(0)) {
+    checkConsistencyForObject(object);
   }
   // NOTE: The SPO and SOP permutations currently don't have patterns stored.
   // with them.
