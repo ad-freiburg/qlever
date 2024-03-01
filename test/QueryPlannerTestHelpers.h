@@ -236,8 +236,14 @@ inline auto TransitivePath =
                       TransitivePathSideMatcher(right))));
     };
 
-// TODO<joka921> We also have to match the sorted variables etc.
-constexpr auto OrderBy = MatchTypeAndOrderedChildren<::OrderBy>;
+// Match an `OrderBy` operation
+constexpr auto OrderBy =
+    [](const ::OrderBy::SortedVariables& sortedVariables, const QetMatcher& childMatcher) {
+      return RootOperation<::OrderBy>(AllOf(
+          Property("getChildren", &Operation::getChildren,
+                   ElementsAre(Pointee(childMatcher))),
+          AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
+    };
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

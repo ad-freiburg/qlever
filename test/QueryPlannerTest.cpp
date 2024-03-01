@@ -255,12 +255,13 @@ TEST(QueryPlanner, joinOfTwoScans) {
 
 TEST(QueryPlanner, testActorsBornInEurope) {
   auto scan = h::IndexScanFromStrings;
+  using enum ::OrderBy::AscOrDesc;
   h::expect(
       "PREFIX : <pre/>\n"
       "SELECT ?a \n "
       "WHERE {?a :profession :Actor . ?a :born-in ?c. ?c :in :Europe}\n"
       "ORDER BY ?a",
-      h::OrderBy(
+      h::OrderBy({{Variable{"?a"}, Asc}},
           h::UnorderedJoins(scan("?a", "<pre/profession>", "<pre/Actor>"),
                             scan("?a", "<pre/born-in>", "?c"),
                             scan("?c", "<pre/in>", "<pre/Europe>"))));

@@ -43,10 +43,6 @@ class HasPredicateScanTest : public ::testing::Test {
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
     auto res = operation.getResult();
-    for (auto &[key, value] : operation.getExternallyVisibleVariableColumns()) {
-      LOG(INFO) << key.name() << ' ' << value.columnIndex_ << std::endl;
-
-    }
     EXPECT_THAT(res->idTable(),
                 ::testing::ElementsAreArray(expected));
   }
@@ -116,7 +112,7 @@ TEST_F(HasPredicateScanTest, subtree) {
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", "<o4>"});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
-  runTest(scan, {{p3, y, p}, {p3, y, p3}});
+  runTest(scan, {{y, p, p3}, {y, p3, p3}});
 }
 
 // ____________________________________________________________
