@@ -333,13 +333,9 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   };
 
   AD_CONTRACT_CHECK(getFirstVariable(s1) == getFirstVariable(s2));
-  // TODO<joka921> This check could be reinstated,
-  // it tests that we only have a single join column
-  /*
   if (s1.numVariables_ == 2 && s2.numVariables_ == 2) {
     AD_CONTRACT_CHECK(*s1.getPermutedTriple()[2] != *s2.getPermutedTriple()[2]);
   }
-   */
 
   auto metaBlocks1 = getMetadataForScan(s1);
   auto metaBlocks2 = getMetadataForScan(s2);
