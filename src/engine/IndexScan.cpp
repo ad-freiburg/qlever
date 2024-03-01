@@ -16,18 +16,16 @@ using std::string;
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple)
+                     const SparqlTripleSimple& triple)
     : Operation(qec),
       permutation_(permutation),
-      subject_(triple._s),
-      predicate_(triple._p.getIri().starts_with("?")
-                     ? TripleComponent(Variable{triple._p.getIri()})
-                     : TripleComponent(triple._p.getIri())),
-      object_(triple._o),
+      subject_(triple.s_),
+      predicate_(triple.p_),
+      object_(triple.o_),
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
-  for (auto& [idx, variable] : triple._additionalScanColumns) {
+  for (auto& [idx, variable] : triple.additionalScanColumns_) {
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
@@ -46,6 +44,11 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
     AD_CONTRACT_CHECK(permutedTriple.at(i)->isVariable());
   }
 }
+
+// _____________________________________________________________________________
+IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+                     const SparqlTriple& triple)
+    : IndexScan(qec, permutation, triple.getSimple()) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {

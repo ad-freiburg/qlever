@@ -40,14 +40,14 @@ class QueryPlanner {
 
     struct Node {
       Node(size_t id, SparqlTriple t) : id_(id), triple_(std::move(t)) {
-        if (isVariable(triple_._s)) {
-          _variables.insert(triple_._s.getVariable());
+        if (isVariable(triple_.s_)) {
+          _variables.insert(triple_.s_.getVariable());
         }
-        if (isVariable(triple_._p)) {
-          _variables.insert(Variable{triple_._p._iri});
+        if (isVariable(triple_.p_)) {
+          _variables.insert(Variable{triple_.p_._iri});
         }
-        if (isVariable(triple_._o)) {
-          _variables.insert(triple_._o.getVariable());
+        if (isVariable(triple_.o_)) {
+          _variables.insert(triple_.o_.getVariable());
         }
       }
 
@@ -232,32 +232,38 @@ class QueryPlanner {
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
   // ql:contains-word nor a special pattern trick triple.
-  template <typename PushPlanFunction, typename AddedIndexScanFunction>
+  template <typename AddedIndexScanFunction, typename AddFilterFunction>
   void seedFromOrdinaryTriple(const TripleGraph::Node& node,
-                              const PushPlanFunction& pushPlan,
-                              const AddedIndexScanFunction& addIndexScan);
-
-  // Helper function used by the seedFromOrdinaryTriple function
-  template <typename PushPlanFunction, typename AddedIndexScanFunction>
-  void indexScanSingleVarCase(const TripleGraph::Node& node,
-                              const PushPlanFunction& pushPlan,
-                              const AddedIndexScanFunction& addIndexScan);
+                              const AddedIndexScanFunction& addIndexScan,
+                              const AddFilterFunction& addFilter);
 
   // Helper function used by the seedFromOrdinaryTriple function
   template <typename AddedIndexScanFunction>
-  void indexScanTwoVarsCase(const TripleGraph::Node& node,
-                            const AddedIndexScanFunction& addIndexScan) const;
-
-  // Helper function used by the seedFromOrdinaryTriple function
-  template <typename AddedIndexScanFunction>
-  void indexScanThreeVarsCase(const TripleGraph::Node& node,
+  void indexScanSingleVarCase(const SparqlTripleSimple& triple,
                               const AddedIndexScanFunction& addIndexScan) const;
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanTwoVarsCase(const SparqlTripleSimple& triple,
+                            const AddedIndexScanFunction& addIndexScan,
+                            const auto& addFilter);
+
+  // Helper function used by the seedFromOrdinaryTriple function
+  template <typename AddedIndexScanFunction>
+  void indexScanThreeVarsCase(const SparqlTripleSimple& triple,
+                              const AddedIndexScanFunction& addIndexScan,
+                              const auto& addFilter);
 
   /**
    * @brief Fills children with all operations that are associated with a single
    * node in the triple graph (e.g. IndexScans).
    */
-  [[nodiscard]] vector<SubtreePlan> seedWithScansAndText(
+  struct PlansAndFilters {
+    std::vector<SubtreePlan> plans_;
+    std::vector<SparqlFilter> filters_;
+  };
+
+  [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
@@ -430,7 +436,7 @@ class QueryPlanner {
    * it as a filter later on).
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
-      const TripleGraph& graph, const vector<SparqlFilter>& fs,
+      const TripleGraph& graph, std::vector<SparqlFilter> fs,
       const vector<vector<SubtreePlan>>& children);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected

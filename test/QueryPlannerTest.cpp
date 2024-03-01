@@ -866,6 +866,39 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
           "always also needs corresponding ql:contains-word statement."));
 }
 
+TEST(QueryPlanner, NonDistinctVariablesInTriple) {
+  auto internalVar = [](int i) {
+    return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
+  };
+  auto eq = [](std::string_view l, std::string_view r) {
+    return absl::StrCat(l, "=", r);
+  };
+
+  h::expect("SELECT * WHERE {?s ?p ?s}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?p", "?s")));
+  h::expect("SELECT * WHERE {?s ?s ?o}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "?o")));
+  h::expect("SELECT * WHERE {?s ?p ?p}",
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("?s", "?p", internalVar(0))));
+  h::expect("SELECT * WHERE {?s ?s ?s}",
+            h::Filter(eq(internalVar(1), "?s"),
+                      h::Filter(eq(internalVar(0), "?s"),
+                                h::IndexScanFromStrings(internalVar(1), "?s",
+                                                        internalVar(0)))));
+  h::expect("SELECT * WHERE {?s <is-a> ?s}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings("?s", "<is-a>", internalVar(0))));
+  h::expect("SELECT * WHERE {<s> ?p ?p}",
+            h::Filter(eq(internalVar(0), "?p"),
+                      h::IndexScanFromStrings("<s>", "?p", internalVar(0))));
+  h::expect("SELECT * WHERE {?s ?s <o>}",
+            h::Filter(eq(internalVar(0), "?s"),
+                      h::IndexScanFromStrings(internalVar(0), "?s", "<o>")));
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, TooManyTriples) {
   std::string query = "SELECT * WHERE {";
