@@ -234,14 +234,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
                                  std::decay_t<decltype(v)>>) {
       // we only consist of triples, store them and all the bound variables.
       for (const SparqlTriple& t : v._triples) {
-        if (isVariable(t._s)) {
-          boundVariables.insert(t._s.getVariable());
+        if (isVariable(t.s_)) {
+          boundVariables.insert(t.s_.getVariable());
         }
-        if (isVariable(t._p)) {
-          boundVariables.insert(Variable{t._p._iri});
+        if (isVariable(t.p_)) {
+          boundVariables.insert(Variable{t.p_._iri});
         }
-        if (isVariable(t._o)) {
-          boundVariables.insert(t._o.getVariable());
+        if (isVariable(t.o_)) {
+          boundVariables.insert(t.o_.getVariable());
         }
       }
       candidateTriples._triples.insert(
@@ -688,20 +688,20 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   vector<const SparqlTriple*> entityTriples;
   // Add one or more nodes for each triple.
   for (auto& t : pattern->_triples) {
-    if (t._p._iri == CONTAINS_WORD_PREDICATE) {
-      std::string buffer = t._o.toString();
+    if (t.p_._iri == CONTAINS_WORD_PREDICATE) {
+      std::string buffer = t.o_.toString();
       std::string_view sv{buffer};
       // Add one node for each word
       for (const auto& term :
            absl::StrSplit(sv.substr(1, sv.size() - 2), ' ')) {
         std::string s{ad_utility::utf8ToLower(term)};
-        potentialTermsForCvar[t._s.getVariable()].push_back(s);
+        potentialTermsForCvar[t.s_.getVariable()].push_back(s);
         addNodeToTripleGraph(
-            TripleGraph::Node(tg._nodeStorage.size(), t._s.getVariable(), s, t),
+            TripleGraph::Node(tg._nodeStorage.size(), t.s_.getVariable(), s, t),
             tg);
         numNodesInTripleGraph++;
       }
-    } else if (t._p._iri == CONTAINS_ENTITY_PREDICATE) {
+    } else if (t.p_._iri == CONTAINS_ENTITY_PREDICATE) {
       entityTriples.push_back(&t);
     } else {
       addNodeToTripleGraph(TripleGraph::Node(tg._nodeStorage.size(), t), tg);
@@ -713,7 +713,7 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
         terms[_qec->getIndex().getIndexOfBestSuitedElTerm(terms)];
   }
   for (const SparqlTriple* t : entityTriples) {
-    Variable currentVar = t->_s.getVariable();
+    Variable currentVar = t->s_.getVariable();
     if (!optTermForCvar.contains(currentVar)) {
       AD_THROW(
           "Missing ql:contains-word statement. A ql:contains-entity "
@@ -731,77 +731,161 @@ QueryPlanner::TripleGraph QueryPlanner::createTripleGraph(
   return tg;
 }
 
+namespace {
+// A `TriplePosition` is a function that takes a triple and returns a
+// `TripleComponent`, typically the subject, predicate, or object of the triple,
+// hence the name.
+template <typename Function>
+concept TriplePosition =
+    ad_utility::InvocableWithExactReturnType<Function, TripleComponent&,
+                                             SparqlTripleSimple&>;
+
+// Create a `SparqlFilter` that corresponds to the expression `var1==var2`.
+// Used as a helper function below.
+SparqlFilter createEqualFilter(const Variable& var1, const Variable& var2) {
+  std::string filterString =
+      absl::StrCat("FILTER ( ", var1.name(), "=", var2.name(), ")");
+  return sparqlParserHelpers::ParserAndVisitor{filterString}
+      .parseTypesafe(&SparqlAutomaticParser::filterR)
+      .resultOfParse_;
+};
+
+// Helper function for `handleRepeatedVariables` below. Replace a single
+// position of the `scanTriple`, denoted by the `rewritePosition` by a new
+// variable, and add a filter, that checks the old and the new value for
+// equality.
+constexpr auto rewriteSingle =
+    [](TriplePosition auto rewritePosition, SparqlTripleSimple& scanTriple,
+       const auto& addFilter, const auto& generateUniqueVarName) {
+      Variable filterVar = generateUniqueVarName();
+      auto& target = std::invoke(rewritePosition, scanTriple).getVariable();
+      addFilter(createEqualFilter(filterVar, target));
+      target = filterVar;
+    };
+
+// Replace the positions of the `triple` that are specified by the
+// `rewritePositions` with a new variable, and add a filter, which checks the
+// old and the new value for equality for each of these rewrites. Then also
+// add an index scan for the rewritten triple.
+constexpr auto handleRepeatedVariablesImpl =
+    [](const auto& triple, auto& addIndexScan,
+       const auto& generateUniqueVarName, const auto& addFilter,
+       std::span<const Permutation::Enum> permutations,
+       TriplePosition auto... rewritePositions) {
+      auto scanTriple = triple;
+      (..., rewriteSingle(rewritePositions, scanTriple, addFilter,
+                          generateUniqueVarName));
+      for (const auto& permutation : permutations) {
+        addIndexScan(permutation, scanTriple);
+      }
+    };
+
+}  // namespace
+
 // _____________________________________________________________________________
-template <typename PushPlanFunction, typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanSingleVarCase(
-    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
-    const AddedIndexScanFunction& addIndexScan) {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan) const {
   using enum Permutation::Enum;
 
-  // TODO: The case where the same variable appears in subject + predicate or
-  // object + predicate is missing here and leads to an assertion failure.
-  if (isVariable(node.triple_._s) && isVariable(node.triple_._o) &&
-      node.triple_._s == node.triple_._o) {
-    if (isVariable(node.triple_._p._iri)) {
-      AD_THROW("Triple with one variable repeated three times");
-    }
-    LOG(DEBUG) << "Subject variable same as object variable" << std::endl;
-    // Need to handle this as IndexScan with a new unique
-    // variable + Filter. Works in both directions
-    Variable filterVar = generateUniqueVarName();
-    auto scanTriple = node.triple_;
-    scanTriple._o = filterVar;
-    auto scanTree = makeExecutionTree<IndexScan>(_qec, PSO, scanTriple);
-    // The simplest way to set up the filtering expression is to use the
-    // parser.
-    std::string filterString =
-        absl::StrCat("FILTER (", scanTriple._s.getVariable().name(), "=",
-                     filterVar.name(), ")");
-    auto filter = sparqlParserHelpers::ParserAndVisitor{filterString}
-                      .parseTypesafe(&SparqlAutomaticParser::filterR)
-                      .resultOfParse_;
-    auto plan =
-        makeSubtreePlan<Filter>(_qec, scanTree, std::move(filter.expression_));
-    pushPlan(std::move(plan));
-  } else if (isVariable(node.triple_._s)) {
+  if (isVariable(triple.s_)) {
     addIndexScan(POS);
-  } else if (isVariable(node.triple_._o)) {
-    addIndexScan(PSO);
-  } else {
-    AD_CONTRACT_CHECK(isVariable(node.triple_._p));
+  } else if (isVariable(triple.p_)) {
     addIndexScan(SOP);
+  } else {
+    addIndexScan(PSO);
   }
 }
 
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanTwoVarsCase(
-    const TripleGraph::Node& node,
-    const AddedIndexScanFunction& addIndexScan) const {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
 
-  // TODO: The case that the same variable appears in more than one position
-  // leads (as in indexScanSingleVarCase) to an assertion.
-  if (!isVariable(node.triple_._p._iri)) {
-    addIndexScan(PSO);
-    addIndexScan(POS);
-  } else if (!isVariable(node.triple_._s)) {
-    addIndexScan(SPO);
-    addIndexScan(SOP);
-  } else if (!isVariable(node.triple_._o)) {
-    addIndexScan(OSP);
-    addIndexScan(OPS);
+  // Replace the position of the `triple` that is specified by the
+  // `rewritePosition` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for this rewrite. Then also
+  // add an index scan for the rewritten triple.
+  auto generate = [this]() { return generateUniqueVarName(); };
+  auto handleRepeatedVariables =
+      [&triple, &addIndexScan, &addFilter, &generate](
+          std::span<const Permutation::Enum> permutations,
+          TriplePosition auto... rewritePositions) {
+        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                           addFilter, permutations,
+                                           rewritePositions...);
+      };
+
+  const auto& [s, p, o, _] = triple;
+
+  using Tr = SparqlTripleSimple;
+  if (!isVariable(s)) {
+    if (p == o) {
+      handleRepeatedVariables({{SPO}}, &Tr::o_);
+    } else {
+      addIndexScan(SPO);
+      addIndexScan(SOP);
+    }
+  } else if (!isVariable(p)) {
+    if (s == o) {
+      handleRepeatedVariables({{PSO}}, &Tr::o_);
+    } else {
+      addIndexScan(PSO);
+      addIndexScan(POS);
+    }
+  } else {
+    AD_CORRECTNESS_CHECK(!isVariable(o));
+    if (s == p) {
+      handleRepeatedVariables({{OPS}}, &Tr::s_);
+    } else {
+      addIndexScan(OSP);
+      addIndexScan(OPS);
+    }
   }
 }
 
 // _____________________________________________________________________________
 template <typename AddedIndexScanFunction>
 void QueryPlanner::indexScanThreeVarsCase(
-    const TripleGraph::Node& node,
-    const AddedIndexScanFunction& addIndexScan) const {
+    const SparqlTripleSimple& triple,
+    const AddedIndexScanFunction& addIndexScan, const auto& addFilter) {
   using enum Permutation::Enum;
+  AD_CONTRACT_CHECK(!_qec || _qec->getIndex().hasAllPermutations(),
+                    "With only 2 permutations registered (no -a option), "
+                    "triples should have at most two variables.");
+  auto generate = [this]() { return generateUniqueVarName(); };
 
-  if (!_qec || _qec->getIndex().hasAllPermutations()) {
+  // Replace the position of the `triple` that is specified by the
+  // `rewritePosition` with a new variable, and add a filter, that checks the
+  // old and the new value for equality for this rewrite. Then also
+  // add an index scan for the rewritten triple.
+  auto handleRepeatedVariables =
+      [&triple, &addIndexScan, &addFilter, &generate](
+          std::span<const Permutation::Enum> permutations,
+          TriplePosition auto... rewritePositions) {
+        return handleRepeatedVariablesImpl(triple, addIndexScan, generate,
+                                           addFilter, permutations,
+                                           rewritePositions...);
+      };
+
+  using Tr = SparqlTripleSimple;
+  const auto& [s, p, o, _] = triple;
+
+  if (s == o) {
+    if (s == p) {
+      handleRepeatedVariables({{PSO}}, &Tr::o_, &Tr::s_);
+    } else {
+      handleRepeatedVariables({{POS, OPS}}, &Tr::s_);
+    }
+  } else if (s == p) {
+    handleRepeatedVariables({{OPS, POS}}, &Tr::s_);
+  } else if (o == p) {
+    handleRepeatedVariables({{PSO, SPO}}, &Tr::o_);
+  } else {
+    // Three distinct variables
     // Add plans for all six permutations.
     addIndexScan(OPS);
     addIndexScan(OSP);
@@ -809,34 +893,35 @@ void QueryPlanner::indexScanThreeVarsCase(
     addIndexScan(POS);
     addIndexScan(SPO);
     addIndexScan(SOP);
-  } else {
-    AD_THROW(
-        "With only 2 permutations registered (no -a option), "
-        "triples should have at most two variables. "
-        "Not the case in: " +
-        node.triple_.asString());
   }
 }
 
 // _____________________________________________________________________________
-template <typename PushPlanFunction, typename AddedIndexScanFunction>
+template <typename AddedIndexScanFunction, typename AddFilter>
 void QueryPlanner::seedFromOrdinaryTriple(
-    const TripleGraph::Node& node, const PushPlanFunction& pushPlan,
-    const AddedIndexScanFunction& addIndexScan) {
-  if (node._variables.size() == 1) {
-    indexScanSingleVarCase(node, pushPlan, addIndexScan);
-  } else if (node._variables.size() == 2) {
-    indexScanTwoVarsCase(node, addIndexScan);
+    const TripleGraph::Node& node, const AddedIndexScanFunction& addIndexScan,
+    const AddFilter& addFilter) {
+  auto triple = node.triple_.getSimple();
+  const size_t numVars = static_cast<size_t>(isVariable(triple.s_)) +
+                         static_cast<size_t>(isVariable(triple.p_)) +
+                         static_cast<size_t>(isVariable(triple.o_));
+  if (numVars == 1) {
+    indexScanSingleVarCase(triple, addIndexScan);
+  } else if (numVars == 2) {
+    indexScanTwoVarsCase(triple, addIndexScan, addFilter);
   } else {
-    indexScanThreeVarsCase(node, addIndexScan);
+    AD_CORRECTNESS_CHECK(numVars == 3);
+    indexScanThreeVarsCase(triple, addIndexScan, addFilter);
   }
 }
 
 // _____________________________________________________________________________
-vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
+auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
-  vector<SubtreePlan> seeds;
+    const vector<vector<QueryPlanner::SubtreePlan>>& children)
+    -> PlansAndFilters {
+  PlansAndFilters result;
+  vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
   uint64_t idShift = tg._nodeMap.size();
   for (const auto& vec : children) {
@@ -857,10 +942,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
       seeds.push_back(std::move(plan));
     };
 
-    auto addIndexScan = [this, pushPlan, node](Permutation::Enum permutation) {
-      pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation, node.triple_));
-    };
-
     using enum Permutation::Enum;
 
     if (node.isTextNode()) {
@@ -874,7 +955,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
 
     // If the predicate is a property path, we have to recursively set up the
     // index scans.
-    if (node.triple_._p._operation != PropertyPath::Operation::IRI) {
+    if (node.triple_.p_._operation != PropertyPath::Operation::IRI) {
       for (SubtreePlan& plan : seedFromPropertyPathTriple(node.triple_)) {
         pushPlan(std::move(plan));
       }
@@ -884,7 +965,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
     // At this point, we know that the predicate is a simple IRI or a variable.
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
-        isVariable(node.triple_._p._iri)) {
+        isVariable(node.triple_.p_._iri)) {
       AD_THROW(
           "The query contains a predicate variable, but only the PSO "
           "and POS permutations were loaded. Rerun the server without "
@@ -892,21 +973,37 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    if (node.triple_._p._iri == HAS_PREDICATE_PREDICATE) {
+    if (node.triple_.p_._iri == HAS_PREDICATE_PREDICATE) {
       pushPlan(makeSubtreePlan<HasPredicateScan>(_qec, node.triple_));
       continue;
     }
 
-    seedFromOrdinaryTriple(node, pushPlan, addIndexScan);
+    auto addIndexScan = [this, pushPlan, node](
+                            Permutation::Enum permutation,
+                            std::optional<SparqlTripleSimple> triple =
+                                std::nullopt) {
+      if (!triple.has_value()) {
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
+                                            node.triple_.getSimple()));
+      } else {
+        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
+                                            std::move(triple.value())));
+      }
+    };
+
+    auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
+      filters.push_back(std::move(filter));
+    };
+    seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
-  return seeds;
+  return result;
 }
 
 // _____________________________________________________________________________
 vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     const SparqlTriple& triple) {
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
-      seedFromPropertyPath(triple._s, triple._p, triple._o);
+      seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
 #if LOGLEVEL >= TRACE
   std::ostringstream out;
   pattern->toString(out, 0);
@@ -1070,7 +1167,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
   string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
-  if (node.triple_._p._iri == CONTAINS_ENTITY_PREDICATE) {
+  if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicity.
@@ -1083,7 +1180,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       // Fixed entity case
       AD_CORRECTNESS_CHECK(node._variables.size() == 1);
       plan = makeSubtreePlan<TextIndexScanForEntity>(
-          _qec, node.cvar_.value(), node.triple_._o.toString(), word);
+          _qec, node.cvar_.value(), node.triple_.o_.toString(), word);
     }
   } else {
     plan =
@@ -1349,12 +1446,13 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
-    const QueryPlanner::TripleGraph& tg, const vector<SparqlFilter>& filters,
+    const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
+  auto [initialPlans, additionalFilters] = seedWithScansAndText(tg, children);
+  std::ranges::move(additionalFilters, std::back_inserter(filters));
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
   }
-  auto initialPlans = seedWithScansAndText(tg, children);
   auto componentIndices = QueryGraph::computeConnectedComponents(initialPlans);
   ad_utility::HashMap<size_t, std::vector<SubtreePlan>> components;
   for (size_t i = 0; i < componentIndices.size(); ++i) {
@@ -1398,9 +1496,9 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
 // _____________________________________________________________________________
 bool QueryPlanner::TripleGraph::isTextNode(size_t i) const {
   return _nodeMap.count(i) > 0 &&
-         (_nodeMap.find(i)->second->triple_._p._iri ==
+         (_nodeMap.find(i)->second->triple_.p_._iri ==
               CONTAINS_ENTITY_PREDICATE ||
-          _nodeMap.find(i)->second->triple_._p._iri == CONTAINS_WORD_PREDICATE);
+          _nodeMap.find(i)->second->triple_.p_._iri == CONTAINS_WORD_PREDICATE);
 }
 
 // _____________________________________________________________________________
