@@ -740,11 +740,15 @@ CompressedRelationReader::getRelevantBlocks(
   // Get all the blocks  that possibly might contain our pair of col0Id and
   // col1Id
   CompressedBlockMetadata key;
-  auto setKey = [&key, &scanSpec](auto getterA, auto getterB) {
-    std::invoke(getterA, key.firstTriple_) =
-        std::invoke(getterB, scanSpec).value_or(Id::min());
-    std::invoke(getterA, key.lastTriple_) =
-        std::invoke(getterB, scanSpec).value_or(Id::max());
+
+  auto setOrDefault = [&scanSpec](auto getterA, auto getterB, auto& triple,
+                                  auto defaultValue) {
+    std::invoke(getterA, triple) =
+        std::invoke(getterB, scanSpec).value_or(defaultValue);
+  };
+  auto setKey = [&setOrDefault, &key](auto getterA, auto getterB) {
+    setOrDefault(getterA, getterB, key.firstTriple_, Id::min());
+    setOrDefault(getterA, getterB, key.lastTriple_, Id::max());
   };
   using PermutedTriple = CompressedBlockMetadata::PermutedTriple;
   setKey(&PermutedTriple::col0Id_, &ScanSpecification::col0Id);

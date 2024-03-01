@@ -94,16 +94,17 @@ string IndexMetaData<MapType>::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << "#relations = " << _numDistinctC0 << ", #blocks = " << _blockData.size()
+  os << "#relations = " << _numDistinctCol0
+     << ", #blocks = " << _blockData.size()
      << ", #triples = " << _totalElements;
   return std::move(os).str();
 }
 
 // __________________________________________________________________
 template <class MapType>
-void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctC0) {
+void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
   _totalElements = 0;
-  _numDistinctC0 = numDistinctC0;
+  _numDistinctCol0 = numDistinctCol0;
   for (const auto& block : _blockData) {
     _totalElements += block.numRows_;
   }

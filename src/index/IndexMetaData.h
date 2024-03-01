@@ -91,7 +91,7 @@ class IndexMetaData {
   BlocksType _blockData;
 
   size_t _totalElements = 0;
-  size_t _numDistinctC0 = 0;
+  size_t _numDistinctCol0 = 0;
   uint64_t _version = V_CURRENT;
 
   // Public methods.
@@ -160,7 +160,7 @@ class IndexMetaData {
 
   // Calculate and save statistics that are expensive to calculate so we only
   // have to do this once during the index build and not at server start.
-  void calculateStatistics(size_t numDistinctC0);
+  void calculateStatistics(size_t numDistinctCol0);
 
   // The number of distinct Col0Ids has to be passed in manually, as it cannot
   // be computed.
@@ -209,7 +209,7 @@ class IndexMetaData {
     serializer | arg._blockData;
     serializer | arg._offsetAfter;
     serializer | arg._totalElements;
-    serializer | arg._numDistinctC0;
+    serializer | arg._numDistinctCol0;
   }
 };
 
