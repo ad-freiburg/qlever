@@ -34,11 +34,12 @@ Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
 Iri Iri::fromInternalRepresentation(std::string_view s) {
   // TODO<joka921> check the tag.
   s.remove_prefix(1);
+  s.remove_suffix(1);
   return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
 }
 std::string Iri::toInternalRepresentation() const {
-  auto first = iriPrefix;
-  return absl::StrCat(first, asStringViewUnsafe(getContent()));
+  static_assert(iriPrefix == "<");
+  return absl::StrCat(iriPrefix, asStringViewUnsafe(getContent()), ">");
 }
 
 }  // namespace ad_utility::triple_component

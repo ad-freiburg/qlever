@@ -399,7 +399,7 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
   auto visitIri = [](const Iri& iri) -> TripleComponent {
-    return iri.toSparql();
+    return TripleComponent::Iri::iriref(iri.toSparql());
   };
   auto visitBlankNode = [](const BlankNode& blankNode) -> TripleComponent {
     return blankNode.toSparql();

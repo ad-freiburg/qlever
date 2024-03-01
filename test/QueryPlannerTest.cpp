@@ -337,27 +337,26 @@ TEST(QueryPlannerTest, threeVarTriples) {
 
 TEST(QueryPlannerTest, threeVarTriplesTCJ) {
   auto qec = ad_utility::testing::getQec("<s> <p> <x>");
+  auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?x . ?x ?p ?o }",
-      h::MultiColumnJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?x"}),
-                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})),
-      qec);
+      h::MultiColumnJoin(scan("<s>", "?p", "?x"), scan("?x", "?p", "?o")), qec);
 
   h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
-      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")),
+      h::MultiColumnJoin(scan("?s", "?p", "?o"),
+                         scan("?s", "?p", "<x>")),
       qec);
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
+  auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
-      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s2"}, Var{"?p"}, Var{"?o"})));
+      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s2", "?p", "?o")));
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
