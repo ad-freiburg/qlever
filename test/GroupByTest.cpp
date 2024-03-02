@@ -82,6 +82,23 @@ class GroupByTest : public ::testing::Test {
   Index _index = makeIndexWithTestSettings();
 };
 
+TEST_F(GroupByTest, getDescriptor) {
+  auto expr =
+      std::make_unique<sparqlExpression::VariableExpression>(Variable{"?a"});
+  auto alias =
+      Alias{sparqlExpression::SparqlExpressionPimpl{std::move(expr), "?a"},
+            Variable{"?a"}};
+
+  parsedQuery::SparqlValues input;
+  input._variables = {Variable{"?a"}};
+  auto values = ad_utility::makeExecutionTree<Values>(
+      ad_utility::testing::getQec(), input);
+
+  GroupBy groupBy{
+      ad_utility::testing::getQec(), {Variable{"?a"}}, {alias}, values};
+  ASSERT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+}
+
 TEST_F(GroupByTest, doGroupBy) {
   using std::string;
   using std::vector;

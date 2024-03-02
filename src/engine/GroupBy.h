@@ -319,7 +319,6 @@ class GroupBy : public Operation {
           aggregateTypeWithData_.emplace_back(aggregate.aggregateType_);
         }
       }
-      AD_CONTRACT_CHECK(numAggregates > 0);
     }
 
     // Returns a vector containing the offsets for all ids of `groupByCols`,

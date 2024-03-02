@@ -980,7 +980,7 @@ GroupBy::getHashMapAggregationResults(
     B mapKey;
     resizeIfVector(mapKey, aggregationData.numOfGroupedColumns_);
 
-    for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx) {
+    for (size_t idx = 0; idx < mapKey.size(); ++idx) {
       mapKey.at(idx) = resultTable->getColumn(idx)[rowIdx];
     }
     auto vectorIdx = aggregationData.getIndex(mapKey);
@@ -1127,7 +1127,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getSortedGroupColumns()
   ArrayOrVector<std::vector<Id>> result;
   resizeIfVector(result, numOfGroupedColumns_);
 
-  for (size_t idx = 0; idx < numOfGroupedColumns_; ++idx)
+  for (size_t idx = 0; idx < result.size(); ++idx)
     for (auto& val : sortedKeys) {
       result.at(idx).push_back(val.at(idx));
     }
@@ -1317,6 +1317,9 @@ void GroupBy::computeGroupByForHashMapOptimization(
     IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
     const IdTable& subresult, const std::vector<size_t>& columnIndices,
     LocalVocab* localVocab) {
+  AD_CONTRACT_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
+                    NUM_GROUP_COLUMNS == 0);
+
   // Initialize aggregation data
   HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData(
       getExecutionContext()->getAllocator(), aggregateAliases,
