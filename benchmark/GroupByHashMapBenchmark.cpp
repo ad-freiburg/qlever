@@ -130,44 +130,42 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   }
 
   void runNumericBenchmarks(BenchmarkResults& results) {
-    for (int i = 0; i < 2; i++) {
-      for (auto multiplicity : multiplicities) {
-        for (auto valueIdType : numericValueIdTypes) {
-          //-----------------------------------------------------------------------------------------------------
-          runTests<AvgExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+    for (auto multiplicity : multiplicities) {
+      for (auto valueIdType : numericValueIdTypes) {
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<AvgExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<AvgExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<SumExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<SumExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<SumExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<SumExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<CountExpression>(results, multiplicity, valueIdType, false,
-                                    static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<CountExpression>(results, multiplicity, valueIdType, false,
+                                  false);
 
-          runTests<CountExpression>(results, multiplicity, valueIdType, true,
-                                    static_cast<bool>(i));
+        runTests<CountExpression>(results, multiplicity, valueIdType, true,
+                                  false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<MinExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<MinExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<MinExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<MinExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<MaxExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<MaxExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<MaxExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
-        }
+        runTests<MaxExpression>(results, multiplicity, valueIdType, true,
+                                false);
       }
     }
   }
@@ -207,23 +205,19 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   }
 
   void runStringBenchmarks(BenchmarkResults& results) {
-    for (int i = 0; i < 2; i++) {
-      for (auto multiplicity : multiplicities) {
-        runTests<GroupConcatExpression>(results, multiplicity,
-                                        ValueIdType::Strings, false,
-                                        static_cast<bool>(i));
-        runTests<GroupConcatExpression>(results, multiplicity,
-                                        ValueIdType::Strings, true,
-                                        static_cast<bool>(i));
-      }
+    for (auto multiplicity : multiplicities) {
+      runTests<GroupConcatExpression>(results, multiplicity,
+                                      ValueIdType::Strings, false, false);
+      runTests<GroupConcatExpression>(results, multiplicity,
+                                      ValueIdType::Strings, true, false);
     }
   }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
-    // runStringBenchmarks(results);
     // runTwoAggregateBenchmarks(results);
+    // runStringBenchmarks(results);
     runNumericBenchmarks(results);
 
     return results;

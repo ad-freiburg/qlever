@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
@@ -79,13 +80,9 @@ struct ExtremumAggregationData {
       firstValueSet_ = true;
       return;
     }
-    auto impl = [&ctx]<typename X, typename Y>(const X& x, const Y& y) {
-      return toBoolNotUndef(
-          sparqlExpression::compareIdsOrStrings<
-              Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                        CompareByType>(x, y, ctx));
-    };
-    if (std::visit(impl, value, currentValue_)) currentValue_ = value;
+
+    currentValue_ = sparqlExpression::detail::minMaxLambdaForAllTypes<Comp>(
+        value, currentValue_, ctx);
   }
 
   // _____________________________________________________________________________
