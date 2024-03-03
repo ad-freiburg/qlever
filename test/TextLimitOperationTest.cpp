@@ -14,8 +14,8 @@
 namespace {
 TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const ColumnIndex& textRecordColumn,
-                        const ColumnIndex& entityColumn,
-                        const ColumnIndex& scoreColumn) {
+                        const vector<ColumnIndex>& entityColumns,
+                        const vector<ColumnIndex>& scoreColumns) {
   auto qec = ad_utility::testing::getQec();
   qec->_textLimit = n;
   std::vector<std::optional<Variable>> vars;
@@ -24,8 +24,8 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return TextLimit{qec, std::move(subtree), textRecordColumn, entityColumn,
-                   scoreColumn};
+  return TextLimit{qec, std::move(subtree), textRecordColumn, entityColumns,
+                   scoreColumns};
 }
 
 bool testSorted(IdTable result, const ColumnIndex& textRecordColumn,
@@ -91,7 +91,7 @@ TEST(TextLimit, computeResult) {
   */
 
   // Test with limit 0.
-  TextLimit textLimit0 = makeTextLimit(inputTable.clone(), 0, 0, 1, 3);
+  TextLimit textLimit0 = makeTextLimit(inputTable.clone(), 0, 0, {1}, {3});
   ASSERT_EQ(textLimit0.getResultWidth(), 6);
   ASSERT_TRUE(textLimit0.knownEmptyResult());
   IdTable resultIdTable = textLimit0.getResult()->idTable().clone();
@@ -99,7 +99,7 @@ TEST(TextLimit, computeResult) {
   ASSERT_EQ(resultIdTable.numRows(), 0);
 
   // Test with limit 1.
-  TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 1, 0, 1, 3);
+  TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 1, 0, {1}, {3});
   ASSERT_EQ(textLimit1.getResultWidth(), 6);
   resultIdTable = textLimit1.getResult()->idTable().clone();
 
@@ -123,7 +123,7 @@ TEST(TextLimit, computeResult) {
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
   // Test with limit 2.
-  TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 2, 0, 1, 3);
+  TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 2, 0, {1}, {3});
   ASSERT_EQ(textLimit2.getResultWidth(), 6);
   resultIdTable = textLimit2.getResult()->idTable().clone();
 
@@ -153,7 +153,7 @@ TEST(TextLimit, computeResult) {
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
   // Test with limit 19.
-  TextLimit textLimit19 = makeTextLimit(inputTable.clone(), 19, 0, 1, 3);
+  TextLimit textLimit19 = makeTextLimit(inputTable.clone(), 19, 0, {1}, {3});
   ASSERT_EQ(textLimit19.getResultWidth(), 6);
   resultIdTable = textLimit19.getResult()->idTable().clone();
 
@@ -211,7 +211,7 @@ TEST(TextLimit, computeResult) {
   inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
   // Test with limit 3.
-  TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 3, 0, 1, 3);
+  TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 3, 0, {1}, {3});
   ASSERT_EQ(textLimit3.getResultWidth(), 6);
   resultIdTable = textLimit3.getResult()->idTable().clone();
 
@@ -236,10 +236,125 @@ TEST(TextLimit, computeResult) {
 }
 
 // _____________________________________________________________________________
+TEST(TextLimit, computeResultMultipleEntities) {
+  /*
+  The indices written as a table:
+  textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
+  -------------------------------------------------------------------------
+  7          | 1       | 1       | 1       | 1    | 2      | 21     | 2
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  5          | 1       | 1       | 1       | 0    | 1      | 4      | 2
+  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+
+
+  ordered by entity1, entity2, entity3, score1+score2+score3, textRecord
+  descending:
+  textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
+  -------------------------------------------------------------------------
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
+  7          | 1       | 1       | 1       | 1    | 2      | 21     | 2
+  5          | 1       | 1       | 1       | 0    | 1      | 4      | 2
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  */
+  IdTable inputTable = makeIdTableFromVector({{7, 1, 1, 1, 1, 2, 21, 2},
+                                              {0, 6, 7, 6, 3, 5, 1, 3},
+                                              {5, 1, 1, 2, 1, 1, 1, 2},
+                                              {5, 1, 1, 1, 0, 1, 4, 2},
+                                              {19, 1, 1, 1, 4, 22, 2, 1},
+                                              {3, 5, 3, 8, 4, 4, 3, 2},
+                                              {2, 5, 9, 5, 0, 5, 2, 6},
+                                              {5, 5, 23, 17, 2, 6, 6, 4},
+                                              {2, 4, 4, 2, 1, 8, 5, 5},
+                                              {1, 36, 36, 36, 2, 7, 4, 4},
+                                              {4, 0, 3, 1, 1, 7, 7, 7},
+                                              {0, 0, 1, 3, 2, 4, 3, 1}},
+                                             &Id::makeFromInt);
+
+  // Test TextLimit with limit 2.
+  TextLimit textLimit2 =
+      makeTextLimit(inputTable.clone(), 2, 0, {1, 2, 3}, {5, 6, 7});
+  ASSERT_EQ(textLimit2.getResultWidth(), 8);
+  IdTable resultIdTable = textLimit2.getResult()->idTable().clone();
+
+  /*
+  Expected result:
+  textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
+  -------------------------------------------------------------------------
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
+  7          | 1       | 1       | 1       | 1    | 2      | 21     | 2
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  */
+
+  VectorTable expected = {
+      {1, 36, 36, 36, 2, 7, 4, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
+      {5, 5, 23, 17, 2, 6, 6, 4},  {2, 5, 9, 5, 0, 5, 2, 6},
+      {3, 5, 3, 8, 4, 4, 3, 2},    {2, 4, 4, 2, 1, 8, 5, 5},
+      {5, 1, 1, 2, 1, 1, 1, 2},    {19, 1, 1, 1, 4, 22, 2, 1},
+      {7, 1, 1, 1, 1, 2, 21, 2},   {4, 0, 3, 1, 1, 7, 7, 7},
+      {0, 0, 1, 3, 2, 4, 3, 1}};
+  IdTable expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
+  compareIdTableWithExpectedContent(resultIdTable, expectedTable);
+
+  // Test two entity columns but three score columns. That is possible if there
+  // is a fixed entity statement.
+  TextLimit textLimitFixedEntity =
+      makeTextLimit(inputTable.clone(), 1, 0, {1, 2}, {5, 6, 7});
+  ASSERT_EQ(textLimitFixedEntity.getResultWidth(), 8);
+  resultIdTable = textLimitFixedEntity.getResult()->idTable().clone();
+
+  /*
+  Expected result:
+  textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
+  -------------------------------------------------------------------------
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  */
+
+  expected = {{1, 36, 36, 36, 2, 7, 4, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
+              {5, 5, 23, 17, 2, 6, 6, 4},  {2, 5, 9, 5, 0, 5, 2, 6},
+              {3, 5, 3, 8, 4, 4, 3, 2},    {2, 4, 4, 2, 1, 8, 5, 5},
+              {19, 1, 1, 1, 4, 22, 2, 1},  {4, 0, 3, 1, 1, 7, 7, 7},
+              {0, 0, 1, 3, 2, 4, 3, 1}};
+  expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
+  compareIdTableWithExpectedContent(resultIdTable, expectedTable);
+}
+
+// _____________________________________________________________________________
 TEST(TextLimit, BasicMemberFunctions) {
   VectorTable input{{1, 1, 1}, {2, 2, 2}, {3, 3, 3}, {4, 4, 4}};
   IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  TextLimit textLimit = makeTextLimit(inputTable.clone(), 5, 0, 1, 2);
+  TextLimit textLimit = makeTextLimit(inputTable.clone(), 5, 0, {1}, {2});
   ASSERT_EQ(textLimit.getResultWidth(), 3);
   ASSERT_EQ(textLimit.getCostEstimate(), 12);
   ASSERT_EQ(textLimit.getSizeEstimateBeforeLimit(), 4);
@@ -252,7 +367,7 @@ TEST(TextLimit, BasicMemberFunctions) {
 
   inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   TextLimit textLimit2 = makeTextLimit(
-      IdTable(3, ad_utility::testing::makeAllocator()), 5, 0, 1, 2);
+      IdTable(3, ad_utility::testing::makeAllocator()), 5, 0, {1}, {2});
   ASSERT_TRUE(textLimit2.knownEmptyResult());
 }
 
@@ -260,32 +375,40 @@ TEST(TextLimit, BasicMemberFunctions) {
 TEST(TextLimit, CacheKey) {
   VectorTable input{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}};
   IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 4, 0, 1, 2);
-  ASSERT_EQ(textLimit1.getDescriptor(), "TextLimit with limit n: 4");
+  TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
+  string textLimit1Desc = textLimit1.getDescriptor();
+  string textLimit1CacheKey = textLimit1.getCacheKey();
+  ASSERT_EQ(textLimit1Desc, "TextLimit with limit n: 4");
 
-  TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 4, 0, 1, 2);
+  string textLimit2CacheKey =
+      makeTextLimit(inputTable.clone(), 4, 0, {1}, {2}).getCacheKey();
   // Every argument is the same.
-  ASSERT_EQ(textLimit1.getCacheKey(), textLimit2.getCacheKey());
+  ASSERT_EQ(textLimit1CacheKey, textLimit2CacheKey);
 
-  TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 5, 0, 1, 2);
+  string textLimit3CacheKey =
+      makeTextLimit(inputTable.clone(), 5, 0, {1}, {2}).getCacheKey();
   // The limit is different.
-  ASSERT_NE(textLimit1.getCacheKey(), textLimit3.getCacheKey());
+  ASSERT_NE(textLimit1CacheKey, textLimit3CacheKey);
 
-  TextLimit textLimit4 = makeTextLimit(inputTable.clone(), 4, 1, 1, 2);
+  string textLimit4CacheKey =
+      makeTextLimit(inputTable.clone(), 4, 1, {1}, {2}).getCacheKey();
   // The textRecordColumn is different.
-  ASSERT_NE(textLimit1.getCacheKey(), textLimit4.getCacheKey());
+  ASSERT_NE(textLimit1CacheKey, textLimit4CacheKey);
 
-  TextLimit textLimit5 = makeTextLimit(inputTable.clone(), 4, 0, 2, 2);
+  string textLimit5CacheKey =
+      makeTextLimit(inputTable.clone(), 4, 0, {2}, {2}).getCacheKey();
   // The entityColumn is different.
-  ASSERT_NE(textLimit1.getCacheKey(), textLimit5.getCacheKey());
+  ASSERT_NE(textLimit1CacheKey, textLimit5CacheKey);
 
-  TextLimit textLimit6 = makeTextLimit(inputTable.clone(), 4, 0, 1, 3);
+  string textLimit6CacheKey =
+      makeTextLimit(inputTable.clone(), 4, 0, {1}, {3}).getCacheKey();
   // The scoreColumn is different.
-  ASSERT_NE(textLimit1.getCacheKey(), textLimit6.getCacheKey());
+  ASSERT_NE(textLimit1CacheKey, textLimit6CacheKey);
 
   input = {{1, 2, 3}, {1, 2, 3}, {1, 2, 4}};
   inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  TextLimit textLimit7 = makeTextLimit(inputTable.clone(), 4, 0, 1, 2);
+  string textLimit7CacheKey =
+      makeTextLimit(inputTable.clone(), 4, 0, {1}, {2}).getCacheKey();
   // The input is different.
-  ASSERT_NE(textLimit1.getCacheKey(), textLimit7.getCacheKey());
+  ASSERT_NE(textLimit1CacheKey, textLimit7CacheKey);
 }

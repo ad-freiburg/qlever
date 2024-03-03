@@ -11,14 +11,15 @@ class TextLimit : public Operation {
   const QueryExecutionContext* qec_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
-  const ColumnIndex entityColumn_;
-  const ColumnIndex scoreColumn_;
+  const vector<ColumnIndex> entityColumns_;
+  const vector<ColumnIndex> scoreColumns_;
 
  public:
   TextLimit(QueryExecutionContext* qec,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
-            const ColumnIndex& entityColumn, const ColumnIndex& scoreColumn);
+            const vector<ColumnIndex>& entityColumns,
+            const vector<ColumnIndex>& scoreColumns);
 
   ~TextLimit() override = default;
 

@@ -931,8 +931,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
     const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-        textLimits)
+    ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>& textLimits)
     -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
@@ -1484,11 +1483,17 @@ void QueryPlanner::applyTextLimitsIfPossible(
         i++;
         continue;
       }
-      // TODO: adapt for multiple entities
+      auto getVarColumns = [&plan](const std::vector<Variable>& vars) {
+        std::vector<ColumnIndex> result;
+        for (const auto& var : vars) {
+          result.push_back(plan._qet->getVariableColumn(var));
+        }
+        return result;
+      };
       SubtreePlan newPlan = makeSubtreePlan<TextLimit>(
           _qec, plan._qet, plan._qet.get()->getVariableColumn(textVar),
-          plan._qet.get()->getVariableColumn(textLimit._entityVars[0]),
-          plan._qet.get()->getVariableColumn(textLimit._scoreVars[0]));
+          getVarColumns(textLimit._entityVars),
+          getVarColumns(textLimit._scoreVars));
       newPlan._idsOfIncludedTextLimits = plan._idsOfIncludedTextLimits;
       newPlan._idsOfIncludedTextLimits |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
@@ -1539,7 +1544,8 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>& textLimits,
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
-  auto [initialPlans, additionalFilters] = seedWithScansAndText(tg, children);
+  auto [initialPlans, additionalFilters] =
+      seedWithScansAndText(tg, children, textLimits);
   std::ranges::move(additionalFilters, std::back_inserter(filters));
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");

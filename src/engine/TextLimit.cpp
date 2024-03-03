@@ -8,14 +8,14 @@
 TextLimit::TextLimit(QueryExecutionContext* qec,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
-                     const ColumnIndex& entityColumn,
-                     const ColumnIndex& scoreColumn)
+                     const vector<ColumnIndex>& entityColumns,
+                     const vector<ColumnIndex>& scoreColumns)
     : Operation(qec),
       qec_(qec),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
-      entityColumn_(entityColumn),
-      scoreColumn_(scoreColumn) {}
+      entityColumns_(entityColumns),
+      scoreColumns_(scoreColumns) {}
 
 // _____________________________________________________________________________
 ResultTable TextLimit::computeResult() {
@@ -31,12 +31,40 @@ ResultTable TextLimit::computeResult() {
   // Sort the table by the entity column, then the score column, then the text
   // column.
 
+  auto compareScores = [this](const auto& lhs, const auto& rhs) {
+    size_t lhsScore = 0;
+    size_t rhsScore = 0;
+    for (size_t i = 0; i < scoreColumns_.size(); ++i) {
+      lhsScore += lhs[scoreColumns_[i]].getInt();
+      rhsScore += rhs[scoreColumns_[i]].getInt();
+    }
+    if (lhsScore > rhsScore) {
+      return 1;
+    } else if (lhsScore < rhsScore) {
+      return -1;
+    } else {
+      return 0;
+    }
+  };
+
+  auto compareEntities = [this](const auto& lhs, const auto& rhs) {
+    for (size_t i = 0; i < entityColumns_.size(); ++i) {
+      if (lhs[entityColumns_[i]] > rhs[entityColumns_[i]]) {
+        return 1;
+      } else if (lhs[entityColumns_[i]] < rhs[entityColumns_[i]]) {
+        return -1;
+      }
+    }
+    return 0;
+  };
+
   // Runtime: O(n log n)
-  std::ranges::sort(idTable, [this](const auto& lhs, const auto& rhs) {
-    return lhs[entityColumn_] > rhs[entityColumn_] ||
-           (lhs[entityColumn_] == rhs[entityColumn_] &&
-            (lhs[scoreColumn_] > rhs[scoreColumn_] ||
-             (lhs[scoreColumn_] == rhs[scoreColumn_] &&
+  std::ranges::sort(idTable, [this, compareScores, compareEntities](
+                                 const auto& lhs, const auto& rhs) {
+    return compareEntities(lhs, rhs) == 1 ||
+           (compareEntities(lhs, rhs) == 0 &&
+            (compareScores(lhs, rhs) == 1 ||
+             (compareScores(lhs, rhs) == 0 &&
               (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
   });
   // NOTE: The algorithm assumes that the scores only depends on entity and text
@@ -46,12 +74,12 @@ ResultTable TextLimit::computeResult() {
   // entity.
 
   // Runtime: O(n)? How expensive is erase?
-  Id currentEntity = idTable[0][entityColumn_];
+  size_t currentEntityIndex = 0;
   size_t currentEntityCount = 1;
   for (size_t i = 1; i < idTable.numRows(); ++i) {
-    if (idTable[i][entityColumn_] != currentEntity) {
+    if (compareEntities(idTable[i], idTable[currentEntityIndex]) != 0) {
       // Case: new entity.
-      currentEntity = idTable[i][entityColumn_];
+      currentEntityIndex = i;
       currentEntityCount = 1;
     } else if (idTable[i][textRecordColumn_] !=
                idTable[i - 1][textRecordColumn_]) {
@@ -120,7 +148,15 @@ string TextLimit::getCacheKeyImpl() const {
   os << "TEXT LIMIT: "
      << " with n: " << qec_->_textLimit
      << ", with child: " << child_->getCacheKey()
-     << "and ColumnIndices: " << textRecordColumn_ << ", " << entityColumn_
-     << ", " << scoreColumn_;
+     << " and ColumnIndices: " << std::to_string(textRecordColumn_) << ", {";
+  for (const auto& column : entityColumns_) {
+    os << std::to_string(column) << ", ";
+  }
+  os.seekp(-2, os.cur);
+  os << "}, {";
+  for (const auto& column : scoreColumns_) {
+    os << std::to_string(column) << ", ";
+  }
+  os << "}";
   return std::move(os).str();
 }
