@@ -117,19 +117,6 @@ class Join : public Operation {
   void hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                 ColumnIndex jc2, IdTable* dynRes);
 
-  static bool isFullScanDummy(std::shared_ptr<QueryExecutionTree> tree) {
-    if (tree->getType() != QueryExecutionTree::SCAN) {
-      return false;
-    }
-    // Note: it is not sufficient to check `getResultWidth == 3` as
-    // the index scan might also have 2 variables + one additional column
-    // for the pattern trick (or any other additional column that we might add
-    // in the future).
-    const auto& scan =
-        dynamic_cast<const IndexScan&>(*tree->getRootOperation());
-    return scan.numVariables() == 3;
-  }
-
  protected:
   virtual string getCacheKeyImpl() const override;
 
@@ -137,8 +124,6 @@ class Join : public Operation {
   ResultTable computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  ResultTable computeResultForJoinWithFullScanDummy();
 
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
@@ -159,8 +144,6 @@ class Join : public Operation {
 
   ScanMethodType getScanMethod(
       std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
-
-  void doComputeJoinWithFullScanDummyRight(const IdTable& v, IdTable* r) const;
 
   void appendCrossProduct(const IdTable::const_iterator& leftBegin,
                           const IdTable::const_iterator& leftEnd,

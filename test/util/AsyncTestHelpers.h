@@ -22,11 +22,21 @@ template <typename Func>
 concept TestableCoroutine =
     std::is_invocable_r_v<net::awaitable<void>, Func, net::io_context&>;
 
-template <TestableCoroutine Func>
-void runCoroutine(Func innerRun, size_t numThreads) {
+template <typename Func>
+concept TestableFunction = std::is_invocable_r_v<void, Func, net::io_context&>;
+
+template <typename Func>
+requires(TestableCoroutine<Func> || TestableFunction<Func>)
+void runAsyncTest(Func innerRun, size_t numThreads) {
   auto ioContext = std::make_shared<net::io_context>();
-  auto future =
-      net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
+  auto future = [&]() {
+    if constexpr (TestableCoroutine<Func>) {
+      return net::co_spawn(*ioContext, innerRun(*ioContext), net::use_future);
+    } else {
+      return net::post(*ioContext, std::packaged_task<void()>{
+                                       [&] { innerRun(*ioContext); }});
+    }
+  }();
 
   std::vector<ad_utility::JThread> workers{};
 
@@ -60,24 +70,33 @@ void runCoroutine(Func innerRun, size_t numThreads) {
   }
 }
 
-#define COROUTINE_NAME(test_suite_name, test_name) \
-  test_suite_name##_##test_name##_coroutine
+#define TEST_IMPL_NAME(test_suite_name, test_name) \
+  test_suite_name##_##test_name##_impl
 
 #define ASYNC_TEST_N(test_suite_name, test_name, num_threads)              \
-  net::awaitable<void> COROUTINE_NAME(test_suite_name,                     \
+  net::awaitable<void> TEST_IMPL_NAME(test_suite_name,                     \
                                       test_name)(net::io_context&);        \
   TEST(test_suite_name, test_name) {                                       \
-    runCoroutine(COROUTINE_NAME(test_suite_name, test_name), num_threads); \
+    runAsyncTest(TEST_IMPL_NAME(test_suite_name, test_name), num_threads); \
   }                                                                        \
-  net::awaitable<void> COROUTINE_NAME(test_suite_name,                     \
+  net::awaitable<void> TEST_IMPL_NAME(test_suite_name,                     \
                                       test_name)(net::io_context & ioContext)
+
+#define ASIO_TEST_N(test_suite_name, test_name, num_threads)               \
+  void TEST_IMPL_NAME(test_suite_name, test_name)(net::io_context&);       \
+  TEST(test_suite_name, test_name) {                                       \
+    runAsyncTest(TEST_IMPL_NAME(test_suite_name, test_name), num_threads); \
+  }                                                                        \
+  void TEST_IMPL_NAME(test_suite_name, test_name)(net::io_context & ioContext)
 
 // Drop-in replacement for gtest's TEST() macro, but for tests that make
 // use of boost asio's awaitable coroutines. Note that this prevents you
 // from using ASSERT_* macros unless you redefine the return keword with
 // co_return so it works nicely with the coroutine.
-
 #define ASYNC_TEST(test_suite_name, test_name) \
   ASYNC_TEST_N(test_suite_name, test_name, 1)
+
+#define ASIO_TEST(test_suite_name, test_name) \
+  ASIO_TEST_N(test_suite_name, test_name, 1)
 
 #endif  // QLEVER_ASYNCTESTHELPERS_H

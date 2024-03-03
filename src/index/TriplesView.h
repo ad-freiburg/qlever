@@ -37,54 +37,41 @@ cppcoro::generator<std::array<Id, 3>> TriplesView(
     ad_utility::SharedCancellationHandle cancellationHandle,
     detail::IgnoredRelations ignoredRanges = {},
     IsTripleIgnored isTripleIgnored = IsTripleIgnored{}) {
-  std::sort(ignoredRanges.begin(), ignoredRanges.end());
+  std::ranges::sort(ignoredRanges);
 
-  const auto& metaData = permutation.meta_.data();
-  // The argument `ignoredRanges` specifies the ignored ranges, but we need to
-  // compute the ranges that are allowed (the inverse).
-  using Iterator = std::decay_t<decltype(metaData.ordered_begin())>;
-  std::vector<std::pair<Iterator, Iterator>> allowedRanges;
-
-  // Add sentinels.
-  // TODO<joka921> implement Index::prefixRange with all the logic.
-  ignoredRanges.insert(ignoredRanges.begin(), {Id::min(), Id::min()});
-  ignoredRanges.insert(ignoredRanges.end(), {Id::max(), Id::max()});
-  auto orderedBegin = metaData.ordered_begin();
-  auto orderedEnd = metaData.ordered_end();
-
-  // Convert the `ignoredRanges` to the `allowedRanges`. The algorithm
-  // works because of the sentinels.
-  for (auto it = ignoredRanges.begin(); it != ignoredRanges.end() - 1; ++it) {
-    auto beginOfAllowed = std::lower_bound(
-        orderedBegin, orderedEnd, it->second,
-        [](const auto& meta, const auto& id) {
-          return decltype(orderedBegin)::getIdFromElement(meta) < id;
-        });
-    auto endOfAllowed = std::lower_bound(
-        orderedBegin, orderedEnd, (it + 1)->first,
-        [](const auto& meta, const auto& id) {
-          return decltype(orderedBegin)::getIdFromElement(meta) < id;
-        });
-    allowedRanges.emplace_back(beginOfAllowed, endOfAllowed);
+  auto blockGenerator = permutation.lazyScan(
+      {std::nullopt, std::nullopt, std::nullopt}, std::nullopt,
+      CompressedRelationReader::ColumnIndices{}, cancellationHandle);
+  auto ignoreIt = ignoredRanges.begin();
+  Id ignoreLow = Id::max();
+  Id ignoreHigh = Id::max();
+  if (ignoreIt != ignoredRanges.end()) {
+    std::tie(ignoreLow, ignoreHigh) = *ignoreIt;
+    ++ignoreIt;
   }
-
-  for (auto& [begin, end] : allowedRanges) {
-    for (auto it = begin; it != end; ++it) {
-      Id id = it.getId();
-      auto blockGenerator = permutation.lazyScan(
-          id, std::nullopt, std::nullopt,
-          CompressedRelationReader::ColumnIndices{}, cancellationHandle);
-      for (const IdTable& col1And2 : blockGenerator) {
-        AD_CORRECTNESS_CHECK(col1And2.numColumns() == 2);
-        for (const auto& row : col1And2) {
-          std::array<Id, 3> triple{id, row[0], row[1]};
-          if (isTripleIgnored(triple)) [[unlikely]] {
-            continue;
-          }
-          co_yield triple;
+  for (const IdTable& cols : blockGenerator) {
+    AD_CORRECTNESS_CHECK(cols.numColumns() == 3);
+    for (const auto& row : cols) {
+      // TODO<joka921> This can be done much more efficient without copying etc.
+      // and with prefiltering.
+      std::array<Id, 3> triple{row[0], row[1], row[2]};
+      if (isTripleIgnored(triple)) [[unlikely]] {
+        continue;
+      }
+      if (triple[0] > ignoreHigh) {
+        if (ignoreIt != ignoredRanges.end()) {
+          std::tie(ignoreLow, ignoreHigh) = *ignoreIt;
+          ++ignoreIt;
+        } else {
+          ignoreLow = Id::max();
+          ignoreHigh = Id::max();
         }
       }
-      cancellationHandle->throwIfCancelled();
+      if (triple[0] >= ignoreLow && triple[0] < ignoreHigh) {
+        continue;
+      }
+      co_yield triple;
     }
+    cancellationHandle->throwIfCancelled();
   }
 }

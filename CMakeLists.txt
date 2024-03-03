@@ -12,6 +12,15 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
 endif()
 
+# Boost::ASIO currently seems to have a bug when multiple coroutine streams are
+# concurrently in flight because there were multiple calls to `co_spawn`.
+# `ASIO` recycles the memory for awaitable frames, but there seems to only be
+# one global unsynchronized memory pool for this recycling, which leads to all
+# kinds of race conditions. The following constant disables the memory
+# recycling and gets rid of all of those errors and crashes.
+# TODO<joka921> Further analyze and then report this bug to the ASIO
+# developers.
+add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
@@ -300,9 +309,12 @@ FetchContent_Declare(
 # Apply FetchContent
 ################################
 FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
-# Disable some warnings in RE2 and STXXL
+# Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
 
 message(STATUS ---)

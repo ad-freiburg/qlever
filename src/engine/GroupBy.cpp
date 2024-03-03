@@ -438,9 +438,9 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
           getPermutationForThreeVariableTriple(*_subtree, var, var);
       AD_CONTRACT_CHECK(permutation.has_value());
       table(0, 0) = Id::makeFromInt(
-          getIndex().getImpl().numDistinctCol0(permutation.value()).normal_);
+          getIndex().getImpl().numDistinctCol0(permutation.value()).normal);
     } else {
-      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal_);
+      table(0, 0) = Id::makeFromInt(getIndex().numTriples().normal);
     }
   } else {
     // TODO<joka921> The two variables IndexScans should also account for the
@@ -555,47 +555,19 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
     const auto& permutation =
         getExecutionContext()->getIndex().getPimpl().getPermutation(
             permutationEnum.value());
-    IdTableStatic<NUM_COLS> table = std::move(*idTable).toStatic<NUM_COLS>();
-    const auto& metaData = permutation.meta_.data();
-    // TODO<joka921> the reserve is too large because of the ignored
-    // triples. We would need to incorporate the information how many
-    // added "relations" are in each permutationEnum during index building.
-    table.reserve(metaData.size());
-    for (auto it = metaData.ordered_begin(); it != metaData.ordered_end();
-         ++it) {
-      Id id = decltype(metaData.ordered_begin())::getIdFromElement(*it);
-
-      // Check whether this is an `@en@...` predicate in a `Pxx`
-      // permutationEnum, a literal in a `Sxx` permutationEnum or some other
-      // entity that was added only for internal reasons.
-      if (std::ranges::any_of(ignoredRanges, [&id](const auto& pair) {
-            return id >= pair.first && id < pair.second;
-          })) {
-        continue;
-      }
-      Id count = Id::makeFromInt(
-          decltype(metaData.ordered_begin())::getNumRowsFromElement(*it));
-      // TODO<joka921> The count is actually not accurate at least for the
-      // `Sxx` and `Oxx` permutations because it contains the triples with
-      // predicate
-      // `@en@rdfs:label` etc. The probably easiest way to fix this is to
-      // exclude these triples from those permutations (they are only
-      // relevant for queries with a fixed subject), but then we would
-      // need to make sure, that we don't accidentally break the language
-      // filters for queries like
-      // `<fixedSubject> @en@rdfs:label ?labels`, for which the best
-      // query plan potentially goes through the `SPO` relation.
-      // Alternatively we would have to write an additional number
-      // `numNonAddedTriples` to the `IndexMetaData` which would further
-      // increase their size.
-      // TODO<joka921> Discuss this with Hannah.
-      table.emplace_back();
-      table(table.size() - 1, 0) = id;
-      if (numCounts == 1) {
-        table(table.size() - 1, 1) = count;
-      }
+    auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+    if (NUM_COLS == 1) {
+      table.setColumnSubset({{0}});
     }
-    *idTable = std::move(table).toDynamic();
+    // TODO<joka921> This is only semi-efficient.
+    auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
+      return std::ranges::any_of(ignoredRanges,
+                                 [id = row[0]](const auto& pair) {
+                                   return id >= pair.first && id < pair.second;
+                                 });
+    });
+    table.resize(end.begin() - table.begin());
+    *idTable = std::move(table);
   };
   ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns, result);
 
@@ -763,12 +735,12 @@ bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
 GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
-  if (!RuntimeParameters().get<"use-group-by-hash-map-optimization">()) {
+  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
     return std::nullopt;
   }
 
-  auto* sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-  if (!sort) {
+  if (auto sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
+      sort == nullptr) {
     return std::nullopt;
   }
 
@@ -785,8 +757,6 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
 
     // Find all aggregates in the expression of the current alias.
     auto foundAggregates = findAggregates(expr);
-
-    // TODO<kcaliban> Remove as soon as all aggregates are supported
     if (!foundAggregates.has_value()) return std::nullopt;
 
     for (auto& aggregate : foundAggregates.value()) {
@@ -798,8 +768,9 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
   }
 
   const Variable& groupByVariable = _groupByVariables.front();
+
   auto child = _subtree->getRootOperation()->getChildren().at(0);
-  auto columnIndex = child->getVariableColumn(groupByVariable);
+  size_t columnIndex = child->getVariableColumn(groupByVariable);
 
   return HashMapOptimizationData{columnIndex, aliasesWithAggregateInfo};
 }
@@ -1188,13 +1159,12 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
-
-  for (size_t i = 0; i < numberOfGroups; i += blockSize) {
+  for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, numberOfGroups);
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, numberOfGroups);
 
     for (auto& alias : aggregateAliases) {
       evaluateAlias(alias, result, evaluationContext, aggregationData,
@@ -1248,13 +1218,12 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  size_t blockSize = 65536;
-
-  for (size_t i = 0; i < subresult.size(); i += blockSize) {
+  for (size_t i = 0; i < subresult.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
     evaluationContext._beginIndex = i;
-    evaluationContext._endIndex = std::min(i + blockSize, subresult.size());
+    evaluationContext._endIndex =
+        std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, subresult.size());
 
     auto currentBlockSize =
         evaluationContext._endIndex - evaluationContext._beginIndex;

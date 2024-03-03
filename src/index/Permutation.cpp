@@ -16,7 +16,7 @@ Permutation::Permutation(Enum permutation, Allocator allocator)
 
 // _____________________________________________________________________
 void Permutation::loadFromDisk(const std::string& onDiskBase) {
-  if constexpr (MetaData::_isMmapBased) {
+  if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
   }
@@ -39,47 +39,36 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 }
 
 // _____________________________________________________________________
-IdTable Permutation::scan(
-    Id col0Id, std::optional<Id> col1Id, ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+IdTable Permutation::scan(const ScanSpecification& scanSpec,
+                          ColumnIndicesRef additionalColumns,
+                          const CancellationHandle& cancellationHandle) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
   }
 
-  if (!meta_.col0IdExists(col0Id)) {
-    size_t numColumns = col1Id.has_value() ? 1 : 2;
-    cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns, reader().allocator()};
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
-
-  return reader().scan(metaData, col1Id, meta_.blockData(), additionalColumns,
-                       std::move(cancellationHandle));
+  return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
+                       cancellationHandle);
 }
 
 // _____________________________________________________________________
-size_t Permutation::getResultSizeOfScan(Id col0Id, Id col1Id) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return 0;
-  }
-  const auto& metaData = meta_.getMetaData(col0Id);
-
-  return reader().getResultSizeOfScan(metaData, col1Id, meta_.blockData());
+size_t Permutation::getResultSizeOfScan(
+    const ScanSpecification& scanSpec) const {
+  return reader().getResultSizeOfScan(scanSpec, meta_.blockData());
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
-    Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const {
-  // TODO: It's a recurring pattern here and in other methods in this file,
-  // that it is first checked whether the `col0Id` exists in the metadata and
-  // subsequently the metadata is retrieved. Shoulnd't we avoid this because
-  // each of these is a binary search on disk, so not for free?
-  AD_CONTRACT_CHECK(meta_.col0IdExists(col0Id));
-  const auto& relationMetadata = meta_.getMetaData(col0Id);
-  const auto& allBlocksMetadata = meta_.blockData();
-  return reader().getDistinctCol1IdsAndCounts(
-      relationMetadata, allBlocksMetadata, cancellationHandle);
+    Id col0Id, const CancellationHandle& cancellationHandle) const {
+  return reader().getDistinctCol1IdsAndCounts(col0Id, meta_.blockData(),
+                                              cancellationHandle);
+}
+
+// ____________________________________________________________________________
+IdTable Permutation::getDistinctCol0IdsAndCounts(
+    const CancellationHandle& cancellationHandle) const {
+  return reader().getDistinctCol0IdsAndCounts(meta_.blockData(),
+                                              cancellationHandle);
 }
 
 // _____________________________________________________________________
@@ -123,18 +112,21 @@ std::string_view Permutation::toString(Permutation::Enum permutation) {
 }
 
 // _____________________________________________________________________
-std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
-    Id col0Id, std::optional<Id> col1Id) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return std::nullopt;
+std::optional<CompressedRelationMetadata> Permutation::getMetadata(
+    Id col0Id) const {
+  if (meta_.col0IdExists(col0Id)) {
+    return meta_.getMetaData(col0Id);
   }
+  return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id);
+}
 
-  auto metadata = meta_.getMetaData(col0Id);
-
-  MetadataAndBlocks result{meta_.getMetaData(col0Id),
-                           CompressedRelationReader::getBlocksFromMetadata(
-                               metadata, col1Id, meta_.blockData()),
-                           col1Id, std::nullopt};
+// _____________________________________________________________________
+std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
+    const ScanSpecification& scanSpec) const {
+  MetadataAndBlocks result{
+      scanSpec,
+      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData()),
+      std::nullopt};
 
   result.firstAndLastTriple_ = reader().getFirstAndLastTriple(result);
   return result;
@@ -142,21 +134,16 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
 
 // _____________________________________________________________________
 Permutation::IdTableGenerator Permutation::lazyScan(
-    Id col0Id, std::optional<Id> col1Id,
+    const ScanSpecification& scanSpec,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  if (!meta_.col0IdExists(col0Id)) {
-    return {};
-  }
-  auto relationMetadata = meta_.getMetaData(col0Id);
   if (!blocks.has_value()) {
-    auto blockSpan = CompressedRelationReader::getBlocksFromMetadata(
-        relationMetadata, col1Id, meta_.blockData());
+    auto blockSpan = CompressedRelationReader::getRelevantBlocks(
+        scanSpec, meta_.blockData());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
-  return reader().lazyScan(meta_.getMetaData(col0Id), col1Id,
-                           std::move(blocks.value()), std::move(columns),
-                           cancellationHandle);
+  return reader().lazyScan(scanSpec, std::move(blocks.value()),
+                           std::move(columns), std::move(cancellationHandle));
 }

@@ -201,8 +201,8 @@ constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
 // In the PSO and PSO permutations the patterns of the subject and object are
 // stored at the following indices. Note that the col0 (the P) is not part of
 // the result, so the column order for PSO is S O PatternS PatternO.
-constexpr size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 2;
-constexpr size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 3;
+constexpr size_t ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN = 3;
+constexpr size_t ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN = 4;
 
 inline auto& RuntimeParameters() {
   using ad_utility::detail::parameterShortNames::Bool;
@@ -242,7 +242,7 @@ inline auto& RuntimeParameters() {
             DurationParameter<std::chrono::seconds, "default-query-timeout">{
                 30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-group-by-hash-map-optimization">{false}};
+        Bool<"group-by-hash-map-enabled">{false}};
   }();
   return params;
 }

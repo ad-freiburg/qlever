@@ -11,6 +11,7 @@
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
 #include "util/jthread.h"
 
 using namespace ad_utility::httpUtils;
@@ -54,7 +55,7 @@ TEST(HttpServer, HttpTest) {
       std::vector<ad_utility::JThread> threads;
       for (size_t i = 0; i < 2; ++i) {
         threads.emplace_back([&]() {
-          for (size_t j = 0; j < 5; ++j) {
+          for (size_t j = 0; j < 20; ++j) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
@@ -86,12 +87,15 @@ TEST(HttpServer, HttpTest) {
     }
 
     // Test if websocket is correctly opened and closed
-    {
-      HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
-                                                        "/watch/some-id");
-      // verify request is upgraded
-      ASSERT_EQ(response.base().result(), http::status::switching_protocols);
+    for (size_t i = 0; i < 20; ++i) {
+      {
+        HttpClient httpClient("localhost",
+                              std::to_string(httpServer.getPort()));
+        auto response = httpClient.sendWebSocketHandshake(
+            verb::get, "localhost", "/watch/some-id");
+        // verify request is upgraded
+        ASSERT_EQ(response.base().result(), http::status::switching_protocols);
+      }
     }
 
     // Test if websocket is denied on wrong paths
