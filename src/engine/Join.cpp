@@ -40,11 +40,14 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   };
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
-  } else if (t1->getType() == QueryExecutionTree::SCAN &&
-             t2->getType() != QueryExecutionTree::SCAN) {
-    // If one of the inputs is a SCAN and the other one is not,
-    // make the SCAN the right child, this simplifies several branches
-    // in the `computeResult` method.
+  }
+  // If one of the inputs is a SCAN and the other one is not,
+  // make the SCAN the right child, this simplifies several branches
+  // in the `computeResult` method. This is more important than the condition
+  // above and also enforces deterministic subtre orderings, so we can *not* use
+  // an `if-else` here.
+  if (t1->getType() == QueryExecutionTree::SCAN &&
+      t2->getType() != QueryExecutionTree::SCAN) {
     swapChildren();
   }
   _left = std::move(t1);
