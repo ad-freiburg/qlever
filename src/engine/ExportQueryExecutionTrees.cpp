@@ -173,9 +173,16 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
       return id.getDate().toStringAndType();
-    default:
-      AD_FAIL();
+    case BlankNodeIndex:
+    return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()), ""};
+
+    case VocabIndex:
+    case WordVocabIndex:
+    case TextRecordIndex:
+    case LocalVocabIndex:
+     AD_FAIL();
   }
+  AD_FAIL();
 }
 
 // ___________________________________________________________________________
@@ -198,6 +205,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     case Bool:
     case Int:
     case Date:
+    case BlankNodeIndex:
       return idToStringAndTypeForEncodedValue(id);
     case Datatype::WordVocabIndex: {
       std::optional<string> entity =
