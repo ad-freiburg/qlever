@@ -66,9 +66,7 @@ TEST(Values, computeResult) {
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
   const auto& table = result->idTable();
-  Id x;
-  bool success = testQec->getIndex().getId("<x>", &x);
-  AD_CORRECTNESS_CHECK(success);
+  Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto L = ad_utility::testing::LocalVocabId;
   auto U = Id::makeUndefined();

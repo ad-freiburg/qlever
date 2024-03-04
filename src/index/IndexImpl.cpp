@@ -1400,16 +1400,15 @@ std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
 }
 
 // ___________________________________________________________________________
-bool IndexImpl::getId(const string& element, Id* id) const {
-  // TODO<joka921> we should parse doubles correctly in the SparqlParser and
-  // then return the correct ids here or somewhere else.
-  auto internal = TurtleStringParser<Tokenizer>{}.parseTripleObject(element);
-  VocabIndex vocabId;
-  // TODO<joka921> This is really hacky for now and not so efficient,
-  // move the IdOrString handling one level up.
-  auto success = getVocab().getId(internal.toRdfLiteral(), &vocabId);
-  *id = Id::makeFromVocabIndex(vocabId);
-  return success;
+std::optional<Id> IndexImpl::getId(
+    const ad_utility::triple_component::LiteralOrIri& element) const {
+  VocabIndex vocabIndex;
+  auto success =
+      getVocab().getId(element.toInternalRepresentation(), &vocabIndex);
+  if (!success) {
+    return std::nullopt;
+  }
+  return Id::makeFromVocabIndex(vocabIndex);
 }
 
 // ___________________________________________________________________________

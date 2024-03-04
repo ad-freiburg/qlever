@@ -1160,10 +1160,10 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // subject, and 1 triple with `y` as a subject.
     ASSERT_EQ(result.numColumns(), 2u);
     ASSERT_EQ(result.size(), 2u);
-    Id idOfX;
-    Id idOfY;
-    qec->getIndex().getId("<x>", &idOfX);
-    qec->getIndex().getId("<y>", &idOfY);
+
+    auto getId = makeGetId(qec->getIndex());
+    Id idOfX = getId("<x>");
+    Id idOfY = getId("<y>");
 
     ASSERT_EQ(result(0, 0), idOfX);
     ASSERT_EQ(result(0, 1), Id::makeFromInt(7));

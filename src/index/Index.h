@@ -117,7 +117,8 @@ class Index {
   [[nodiscard]] std::optional<std::string> idToOptionalString(
       WordVocabIndex id) const;
 
-  bool getId(const std::string& element, Id* id) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::LiteralOrIri& element) const;
 
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 

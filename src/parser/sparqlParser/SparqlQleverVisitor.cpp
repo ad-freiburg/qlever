@@ -1573,13 +1573,13 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
         visit(ctx->rdfLiteral()));
-    if (tripleComponent.isString()) {
-      return make_unique<IriExpression>(tripleComponent.getString());
-    } else if (tripleComponent.isLiteral() || tripleComponent.isIri()) {
+    if (tripleComponent.isIri()) {
+      return make_unique<IriExpression>(tripleComponent.getIri());
+    } else if (tripleComponent.isLiteral()) {
+      return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
+    } else if (tripleComponent.isString()) {
+      // TODO<joka921> This shouldn't be a case at all.
       AD_FAIL();
-      // TODO<joka921> Reinstate.
-      // return
-      // make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
           tripleComponent.toValueIdIfNotString().value());
@@ -1856,7 +1856,10 @@ ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::IriOrFunctionContext* ctx) {
   // Case 1: Just an IRI.
   if (ctx->argList() == nullptr) {
-    return std::make_unique<sparqlExpression::IriExpression>(visit(ctx->iri()));
+    // TODO<joka921> This is currently hacky and doesn't handle the @en@ case.
+    // The `visit` function should directly return an `IRI`.
+    return std::make_unique<sparqlExpression::IriExpression>(
+        TripleComponent::Iri::iriref(visit(ctx->iri())));
   }
   // Case 2: Function call, where the function name is an IRI.
   return processIriFunctionCall(visit(ctx->iri()), visit(ctx->argList()), ctx);

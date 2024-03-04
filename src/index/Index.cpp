@@ -78,8 +78,9 @@ std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
 }
 
 // ____________________________________________________________________________
-bool Index::getId(const std::string& element, Id* id) const {
-  return pimpl_->getId(element, id);
+std::optional<Id> Index::getId(
+    const ad_utility::triple_component::LiteralOrIri& element) const {
+  return pimpl_->getId(element);
 }
 
 // ____________________________________________________________________________

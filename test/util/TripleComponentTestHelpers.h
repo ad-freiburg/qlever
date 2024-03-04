@@ -27,4 +27,5 @@ inline auto tripleComponentLiteral = [](const std::string& literal,
     return TripleComponent::Literal::literalWithQuotes(literal);
   }
 };
+auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
 }  // namespace ad_utility::testing

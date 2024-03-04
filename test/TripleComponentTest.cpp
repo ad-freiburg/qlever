@@ -16,7 +16,6 @@ namespace {
 auto I = IntId;
 auto D = DoubleId;
 auto lit = tripleComponentLiteral;
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
 }  // namespace
 
 TEST(TripleComponent, setAndGetString) {
@@ -145,12 +144,12 @@ TEST(TripleComponent, toValueId) {
   const auto& vocab = qec->getIndex().getVocab();
 
   TripleComponent tc = iri("<x>");
-  Id id = I(10293478);
-  qec->getIndex().getId("<x>", &id);
+  auto getId = makeGetId(qec->getIndex());
+  Id id = getId("<x>");
   ASSERT_EQ(tc.toValueId(vocab).value(), id);
 
   tc = lit("\"alpha\"");
-  qec->getIndex().getId("\"alpha\"", &id);
+  id = getId("\"alpha\"");
   EXPECT_EQ(tc.toValueId(vocab).value(), id);
 
   tc = "<notexisting>";

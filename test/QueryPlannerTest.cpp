@@ -13,7 +13,7 @@ namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
 auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
-}
+}  // namespace
 
 QueryPlanner makeQueryPlanner() {
   return QueryPlanner{nullptr,
@@ -349,9 +349,7 @@ TEST(QueryPlannerTest, threeVarTriplesTCJ) {
   h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
-      h::MultiColumnJoin(scan("?s", "?p", "?o"),
-                         scan("?s", "?p", "<x>")),
-      qec);
+      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s", "?p", "<x>")), qec);
 }
 
 TEST(QueryPlannerTest, threeVarXthreeVarException) {
@@ -618,8 +616,8 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
   // Fixed predicate.
 
   // Without `Order By`, two orderings are possible, both are fine.
-  h::expect("SELECT * WHERE { ?s <p> ?o }",
-            scan("?s", "<p>", "?o", {POS, PSO}), qec);
+  h::expect("SELECT * WHERE { ?s <p> ?o }", scan("?s", "<p>", "?o", {POS, PSO}),
+            qec);
   // Must always be a single index scan, never index scan + sorting.
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
             scan("?s", "<p>", "?o", {POS}), qec);
@@ -627,16 +625,16 @@ TEST(QueryPlannerTest, SimpleTripleTwoVariables) {
             scan("?s", "<p>", "?o", {PSO}), qec);
 
   // Fixed subject.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            scan("<s>", "?p", "?o", {SOP, SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
             scan("<s>", "?p", "?o", {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
             scan("<s>", "?p", "?o", {SPO}), qec);
 
   // Fixed object.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            scan("<s>", "?p", "?o", {SOP, SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
             scan("<s>", "?p", "?o", {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",

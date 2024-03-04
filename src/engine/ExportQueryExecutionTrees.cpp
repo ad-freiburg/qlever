@@ -213,10 +213,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       if constexpr (removeQuotesAndAngleBrackets) {
         entity = asStringViewUnsafe(litOrIri.getContent());
       }
-      if (entity.value().starts_with('<')) {
-        entity.value().push_back('>');
-      }
-      // TODO<joka921> handle the exporing of literals.
+      // TODO<joka921> handle the exporting of literals more correctly.
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case LocalVocabIndex: {

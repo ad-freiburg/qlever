@@ -24,7 +24,6 @@ using ::testing::UnorderedElementsAre;
 namespace {
 using ad_utility::source_location;
 auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
 
 // Return a lambda that runs a scan for two fixed elements `c0` and `c1`
 // on the `permutation` (e.g. a fixed P and S in the PSO permutation)
@@ -397,17 +396,12 @@ TEST(IndexTest, TripleToInternalRepresentation) {
 }
 
 TEST(IndexTest, getIgnoredIdRanges) {
-  const IndexImpl& index = getQec()->getIndex().getImpl();
+  const Index& indexNoImpl = getQec()->getIndex();
+  const IndexImpl& index = indexNoImpl.getImpl();
 
   // First manually get the IDs of the vocabulary elements that might appear
   // in added triples.
-  auto getId = [&index](const std::string& s) {
-    Id id;
-    bool success = index.getId(s, &id);
-    AD_CONTRACT_CHECK(success);
-    return id;
-  };
-
+  auto getId = makeGetId(indexNoImpl);
   Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
   Id lastLiteral = getId("\"zz\"@en");
