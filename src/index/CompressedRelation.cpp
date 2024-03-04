@@ -534,6 +534,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   std::span<const CompressedBlockMetadata> relationBlocksMetadata =
       getRelevantBlocks(scanSpec, allBlocksMetadata);
 
+  auto relevantColumns = prepareColumnIndices(scanSpec, {});
+  AD_CORRECTNESS_CHECK(!relevantColumns.empty());
+  relevantColumns.resize(1);
+
   // Iterate over the blocks and only read (and decompress) those which
   // contain more than one different `col1Id`. For the others, we can determine
   // the count from the metadata.
@@ -563,11 +567,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
       processCol1Id(firstCol1Id, blockMetadata.numRows_);
     } else {
       // Multiple `col1Id`s in one block.
-      std::array<ColumnIndex, 1> columnIndices{1u};
       const auto& block =
           i == 0 ? readPossiblyIncompleteBlock(scanSpec, blockMetadata,
-                                               std::nullopt, columnIndices)
-                 : readAndDecompressBlock(blockMetadata, columnIndices);
+                                               std::nullopt, relevantColumns)
+                 : readAndDecompressBlock(blockMetadata, relevantColumns);
       cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {

@@ -111,8 +111,12 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   columnNames_.resize(maxColumnIndex + 1);
   // Now copy the (variable, index) pairs to the vector.
   for (const auto& [variable, columnIndexAndType] : columnMap) {
-    ColumnIndex columnIndex = columnIndexAndType.columnIndex_;
-    columnNames_.at(columnIndex) = variable.name();
+    const auto& [columnIndex, definedness] = columnIndexAndType;
+    std::string_view defined =
+        definedness == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined
+            ? ""
+            : " (U)";
+    columnNames_.at(columnIndex) = absl::StrCat(variable.name(), defined);
   }
 }
 
