@@ -493,6 +493,7 @@ struct ConfigVariables {
   For an explanation, what a member variables does, see the created
   `ConfigOption`s in `GeneralInterfaceImplementation`.
   */
+  size_t minSmallerTableRows_;
   size_t minBiggerTableRows_;
   size_t maxBiggerTableRows_;
   size_t smallerTableNumColumns_;
@@ -595,6 +596,12 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   GeneralInterfaceImplementation() {
     ad_utility::ConfigManager& config = getConfigManager();
 
+    decltype(auto) minSmallerTableRows = config.addOption(
+        "min-smaller-table-rows",
+        "The minimum amount of rows for the smaller 'IdTable' in benchmarking "
+        "tables.",
+        &configVariables_.minSmallerTableRows_, 10000UL);
+
     decltype(auto) minBiggerTableRows = config.addOption(
         "min-bigger-table-rows",
         "The minimum amount of rows for the bigger 'IdTable' in benchmarking "
@@ -663,12 +670,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "max-ratio-rows",
         "The maximum row ratio between the smaller and the bigger 'IdTable' "
         "for a benchmark table in the benchmark class 'Benchmarktables, where "
-        "the smaller table grows and the ratio between tables stays the same.' "
-        "and 'Benchmarktables, where the smaller table stays at the same "
-        "amount of rows and the bigger tables keeps getting bigger.'. Also "
-        "used for the calculation of the minimum number of rows for the "
-        "smaller table in 'Benchmarktables, where the smaller table grows and "
-        "the size of the bigger table remains the same.'.",
+        "the smaller table grows and the ratio between tables stays the "
+        "same.'.",
         &configVariables_.maxRatioRows_, 1000.f);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
@@ -809,26 +812,36 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                      "of joining the smaller and bigger table."),
         maxMemoryInStringFormat, smallerTableNumColumns, biggerTableNumColumns);
 
-    // Is `min-bigger-table-rows` big enough, to deliver interesting
-    // measurements?
+    // Are `min-smaller-table-rows` and `min-bigger-table-rows` big enough, to
+    // deliver interesting measurements?
+    const auto addValidatorEnoughRowsToBeInteresting =
+        [&config, &generateBiggerEqualLambda, &generateBiggerEqualLambdaDesc](
+            ad_utility::ConstConfigOptionProxy<size_t> option) {
+          config.addValidator(
+              generateBiggerEqualLambda(
+                  option.getConfigOption().getDefaultValue<size_t>(), true),
+              absl::StrCat("'", option.getConfigOption().getIdentifier(),
+                           "' is to small. Interesting measurement values "
+                           "start at ",
+                           option.getConfigOption().getDefaultValueAsString(),
+                           " rows, or more."),
+              absl::StrCat(
+                  generateBiggerEqualLambdaDesc(
+                      option,
+                      option.getConfigOption().getDefaultValueAsString(), true),
+                  " Interesting measurement values only appear from that point "
+                  "onwards."),
+              option);
+        };
+    addValidatorEnoughRowsToBeInteresting(minSmallerTableRows);
+    addValidatorEnoughRowsToBeInteresting(minBiggerTableRows);
+
+    // Is `minSmallerTableRows` smaller, or equal, to `minBiggerTableRows`?
     config.addValidator(
-        generateBiggerEqualLambda(
-            minBiggerTableRows.getConfigOption().getDefaultValue<size_t>(),
-            true),
-        absl::StrCat(
-            "'", minBiggerTableRows.getConfigOption().getIdentifier(),
-            "' is to small. Interesting measurement values "
-            "start at ",
-            minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
-            " rows, or more."),
-        absl::StrCat(
-            generateBiggerEqualLambdaDesc(
-                minBiggerTableRows,
-                minBiggerTableRows.getConfigOption().getDefaultValueAsString(),
-                true),
-            " Interesting measurement values only appear from that point "
-            "onwards."),
-        minBiggerTableRows);
+        lessEqualLambda,
+        generateLessEqualLambdaDesc(minSmallerTableRows, minBiggerTableRows),
+        generateLessEqualLambdaDesc(minSmallerTableRows, minBiggerTableRows),
+        minSmallerTableRows, minBiggerTableRows);
 
     // Is `minBiggerTableRows` smaller, or equal, to `max-bigger-table-rows`?
     config.addValidator(
@@ -943,8 +956,37 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                         generateLessEqualLambdaDesc(minRatioRows, maxRatioRows),
                         minRatioRows, maxRatioRows);
 
-    // Can the options be cast to double, while keeping their values? (Needed
-    // for calculations later.)
+    /*
+    Is the row ratio needed for the combination of `min-smaller-table-rows` and
+    `min-bigger-table-rows` inside the range set via `min-ratio-rows` and
+    `max-ratio-rows`?
+    */
+    const std::string minTableRowNumPossibleDesc{absl::StrCat(
+        "The row ratio needed for a bigger table with ",
+        minBiggerTableRows.getConfigOption().getValueAsString(), " ('",
+        minBiggerTableRows.getConfigOption().getIdentifier(),
+        "') rows, when the smaller table has ",
+        minSmallerTableRows.getConfigOption().getValueAsString(), " rows ('",
+        minSmallerTableRows.getConfigOption().getIdentifier(),
+        "'), must be in the range described via '",
+        minRatioRows.getConfigOption().getIdentifier(), "' (",
+        minRatioRows.getConfigOption().getValueAsString(), ") and '",
+        maxRatioRows.getConfigOption().getIdentifier(), "' (",
+        maxRatioRows.getConfigOption().getValueAsString(), ").")};
+    config.addValidator(
+        [](const size_t numRowsSmallerTable, const size_t numRowsBiggerTable,
+           const float minRatio, const float maxRatio) {
+          const float neededRatio{
+              static_cast<float>(static_cast<double>(numRowsBiggerTable) /
+                                 static_cast<double>(numRowsSmallerTable))};
+          // Checking for equality is more effort.
+          return !(neededRatio < minRatio || maxRatio < neededRatio);
+        },
+        minTableRowNumPossibleDesc, minTableRowNumPossibleDesc,
+        minSmallerTableRows, minBiggerTableRows, minRatioRows, maxRatioRows);
+
+    // Can the options be cast to double, while keeping their values?
+    // (Needed for calculations later.)
     const auto addCastableValidator =
         [&config](ad_utility::ConstConfigOptionProxy<size_t> option) {
           /*
@@ -1554,11 +1596,7 @@ class BmOnlyBiggerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         for (const size_t smallerTableNumRows : createExponentVectorUntilSize(
-                 10UL,
-                 static_cast<size_t>(
-                     static_cast<double>(
-                         getConfigVariables().minBiggerTableRows_) /
-                     getConfigVariables().maxRatioRows_),
+                 10UL, getConfigVariables().minSmallerTableRows_,
                  static_cast<size_t>(
                      static_cast<double>(
                          getConfigVariables().minBiggerTableRows_) /
@@ -1633,10 +1671,12 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10, static_cast<size_t>(
-                      static_cast<double>(
-                          getConfigVariables().minBiggerTableRows_) /
-                      ratioRows));
+              10, std::ranges::max(
+                      static_cast<size_t>(
+                          static_cast<double>(
+                              getConfigVariables().minBiggerTableRows_) /
+                          ratioRows),
+                      getConfigVariables().minSmallerTableRows_));
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
@@ -1954,9 +1994,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
     BenchmarkResults results{};
     // Start with the smallest possible smaller table.
     auto growthFunction = createDefaultGrowthLambda(
-        10, static_cast<size_t>(
-                static_cast<double>(getConfigVariables().minBiggerTableRows_) /
-                getConfigVariables().maxRatioRows_));
+        10, getConfigVariables().minSmallerTableRows_);
 
     // Making a benchmark table for all combination of IdTables being sorted and
     // all possibles sizes for the bigger table.
