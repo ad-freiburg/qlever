@@ -669,7 +669,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "used for the calculation of the minimum number of rows for the "
         "smaller table in 'Benchmarktables, where the smaller table grows and "
         "the size of the bigger table remains the same.'.",
-        &configVariables_.maxRatioRows_, 10000.f);
+        &configVariables_.maxRatioRows_, 1000.f);
 
     decltype(auto) maxMemoryInStringFormat = config.addOption(
         "max-memory",
