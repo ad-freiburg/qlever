@@ -17,11 +17,11 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
   }
   if (!currentSubjectIndex_.has_value()) {
     // This is the first triple
-    currentSubjectIndex_ = triple[0].getVocabIndex();
-  } else if (triple[0].getVocabIndex() != currentSubjectIndex_) {
+    currentSubjectIndex_ = triple[0];
+  } else if (triple[0] != currentSubjectIndex_) {
     // New subject.
     finishSubject(currentSubjectIndex_.value(), currentPattern_);
-    currentSubjectIndex_ = triple[0].getVocabIndex();
+    currentSubjectIndex_ = triple[0];
     currentPattern_.clear();
   }
   tripleBuffer_.emplace_back(triple, ignoreForPatterns);
@@ -32,8 +32,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
 }
 
 // ________________________________________________________________________________
-void PatternCreator::finishSubject(VocabIndex subjectIndex,
-                                   const Pattern& pattern) {
+void PatternCreator::finishSubject(Id subjectIndex, const Pattern& pattern) {
   numDistinctSubjects_++;
   numDistinctSubjectPredicatePairs_ += pattern.size();
   PatternID patternId;
@@ -55,10 +54,10 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
     it->second.count_++;
   }
 
-  auto additionalTriple = std::array{Id::makeFromVocabIndex(subjectIndex),
-                                     hasPatternId, Id::makeFromInt(patternId)};
+  auto additionalTriple =
+      std::array{subjectIndex, hasPatternId, Id::makeFromInt(patternId)};
   tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
-  auto curSubject = Id::makeFromVocabIndex(currentSubjectIndex_.value());
+  auto curSubject = currentSubjectIndex_.value();
   std::ranges::for_each(tripleBuffer_, [this, patternId,
                                         &curSubject](const auto& t) {
     const auto& [s, p, o] = t.triple_;

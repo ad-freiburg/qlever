@@ -50,6 +50,9 @@ Id makeNumericId(T t) {
   }
 }
 
+// All the numeric value getters have an `operator()` for `ValueId` and one for
+// `std::string`. This mixin adds the `operator()` for the `IdOrString` variant
+// via the CRTP pattern.
 template <typename Self>
 struct Mixin {
   decltype(auto) operator()(IdOrString s, const EvaluationContext* ctx) const {
