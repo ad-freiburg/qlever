@@ -111,7 +111,7 @@ TEST_F(HasPredicateScanTest, subtree) {
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", "<o4>"});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
-  runTest(scan, {{y, p, p3}, {y, p3, p3}});
+  runTest(scan, {{p3, y, p}, {p3, y, p3}});
 }
 
 // ____________________________________________________________
