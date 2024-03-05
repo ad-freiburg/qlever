@@ -98,25 +98,32 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
 
 // __________________________________________________________________________
 void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
+  // Empty hash map -> empty vector.
   if (columnMap.empty()) {
     columnNames_.clear();
     return;
   }
 
+  // Resize the `columnNames_` vector such that we can use the keys from
+  // columnMap (which are not necessarily consecutive) as indexes.
   ColumnIndex maxColumnIndex = std::ranges::max(
       columnMap | std::views::values |
       std::views::transform(&ColumnIndexAndTypeInfo::columnIndex_));
-  // Resize the `columnNames_` vector such that we can use the keys from
-  // columnMap (which are not necessarily consecutive) as indexes.
   columnNames_.resize(maxColumnIndex + 1);
-  // Now copy the (variable, index) pairs to the vector.
+
+  // Now copy the `variable, index` pairs from the map to the vector. If the
+  // column might contain UNDEF values, append ` (U)` to the variable name.
+  //
+  // TODO: Johannes, was this just for debugging or is this something we want
+  // to keep?
   for (const auto& [variable, columnIndexAndType] : columnMap) {
-    const auto& [columnIndex, definedness] = columnIndexAndType;
-    std::string_view defined =
-        definedness == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined
+    const auto& [columnIndex, undefStatus] = columnIndexAndType;
+    std::string_view undefStatusSuffix =
+        undefStatus == ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined
             ? ""
             : " (U)";
-    columnNames_.at(columnIndex) = absl::StrCat(variable.name(), defined);
+    columnNames_.at(columnIndex) =
+        absl::StrCat(variable.name(), undefStatusSuffix);
   }
 }
 
