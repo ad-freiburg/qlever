@@ -244,7 +244,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   LOG(DEBUG) << "Finished writing batch of merged words" << std::endl;
 }
 
-// ____________________________________________________________________________________________________________
+// ____________________________________________________________________________
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   if (noIdMapsAndIgnoreExternalVocab_) {

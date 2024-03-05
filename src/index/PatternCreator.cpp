@@ -16,7 +16,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
     return;
   }
   if (!currentSubject_.has_value()) {
-    // This is the first triple
+    // This is the first triple.
     currentSubject_ = triple[0];
   } else if (triple[0] != currentSubject_) {
     // New subject.
