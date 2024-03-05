@@ -42,8 +42,8 @@ class HasPredicateScanTest : public ::testing::Test {
   // Expect that the result of the `operation` matches the `expectedElements`.
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(operation.getResult()->idTable(),
-                ::testing::ElementsAreArray(expected));
+    auto res = operation.getResult();
+    EXPECT_THAT(res->idTable(), ::testing::ElementsAreArray(expected));
   }
 
   // Expect that the result of the `operation` matches the `expectedElements`,
@@ -111,7 +111,7 @@ TEST_F(HasPredicateScanTest, subtree) {
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", "<o4>"});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
-  runTest(scan, {{p3, y, p}, {p3, y, p3}});
+  runTest(scan, {{y, p, p3}, {y, p3, p3}});
 }
 
 // ____________________________________________________________
@@ -124,7 +124,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtree) {
    * } GROUP BY ?predicate
    */
   auto triple = SparqlTriple{V{"?x"}, "<p3>", V{"?y"}};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
@@ -144,7 +144,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
    * } GROUP BY ?predicate
    */
   auto triple = SparqlTriple{V{"?x"}, "<p3>", "<o4>"};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::POS, triple);

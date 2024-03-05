@@ -95,7 +95,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
   std::string filename = testCaseName + ".dat";
 
   // First create the on-disk permutation.
-  size_t numColumns = getNumColumns(inputs);
+  size_t numColumns = getNumColumns(inputs) + 1;
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
                                   blocksize};
   vector<CompressedRelationMetadata> metaData;
@@ -117,7 +117,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
         ++numBlocks;
       };
       for (const auto& arr : input.col1And2_) {
-        buffer.push_back(std::views::transform(arr, V));
+        std::vector row{V(input.col0_)};
+        std::ranges::transform(arr, std::back_inserter(row), V);
+        buffer.push_back(row);
         if (buffer.numRows() > writer.blocksize()) {
           addBlock();
         }
@@ -159,7 +161,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
                                   ad_utility::File{filename, "r"}};
   // TODO<C++23> `std::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
-  std::ranges::copy(std::views::iota(2ul, getNumColumns(inputs)),
+  std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
                     std::back_inserter(additionalColumns));
   for (size_t i = 0; i < metaData.size(); ++i) {
     const auto& m = metaData[i];
@@ -170,15 +172,16 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    IdTable table = reader.scan(metaData[i], std::nullopt, blocks,
-                                additionalColumns, cancellationHandle);
+    CompressedRelationReader::ScanSpecification scanSpec{
+        metaData[i].col0Id_, std::nullopt, std::nullopt};
+    IdTable table =
+        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block :
-         reader.lazyScan(metaData[i], std::nullopt, blocks, additionalColumns,
-                         cancellationHandle)) {
+    for (const auto& block : reader.lazyScan(
+             scanSpec, blocks, additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -190,18 +193,19 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      auto size =
-          reader.getResultSizeOfScan(metaData[i], V(lastCol1Id), blocks);
+      CompressedRelationReader::ScanSpecification scanSpec{
+          metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
+      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
       IdTable tableWidthOne =
-          reader.scan(metaData[i], V(lastCol1Id), blocks,
-                      Permutation::ColumnIndicesRef{}, cancellationHandle);
+          reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
+                      cancellationHandle);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
-           reader.lazyScan(metaData[i], V(lastCol1Id), blocks,
-                           Permutation::ColumnIndices{}, cancellationHandle)) {
+           reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
+                           cancellationHandle)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -385,7 +389,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      relation, blocks, std::nullopt, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -408,7 +412,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
-  metadataAndBlocks.col1Id_ = V(4);
+  metadataAndBlocks.scanSpec_.setCol1Id(V(4));
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
@@ -431,7 +435,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      relation, blocks, std::nullopt, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
 
   CompressedBlockMetadata blockB1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
@@ -452,7 +456,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-      relationB, blocksB, std::nullopt, std::nullopt};
+      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
@@ -484,18 +488,18 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // Test for only the `col0Id` fixed.
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
-  metadataAndBlocks.col1Id_ = V(20);
-  metadataAndBlocksB.col1Id_ = V(38);
+  metadataAndBlocks.scanSpec_.setCol1Id(V(20));
+  metadataAndBlocksB.scanSpec_.setCol1Id(V(38));
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
-  metadataAndBlocks.col1Id_ = V(4);
-  metadataAndBlocksB.col1Id_ = std::nullopt;
+  metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocksB.scanSpec_.setCol1Id(std::nullopt);
   test({std::vector{block2}, std::vector{blockB2, blockB3}});
 
   // Fix only the col1Id of the right input.
-  metadataAndBlocks.col1Id_ = std::nullopt;
-  metadataAndBlocksB.col1Id_ = V(7);
+  metadataAndBlocks.scanSpec_.setCol1Id(std::nullopt);
+  metadataAndBlocksB.scanSpec_.setCol1Id(V(7));
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 

@@ -135,3 +135,14 @@ ResultTable OrderBy::computeResult() {
   LOG(DEBUG) << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 }
+
+// ___________________________________________________________________
+OrderBy::SortedVariables OrderBy::getSortedVariables() const {
+  SortedVariables result;
+  for (const auto& [colIdx, isDescending] : sortIndices_) {
+    using enum AscOrDesc;
+    result.emplace_back(subtree_->getVariableAndInfoByColumnIndex(colIdx).first,
+                        isDescending ? Desc : Asc);
+  }
+  return result;
+}

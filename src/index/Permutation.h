@@ -35,6 +35,9 @@ class Permutation {
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = CompressedRelationReader::ColumnIndicesRef;
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  using ScanSpecification = CompressedRelationReader::ScanSpecification;
 
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
@@ -53,15 +56,18 @@ class Permutation {
   // If `col1Id` is specified, only the col2 is returned for triples that
   // additionally have the specified col1. .This is just a thin wrapper around
   // `CompressedRelationMetaData::scan`.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id,
+  IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+               const CancellationHandle& cancellationHandle) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
   // in `meta_`.
   IdTable getDistinctCol1IdsAndCounts(
-      Id col0Id, ad_utility::SharedCancellationHandle cancellationHandle) const;
+      Id col0Id, const CancellationHandle& cancellationHandle) const;
+
+  IdTable getDistinctCol0IdsAndCounts(
+      const CancellationHandle& cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
   using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
@@ -81,34 +87,53 @@ class Permutation {
   // `MetadataAndBlocks` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
-      Id col0Id, std::optional<Id> col1Id,
+      const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      CancellationHandle cancellationHandle) const;
+
+  std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
 
   // Return the metadata for the relation specified by the `col0Id`
   // along with the metadata for all the blocks that contain this relation (also
   // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
   // in this permutation, `nullopt` is returned.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
-      Id col0Id, std::optional<Id> col1Id) const;
+      const ScanSpecification& scanSpec) const;
 
   /// Similar to the previous `scan` function, but only get the size of the
   /// result
-  size_t getResultSizeOfScan(Id col0Id, Id col1Id) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpec) const;
 
   // _______________________________________________________
   void setKbName(const string& name) { meta_.setName(name); }
 
+  // _______________________________________________________
+  const std::string& getKbName() const { return meta_.getName(); }
+
+  // _______________________________________________________
   const CompressedRelationReader& reader() const { return reader_.value(); }
 
+  // _______________________________________________________
+  const std::string& readableName() const { return readableName_; }
+
+  // _______________________________________________________
+  const std::string& fileSuffix() const { return fileSuffix_; }
+
+  // _______________________________________________________
+  const array<size_t, 3>& keyOrder() const { return keyOrder_; };
+
+  // _______________________________________________________
+  const bool& isLoaded() const { return isLoaded_; }
+
+ private:
   // for Log output, e.g. "POS"
-  const std::string readableName_;
+  std::string readableName_;
   // e.g. ".pos"
-  const std::string fileSuffix_;
+  std::string fileSuffix_;
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
   // sorted, for example {1, 0, 2} for PSO.
-  const array<size_t, 3> keyOrder_;
+  array<size_t, 3> keyOrder_;
 
   const MetaData& metaData() const { return meta_; }
   MetaData meta_;

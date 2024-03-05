@@ -10,6 +10,7 @@
 using std::string;
 
 class SparqlTriple;
+class SparqlTripleSimple;
 
 class IndexScan : public Operation {
  private:
@@ -30,6 +31,8 @@ class IndexScan : public Operation {
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple);
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+            const SparqlTripleSimple& triple);
 
   virtual ~IndexScan() = default;
 

@@ -93,21 +93,27 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c2 = getId("<c2>");
 
       // TODO<joka921> We could also test the multiplicities here.
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(
-          Id::makeFromVocabIndex(VocabIndex::make(735))));
-      ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
-      ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+      ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
+      ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a2).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+      ASSERT_FALSE(
+          index.PSO()
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
+      ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
-      ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
-      ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
-      ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
-      ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(b).has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(a2).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+      ASSERT_FALSE(
+          index.POS()
+              .getMetadata(Id::makeFromVocabIndex(VocabIndex::make(735)))
+              .has_value());
+      ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
 
       // Relation b
       // Pair index
@@ -151,13 +157,13 @@ TEST(IndexTest, createFromTurtleTest) {
       Id c = getId("<c>");
       Id isA = getId("<is-a>");
 
-      ASSERT_TRUE(index.PSO().metaData().col0IdExists(isA));
-      ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
+      ASSERT_TRUE(index.PSO().getMetadata(isA).has_value());
+      ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
 
-      ASSERT_FALSE(index.PSO().metaData().getMetaData(isA).isFunctional());
+      ASSERT_FALSE(index.PSO().getMetadata(isA).value().isFunctional());
 
-      ASSERT_TRUE(index.POS().metaData().col0IdExists(isA));
-      ASSERT_FALSE(index.POS().metaData().getMetaData(isA).isFunctional());
+      ASSERT_TRUE(index.POS().getMetadata(isA).has_value());
+      ASSERT_FALSE(index.POS().getMetadata(isA).value().isFunctional());
 
       auto testTwo = makeTestScanWidthTwo(index);
       testTwo("<is-a>", Permutation::PSO,
@@ -200,19 +206,19 @@ TEST(IndexTest, createFromOnDiskIndexTest) {
   Id a = getId("<a>");
   Id c = getId("<c>");
 
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b));
-  ASSERT_TRUE(index.PSO().metaData().col0IdExists(b2));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(a));
-  ASSERT_FALSE(index.PSO().metaData().col0IdExists(c));
-  ASSERT_FALSE(index.PSO().metaData().getMetaData(b).isFunctional());
-  ASSERT_TRUE(index.PSO().metaData().getMetaData(b2).isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b).has_value());
+  ASSERT_TRUE(index.PSO().getMetadata(b2).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(a).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(c).has_value());
+  ASSERT_FALSE(index.PSO().getMetadata(b).value().isFunctional());
+  ASSERT_TRUE(index.PSO().getMetadata(b2).value().isFunctional());
 
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(b));
-  ASSERT_TRUE(index.POS().metaData().col0IdExists(b2));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(a));
-  ASSERT_FALSE(index.POS().metaData().col0IdExists(c));
-  ASSERT_TRUE(index.POS().metaData().getMetaData(b).isFunctional());
-  ASSERT_TRUE(index.POS().metaData().getMetaData(b2).isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b2).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(a).has_value());
+  ASSERT_FALSE(index.POS().getMetadata(c).has_value());
+  ASSERT_TRUE(index.POS().getMetadata(b).value().isFunctional());
+  ASSERT_TRUE(index.POS().getMetadata(b2).value().isFunctional());
 };
 
 TEST(IndexTest, indexId) {
@@ -327,10 +333,10 @@ TEST(IndexTest, emptyIndex) {
   const IndexImpl& emptyIndexWithoutCompression =
       getQec("", true, true, false)->getIndex().getImpl();
 
-  EXPECT_EQ(emptyIndexWithCompression.numTriples().normal_, 0u);
-  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal_, 0u);
-  EXPECT_EQ(emptyIndexWithCompression.numTriples().internal_, 0u);
-  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal_, 0u);
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().normal, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().normal, 0u);
+  EXPECT_EQ(emptyIndexWithCompression.numTriples().internal, 0u);
+  EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
   auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
   // Test that scanning an empty index works, but yields an empty permutation.
   test("<x>", Permutation::PSO, {});
@@ -505,35 +511,35 @@ TEST(IndexTest, NumDistinctEntities) {
   // TODO<joka921> Also check the number of triples and the number of
   // added things.
   auto subjects = index.numDistinctSubjects();
-  EXPECT_EQ(subjects.normal_, 3);
+  EXPECT_EQ(subjects.normal, 3);
   // All literals with language tags are added subjects.
-  EXPECT_EQ(subjects.internal_, 1);
+  EXPECT_EQ(subjects.internal, 1);
   EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SPO));
   EXPECT_EQ(subjects, index.numDistinctCol0(Permutation::SOP));
 
   auto predicates = index.numDistinctPredicates();
-  EXPECT_EQ(predicates.normal_, 2);
+  EXPECT_EQ(predicates.normal, 2);
   // The added predicates are `ql:has-pattern`, `ql:langtag`, and one added
   // predicate for each combination of predicate+language that is actually used
   // (e.g. `@en@label`).
-  EXPECT_EQ(predicates.internal_, 3);
+  EXPECT_EQ(predicates.internal, 3);
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::PSO));
   EXPECT_EQ(predicates, index.numDistinctCol0(Permutation::POS));
 
   auto objects = index.numDistinctObjects();
-  EXPECT_EQ(objects.normal_, 7);
+  EXPECT_EQ(objects.normal, 7);
   // One added object for each language that is used.
   // Note: The pattern indices from the `ql:has-pattern` predicate are currently
-  // not part of `objects.internal_`, but they are also not very important.
-  EXPECT_EQ(objects.internal_, 1);
+  // not part of `objects.internal`, but they are also not very important.
+  EXPECT_EQ(objects.internal, 1);
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OSP));
   EXPECT_EQ(objects, index.numDistinctCol0(Permutation::OPS));
 
   auto numTriples = index.numTriples();
-  EXPECT_EQ(numTriples.normal_, 7);
+  EXPECT_EQ(numTriples.normal, 7);
   // Two added triples for each triple that has an object with a language tag
   // and one triple per subject for the pattern.
-  EXPECT_EQ(numTriples.internal_, 5);
+  EXPECT_EQ(numTriples.internal, 5);
 
   auto multiplicities = index.getMultiplicities(Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 12.0 / 4.0);
