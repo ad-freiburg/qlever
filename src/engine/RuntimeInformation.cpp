@@ -125,6 +125,14 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
     columnNames_.at(columnIndex) =
         absl::StrCat(variable.name(), undefStatusSuffix);
   }
+  // Replace the empty column names (columns that are present in the result, but
+  // are not visible using a variable) by the placeholder "_" to make the
+  // runtime information more readable.
+  for (auto& name : columnNames_) {
+    if (name.empty()) {
+      name = "_";
+    }
+  }
 }
 
 // __________________________________________________________________________
