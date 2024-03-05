@@ -9,6 +9,7 @@
 
 #include "global/Id.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
@@ -119,9 +120,10 @@ class VocabularyOnDisk {
   }
 
   template <typename Comparator>
-  WordAndIndex lower_bound_iterator(const auto& word, Comparator comparator) const {
-    auto it =
-        ad_utility::lower_bound_iterator(begin(), end(), word, transformComparator(comparator));
+  WordAndIndex lower_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
+    auto it = ad_utility::lower_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
 
@@ -137,7 +139,8 @@ class VocabularyOnDisk {
   }
 
   template <typename Comparator>
-  WordAndIndex upper_bound_iterator(const auto& word, Comparator comparator) const {
+  WordAndIndex upper_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
     auto it =
         std::upper_bound(begin(), end(), word, transformComparator(comparator));
     return iteratorToWordAndIndex(it);

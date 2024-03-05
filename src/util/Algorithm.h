@@ -160,11 +160,10 @@ auto transformArray(Array&& input, Function function) {
 
 template <typename ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
-                                                    ForwardIterator last,
-                                                    const Tp& val,
-                                                    Compare comp) {
-  typedef
-      typename std::iterator_traits<ForwardIterator>::difference_type DistanceType;
+                                               ForwardIterator last,
+                                               const Tp& val, Compare comp) {
+  typedef typename std::iterator_traits<ForwardIterator>::difference_type
+      DistanceType;
 
   DistanceType len = std::distance(first, last);
 
@@ -186,8 +185,8 @@ template <typename ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
                                                ForwardIterator last,
                                                const Tp& val, Compare comp) {
-  typedef
-      typename std::iterator_traits<ForwardIterator>::difference_type DistanceType;
+  typedef typename std::iterator_traits<ForwardIterator>::difference_type
+      DistanceType;
 
   DistanceType len = std::distance(first, last);
 

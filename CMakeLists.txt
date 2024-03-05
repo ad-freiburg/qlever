@@ -326,6 +326,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
+include_directories(${fsst_SOURCE_DIR})
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
