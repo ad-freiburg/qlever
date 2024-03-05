@@ -170,6 +170,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   std::future<void> writeFut;
   std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
   writeBuffer.reserve(bufSize);
+
   // avoid duplicates
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
