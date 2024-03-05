@@ -183,7 +183,6 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case LocalVocabIndex:
       AD_FAIL();
   }
-  AD_FAIL();
 }
 
 // ___________________________________________________________________________

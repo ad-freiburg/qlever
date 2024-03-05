@@ -19,8 +19,10 @@ using ::testing::HasSubstr;
 // as the `mediaType`. `mediaType` must be TSV or CSV.
 std::string runQueryStreamableResult(const std::string& kg,
                                      const std::string& query,
-                                     ad_utility::MediaType mediaType) {
-  auto qec = ad_utility::testing::getQec(kg);
+                                     ad_utility::MediaType mediaType,
+                                     bool useTextIndex = false) {
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -41,8 +43,10 @@ std::string runQueryStreamableResult(const std::string& kg,
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as JSON. `mediaType` must be `sparqlJSON` or `qleverJSON`.
 nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
-                            ad_utility::MediaType mediaType) {
-  auto qec = ad_utility::testing::getQec(kg);
+                            ad_utility::MediaType mediaType,
+                            bool useTextIndex = false) {
+  auto qec =
+      ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
   // This cache clearing should not be necessary.
   qec->clearCacheUnpinnedOnly();
@@ -87,27 +91,31 @@ struct TestCaseConstructQuery {
 
 // Run a single test case for a SELECT query.
 void runSelectQueryTestCase(
-    const TestCaseSelectQuery& testCase,
+    const TestCaseSelectQuery& testCase, bool useTextIndex = false,
     ad_utility::source_location l = ad_utility::source_location::current()) {
   auto trace = generateLocationTrace(l, "runSelectQueryTestCase");
   using enum ad_utility::MediaType;
-  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, tsv),
-            testCase.resultTsv);
-  EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
-            testCase.resultCsv);
-  auto qleverJSONResult = runJSONQuery(testCase.kg, testCase.query, qleverJson);
+  EXPECT_EQ(
+      runQueryStreamableResult(testCase.kg, testCase.query, tsv, useTextIndex),
+      testCase.resultTsv);
+  EXPECT_EQ(
+      runQueryStreamableResult(testCase.kg, testCase.query, csv, useTextIndex),
+      testCase.resultCsv);
+  auto qleverJSONResult =
+      runJSONQuery(testCase.kg, testCase.query, qleverJson, useTextIndex);
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
   // variables).
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
 
-  auto sparqlJSONResult = runJSONQuery(testCase.kg, testCase.query, sparqlJson);
+  auto sparqlJSONResult =
+      runJSONQuery(testCase.kg, testCase.query, sparqlJson, useTextIndex);
   EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
 
   // TODO<joka921> Use this for proper testing etc.
-  auto xmlAsString =
-      runQueryStreamableResult(testCase.kg, testCase.query, sparqlXml);
+  auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
+                                              sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
 }
 
@@ -694,6 +702,35 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, TextIndex) {
+  std::string kg = "<s> <p> \"alpha beta\". <s2> <p2> \"alphax betax\". ";
+  std::string objectQuery =
+      "SELECT ?o WHERE {<s> <p> ?t. ?text ql:contains-entity ?t .?text "
+      "ql:contains-word \"alph*\" BIND (?ql_matchingword_text_alph AS ?o)}";
+
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><literal>alpha</literal></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseTextIndex{kg, objectQuery, 1,
+                                        // TSV
+                                        "?o\n"
+                                        "alpha\n",
+                                        // CSV
+                                        "o\n"
+                                        "alpha\n",
+                                        makeExpectedQLeverJSON({"alpha"s}),
+                                        makeExpectedSparqlJSON({makeJSONBinding(
+                                            std::nullopt, "literal", "alpha")}),
+                                        expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex, true);
+  // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
+  // never be part of the local vocabulary. For this reason we don't need a
+  // `VALUES` clause in the test query like in the test cases above.
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
@@ -743,7 +780,6 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
   auto o = getId("<o>");
 
   Id id0, id1, id2, id3;
-  // TODO<joka921, C++20> Use `std::bit_cast`
   std::memcpy(&id0, result.data(), sizeof(Id));
   std::memcpy(&id1, result.data() + sizeof(Id), sizeof(Id));
   std::memcpy(&id2, result.data() + 2 * sizeof(Id), sizeof(Id));
