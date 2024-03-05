@@ -674,19 +674,19 @@ TEST(ExportQueryExecutionTree, BlankNode) {
   std::string expectedXml = makeXMLHeader({"o"}) +
                             R"(
   <result>
-    <binding name="o"><bnode>u_blank</bnode></binding>
+    <binding name="o"><bnode>bn0</bnode></binding>
   </result>)" + xmlTrailer;
-  TestCaseSelectQuery testCaseBlankNode{kg, objectQuery, 1,
-                                        // TSV
-                                        "?o\n"
-                                        "_:u_blank\n",
-                                        // CSV
-                                        "o\n"
-                                        "_:u_blank\n",
-                                        makeExpectedQLeverJSON({"_:u_blank"s}),
-                                        makeExpectedSparqlJSON({makeJSONBinding(
-                                            std::nullopt, "bnode", "u_blank")}),
-                                        expectedXml};
+  TestCaseSelectQuery testCaseBlankNode{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "_:bn0\n",
+      // CSV
+      "o\n"
+      "_:bn0\n",
+      makeExpectedQLeverJSON({"_:bn0"s}),
+      makeExpectedSparqlJSON({makeJSONBinding(std::nullopt, "bnode", "bn0")}),
+      expectedXml};
   runSelectQueryTestCase(testCaseBlankNode);
   // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
   // never be part of the local vocabulary. For this reason we don't need a

@@ -731,10 +731,11 @@ TEST(SparqlExpression, isSomethingFunctions) {
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
+  Id blank2 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12));
   Id localLiteral = testContext().notInVocabA;
 
-  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      "_:b", iri,  literal,
-                              blank, localLiteral, I(42), D(1), U};
+  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      blank2, iri,  literal,
+                              blank, localLiteral, I(42),  D(1), U};
   testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
                                            Ids{T, F, F, T, F, F, F, F, F, F});
   testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,

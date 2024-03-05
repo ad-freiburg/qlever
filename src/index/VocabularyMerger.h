@@ -69,6 +69,7 @@ struct VocabularyMetaData {
   };
 
   size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
+  size_t numBlankNodesTotal_ = 0;
   // the vocabulary)
   IdRangeForPrefix langTaggedPredicates_{"@"};
   IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
@@ -182,7 +183,7 @@ class VocabularyMerger {
   // to the IdPairVecs. Format of argument is <vecToWriteTo<internalId,
   // globalId>>
   void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
+      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
 // _________________________________________________________________________________________

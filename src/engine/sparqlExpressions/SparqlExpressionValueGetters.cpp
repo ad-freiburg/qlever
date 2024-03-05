@@ -29,6 +29,7 @@ NumericValue NumericValueGetter::operator()(
     case Datatype::TextRecordIndex:
     case Datatype::WordVocabIndex:
     case Datatype::Date:
+    case Datatype::BlankNodeIndex:
       return NotNumeric{};
   }
   AD_FAIL();
@@ -48,6 +49,7 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Bool:
       return id.getBool() ? True : False;
     case Datatype::Undefined:
+    case Datatype::BlankNodeIndex:
       return Undef;
     case Datatype::VocabIndex: {
       auto index = id.getVocabIndex();
@@ -108,8 +110,6 @@ Id IsSomethingValueGetter<isSomethingFunction, prefix>::operator()(
 }
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isIri, isIriPrefix>;
-template struct sparqlExpression::detail::IsSomethingValueGetter<
-    &Index::Vocab::isBlankNode, isBlankPrefix>;
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
