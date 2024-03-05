@@ -68,9 +68,9 @@ struct VocabularyMetaData {
     bool beginWasSeen_ = false;
   };
 
-  size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
+  size_t numWordsTotal_ = 0;  // that many distinct words were found
+                              // (size of the vocabulary)
   size_t numBlankNodesTotal_ = 0;
-  // the vocabulary)
   IdRangeForPrefix langTaggedPredicates_{"@"};
   IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
 
@@ -172,21 +172,22 @@ class VocabularyMerger {
       std::predicate<TripleComponentWithIndex,
                      TripleComponentWithIndex> auto const& lessThan);
 
-  // close all associated files and MmapVectors and reset all internal variables
+  // Close all associated files and MmapVectors and reset all internal
+  // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
     idVecs_.clear();
   }
 
-  // inner helper function for the parallel pipeline. perform the actual write
-  // to the IdPairVecs. Format of argument is <vecToWriteTo<internalId,
-  // globalId>>
+  // Inner helper function for the parallel pipeline, which performs the actual
+  // write to the IdPairVecs. Format of argument is `<vecToWriteTo<internalId,
+  // globalId>>`.
   void doActualWrite(
       const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
-// _________________________________________________________________________________________
+// ____________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename);
 

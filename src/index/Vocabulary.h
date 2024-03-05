@@ -139,8 +139,8 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
-  // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
-  // computation of the `isIRI`, ` and `isLiteral` functions.
+  // ID ranges for IRIs and literals. Used for the efficient computation of the
+  // `isIRI` and `isLiteral` functions.
   PrefixRanges prefixRangesIris_;
   PrefixRanges prefixRangesLiterals_;
 
