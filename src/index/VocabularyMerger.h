@@ -67,8 +67,10 @@ struct VocabularyMetaData {
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
-
-  size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
+  // The number of distinct words (size of the created vocabulary).
+  size_t numWordsTotal_ = 0;
+  // The number of distinct blank nodes that were found and immediately
+  // converted to an ID without becoming part of the vocabulary.
   size_t numBlankNodesTotal_ = 0;
   // the vocabulary)
   IdRangeForPrefix langTaggedPredicates_{"@"};

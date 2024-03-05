@@ -725,9 +725,6 @@ TEST(ExportQueryExecutionTree, TextIndex) {
                                             std::nullopt, "literal", "alpha")}),
                                         expectedXml};
   runSelectQueryTestCase(testCaseTextIndex, true);
-  // Note: Blank nodes cannot be introduced in a `VALUES` clause, so they can
-  // never be part of the local vocabulary. For this reason we don't need a
-  // `VALUES` clause in the test query like in the test cases above.
 }
 
 // ____________________________________________________________________________

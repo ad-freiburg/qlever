@@ -181,6 +181,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case WordVocabIndex:
     case TextRecordIndex:
     case LocalVocabIndex:
+    default:
       AD_FAIL();
   }
 }
