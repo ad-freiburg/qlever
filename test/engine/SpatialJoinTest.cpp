@@ -71,12 +71,11 @@ std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
   auto indVariableMap = copySortedByColumnIndex(varColMaps);
   for (size_t i = 0; i < indVariableMap.size(); i++) {
     bool foundVariable = false;
-    std::cerr << "trying to add " << indVariableMap.at(i).first.name() << std::endl;
     for (size_t k = 0; k < columnNames.size(); k++) {
       if (indVariableMap.at(i).first.name() == columnNames.at(k)) {
         foundVariable = true;
         result.push_back(columns.at(k));
-        std::cerr << "added variable " << columnNames.at(k) << std::endl;
+        break;
       }
     }
     assert(foundVariable);
@@ -92,7 +91,7 @@ void compare_result_table(//const QueryExecutionContext* qec,
               //const std::shared_ptr<const ResultTable> resultTableToTest, 
               std::vector<std::string> tableToTest,
               std::vector<std::string> *expected_output) {
-  // rows will be a reordered version of the table
+  // rows will be a reordered version of the tableToTest
   std::string rows[expected_output->size()];
   // std::vector<std::string> tableToTest = print_table(qec, resultTableToTest);
   for (size_t i = 0; i < expected_output->size(); i++) {
@@ -323,7 +322,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   TripleComponent point1{Variable{"?point1"}};
   std::shared_ptr<QueryExecutionTree> scan3 =
         ad_utility::makeExecutionTree<IndexScan>(qec,
-        Permutation::Enum::PSO, SparqlTriple{obj1, "<asWKT>", point1});
+        Permutation::Enum::PSO, SparqlTriple{geo1, "<asWKT>", point1});
   
   /* test of the third IndexScan, not needed anymore
   std::shared_ptr<const ResultTable> res3 = scan3->getResult();
@@ -340,7 +339,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
 
   std::shared_ptr<QueryExecutionTree> join1 =
         ad_utility::makeExecutionTree<Join>(qec, scan1, scan2, 0, 0, true);
-  // test of the first Join
+  /* test of the first Join
   std::shared_ptr<const ResultTable> res4 = join1->getResult();
   size_t result_size4 = res4->size();
   ASSERT_EQ(result_size4, 5);
@@ -354,19 +353,44 @@ TEST(SpatialJoin, computeResultSmallDataset) {
           "<geometry5>"};
   std::vector<std::vector<std::string>> columns{
                 columnName, columnNode, columnGeometry};
-  std::vector<std::string> columnNames{"?obj1", "?name1", "?geo1"};
+  std::vector<std::string> columnNames{"?name1", "?obj1", "?geo1"};
   auto columnsTest = orderColAccordingToVarColMap(join1->getVariableColumns(),
         columns, columnNames);
   auto rows = create_row_vector_from_column_vector(columnsTest);
-  print_vecs(columns);
-  std::cerr << std::endl;
-  print_vecs(columnsTest);
-  std::cerr << std::endl;
-  print_vec(rows);
-  std::cerr << std::endl;
-  print_vec(print_table(qec, res4));
   compare_result_table(print_table(qec, res4), &rows);
-  
+  */
+
+ auto varCol1 = join1->getVariableColumns();
+ auto varCol2 = scan3->getVariableColumns();
+ Variable varPoint = geo1.getVariable();
+ size_t col1 = varCol1[varPoint].columnIndex_;
+ size_t col2 = varCol2[varPoint].columnIndex_;
+ std::shared_ptr<QueryExecutionTree> join2 = 
+      ad_utility::makeExecutionTree<Join>(qec, join1, scan3, col1, col2, true);
+  // test of the second Join
+  std::shared_ptr<const ResultTable> res5 = join2->getResult();
+  size_t result_size5 = res5->size();
+  ASSERT_EQ(result_size5, 5);
+  std::vector<std::string> columnName{
+          "\"Uni Freiburg TF\"", "\"Muenster Freiburg\"", "\"London Eye\"",
+          "\"Statue of liberty\"", "\"eiffel tower\""};
+  std::vector<std::string> columnNode{
+          "<node_1>", "<node_2>", "<node_3>", "<node_4>", "<node_5>"};
+  std::vector<std::string> columnGeometry{
+          "<geometry1>", "<geometry2>", "<geometry3>", "<geometry4>",
+          "<geometry5>"};
+  std::vector<std::string> columnPoint{
+          "\"POINT(7.83505 48.01267)\"", "\"POINT(7.85298 47.99557)\"",
+          "\"POINT(-0.11957 51.50333)\"", "\"POINT(-74.04454 40.68925)\"",
+          "\"POINT(2.29451 48.85825)\""};
+  std::vector<std::vector<std::string>> columns{
+                columnName, columnNode, columnGeometry, columnPoint};
+  std::vector<std::string> columnNames{"?name1", "?obj1", "?geo1", "?point1"};
+  auto columnsTest = orderColAccordingToVarColMap(join2->getVariableColumns(),
+        columns, columnNames);
+  auto rows = create_row_vector_from_column_vector(columnsTest);
+  compare_result_table(print_table(qec, res5), &rows);
+  print_vec(rows);
   
   
   
