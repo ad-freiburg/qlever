@@ -114,8 +114,6 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
   // Now copy the `variable, index` pairs from the map to the vector. If the
   // column might contain UNDEF values, append ` (U)` to the variable name.
   //
-  // TODO: Johannes, was this just for debugging or is this something we want
-  // to keep?
   for (const auto& [variable, columnIndexAndType] : columnMap) {
     const auto& [columnIndex, undefStatus] = columnIndexAndType;
     std::string_view undefStatusSuffix =
