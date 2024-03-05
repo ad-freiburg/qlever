@@ -110,7 +110,28 @@ size_t SpatialJoin::getCostEstimate() {
 
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
+  if (childLeft_ && childRight_) {
+    if (maxDist_ % 1000 == 2) {
+      return 500;
+    }
+  } else {
+    LOG(INFO) << "called before both children are added ============================" << std::endl;
+  }
   return 1;  // dummy return for now
+}
+
+void dummy_print_var_cols_map(VariableToColumnMap vars) {
+  for (auto i : vars) {
+    LOG(INFO) << "Variable " << i.first.name()
+          << " column " << i.second.columnIndex_ << std::endl;
+  }
+}
+
+void dummy_print_col_var_map(std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> vars) {
+  for (unsigned int i = 0; i < vars.size(); i++) {
+    LOG(INFO) << "Variable: " << vars[i].first.name() 
+          << " Column: " << vars[i].second.columnIndex_ << std::endl;
+  }
 }
 
 // ____________________________________________________________________________
@@ -124,7 +145,20 @@ float SpatialJoin::getMultiplicity(size_t col) {
     auto colVarMap = copySortedByColumnIndex(varColMap);
     Variable var = colVarMap.at(col).first;
     auto left = varColsLeftMap.find(var);
-    if (left != varColsLeftMap.end()) {
+    // testing start
+    LOG(INFO) << "starting debugging statements var cols left map" << std::endl;
+    dummy_print_var_cols_map(varColsLeftMap);
+    LOG(INFO) << "starting debugging statements var cols right map" << std::endl;
+    dummy_print_var_cols_map(varColsRightMap);
+    LOG(INFO) << "starting debugging statements var col map" << std::endl;
+    dummy_print_var_cols_map(varColMap);
+    LOG(INFO) << "starting debugging statements col var map" << std::endl;
+    dummy_print_col_var_map(colVarMap);
+    LOG(INFO) << "size Left " << sizeLeft << std::endl;
+    LOG(INFO) << "size right"  << sizeRight << std::endl;
+    LOG(INFO) << "Variable " << var.name() << std::endl;
+    // testing end
+    /*if (left != varColsLeftMap.end()) {
       // multiplicity of var times size of right
       LOG(INFO) << "=============MULTIPLICITY 1" << childLeft_->getMultiplicity(
                     varColsLeftMap[var].columnIndex_) * sizeRight << std::endl;
@@ -144,7 +178,18 @@ float SpatialJoin::getMultiplicity(size_t col) {
       } else {
         AD_THROW("Variable does not match");
       }
+    }*/
+    // seems like it only works, when this method returns 1, maybe it's
+    // because then the join is done on ?geometry instead of ?wkt1
+    // return sizeLeft * sizeRight; // this line is only for testing, seems to introduce mistakes elsewhere
+    // return 1;
+    // testing starting
+    if (maxDist_ % 1000 == 1) {
+      return 1;
+    } else {
+      return sizeLeft * sizeRight;
     }
+    // testing ending
   } else {
     LOG(INFO) << "==============MULTIPLICITY 4" << std::endl;
     return 1;  // dummy return, as the class does not have its children yet
