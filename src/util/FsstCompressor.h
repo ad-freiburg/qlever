@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <absl/cleanup/cleanup.h>
 
 #include "util/Exception.h"
 
@@ -103,7 +104,7 @@ class FsstEncoder {
   // strings again.
   using BulkResult =
       std::tuple<std::string, std::vector<std::string_view>, FsstDecoder>;
-  static BulkResult compressAll(const std::vector<std::string>& strings) {
+  static BulkResult compressAll(const auto& strings) {
     return makeEncoder<true>(strings);
   }
 
@@ -111,7 +112,7 @@ class FsstEncoder {
   // The implementation of the constructor and of `compressAll`.
   template <bool alsoCompressAll = false>
   static std::conditional_t<alsoCompressAll, BulkResult, Ptr> makeEncoder(
-      const std::vector<std::string>& strings) {
+      const auto& strings) {
     std::vector<size_t> lengths;
     std::vector<unsigned char*> pointers;
     [[maybe_unused]] size_t totalSize = 0;
@@ -125,7 +126,7 @@ class FsstEncoder {
     if constexpr (!alsoCompressAll) {
       return Ptr{ptr, Deleter{}};
     } else {
-      absl::Cleanup _{[&ptr]() {
+      absl::Cleanup cleanup{[&ptr]() {
         fsst_destroy(ptr);
       }};
       std::string output;

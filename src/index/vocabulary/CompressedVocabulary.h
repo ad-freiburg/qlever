@@ -9,6 +9,7 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/Serializer/FileSerializer.h"
+#include "util/Serializer/SerializePair.h"
 
 /// TODO<joka921> Currently the settings of the compressor are not directly
 /// serialized but have to be manually stored and initialized.
@@ -140,7 +141,7 @@ class FSSTCompressedVocabulary {
   // The number of words that share the same decoder.
   static constexpr size_t numWordsPerBlock = 1UL << 20;
   UnderlyingVocabulary underlyingVocabulary_;
-  std::vector<FsstDecoder> decoders_;
+  std::vector<std::pair<FsstDecoder, FsstDecoder>> decoders_;
   // We need to store two files, one for the words and one for the decoders.
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".decoders";
@@ -152,8 +153,9 @@ class FSSTCompressedVocabulary {
 
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
-    return decoders_.at(idx / numWordsPerBlock)
-        .decompress(underlyingVocabulary_[idx].value());
+    const auto& [decoder1, decoder2] =
+    decoders_.at(idx / numWordsPerBlock);
+        return decoder1.decompress(decoder2.decompress(underlyingVocabulary_[idx].value()));
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
@@ -177,8 +179,9 @@ class FSSTCompressedVocabulary {
     WordAndIndex result;
     result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {
+      const auto& [decoder1, decoder2] = getDecoder(result._index);
       result._word =
-          getDecoder(result._index).decompress(underlyingResult._word.value());
+          decoder1.decompress(decoder2.decompress(underlyingResult._word.value()));
     }
     return result;
   }
@@ -199,8 +202,9 @@ class FSSTCompressedVocabulary {
     WordAndIndex result;
     result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {
+      const auto& [decoder1, decoder2 ] = getDecoder(result._index);
       result._word =
-          getDecoder(result._index).decompress(underlyingResult._word.value());
+          decoder1.decompress(decoder2.decompress(underlyingResult._word.value()));
     }
     return result;
   }
@@ -221,7 +225,7 @@ class FSSTCompressedVocabulary {
   class DiskWriterFromUncompressedWords {
    private:
     std::vector<std::string> wordBuffer_;
-    std::vector<FsstDecoder> decoders_;
+    std::vector<std::pair<FsstDecoder, FsstDecoder>> decoders_;
     typename UnderlyingVocabulary::WordWriter _underlyingWriter;
     std::string filenameDecoders_;
     bool isFinished_ = false;
@@ -266,10 +270,11 @@ class FSSTCompressedVocabulary {
       }
 
       auto [buffer, views, decoder] = FsstEncoder::compressAll(wordBuffer_);
-      for (auto& word : views) {
+      auto [buffer2, views2, decoder2] = FsstEncoder::compressAll(views);
+      for (auto& word : views2) {
         _underlyingWriter(word);
       }
-      decoders_.push_back(decoder);
+      decoders_.emplace_back(decoder, decoder2);
       wordBuffer_.clear();
     }
   };
@@ -294,7 +299,7 @@ class FSSTCompressedVocabulary {
 
  private:
   // Get the correct decoder for the given `idx`.
-  const FsstDecoder& getDecoder(size_t idx) const {
+  const std::pair<FsstDecoder, FsstDecoder>& getDecoder(size_t idx) const {
     return decoders_.at(idx / numWordsPerBlock);
   }
 
@@ -302,7 +307,8 @@ class FSSTCompressedVocabulary {
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
     auto idx = it - underlyingVocabulary_.begin();
-    return getDecoder(idx).decompress((*it)._word.value());
+    const auto& [decoder1, decoder2] = getDecoder(idx);
+    return decoder1.decompress(decoder2.decompress((*it)._word.value()));
   };
 };
 
