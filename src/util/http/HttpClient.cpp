@@ -100,7 +100,7 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
 template <typename StreamType>
 std::istringstream HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
-    std::string_view target, ad_utility::SharedCancellationHandle handle,
+    std::string_view target, ad_utility::CancellationHandle<>& handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
     std::string_view acceptHeader) {
   // Check that we have a stream (created in the constructor).
@@ -120,13 +120,13 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
   // Send the request, receive the response (unlimited body size), and return
   // the body as a `std::istringstream`.
   waitWithInterrupts(http::async_write(*stream_, request, net::use_future),
-                     *handle);
+                     handle);
   beast::flat_buffer buffer;
   http::response_parser<http::dynamic_body> response_parser;
   response_parser.body_limit((std::numeric_limits<std::uint64_t>::max)());
   waitWithInterrupts(
       http::async_read(*stream_, buffer, response_parser, net::use_future),
-      *handle);
+      handle);
   std::istringstream responseBody(
       beast::buffers_to_string(response_parser.get().body().data()));
   return responseBody;
@@ -170,14 +170,14 @@ template class HttpClientImpl<ssl::stream<tcp::socket>>;
 
 // ____________________________________________________________________________
 std::istringstream sendHttpOrHttpsRequest(
-    ad_utility::httpUtils::Url url, ad_utility::SharedCancellationHandle handle,
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::CancellationHandle<>& handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
   auto sendRequest = [&]<typename Client>() {
     Client client{url.host(), url.port()};
-    return client.sendRequest(method, url.host(), url.target(),
-                              std::move(handle), requestData, contentTypeHeader,
-                              acceptHeader);
+    return client.sendRequest(method, url.host(), url.target(), handle,
+                              requestData, contentTypeHeader, acceptHeader);
   };
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();

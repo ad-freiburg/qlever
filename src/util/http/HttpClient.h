@@ -47,7 +47,7 @@ class HttpClientImpl {
   // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
   std::istringstream sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
-      std::string_view target, ad_utility::SharedCancellationHandle handle,
+      std::string_view target, ad_utility::CancellationHandle<>& handle,
       std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
@@ -77,7 +77,8 @@ using HttpsClient =
 // HTTPS) is chosen automatically based on the URL. The `requestBody` is the
 // payload sent for POST requests (default: empty).
 std::istringstream sendHttpOrHttpsRequest(
-    ad_utility::httpUtils::Url url, ad_utility::SharedCancellationHandle handle,
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::CancellationHandle<>& handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",

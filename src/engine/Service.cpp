@@ -113,7 +113,7 @@ ResultTable Service::computeResult() {
   // and portability though. In particular, we are not sure how deterministic
   // the TSV output is with respect to the precise encoding of literals.
   std::istringstream tsvResult = getTsvFunction_(
-      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceUrl, *cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query", "text/tab-separated-values");
 
   // The first line of the TSV result contains the variable names.
