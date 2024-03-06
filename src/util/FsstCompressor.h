@@ -15,21 +15,29 @@
 
 class FsstDecoder {
  private:
-  fsst_decoder_t decoder_;
+  // TODO<joka921> We really have to start this PR to FSST.
+  mutable fsst_decoder_t decoder_;
 
  public:
+  // TODO<joka921> This constructor is a bit unsafe, but we need it for
+  // serialization. Should we do something about this?
+  FsstDecoder() = default;
   FsstDecoder(fsst_decoder_t decoder) : decoder_{decoder} {}
-  std::string decompress(std::string& str) {
+  std::string decompress(const std::string& str) const {
     std::string output;
     output.resize(8 * str.size());
     size_t size = fsst_decompress(
-        &decoder_, str.size(), reinterpret_cast<unsigned char*>(str.data()),
+        &decoder_, str.size(),
+        reinterpret_cast<unsigned char*>(const_cast<char*>(str.data())),
         output.size(), reinterpret_cast<unsigned char*>(output.data()));
     // TODO<joka921> implement the fallback for the correct size.
     AD_CORRECTNESS_CHECK(size <= output.size());
     output.resize(size);
     return output;
   }
+  // Allow this type to be trivially serializable,
+  friend std::true_type allowTrivialSerialization(
+      std::same_as<FsstDecoder> auto, auto);
 };
 
 class FsstEncoder {

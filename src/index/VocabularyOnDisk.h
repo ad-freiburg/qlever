@@ -161,23 +161,22 @@ class VocabularyOnDisk {
     OffsetAndSize() = default;
   };
 
- private:
-  // Return the `i`-th element from this vocabulary. Note that this is (in
-  // general) NOT the element with the ID `i`, because the ID space is not
-  // contiguous.
-  WordAndIndex getIthElement(size_t n) const;
-
   // Helper function for implementing a random access iterator.
   using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
     return vocabulary.getIthElement(index);
   });
-
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =
       ad_utility::IteratorForAccessOperator<VocabularyOnDisk, Accessor>;
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
+
+ private:
+  // Return the `i`-th element from this vocabulary. Note that this is (in
+  // general) NOT the element with the ID `i`, because the ID space is not
+  // contiguous.
+  WordAndIndex getIthElement(size_t n) const;
 
   // Takes a lambda that compares two string-like objects and returns a lambda
   // that compares two objects, either of which can be string-like or

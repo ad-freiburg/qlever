@@ -185,7 +185,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -326,6 +326,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
+target_compile_options(fsst PRIVATE -Wno-deprecated-declarations -Wno-extra -Wno-all)
 include_directories(${fsst_SOURCE_DIR})
 
 message(STATUS ---)

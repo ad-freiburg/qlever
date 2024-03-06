@@ -136,7 +136,8 @@ class Vocabulary {
   InternalVocabulary internalVocabulary_;
 
   using ExternalVocabulary =
-      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
+      UnicodeVocabulary<FSSTCompressedVocabulary<VocabularyOnDisk>,
+                        ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
   // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
@@ -295,9 +296,10 @@ class Vocabulary {
 
   // Get a writer for the external vocab that has a `push` method to which the
   // single words have to be pushed one by one to add words to the vocabulary.
-  VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
-      const std::string& filename) const {
-    return VocabularyOnDisk::WordWriter(filename);
+  FSSTCompressedVocabulary<VocabularyOnDisk>::DiskWriterFromUncompressedWords
+  makeWordWriterForExternalVocabulary(const std::string& filename) const {
+    return externalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
+        filename);
   }
 
   VocabularyInMemory::WordWriter makeUncompressingWordWriter(
