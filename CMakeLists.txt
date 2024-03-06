@@ -326,7 +326,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
-target_compile_options(fsst PRIVATE -Wno-deprecated-declarations -Wno-extra -Wno-all)
+target_compile_options(fsst PRIVATE -Wno-deprecated-declarations -Wno-extra -Wno-all -Wno-error)
 include_directories(${fsst_SOURCE_DIR})
 
 message(STATUS ---)
