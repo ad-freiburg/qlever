@@ -6,6 +6,10 @@
 #ifndef QLEVER_ASIOHELPERS_H
 #define QLEVER_ASIOHELPERS_H
 
+#include <boost/asio/experimental/awaitable_operators.hpp>
+
+#include "global/Constants.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/http/beast.h"
 
@@ -102,6 +106,68 @@ auto runFunctionOnExecutor(Executor executor, Function function,
   };
   return net::async_initiate<CompletionToken, Signature>(
       std::move(initiatingFunction), completionToken);
+}
+
+template <typename T>
+inline net::awaitable<T> interruptible(
+    net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
+    ad_utility::source_location loc = ad_utility::source_location::current()) {
+  using namespace net::experimental::awaitable_operators;
+
+  std::shared_ptr<std::atomic_flag> timerRunning =
+      std::make_shared<std::atomic_flag>(true);
+
+  auto timerLoop = [](std::shared_ptr<std::atomic_flag> timerRunning,
+                      ad_utility::SharedCancellationHandle handle,
+                      ad_utility::source_location loc) -> net::awaitable<void> {
+    constexpr auto timeout = DESIRED_CANCELLATION_CHECK_INTERVAL / 2;
+    absl::Cleanup cleanup{[&timerRunning]() { timerRunning->clear(); }};
+    net::steady_timer timer{co_await net::this_coro::executor};
+    while (timerRunning->test()) {
+      handle->throwIfCancelled(loc);
+      timer.expires_after(timeout);
+      auto [ec] = co_await timer.async_wait(net::as_tuple(net::deferred));
+      if (ec) {
+        AD_CORRECTNESS_CHECK(ec == net::error::operation_aborted);
+        break;
+      }
+    }
+  };
+  auto wrapper = [](net::awaitable<T> awaitable,
+                    std::shared_ptr<std::atomic_flag> timerRunning) mutable
+      -> net::awaitable<T> {
+    absl::Cleanup cleanup{[&timerRunning]() { timerRunning->clear(); }};
+    try {
+      co_return co_await std::move(awaitable);
+    } catch (...) {
+      // Only propagate exception if the operation wasn't cancelled
+      // by the cancellation handle, otherwise this exception might just
+      // be a reflection of that.
+      if (timerRunning->test()) {
+        throw;
+      }
+    }
+  };
+
+  auto timerClone = timerRunning;
+  return timerLoop(std::move(timerClone), std::move(handle), std::move(loc)) &&
+         wrapper(std::move(awaitable), std::move(timerRunning));
+}
+
+/// Helper method to wait for an awaitable that is supposed to be run on an io
+/// context.
+template <typename T>
+inline T runAndWaitForAwaitable(net::awaitable<T> awaitable,
+                                net::io_context& ioContext) {
+  auto future = net::co_spawn(ioContext, std::move(awaitable), net::use_future);
+
+  while (future.wait_for(std::chrono::milliseconds{0}) !=
+         std::future_status::ready) {
+    AD_CORRECTNESS_CHECK(future.wait_for(std::chrono::milliseconds{0}) !=
+                         std::future_status::deferred);
+    ioContext.poll_one();
+  }
+  return future.get();
 }
 }  // namespace ad_utility
 

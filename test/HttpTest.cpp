@@ -18,7 +18,8 @@ using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
 TEST(HttpServer, HttpTest) {
-  ad_utility::CancellationHandle<> handle{};
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // This test used to spuriously crash because of something that we (joka92,
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make

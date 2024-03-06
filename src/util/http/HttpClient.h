@@ -47,7 +47,7 @@ class HttpClientImpl {
   // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
   std::istringstream sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
-      std::string_view target, ad_utility::CancellationHandle<>& handle,
+      std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
@@ -60,7 +60,11 @@ class HttpClientImpl {
  private:
   // The connection stream and associated objects. See the implementation of
   // `openStream` for why we need all of them, and not just `stream_`.
-  boost::asio::thread_pool executor_{1};
+  boost::asio::io_context ioContext_;
+  // For some reason this work guard is required when no threads are attached
+  // immediately.
+  boost::asio::executor_work_guard<boost::asio::io_context::executor_type>
+      workGuard_ = boost::asio::make_work_guard(ioContext_);
   std::unique_ptr<boost::asio::ssl::context> ssl_context_;
   std::unique_ptr<StreamType> stream_;
 };
@@ -78,7 +82,7 @@ using HttpsClient =
 // payload sent for POST requests (default: empty).
 std::istringstream sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
-    ad_utility::CancellationHandle<>& handle,
+    ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",

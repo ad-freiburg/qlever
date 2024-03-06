@@ -10,6 +10,7 @@
 #include <string>
 
 #include "global/Constants.h"
+#include "util/AsioHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -24,23 +25,6 @@ using ad_utility::httpUtils::Url;
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync/http_client_sync.cpp
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync-ssl/http_client_sync_ssl.cpp
 
-/// Instead of waiting for an external server in a blocking manner,
-/// we regularily check the cancellation handle intead. This ensures tasks
-/// stay cancellable even when waiting for an external server. Note that
-/// any cancellation operation is not applied transitively.
-template <typename T>
-T waitWithInterrupts(
-    std::future<T> future, ad_utility::CancellationHandle<>& handle,
-    ad_utility::source_location loc = ad_utility::source_location::current()) {
-  std::future_status status;
-  do {
-    status = future.wait_for(DESIRED_CANCELLATION_CHECK_INTERVAL / 2);
-    AD_CORRECTNESS_CHECK(status != std::future_status::deferred);
-    handle.throwIfCancelled(loc);
-  } while (std::future_status::ready != status);
-  return future.get();
-}
-
 // ____________________________________________________________________________
 template <typename StreamType>
 HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
@@ -51,8 +35,8 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
   // the destructor of `stream_` is called. It seems that `resolver` does not
   // have to stay alive.
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
-    tcp::resolver resolver{executor_};
-    stream_ = std::make_unique<StreamType>(executor_);
+    tcp::resolver resolver{ioContext_};
+    stream_ = std::make_unique<StreamType>(ioContext_);
     auto const results = resolver.resolve(host, port);
     stream_->connect(results);
   } else {
@@ -61,8 +45,8 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
                   "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
     ssl_context_ = std::make_unique<ssl::context>(ssl::context::sslv23_client);
     ssl_context_->set_verify_mode(ssl::verify_none);
-    tcp::resolver resolver{executor_};
-    stream_ = std::make_unique<StreamType>(executor_, *ssl_context_);
+    tcp::resolver resolver{ioContext_};
+    stream_ = std::make_unique<StreamType>(ioContext_, *ssl_context_);
     if (!SSL_set_tlsext_host_name(stream_->native_handle(),
                                   std::string{host}.c_str())) {
       boost::system::error_code ec{static_cast<int>(::ERR_get_error()),
@@ -94,13 +78,14 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
                   "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
     stream_->shutdown(ec);
   }
+  workGuard_.reset();
 }
 
 // ____________________________________________________________________________
 template <typename StreamType>
 std::istringstream HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
-    std::string_view target, ad_utility::CancellationHandle<>& handle,
+    std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
     std::string_view acceptHeader) {
   // Check that we have a stream (created in the constructor).
@@ -119,14 +104,19 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
 
   // Send the request, receive the response (unlimited body size), and return
   // the body as a `std::istringstream`.
-  waitWithInterrupts(http::async_write(*stream_, request, net::use_future),
-                     handle);
+  ad_utility::runAndWaitForAwaitable(
+      ad_utility::interruptible(
+          http::async_write(*stream_, request, net::use_awaitable), handle),
+      ioContext_);
   beast::flat_buffer buffer;
   http::response_parser<http::dynamic_body> response_parser;
   response_parser.body_limit((std::numeric_limits<std::uint64_t>::max)());
-  waitWithInterrupts(
-      http::async_read(*stream_, buffer, response_parser, net::use_future),
-      handle);
+  ad_utility::runAndWaitForAwaitable(
+      ad_utility::interruptible(
+          http::async_read(*stream_, buffer, response_parser,
+                           net::use_awaitable),
+          handle),
+      ioContext_);
   std::istringstream responseBody(
       beast::buffers_to_string(response_parser.get().body().data()));
   return responseBody;
@@ -171,13 +161,14 @@ template class HttpClientImpl<ssl::stream<tcp::socket>>;
 // ____________________________________________________________________________
 std::istringstream sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
-    ad_utility::CancellationHandle<>& handle,
+    ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
   auto sendRequest = [&]<typename Client>() {
     Client client{url.host(), url.port()};
-    return client.sendRequest(method, url.host(), url.target(), handle,
-                              requestData, contentTypeHeader, acceptHeader);
+    return client.sendRequest(method, url.host(), url.target(),
+                              std::move(handle), requestData, contentTypeHeader,
+                              acceptHeader);
   };
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();
