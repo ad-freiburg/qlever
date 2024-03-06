@@ -139,10 +139,9 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
-  // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
-  // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
+  // ID ranges for IRIs and literals. Used for the efficient computation of the
+  // `isIRI` and `isLiteral` functions.
   PrefixRanges prefixRangesIris_;
-  PrefixRanges prefixRangesBlankNodes_;
   PrefixRanges prefixRangesLiterals_;
 
  public:
@@ -219,9 +218,6 @@ class Vocabulary {
   static bool stringIsLiteral(const string& s);
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
-  bool isBlankNode(IndexT index) const {
-    return prefixRangesBlankNodes_.contain(index);
-  }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
   }
