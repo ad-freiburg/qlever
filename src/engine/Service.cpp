@@ -112,16 +112,17 @@ ResultTable Service::computeResult() {
   // easy-to-parse format. It might not be the best choice regarding robustness
   // and portability though. In particular, we are not sure how deterministic
   // the TSV output is with respect to the precise encoding of literals.
-  std::istringstream tsvResult = getTsvFunction_(
+  cppcoro::generator<std::string_view> tsvResult = getTsvFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query", "text/tab-separated-values");
 
   // The first line of the TSV result contains the variable names.
-  std::string tsvHeaderRow;
-  if (!std::getline(tsvResult, tsvHeaderRow)) {
+  auto begin = tsvResult.begin();
+  if (begin == tsvResult.end()) {
     throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
                                           serviceUrl.host(), " is empty"));
   }
+  std::string_view tsvHeaderRow = *begin;
   LOG(INFO) << "Header row of TSV result: " << tsvHeaderRow << std::endl;
 
   // Check that the variables in the header row agree with those requested by
@@ -148,16 +149,15 @@ ResultTable Service::computeResult() {
 
 // ____________________________________________________________________________
 template <size_t I>
-void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
-                             LocalVocab* localVocab) {
+void Service::writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
+                             IdTable* idTablePtr, LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
-  std::string line;
   std::string lastLine;
   const size_t numVariables = parsedServiceClause_.visibleVariables_.size();
-  while (lastLine = std::move(line), std::getline(tsvResult, line)) {
+  for (std::string_view line : tsvResult) {
     // Print first line.
     if (rowIdx == 0) {
       LOG(INFO) << "First non-header row of TSV result: " << line << std::endl;
@@ -165,9 +165,9 @@ void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
     std::vector<std::string_view> valueStrings = absl::StrSplit(line, "\t");
     if (valueStrings.size() != numVariables) {
       throw std::runtime_error(absl::StrCat(
-          "Number of columns in ", rowIdx + 1, " of TSV result is ",
-          valueStrings.size(), "but number of variables in header row is ",
-          numVariables));
+          "Number of columns in row ", rowIdx + 1, " of TSV result is ",
+          valueStrings.size(), " but number of variables in header row is ",
+          numVariables, ". Line: ", line));
     }
     idTable.emplace_back();
     for (size_t colIdx = 0; colIdx < valueStrings.size(); colIdx++) {
@@ -181,6 +181,7 @@ void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
     }
     rowIdx++;
     checkCancellation();
+    lastLine = line;
   }
   if (idTable.size() > 1) {
     LOG(INFO) << "Last non-header row of TSV result: " << lastLine << std::endl;

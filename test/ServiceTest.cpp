@@ -47,7 +47,8 @@ class ServiceTest : public ::testing::Test {
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
-               std::string_view acceptHeader) -> std::istringstream {
+               std::string_view acceptHeader)
+               -> cppcoro::generator<std::string_view> {
       // Check that the request parameters are as expected.
       //
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
@@ -67,7 +68,16 @@ class ServiceTest : public ::testing::Test {
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
 
-      return std::istringstream{predefinedResult};
+      // Trim trailing newline, so we don't create an extra empty subrange for
+      // it.
+      auto resultView = std::string_view{predefinedResult}.substr(
+          0, predefinedResult.ends_with('\n') ? predefinedResult.length() - 1
+                                              : predefinedResult.length());
+      for (const auto& subrange : std::ranges::split_view(resultView, '\n')) {
+        co_yield std::string_view{
+            &*subrange.begin(),
+            static_cast<size_t>(std::ranges::distance(subrange))};
+      }
     };
   };
 };

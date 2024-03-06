@@ -82,7 +82,7 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
 
 // ____________________________________________________________________________
 template <typename StreamType>
-std::istringstream HttpClientImpl<StreamType>::sendRequest(
+cppcoro::generator<std::string_view> HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
     std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
@@ -116,9 +116,15 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
                            net::use_awaitable),
           handle),
       ioContext_);
-  std::istringstream responseBody(
-      beast::buffers_to_string(response_parser.get().body().data()));
-  return responseBody;
+  auto data = beast::buffers_to_string(response_parser.get().body().data());
+  // Trim trailing newline, so we don't create an extra empty subrange for it.
+  auto dataView = std::string_view{data}.substr(
+      0, data.ends_with('\n') ? data.length() - 1 : data.length());
+  for (const auto& subrange : std::ranges::split_view(dataView, '\n')) {
+    co_yield std::string_view{
+        &*subrange.begin(),
+        static_cast<size_t>(std::ranges::distance(subrange))};
+  }
 }
 
 // ____________________________________________________________________________
@@ -153,26 +159,41 @@ HttpClientImpl<StreamType>::sendWebSocketHandshake(
   return response;
 }
 
-// Explicit instantiations for HTTP and HTTPS, see the bottom of `HttpClient.h`.
+// Explicit instantiations for HTTP and HTTPS, see the bottom of
+// `HttpClient.h`.
 template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;
 
 // ____________________________________________________________________________
-std::istringstream sendHttpOrHttpsRequest(
+cppcoro::generator<std::string_view> sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
-  auto sendRequest = [&]<typename Client>() {
+  auto sendRequest =
+      []<typename Client>(
+          const ad_utility::httpUtils::Url& url,
+          ad_utility::SharedCancellationHandle handle,
+          const boost::beast::http::verb& method, std::string_view requestData,
+          std::string_view contentTypeHeader, std::string_view acceptHeader)
+      -> cppcoro::generator<std::string_view> {
     Client client{url.host(), url.port()};
-    return client.sendRequest(method, url.host(), url.target(),
-                              std::move(handle), requestData, contentTypeHeader,
-                              acceptHeader);
+    auto generator =
+        client.sendRequest(method, url.host(), url.target(), std::move(handle),
+                           requestData, contentTypeHeader, acceptHeader);
+    // Don't return directly, to keep the client object alive.
+    for (std::string_view line : generator) {
+      co_yield line;
+    }
   };
   if (url.protocol() == Url::Protocol::HTTP) {
-    return sendRequest.operator()<HttpClient>();
+    return sendRequest.operator()<HttpClient>(url, std::move(handle), method,
+                                              requestData, contentTypeHeader,
+                                              acceptHeader);
   } else {
     AD_CORRECTNESS_CHECK(url.protocol() == Url::Protocol::HTTPS);
-    return sendRequest.operator()<HttpsClient>();
+    return sendRequest.operator()<HttpsClient>(url, std::move(handle), method,
+                                               requestData, contentTypeHeader,
+                                               acceptHeader);
   }
 }

@@ -19,6 +19,7 @@
 #include <string>
 
 #include "util/CancellationHandle.h"
+#include "util/Generator.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -40,12 +41,12 @@ class HttpClientImpl {
 
   // Send a request (the first argument must be either `http::verb::get` or
   // `http::verb::post`) and return the body of the reponse (possibly very
-  // large) as an `std::istringstream`. The same connection can be used for
-  // multiple requests in a row.
+  // large) as an `cppcoro::generator<std::string_view>`. The same connection
+  // can be used for multiple requests in a row.
   //
   // TODO: Read and process the response in chunks. Here is a code example:
   // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
-  std::istringstream sendRequest(
+  cppcoro::generator<std::string_view> sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
@@ -80,7 +81,7 @@ using HttpsClient =
 // URL and obtaining the result as a `std::istringstream`. The protocol (HTTP or
 // HTTPS) is chosen automatically based on the URL. The `requestBody` is the
 // payload sent for POST requests (default: empty).
-std::istringstream sendHttpOrHttpsRequest(
+cppcoro::generator<std::string_view> sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,

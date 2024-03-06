@@ -33,7 +33,7 @@
 class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
-  using GetTsvFunction = std::function<std::istringstream(
+  using GetTsvFunction = std::function<cppcoro::generator<std::string_view>(
       const ad_utility::httpUtils::Url&,
       ad_utility::SharedCancellationHandle handle,
       const boost::beast::http::verb&, std::string_view, std::string_view,
@@ -93,6 +93,6 @@ class Service : public Operation {
   // `tsvResult` is not `const` here is because the method iterates over the
   // `std::istringstream` and thus changes it.
   template <size_t I>
-  void writeTsvResult(std::istringstream tsvResult, IdTable* idTable,
-                      LocalVocab* localVocab);
+  void writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
+                      IdTable* idTable, LocalVocab* localVocab);
 };

@@ -17,6 +17,15 @@
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
+std::vector<std::string> toVector(
+    cppcoro::generator<std::string_view> generator) {
+  std::vector<std::string> result;
+  for (std::string_view view : generator) {
+    result.emplace_back(view);
+  }
+  return result;
+}
+
 TEST(HttpServer, HttpTest) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
@@ -61,16 +70,13 @@ TEST(HttpServer, HttpTest) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
+              ASSERT_EQ(toVector(httpClient.sendRequest(verb::get, "localhost",
+                                                        "target1", handle)),
+                        (std::vector<std::string>{"GET", "target1"}));
               ASSERT_EQ(
-                  httpClient
-                      .sendRequest(verb::get, "localhost", "target1", handle)
-                      .str(),
-                  "GET\ntarget1\n");
-              ASSERT_EQ(httpClient
-                            .sendRequest(verb::post, "localhost", "target1",
-                                         handle, "body1")
-                            .str(),
-                        "POST\ntarget1\nbody1");
+                  toVector(httpClient.sendRequest(verb::post, "localhost",
+                                                  "target1", handle, "body1")),
+                  (std::vector<std::string>{"POST", "target1", "body1"}));
             }
           }
         });
@@ -81,15 +87,12 @@ TEST(HttpServer, HttpTest) {
     // fine with the server after we have communicated with it for one session).
     {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(
-          httpClient.sendRequest(verb::get, "localhost", "target2", handle)
-              .str(),
-          "GET\ntarget2\n");
-      ASSERT_EQ(
-          httpClient
-              .sendRequest(verb::post, "localhost", "target2", handle, "body2")
-              .str(),
-          "POST\ntarget2\nbody2");
+      ASSERT_EQ(toVector(httpClient.sendRequest(verb::get, "localhost",
+                                                "target2", handle)),
+                (std::vector<std::string>{"GET", "target2"}));
+      ASSERT_EQ(toVector(httpClient.sendRequest(verb::post, "localhost",
+                                                "target2", handle, "body2")),
+                (std::vector<std::string>{"POST", "target2", "body2"}));
     }
 
     // Test if websocket is correctly opened and closed
@@ -118,10 +121,11 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, handle, verb::get).str(),
-                "GET\n/target\n");
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, handle, verb::post, "body").str(),
-                "POST\n/target\nbody");
+      ASSERT_EQ(toVector(sendHttpOrHttpsRequest(url, handle, verb::get)),
+                (std::vector<std::string>{"GET", "/target"}));
+      ASSERT_EQ(
+          toVector(sendHttpOrHttpsRequest(url, handle, verb::post, "body")),
+          (std::vector<std::string>{"POST", "/target", "body"}));
     }
 
     // Check that after shutting down, no more new connections are accepted.
