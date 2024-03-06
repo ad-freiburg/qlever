@@ -291,11 +291,8 @@ class GroupBy : public Operation {
           alloc_{alloc},
           map_{alloc} {
       using enum HashMapAggregateType;
-      size_t numAggregates = 0;
       for (const auto& alias : aggregateAliases) {
         for (const auto& aggregate : alias.aggregateInfo_) {
-          ++numAggregates;
-
           using namespace ad_utility::use_type_identity;
           auto addIf = [this, &aggregate]<typename T>(
                            TI<T>, HashMapAggregateType target) {

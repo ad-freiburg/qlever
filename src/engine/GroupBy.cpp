@@ -1152,11 +1152,10 @@ void GroupBy::evaluateAlias(
   // have to be substituted away before evaluation
 
   auto substitutions = alias.groupedVariables_;
-  auto topLevelGroupedVariable =
-      std::ranges::find_if(substitutions.begin(), substitutions.end(),
-                           [](HashMapGroupedVariableInformation& val) {
-                             return std::get_if<OccurAsRoot>(&val.occurrences_);
-                           });
+  auto topLevelGroupedVariable = std::ranges::find_if(
+      substitutions, [](HashMapGroupedVariableInformation& val) {
+        return std::get_if<OccurAsRoot>(&val.occurrences_);
+      });
 
   if (topLevelGroupedVariable != substitutions.end()) {
     // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
@@ -1237,10 +1236,8 @@ void GroupBy::createResultFromHashMap(
     LocalVocab* localVocab) {
   // Create result table, filling in the group values, since they might be
   // required in evaluation
-  ad_utility::Timer sortingTimer{
-      ad_utility::timer::Timer::InitialStatus::Started};
+  ad_utility::Timer sortingTimer{ad_utility::Timer::Started};
   auto sortedKeys = aggregationData.getSortedGroupColumns();
-  sortingTimer.stop();
   runtimeInfo().addDetail("timeResultSorting", sortingTimer.msecs());
 
   size_t numberOfGroups = aggregationData.getNumberOfGroups();
@@ -1263,8 +1260,7 @@ void GroupBy::createResultFromHashMap(
   evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
   evaluationContext._isPartOfGroupBy = true;
 
-  ad_utility::Timer evaluationAndResultsTimer{
-      ad_utility::timer::Timer::InitialStatus::Started};
+  ad_utility::Timer evaluationAndResultsTimer{ad_utility::Timer::Started};
   for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
@@ -1277,8 +1273,6 @@ void GroupBy::createResultFromHashMap(
                     localVocab);
     }
   }
-  evaluationAndResultsTimer.stop();
-
   runtimeInfo().addDetail("timeEvaluationAndResults",
                           evaluationAndResultsTimer.msecs());
 }
@@ -1334,10 +1328,8 @@ void GroupBy::computeGroupByForHashMapOptimization(
       _groupByVariables.begin(), _groupByVariables.end()};
   evaluationContext._isPartOfGroupBy = true;
 
-  ad_utility::Timer lookupTimer{
-      ad_utility::timer::Timer::InitialStatus::Stopped};
-  ad_utility::Timer aggregationTimer{
-      ad_utility::timer::Timer::InitialStatus::Stopped};
+  ad_utility::Timer lookupTimer{ad_utility::Timer::Stopped};
+  ad_utility::Timer aggregationTimer{ad_utility::Timer::Stopped};
   for (size_t i = 0; i < subresult.size(); i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {
     checkCancellation();
 
