@@ -5,9 +5,8 @@
 #ifndef QLEVER_COMPRESSEDVOCABULARY_H
 #define QLEVER_COMPRESSEDVOCABULARY_H
 
-#include <fsst.h>
-
-#include "./VocabularyTypes.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/Serializer/FileSerializer.h"
 
@@ -24,7 +23,7 @@ class CompressedVocabulary {
   Compressor _compressor;
 
  public:
-  CompressedVocabulary(Compressor compressor = Compressor())
+  explicit CompressedVocabulary(Compressor compressor = Compressor())
       : _compressor{std::move(compressor)} {}
 
   auto operator[](uint64_t id) const {
@@ -132,22 +131,29 @@ class CompressedVocabulary {
   }
 };
 
-/// A vocabulary in which compression is performed per word via the `Compressor`
+// A vocabulary in which compression is performed using the `FSST` algorithm,
+// with one dictionary per `numWordsPerBlock` many words (currently 1 million).
+// The interface is currently designed to work with the `VocabularyOnDisk`.
 template <typename UnderlyingVocabulary>
 class FSSTCompressedVocabulary {
  private:
+  // The number of words that share the same decoder.
   static constexpr size_t numWordsPerBlock = 1ul << 20;
   UnderlyingVocabulary _underlyingVocabulary;
   std::vector<FsstDecoder> _decoders;
+  // We need to store two files, one for the words and one for the decoders.
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".decoders";
 
  public:
+  // The vocabulary is initialized using the `open()` method, the default
+  // constructor leads to an empty vocabulary.
   FSSTCompressedVocabulary() = default;
 
-  auto operator[](uint64_t id) const {
-    return _decoders.at(id / numWordsPerBlock)
-        .decompress(_underlyingVocabulary[id].value());
+  // Get the uncompressed word at the given index.
+  std::string operator[](uint64_t idx) const {
+    return _decoders.at(idx / numWordsPerBlock)
+        .decompress(_underlyingVocabulary[idx].value());
   }
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
@@ -185,7 +191,7 @@ class FSSTCompressedVocabulary {
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
     auto actualComparator = [this, &comparator](const auto& a, const auto& it) {
-      return comparator(a, decompressFromIterator(it));
+      return comparator(a, this->decompressFromIterator(it));
     };
     auto underlyingResult =
         _underlyingVocabulary.upper_bound_iterator(word, actualComparator);
@@ -200,9 +206,7 @@ class FSSTCompressedVocabulary {
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
-  /// created by using a `DiskWriterFromUncompressedWords`. Note that the
-  /// settings of the `compressor` are not stored in the file, but currently
-  /// have to be manually stored a set via the constructor.
+  /// created by using a `DiskWriterFromUncompressedWords`.
   void open(const std::string& filename) {
     _underlyingVocabulary.open(absl::StrCat(filename, wordsSuffix));
     ad_utility::serialization::FileReadSerializer decoderReader(
@@ -223,34 +227,21 @@ class FSSTCompressedVocabulary {
     bool isFinished_ = false;
 
    public:
-    /// Constructor
+    /// Constructor.
     explicit DiskWriterFromUncompressedWords(
         const std::string& filenameWords, const std::string& filenameDecoders)
         : _underlyingWriter{filenameWords},
           filenameDecoders_{filenameDecoders} {}
 
-    void finishBlock() {
-      if (wordBuffer_.empty()) {
-        return;
-      }
-      FsstEncoder encoder{wordBuffer_};
-      for (auto& word : wordBuffer_) {
-        auto compressedWord = encoder.compress(word);
-        _underlyingWriter(compressedWord);
-      }
-      decoders_.push_back(encoder.makeDecoder());
-      wordBuffer_.clear();
-    }
     /// Compress the `uncompressedWord` and write it to disk.
-    // TODO<joka921> We could manage the strings more efficiently
-    void push(std::string_view uncompressedWord) {
+    // TODO<joka921> We could manage the strings more efficiently by passing a
+    // whole block of words to the FSST encoder.
+    void operator()(std::string_view uncompressedWord) {
+      AD_CORRECTNESS_CHECK(!isFinished_);
       wordBuffer_.emplace_back(uncompressedWord);
       if (wordBuffer_.size() == numWordsPerBlock) {
         finishBlock();
       }
-    }
-    void operator()(std::string_view uncompressedWord) {
-      push(uncompressedWord);
     }
 
     /// After calls to `finish()` no more words can be pushed.
@@ -266,9 +257,26 @@ class FSSTCompressedVocabulary {
       decoderWriter << decoders_;
     }
 
+    // Call `finish`, does nothing if `finish` has been manually called.
     ~DiskWriterFromUncompressedWords() { finish(); }
+
+   private:
+    // Compress a complete block and write it to the underlying vocabulary.
+    void finishBlock() {
+      if (wordBuffer_.empty()) {
+        return;
+      }
+
+      auto [buffer, views, decoder] = FsstEncoder::compressAll(wordBuffer_);
+      for (auto& word : views) {
+        _underlyingWriter(word);
+      }
+      decoders_.push_back(decoder);
+      wordBuffer_.clear();
+    }
   };
 
+  // Return a `DiskWriter` that can be used to create the vocabulary.
   DiskWriterFromUncompressedWords makeDiskWriter(
       const std::string& filename) const {
     return DiskWriterFromUncompressedWords{
@@ -276,6 +284,7 @@ class FSSTCompressedVocabulary {
         absl::StrCat(filename, decodersSuffix)};
   }
 
+  // Access to the underlying vocabulary.
   UnderlyingVocabulary& getUnderlyingVocabulary() {
     return _underlyingVocabulary;
   }
@@ -285,19 +294,14 @@ class FSSTCompressedVocabulary {
 
   void close() { _underlyingVocabulary.close(); }
 
-  /*
-  void build(std::vector<std::string> words) {
-    for (auto& word : words) {
-      word = _compressor.compress(word);
-    }
-    _underlyingVocabulary.build(words);
-  }
-   */
  private:
+  // Get the correct decoder for the given `idx`.
   const FsstDecoder& getDecoder(size_t idx) const {
     return _decoders.at(idx / numWordsPerBlock);
   }
 
+  // Decompress the word that `it` points to. `it` is an iterator into the
+  // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
     auto idx = it - _underlyingVocabulary.begin();
     return getDecoder(idx).decompress((*it)._word.value());

@@ -1,6 +1,7 @@
-//
-// Created by kalmbacj on 3/5/24.
-//
+// Copyright 2024, University of Freiburg,
+//                 Chair of Algorithms and Data Structures.
+// Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
+
 #include <absl/strings/str_split.h>
 #include <gmock/gmock.h>
 
@@ -333,6 +334,8 @@ TEST(FsstEncoder, firstTest) {
       "voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet "
       "clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor "};
   s = absl::StrSplit(s.front(), " ");
+
+  // First test the manual interface.
   FsstEncoder encoder{s};
   std::vector<std::string> s2;
   size_t original = 0;
@@ -342,11 +345,21 @@ TEST(FsstEncoder, firstTest) {
     original += str.size();
     compressed += s2.back().size();
   }
-  std::cout << original << "-> " << compressed << std::endl;
+  EXPECT_LT(compressed, original);
 
   auto decoder = encoder.makeDecoder();
   for (auto& str : s2) {
     str = decoder.decompress(str);
   }
   EXPECT_THAT(s2, ::testing::ElementsAreArray(s));
+
+  // Now test the `compressAll` interface.
+  {
+    auto [buffer, compressedViews, decoder] = FsstEncoder::compressAll(s);
+    std::vector<std::string> s3;
+    for (auto compressedView : compressedViews) {
+      s3.push_back(decoder.decompress(compressedView));
+    }
+    EXPECT_THAT(s3, ::testing::ElementsAreArray(s));
+  }
 }

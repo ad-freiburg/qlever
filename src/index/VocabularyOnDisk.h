@@ -119,6 +119,10 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  // Same as `lower_bound`, but the `comparator` compares an `iterator` (first
+  // argument) and a `WordAndIndex` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
   template <typename Comparator>
   WordAndIndex lower_bound_iterator(const auto& word,
                                     Comparator comparator) const {
@@ -138,11 +142,15 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  // Same as `upper_bound`, but the `comparator` compares a `WordAndIndex`
+  // (first argument) and an `Iterator` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
   template <typename Comparator>
   WordAndIndex upper_bound_iterator(const auto& word,
                                     Comparator comparator) const {
-    auto it =
-        std::upper_bound(begin(), end(), word, transformComparator(comparator));
+    auto it = ad_utility::upper_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
 

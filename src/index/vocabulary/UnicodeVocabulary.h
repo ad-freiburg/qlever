@@ -49,13 +49,6 @@ class UnicodeVocabulary {
     };
     return _underlyingVocabulary.lower_bound(word, actualComparator);
   }
-  template <typename T>
-  WordAndIndex lower_bound_iterator(const T& word, SortLevel level) const {
-    auto actualComparator = [this, level](const auto& a, const auto& b) {
-      return _comparator(a, b, level);
-    };
-    return _underlyingVocabulary.lower_bound_iterator(word, actualComparator);
-  }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
@@ -69,13 +62,6 @@ class UnicodeVocabulary {
       return _comparator(a, b, level);
     };
     return _underlyingVocabulary.upper_bound(word, actualComparator);
-  }
-  template <typename T>
-  WordAndIndex upper_bound_iterator(const T& word, SortLevel level) const {
-    auto actualComparator = [this, level](const auto& a, const auto& b) {
-      return _comparator(a, b, level);
-    };
-    return _underlyingVocabulary.upper_bound_iterator(word, actualComparator);
   }
 
   /// Return the index range [lowest, highest) of words where a prefix of the

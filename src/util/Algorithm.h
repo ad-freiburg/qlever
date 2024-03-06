@@ -158,6 +158,10 @@ auto transformArray(Array&& input, Function function) {
       AD_FWD(input));
 }
 
+// Same as `std::lower_bound`, but the comparator doesn't compare two values,
+// but an iterator (first argument) and a value (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
 template <typename ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
                                                ForwardIterator last,
@@ -181,6 +185,10 @@ constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
   return first;
 }
 
+// Same as `std::upper_bound`, but the comparator doesn't compare two values,
+// but a value (first argument) and an iterator (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
 template <typename ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
                                                ForwardIterator last,

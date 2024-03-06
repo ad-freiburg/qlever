@@ -4,10 +4,11 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/vocabulary/CompressedVocabulary.h"
-#include "../src/index/vocabulary/PrefixCompressor.h"
-#include "../src/index/vocabulary/VocabularyInMemory.h"
 #include "./VocabularyTestHelpers.h"
+#include "index/VocabularyOnDisk.h"
+#include "index/vocabulary/CompressedVocabulary.h"
+#include "index/vocabulary/PrefixCompressor.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 
 // A stateless "compressor" that applies a trivial transformation to a string
 struct DummyCompressor {
@@ -82,6 +83,41 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
     ASSERT_NE(simple[i], words[i]);
     ASSERT_EQ(DummyCompressor::decompress(simple[i]), words[i]);
   }
+}
+
+// Tests for the FSST-compressed vocabulary. These use the generic testing
+// framework that was set up for all the other vocabularies.
+auto createFsstVocabulary(const std::string& filename) {
+  return [filename](const std::vector<std::string>& words) {
+    FSSTCompressedVocabulary<VocabularyOnDisk> vocab;
+    auto writer = vocab.makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    // std::ranges::for_each(words, writer);
+    writer.finish();
+    vocab.open(filename);
+    return vocab;
+  };
+}
+
+TEST(FsstVocabulary, LowerUpperBoundStdLess) {
+  testUpperAndLowerBoundWithStdLess(
+      createFsstVocabulary("lowerUpperBoundStdLessFsst"));
+}
+
+TEST(FsstVocabulary, LowerUpperBoundNumeric) {
+  testUpperAndLowerBoundWithNumericComparator(
+      createFsstVocabulary("lowerUpperBoundNumericFsst"));
+}
+
+TEST(FsstVocabulary, AccessOperator) {
+  testAccessOperatorForUnorderedVocabulary(
+      createFsstVocabulary("accessOperatorFsst"));
+}
+
+TEST(FsstVocabulary, EmptyVocabulary) {
+  testEmptyVocabulary(createFsstVocabulary("accessOperatorFsst"));
 }
 
 }  // namespace
