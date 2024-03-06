@@ -141,22 +141,20 @@ inline net::awaitable<T> interruptible(
   auto wrapper = [](net::awaitable<T> awaitable,
                     std::shared_ptr<std::atomic_flag> timerRunning) mutable
       -> net::awaitable<T> {
-    absl::Cleanup cleanup{[&timerRunning]() { timerRunning->clear(); }};
-    try {
-      co_return co_await std::move(awaitable);
-    } catch (...) {
-      // Only propagate exception if the operation wasn't cancelled
-      // by the cancellation handle, otherwise this exception might just
-      // be a reflection of that.
-      if (timerRunning->test()) {
-        throw;
-      }
-    }
+    absl::Cleanup cleanup{
+        [timerRunning = std::move(timerRunning)]() { timerRunning->clear(); }};
+    co_return co_await std::move(awaitable);
   };
 
   auto timerClone = timerRunning;
-  return timerLoop(std::move(timerClone), std::move(handle), std::move(loc)) &&
-         wrapper(std::move(awaitable), std::move(timerRunning));
+  try {
+    co_return co_await (
+        timerLoop(std::move(timerClone), std::move(handle), std::move(loc)) &&
+        wrapper(std::move(awaitable), std::move(timerRunning)));
+  } catch (const net::multiple_exceptions& e) {
+    // Ignore other exceptions
+    std::rethrow_exception(e.first_exception());
+  }
 }
 
 /// Helper function to wait for an awaitable that is supposed to be run on an io
