@@ -68,13 +68,12 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
   }
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
-  // processing of the `isIrI`, `isBlankNode`, and `isLiteral` functions.
+  // processing of the `isIrI` and `isLiteral` functions.
   //
   // NOTE: We only need this for the vocabulary of the main index, where
   // `I` is `VocabIndex`. However, since this is a negligible one-time cost,
   // it does not harm to do it for all vocabularies.
   prefixRangesIris_ = prefixRanges("<");
-  prefixRangesBlankNodes_ = prefixRanges("_:");
   prefixRangesLiterals_ = prefixRanges("\"");
 }
 

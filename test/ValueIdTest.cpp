@@ -291,6 +291,7 @@ TEST(ValueId, toDebugString) {
   test(makeLocalVocabId(25), "LocalVocabIndex:25");
   test(makeTextRecordId(37), "TextRecordIndex:37");
   test(makeWordVocabId(42), "WordVocabIndex:42");
+  test(makeBlankNodeId(27), "BlankNodeIndex:27");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
        "Date:123456");

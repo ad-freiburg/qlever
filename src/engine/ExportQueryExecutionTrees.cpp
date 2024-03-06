@@ -173,6 +173,9 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
       return std::pair{std::to_string(id.getInt()), XSD_INT_TYPE};
     case Date:
       return id.getDate().toStringAndType();
+    case BlankNodeIndex:
+      return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
+                       nullptr};
     default:
       AD_FAIL();
   }
@@ -193,12 +196,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     }
   }
   switch (id.getDatatype()) {
-    case Undefined:
-    case Double:
-    case Bool:
-    case Int:
-    case Date:
-      return idToStringAndTypeForEncodedValue(id);
     case Datatype::WordVocabIndex: {
       std::optional<string> entity =
           index.idToOptionalString(id.getWordVocabIndex());
@@ -206,8 +203,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case VocabIndex: {
-      // TODO<joka921> As soon as we get rid of the special encoding of date
-      // values, we can use `index.getVocab().indexToOptionalString()` directly.
       std::optional<string> entity =
           index.idToOptionalString(id.getVocabIndex());
       AD_CONTRACT_CHECK(entity.has_value());
@@ -238,8 +233,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{
           escapeFunction(index.getTextExcerpt(id.getTextRecordIndex())),
           nullptr};
+    default:
+      return idToStringAndTypeForEncodedValue(id);
   }
-  AD_FAIL();
 }
 // ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>

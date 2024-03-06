@@ -234,7 +234,8 @@ void testJoinOperation(Join& join, const ExpectedColumns& expected) {
   ASSERT_EQ(table.numColumns(), expected.size());
   for (const auto& [var, columnAndStatus] : expected) {
     const auto& [colIndex, undefStatus] = varToCols.at(var);
-    decltype(auto) column = table.getColumn(colIndex);
+    decltype(auto) columnSpan = table.getColumn(colIndex);
+    std::vector column(columnSpan.begin(), columnSpan.end());
     EXPECT_EQ(undefStatus, columnAndStatus.second);
     EXPECT_THAT(column, ::testing::ElementsAreArray(columnAndStatus.first))
         << "Columns for variable " << var.name() << " did not match";
@@ -275,7 +276,7 @@ using Var = Variable;
 }  // namespace
 
 TEST(JoinTest, joinWithFullScanPSO) {
-  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> 2. <x> <a> 3.");
+  auto qec = ad_utility::testing::getQec("<x> <p> 1. <x> <o> <x>. <x> <a> 3.");
   // Expressions in HAVING clauses are converted to special internal aliases.
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
@@ -285,8 +286,12 @@ TEST(JoinTest, joinWithFullScanPSO) {
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
   auto id = ad_utility::testing::makeGetId(qec->getIndex());
-  auto expected = makeIdTableFromVector(
-      {{id("<a>"), id("<x>"), I(3)}, {id("<o>"), id("<x>"), I(2)}});
+
+  auto x = id("<x>");
+  auto p = id("<p>");
+  auto a = id("<a>");
+  auto o = id("<o>");
+  auto expected = makeIdTableFromVector({{a, x, I(3)}, {o, x, x}});
   VariableToColumnMap expectedVariables{
       {Variable{"?p"}, makeAlwaysDefinedColumn(0)},
       {Variable{"?s"}, makeAlwaysDefinedColumn(1)},
@@ -297,8 +302,24 @@ TEST(JoinTest, joinWithFullScanPSO) {
   testJoinOperation(joinSwitched,
                     makeExpectedColumns(expectedVariables, expected));
 
-  // A `Join` of two full scans is not supported.
-  EXPECT_ANY_THROW(Join(qec, fullScanPSO, fullScanPSO, 0, 0));
+  // A `Join` of two full scans.
+  {
+    auto fullScanSPO = ad_utility::makeExecutionTree<IndexScan>(
+        qec, SPO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
+    auto fullScanOPS = ad_utility::makeExecutionTree<IndexScan>(
+        qec, OPS, SparqlTriple{Var{"?s2"}, "?p2", Var{"?s"}});
+    // The knowledge graph is "<x> <p> 1 . <x> <o> <x> . <x> <a> 3 ."
+    auto expected = makeIdTableFromVector(
+        {{x, a, I(3), o, x}, {x, o, x, o, x}, {x, p, I(1), o, x}});
+    VariableToColumnMap expectedVariables{
+        {Variable{"?s"}, makeAlwaysDefinedColumn(0)},
+        {Variable{"?p"}, makeAlwaysDefinedColumn(1)},
+        {Variable{"?o"}, makeAlwaysDefinedColumn(2)},
+        {Variable{"?p2"}, makeAlwaysDefinedColumn(3)},
+        {Variable{"?s2"}, makeAlwaysDefinedColumn(4)}};
+    auto join = Join{qec, fullScanSPO, fullScanOPS, 0, 0};
+    testJoinOperation(join, makeExpectedColumns(expectedVariables, expected));
+  }
 }
 
 // The following two tests run different code depending on the setting of the

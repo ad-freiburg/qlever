@@ -774,6 +774,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
+  idTable.setNumColumns(term.ends_with('*') ? 2 : 1);
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
     return idTable;

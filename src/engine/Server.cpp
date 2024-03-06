@@ -444,18 +444,18 @@ json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
   result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
-  result["num-predicates-normal"] = index_.numDistinctPredicates().normal_;
-  result["num-predicates-internal"] = index_.numDistinctPredicates().internal_;
+  result["num-predicates-normal"] = index_.numDistinctPredicates().normal;
+  result["num-predicates-internal"] = index_.numDistinctPredicates().internal;
   if (index_.hasAllPermutations()) {
-    result["num-subjects-normal"] = index_.numDistinctSubjects().normal_;
-    result["num-subjects-internal"] = index_.numDistinctSubjects().internal_;
-    result["num-objects-normal"] = index_.numDistinctObjects().normal_;
-    result["num-objects-internal"] = index_.numDistinctObjects().internal_;
+    result["num-subjects-normal"] = index_.numDistinctSubjects().normal;
+    result["num-subjects-internal"] = index_.numDistinctSubjects().internal;
+    result["num-objects-normal"] = index_.numDistinctObjects().normal;
+    result["num-objects-internal"] = index_.numDistinctObjects().internal;
   }
 
   auto numTriples = index_.numTriples();
-  result["num-triples-normal"] = numTriples.normal_;
-  result["num-triples-internal"] = numTriples.internal_;
+  result["num-triples-normal"] = numTriples.normal;
+  result["num-triples-internal"] = numTriples.internal;
   result["name-text-index"] = index_.getTextName();
   result["num-text-records"] = index_.getNofTextRecords();
   result["num-word-occurrences"] = index_.getNofWordPostings();

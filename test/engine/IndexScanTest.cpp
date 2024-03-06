@@ -232,8 +232,8 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
   // Corner cases
   {
     std::string kg = "<a> <b> <c> .";
-    // Triples with three variables are not supported.
     SparqlTriple xyz{Tc{Var{"?x"}}, "?y", Tc{Var{"?z"}}};
+    testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xyz);
     testLazyScanThrows(kg, xqz, xyz);
@@ -308,9 +308,11 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
       "<b> <p> <B2> ."
       "<b> <q> <xb>. <b> <q> <xb2> .";
 
-  // Full index scans (three variables) are not supported.
+  // Full index scan (three variables).
   std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
-  testLazyScanWithColumnThrows(kg, threeVars, column);
+  // only `<q>` matches (we join on the predicate), so we only get the last
+  // block.
+  testLazyScanForJoinWithColumn(kg, threeVars, column, {{5, 7}});
 
   // The join column must be sorted.
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
@@ -338,7 +340,7 @@ TEST(IndexScan, additionalColumn) {
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
-              ::testing::ContainsRegex("Additional Columns: 2 3"));
+              ::testing::ContainsRegex("Additional Columns: 3 4"));
   auto res = scan.computeResultOnlyForTesting();
   auto getId = makeGetId(qec->getIndex());
   auto I = IntId;

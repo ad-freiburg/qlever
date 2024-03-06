@@ -42,8 +42,8 @@ class HasPredicateScanTest : public ::testing::Test {
   // Expect that the result of the `operation` matches the `expectedElements`.
   void runTest(Operation& operation, const VectorTable& expectedElements) {
     auto expected = makeIdTableFromVector(expectedElements);
-    EXPECT_THAT(operation.getResult()->idTable(),
-                ::testing::ElementsAreArray(expected));
+    auto res = operation.getResult();
+    EXPECT_THAT(res->idTable(), ::testing::ElementsAreArray(expected));
   }
 
   // Expect that the result of the `operation` matches the `expectedElements`,
