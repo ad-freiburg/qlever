@@ -34,8 +34,9 @@ class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
   using GetTsvFunction = std::function<std::istringstream(
-      ad_utility::httpUtils::Url, const boost::beast::http::verb&,
-      std::string_view, std::string_view, std::string_view)>;
+      ad_utility::httpUtils::Url, ad_utility::SharedCancellationHandle handle,
+      const boost::beast::http::verb&, std::string_view, std::string_view,
+      std::string_view)>;
 
  private:
   // The parsed SERVICE clause.

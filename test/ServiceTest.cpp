@@ -44,6 +44,7 @@ class ServiceTest : public ::testing::Test {
       [](const std::string& expectedUrl, const std::string& expectedSparqlQuery,
          const std::string& predefinedResult) -> Service::GetTsvFunction {
     return [=](ad_utility::httpUtils::Url url,
+               ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
                std::string_view acceptHeader) -> std::istringstream {

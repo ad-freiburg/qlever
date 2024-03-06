@@ -18,6 +18,8 @@ using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
 TEST(HttpServer, HttpTest) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // This test used to spuriously crash because of something that we (joka92,
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make
@@ -60,14 +62,15 @@ TEST(HttpServer, HttpTest) {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
               ASSERT_EQ(
-                  httpClient.sendRequest(verb::get, "localhost", "target1")
+                  httpClient
+                      .sendRequest(verb::get, "localhost", "target1", handle)
                       .str(),
                   "GET\ntarget1\n");
-              ASSERT_EQ(
-                  httpClient
-                      .sendRequest(verb::post, "localhost", "target1", "body1")
-                      .str(),
-                  "POST\ntarget1\nbody1");
+              ASSERT_EQ(httpClient
+                            .sendRequest(verb::post, "localhost", "target1",
+                                         handle, "body1")
+                            .str(),
+                        "POST\ntarget1\nbody1");
             }
           }
         });
@@ -78,10 +81,13 @@ TEST(HttpServer, HttpTest) {
     // fine with the server after we have communicated with it for one session).
     {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target2").str(),
-                "GET\ntarget2\n");
       ASSERT_EQ(
-          httpClient.sendRequest(verb::post, "localhost", "target2", "body2")
+          httpClient.sendRequest(verb::get, "localhost", "target2", handle)
+              .str(),
+          "GET\ntarget2\n");
+      ASSERT_EQ(
+          httpClient
+              .sendRequest(verb::post, "localhost", "target2", handle, "body2")
               .str(),
           "POST\ntarget2\nbody2");
     }
@@ -112,8 +118,9 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(), "GET\n/target\n");
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post, "body").str(),
+      ASSERT_EQ(sendHttpOrHttpsRequest(url, handle, verb::get).str(),
+                "GET\n/target\n");
+      ASSERT_EQ(sendHttpOrHttpsRequest(url, handle, verb::post, "body").str(),
                 "POST\n/target\nbody");
     }
 

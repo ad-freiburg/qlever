@@ -18,6 +18,7 @@
 #include <sstream>
 #include <string>
 
+#include "util/CancellationHandle.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
@@ -46,7 +47,8 @@ class HttpClientImpl {
   // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
   std::istringstream sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
-      std::string_view target, std::string_view requestBody = "",
+      std::string_view target, ad_utility::SharedCancellationHandle handle,
+      std::string_view requestBody = "",
       std::string_view contentTypeHeader = "text/plain",
       std::string_view acceptHeader = "text/plain");
 
@@ -58,7 +60,7 @@ class HttpClientImpl {
  private:
   // The connection stream and associated objects. See the implementation of
   // `openStream` for why we need all of them, and not just `stream_`.
-  boost::asio::io_context io_context_;
+  boost::asio::thread_pool executor_{1};
   std::unique_ptr<boost::asio::ssl::context> ssl_context_;
   std::unique_ptr<StreamType> stream_;
 };
@@ -75,7 +77,7 @@ using HttpsClient =
 // HTTPS) is chosen automatically based on the URL. The `requestBody` is the
 // payload sent for POST requests (default: empty).
 std::istringstream sendHttpOrHttpsRequest(
-    ad_utility::httpUtils::Url url,
+    ad_utility::httpUtils::Url url, ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,
     std::string_view postData = "",
     std::string_view contentTypeHeader = "text/plain",
