@@ -125,6 +125,9 @@ class FsstEncoder {
     if constexpr (!alsoCompressAll) {
       return Ptr{ptr, Deleter{}};
     } else {
+      absl::Cleanup _{[&ptr]() {
+        fsst_destroy(ptr);
+      }};
       std::string output;
       // Assume that the compression acutally makes the input smaller.
       output.resize(totalSize);
