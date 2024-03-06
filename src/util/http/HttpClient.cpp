@@ -78,7 +78,6 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
                   "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
     stream_->shutdown(ec);
   }
-  workGuard_.reset();
 }
 
 // ____________________________________________________________________________
