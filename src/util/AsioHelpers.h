@@ -112,15 +112,15 @@ auto runFunctionOnExecutor(Executor executor, Function function,
 /// on an awaitable object that doesn't do this on its own. It's always better
 /// to integrate cancellation checks right into the awaitable itself, but
 /// sometimes this doesn't work because it's part of a library or boost asio
-/// itself.
+/// itself. Once `timerRunning` resolves to `false` (or the awaitable is
+/// finished, whatever happens first), the cancellation checks are stopped.
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
+    std::shared_ptr<std::atomic_flag> timerRunning =
+        std::make_shared<std::atomic_flag>(true),
     ad_utility::source_location loc = ad_utility::source_location::current()) {
   using namespace net::experimental::awaitable_operators;
-
-  std::shared_ptr<std::atomic_flag> timerRunning =
-      std::make_shared<std::atomic_flag>(true);
 
   auto timerLoop = [](std::shared_ptr<std::atomic_flag> timerRunning,
                       ad_utility::SharedCancellationHandle handle,
