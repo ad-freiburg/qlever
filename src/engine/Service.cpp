@@ -151,6 +151,7 @@ template <size_t I>
 void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
                              LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
+  checkCancellation();
   size_t rowIdx = 0;
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
   std::string line;
@@ -179,6 +180,7 @@ void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
       }
     }
     rowIdx++;
+    checkCancellation();
   }
   if (idTable.size() > 1) {
     LOG(INFO) << "Last non-header row of TSV result: " << lastLine << std::endl;
@@ -188,4 +190,5 @@ void Service::writeTsvResult(std::istringstream tsvResult, IdTable* idTablePtr,
   LOG(INFO) << "Number of entries in local vocabulary per column: "
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
+  checkCancellation();
 }
