@@ -83,6 +83,44 @@ std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
   return result;
 }
 
+std::shared_ptr<QueryExecutionTree> buildIndexScan(QueryExecutionContext* qec,
+      TripleComponent subject, std::string predicate, TripleComponent object) {
+  return ad_utility::makeExecutionTree<IndexScan>(qec, 
+        Permutation::Enum::PSO, SparqlTriple{subject, predicate, object});
+}
+
+std::shared_ptr<QueryExecutionTree> buildJoin(QueryExecutionContext* qec,
+      std::shared_ptr<QueryExecutionTree> tree1,
+      std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
+  auto varCol1 = tree1->getVariableColumns();
+  auto varCol2 = tree2->getVariableColumns();
+  size_t col1 = varCol1[joinVariable].columnIndex_;
+  size_t col2 = varCol2[joinVariable].columnIndex_;
+  return ad_utility::makeExecutionTree<Join>(
+          qec, tree1, tree2, col1, col2, true);
+}
+
+std::shared_ptr<QueryExecutionTree> buildSmallChild(QueryExecutionContext* qec,
+    TripleComponent subject1, std::string predicate1, TripleComponent object1,
+    TripleComponent subject2, std::string predicate2, TripleComponent object2,
+    Variable joinVariable) {
+  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
+  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
+  return buildJoin(qec, scan1, scan2, joinVariable);
+}
+
+std::shared_ptr<QueryExecutionTree> buildMediumChild(QueryExecutionContext* qec,
+    TripleComponent subject1, std::string predicate1, TripleComponent object1,
+    TripleComponent subject2, std::string predicate2, TripleComponent object2,
+    TripleComponent subject3, std::string predicate3, TripleComponent object3,
+    Variable joinVariable1, Variable joinVariable2) {
+  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
+  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
+  auto scan3 = buildIndexScan(qec, subject3, predicate3, object3);
+  auto join = buildJoin(qec, scan1, scan2, joinVariable1);
+  return buildJoin(qec, join, scan3, joinVariable2);
+}
+
 // this function compares the ResultTable resultTableToTest with the
 // expected_output. It assumes, that all rows are unique. Therefore the tables
 // are equal, if each row of the expected_output is contained in the table and
@@ -283,12 +321,13 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   //   ?point1 <max-distance-in-meters:5000> ?point2 .
   // }
   // ===================== build the left input ===============================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent name1{Variable{"?name1"}};
-  std::shared_ptr<QueryExecutionTree> scan1 =
-        ad_utility::makeExecutionTree<IndexScan>(qec, 
-        Permutation::Enum::PSO, SparqlTriple{obj1, "<name>", name1});
+  //TripleComponent obj1{Variable{"?obj1"}};
+  //TripleComponent name1{Variable{"?name1"}};
+  //std::shared_ptr<QueryExecutionTree> scan1 =
+  //      ad_utility::makeExecutionTree<IndexScan>(qec, 
+  //      Permutation::Enum::PSO, SparqlTriple{obj1, "<name>", name1});
   
+
   /* test of the first IndexScan, not needed anymore
   std::shared_ptr<const ResultTable> res1 = scan1->getResult();
   size_t result_size = res1->size();
@@ -302,10 +341,10 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   compare_result_table(print_table(qec, res1), &expected_output1);
   */
   
-  TripleComponent geo1{Variable{"?geo1"}};
-  std::shared_ptr<QueryExecutionTree> scan2 =
-        ad_utility::makeExecutionTree<IndexScan>(qec,
-        Permutation::Enum::PSO, SparqlTriple{obj1, "<hasGeometry>", geo1});
+  //TripleComponent geo1{Variable{"?geo1"}};
+  //std::shared_ptr<QueryExecutionTree> scan2 =
+  //      ad_utility::makeExecutionTree<IndexScan>(qec,
+  //      Permutation::Enum::PSO, SparqlTriple{obj1, "<hasGeometry>", geo1});
   /* test of the second IndexScan, not needed anymore
   std::shared_ptr<const ResultTable> res2 = scan2->getResult();
   result_size = res2->size();
@@ -319,10 +358,10 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   compare_result_table(print_table(qec, res2), &expected_output2);
   */
 
-  TripleComponent point1{Variable{"?point1"}};
-  std::shared_ptr<QueryExecutionTree> scan3 =
-        ad_utility::makeExecutionTree<IndexScan>(qec,
-        Permutation::Enum::PSO, SparqlTriple{geo1, "<asWKT>", point1});
+  //TripleComponent point1{Variable{"?point1"}};
+  //std::shared_ptr<QueryExecutionTree> scan3 =
+  //      ad_utility::makeExecutionTree<IndexScan>(qec,
+  //      Permutation::Enum::PSO, SparqlTriple{geo1, "<asWKT>", point1});
   
   /* test of the third IndexScan, not needed anymore
   std::shared_ptr<const ResultTable> res3 = scan3->getResult();
@@ -337,8 +376,9 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   compare_result_table(print_table(qec, res3), &expected_output3);
   */
 
-  std::shared_ptr<QueryExecutionTree> join1 =
-        ad_utility::makeExecutionTree<Join>(qec, scan1, scan2, 0, 0, true);
+  
+  //std::shared_ptr<QueryExecutionTree> join1 =
+  //      ad_utility::makeExecutionTree<Join>(qec, scan1, scan2, 0, 0, true);
   /* test of the first Join
   std::shared_ptr<const ResultTable> res4 = join1->getResult();
   size_t result_size4 = res4->size();
@@ -360,13 +400,27 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   compare_result_table(print_table(qec, res4), &rows);
   */
 
- auto varCol1 = join1->getVariableColumns();
- auto varCol2 = scan3->getVariableColumns();
- Variable varPoint = geo1.getVariable();
- size_t col1 = varCol1[varPoint].columnIndex_;
- size_t col2 = varCol2[varPoint].columnIndex_;
- std::shared_ptr<QueryExecutionTree> join2 = 
-      ad_utility::makeExecutionTree<Join>(qec, join1, scan3, col1, col2, true);
+ //auto varCol1 = join1->getVariableColumns();
+ //auto varCol2 = scan3->getVariableColumns();
+ //Variable varPoint = geo1.getVariable();
+ //size_t col1 = varCol1[varPoint].columnIndex_;
+ //size_t col2 = varCol2[varPoint].columnIndex_;
+ //std::shared_ptr<QueryExecutionTree> join2 = 
+  //    ad_utility::makeExecutionTree<Join>(qec, join1, scan3, col1, col2, true);
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent geo1{Variable{"?geo1"}};
+  // needed as getVariable() returns a const variable
+  Variable joinVar1 = obj1.getVariable();
+  Variable joinVar2 = geo1.getVariable();
+  auto join2 = buildMediumChild(qec,
+          obj1,
+          std::string{"<name>"},
+          TripleComponent{Variable{"?name1"}},
+          obj1,
+          std::string{"<hasGeometry>"},
+          geo1,
+          geo1, std::string{"<asWKT>"}, 
+          TripleComponent{Variable{"?point1"}}, joinVar1, joinVar2);
   // test of the second Join
   std::shared_ptr<const ResultTable> res5 = join2->getResult();
   size_t result_size5 = res5->size();
