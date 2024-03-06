@@ -108,6 +108,11 @@ auto runFunctionOnExecutor(Executor executor, Function function,
       std::move(initiatingFunction), completionToken);
 }
 
+/// Helper function, that checks a cancellation handle regularly while waiting
+/// on an awaitable object that doesn't do this on its own. It's always better
+/// to integrate cancellation checks right into the awaitable itself, but
+/// sometimes this doesn't work because it's part of a library or boost asio
+/// itself.
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
@@ -154,7 +159,7 @@ inline net::awaitable<T> interruptible(
          wrapper(std::move(awaitable), std::move(timerRunning));
 }
 
-/// Helper method to wait for an awaitable that is supposed to be run on an io
+/// Helper function to wait for an awaitable that is supposed to be run on an io
 /// context.
 template <typename T>
 inline T runAndWaitForAwaitable(net::awaitable<T> awaitable,
