@@ -79,7 +79,7 @@ class ServiceTest : public ::testing::Test {
           co_yield std::as_writable_bytes(std::span{resultCopy});
           start += size;
         }
-      }(std::string{predefinedResult});
+      }(predefinedResult);
     };
   };
 };
