@@ -131,6 +131,35 @@ ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesCheckCancellationHandle) {
 }
 
 // _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesReportOnlyFirstError) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  auto sleeperTask = []() -> net::awaitable<void> {
+    throw std::runtime_error{"My error"};
+    co_return;
+  }();
+
+  EXPECT_THROW(
+      co_await ad_utility::interruptible(std::move(sleeperTask), handle),
+      ad_utility::CancellationException);
+}
+
+// _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesPropagateError) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto sleeperTask = []() -> net::awaitable<void> {
+    throw std::runtime_error{"My error"};
+    co_return;
+  }();
+
+  EXPECT_THROW(
+      co_await ad_utility::interruptible(std::move(sleeperTask), handle),
+      std::runtime_error);
+}
+
+// _________________________________________________________________________
 ASYNC_TEST(AsioHelpers, verifyNoCheckIsPerformedWhenTimerIsCancelledEarly) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
