@@ -117,19 +117,19 @@ HttpClientImpl<StreamType>::sendRequest(
   // the body as a `std::istringstream`.
   wait(http::async_write(*stream_, request, net::use_awaitable));
   beast::flat_buffer buffer;
-  http::response_parser<http::buffer_body> response_parser;
-  response_parser.body_limit(std::numeric_limits<std::uint64_t>::max());
-  wait(http::async_read_header(*stream_, buffer, response_parser,
+  http::response_parser<http::buffer_body> responseParser;
+  responseParser.body_limit(std::numeric_limits<std::uint64_t>::max());
+  wait(http::async_read_header(*stream_, buffer, responseParser,
                                net::use_awaitable));
   std::string aggregateBuffer;
-  while (!response_parser.is_done()) {
+  while (!responseParser.is_done()) {
     std::array<std::byte, 4096> staticBuffer;
-    response_parser.get().body().data = staticBuffer.data();
-    response_parser.get().body().size = staticBuffer.size();
+    responseParser.get().body().data = staticBuffer.data();
+    responseParser.get().body().size = staticBuffer.size();
 
-    wait(http::async_read_some(*stream_, buffer, response_parser,
+    wait(http::async_read_some(*stream_, buffer, responseParser,
                                net::use_awaitable));
-    size_t remainingBytes = response_parser.get().body().size;
+    size_t remainingBytes = responseParser.get().body().size;
     co_yield std::span{staticBuffer}.first(staticBuffer.size() -
                                            remainingBytes);
   }

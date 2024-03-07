@@ -7,6 +7,7 @@
 
 #include <future>
 #include <ranges>
+#include <span>
 
 #include "util/Generator.h"
 #include "util/Log.h"
