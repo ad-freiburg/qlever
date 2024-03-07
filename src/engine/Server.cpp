@@ -793,8 +793,7 @@ boost::asio::awaitable<void> Server::processQuery(
 template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
-  std::shared_ptr<std::atomic_flag> timerRunning =
-      std::make_shared<std::atomic_flag>(true);
+  auto timerRunning = std::make_shared<std::atomic_flag>(true);
   auto inner = [function = std::move(function), timerRunning]() mutable -> T {
     timerRunning->clear();
     return std::invoke(std::move(function));
