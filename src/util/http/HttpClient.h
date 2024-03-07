@@ -43,9 +43,6 @@ class HttpClientImpl {
   // `http::verb::post`) and return the body of the reponse (possibly very
   // large) as an `cppcoro::generator<std::string_view>`. The same connection
   // can be used for multiple requests in a row.
-  //
-  // TODO: Read and process the response in chunks. Here is a code example:
-  // https://stackoverflow.com/questions/69011767/handling-large-http-response-using-boostbeast
   cppcoro::generator<std::string_view> sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,

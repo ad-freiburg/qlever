@@ -108,22 +108,47 @@ cppcoro::generator<std::string_view> HttpClientImpl<StreamType>::sendRequest(
           http::async_write(*stream_, request, net::use_awaitable), handle),
       ioContext_);
   beast::flat_buffer buffer;
-  http::response_parser<http::dynamic_body> response_parser;
-  response_parser.body_limit((std::numeric_limits<std::uint64_t>::max)());
+  http::response_parser<http::buffer_body> response_parser;
+  response_parser.body_limit(std::numeric_limits<std::uint64_t>::max());
   ad_utility::runAndWaitForAwaitable(
       ad_utility::interruptible(
-          http::async_read(*stream_, buffer, response_parser,
-                           net::use_awaitable),
+          http::async_read_header(*stream_, buffer, response_parser,
+                                  net::use_awaitable),
           handle),
       ioContext_);
-  auto data = beast::buffers_to_string(response_parser.get().body().data());
-  // Trim trailing newline, so we don't create an extra empty subrange for it.
-  auto dataView = std::string_view{data}.substr(
-      0, data.ends_with('\n') ? data.length() - 1 : data.length());
-  for (const auto& subrange : std::ranges::split_view(dataView, '\n')) {
-    co_yield std::string_view{
-        &*subrange.begin(),
-        static_cast<size_t>(std::ranges::distance(subrange))};
+  std::string aggregateBuffer;
+  while (!response_parser.is_done()) {
+    // Small buffer to hopefully store a whole line.
+    char staticBuffer[4096];
+    response_parser.get().body().data = staticBuffer;
+    response_parser.get().body().size = sizeof(staticBuffer);
+
+    auto [ec, bytes] = ad_utility::runAndWaitForAwaitable(
+        ad_utility::interruptible(
+            http::async_read(*stream_, buffer, response_parser,
+                             net::as_tuple(net::use_awaitable)),
+            handle),
+        ioContext_);
+    if (ec && ec != http::error::need_buffer) {
+      throw std::runtime_error{absl::StrCat(
+          "Unexpected error while parsing HTTP request. Error code: ",
+          ec.what())};
+    }
+    aggregateBuffer += std::string_view{
+        staticBuffer, sizeof(staticBuffer) - response_parser.get().body().size};
+    size_t lastIndex = 0;
+    size_t currentIndex;
+    while ((currentIndex = aggregateBuffer.find_first_of('\n', lastIndex)) !=
+           std::string::npos) {
+      co_yield std::string_view{aggregateBuffer}.substr(
+          lastIndex, currentIndex - lastIndex);
+      lastIndex = currentIndex + 1;
+    }
+    aggregateBuffer.erase(0, lastIndex);
+  }
+  // Flush remaining buffer if not empty
+  if (!aggregateBuffer.empty()) {
+    co_yield aggregateBuffer;
   }
 }
 
