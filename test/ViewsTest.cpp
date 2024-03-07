@@ -217,6 +217,26 @@ TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
 }
 
 // __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
+  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
+    std::string_view values = "abc";
+    for (char c : values) {
+      std::byte wrapper = static_cast<std::byte>(c);
+      co_yield std::span{&wrapper, 1};
+    }
+  }();
+
+  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "abc");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
+
+// __________________________________________________________________________
 TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
   auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
     auto range = std::string_view{"\nabc\ndefghij\n"} |
