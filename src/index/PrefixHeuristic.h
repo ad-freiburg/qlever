@@ -22,7 +22,7 @@
 //
 std::vector<std::string> calculatePrefixes(std::vector<std::string> vocabulary,
                                            size_t numPrefixes,
-                                           size_t codelength);
+                                           size_t codelength, bool alwaysAddCode = false);
 
 // A simple greedy algorithm the calculates prefixes of a given vocabulary which
 // are suitable for compression.

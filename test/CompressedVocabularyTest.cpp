@@ -94,7 +94,6 @@ auto createFsstVocabulary(const std::string& filename) {
     for (const auto& word : words) {
       writer(word);
     }
-    // std::ranges::for_each(words, writer);
     writer.finish();
     vocab.open(filename);
     return vocab;

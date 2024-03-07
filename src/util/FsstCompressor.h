@@ -13,6 +13,7 @@
 #include <absl/cleanup/cleanup.h>
 
 #include "util/Exception.h"
+#include "util/Log.h"
 
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
 // two types, a thredsafe `FsstDecoder` that can be used to perform
@@ -62,8 +63,8 @@ class FsstEncoder {
   struct Deleter {
     void operator()(fsst_encoder_t* ptr) const { fsst_destroy(ptr); }
   };
-  using Ptr = std::unique_ptr<fsst_encoder_t, Deleter>;
-  Ptr encoder_;
+  using Encoder = std::unique_ptr<fsst_encoder_t, Deleter>;
+  Encoder encoder_;
 
  public:
   // Create an `FsstEncoder`. The given `strings` are used to create the
@@ -111,7 +112,7 @@ class FsstEncoder {
  private:
   // The implementation of the constructor and of `compressAll`.
   template <bool alsoCompressAll = false>
-  static std::conditional_t<alsoCompressAll, BulkResult, Ptr> makeEncoder(
+  static std::conditional_t<alsoCompressAll, BulkResult, Encoder> makeEncoder(
       const auto& strings) {
     std::vector<size_t> lengths;
     std::vector<unsigned char*> pointers;
@@ -122,15 +123,14 @@ class FsstEncoder {
       pointers.push_back(
           reinterpret_cast<unsigned char*>(const_cast<char*>(string.data())));
     }
-    auto ptr = fsst_create(strings.size(), lengths.data(), pointers.data(), 0);
+    auto encoder = fsst_create(strings.size(), lengths.data(), pointers.data(), 0);
     if constexpr (!alsoCompressAll) {
-      return Ptr{ptr, Deleter{}};
+      return Encoder{encoder, Deleter{}};
     } else {
-      absl::Cleanup cleanup{[&ptr]() {
-        fsst_destroy(ptr);
+      absl::Cleanup cleanup{[&encoder]() {
+        fsst_destroy(encoder);
       }};
       std::string output;
-      // Assume that the compression acutally makes the input smaller.
       output.resize(totalSize);
       std::vector<char*> outputPtrs;
       outputPtrs.resize(strings.size());
@@ -138,7 +138,7 @@ class FsstEncoder {
       outputLengths.resize(strings.size());
       while (true) {
         size_t numCompressed = fsst_compress(
-            ptr, strings.size(), lengths.data(), pointers.data(), output.size(),
+            encoder, strings.size(), lengths.data(), pointers.data(), output.size(),
             reinterpret_cast<unsigned char*>(output.data()),
             outputLengths.data(),
             reinterpret_cast<unsigned char**>(outputPtrs.data()));
@@ -147,6 +147,7 @@ class FsstEncoder {
         if (numCompressed == strings.size()) {
           break;
         }
+        LOG(WARN) << "FSST compression of a block of strings made the input larger instead of smaller" << std::endl;
         output.resize(2 * output.size());
       }
       // Convert the result pointers to `string_views` for easier handling.
@@ -156,7 +157,7 @@ class FsstEncoder {
         stringViews.emplace_back(outputPtrs.at(i), outputLengths.at(i));
       }
       return std::tuple{std::move(output), std::move(stringViews),
-                        FsstDecoder(fsst_decoder(ptr))};
+                        FsstDecoder(fsst_decoder(encoder))};
     }
   }
 };
