@@ -103,8 +103,8 @@ class FsstEncoder {
   // all the compressed strings concatenated, a `vector<string_view` that points
   // to the compressed strings, and a decoder that can be used to decompress the
   // strings again.
-  using BulkResult =
-      std::tuple<std::string, std::vector<std::string_view>, FsstDecoder>;
+  using BulkResult = std::tuple<std::shared_ptr<std::string>,
+                                std::vector<std::string_view>, FsstDecoder>;
   static BulkResult compressAll(const auto& strings) {
     return makeEncoder<true>(strings);
   }
@@ -129,7 +129,8 @@ class FsstEncoder {
       return Encoder{encoder, Deleter{}};
     } else {
       absl::Cleanup cleanup{[&encoder]() { fsst_destroy(encoder); }};
-      std::string output;
+      auto outputPtr = std::make_unique<std::string>();
+      std::string& output = *outputPtr;
       output.resize(totalSize);
       std::vector<char*> outputPtrs;
       outputPtrs.resize(strings.size());
@@ -157,7 +158,7 @@ class FsstEncoder {
       for (size_t i = 0; i < strings.size(); ++i) {
         stringViews.emplace_back(outputPtrs.at(i), outputLengths.at(i));
       }
-      return std::tuple{std::move(output), std::move(stringViews),
+      return std::tuple{std::move(outputPtr), std::move(stringViews),
                         FsstDecoder(fsst_decoder(encoder))};
     }
   }

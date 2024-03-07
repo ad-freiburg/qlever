@@ -224,8 +224,8 @@ struct PrefixSuffixFsstDecodderImpl
 struct PrefixSuffixFsstDecodder
     : CompressionMixin<PrefixSuffixFsstDecodderImpl> {
   using Strings = std::vector<std::string>;
-  using BulkResult =
-      std::tuple<std::string, std::vector<std::string_view>, Decoder>;
+  using BulkResult = std::tuple<std::shared_ptr<string>,
+                                std::vector<std::string_view>, Decoder>;
 
   static BulkResult compressAll(const Strings& strings) {
     auto [unused, prefixCompressed, prefixDecoder] =
@@ -234,10 +234,10 @@ struct PrefixSuffixFsstDecodder
         SuffixCompressionDecoder::compressAll(prefixCompressed);
     auto [buffer, fsstCompressed, fsstDecoder] =
         FsstCompressionWrapper::compressAll(suffixCompressed);
-    return {std::move(buffer),
-            std::move(fsstCompressed),
-            {{std::move(prefixDecoder), std::move(suffixDecoder),
-              std::move(fsstDecoder)}}};
+    return std::tuple{
+        std::move(buffer), std::move(fsstCompressed),
+        Decoder{{std::move(prefixDecoder), std::move(suffixDecoder),
+                 std::move(fsstDecoder)}}};
   }
 };
 
@@ -390,6 +390,14 @@ class FSSTCompressedVocabulary {
       if (wordBuffer_.empty()) {
         return;
       }
+      /*
+      auto bulkResult = CompressionWrapper::compressAll(wordBuffer_);
+      auto& [buffer, views, decoder] = bulkResult;
+      for (auto& word : views) {
+        _underlyingWriter(word);
+      }
+      decoders_.emplace_back(decoder);
+       */
 
       auto compressAndWrite = [words = std::move(wordBuffer_), this,
                                idx = queueIndex_++]() {
