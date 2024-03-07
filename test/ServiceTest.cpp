@@ -41,14 +41,13 @@ class ServiceTest : public ::testing::Test {
   // NOTE: In a previous version of this test, we set up an actual test server.
   // The code can be found in the history of this PR.
   static auto constexpr getTsvFunctionFactory =
-      [](const std::string& expectedUrl, const std::string& expectedSparqlQuery,
-         const std::string& predefinedResult) -> Service::GetTsvFunction {
+      [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
+         std::string_view predefinedResult) -> Service::GetTsvFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
                std::string_view postData, std::string_view contentTypeHeader,
-               std::string_view acceptHeader)
-               -> cppcoro::generator<std::string_view> {
+               std::string_view acceptHeader) {
       // Check that the request parameters are as expected.
       //
       // NOTE: The first three are hard-coded in `Service::computeResult`, but
@@ -73,11 +72,13 @@ class ServiceTest : public ::testing::Test {
       auto resultView = std::string_view{predefinedResult}.substr(
           0, predefinedResult.ends_with('\n') ? predefinedResult.length() - 1
                                               : predefinedResult.length());
-      for (const auto& subrange : std::ranges::split_view(resultView, '\n')) {
-        co_yield std::string_view{
-            &*subrange.begin(),
-            static_cast<size_t>(std::ranges::distance(subrange))};
-      }
+      return [](std::string_view view) -> cppcoro::generator<std::string_view> {
+        for (const auto& subrange : std::ranges::split_view(view, '\n')) {
+          co_yield std::string_view{
+              &*subrange.begin(),
+              static_cast<size_t>(std::ranges::distance(subrange))};
+        }
+      }(resultView);
     };
   };
 };
@@ -125,8 +126,8 @@ TEST_F(ServiceTest, computeResult) {
 
   // This is the (port-normalized) URL and (whitespace-normalized) SPARQL query
   // we expect.
-  std::string expectedUrl = "http://localhorst:80/api";
-  std::string expectedSparqlQuery =
+  std::string_view expectedUrl = "http://localhorst:80/api";
+  std::string_view expectedSparqlQuery =
       "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
 
   // CHECK 1: Returned TSV is empty -> an exception should be thrown.
