@@ -187,3 +187,62 @@ TEST(Views, inPlaceTransform) {
   EXPECT_THAT(res2, ::testing::ElementsAreArray(res1));
   EXPECT_THAT(res3, ::testing::ElementsAreArray(res1));
 }
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
+  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
+    std::string_view values = "\nabc\ndefghij\n";
+    for (char c : values) {
+      std::byte wrapper = static_cast<std::byte>(c);
+      co_yield std::span{&wrapper, 1};
+    }
+  }();
+
+  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "abc");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "defghij");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
+  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
+    auto range = std::string_view{"\nabc\ndefghij\n"} |
+                 std::ranges::views::transform(
+                     [](char c) { return static_cast<std::byte>(c); });
+    std::vector<std::byte> values{range.begin(), range.end()};
+    constexpr size_t chunkSize = 6;
+    for (size_t i = 0; i < values.size(); i += chunkSize) {
+      co_yield std::span{&values.at(i), std::min(chunkSize, values.size() - i)};
+    }
+  }();
+
+  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "abc");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(*iterator, "defghij");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
