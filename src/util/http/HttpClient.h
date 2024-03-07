@@ -15,7 +15,7 @@
 // order of the includes should not matter, and it should certainly not cause
 // segmentation faults.
 
-#include <sstream>
+#include <span>
 #include <string>
 
 #include "util/CancellationHandle.h"
@@ -75,9 +75,9 @@ using HttpsClient =
     HttpClientImpl<boost::asio::ssl::stream<boost::asio::ip::tcp::socket>>;
 
 // Global convenience function for sending a request (default: GET) to the given
-// URL and obtaining the result as a `std::istringstream`. The protocol (HTTP or
-// HTTPS) is chosen automatically based on the URL. The `requestBody` is the
-// payload sent for POST requests (default: empty).
+// URL and obtaining the result as a `cppcoro::generator<std::span<std::byte>>`.
+// The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
+// `requestBody` is the payload sent for POST requests (default: empty).
 cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
