@@ -66,19 +66,20 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
+      return [](std::string_view result)
+                 -> cppcoro::generator<std::span<std::byte>> {
+        // Randomly slice the string to make tests more robust.
+        std::mt19937 rng{std::random_device{}()};
+        std::uniform_int_distribution<size_t> distribution{0,
+                                                           result.length() / 2};
 
-      // Trim trailing newline, so we don't create an extra empty subrange for
-      // it.
-      auto resultView = std::string_view{predefinedResult}.substr(
-          0, predefinedResult.ends_with('\n') ? predefinedResult.length() - 1
-                                              : predefinedResult.length());
-      return [](std::string_view view) -> cppcoro::generator<std::string_view> {
-        for (const auto& subrange : std::ranges::split_view(view, '\n')) {
-          co_yield std::string_view{
-              &*subrange.begin(),
-              static_cast<size_t>(std::ranges::distance(subrange))};
+        for (size_t start = 0; start < result.length();) {
+          size_t size = distribution(rng);
+          std::string resultCopy{result.substr(start, size)};
+          co_yield std::as_writable_bytes(std::span{resultCopy});
+          start += size;
         }
-      }(resultView);
+      }(std::string{predefinedResult});
     };
   };
 };

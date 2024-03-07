@@ -43,7 +43,7 @@ class HttpClientImpl {
   // `http::verb::post`) and return the body of the reponse (possibly very
   // large) as an `cppcoro::generator<std::string_view>`. The same connection
   // can be used for multiple requests in a row.
-  cppcoro::generator<std::string_view> sendRequest(
+  cppcoro::generator<std::span<std::byte>> sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
@@ -78,7 +78,7 @@ using HttpsClient =
 // URL and obtaining the result as a `std::istringstream`. The protocol (HTTP or
 // HTTPS) is chosen automatically based on the URL. The `requestBody` is the
 // payload sent for POST requests (default: empty).
-cppcoro::generator<std::string_view> sendHttpOrHttpsRequest(
+cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,

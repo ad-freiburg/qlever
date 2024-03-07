@@ -4,8 +4,9 @@
 
 #include "engine/Service.h"
 
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_split.h"
+#include <absl/strings/str_cat.h>
+#include <absl/strings/str_split.h>
+
 #include "engine/CallFixedSize.h"
 #include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
@@ -13,6 +14,7 @@
 #include "parser/TurtleParser.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/Views.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpUtils.h"
 
@@ -112,9 +114,10 @@ ResultTable Service::computeResult() {
   // easy-to-parse format. It might not be the best choice regarding robustness
   // and portability though. In particular, we are not sure how deterministic
   // the TSV output is with respect to the precise encoding of literals.
-  cppcoro::generator<std::string_view> tsvResult = getTsvFunction_(
-      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
-      serviceQuery, "application/sparql-query", "text/tab-separated-values");
+  cppcoro::generator<std::string_view> tsvResult = ad_utility::lineByLine(
+      getTsvFunction_(serviceUrl, cancellationHandle_,
+                      boost::beast::http::verb::post, serviceQuery,
+                      "application/sparql-query", "text/tab-separated-values"));
 
   // The first line of the TSV result contains the variable names.
   auto begin = tsvResult.begin();

@@ -82,7 +82,8 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
 
 // ____________________________________________________________________________
 template <typename StreamType>
-cppcoro::generator<std::string_view> HttpClientImpl<StreamType>::sendRequest(
+cppcoro::generator<std::span<std::byte>>
+HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
     std::string_view target, ad_utility::SharedCancellationHandle handle,
     std::string_view requestBody, std::string_view contentTypeHeader,
@@ -118,10 +119,9 @@ cppcoro::generator<std::string_view> HttpClientImpl<StreamType>::sendRequest(
       ioContext_);
   std::string aggregateBuffer;
   while (!response_parser.is_done()) {
-    // Small buffer to hopefully store a whole line.
-    char staticBuffer[4096];
-    response_parser.get().body().data = staticBuffer;
-    response_parser.get().body().size = sizeof(staticBuffer);
+    std::array<std::byte, 4096> staticBuffer;
+    response_parser.get().body().data = staticBuffer.data();
+    response_parser.get().body().size = staticBuffer.size();
 
     auto [ec, bytes] = ad_utility::runAndWaitForAwaitable(
         ad_utility::interruptible(
@@ -134,21 +134,9 @@ cppcoro::generator<std::string_view> HttpClientImpl<StreamType>::sendRequest(
           "Unexpected error while parsing HTTP request. Error code: ",
           ec.what())};
     }
-    aggregateBuffer += std::string_view{
-        staticBuffer, sizeof(staticBuffer) - response_parser.get().body().size};
-    size_t lastIndex = 0;
-    size_t currentIndex;
-    while ((currentIndex = aggregateBuffer.find_first_of('\n', lastIndex)) !=
-           std::string::npos) {
-      co_yield std::string_view{aggregateBuffer}.substr(
-          lastIndex, currentIndex - lastIndex);
-      lastIndex = currentIndex + 1;
-    }
-    aggregateBuffer.erase(0, lastIndex);
-  }
-  // Flush remaining buffer if not empty
-  if (!aggregateBuffer.empty()) {
-    co_yield aggregateBuffer;
+    size_t remainingBytes = response_parser.get().body().size;
+    co_yield std::span{staticBuffer}.first(staticBuffer.size() -
+                                           remainingBytes);
   }
 }
 
@@ -190,7 +178,7 @@ template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;
 
 // ____________________________________________________________________________
-cppcoro::generator<std::string_view> sendHttpOrHttpsRequest(
+cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method, std::string_view requestData,
@@ -201,14 +189,14 @@ cppcoro::generator<std::string_view> sendHttpOrHttpsRequest(
           ad_utility::SharedCancellationHandle handle,
           const boost::beast::http::verb& method, std::string_view requestData,
           std::string_view contentTypeHeader, std::string_view acceptHeader)
-      -> cppcoro::generator<std::string_view> {
+      -> cppcoro::generator<std::span<std::byte>> {
     Client client{url.host(), url.port()};
     auto generator =
         client.sendRequest(method, url.host(), url.target(), std::move(handle),
                            requestData, contentTypeHeader, acceptHeader);
     // Don't return directly, to keep the client object alive.
-    for (std::string_view line : generator) {
-      co_yield line;
+    for (auto bytes : generator) {
+      co_yield bytes;
     }
   };
   if (url.protocol() == Url::Protocol::HTTP) {
