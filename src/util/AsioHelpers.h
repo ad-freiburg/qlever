@@ -114,6 +114,8 @@ auto runFunctionOnExecutor(Executor executor, Function function,
 /// sometimes this doesn't work because it's part of a library or boost asio
 /// itself. Once `timerRunning` resolves to `false` (or the awaitable is
 /// finished, whatever happens first), the cancellation checks are stopped.
+/// This needs to be called on a strand or in a single-threaded environment,
+/// otherwise this may lead to race conditions, due to issues with boost asio.
 template <typename T>
 inline net::awaitable<T> interruptible(
     net::awaitable<T> awaitable, ad_utility::SharedCancellationHandle handle,
@@ -162,12 +164,15 @@ inline net::awaitable<T> interruptible(
 template <typename T>
 inline T runAndWaitForAwaitable(net::awaitable<T> awaitable,
                                 net::io_context& ioContext) {
-  auto future = net::co_spawn(ioContext, std::move(awaitable), net::use_future);
+  auto future = net::co_spawn(net::make_strand(ioContext), std::move(awaitable),
+                              net::use_future);
 
-  while (future.wait_for(std::chrono::milliseconds{0}) !=
-         std::future_status::ready) {
-    AD_CORRECTNESS_CHECK(future.wait_for(std::chrono::milliseconds{0}) !=
-                         std::future_status::deferred);
+  while (true) {
+    auto futureStatus = future.wait_for(std::chrono::milliseconds{0});
+    if (futureStatus == std::future_status::ready) {
+      break;
+    }
+    AD_CORRECTNESS_CHECK(futureStatus != std::future_status::deferred);
     ioContext.poll_one();
   }
   return future.get();
