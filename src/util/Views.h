@@ -203,21 +203,19 @@ auto inPlaceTransformView(Range&& range, Transformation transformation) {
 /// Create a generator the consumes the input generator until it finds a newline
 /// character and the yields views of whole lines.
 inline cppcoro::generator<std::string_view> lineByLine(
-    cppcoro::generator<std::span<std::byte>> generator) {
+    std::ranges::input_range auto generator) {
   std::string aggregateBuffer{};
   for (auto span : generator) {
     static_assert(sizeof(char) == sizeof(std::byte));
     aggregateBuffer += std::string_view{
         std::bit_cast<const char*>(&*span.begin()), span.size()};
-    size_t lastIndex = 0;
-    size_t currentIndex;
-    while ((currentIndex = aggregateBuffer.find_first_of('\n', lastIndex)) !=
-           std::string::npos) {
-      co_yield std::string_view{aggregateBuffer}.substr(
-          lastIndex, currentIndex - lastIndex);
-      lastIndex = currentIndex + 1;
+    std::string_view view{aggregateBuffer};
+    size_t nextNewlineIdx;
+    while ((nextNewlineIdx = view.find('\n')) != std::string::npos) {
+      co_yield view.substr(0, nextNewlineIdx);
+      view.remove_prefix(nextNewlineIdx + 1);
     }
-    aggregateBuffer.erase(0, lastIndex);
+    aggregateBuffer.erase(0, view.data() - aggregateBuffer.data());
   }
   // Flush remaining buffer if not empty
   if (!aggregateBuffer.empty()) {
