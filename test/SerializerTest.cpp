@@ -7,11 +7,11 @@
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
+#include "../src/util/Serializer/SerializeArray.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
+#include "../src/util/Serializer/SerializePair.h"
 #include "../src/util/Serializer/SerializeString.h"
 #include "../src/util/Serializer/SerializeVector.h"
-#include "../src/util/Serializer/SerializeArray.h"
-#include "../src/util/Serializer/SerializePair.h"
 #include "../src/util/Serializer/Serializer.h"
 
 using namespace ad_utility;

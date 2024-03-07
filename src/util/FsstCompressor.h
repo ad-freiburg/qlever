@@ -5,12 +5,12 @@
 #ifndef QLEVER_FSSTCOMPRESSOR_H
 #define QLEVER_FSSTCOMPRESSOR_H
 
+#include <absl/cleanup/cleanup.h>
 #include <fsst.h>
 
 #include <memory>
 #include <string>
 #include <vector>
-#include <absl/cleanup/cleanup.h>
 
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -123,13 +123,12 @@ class FsstEncoder {
       pointers.push_back(
           reinterpret_cast<unsigned char*>(const_cast<char*>(string.data())));
     }
-    auto encoder = fsst_create(strings.size(), lengths.data(), pointers.data(), 0);
+    auto encoder =
+        fsst_create(strings.size(), lengths.data(), pointers.data(), 0);
     if constexpr (!alsoCompressAll) {
       return Encoder{encoder, Deleter{}};
     } else {
-      absl::Cleanup cleanup{[&encoder]() {
-        fsst_destroy(encoder);
-      }};
+      absl::Cleanup cleanup{[&encoder]() { fsst_destroy(encoder); }};
       std::string output;
       output.resize(totalSize);
       std::vector<char*> outputPtrs;
@@ -138,8 +137,8 @@ class FsstEncoder {
       outputLengths.resize(strings.size());
       while (true) {
         size_t numCompressed = fsst_compress(
-            encoder, strings.size(), lengths.data(), pointers.data(), output.size(),
-            reinterpret_cast<unsigned char*>(output.data()),
+            encoder, strings.size(), lengths.data(), pointers.data(),
+            output.size(), reinterpret_cast<unsigned char*>(output.data()),
             outputLengths.data(),
             reinterpret_cast<unsigned char**>(outputPtrs.data()));
         // Typically one iteration should suffice, we repeat in a loop with
@@ -147,7 +146,9 @@ class FsstEncoder {
         if (numCompressed == strings.size()) {
           break;
         }
-        LOG(WARN) << "FSST compression of a block of strings made the input larger instead of smaller" << std::endl;
+        LOG(WARN) << "FSST compression of a block of strings made the input "
+                     "larger instead of smaller"
+                  << std::endl;
         output.resize(2 * output.size());
       }
       // Convert the result pointers to `string_views` for easier handling.

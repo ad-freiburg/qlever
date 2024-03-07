@@ -12,9 +12,9 @@
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/StringUtils.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/SerializeArray.h"
+#include "util/Serializer/SerializeVector.h"
+#include "util/StringUtils.h"
 
 // TODO<joka921> Include the relevant constants directly here.
 

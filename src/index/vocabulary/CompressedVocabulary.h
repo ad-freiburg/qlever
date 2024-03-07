@@ -6,12 +6,12 @@
 #define QLEVER_COMPRESSEDVOCABULARY_H
 
 #include "index/ConstantsIndexBuilding.h"
+#include "index/PrefixHeuristic.h"
+#include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
-#include "index/vocabulary/PrefixCompressor.h"
-#include "index/PrefixHeuristic.h"
 #include "util/TaskQueue.h"
 
 /// TODO<joka921> Currently the settings of the compressor are not directly
@@ -153,7 +153,7 @@ struct FsstCompressionWrapper : CompressionMixin<FsstDecoder> {
   }
 };
 
-struct PrefixCompressionDecoder: CompressionMixin<PrefixCompressor> {
+struct PrefixCompressionDecoder : CompressionMixin<PrefixCompressor> {
   using Strings = std::vector<std::string>;
   using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
 
@@ -161,17 +161,18 @@ struct PrefixCompressionDecoder: CompressionMixin<PrefixCompressor> {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
     std::ranges::sort(stringsCopy);
-    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
+    auto prefixes =
+        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
     compressor.buildCodebook(prefixes);
     Strings compressedStrings;
-    for (const auto& string: strings) {
+    for (const auto& string : strings) {
       compressedStrings.push_back(compressor.compress(string));
     }
     return {true, std::move(compressedStrings), std::move(compressor)};
   }
 };
 
-struct SuffixCompressionDecoder:CompressionMixin<PrefixCompressor> {
+struct SuffixCompressionDecoder : CompressionMixin<PrefixCompressor> {
   // TODO<joka921> If this is beneficial,
   // add functionality to NOT always physically reverse the strings.
   using Decoder = PrefixCompressor;
@@ -183,10 +184,11 @@ struct SuffixCompressionDecoder:CompressionMixin<PrefixCompressor> {
     PrefixCompressor compressor;
     auto stringsCopy = strings;
     std::ranges::sort(stringsCopy);
-    auto prefixes = calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
+    auto prefixes =
+        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
     compressor.buildCodebook(prefixes);
     Strings compressedStrings;
-    for (const auto& string: strings) {
+    for (const auto& string : strings) {
       compressedStrings.push_back(compressor.compress(string));
     }
     std::ranges::for_each(compressedStrings, std::ranges::reverse);
@@ -198,13 +200,14 @@ struct SuffixCompressionDecoder:CompressionMixin<PrefixCompressor> {
     std::ranges::reverse(result);
     return result;
   }
-
 };
 
-struct PrefixSuffixFsstDecodderImpl : public std::tuple<PrefixCompressor, PrefixCompressor, FsstDecoder> {
+struct PrefixSuffixFsstDecodderImpl
+    : public std::tuple<PrefixCompressor, PrefixCompressor, FsstDecoder> {
   using Base = std::tuple<PrefixCompressor, PrefixCompressor, FsstDecoder>;
   std::string decompress(std::string_view compressed) const {
-    const auto& [prefixDecoder, suffixDecoder, fsstDecoder] = static_cast<const Base&>(*this);
+    const auto& [prefixDecoder, suffixDecoder, fsstDecoder] =
+        static_cast<const Base&>(*this);
     auto result = fsstDecoder.decompress(compressed);
     std::ranges::reverse(result);
     result = suffixDecoder.decompress(result);
@@ -212,33 +215,37 @@ struct PrefixSuffixFsstDecodderImpl : public std::tuple<PrefixCompressor, Prefix
     result = prefixDecoder.decompress(result);
     return result;
   }
-  const auto& base() const {
-    return static_cast<const Base&>(*this);
-  }
-  auto& base() {
-    return static_cast<Base&>(*this);
-  }
+  const auto& base() const { return static_cast<const Base&>(*this); }
+  auto& base() { return static_cast<Base&>(*this); }
   AD_SERIALIZE_FRIEND_FUNCTION(PrefixSuffixFsstDecodderImpl) {
     serializer | arg.base();
   }
-
 };
-struct PrefixSuffixFsstDecodder : CompressionMixin<PrefixSuffixFsstDecodderImpl> {
+struct PrefixSuffixFsstDecodder
+    : CompressionMixin<PrefixSuffixFsstDecodderImpl> {
   using Strings = std::vector<std::string>;
-  using BulkResult = std::tuple<std::string, std::vector<std::string_view>, Decoder>;
+  using BulkResult =
+      std::tuple<std::string, std::vector<std::string_view>, Decoder>;
 
   static BulkResult compressAll(const Strings& strings) {
-    auto [unused, prefixCompressed, prefixDecoder] = PrefixCompressionDecoder::compressAll(strings);
-    auto [unused2, suffixCompressed, suffixDecoder] = SuffixCompressionDecoder::compressAll(prefixCompressed);
-    auto [buffer, fsstCompressed, fsstDecoder] = FsstCompressionWrapper::compressAll(suffixCompressed);
-    return {std::move(buffer), std::move(fsstCompressed), {{std::move(prefixDecoder), std::move(suffixDecoder), std::move(fsstDecoder)}}};
+    auto [unused, prefixCompressed, prefixDecoder] =
+        PrefixCompressionDecoder::compressAll(strings);
+    auto [unused2, suffixCompressed, suffixDecoder] =
+        SuffixCompressionDecoder::compressAll(prefixCompressed);
+    auto [buffer, fsstCompressed, fsstDecoder] =
+        FsstCompressionWrapper::compressAll(suffixCompressed);
+    return {std::move(buffer),
+            std::move(fsstCompressed),
+            {{std::move(prefixDecoder), std::move(suffixDecoder),
+              std::move(fsstDecoder)}}};
   }
 };
 
 // A vocabulary in which compression is performed using the `FSST` algorithm,
 // with one dictionary per `numWordsPerBlock` many words (currently 1 million).
 // The interface is currently designed to work with the `VocabularyOnDisk`.
-template <typename UnderlyingVocabulary, typename CompressionWrapper = PrefixSuffixFsstDecodder>
+template <typename UnderlyingVocabulary,
+          typename CompressionWrapper = PrefixSuffixFsstDecodder>
 class FSSTCompressedVocabulary {
  private:
   // The number of words that share the same decoder.
@@ -256,7 +263,8 @@ class FSSTCompressedVocabulary {
 
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
-    return compressionWrapper_.decompress(underlyingVocabulary_[idx].value(), getDecoderIdx(idx));
+    return compressionWrapper_.decompress(underlyingVocabulary_[idx].value(),
+                                          getDecoderIdx(idx));
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
@@ -317,8 +325,8 @@ class FSSTCompressedVocabulary {
     std::vector<typename CompressionWrapper::Decoder> decoders;
     decoderReader >> decoders;
     compressionWrapper_ = CompressionWrapper{{std::move(decoders)}};
-    AD_CORRECTNESS_CHECK((size() == 0) ||
-                         (getDecoderIdx(size()) <= compressionWrapper_.numDecoders()));
+    AD_CORRECTNESS_CHECK((size() == 0) || (getDecoderIdx(size()) <=
+                                           compressionWrapper_.numDecoders()));
   }
 
   /// Allows the incremental writing of the words to disk. Uses `WordWriter` of
@@ -330,7 +338,14 @@ class FSSTCompressedVocabulary {
     typename UnderlyingVocabulary::WordWriter _underlyingWriter;
     std::string filenameDecoders_;
     bool isFinished_ = false;
-    ad_utility::TaskQueue<false> writeQueue_{5, 1};
+    ad_utility::data_structures::OrderedThreadSafeQueue<std::function<void()>>
+        writeQueue_{5};
+    ad_utility::JThread writeThread_{[this] {
+      while (auto opt = writeQueue_.pop()) {
+        opt.value()();
+      }
+    }};
+    std::atomic<size_t> queueIndex_ = 0;
     ad_utility::TaskQueue<false> compressQueue_{10, 10};
 
    public:
@@ -358,6 +373,8 @@ class FSSTCompressedVocabulary {
       finishBlock();
       compressQueue_.finish();
       writeQueue_.finish();
+      AD_CORRECTNESS_CHECK(writeThread_.joinable());
+      writeThread_.join();
       _underlyingWriter.finish();
       ad_utility::serialization::FileWriteSerializer decoderWriter(
           filenameDecoders_);
@@ -374,15 +391,17 @@ class FSSTCompressedVocabulary {
         return;
       }
 
-      auto compressAndWrite = [words = std::move(wordBuffer_), this]() {
+      auto compressAndWrite = [words = std::move(wordBuffer_), this,
+                               idx = queueIndex_++]() {
         auto bulkResult = CompressionWrapper::compressAll(words);
-        writeQueue_.push([bulkResult = std::move(bulkResult), this]() {
-         auto& [buffer, views, decoder]  = bulkResult;
-        for (auto& word : views) {
-          _underlyingWriter(word);
-        }
-        decoders_.emplace_back(decoder);
-      });
+        writeQueue_.push(
+            std::pair{idx, [bulkResult = std::move(bulkResult), this]() {
+                        auto& [buffer, views, decoder] = bulkResult;
+                        for (auto& word : views) {
+                          _underlyingWriter(word);
+                        }
+                        decoders_.emplace_back(decoder);
+                      }});
       };
       compressQueue_.push(std::move(compressAndWrite));
       wordBuffer_.clear();
@@ -409,15 +428,14 @@ class FSSTCompressedVocabulary {
 
  private:
   // Get the correct decoder for the given `idx`.
-  size_t getDecoderIdx(size_t idx) const {
-    return idx / numWordsPerBlock;
-  }
+  size_t getDecoderIdx(size_t idx) const { return idx / numWordsPerBlock; }
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
     auto idx = it - underlyingVocabulary_.begin();
-    return compressionWrapper_.decompress((*it)._word.value(), getDecoderIdx(idx));
+    return compressionWrapper_.decompress((*it)._word.value(),
+                                          getDecoderIdx(idx));
   };
 };
 

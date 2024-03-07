@@ -241,7 +241,8 @@ std::vector<string> calculatePrefixes(const string& filename,
 
 // ______________________________________________________________________________________
 std::vector<string> calculatePrefixes(std::vector<string> vocabulary,
-                                      size_t numPrefixes, size_t codelength, bool alwaysAddCode) {
+                                      size_t numPrefixes, size_t codelength,
+                                      bool alwaysAddCode) {
   // same function, just for vector of strings
   size_t MIN_PREFIX_LENGTH = alwaysAddCode ? 1 : codelength + 1;
   size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
