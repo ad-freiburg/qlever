@@ -793,13 +793,18 @@ boost::asio::awaitable<void> Server::processQuery(
 template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
-  auto inner = [function = std::move(function),
-                handle = std::move(handle)]() mutable -> T {
-    handle->resetWatchDogState();
+  auto timerRunning = std::make_shared<std::atomic_flag>(true);
+  auto inner = [function = std::move(function), timerRunning]() mutable -> T {
+    timerRunning->clear();
     return std::invoke(std::move(function));
   };
-  return ad_utility::runFunctionOnExecutor(
-      threadPool_.get_executor(), std::move(inner), net::use_awaitable);
+  // interruptible doesn't make the awaitable return faster when cancelled,
+  // this might still block. However it will make the code check the
+  // cancellation handle while waiting for a thread in the pool to become ready.
+  return ad_utility::interruptible(
+      ad_utility::runFunctionOnExecutor(threadPool_.get_executor(),
+                                        std::move(inner), net::use_awaitable),
+      std::move(handle), std::move(timerRunning));
 }
 
 // _____________________________________________________________________________

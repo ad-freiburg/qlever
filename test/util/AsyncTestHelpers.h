@@ -74,20 +74,22 @@ void runAsyncTest(Func innerRun, size_t numThreads) {
   test_suite_name##_##test_name##_impl
 
 #define ASYNC_TEST_N(test_suite_name, test_name, num_threads)              \
-  net::awaitable<void> TEST_IMPL_NAME(test_suite_name,                     \
-                                      test_name)(net::io_context&);        \
+  net::awaitable<void> TEST_IMPL_NAME(                                     \
+      test_suite_name, test_name)([[maybe_unused]] net::io_context&);      \
   TEST(test_suite_name, test_name) {                                       \
     runAsyncTest(TEST_IMPL_NAME(test_suite_name, test_name), num_threads); \
   }                                                                        \
-  net::awaitable<void> TEST_IMPL_NAME(test_suite_name,                     \
-                                      test_name)(net::io_context & ioContext)
+  net::awaitable<void> TEST_IMPL_NAME(test_suite_name, test_name)(         \
+      [[maybe_unused]] net::io_context & ioContext)
 
 #define ASIO_TEST_N(test_suite_name, test_name, num_threads)               \
-  void TEST_IMPL_NAME(test_suite_name, test_name)(net::io_context&);       \
+  void TEST_IMPL_NAME(test_suite_name,                                     \
+                      test_name)([[maybe_unused]] net::io_context&);       \
   TEST(test_suite_name, test_name) {                                       \
     runAsyncTest(TEST_IMPL_NAME(test_suite_name, test_name), num_threads); \
   }                                                                        \
-  void TEST_IMPL_NAME(test_suite_name, test_name)(net::io_context & ioContext)
+  void TEST_IMPL_NAME(test_suite_name,                                     \
+                      test_name)([[maybe_unused]] net::io_context & ioContext)
 
 // Drop-in replacement for gtest's TEST() macro, but for tests that make
 // use of boost asio's awaitable coroutines. Note that this prevents you
