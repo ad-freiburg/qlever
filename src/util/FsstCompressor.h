@@ -36,7 +36,7 @@ class FsstDecoder {
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
-  explicit FsstDecoder(fsst_decoder_t decoder) : decoder_{decoder} {}
+  explicit FsstDecoder(const fsst_decoder_t& decoder) : decoder_{decoder} {}
 
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {
@@ -127,7 +127,7 @@ class FsstEncoder {
 
   // Return a decoder, that can be used to decompress strings that have been
   // compressed by this encoder.
-  FsstDecoder makeDecoder() {
+  FsstDecoder makeDecoder() const {
     return FsstDecoder{fsst_decoder(encoder_.get())};
   }
 

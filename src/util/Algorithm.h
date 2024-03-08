@@ -162,7 +162,7 @@ auto transformArray(Array&& input, Function function) {
 // but an iterator (first argument) and a value (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-template <typename ForwardIterator, typename Tp, typename Compare>
+template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
                                                ForwardIterator last,
                                                const Tp& val, Compare comp) {
@@ -188,7 +188,7 @@ constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
 // but a value (first argument) and an iterator (second argument). The
 // implementation is copied from libstdc++ which has this function as an
 // internal detail, but doesn't expose it to the outside.
-template <typename ForwardIterator, typename Tp, typename Compare>
+template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
 constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
                                                ForwardIterator last,
                                                const Tp& val, Compare comp) {

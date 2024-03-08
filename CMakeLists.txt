@@ -414,9 +414,6 @@ add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
-qlever_target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
-
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
 qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 

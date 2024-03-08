@@ -131,14 +131,9 @@ class VocabularyInMemory {
     void finish() { writer_.finish(); }
   };
 
-  /// Create an iterable generator that yields the `VocabularyInMemory` from the
-  /// file, without materializing the whole vocabulary in RAM. See the
-  /// documentaion of `CompactVectorOfStrings` for details.
-  static auto makeWordDiskIterator(const string& filename) {
-    return Words::diskIterator(filename);
-  }
-
-  // TODO<joka921> Rename this...
+  // Return a `WordWriter` that directly writes the words to the given
+  // `filename`. The words are not materialized in RAM, but the vocabulary later
+  // has to be explicitly initizlied via `open(filename)`.
   WordWriter makeDiskWriter(const std::string& filename) const {
     return WordWriter{filename};
   }

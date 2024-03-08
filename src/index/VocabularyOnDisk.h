@@ -192,8 +192,8 @@ class VocabularyOnDisk {
   auto transformComparator(auto comparator) const {
     // For a `WordAndIndex`, return the word, else (for string types) just
     // return the input.
-    auto getString = [&](const auto& input) -> decltype(auto) {
-      if constexpr (ad_utility::isSimilar<decltype(input), WordAndIndex>) {
+    auto getString = [&]<typename T>(const T& input) -> decltype(auto) {
+      if constexpr (ad_utility::isSimilar<T, WordAndIndex>) {
         AD_CONTRACT_CHECK(input._word.has_value());
         return input._word.value();
       } else {
