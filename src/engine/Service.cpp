@@ -112,22 +112,18 @@ ResultTable Service::computeResult() {
   // easy-to-parse format. It might not be the best choice regarding robustness
   // and portability though. In particular, we are not sure how deterministic
   // the TSV output is with respect to the precise encoding of literals.
-  cppcoro::generator<std::span<std::byte>> tsvByteResult =
+  auto tsvResult =
       ad_utility::reChunkAtSeparator(
           getTsvFunction_(serviceUrl, cancellationHandle_,
                           boost::beast::http::verb::post, serviceQuery,
                           "application/sparql-query",
                           "text/tab-separated-values"),
-          static_cast<std::byte>('\n'));
-
-  // This generator needs to be manually transformed, because CALL_FIXED_SIZE
-  // can only deal with functions with only one template parameter.
-  auto tsvResult = [](auto byteResult) -> cppcoro::generator<std::string_view> {
-    for (std::span<std::byte> bytes : byteResult) {
-      co_yield std::string_view{reinterpret_cast<const char*>(bytes.data()),
+          static_cast<std::byte>('\n')) |
+      std::views::transform([](std::span<std::byte> bytes) {
+        static_assert(sizeof(char) == sizeof(std::byte));
+        return std::string_view{reinterpret_cast<const char*>(bytes.data()),
                                 bytes.size()};
-    }
-  }(std::move(tsvByteResult));
+      });
 
   // The first line of the TSV result contains the variable names.
   auto begin = tsvResult.begin();
@@ -154,15 +150,18 @@ ResultTable Service::computeResult() {
   LocalVocab localVocab{};
   // Fill the result table using the `writeTsvResult` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Service::writeTsvResult, this,
-                  std::move(tsvResult), &idTable, &localVocab);
+  ad_utility::callFixedSize(
+      resWidth, [this, &tsvResult, &idTable, &localVocab]<int Is>() {
+        return Service::writeTsvResult<Is>(std::move(tsvResult), &idTable,
+                                           &localVocab);
+      });
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // ____________________________________________________________________________
 template <size_t I>
-void Service::writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
+void Service::writeTsvResult(std::ranges::input_range auto tsvResult,
                              IdTable* idTablePtr, LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
