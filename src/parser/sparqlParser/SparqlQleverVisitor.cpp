@@ -404,7 +404,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
-      } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
+      } else if constexpr (std::is_same_v<T, Literal> ||
+                           std::is_same_v<T, Iri>) {
         return TurtleStringParser<TokenizerCtre>::parseTripleObject(
             element.toSparql());
       } else {

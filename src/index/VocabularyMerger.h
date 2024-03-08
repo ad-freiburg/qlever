@@ -72,7 +72,8 @@ struct VocabularyMetaData {
   // The number of distinct blank nodes that were found and immediately
   // converted to an ID without becoming part of the vocabulary.
   size_t numBlankNodesTotal_ = 0;
-  IdRangeForPrefix langTaggedPredicates_{"@"};
+  IdRangeForPrefix langTaggedPredicates_{
+      std::string{ad_utility::languageTaggedPredicatePrefix}};
   IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
 
   // Return true iff the `id` belongs to one of the two ranges that contain

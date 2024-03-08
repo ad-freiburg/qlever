@@ -19,7 +19,8 @@ namespace p = parsedQuery;
 using Var = Variable;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-}
+auto iri = ad_utility::testing::iri;
+}  // namespace
 
 TEST(ParserTest, testParse) {
   {
@@ -56,7 +57,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", triples[2].p_._iri);
-    ASSERT_EQ("<http://abc.de>", triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -85,7 +86,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", triples[2].p_._iri);
-    ASSERT_EQ("<http://abc.de>", triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -484,7 +485,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(c._triples[0].p_._iri, "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, "<Scott%2C%20Ridley>");
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -561,7 +562,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(c._triples[0].p_._iri, "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, "<Scott%2C%20Ridley>");
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -747,7 +748,7 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(Var{"?z"}, c._triples[1].o_);
   ASSERT_EQ(Var{"?y"}, c._triples[2].s_);
   ASSERT_EQ("<nsx:rel2>", c._triples[2].p_._iri);
-  ASSERT_EQ("<http://abc.de>", c._triples[2].o_);
+  ASSERT_EQ(iri("<http://abc.de>"), c._triples[2].o_);
   ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
@@ -909,7 +910,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", c._triples[1].p_._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -932,7 +933,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", c._triples[1].p_._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -1164,7 +1165,8 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"}, PropertyPath::fromIri("@en@<label>"),
+    ASSERT_EQ((SparqlTriple{Var{"?x"},
+                            PropertyPath::fromIri("<ql:langtaggedenlabel>"),
                             Var{"?y"}}),
               triples[0]);
   }
