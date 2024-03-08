@@ -3,7 +3,11 @@
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 #pragma once
 
+#include <atomic>
+#include <cstdint>
 #include <string>
+
+#include "util/MemorySize/MemorySize.h"
 
 // Constants which are only used during index creation
 
