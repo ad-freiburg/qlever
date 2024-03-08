@@ -201,7 +201,7 @@ auto inPlaceTransformView(Range&& range, Transformation transformation) {
 }
 
 /// Create a generator the consumes the input generator until it finds the given
-/// separator and the yields spans of the chunks of data received in between.
+/// separator and the yields spans of the chunks of data received inbetween.
 template <std::ranges::input_range Range, typename ElementType>
 inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
     Range generator, ElementType separator) {
