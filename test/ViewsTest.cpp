@@ -189,28 +189,30 @@ TEST(Views, inPlaceTransform) {
 }
 
 // __________________________________________________________________________
-TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
-  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
-    std::string_view values = "\nabc\ndefghij\n";
-    for (char c : values) {
-      std::byte wrapper = static_cast<std::byte>(c);
-      co_yield std::span{&wrapper, 1};
-    }
-  }();
 
-  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+std::string_view toView(std::span<char> span) {
+  return {span.data(), span.size()};
+}
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
+  auto range =
+      std::string_view{"\nabc\ndefghij\n"} |
+      std::views::transform([](char c) { return std::ranges::single_view(c); });
+  auto lineByLineGenerator =
+      ad_utility::reChunkAtSeparator(std::move(range), '\n');
 
   auto iterator = lineByLineGenerator.begin();
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "");
+  EXPECT_EQ(toView(*iterator), "");
 
   ++iterator;
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "abc");
+  EXPECT_EQ(toView(*iterator), "abc");
 
   ++iterator;
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "defghij");
+  EXPECT_EQ(toView(*iterator), "defghij");
 
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());
@@ -218,19 +220,16 @@ TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
 
 // __________________________________________________________________________
 TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
-  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
-    std::string_view values = "abc";
-    for (char c : values) {
-      std::byte wrapper = static_cast<std::byte>(c);
-      co_yield std::span{&wrapper, 1};
-    }
-  }();
+  auto range = std::string_view{"abc"} | std::views::transform([](char c) {
+                 return std::ranges::single_view(c);
+               });
 
-  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+  auto lineByLineGenerator =
+      ad_utility::reChunkAtSeparator(std::move(range), '\n');
 
   auto iterator = lineByLineGenerator.begin();
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "abc");
+  EXPECT_EQ(toView(*iterator), "abc");
 
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());
@@ -238,30 +237,22 @@ TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
 
 // __________________________________________________________________________
 TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
-  auto generator = []() -> cppcoro::generator<std::span<std::byte>> {
-    auto range = std::string_view{"\nabc\ndefghij\n"} |
-                 std::ranges::views::transform(
-                     [](char c) { return static_cast<std::byte>(c); });
-    std::vector<std::byte> values{range.begin(), range.end()};
-    constexpr size_t chunkSize = 6;
-    for (size_t i = 0; i < values.size(); i += chunkSize) {
-      co_yield std::span{&values.at(i), std::min(chunkSize, values.size() - i)};
-    }
-  }();
+  using namespace std::string_view_literals;
 
-  auto lineByLineGenerator = ad_utility::lineByLine(std::move(generator));
+  auto lineByLineGenerator = ad_utility::reChunkAtSeparator(
+      std::vector{"\nabc\nd"sv, "efghij"sv, "\n"sv}, '\n');
 
   auto iterator = lineByLineGenerator.begin();
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "");
+  EXPECT_EQ(toView(*iterator), "");
 
   ++iterator;
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "abc");
+  EXPECT_EQ(toView(*iterator), "abc");
 
   ++iterator;
   ASSERT_NE(iterator, lineByLineGenerator.end());
-  EXPECT_EQ(*iterator, "defghij");
+  EXPECT_EQ(toView(*iterator), "defghij");
 
   ++iterator;
   ASSERT_EQ(iterator, lineByLineGenerator.end());

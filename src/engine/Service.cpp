@@ -108,16 +108,26 @@ ResultTable Service::computeResult() {
   // Send the query to the remote SPARQL endpoint via a POST request and get the
   // result as TSV.
   //
-  // TODO: We should support a timeout here.
-  //
   // TODO: We ask for the result as TSV because that is a compact and
   // easy-to-parse format. It might not be the best choice regarding robustness
   // and portability though. In particular, we are not sure how deterministic
   // the TSV output is with respect to the precise encoding of literals.
-  cppcoro::generator<std::string_view> tsvResult = ad_utility::lineByLine(
-      getTsvFunction_(serviceUrl, cancellationHandle_,
-                      boost::beast::http::verb::post, serviceQuery,
-                      "application/sparql-query", "text/tab-separated-values"));
+  cppcoro::generator<std::span<std::byte>> tsvByteResult =
+      ad_utility::reChunkAtSeparator(
+          getTsvFunction_(serviceUrl, cancellationHandle_,
+                          boost::beast::http::verb::post, serviceQuery,
+                          "application/sparql-query",
+                          "text/tab-separated-values"),
+          static_cast<std::byte>('\n'));
+
+  // This generator needs to be manually transformed, because CALL_FIXED_SIZE
+  // can only deal with functions with only one template parameter.
+  auto tsvResult = [](auto byteResult) -> cppcoro::generator<std::string_view> {
+    for (std::span<std::byte> bytes : byteResult) {
+      co_yield std::string_view{reinterpret_cast<const char*>(bytes.data()),
+                                bytes.size()};
+    }
+  }(std::move(tsvByteResult));
 
   // The first line of the TSV result contains the variable names.
   auto begin = tsvResult.begin();

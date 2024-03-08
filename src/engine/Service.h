@@ -91,7 +91,7 @@ class Service : public Operation {
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse TSV here and not a VALUES clause. Note that the only reason that
   // `tsvResult` is not `const` here is because the method iterates over the
-  // `std::istringstream` and thus changes it.
+  // input range and thus changes it.
   template <size_t I>
   void writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
                       IdTable* idTable, LocalVocab* localVocab);

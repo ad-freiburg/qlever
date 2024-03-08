@@ -200,26 +200,26 @@ auto inPlaceTransformView(Range&& range, Transformation transformation) {
                                           std::move(transformation));
 }
 
-/// Create a generator the consumes the input generator until it finds a newline
-/// character and the yields views of whole lines.
-inline cppcoro::generator<std::string_view> lineByLine(
-    std::ranges::input_range auto generator) {
-  std::string aggregateBuffer{};
-  for (auto span : generator) {
-    static_assert(sizeof(char) == sizeof(std::byte));
-    aggregateBuffer += std::string_view{
-        std::bit_cast<const char*>(&*span.begin()), span.size()};
-    std::string_view view{aggregateBuffer};
-    size_t nextNewlineIdx;
-    while ((nextNewlineIdx = view.find('\n')) != std::string::npos) {
-      co_yield view.substr(0, nextNewlineIdx);
-      view.remove_prefix(nextNewlineIdx + 1);
+/// Create a generator the consumes the input generator until it finds the given
+/// separator and the yields spans of the chunks of data received in between.
+template <std::ranges::input_range Range,
+          typename SeparatorType =
+              decltype(*std::ranges::begin(std::declval<Range>()))>
+inline cppcoro::generator<std::span<SeparatorType>> reChunkAtSeparator(
+    Range generator, SeparatorType separator) {
+  std::vector<SeparatorType> buffer;
+  for (std::ranges::input_range auto chunk : generator) {
+    for (SeparatorType c : chunk) {
+      if (c == separator) {
+        co_yield std::span{buffer.data(), buffer.size()};
+        buffer.clear();
+      } else {
+        buffer.push_back(c);
+      }
     }
-    aggregateBuffer.erase(0, view.data() - aggregateBuffer.data());
   }
-  // Flush remaining buffer if not empty
-  if (!aggregateBuffer.empty()) {
-    co_yield aggregateBuffer;
+  if (!buffer.empty()) {
+    co_yield std::span{buffer.data(), buffer.size()};
   }
 }
 
