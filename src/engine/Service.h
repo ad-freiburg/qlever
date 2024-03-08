@@ -93,6 +93,6 @@ class Service : public Operation {
   // `tsvResult` is not `const` here is because the method iterates over the
   // input range and thus changes it.
   template <size_t I>
-  void writeTsvResult(std::ranges::input_range auto tsvResult, IdTable* idTable,
-                      LocalVocab* localVocab);
+  void writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
+                      IdTable* idTable, LocalVocab* localVocab);
 };
