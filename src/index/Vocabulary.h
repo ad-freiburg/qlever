@@ -256,16 +256,21 @@ class Vocabulary {
     return internalVocabulary_;
   }
 
-  // Get a writer for the external vocab that has a `push` method to which the
-  // single words have to be pushed one by one to add words to the vocabulary.
+  // Get a writer for the external vocab that has an `operator()` method to
+  // which the single words have to be pushed one by one to add words to the
+  // vocabulary.
   CompressedVocabulary<VocabularyOnDisk>::WordWriter
   makeWordWriterForExternalVocabulary(const std::string& filename) const {
     return externalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
         filename);
   }
+
+  // Same as `makeWordWriterForExternalVocabulary`, but for the internal
+  // vocabulary.
   // TODO<joka921> Fix the unicode inconsistencies in Wikidata, and then let the
   // UnicodeVocabulary hand out the writer including assertions that the
-  // vocabulary is sorted.
+  // vocabulary is sorted. Then we don't need the call to
+  // `getUnderlyingVocabulary()` here.
   InternalUnderlyingVocabulary::WordWriter makeWordWriterForInternalVocabulary(
       const std::string& filename) const {
     return internalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(

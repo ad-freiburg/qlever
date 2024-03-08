@@ -23,9 +23,8 @@ struct DummyDecoder {
     }
     return result;
   }
-  AD_SERIALIZE_FRIEND_FUNCTION(DummyDecoder) {
-    // No state, so nothing to serialize here.
-  }
+  // This class has no state, but it still needs to be serialized.
+  friend std::true_type allowTrivialSerialization(DummyDecoder, auto);
 };
 
 // A wrapper for the stateless dummy compression.
@@ -65,7 +64,8 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   writer.finish();
 
   VocabularyInMemory simple;
-  simple.open("vocabtmp.txt");
+  simple.open("vocabtmp.txt.words");
+  ad_utility::deleteFile("vocabtmp.txt.words");
 
   ASSERT_EQ(simple.size(), words.size());
   for (size_t i = 0; i < simple.size(); ++i) {
