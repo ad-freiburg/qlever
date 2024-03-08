@@ -96,8 +96,8 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<VocabIndex> currentSubjectIndex_;
-  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
+  std::optional<Id> currentSubject_;
+  // The pattern of `currentSubject_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;
 
@@ -135,7 +135,7 @@ class PatternCreator {
                 basename + ".additionalTriples.pso.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
-                basename + ".withPatterns.osp.dat", memoryLimit / 2,
+                basename + ".second-sorter.dat", memoryLimit / 2,
                 ad_utility::makeUnlimitedAllocator<Id>())} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
@@ -175,7 +175,7 @@ class PatternCreator {
   }
 
  private:
-  void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
+  void finishSubject(Id subject, const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

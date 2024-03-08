@@ -9,16 +9,15 @@
 #include <unordered_map>
 #include <unordered_set>
 
-#include "../parser/ParsedQuery.h"
-#include "../parser/data/ConstructQueryExportContext.h"
-#include "../parser/data/Types.h"
-#include "../parser/data/VarOrTerm.h"
-#include "../util/Conversions.h"
-#include "../util/Generator.h"
-#include "../util/HashSet.h"
-#include "../util/stream_generator.h"
-#include "./Operation.h"
-#include "./QueryExecutionContext.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionContext.h"
+#include "parser/ParsedQuery.h"
+#include "parser/data/ConstructQueryExportContext.h"
+#include "parser/data/Types.h"
+#include "util/Conversions.h"
+#include "util/Generator.h"
+#include "util/HashSet.h"
+#include "util/stream_generator.h"
 
 using std::shared_ptr;
 using std::string;

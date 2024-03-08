@@ -139,10 +139,9 @@ class Vocabulary {
       UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
-  // ID ranges for IRIs, blank nodes, and literals. Used for the efficient
-  // computation of the `isIRI`, `isBlankNode`, and `isLiteral` functions.
+  // ID ranges for IRIs and literals. Used for the efficient computation of the
+  // `isIRI` and `isLiteral` functions.
   PrefixRanges prefixRangesIris_;
-  PrefixRanges prefixRangesBlankNodes_;
   PrefixRanges prefixRangesLiterals_;
 
  public:
@@ -158,11 +157,6 @@ class Vocabulary {
 
   virtual ~Vocabulary() = default;
 
-  //! clear all the contents, but not the settings for prefixes etc
-  void clear() {
-    internalVocabulary_.close();
-    externalVocabulary_.close();
-  }
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
 
@@ -224,9 +218,6 @@ class Vocabulary {
   static bool stringIsLiteral(const string& s);
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
-  bool isBlankNode(IndexT index) const {
-    return prefixRangesBlankNodes_.contain(index);
-  }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
   }
@@ -236,13 +227,6 @@ class Vocabulary {
   bool shouldEntityBeExternalized(const string& word) const;
 
   bool shouldLiteralBeExternalized(const string& word) const;
-
-  // only still needed for text vocabulary
-  void externalizeLiteralsFromTextFile(const string& textFileName,
-                                       const string& outFileName) {
-    externalVocabulary_.getUnderlyingVocabulary().buildFromTextFile(
-        textFileName, outFileName);
-  }
 
   static string getLanguage(const string& literal);
 
@@ -305,7 +289,15 @@ class Vocabulary {
     return internalVocabulary_;
   }
 
-  auto makeUncompressingWordWriter(const std::string& filename) {
+  // Get a writer for the external vocab that has a `push` method to which the
+  // single words have to be pushed one by one to add words to the vocabulary.
+  VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
+      const std::string& filename) const {
+    return VocabularyOnDisk::WordWriter(filename);
+  }
+
+  VocabularyInMemory::WordWriter makeUncompressingWordWriter(
+      const std::string& filename) const {
     return VocabularyInMemory::WordWriter{filename};
   }
 

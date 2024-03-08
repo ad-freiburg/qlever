@@ -6,12 +6,12 @@
 
 #include <vector>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/ResultTable.h"
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
+#include "util/IndexTestHelpers.h"
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;

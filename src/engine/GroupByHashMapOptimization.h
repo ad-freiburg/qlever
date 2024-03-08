@@ -5,11 +5,12 @@
 
 #pragma once
 
+#include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
-// For `SUM` and `AVG`, add value to sum if it is numeric, otherwise
+// For `AVG`, add value to sum if it is numeric, otherwise
 // set error flag.
 static constexpr auto valueAdder = []() {
   auto numericValueAdder =
@@ -68,23 +69,20 @@ struct CountAggregationData {
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
 template <valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
-  sparqlExpression::IdOrString currentValue_ = ValueId::makeUndefined();
+  sparqlExpression::IdOrString currentValue_;
+  bool firstValueSet_ = false;
 
   // _____________________________________________________________________________
   void addValue(const sparqlExpression::IdOrString& value,
                 const sparqlExpression::EvaluationContext* ctx) {
-    if (auto val = std::get_if<ValueId>(&currentValue_);
-        val != nullptr && val->isUndefined()) {
+    if (!firstValueSet_) {
       currentValue_ = value;
+      firstValueSet_ = true;
       return;
     }
-    auto impl = [&ctx]<typename X, typename Y>(const X& x, const Y& y) {
-      return toBoolNotUndef(
-          sparqlExpression::compareIdsOrStrings<
-              Comp, valueIdComparators::ComparisonForIncompatibleTypes::
-                        CompareByType>(x, y, ctx));
-    };
-    if (std::visit(impl, value, currentValue_)) currentValue_ = value;
+
+    currentValue_ = sparqlExpression::detail::minMaxLambdaForAllTypes<Comp>(
+        value, currentValue_, ctx);
   }
 
   // _____________________________________________________________________________
@@ -109,12 +107,29 @@ using MaxAggregationData =
 struct SumAggregationData {
   using ValueGetter = sparqlExpression::detail::NumericValueGetter;
   bool error_ = false;
+  bool intSumValid_ = true;
   double sum_ = 0;
+  int64_t intSum_ = 0;
 
   // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
     auto val = ValueGetter{}(AD_FWD(value), ctx);
-    std::visit([this](auto val) { valueAdder(val, sum_, error_); }, val);
+
+    auto doubleValueAdder = [this](double value) {
+      sum_ += value;
+      intSumValid_ = false;
+    };
+    auto intValueAdder = [this](int64_t value) {
+      sum_ += static_cast<double>(value);
+      intSum_ += value;
+    };
+    auto nonNumericValueAdder = [this](sparqlExpression::detail::NotNumeric) {
+      error_ = true;
+    };
+    auto sumValueAdder = ad_utility::OverloadCallOperator(
+        doubleValueAdder, intValueAdder, nonNumericValueAdder);
+
+    std::visit(sumValueAdder, val);
   };
 
   // _____________________________________________________________________________
@@ -122,6 +137,8 @@ struct SumAggregationData {
       [[maybe_unused]] const LocalVocab* localVocab) const {
     if (error_)
       return ValueId::makeUndefined();
+    else if (intSumValid_)
+      return ValueId::makeFromInt(intSum_);
     else
       return ValueId::makeFromDouble(sum_);
   }

@@ -38,7 +38,8 @@ class RuntimeInformation {
     lazilyMaterialized,
     optimizedOut,
     failed,
-    failedBecauseChildFailed
+    failedBecauseChildFailed,
+    cancelled
   };
   using enum Status;
 
@@ -92,8 +93,9 @@ class RuntimeInformation {
   /// library to allow for implicit conversion.
   friend void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti);
 
-  /// Set the names of the columns from the HashMap format that is used in the
-  /// rest of the Qlever code.
+  /// Set `columnNames_` from a `VariableToColumnMap`. The former is a vector
+  /// (convenient for this class), the latter is a hash map (appropriate for
+  /// the rest of the code).
   void setColumnNames(const VariableToColumnMap& columnMap);
 
   /// Get the time spent computing the operation. This is the total time minus

@@ -19,6 +19,8 @@ using ::testing::HasSubstr;
 
 using namespace std::chrono_literals;
 
+ad_utility::source_location location = ad_utility::source_location::current();
+
 template <typename CancellationHandle>
 struct CancellationHandleFixture : public ::testing::Test {
   CancellationHandle handle_;
@@ -30,7 +32,7 @@ TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, verifyConstructorMessageIsPassed) {
+TEST(CancellationException, verifyConstructorMessageIsPassed) {
   auto message = "Message";
   CancellationException exception{message};
   EXPECT_STREQ(message, exception.what());
@@ -38,9 +40,41 @@ TEST(CancellationHandle, verifyConstructorMessageIsPassed) {
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, verifyConstructorDoesNotAcceptNoReason) {
-  EXPECT_THROW(CancellationException exception(NOT_CANCELLED, ""),
+TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
+  EXPECT_THROW(CancellationException exception(NOT_CANCELLED),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+
+TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
+  auto message = "Message";
+  auto operation = "Operation";
+  auto otherThing = "Other Thing";
+  {
+    CancellationException exception{message};
+
+    exception.setOperation(operation);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(message), HasSubstr(operation)));
+
+    // Verify double call does not overwrite initial operation.
+    exception.setOperation(otherThing);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(message), HasSubstr(operation),
+                      Not(HasSubstr(otherThing))));
+  }
+  {
+    CancellationException exception{MANUAL};
+
+    exception.setOperation(operation);
+    EXPECT_THAT(exception.what(), HasSubstr(operation));
+
+    // Verify double call does not overwrite initial operation.
+    exception.setOperation(otherThing);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(operation), Not(HasSubstr(otherThing))));
+  }
 }
 
 // _____________________________________________________________________________
@@ -48,9 +82,9 @@ TEST(CancellationHandle, verifyConstructorDoesNotAcceptNoReason) {
 TYPED_TEST(CancellationHandleFixture, verifyNotCancelledByDefault) {
   auto& handle = this->handle_;
 
-  EXPECT_FALSE(handle.isCancelled(""));
-  EXPECT_NO_THROW(handle.throwIfCancelled(""));
-  EXPECT_NO_THROW(handle.throwIfCancelled([]() { return ""; }));
+  EXPECT_FALSE(handle.isCancelled());
+  EXPECT_NO_THROW(handle.throwIfCancelled());
+  EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
 // _____________________________________________________________________________
@@ -62,21 +96,15 @@ TYPED_TEST(CancellationHandleFixture, verifyCancelWithWrongReasonThrows) {
 
 // _____________________________________________________________________________
 
-auto detail = "Some Detail";
-
 TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
   auto& handle = this->handle_;
 
   handle.cancel(TIMEOUT);
 
-  auto timeoutMessageMatcher = AllOf(HasSubstr(detail), HasSubstr("timeout"));
-  EXPECT_TRUE(handle.isCancelled(""));
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
-                                        timeoutMessageMatcher,
+  EXPECT_TRUE(handle.isCancelled());
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(location),
+                                        HasSubstr("timed out"),
                                         CancellationException);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      handle.throwIfCancelled([]() { return detail; }), timeoutMessageMatcher,
-      CancellationException);
 }
 
 // _____________________________________________________________________________
@@ -86,15 +114,10 @@ TYPED_TEST(CancellationHandleFixture, verifyManualCancellationWorks) {
 
   handle.cancel(MANUAL);
 
-  auto cancellationMessageMatcher =
-      AllOf(HasSubstr(detail), HasSubstr("manual cancellation"));
-  EXPECT_TRUE(handle.isCancelled(""));
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(detail),
-                                        cancellationMessageMatcher,
+  EXPECT_TRUE(handle.isCancelled());
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(handle.throwIfCancelled(location),
+                                        HasSubstr("manually cancelled"),
                                         CancellationException);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      handle.throwIfCancelled([]() { return detail; }),
-      cancellationMessageMatcher, CancellationException);
 }
 
 // _____________________________________________________________________________
@@ -112,11 +135,11 @@ TYPED_TEST(CancellationHandleFixture,
       {
         auto end = std::chrono::steady_clock::now() + 100ms;
         while (std::chrono::steady_clock::now() < end) {
-          handle.throwIfCancelled("Some Detail");
+          handle.throwIfCancelled();
         }
       },
       CancellationException);
-  EXPECT_TRUE(handle.isCancelled(""));
+  EXPECT_TRUE(handle.isCancelled());
 }
 
 // _____________________________________________________________________________
@@ -239,11 +262,11 @@ TEST(CancellationHandle, verifyCheckDoesPleaseWatchDog) {
   CancellationHandle<ENABLED> handle;
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
-  EXPECT_NO_THROW(handle.throwIfCancelled(""));
+  EXPECT_NO_THROW(handle.throwIfCancelled());
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  EXPECT_NO_THROW(handle.throwIfCancelled(""));
+  EXPECT_NO_THROW(handle.throwIfCancelled());
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 }
 
@@ -253,11 +276,11 @@ TEST(CancellationHandle, verifyCheckDoesNotOverrideCancelledState) {
   CancellationHandle<ENABLED> handle;
 
   handle.cancellationState_ = MANUAL;
-  EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
+  EXPECT_THROW(handle.throwIfCancelled(), CancellationException);
   EXPECT_EQ(handle.cancellationState_, MANUAL);
 
   handle.cancellationState_ = TIMEOUT;
-  EXPECT_THROW(handle.throwIfCancelled(""), CancellationException);
+  EXPECT_THROW(handle.throwIfCancelled(), CancellationException);
   EXPECT_EQ(handle.cancellationState_, TIMEOUT);
 }
 
@@ -277,12 +300,12 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
-  EXPECT_NO_THROW(handle.throwIfCancelled("my-detail"));
+  EXPECT_NO_THROW(handle.throwIfCancelled(location));
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
 
   EXPECT_THAT(
       std::move(testStream).str(),
-      AllOf(HasSubstr("my-detail"),
+      AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
             // Check for small miss window
@@ -309,39 +332,75 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
   // The first call should trigger a log
-  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "my-detail");
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(), HasSubstr("my-detail"));
+  EXPECT_THAT(std::move(testStream).str(),
+              HasSubstr("CancellationHandleTest.cpp:22"));
 
   testStream.str("");
 
   // The second call should not trigger a log because the state has already
   // been reset
-  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, std::identity{}, "other-detail");
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("other-detail")));
+  EXPECT_THAT(std::move(testStream).str(),
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
 
   // WAITING_FOR_CHECK should not trigger a log
-  handle.pleaseWatchDog(WAITING_FOR_CHECK, std::identity{}, "my-detail");
+  handle.pleaseWatchDog(WAITING_FOR_CHECK, location, detail::printNothing);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
+  EXPECT_THAT(std::move(testStream).str(),
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
+
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+
+  constexpr auto printSomething = []() { return "something"; };
+  // The first call should trigger a log with more details
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, printSomething);
+
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(),
+              AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
+                    HasSubstr(printSomething())));
+
+  testStream.str("");
+
+  // The second call should not trigger a log
+  handle.pleaseWatchDog(CHECK_WINDOW_MISSED, location, printSomething);
+
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
+                        HasSubstr(printSomething()))));
+
+  handle.cancellationState_ = CHECK_WINDOW_MISSED;
+  testStream.str("");
+
+  // WAITING_FOR_CHECK should not trigger a log
+  handle.pleaseWatchDog(WAITING_FOR_CHECK, location, printSomething);
+
+  EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
+  EXPECT_THAT(std::move(testStream).str(),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
+                        HasSubstr(printSomething()))));
 }
 
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyPleaseWatchDogDoesNotAcceptInvalidState) {
+  using detail::printNothing;
   CancellationHandle<ENABLED> handle;
-  EXPECT_THROW(handle.pleaseWatchDog(NOT_CANCELLED, std::identity{}, ""),
+  EXPECT_THROW(handle.pleaseWatchDog(NOT_CANCELLED, location, printNothing),
                ad_utility::Exception);
-  EXPECT_THROW(handle.pleaseWatchDog(MANUAL, std::identity{}, ""),
+  EXPECT_THROW(handle.pleaseWatchDog(MANUAL, location, printNothing),
                ad_utility::Exception);
-  EXPECT_THROW(handle.pleaseWatchDog(TIMEOUT, std::identity{}, ""),
+  EXPECT_THROW(handle.pleaseWatchDog(TIMEOUT, location, printNothing),
                ad_utility::Exception);
 }
 
@@ -362,18 +421,20 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
   handle.startTimeoutWindow_ = std::chrono::steady_clock::now();
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
-  handle.isCancelled("my-detail");
+  handle.isCancelled(location);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(), HasSubstr("my-detail"));
+  EXPECT_THAT(std::move(testStream).str(),
+              HasSubstr("CancellationHandleTest.cpp:22"));
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   testStream.str("");
 
-  handle.isCancelled("my-detail");
+  handle.isCancelled(location);
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
-  EXPECT_THAT(std::move(testStream).str(), Not(HasSubstr("my-detail")));
+  EXPECT_THAT(std::move(testStream).str(),
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
 }
 
 // _____________________________________________________________________________
@@ -381,8 +442,8 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 TEST(CancellationHandle, expectDisabledHandleIsAlwaysFalse) {
   CancellationHandle<DISABLED> handle;
 
-  EXPECT_FALSE(handle.isCancelled(""));
-  EXPECT_NO_THROW(handle.throwIfCancelled("Abc"));
+  EXPECT_FALSE(handle.isCancelled());
+  EXPECT_NO_THROW(handle.throwIfCancelled());
 }
 
 consteval bool isMemberFunction([[maybe_unused]] auto funcPtr) {
@@ -403,5 +464,14 @@ static_assert(isMemberFunction(&CancellationHandle<DISABLED>::cancel));
 static_assert(isMemberFunction(&CancellationHandle<DISABLED>::isCancelled));
 // Ideally we'd add a static assertion for throwIfCancelled here too, but
 // because the function is overloaded, we can't get a function pointer for it.
+
+// Constexpr test cases
+static_assert(trimFileName("") == "");
+static_assert(trimFileName("/") == "");
+static_assert(trimFileName("folder/") == "");
+static_assert(trimFileName("//////") == "");
+static_assert(trimFileName("../Test.cpp") == "Test.cpp");
+static_assert(trimFileName("Test.cpp") == "Test.cpp");
+static_assert(trimFileName("./folder/Test.cpp") == "Test.cpp");
 
 }  // namespace ad_utility

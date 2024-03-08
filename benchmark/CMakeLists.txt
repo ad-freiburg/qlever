@@ -30,3 +30,5 @@ addAndLinkBenchmark(BenchmarkExamples)
 addAndLinkBenchmark(IdTableCompressedWriterBenchmark engine testUtil)
 
 addAndLinkBenchmark(ParallelMergeBenchmark)
+
+addAndLinkBenchmark(GroupByHashMapBenchmark engine testUtil gtest gmock)

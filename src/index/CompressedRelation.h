@@ -66,20 +66,21 @@ struct CompressedBlockMetadata {
   // triples depends on the stored permutation: For example, in the PSO
   // permutation, the first element of the triples is the P, the second one is
   // the S and the third one is the O. Note that the first key of the
-  // permutation (for example the P in the PSO permutation) is not stored in the
-  // blocks, but has to be retrieved via the corresponding
+  // permutation (for example the P in the PSO permutation) is not stored in
+  // the blocks, but has to be retrieved via the corresponding
   // `CompressedRelationMetadata`.
+  //
   // NOTE: Strictly speaking, storing one of `firstTriple_` or `lastTriple_`
-  // would probably suffice. However, they make several functions much easier to
-  // implement and don't really harm with respect to space efficiency. For
+  // would probably suffice. However, they make several functions much easier
+  // to implement and don't really harm with respect to space efficiency. For
   // example, for Wikidata, we have only around 50K blocks with block size 8M
-  // and around 5M blocks with block size 80K; even the latter takes only half a
-  // GB in total.
+  // and around 5M blocks with block size 80K; even the latter takes only half
+  // a GB in total.
   struct PermutedTriple {
     Id col0Id_;
     Id col1Id_;
     Id col2Id_;
-    bool operator==(const PermutedTriple&) const = default;
+    auto operator<=>(const PermutedTriple&) const = default;
 
     // Formatted output for debugging.
     friend std::ostream& operator<<(std::ostream& str,
@@ -215,9 +216,12 @@ class CompressedRelationWriter {
    * @param permutation The permutation to be build (as a permutation of the
    * array `[0, 1, 2]`). The `sortedTriples` must be sorted by this permutation.
    */
-  static std::pair<std::vector<CompressedBlockMetadata>,
-                   std::vector<CompressedBlockMetadata>>
-  createPermutationPair(
+  struct PermutationPairResult {
+    size_t numDistinctCol0_;
+    std::vector<CompressedBlockMetadata> blockMetadata_;
+    std::vector<CompressedBlockMetadata> blockMetadataSwitched_;
+  };
+  static PermutationPairResult createPermutationPair(
       const std::string& basename, WriterAndCallback writerAndCallback1,
       WriterAndCallback writerAndCallback2,
       cppcoro::generator<IdTableStatic<0>> sortedTriples,
@@ -332,14 +336,56 @@ class CompressedRelationReader {
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
   using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+
+  // The specification of a scan operation for a given permutation.
+  // Can either be a full scan (all three elements are `std::nullopt`),
+  // a scan for a fixed `col0Id`, a scan for a fixed `col0Id` and `col1Id`,
+  // or even a scan for a single triple to check whether it is contained in
+  // the knowledge graph at all. The values which are `nullopt` become variables
+  // and are returned as columns in the result of the scan.
+  class ScanSpecification {
+   private:
+    using T = std::optional<Id>;
+
+    T col0Id_;
+    T col1Id_;
+    T col2Id_;
+
+    void validate() const {
+      bool c0 = col0Id_.has_value();
+      bool c1 = col1Id_.has_value();
+      bool c2 = col2Id_.has_value();
+      if (!c0) {
+        AD_CORRECTNESS_CHECK(!c1 && !c2);
+      }
+      if (!c1) {
+        AD_CORRECTNESS_CHECK(!c2);
+      }
+    }
+
+   public:
+    ScanSpecification(T col0Id, T col1Id, T col2Id)
+        : col0Id_{col0Id}, col1Id_{col1Id}, col2Id_{col2Id} {
+      validate();
+    }
+    const T& col0Id() const { return col0Id_; }
+    const T& col1Id() const { return col1Id_; }
+    const T& col2Id() const { return col2Id_; }
+
+    // Only used in tests.
+    void setCol1Id(T col1Id) {
+      col1Id_ = col1Id;
+      validate();
+    }
+  };
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
   // the input to several functions below that take such an input.
   struct MetadataAndBlocks {
-    const CompressedRelationMetadata relationMetadata_;
+    ScanSpecification scanSpec_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
-    std::optional<Id> col1Id_;
 
     // If set, `firstAndLastTriple_` contains the first and the last triple
     // of the specified relation (and being filtered by the `col1Id` if
@@ -424,20 +470,19 @@ class CompressedRelationReader {
    * The arguments `metadata`, `blocks`, and `file` must all be obtained from
    * The same `CompressedRelationWriter` (see below).
    */
-  IdTable scan(const CompressedRelationMetadata& metadata,
-               std::optional<Id> col1Id,
+  IdTable scan(const ScanSpecification& scanSpec,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+               const CancellationHandle& cancellationHandle) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
   // The blocks are guaranteed to be in order.
-  IdTableGenerator lazyScan(
-      CompressedRelationMetadata metadata, std::optional<Id> col1Id,
+  CompressedRelationReader::IdTableGenerator lazyScan(
+      ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      CancellationHandle cancellationHandle) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -445,16 +490,32 @@ class CompressedRelationReader {
   // these scans can be retrieved from the `CompressedRelationMetadata`
   // directly.
   size_t getResultSizeOfScan(
-      const CompressedRelationMetadata& metaData, Id col1Id,
+      const ScanSpecification& scanSpec,
       const vector<CompressedBlockMetadata>& blocks) const;
 
-  // Get the contiguous subrange of the given `blockMetadata` for the blocks
+  // For a given relation, determine the `col1Id`s and their counts. This is
+  // used for `computeGroupByObjectWithCount`.
+  IdTable getDistinctCol1IdsAndCounts(
+      Id col0Id, const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      const CancellationHandle& cancellationHandle) const;
+
+  // For all `col0Ids` determine their counts. This is
+  // used for `computeGroupByForFullScan`.
+  IdTable getDistinctCol0IdsAndCounts(
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      const CancellationHandle& cancellationHandle) const;
+
+  std::optional<CompressedRelationMetadata> getMetadataForSmallRelation(
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      Id col0Id) const;
+
+  // Get the contiguous subrange of the given `blockB` for the blocks
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
-  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const CompressedRelationMetadata& metadata, std::optional<Id> col1Id,
-      std::span<const CompressedBlockMetadata> blockMetadata);
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
+      const ScanSpecification& blockA,
+      std::span<const CompressedBlockMetadata> blockB);
 
   // The same function, but specify the arguments as the `MetadataAndBlocks`
   // struct.
@@ -509,19 +570,18 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData,
       ColumnIndicesRef columnIndices) const;
 
-  // Read the block that is identified by the `blockMetadata` from the `file`,
-  // decompress and return it. Before returning, delete all rows where the col0
-  // ID / relation ID does not correspond with the `relationMetadata`, or where
-  // the `col1Id` doesn't match. For this to work, the block has to be one of
-  // the blocks that actually store triples from the given `relationMetadata`'s
-  // relation, else the behavior is undefined. Only return the columns specified
-  // by the `columnIndices`. Note: Do not call this function for blocks of which
-  // you know that you need them completely, as then this function wastes some
-  // time and space. It is only typically needed for the first and last block of
-  // certain scans.
+  // Read the block identified by `blockMetadata` from disk, decompress it, and
+  // return the part that matches `col1Id` (or the whole block if `col1Id` is
+  // `nullopt`). The block must contain triples from the relation identified by
+  // `relationMetadata`. If `scanMetadata` is not `nullopt`, update information
+  // about the number of blocks and elements read.
+  //
+  // NOTE: When all triples in the block match the `col1Id`, this method makes
+  // an unnecessary copy of the block. Therefore, if you know that you need the
+  // whole block, use `readAndDecompressBlock` instead.
   DecompressedBlock readPossiblyIncompleteBlock(
-      const CompressedRelationMetadata& relationMetadata,
-      std::optional<Id> col1Id, const CompressedBlockMetadata& blockMetadata,
+      const ScanSpecification& scanSpec,
+      const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices) const;
 
@@ -532,16 +592,7 @@ class CompressedRelationReader {
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
-
-  // A helper function to abstract away the timeout check:
-  static void checkCancellation(
-      const ad_utility::SharedCancellationHandle& cancellationHandle) {
-    // Not really expensive but since this should be called
-    // very often, try to avoid any extra checks.
-    AD_EXPENSIVE_CHECK(cancellationHandle);
-    cancellationHandle->throwIfCancelled("IndexScan"sv);
-  }
+      CancellationHandle cancellationHandle) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
@@ -554,7 +605,16 @@ class CompressedRelationReader {
   // These are exactly the columns that are returned by a scan depending on
   // whether the `col1Id` is specified or not.
   static std::vector<ColumnIndex> prepareColumnIndices(
-      const std::optional<Id>& col1Id, ColumnIndicesRef additionalColumns);
+      const ScanSpecification& scanSpec, ColumnIndicesRef additionalColumns);
+
+  // The common implementation for `getDistinctCol0IdsAndCounts` and
+  // `getCol1IdsAndCounts`.
+  IdTable getDistinctColIdsAndCountsImpl(
+      ad_utility::InvocableWithConvertibleReturnType<
+          Id, const CompressedBlockMetadata::PermutedTriple&> auto idGetter,
+      const ScanSpecification& scanSpec,
+      const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
+      const CancellationHandle& cancellationHandle) const;
 };
 
 // TODO<joka921>

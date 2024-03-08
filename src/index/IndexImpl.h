@@ -19,7 +19,7 @@
 #include <index/StxxlSortFunctors.h>
 #include <index/TextMetaData.h>
 #include <index/Vocabulary.h>
-#include <index/VocabularyGenerator.h>
+#include <index/VocabularyMerger.h>
 #include <parser/ContextFileParser.h>
 #include <parser/TripleComponent.h>
 #include <parser/TurtleParser.h>
@@ -71,7 +71,7 @@ using ThirdPermutation = SortByPSO;
 // Several data that are passed along between different phases of the
 // index builder.
 struct IndexBuilderDataBase {
-  VocabularyMerger::VocabularyMetaData vocabularyMetaData_;
+  ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
   // The prefixes that are used for the prefix compression.
   std::vector<std::string> prefixes_;
 };
@@ -152,12 +152,10 @@ class IndexImpl {
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
-  // These statistics all do *not* include the triples that are added by
-  // QLever for more efficient query processing.
-  size_t numSubjectsNormal_ = 0;
-  size_t numPredicatesNormal_ = 0;
-  size_t numObjectsNormal_ = 0;
-  size_t numTriplesNormal_ = 0;
+  NumNormalAndInternal numSubjects_;
+  NumNormalAndInternal numPredicates_;
+  NumNormalAndInternal numObjects_;
+  NumNormalAndInternal numTriples_;
   string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
@@ -381,7 +379,7 @@ class IndexImpl {
 
   const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return pso_.metaData().getName(); }
+  const string& getKbName() const { return pso_.getKbName(); }
 
   const string& getIndexId() const { return indexId_; }
 
@@ -391,7 +389,7 @@ class IndexImpl {
     return textMeta_.getNofEntityPostings();
   }
 
-  bool hasAllPermutations() const { return SPO().isLoaded_; }
+  bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
@@ -406,12 +404,13 @@ class IndexImpl {
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
       Permutation::ColumnIndicesRef additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndicesRef additionalColumns,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,
@@ -486,8 +485,8 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
-  std::pair<IndexMetaDataMmapDispatcher::WriteType,
-            IndexMetaDataMmapDispatcher::WriteType>
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
+             IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
                             std::array<size_t, 3> permutation,
@@ -504,9 +503,11 @@ class IndexImpl {
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  void createPermutationPair(size_t numColumns, auto&& sortedTriples,
-                             const Permutation& p1, const Permutation& p2,
-                             auto&&... perTripleCallbacks);
+  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
+                                             auto&& sortedTriples,
+                                             const Permutation& p1,
+                                             const Permutation& p2,
+                                             auto&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -517,8 +518,8 @@ class IndexImpl {
   // Careful: only multiplicities for first column is valid after call, need to
   // call exchangeMultiplicities as done by createPermutationPair
   // the optional is std::nullopt if vec and thus the index is empty
-  std::pair<IndexMetaDataMmapDispatcher::WriteType,
-            IndexMetaDataMmapDispatcher::WriteType>
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
+             IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(size_t numColumns, auto&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
                      auto&&... perTripleCallbacks);

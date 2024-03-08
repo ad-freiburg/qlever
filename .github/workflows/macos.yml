@@ -20,7 +20,6 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Debugging the Stxxl build
         build-type: [Release]
     runs-on: macos-12
     steps:
@@ -30,6 +29,7 @@ jobs:
 
       - name: Install ICU dependency for python (only needed for E2E test)
         run: |
+          df -h
           brew install pkg-config icu4c 
           echo PATH="/usr/local/opt/icu4c/bin:/usr/local/opt/icu4c/sbin:$PATH" >> $GITHUB_ENV
           echo PKG_CONFIG_PATH="$PKG_CONFIG_PATH:/usr/local/opt/icu4c/lib/pkgconfig" >> $GITHUB_ENV
@@ -72,6 +72,7 @@ jobs:
           # Build your program with the given configuration
         # Sourcing the conanrun.sh even for building is required to make gtest_discover_tests pass reliably.
         run: >
+          df -h;
           source ${{github.workspace}}/build/conanrun.sh;
           cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j 1; 
 
@@ -80,6 +81,7 @@ jobs:
         # Execute tests defined by the CMake configuration.
         # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
         run: >
+          df -h;
           source ../conanrun.sh;
           env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .;
 

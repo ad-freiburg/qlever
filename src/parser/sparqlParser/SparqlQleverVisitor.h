@@ -22,7 +22,6 @@
 #include "parser/data/Iri.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/Types.h"
-#include "parser/data/VarOrTerm.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
@@ -50,14 +49,21 @@ class SparqlQleverVisitor {
  public:
   using GraphPatternOperation = parsedQuery::GraphPatternOperation;
   using Objects = ad_utility::sparql_types::Objects;
-  using Tuples = ad_utility::sparql_types::Tuples;
-  using PathTuples = ad_utility::sparql_types::PathTuples;
+  using PredicateObjectPairs = ad_utility::sparql_types::PredicateObjectPairs;
+  using PathObjectPairs = ad_utility::sparql_types::PathObjectPairs;
+  using PathObjectPairsAndTriples =
+      ad_utility::sparql_types::PathObjectPairsAndTriples;
   using TripleWithPropertyPath =
       ad_utility::sparql_types::TripleWithPropertyPath;
   using Triples = ad_utility::sparql_types::Triples;
-  using Node = ad_utility::sparql_types::Node;
-  using ObjectList = ad_utility::sparql_types::ObjectList;
-  using PropertyList = ad_utility::sparql_types::PropertyList;
+  using SubjectOrObjectAndTriples =
+      ad_utility::sparql_types::SubjectOrObjectAndTriples;
+  using SubjectOrObjectAndPathTriples =
+      ad_utility::sparql_types::SubjectOrObjectAndPathTriples;
+  using ObjectsAndTriples = ad_utility::sparql_types::ObjectsAndTriples;
+  using ObjectsAndPathTriples = ad_utility::sparql_types::ObjectsAndPathTriples;
+  using PredicateObjectPairsAndTriples =
+      ad_utility::sparql_types::PredicateObjectPairsAndTriples;
   using OperationsAndFilters =
       std::pair<vector<GraphPatternOperation>, vector<SparqlFilter>>;
   using OperationOrFilterAndMaybeTriples =
@@ -92,9 +98,18 @@ class SparqlQleverVisitor {
 
   DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting_;
 
+  // This is the parsed query so far. Currently, this only contains information
+  // about the number of internal variables that have already been assigned.
+  ParsedQuery parsedQuery_;
+
+  // This is set to true if and only if we are only inside the template of a
+  // CONSTRUCT query (the first {} before the WHERE clause). In this section the
+  // meaning of blank and anonymous nodes is different.
+  bool isInsideConstructTriples_ = false;
+
  public:
   SparqlQleverVisitor() = default;
-  SparqlQleverVisitor(
+  explicit SparqlQleverVisitor(
       PrefixMap prefixMap,
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
@@ -103,6 +118,10 @@ class SparqlQleverVisitor {
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
+
+  void setParseModeToInsideConstructTemplateForTesting() {
+    isInsideConstructTriples_ = true;
+  }
 
   // ___________________________________________________________________________
   [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);
@@ -247,38 +266,44 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] Triples visit(Parser::TriplesSameSubjectContext* ctx);
 
-  [[nodiscard]] PropertyList visit(Parser::PropertyListContext* ctx);
+  [[nodiscard]] PredicateObjectPairsAndTriples visit(
+      Parser::PropertyListContext* ctx);
 
-  [[nodiscard]] PropertyList visit(Parser::PropertyListNotEmptyContext* ctx);
+  [[nodiscard]] PredicateObjectPairsAndTriples visit(
+      Parser::PropertyListNotEmptyContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VerbContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VerbContext* ctx);
 
-  [[nodiscard]] ObjectList visit(Parser::ObjectListContext* ctx);
+  [[nodiscard]] ObjectsAndTriples visit(Parser::ObjectListContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::ObjectRContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
 
   [[nodiscard]] vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  [[nodiscard]] std::optional<PathTuples> visit(
+  [[nodiscard]] std::optional<PathObjectPairsAndTriples> visit(
       Parser::PropertyListPathContext* ctx);
 
-  [[nodiscard]] PathTuples visit(Parser::PropertyListPathNotEmptyContext* ctx);
+  [[nodiscard]] PathObjectPairsAndTriples visit(
+      Parser::PropertyListPathNotEmptyContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
 
   [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
 
-  [[nodiscard]] PathTuples visit(Parser::TupleWithoutPathContext* ctx);
+  [[nodiscard]] PathObjectPairsAndTriples visit(
+      Parser::TupleWithoutPathContext* term);
 
-  [[nodiscard]] PathTuples visit(Parser::TupleWithPathContext* ctx);
+  [[nodiscard]] PathObjectPairsAndTriples visit(
+      Parser::TupleWithPathContext* ctx);
 
   [[nodiscard]] ad_utility::sparql_types::VarOrPath visit(
       Parser::VerbPathOrSimpleContext* ctx);
 
-  [[nodiscard]] ObjectList visit(Parser::ObjectListPathContext* ctx);
+  [[nodiscard]] ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::ObjectPathContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
+      Parser::ObjectPathContext* ctx);
 
   [[nodiscard]] PropertyPath visit(Parser::PathContext* ctx);
 
@@ -304,25 +329,30 @@ class SparqlQleverVisitor {
   /// integers without an explicit sign.
   [[nodiscard]] static uint64_t visit(Parser::IntegerContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::TriplesNodeContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(
+      Parser::TriplesNodeContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::BlankNodePropertyListContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(
+      Parser::BlankNodePropertyListContext* ctx);
 
-  [[noreturn]] void visit(Parser::TriplesNodePathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::TriplesNodePathContext* ctx);
 
-  [[noreturn]] void visit(Parser::BlankNodePropertyListPathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(
+      Parser::BlankNodePropertyListPathContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::CollectionContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
 
-  [[noreturn]] void visit(Parser::CollectionPathContext* ctx);
+  [[noreturn]] SubjectOrObjectAndPathTriples visit(
+      Parser::CollectionPathContext* ctx);
 
-  [[nodiscard]] Node visit(Parser::GraphNodeContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::GraphNodePathContext* ctx);
+  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
+      Parser::GraphNodePathContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VarOrTermContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  [[nodiscard]] VarOrTerm visit(Parser::VarOrIriContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::VarOrIriContext* ctx);
 
   [[nodiscard]] static Variable visit(Parser::VarContext* ctx);
 
@@ -424,7 +454,7 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] string visit(Parser::PrefixedNameContext* ctx);
 
-  [[nodiscard]] BlankNode visit(Parser::BlankNodeContext* ctx);
+  [[nodiscard]] GraphTerm visit(Parser::BlankNodeContext* ctx);
 
   [[nodiscard]] string visit(Parser::PnameLnContext* ctx);
 
@@ -460,9 +490,8 @@ class SparqlQleverVisitor {
 
   void addVisibleVariable(Variable var);
 
-  [[noreturn]] void throwCollectionsAndBlankNodePathsNotSupported(auto* ctx) {
-    reportError(
-        ctx, "( ... ) and [ ... ] in triples are not yet supported by QLever.");
+  [[noreturn]] static void throwCollectionsNotSupported(auto* ctx) {
+    reportError(ctx, "( ... ) in triples is not yet supported by QLever.");
   }
 
   // Return the `SparqlExpressionPimpl` for a context that returns a
@@ -538,4 +567,12 @@ class SparqlQleverVisitor {
   // they have the same structure.
   template <typename Context>
   [[nodiscard]] Triples parseTriplesConstruction(Context* ctx);
+
+  // If the triple is a special triple for the text index (i.e. its predicate is
+  // either `ql:contains-word` or `ql:contains-entity`, register the magic
+  // variables for the matching word and the score that will be created when
+  // processing those triples in the query body, s.t. they can be selected as
+  // part of the query result.
+  void setMatchingWordAndScoreVisibleIfPresent(
+      auto* ctx, const TripleWithPropertyPath& triple);
 };
