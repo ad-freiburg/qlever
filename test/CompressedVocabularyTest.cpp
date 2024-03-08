@@ -88,9 +88,11 @@ template <ad_utility::vocabulary::CompressionWrapper Compressor>
 struct CompressedVocabularyF : public testing::Test {
   // Tests for the FSST-compressed vocabulary. These use the generic testing
   // framework that was set up for all the other vocabularies.
-  static constexpr auto createFsstVocabulary(const std::string& filename) {
+  static constexpr auto createCompressedVocabulary(
+      const std::string& filename) {
     return [filename](const std::vector<std::string>& words) {
-      CompressedVocabulary<VocabularyOnDisk, Compressor> vocab;
+      // We deliberately set the blocksize to a very small number.
+      CompressedVocabulary<VocabularyOnDisk, Compressor, 4> vocab;
       auto writer = vocab.makeDiskWriter(filename);
       for (const auto& word : words) {
         writer(word);
@@ -106,24 +108,24 @@ TYPED_TEST_SUITE(CompressedVocabularyF, Compressors);
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundStdLess) {
   testUpperAndLowerBoundWithStdLess(
-      this->createFsstVocabulary("lowerUpperBoundStdLessFsst"));
+      this->createCompressedVocabulary("lowerUpperBoundStdLessFsst"));
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      this->createFsstVocabulary("lowerUpperBoundNumericFsst"));
+      this->createCompressedVocabulary("lowerUpperBoundNumericFsst"));
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(
-      this->createFsstVocabulary("accessOperatorFsst"));
+      this->createCompressedVocabulary("accessOperatorFsst"));
 }
 
 // _______________________________________________________
 TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
-  testEmptyVocabulary(this->createFsstVocabulary("accessOperatorFsst"));
+  testEmptyVocabulary(this->createCompressedVocabulary("accessOperatorFsst"));
 }
 
 }  // namespace

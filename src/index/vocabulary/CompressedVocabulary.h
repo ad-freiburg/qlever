@@ -16,16 +16,14 @@
 #include "util/TaskQueue.h"
 
 // A vocabulary in which compression is performed using a customizable
-// compression algorithm, with one dictionary per `numWordsPerBlock` many words
+// compression algorithm, with one dictionary per `NumWordsPerBlock` many words
 // (currently 1 million).
 template <typename UnderlyingVocabulary,
           ad_utility::vocabulary::CompressionWrapper CompressionWrapper =
-              ad_utility::vocabulary::FsstSquaredCompressionWrapper>
+              ad_utility::vocabulary::FsstSquaredCompressionWrapper,
+          size_t NumWordsPerBlock = 1UL << 20>
 class CompressedVocabulary {
  private:
-  // The number of words that share the same decoder.
-  static constexpr size_t numWordsPerBlock = 1UL << 20;
-  // static constexpr size_t numWordsPerBlock = 2;
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
   // We need to store two files, one for the words and one for the decoders.
@@ -135,7 +133,7 @@ class CompressedVocabulary {
     void operator()(std::string_view uncompressedWord) {
       AD_CORRECTNESS_CHECK(!isFinished_);
       wordBuffer_.emplace_back(uncompressedWord);
-      if (wordBuffer_.size() == numWordsPerBlock) {
+      if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
     }
@@ -224,7 +222,7 @@ class CompressedVocabulary {
 
  private:
   // Get the correct decoder for the given `idx`.
-  size_t getDecoderIdx(size_t idx) const { return idx / numWordsPerBlock; }
+  size_t getDecoderIdx(size_t idx) const { return idx / NumWordsPerBlock; }
 
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
