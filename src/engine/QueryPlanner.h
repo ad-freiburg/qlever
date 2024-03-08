@@ -385,7 +385,8 @@ class QueryPlanner {
   [[nodiscard]] void applyTextLimitsIfPossible(
       std::vector<SubtreePlan>& row,
       const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits) const;
+          textLimits,
+      bool replaceInsteadOfAddPlans) const;
 
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates
@@ -456,7 +457,10 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
+      const vector<SparqlFilter>& filters,
+      const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits,
+      const TripleGraph& tg) const;
 
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node,

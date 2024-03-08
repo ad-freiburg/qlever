@@ -497,7 +497,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
-    applyTextLimitsIfPossible(candidatePlans[0], rootPattern->_textLimits);
+    applyTextLimitsIfPossible(candidatePlans[0], rootPattern->_textLimits,
+                              true);
     checkCancellation();
   }
 
@@ -1455,14 +1456,12 @@ void QueryPlanner::applyFiltersIfPossible(
 void QueryPlanner::applyTextLimitsIfPossible(
     vector<QueryPlanner::SubtreePlan>& row,
     const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-        textLimits) const {
+        textLimits,
+    bool replace) const {
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
   // 1) There is no text operation for the text record column left.
   // 2) The text limit has not already been applied to the plan.
-  // TODO: Operations that are ignored by now but could cause problems:
-  // - Filters that are not yet applied
-  // - GroupBy and having -> what should be the behavior here?
 
   // Note: we are first collecting the newly added plans and then adding them
   // in one go. Changing `row` inside the loop would invalidate the iterators.
@@ -1498,8 +1497,12 @@ void QueryPlanner::applyTextLimitsIfPossible(
       newPlan._idsOfIncludedTextLimits |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
       newPlan.type = plan.type;
-      addedPlans.push_back(std::move(newPlan));
       i++;
+      if (replace) {
+        plan = std::move(newPlan);
+      } else {
+        addedPlans.push_back(std::move(newPlan));
+      }
     }
   }
   row.insert(row.end(), addedPlans.begin(), addedPlans.end());
@@ -1509,13 +1512,17 @@ void QueryPlanner::applyTextLimitsIfPossible(
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters, const TripleGraph& tg) const {
+    const vector<SparqlFilter>& filters,
+    const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+        textLimits,
+    const TripleGraph& tg) const {
   vector<vector<QueryPlanner::SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
   applyFiltersIfPossible(dpTab.back(), filters, false);
+  applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
   ad_utility::HashSet<uint64_t> uniqueNodeIds;
   std::ranges::copy(
       dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
@@ -1531,6 +1538,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
       applyFiltersIfPossible(dpTab.back(), filters, false);
+      applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
@@ -1558,7 +1566,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
   for (auto& component : components | std::views::values) {
     lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
-        std::move(component), filters, tg));
+        std::move(component), filters, textLimits, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -1571,6 +1579,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
     applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
+    applyTextLimitsIfPossible(lastDpRowFromComponents.back(), textLimits, true);
     return lastDpRowFromComponents;
   }
   // More than one connected component, set up a Cartesian product.
@@ -1587,6 +1596,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   result.at(0).push_back(
       makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
   applyFiltersIfPossible(result.at(0), filters, true);
+  applyTextLimitsIfPossible(result.at(0), textLimits, true);
   return result;
 }
 
