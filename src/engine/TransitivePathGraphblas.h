@@ -82,10 +82,6 @@ class TransitivePathGraphblas : public TransitivePathBase {
                              const TransitivePathSide& startSide,
                              const TransitivePathSide& targetSide) const;
 
-  // void computeTransitivePath(
-  //     IdTable* res, const IdTable& sub, const TransitivePathSide& startSide,
-  //     const TransitivePathSide& targetSide) const override;
-
  private:
   /**
    * @brief Compute the result for this TransitivePath operation

@@ -108,10 +108,6 @@ class TransitivePathBase : public Operation {
   std::string getCacheKeyImpl() const override;
 
  public:
-  // virtual void computeTransitivePath(
-  //     IdTable* res, const IdTable& sub, const TransitivePathSide& startSide,
-  //     const TransitivePathSide& targetSide) const = 0;
-
   std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
@@ -149,7 +145,7 @@ class TransitivePathBase : public Operation {
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
-      size_t minDist, size_t maxDist, bool useGraphblas);
+      size_t minDist, size_t maxDist, bool useGraphblas, bool useBinSearch);
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.

@@ -4,7 +4,10 @@
 
 #pragma once
 
+#include <bits/ranges_algo.h>
+
 #include <functional>
+#include <iterator>
 #include <memory>
 
 #include "TransitivePathBase.h"
@@ -12,7 +15,29 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/idTable/IdTable.h"
 
-class TransitivePathFallback : public TransitivePathBase {
+struct BinSearchMap {
+  std::span<const Id> startIds_;
+  std::span<const Id> targetIds_;
+
+  std::span<const Id> successors(const Id node) const {
+    // auto startIt = std::lower_bound(startIds_.begin(), startIds_.end(),
+    // node); auto endIt = std::upper_bound(startIds_.begin(), startIds_.end(),
+    // node);
+    //
+    // auto startIndex = std::distance(startIds_.begin(), startIt);
+    // auto endIndex = std::distance(startIds_.begin(), endIt);
+    //
+    // return targetIds_.subspan(startIndex, endIndex - startIndex);
+
+    auto range = std::ranges::equal_range(startIds_, node);
+
+    auto startIndex = std::distance(startIds_.begin(), range.begin());
+
+    return targetIds_.subspan(startIndex, range.size());
+  }
+};
+
+class TransitivePathBinSearch : public TransitivePathBase {
   // We deliberately use the `std::` variants of a hash set and hash map because
   // `absl`s types are not exception safe.
   constexpr static auto hash = [](Id id) {
@@ -25,11 +50,11 @@ class TransitivePathFallback : public TransitivePathBase {
       ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
  public:
-  TransitivePathFallback(QueryExecutionContext* qec,
-                         std::shared_ptr<QueryExecutionTree> child,
-                         const TransitivePathSide& leftSide,
-                         const TransitivePathSide& rightSide, size_t minDist,
-                         size_t maxDist);
+  TransitivePathBinSearch(QueryExecutionContext* qec,
+                          std::shared_ptr<QueryExecutionTree> child,
+                          const TransitivePathSide& leftSide,
+                          const TransitivePathSide& rightSide, size_t minDist,
+                          size_t maxDist);
 
   /**
    * @brief Compute the transitive hull with a bound side.
@@ -72,6 +97,21 @@ class TransitivePathFallback : public TransitivePathBase {
 
  private:
   /**
+   * @brief Decide on which transitive path side the hull computation should
+   * start and where it should end. The start and target side are chosen by
+   * the following criteria:
+   *
+   * 1. If a side is bound, then this side will be the start side.
+   * 2. If a side is an id, then this side will be the start side.
+   * 3. If both sides are variables, the left side is chosen as start
+   * (arbitrarily).
+   *
+   * @return std::pair<TransitivePathSide&, TransitivePathSide&> The first entry
+   * of the pair is the start side, the second entry is the target side.
+   */
+  std::pair<TransitivePathSide&, TransitivePathSide&> decideDirection();
+
+  /**
    * @brief Compute the result for this TransitivePath operation
    * This function chooses the start and target side for the transitive
    * hull computation. This choice of the start side has a large impact
@@ -95,7 +135,8 @@ class TransitivePathFallback : public TransitivePathBase {
    * in this Id are added to the hull.
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
-  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes,
+  Map transitiveHull(const BinSearchMap& edges,
+                     const std::vector<Id>& startNodes,
                      std::optional<Id> target) const;
 
   /**
@@ -154,7 +195,7 @@ class TransitivePathFallback : public TransitivePathBase {
    * transitive hull computation
    */
   template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
+  std::pair<BinSearchMap, std::vector<Id>> setupMapAndNodes(
       const IdTable& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide,
       const IdTable& startSideTable) const;
@@ -171,14 +212,15 @@ class TransitivePathFallback : public TransitivePathBase {
    * transitive hull computation
    */
   template <size_t SUB_WIDTH>
-  std::pair<Map, std::vector<Id>> setupMapAndNodes(
+  std::pair<BinSearchMap, std::vector<Id>> setupMapAndNodes(
       const IdTable& sub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const;
 
   // initialize the map from the subresult
   template <size_t SUB_WIDTH>
-  Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
-                    const TransitivePathSide& targetSide) const;
+  BinSearchMap setupEdgesMap(const IdTable& dynSub,
+                             const TransitivePathSide& startSide,
+                             const TransitivePathSide& targetSide) const;
 
   // initialize a vector for the starting nodes (Ids)
   template <size_t WIDTH>
