@@ -612,15 +612,6 @@ TEST(TurtleParserTest, collection) {
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
 }
 
-// Sort a vector of triples to get a deterministic order for comparison.
-void sortTriples(std::vector<TurtleTriple>& triples) {
-  auto toRef = [](const TurtleTriple& t) {
-    return std::tie(t.subject_, t.predicate_, t.object_.getString());
-  };
-  // TODO<joka921> Reinstate
-  // std::ranges::sort(triples, std::less{}, toRef);
-}
-
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. Iff `useBatchInterface` then the `getBatch()` function is used
 // for parsing, else `getLine()` is used.
@@ -642,8 +633,6 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
       result.push_back(next);
     }
   }
-  // The order of triples in not necessarily the same, so we sort them.
-  sortTriples(result);
   return result;
 }
 
@@ -682,8 +671,6 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
       expectedTriples.emplace_back(iri(subject), iri(predicate), iri(object));
     }
   }
-  // The order of triples in not necessarily the same, so we sort them.
-  sortTriples(expectedTriples);
 
   FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface) {
@@ -763,7 +750,6 @@ TEST(TurtleParserTest, multilineComments) {
 )";
   std::vector<TurtleTriple> expected{{iri("<s>"), iri("<p>"), iri("<o>")},
                                      {iri("<s>"), iri("<p>"), iri("<o2>")}};
-  sortTriples(expected);
   forAllParsers(testWithParser, input, expected);
 }
 

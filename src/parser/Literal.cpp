@@ -122,7 +122,7 @@ Literal Literal::fromInternalRepresentation(std::string_view input) {
   // TODO<joka921> handle the escaping correctly.
   // TODO<joka921> checkSizes.
   // TODO<joka921> Check that it is indeed a literal.
-  auto posLastQuote = static_cast<int64_t>(input.rfind('"'));
+  auto posLastQuote = input.rfind('"');
   AD_CORRECTNESS_CHECK(posLastQuote > 0 && posLastQuote < input.size());
   std::string_view content = input.substr(1, posLastQuote - 1);
   if (posLastQuote + 1 == input.size()) {
