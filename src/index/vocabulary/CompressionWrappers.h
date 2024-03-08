@@ -13,14 +13,18 @@
 namespace ad_utility::vocabulary {
 
 // A helper concept for the compression wrappers below.
-// A `BulkResultForDecoder` is a tuple of 3 elements, the second of which is a
-// `vector<string_view>` and the third of which is a `Decoder`.
+// A `BulkResultForDecoder` is a tuple of 3 elements, the first of which is an
+// implementation detail (e.g. a buffer that stores the data for the second
+// argument ), the second of which is a `vector<string_view>` or
+// `vector<string>` that stores compressed strings and the third of which is a
+// `Decoder`.
 template <typename T, typename Decoder>
 concept BulkResultForDecoder = requires(T t) {
   requires(std::tuple_size_v<T> == 3);
-  // TODO<joka921> We have `string` as well as `string_view` as the valueType,
-  // so we have to think of something more clever.
-  //{ std::get<1>(t) } -> ad_utility::SimilarTo<std::vector<std::string_view>>;
+  {
+    std::get<1>(t)
+  } -> ad_utility::SimilarToAny<std::vector<std::string_view>,
+                                std::vector<std::string>>;
   { std::get<2>(t) } -> ad_utility::SimilarTo<Decoder>;
 };
 
@@ -39,7 +43,8 @@ concept CompressionWrapper = requires(const T& t) {
   {
     T::compressAll(std::vector<std::string>{})
   } -> BulkResultForDecoder<typename T::Decoder>;
-} && std::constructible_from<T, std::vector<typename T::Decoder>>;
+  requires(std::constructible_from<T, std::vector<typename T::Decoder>>);
+};
 
 namespace detail {
 // A class that holds a `vector<DecoderT>` and implements the
@@ -51,6 +56,7 @@ template <typename DecoderT>
 struct DecoderMultiplexer {
   using Decoder = DecoderT;
   using Decoders = std::vector<Decoder>;
+  using Strings = std::vector<std::string>;
 
  private:
   std::vector<Decoder> decoders_;
@@ -59,7 +65,6 @@ struct DecoderMultiplexer {
   DecoderMultiplexer() = default;
   explicit DecoderMultiplexer(Decoders decoders)
       : decoders_{std::move(decoders)} {}
-  using Strings = std::vector<std::string>;
   std::string decompress(std::string_view compressed,
                          size_t decoderIndex) const {
     return decoders_.at(decoderIndex).decompress(compressed);
@@ -80,25 +85,26 @@ static_assert(CompressionWrapper<FsstCompressionWrapper>);
 
 // A compression wrapper that applies the FSST compression algorithm twice.
 struct FsstSquaredCompressionWrapper
-    : detail::DecoderMultiplexer<FsstSquaredDecoder> {
-  using Base = detail::DecoderMultiplexer<FsstSquaredDecoder>;
+    : detail::DecoderMultiplexer<FsstRepeatedDecoder<2>> {
+  using Base = detail::DecoderMultiplexer<FsstRepeatedDecoder<2>>;
   using Base::Base;
   using BulkResult =
       std::tuple<std::shared_ptr<std::string>, std::vector<std::string_view>,
-                 FsstSquaredDecoder>;
+                 FsstRepeatedDecoder<2>>;
   static BulkResult compressAll(const Strings& strings) {
     auto [buffer, views, decoder1] = FsstEncoder::compressAll(strings);
     auto [buffer2, views2, decoder2] = FsstEncoder::compressAll(views);
     return {std::move(buffer2), std::move(views2),
-            FsstSquaredDecoder{std::array{decoder1, decoder2}}};
+            FsstRepeatedDecoder{std::array{decoder1, decoder2}}};
   }
 };
 static_assert(CompressionWrapper<FsstSquaredCompressionWrapper>);
 
+// A compression wrapper that compresses common prefixes using the greedy
+// algorithm from `PrefixHeuristics.h`.
 struct PrefixCompressionWrapper : detail::DecoderMultiplexer<PrefixCompressor> {
   using Base = detail::DecoderMultiplexer<PrefixCompressor>;
   using Base::Base;
-  using Strings = std::vector<std::string>;
   using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
 
   static BulkResult compressAll(const Strings& strings) {

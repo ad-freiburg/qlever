@@ -805,11 +805,6 @@ void IndexImpl::setSettingsFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void IndexImpl::setPrefixCompression(bool compressed) {
-  vocabPrefixCompressed_ = compressed;
-}
-
-// ____________________________________________________________________________
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
@@ -1126,8 +1121,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,
-                 partialCompressionFilename, numFiles,
-                 vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
+                 partialCompressionFilename, numFiles]() mutable {
     auto vec = [&]() {
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
       return vocabMapsToVector(*items);
@@ -1171,22 +1165,6 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     {
       ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
       writePartialVocabularyToFile(vec, partialFilename);
-    }
-    if (vocabPrefixCompressed) {
-      // sort according to the actual byte values
-      LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
-                 << std::endl;
-      std::erase_if(vec, [](const auto& a) {
-        return a.second.splitVal_.isExternalized_;
-      });
-      {
-        ad_utility::TimeBlockAndLog l{"sorting for compression"};
-        sortVocabVector(
-            &vec,
-            [](const auto& a, const auto& b) { return a.first < b.first; },
-            true);
-      }
-      writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TRACE) << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();

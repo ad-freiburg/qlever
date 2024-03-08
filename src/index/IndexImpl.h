@@ -129,7 +129,6 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
-  bool vocabPrefixCompressed_ = true;
   Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
@@ -367,8 +366,6 @@ class IndexImpl {
   void setOnDiskBase(const std::string& onDiskBase);
 
   void setSettingsFile(const std::string& filename);
-
-  void setPrefixCompression(bool compressed);
 
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;

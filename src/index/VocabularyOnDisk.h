@@ -48,7 +48,7 @@ class VocabularyOnDisk {
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
-  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets.mmap";
+  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets";
 
  public:
   // A helper class that is used to build a vocabulary word by word.

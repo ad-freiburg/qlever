@@ -43,7 +43,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
+          indexBasename + ".vocabulary.external.idsAndOffsets"};
 }
 
 namespace {
@@ -125,7 +125,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
-                    bool usePrefixCompression,
+                    [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex) {
   // Ignore the (irrelevant) log output of the index building and loading during
@@ -156,7 +156,6 @@ Index makeTestIndex(const std::string& indexBasename,
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = usePatterns;
-    index.setPrefixCompression(usePrefixCompression);
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {

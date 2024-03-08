@@ -56,9 +56,14 @@ class FsstDecoder {
       std::same_as<FsstDecoder> auto, auto);
 };
 
-class FsstSquaredDecoder {
+// A sequence of `N` `FsstDecoder` s that are chained in inverted order (the
+// last one first) when decompressing a string. The inverted order is chosen,
+// because it is the correct way to decompress a string that was compressed by
+// the N corresponding encoders in the "normal" order (first encoder first).
+template <size_t N = 2>
+class FsstRepeatedDecoder {
  public:
-  using Decoders = std::array<FsstDecoder, 2>;
+  using Decoders = std::array<FsstDecoder, N>;
 
  private:
   Decoders decoders_;
@@ -66,12 +71,12 @@ class FsstSquaredDecoder {
  public:
   // The default constructor does lead to an invalid decoder, but is required
   // for the serialization module. Don't use it.
-  FsstSquaredDecoder() = default;
+  FsstRepeatedDecoder() = default;
 
   // Construct from the internal `fsst_decoder_t`. Note that the typical way to
   // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
   // `getDecoder()` on that encoder.
-  explicit FsstSquaredDecoder(Decoders decoders) : decoders_{decoders} {}
+  explicit FsstRepeatedDecoder(Decoders decoders) : decoders_{decoders} {}
 
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {
@@ -87,7 +92,7 @@ class FsstSquaredDecoder {
   }
   // Allow this type to be trivially serializable,
   friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstSquaredDecoder> auto, auto);
+      std::same_as<FsstRepeatedDecoder> auto, auto);
 };
 
 // The encoder class.

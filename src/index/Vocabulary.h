@@ -24,7 +24,6 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Exception.h"
@@ -114,10 +113,9 @@ class Vocabulary {
   // externalized.
   vector<std::string> externalizedPrefixes_;
 
-  using PrefixCompressedVocabulary = CompressedVocabulary<VocabularyInMemory>;
-
   using InternalUnderlyingVocabulary =
-      std::conditional_t<isCompressed_, PrefixCompressedVocabulary,
+      std::conditional_t<isCompressed_,
+                         CompressedVocabulary<VocabularyInMemory>,
                          VocabularyInMemory>;
   using InternalVocabulary =
       UnicodeVocabulary<InternalUnderlyingVocabulary, ComparatorType>;

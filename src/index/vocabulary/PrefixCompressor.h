@@ -12,7 +12,7 @@
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
-#include "util/Serializer/SerializeArray.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/StringUtils.h"
 

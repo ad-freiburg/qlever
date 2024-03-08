@@ -75,6 +75,8 @@ class VocabularyInMemory {
     return result;
   }
 
+  // Same as `lower_bound`, but compares an `iterator` and a `value` instead of
+  // two values. Required by the `CompressedVocabulary`.
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {
@@ -105,6 +107,8 @@ class VocabularyInMemory {
     return result;
   }
 
+  // Same as `upper_bound`, but compares a `value` and an `iterator` instead of
+  // two values. Required by the `CompressedVocabulary`.
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {

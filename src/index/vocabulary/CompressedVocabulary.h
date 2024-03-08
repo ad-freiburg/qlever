@@ -17,7 +17,7 @@
 
 // A vocabulary in which compression is performed using a customizable
 // compression algorithm, with one dictionary per `NumWordsPerBlock` many words
-// (currently 1 million).
+// (default 1 million).
 template <typename UnderlyingVocabulary,
           ad_utility::vocabulary::CompressionWrapper CompressionWrapper =
               ad_utility::vocabulary::FsstSquaredCompressionWrapper,
@@ -26,7 +26,7 @@ class CompressedVocabulary {
  private:
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
-  // We need to store two files, one for the words and one for the decoders.
+  // We need to store two files, one for the words and one for the codebooks.
   static constexpr std::string_view wordsSuffix = ".words";
   static constexpr std::string_view decodersSuffix = ".codebooks";
 
@@ -138,8 +138,10 @@ class CompressedVocabulary {
       }
     }
 
-    /// After calls to `finish()` no more words can be pushed.
-    /// `finish()` is implicitly also called by the destructor.
+    /// Dump all the words that still might be contained in intermediate buffers
+    /// to the underlying file and close the file. After calls to `finish()` no
+    /// more words can be pushed. `finish()` is implicitly also called by the
+    /// destructor.
     void finish() {
       if (std::exchange(isFinished_, true)) {
         return;

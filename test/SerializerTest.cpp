@@ -7,7 +7,7 @@
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
-#include "../src/util/Serializer/SerializeArray.h"
+#include "../src/util/Serializer/SerializeArrayOrTuple.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
 #include "../src/util/Serializer/SerializePair.h"
 #include "../src/util/Serializer/SerializeString.h"
