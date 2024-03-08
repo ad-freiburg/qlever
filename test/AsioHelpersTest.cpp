@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "util/AsioHelpers.h"
+#include "util/AsyncTestHelpers.h"
 #include "util/http/beast.h"
 
 using namespace ad_utility;
@@ -111,4 +112,85 @@ TEST(AsioHelpers, runFunctionOnExecutorStrands) {
   ctx.poll();
   fut.get();
   EXPECT_EQ(sanityCounter, 2);
+}
+
+// _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesCheckCancellationHandle) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  auto sleeperTask = []() -> net::awaitable<void> {
+    net::steady_timer timer{co_await net::this_coro::executor,
+                            DESIRED_CANCELLATION_CHECK_INTERVAL * 2};
+    co_await timer.async_wait(net::deferred);
+  }();
+
+  EXPECT_THROW(
+      co_await ad_utility::interruptible(std::move(sleeperTask), handle),
+      ad_utility::CancellationException);
+}
+
+// _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesReportOnlyFirstError) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  auto sleeperTask = []() -> net::awaitable<void> {
+    throw std::runtime_error{"My error"};
+    co_return;
+  }();
+
+  EXPECT_THROW(
+      co_await ad_utility::interruptible(std::move(sleeperTask), handle),
+      ad_utility::CancellationException);
+}
+
+// _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesPropagateError) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto sleeperTask = []() -> net::awaitable<void> {
+    throw std::runtime_error{"My error"};
+    co_return;
+  }();
+
+  EXPECT_THROW(
+      co_await ad_utility::interruptible(std::move(sleeperTask), handle),
+      std::runtime_error);
+}
+
+// _________________________________________________________________________
+ASYNC_TEST(AsioHelpers, verifyNoCheckIsPerformedWhenTimerIsCancelledEarly) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  handle->cancel(ad_utility::CancellationState::MANUAL);
+  auto sleeperTask = []() -> net::awaitable<void> { co_return; }();
+
+  EXPECT_NO_THROW(co_await ad_utility::interruptible(
+      std::move(sleeperTask), handle,
+      std::make_shared<std::atomic_flag>(false)));
+}
+
+// _________________________________________________________________________
+TEST(AsioHelpers, makeSureRunAndWaitForAwaitableWorksAsExpected) {
+  net::io_context ioContext;
+  auto workGuard = makeWorkGuard(ioContext);
+  auto task = []() -> net::awaitable<int> { co_return 42; }();
+
+  EXPECT_EQ(42, ad_utility::runAndWaitForAwaitable(std::move(task), ioContext));
+}
+
+// _________________________________________________________________________
+TEST(AsioHelpers, makeSureRunAndWaitForAwaitablePropagatesErrorCorrectly) {
+  net::io_context ioContext;
+  auto workGuard = makeWorkGuard(ioContext);
+  auto task = []() -> net::awaitable<int> {
+    throw std::exception{};
+    // Make the compiler throw the exception as part of the coroutine, not
+    // when creating it.
+    co_return 0;
+  }();
+
+  EXPECT_THROW(ad_utility::runAndWaitForAwaitable(std::move(task), ioContext),
+               std::exception);
 }
