@@ -72,8 +72,6 @@ using ThirdPermutation = SortByPSO;
 // index builder.
 struct IndexBuilderDataBase {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
-  // The prefixes that are used for the prefix compression.
-  std::vector<std::string> prefixes_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
@@ -449,11 +447,6 @@ class IndexImpl {
       size_t numLines, size_t numFiles, size_t actualCurrentPartialSize,
       std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
-
-  //  Apply the prefix compression to the internal vocabulary. Is called by
-  //  `createFromFile` after the vocabularies have been created and merged.
-  void compressInternalVocabularyIfSpecified(
-      const std::vector<std::string>& prefixes);
 
   // Return a Turtle parser that parses the given file. The parser will be
   // configured to either parse in parallel or not, and to either use the

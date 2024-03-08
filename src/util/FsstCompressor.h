@@ -9,6 +9,7 @@
 #include <fsst.h>
 
 #include <memory>
+#include <ranges>
 #include <string>
 #include <vector>
 
@@ -53,6 +54,40 @@ class FsstDecoder {
   // Allow this type to be trivially serializable,
   friend std::true_type allowTrivialSerialization(
       std::same_as<FsstDecoder> auto, auto);
+};
+
+class FsstSquaredDecoder {
+ public:
+  using Decoders = std::array<FsstDecoder, 2>;
+
+ private:
+  Decoders decoders_;
+
+ public:
+  // The default constructor does lead to an invalid decoder, but is required
+  // for the serialization module. Don't use it.
+  FsstSquaredDecoder() = default;
+
+  // Construct from the internal `fsst_decoder_t`. Note that the typical way to
+  // obtain an `FsstDecoder` is by first creating a `FsstEncoder` and calling
+  // `getDecoder()` on that encoder.
+  explicit FsstSquaredDecoder(Decoders decoders) : decoders_{decoders} {}
+
+  // Decompress a  single string.
+  std::string decompress(std::string_view str) const {
+    std::string result;
+    std::string_view nextInput = str;
+    auto decompressSingle = [&result, &nextInput](const FsstDecoder& decoder) {
+      result = decoder.decompress(nextInput);
+      nextInput = result;
+    };
+
+    std::ranges::for_each(std::views::reverse(decoders_), decompressSingle);
+    return result;
+  }
+  // Allow this type to be trivially serializable,
+  friend std::true_type allowTrivialSerialization(
+      std::same_as<FsstSquaredDecoder> auto, auto);
 };
 
 // The encoder class.

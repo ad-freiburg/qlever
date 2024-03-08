@@ -7,6 +7,7 @@
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
+#include "index/vocabulary/CompressionWrappers.h"
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
@@ -20,6 +21,7 @@
 /// TODO<joka921> Make "Compressor" and "Vocabulary" a concept.
 
 /// A vocabulary in which compression is performed per word via the `Compressor`
+/*
 template <typename UnderlyingVocabulary, typename Compressor>
 class CompressedVocabulary {
  private:
@@ -134,122 +136,19 @@ class CompressedVocabulary {
     _underlyingVocabulary.build(words);
   }
 };
-
-template <typename DecoderT>
-struct CompressionMixin {
-  using Decoder = DecoderT;
-  std::vector<Decoder> decoders_;
-  std::string decompress(std::string_view compressed,
-                         size_t decoderIndex) const {
-    return decoders_.at(decoderIndex).decompress(compressed);
-  }
-  size_t numDecoders() const { return decoders_.size(); }
-};
-
-struct FsstCompressionWrapper : CompressionMixin<FsstDecoder> {
-  using Strings = std::vector<std::string>;
-  static FsstEncoder::BulkResult compressAll(const Strings& strings) {
-    return FsstEncoder::compressAll(strings);
-  }
-};
-
-struct PrefixCompressionDecoder : CompressionMixin<PrefixCompressor> {
-  using Strings = std::vector<std::string>;
-  using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
-
-  static BulkResult compressAll(const Strings& strings) {
-    PrefixCompressor compressor;
-    auto stringsCopy = strings;
-    std::ranges::sort(stringsCopy);
-    auto prefixes =
-        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
-    compressor.buildCodebook(prefixes);
-    Strings compressedStrings;
-    for (const auto& string : strings) {
-      compressedStrings.push_back(compressor.compress(string));
-    }
-    return {true, std::move(compressedStrings), std::move(compressor)};
-  }
-};
-
-struct SuffixCompressionDecoder : CompressionMixin<PrefixCompressor> {
-  // TODO<joka921> If this is beneficial,
-  // add functionality to NOT always physically reverse the strings.
-  using Decoder = PrefixCompressor;
-  using Strings = std::vector<std::string>;
-  using BulkResult = std::tuple<bool, std::vector<std::string>, Decoder>;
-
-  static BulkResult compressAll(Strings strings) {
-    std::ranges::for_each(strings, std::ranges::reverse);
-    PrefixCompressor compressor;
-    auto stringsCopy = strings;
-    std::ranges::sort(stringsCopy);
-    auto prefixes =
-        calculatePrefixes(stringsCopy, NUM_COMPRESSION_PREFIXES, 1, true);
-    compressor.buildCodebook(prefixes);
-    Strings compressedStrings;
-    for (const auto& string : strings) {
-      compressedStrings.push_back(compressor.compress(string));
-    }
-    std::ranges::for_each(compressedStrings, std::ranges::reverse);
-    return {true, std::move(compressedStrings), std::move(compressor)};
-  }
-  std::string decompress(std::string compressed, size_t decoderIndex) const {
-    std::ranges::reverse(compressed);
-    auto result = decoders_.at(decoderIndex).decompress(compressed);
-    std::ranges::reverse(result);
-    return result;
-  }
-};
-
-struct PrefixSuffixFsstDecodderImpl
-    : public std::tuple<PrefixCompressor, PrefixCompressor, FsstDecoder> {
-  using Base = std::tuple<PrefixCompressor, PrefixCompressor, FsstDecoder>;
-  std::string decompress(std::string_view compressed) const {
-    const auto& [prefixDecoder, suffixDecoder, fsstDecoder] =
-        static_cast<const Base&>(*this);
-    auto result = fsstDecoder.decompress(compressed);
-    std::ranges::reverse(result);
-    result = suffixDecoder.decompress(result);
-    std::ranges::reverse(result);
-    result = prefixDecoder.decompress(result);
-    return result;
-  }
-  const auto& base() const { return static_cast<const Base&>(*this); }
-  auto& base() { return static_cast<Base&>(*this); }
-  AD_SERIALIZE_FRIEND_FUNCTION(PrefixSuffixFsstDecodderImpl) {
-    serializer | arg.base();
-  }
-};
-struct PrefixSuffixFsstDecodder
-    : CompressionMixin<PrefixSuffixFsstDecodderImpl> {
-  using Strings = std::vector<std::string>;
-  using BulkResult = std::tuple<std::shared_ptr<string>,
-                                std::vector<std::string_view>, Decoder>;
-
-  static BulkResult compressAll(const Strings& strings) {
-    auto [unused, prefixCompressed, prefixDecoder] =
-        PrefixCompressionDecoder::compressAll(strings);
-    auto [unused2, suffixCompressed, suffixDecoder] =
-        SuffixCompressionDecoder::compressAll(prefixCompressed);
-    auto [buffer, fsstCompressed, fsstDecoder] =
-        FsstCompressionWrapper::compressAll(suffixCompressed);
-    return std::tuple{
-        std::move(buffer), std::move(fsstCompressed),
-        Decoder{{std::move(prefixDecoder), std::move(suffixDecoder),
-                 std::move(fsstDecoder)}}};
-  }
-};
+ */
 
 // A vocabulary in which compression is performed using the `FSST` algorithm,
 // with one dictionary per `numWordsPerBlock` many words (currently 1 million).
 // The interface is currently designed to work with the `VocabularyOnDisk`.
 template <typename UnderlyingVocabulary,
-          typename CompressionWrapper = PrefixSuffixFsstDecodder>
-class FSSTCompressedVocabulary {
+          ad_utility::vocabulary::CompressionWrapper CompressionWrapper =
+              ad_utility::vocabulary::FsstSquaredCompressionWrapper>
+class CompressedVocabulary {
  private:
   // The number of words that share the same decoder.
   static constexpr size_t numWordsPerBlock = 1UL << 20;
+  // static constexpr size_t numWordsPerBlock = 2;
   UnderlyingVocabulary underlyingVocabulary_;
   CompressionWrapper compressionWrapper_;
   // We need to store two files, one for the words and one for the decoders.
@@ -259,12 +158,12 @@ class FSSTCompressedVocabulary {
  public:
   // The vocabulary is initialized using the `open()` method, the default
   // constructor leads to an empty vocabulary.
-  FSSTCompressedVocabulary() = default;
+  CompressedVocabulary() = default;
 
   // Get the uncompressed word at the given index.
   std::string operator[](uint64_t idx) const {
-    return compressionWrapper_.decompress(underlyingVocabulary_[idx].value(),
-                                          getDecoderIdx(idx));
+    return compressionWrapper_.decompress(
+        toStringView(underlyingVocabulary_[idx]), getDecoderIdx(idx));
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
@@ -390,14 +289,6 @@ class FSSTCompressedVocabulary {
       if (wordBuffer_.empty()) {
         return;
       }
-      /*
-      auto bulkResult = CompressionWrapper::compressAll(wordBuffer_);
-      auto& [buffer, views, decoder] = bulkResult;
-      for (auto& word : views) {
-        _underlyingWriter(word);
-      }
-      decoders_.emplace_back(decoder);
-       */
 
       auto compressAndWrite = [words = std::move(wordBuffer_), this,
                                idx = queueIndex_++]() {
@@ -415,6 +306,7 @@ class FSSTCompressedVocabulary {
       wordBuffer_.clear();
     }
   };
+  using WordWriter = DiskWriterFromUncompressedWords;
 
   // Return a `DiskWriter` that can be used to create the vocabulary.
   DiskWriterFromUncompressedWords makeDiskWriter(
@@ -422,6 +314,17 @@ class FSSTCompressedVocabulary {
     return DiskWriterFromUncompressedWords{
         absl::StrCat(filename, wordsSuffix),
         absl::StrCat(filename, decodersSuffix)};
+  }
+  /// Initialize the vocabulary from the given `words`.
+  // TODO<joka921> This can be a generic Mixin...
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    writer.finish();
+    open(filename);
   }
 
   // Access to the underlying vocabulary.
@@ -442,9 +345,22 @@ class FSSTCompressedVocabulary {
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
     auto idx = it - underlyingVocabulary_.begin();
-    return compressionWrapper_.decompress((*it)._word.value(),
+    return compressionWrapper_.decompress(toStringView(*it),
                                           getDecoderIdx(idx));
   };
+
+  // _________________________________________________________________
+  template <typename T>
+  static std::string_view toStringView(const T& el) {
+    if constexpr (std::convertible_to<T, std::string_view>) {
+      return el;
+    } else if constexpr (ad_utility::isInstantiation<T, std::optional>) {
+      return toStringView(el.value());
+    } else {
+      // WordAndIndex
+      return el._word.value();
+    }
+  }
 };
 
 #endif  // QLEVER_COMPRESSEDVOCABULARY_H

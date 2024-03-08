@@ -18,20 +18,23 @@ TEST(VocabularyTest, getIdForWordTest) {
 
   ad_utility::HashSet<std::string> s{"a", "ab", "ba", "car"};
   for (auto& v : vec) {
-    v.createFromSet(s);
+    auto filename = "vocTest1.dat";
+    v.createFromSet(s, filename);
     WordVocabIndex idx;
     ASSERT_TRUE(v.getId("ba", &idx));
     ASSERT_EQ(2u, idx.get());
     ASSERT_TRUE(v.getId("a", &idx));
     ASSERT_EQ(0u, idx.get());
     ASSERT_FALSE(v.getId("foo", &idx));
+    ad_utility::deleteFile(filename);
   }
 
   // with case insensitive ordering
   TextVocabulary voc;
   voc.setLocale("en", "US", false);
   ad_utility::HashSet<string> s2{"a", "A", "Ba", "car"};
-  voc.createFromSet(s2);
+  auto filename = "vocTest2.dat";
+  voc.createFromSet(s2, filename);
   WordVocabIndex idx;
   ASSERT_TRUE(voc.getId("Ba", &idx));
   ASSERT_EQ(2u, idx.get());
@@ -39,13 +42,15 @@ TEST(VocabularyTest, getIdForWordTest) {
   ASSERT_EQ(0u, idx.get());
   // getId only gets exact matches;
   ASSERT_FALSE(voc.getId("ba", &idx));
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
   TextVocabulary v;
   ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
                                 "wordB4"};
-  v.createFromSet(s);
+  auto filename = "vocTest3.dat";
+  v.createFromSet(s, filename);
 
   uint64_t word0 = 0;
   // Match exactly one
@@ -74,23 +79,7 @@ TEST(VocabularyTest, getIdRangeForFullTextPrefixTest) {
 
   retVal = v.getIdRangeForFullTextPrefix("foo*");
   ASSERT_FALSE(retVal.has_value());
-}
-
-TEST(VocabularyTest, readWriteTest) {
-  {
-    TextVocabulary v;
-    ad_utility::HashSet<string> s{"wordA0", "wordA1", "wordB2", "wordB3",
-                                  "wordB4"};
-    v.createFromSet(s);
-    ASSERT_EQ(size_t(5), v.size());
-
-    v.writeToFile("_testtmp_vocfile");
-  }
-
-  TextVocabulary v2;
-  v2.readFromFile("_testtmp_vocfile");
-  ASSERT_EQ(size_t(5), v2.size());
-  remove("_testtmp_vocfile");
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, createFromSetTest) {
@@ -100,13 +89,15 @@ TEST(VocabularyTest, createFromSetTest) {
   s.insert("ba");
   s.insert("car");
   TextVocabulary v;
-  v.createFromSet(s);
+  auto filename = "vocTest4.dat";
+  v.createFromSet(s, filename);
   WordVocabIndex idx;
   ASSERT_TRUE(v.getId("ba", &idx));
   ASSERT_EQ(2u, idx.get());
   ASSERT_TRUE(v.getId("a", &idx));
   ASSERT_EQ(0u, idx.get());
   ASSERT_FALSE(v.getId("foo", &idx));
+  ad_utility::deleteFile(filename);
 }
 
 TEST(VocabularyTest, IncompleteLiterals) {
@@ -124,7 +115,8 @@ TEST(Vocabulary, PrefixFilter) {
   words.insert("\"exp\"");
   words.insert("\"ext\"");
   words.insert(R"("["Ex-vivo" renal artery revascularization]"@en)");
-  vocabulary.createFromSet(words);
+  auto filename = "vocTest5.dat";
+  vocabulary.createFromSet(words, filename);
 
   // Found in internal but not in external vocabulary.
   auto ranges = vocabulary.prefixRanges("\"exp");
@@ -134,4 +126,5 @@ TEST(Vocabulary, PrefixFilter) {
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)},
        {std::pair{firstIndexExternal, firstIndexExternal}}}};
   ASSERT_EQ(ranges, expectedRanges);
+  ad_utility::deleteFile(filename);
 }

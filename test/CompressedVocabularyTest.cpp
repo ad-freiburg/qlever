@@ -10,8 +10,30 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 
+namespace {
+
+using namespace vocabulary_test;
+using namespace ad_utility::vocabulary;
 // A stateless "compressor" that applies a trivial transformation to a string
-struct DummyCompressor {
+struct DummyDecoder {
+  static std::string decompress(std::string_view compressed) {
+    std::string result{compressed};
+    for (char& c : result) {
+      c -= 2;
+    }
+    return result;
+  }
+  AD_SERIALIZE_FRIEND_FUNCTION(DummyDecoder) {
+    // No state, so nothing to serialize here.
+  }
+};
+
+// A wrapper for the stateless dummy compression.
+struct DummyCompressionWrapper
+    : ad_utility::vocabulary::detail::DecoderMultiplexer<DummyDecoder> {
+  using Base = ad_utility::vocabulary::detail::DecoderMultiplexer<DummyDecoder>;
+  using Base::Base;
+
   static std::string compress(std::string_view uncompressed) {
     std::string result{uncompressed};
     for (auto& c : result) {
@@ -20,58 +42,25 @@ struct DummyCompressor {
     return result;
   }
 
-  static std::string decompress(std::string_view compressed) {
-    std::string result{compressed};
-    for (char& c : result) {
-      c -= 2;
+  static std::tuple<int, std::vector<std::string>, DummyDecoder> compressAll(
+      const std::vector<std::string>& strings) {
+    std::vector<std::string> result;
+    for (const auto& string : strings) {
+      result.push_back(compress(string));
     }
-    return result;
+    return {0, std::move(result), DummyDecoder{}};
   }
 };
 
-using Vocab = CompressedVocabulary<VocabularyInMemory, DummyCompressor>;
-
-namespace {
-
-using namespace vocabulary_test;
-
-auto createVocabulary(const std::vector<std::string>& words) {
-  Vocab v;
-  std::string vocabularyFilename = "vocab.test.dat";
-  auto writer = v.makeDiskWriter(vocabularyFilename);
-  for (const auto& word : words) {
-    writer.push(word);
-  }
-  writer.finish();
-  v.open(vocabularyFilename);
-  ad_utility::deleteFile(vocabularyFilename);
-  return v;
-}
-
-TEST(CompressedVocabulary, UpperLowerBound) {
-  testUpperAndLowerBoundWithStdLess(createVocabulary);
-}
-
-TEST(CompressedVocabulary, UpperLowerBoundAlternativeComparator) {
-  testUpperAndLowerBoundWithNumericComparator(createVocabulary);
-}
-
-TEST(CompressedVocabulary, AccessOperator) {
-  testAccessOperatorForUnorderedVocabulary(createVocabulary);
-}
-
-TEST(CompressedVocabulary, EmptyVocabulary) {
-  testEmptyVocabulary(createVocabulary);
-}
-
+// _______________________________________________________
 TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   const std::vector<std::string> words{"alpha", "delta", "beta", "42",
                                        "31",    "0",     "al"};
 
-  Vocab v;
+  CompressedVocabulary<VocabularyInMemory, DummyCompressionWrapper> v;
   auto writer = v.makeDiskWriter("vocabtmp.txt");
   for (const auto& word : words) {
-    writer.push(word);
+    writer(word);
   }
   writer.finish();
 
@@ -81,42 +70,60 @@ TEST(CompressedVocabulary, CompressionIsActuallyApplied) {
   ASSERT_EQ(simple.size(), words.size());
   for (size_t i = 0; i < simple.size(); ++i) {
     ASSERT_NE(simple[i], words[i]);
-    ASSERT_EQ(DummyCompressor::decompress(simple[i]), words[i]);
+    ASSERT_EQ(DummyDecoder::decompress(simple[i]), words[i]);
   }
 }
 
-// Tests for the FSST-compressed vocabulary. These use the generic testing
-// framework that was set up for all the other vocabularies.
-auto createFsstVocabulary(const std::string& filename) {
-  return [filename](const std::vector<std::string>& words) {
-    FSSTCompressedVocabulary<VocabularyOnDisk> vocab;
-    auto writer = vocab.makeDiskWriter(filename);
-    for (const auto& word : words) {
-      writer(word);
-    }
-    writer.finish();
-    vocab.open(filename);
-    return vocab;
-  };
-}
+// The generic tests from the vocabulary testing framework, templated on all the
+// compressors that we have defined.
 
-TEST(FsstVocabulary, LowerUpperBoundStdLess) {
+// Add additional compression wrappers to the following type list. They will
+// then automatically be tested.
+using Compressors =
+    ::testing::Types<FsstSquaredCompressionWrapper, FsstCompressionWrapper,
+                     PrefixCompressionWrapper, DummyCompressionWrapper>;
+
+// _________________________________________________________________________
+template <ad_utility::vocabulary::CompressionWrapper Compressor>
+struct CompressedVocabularyF : public testing::Test {
+  // Tests for the FSST-compressed vocabulary. These use the generic testing
+  // framework that was set up for all the other vocabularies.
+  static constexpr auto createFsstVocabulary(const std::string& filename) {
+    return [filename](const std::vector<std::string>& words) {
+      CompressedVocabulary<VocabularyOnDisk, Compressor> vocab;
+      auto writer = vocab.makeDiskWriter(filename);
+      for (const auto& word : words) {
+        writer(word);
+      }
+      writer.finish();
+      vocab.open(filename);
+      return vocab;
+    };
+  }
+};
+TYPED_TEST_SUITE(CompressedVocabularyF, Compressors);
+
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, LowerUpperBoundStdLess) {
   testUpperAndLowerBoundWithStdLess(
-      createFsstVocabulary("lowerUpperBoundStdLessFsst"));
+      this->createFsstVocabulary("lowerUpperBoundStdLessFsst"));
 }
 
-TEST(FsstVocabulary, LowerUpperBoundNumeric) {
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
-      createFsstVocabulary("lowerUpperBoundNumericFsst"));
+      this->createFsstVocabulary("lowerUpperBoundNumericFsst"));
 }
 
-TEST(FsstVocabulary, AccessOperator) {
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, AccessOperator) {
   testAccessOperatorForUnorderedVocabulary(
-      createFsstVocabulary("accessOperatorFsst"));
+      this->createFsstVocabulary("accessOperatorFsst"));
 }
 
-TEST(FsstVocabulary, EmptyVocabulary) {
-  testEmptyVocabulary(createFsstVocabulary("accessOperatorFsst"));
+// _______________________________________________________
+TYPED_TEST(CompressedVocabularyF, EmptyVocabulary) {
+  testEmptyVocabulary(this->createFsstVocabulary("accessOperatorFsst"));
 }
 
 }  // namespace
