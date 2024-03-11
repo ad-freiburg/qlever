@@ -374,6 +374,56 @@ TEST(Serializer, Vector) {
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
 
+TEST(Serializer, Array) {
+  auto testTriviallyCopyableDatatype = [](auto&& writer,
+                                          auto makeReaderFromWriter) {
+    std::array v{5, 6, 89, 42, -23948165, 0, 59309289, -42};
+    std::tuple t{5, 3.16, 'a', 42, -23948165, 0, 59309289, -42};
+    writer | v;
+    writer | t;
+    using namespace ad_utility::serialization;
+    static_assert(TriviallySerializable<decltype(v)>);
+    static_assert(!TriviallySerializable<decltype(t)>);
+    static_assert(
+        ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v) w;
+    decltype(t) t2;
+    reader | w;
+    reader | t2;
+    ASSERT_EQ(v, w);
+    ASSERT_EQ(t, t2);
+  };
+
+  auto testNonTriviallyCopyableDatatype = [](auto&& writer,
+                                             auto makeReaderFromWriter) {
+    using namespace std::string_literals;
+    std::array v{"hi"s, "bye"s};
+    std::tuple t{5, 3.16, 'a', "bimmbamm"s, -23948165, "ups"s, 59309289, -42};
+    writer | v;
+    writer | t;
+    using namespace ad_utility::serialization;
+    static_assert(!TriviallySerializable<decltype(v)>);
+    static_assert(!TriviallySerializable<decltype(t)>);
+    static_assert(
+        !ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v) w;
+    decltype(t) t2;
+    reader | w;
+    reader | t2;
+    ASSERT_EQ(v, w);
+    ASSERT_EQ(t, t2);
+  };
+
+  testWithAllSerializers(testTriviallyCopyableDatatype);
+  testWithAllSerializers(testNonTriviallyCopyableDatatype);
+}
+
 // Test that we can succesfully write `string_view`s to a serializer and
 // correctly read them as `string`s.
 TEST(Serializer, StringViewToString) {

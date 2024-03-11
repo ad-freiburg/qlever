@@ -158,7 +158,7 @@ class CompressedVocabulary {
     }
 
     // Call `finish`, does nothing if `finish` has been manually called.
-    ~DiskWriterFromUncompressedWords() {
+    ~DiskWriterFromUncompressedWords() noexcept {
       ad_utility::terminateIfThrows(
           [this]() { this->finish(); },
           "The destructor of a DiskWriter of a `CompressedVocabulary`");
