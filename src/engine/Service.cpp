@@ -120,8 +120,7 @@ ResultTable Service::computeResult() {
                           "text/tab-separated-values"),
           static_cast<std::byte>('\n'));
 
-  // This generator needs to be manually transformed, because CALL_FIXED_SIZE
-  // can only deal with functions with only one template parameter.
+  // TODO<GCC12> Use `std::views::transform` instead.
   auto tsvResult = [](auto byteResult) -> cppcoro::generator<std::string_view> {
     for (std::span<std::byte> bytes : byteResult) {
       co_yield std::string_view{reinterpret_cast<const char*>(bytes.data()),
