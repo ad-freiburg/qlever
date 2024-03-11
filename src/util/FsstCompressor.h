@@ -187,7 +187,7 @@ class FsstEncoder {
         if (numCompressed == strings.size()) {
           break;
         }
-        LOG(WARN) << "FSST compression of a block of strings made the input "
+        LOG(DEBUG) << "FSST compression of a block of strings made the input "
                      "larger instead of smaller"
                   << std::endl;
         output.resize(2 * output.size());
