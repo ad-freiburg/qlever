@@ -10,6 +10,7 @@
 
 #include <cctype>
 #include <charconv>
+#include <cmath>
 #include <ctre-unicode.hpp>
 #include <string_view>
 
@@ -26,21 +27,18 @@ std::string MemorySize::asString() const {
       return absl::StrCat(number, " ", unitName);
     } else {
       static_assert(std::floating_point<T>);
-      return absl::StrFormat("%.1f %s", number, unitName);
+      return number * 10 == std::floor(number * 10)
+                 ? absl::StrCat(number, " ", unitName)
+                 : absl::StrCat(std::lround(number * 10) / 10, " ", unitName);
     }
   };
 
-  /*
-  Choosing the memory unit type is done by choosing the unit type, in which
-  range `memoryInBytes_` is contained.
-  A memory unit type normally has the range `[hisSize,
-  sizeOfTheNextBiggerUnit)`.
-  Only exceptions are:
-  - `TB`, which has no upper bound, because it's our biggest unit.
-  - `kB`, which has the lower bound `100'000` instead of `1'000`. Typically, for
-  such small sizes you still want the exact value because they mean something
-  ,e.g. a block size or a page size etc..
-  */
+  // Lower bounds on the size for the various memory units. Used to determine
+  // the memory unit type below.
+  //
+  // NOTE: the lower bound for `kB` is `100'000` instead of `1'000` because we
+  // want exact values below `100'000` bytes (for example, block or page sizes
+  // are often larger than 1'000 bytes but below 100'000 bytes).
   constexpr ad_utility::ConstexprMap<char, size_t, 4> memoryUnitLowerBound(
       {std::pair<char, size_t>{'k', ad_utility::pow(10, 5)},
        std::pair<char, size_t>{'M', detail::numBytesPerUnit.at("MB")},

@@ -377,47 +377,48 @@ TEST(Serializer, Vector) {
 TEST(Serializer, Array) {
   auto testTriviallyCopyableDatatype = [](auto&& writer,
                                           auto makeReaderFromWriter) {
-    std::array v{5, 6, 89, 42, -23948165, 0, 59309289, -42};
-    std::tuple t{5, 3.16, 'a', 42, -23948165, 0, 59309289, -42};
-    writer | v;
-    writer | t;
+    std::array v_in{5, 6, 89, 42, -23948165, 0, 59309289, -42};
+    std::tuple t_in{5, 3.16, 'a', 42, -23948165, 0, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
     using namespace ad_utility::serialization;
-    static_assert(TriviallySerializable<decltype(v)>);
-    static_assert(!TriviallySerializable<decltype(t)>);
+    static_assert(TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
     static_assert(
         ad_utility::serialization::detail::tupleTriviallySerializableImpl<
-            decltype(t)>());
+            decltype(t_in)>());
 
     auto reader = makeReaderFromWriter();
-    decltype(v) w;
-    decltype(t) t2;
-    reader | w;
-    reader | t2;
-    ASSERT_EQ(v, w);
-    ASSERT_EQ(t, t2);
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
   };
 
   auto testNonTriviallyCopyableDatatype = [](auto&& writer,
                                              auto makeReaderFromWriter) {
     using namespace std::string_literals;
-    std::array v{"hi"s, "bye"s};
-    std::tuple t{5, 3.16, 'a', "bimmbamm"s, -23948165, "ups"s, 59309289, -42};
-    writer | v;
-    writer | t;
+    std::array v_in{"hi"s, "bye"s};
+    std::tuple t_in{5,         3.16,   'a',      "bimmbamm"s,
+                    -23948165, "ups"s, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
     using namespace ad_utility::serialization;
-    static_assert(!TriviallySerializable<decltype(v)>);
-    static_assert(!TriviallySerializable<decltype(t)>);
+    static_assert(!TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
     static_assert(
         !ad_utility::serialization::detail::tupleTriviallySerializableImpl<
-            decltype(t)>());
+            decltype(t_in)>());
 
     auto reader = makeReaderFromWriter();
-    decltype(v) w;
-    decltype(t) t2;
-    reader | w;
-    reader | t2;
-    ASSERT_EQ(v, w);
-    ASSERT_EQ(t, t2);
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
   };
 
   testWithAllSerializers(testTriviallyCopyableDatatype);

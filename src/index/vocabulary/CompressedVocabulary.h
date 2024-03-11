@@ -166,14 +166,14 @@ class CompressedVocabulary {
       std::string nameString = readableName_.empty()
                                    ? std::string{""}
                                    : absl::StrCat(" (", readableName_, ")");
-      LOG(INFO) << "Finished writing a compressed vocabulary" << nameString
-                << ". The compressed size is " << compressedSize_
-                << " compared to " << uncompressedSize_ << " uncompressed ("
-                << compressionRatio << "%)." << std::endl;
+      LOG(INFO) << "Finished writing the compressed " << nameString
+                << ", compressed size = " << compressedSize_
+                << ", uncompressed size = " << uncompressedSize_
+                << ", ratio = " << compressionRatio << "% " << std::endl;
       if (numBlocksLargerWhenCompressed_ > 0) {
         LOG(WARN)
+            << "# blocks made larger by the compression instead of smaller: "
             << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
-            << " blocks were made larger by the compression instead of smaller."
             << std::endl;
       }
     }
