@@ -345,7 +345,7 @@ TEST(IndexTest, emptyIndex) {
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
 
-auto IsPossiblyExternalString = [](std::string_view content, bool isExternal) {
+auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
   return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
       ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
                                 ::testing::Eq(content)),
@@ -362,14 +362,11 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     EXPECT_TRUE(res.langtag_.empty());
     EXPECT_THAT(res.triple_[0],
-                IsPossiblyExternalString(
-                    iri("<subject>").toInternalRepresentation(), false));
+                IsPossiblyExternalString(iri("<subject>"), false));
     EXPECT_THAT(res.triple_[1],
-                IsPossiblyExternalString(
-                    iri("<predicate>").toInternalRepresentation(), false));
+                IsPossiblyExternalString(iri("<predicate>"), false));
     EXPECT_THAT(res.triple_[2],
-                IsPossiblyExternalString(
-                    lit("\"literal\"").toInternalRepresentation(), false));
+                IsPossiblyExternalString(lit("\"literal\""), false));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
@@ -381,16 +378,12 @@ TEST(IndexTest, TripleToInternalRepresentation) {
         index.tripleToInternalRepresentation(std::move(turtleTriple));
     EXPECT_EQ(res.langtag_, "fr");
     EXPECT_THAT(res.triple_[0],
-                IsPossiblyExternalString(
-                    iri("<subject>").toInternalRepresentation(), true));
+                IsPossiblyExternalString(iri("<subject>"), true));
     EXPECT_THAT(res.triple_[1],
-                IsPossiblyExternalString(
-                    iri("<predicate>").toInternalRepresentation(), false));
+                IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
-    EXPECT_THAT(
-        res.triple_[2],
-        IsPossiblyExternalString(
-            lit("\"literal\"", "@fr").toInternalRepresentation(), true));
+    EXPECT_THAT(res.triple_[2],
+                IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};

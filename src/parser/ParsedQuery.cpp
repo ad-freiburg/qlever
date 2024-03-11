@@ -417,8 +417,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    // TODO<joka921> This has to be adapted to the new format...
-    triplePtr->p_._iri = '@' + langTag + '@' + triplePtr->p_._iri;
+    triplePtr->p_._iri = ad_utility::convertToLanguageTaggedPredicate(
+        triplePtr->p_._iri, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this

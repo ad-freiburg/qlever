@@ -22,8 +22,8 @@
 namespace ad_utility {
 
 // _________________________________________________________
-string convertLangtagToEntityUri(const string& tag) {
-  return makeInternalIri("@", tag);
+triple_component::Iri convertLangtagToEntityUri(const string& tag) {
+  return triple_component::Iri::iriref(makeInternalIri("@", tag));
 }
 
 // _________________________________________________________

@@ -17,7 +17,7 @@ static constexpr std::string_view languageTaggedPredicatePrefix =
     "<ql:langtagged";
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
-std::string convertLangtagToEntityUri(const std::string& tag);
+triple_component::Iri convertLangtagToEntityUri(const std::string& tag);
 std::string convertToLanguageTaggedPredicate(const std::string& pred,
                                              const std::string& langtag);
 triple_component::Iri convertToLanguageTaggedPredicate(

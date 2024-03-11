@@ -262,9 +262,8 @@ auto getIdMapLambdas(
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
-        auto langTagId =
-            map.getId(TripleComponent{ad_utility::triple_component::Iri::iriref(
-                ad_utility::convertLangtagToEntityUri(lt.langtag_))});
+        auto langTagId = map.getId(TripleComponent{
+            ad_utility::convertLangtagToEntityUri(lt.langtag_)});
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
         const auto& iri =
             std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])

@@ -1166,7 +1166,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
     ASSERT_EQ((SparqlTriple{Var{"?x"},
-                            PropertyPath::fromIri("<ql:langtaggedenlabel>"),
+                            PropertyPath::fromIri(
+                                ad_utility::convertToLanguageTaggedPredicate(
+                                    "<label>", "en")),
                             Var{"?y"}}),
               triples[0]);
   }
@@ -1177,15 +1179,15 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ(
-        (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
-        triples[0]);
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), PropertyPath::fromIri("?p"),
+                            Var{"?y"}}),
+              triples[0]);
     ASSERT_EQ(
         (SparqlTriple{
             Var{"?y"},
             PropertyPath::fromIri(
                 "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+            ad_utility::convertLangtagToEntityUri("en")}),
         triples[1]);
   }
 
@@ -1199,7 +1201,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"}, PropertyPath::fromIri("@en@<label>"),
+    ASSERT_EQ((SparqlTriple{Var{"?x"},
+                            PropertyPath::fromIri(
+                                ad_utility::convertToLanguageTaggedPredicate(
+                                    "<label>", "en")),
                             Var{"?y"}}),
               triples[0]);
     ASSERT_EQ((SparqlTriple{Var{"?text"},
@@ -1215,9 +1220,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(3u, triples.size());
-    ASSERT_EQ(
-        (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
-        triples[0]);
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), PropertyPath::fromIri("?p"),
+                            Var{"?y"}}),
+              triples[0]);
     ASSERT_EQ((SparqlTriple{Var{"?text"},
                             PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
                             Var{"?y"}}),
@@ -1227,7 +1232,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             Var{"?y"},
             PropertyPath::fromIri(
                 "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+            iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
 }
