@@ -4,16 +4,20 @@
 
 #include "util/http/HttpClient.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <sstream>
 #include <string>
 
-#include "absl/strings/str_cat.h"
+#include "global/Constants.h"
+#include "util/AsioHelpers.h"
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
 namespace beast = boost::beast;
 namespace ssl = boost::asio::ssl;
 namespace http = boost::beast::http;
+namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 using ad_utility::httpUtils::Url;
 
@@ -31,8 +35,8 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
   // the destructor of `stream_` is called. It seems that `resolver` does not
   // have to stay alive.
   if constexpr (std::is_same_v<StreamType, beast::tcp_stream>) {
-    tcp::resolver resolver{io_context_};
-    stream_ = std::make_unique<StreamType>(io_context_);
+    tcp::resolver resolver{ioContext_};
+    stream_ = std::make_unique<StreamType>(ioContext_);
     auto const results = resolver.resolve(host, port);
     stream_->connect(results);
   } else {
@@ -41,8 +45,8 @@ HttpClientImpl<StreamType>::HttpClientImpl(std::string_view host,
                   "boost::asio::ssl::stream<boost::asio::ip::tcp::socket>");
     ssl_context_ = std::make_unique<ssl::context>(ssl::context::sslv23_client);
     ssl_context_->set_verify_mode(ssl::verify_none);
-    tcp::resolver resolver{io_context_};
-    stream_ = std::make_unique<StreamType>(io_context_, *ssl_context_);
+    tcp::resolver resolver{ioContext_};
+    stream_ = std::make_unique<StreamType>(ioContext_, *ssl_context_);
     if (!SSL_set_tlsext_host_name(stream_->native_handle(),
                                   std::string{host}.c_str())) {
       boost::system::error_code ec{static_cast<int>(::ERR_get_error()),
@@ -78,10 +82,12 @@ HttpClientImpl<StreamType>::~HttpClientImpl() {
 
 // ____________________________________________________________________________
 template <typename StreamType>
-std::istringstream HttpClientImpl<StreamType>::sendRequest(
+cppcoro::generator<std::span<std::byte>>
+HttpClientImpl<StreamType>::sendRequest(
     const boost::beast::http::verb& method, std::string_view host,
-    std::string_view target, std::string_view requestBody,
-    std::string_view contentTypeHeader, std::string_view acceptHeader) {
+    std::string_view target, ad_utility::SharedCancellationHandle handle,
+    std::string_view requestBody, std::string_view contentTypeHeader,
+    std::string_view acceptHeader) {
   // Check that we have a stream (created in the constructor).
   AD_CORRECTNESS_CHECK(stream_);
 
@@ -96,16 +102,37 @@ std::istringstream HttpClientImpl<StreamType>::sendRequest(
   request.set(http::field::content_length, std::to_string(requestBody.size()));
   request.body() = requestBody;
 
+  auto wait = [this, &handle]<typename T>(
+                  net::awaitable<T> awaitable,
+                  ad_utility::source_location loc =
+                      ad_utility::source_location::current()) -> T {
+    return ad_utility::runAndWaitForAwaitable(
+        ad_utility::interruptible(std::move(awaitable), handle,
+                                  std::make_shared<std::atomic_flag>(true),
+                                  std::move(loc)),
+        ioContext_);
+  };
+
   // Send the request, receive the response (unlimited body size), and return
   // the body as a `std::istringstream`.
-  http::write(*stream_, request);
+  wait(http::async_write(*stream_, request, net::use_awaitable));
   beast::flat_buffer buffer;
-  http::response_parser<http::dynamic_body> response_parser;
-  response_parser.body_limit((std::numeric_limits<std::uint64_t>::max)());
-  http::read(*stream_, buffer, response_parser);
-  std::istringstream responseBody(
-      beast::buffers_to_string(response_parser.get().body().data()));
-  return responseBody;
+  http::response_parser<http::buffer_body> responseParser;
+  responseParser.body_limit(std::numeric_limits<std::uint64_t>::max());
+  wait(http::async_read_header(*stream_, buffer, responseParser,
+                               net::use_awaitable));
+  std::string aggregateBuffer;
+  while (!responseParser.is_done()) {
+    std::array<std::byte, 4096> staticBuffer;
+    responseParser.get().body().data = staticBuffer.data();
+    responseParser.get().body().size = staticBuffer.size();
+
+    wait(http::async_read_some(*stream_, buffer, responseParser,
+                               net::use_awaitable));
+    size_t remainingBytes = responseParser.get().body().size;
+    co_yield std::span{staticBuffer}.first(staticBuffer.size() -
+                                           remainingBytes);
+  }
 }
 
 // ____________________________________________________________________________
@@ -140,19 +167,34 @@ HttpClientImpl<StreamType>::sendWebSocketHandshake(
   return response;
 }
 
-// Explicit instantiations for HTTP and HTTPS, see the bottom of `HttpClient.h`.
+// Explicit instantiations for HTTP and HTTPS, see the bottom of
+// `HttpClient.h`.
 template class HttpClientImpl<beast::tcp_stream>;
 template class HttpClientImpl<ssl::stream<tcp::socket>>;
 
 // ____________________________________________________________________________
-std::istringstream sendHttpOrHttpsRequest(
-    ad_utility::httpUtils::Url url, const boost::beast::http::verb& method,
-    std::string_view requestData, std::string_view contentTypeHeader,
-    std::string_view acceptHeader) {
+cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
+    const ad_utility::httpUtils::Url& url,
+    ad_utility::SharedCancellationHandle handle,
+    const boost::beast::http::verb& method, std::string_view requestData,
+    std::string_view contentTypeHeader, std::string_view acceptHeader) {
   auto sendRequest = [&]<typename Client>() {
-    Client client{url.host(), url.port()};
-    return client.sendRequest(method, url.host(), url.target(), requestData,
-                              contentTypeHeader, acceptHeader);
+    return
+        [](const ad_utility::httpUtils::Url& url,
+           ad_utility::SharedCancellationHandle handle,
+           const boost::beast::http::verb& method, std::string_view requestData,
+           std::string_view contentTypeHeader, std::string_view acceptHeader)
+            -> cppcoro::generator<std::span<std::byte>> {
+          Client client{url.host(), url.port()};
+          auto generator = client.sendRequest(method, url.host(), url.target(),
+                                              std::move(handle), requestData,
+                                              contentTypeHeader, acceptHeader);
+          // Don't return directly, to keep the client object alive.
+          for (auto bytes : generator) {
+            co_yield bytes;
+          }
+        }(url, std::move(handle), method, requestData, contentTypeHeader,
+            acceptHeader);
   };
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();
