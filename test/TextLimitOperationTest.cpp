@@ -23,8 +23,9 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return TextLimit{qec, n, std::move(subtree), textRecordColumn, entityColumns,
-                   scoreColumns};
+  return TextLimit{
+      qec,           n,           std::move(subtree), textRecordColumn,
+      entityColumns, scoreColumns};
 }
 
 bool testSorted(IdTable result, const ColumnIndex& textRecordColumn,

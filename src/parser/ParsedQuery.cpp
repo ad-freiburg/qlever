@@ -65,7 +65,9 @@ string ParsedQuery::asString() const {
   _rootGraphPattern.toString(os, 1);
 
   os << "\nLIMIT: " << (_limitOffset.limitOrDefault());
-  os << "\nTEXTLIMIT: " << (_limitOffset._textLimit.value_or(std::numeric_limits<uint64_t>::max()));
+  os << "\nTEXTLIMIT: "
+     << (_limitOffset._textLimit.value_or(
+            std::numeric_limits<uint64_t>::max()));
   os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {
     const auto& selectClause = this->selectClause();

@@ -525,8 +525,7 @@ TEST(SparqlParser, LimitOffsetClause) {
   expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
                     m::LimitOffset(12, 14, 31));
   expectLimitOffset("textlimit 999", m::LimitOffset(std::nullopt, 999, 0));
-  expectLimitOffset("LIMIT      999",
-                    m::LimitOffset(999, std::nullopt, 0));
+  expectLimitOffset("LIMIT      999", m::LimitOffset(999, std::nullopt, 0));
   expectLimitOffset("OFFSET 43",
                     m::LimitOffset(std::nullopt, std::nullopt, 43));
   expectLimitOffset("TEXTLIMIT 43 LIMIT 19", m::LimitOffset(19, 43, 0));

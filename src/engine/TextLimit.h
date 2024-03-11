@@ -16,8 +16,7 @@ class TextLimit : public Operation {
   const vector<ColumnIndex> scoreColumns_;
 
  public:
-  TextLimit(QueryExecutionContext* qec,
-            const size_t n,
+  TextLimit(QueryExecutionContext* qec, const size_t n,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
             const vector<ColumnIndex>& entityColumns,
