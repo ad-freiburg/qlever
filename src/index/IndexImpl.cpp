@@ -431,8 +431,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
     };
     auto internalVocabularyAction = vocab_.makeWordWriterForInternalVocabulary(
         onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+    internalVocabularyAction.readableName() = "internal vocabulary";
     auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
         onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    externalVocabularyAction.readableName() = "external vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, internalVocabularyAction,
         externalVocabularyAction, memoryLimitIndexBuilding());

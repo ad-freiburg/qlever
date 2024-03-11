@@ -111,6 +111,7 @@ class CompressedVocabulary {
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
+    std::string readableName_ = "";
     bool isFinished_ = false;
     ad_utility::MemorySize uncompressedSize_ = bytes(0);
     ad_utility::MemorySize compressedSize_ = bytes(0);
@@ -162,10 +163,13 @@ class CompressedVocabulary {
       auto compressionRatio =
           (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
           std::max(uncompressedSize_.getBytes(), size_t(1));
-      LOG(INFO)
-          << "Finished writing a compressed vocabulary. The compressed size is "
-          << compressedSize_ << " compared to " << uncompressedSize_
-          << " uncompressed (" << compressionRatio << "%)." << std::endl;
+      std::string nameString = readableName_.empty()
+                                   ? std::string{""}
+                                   : absl::StrCat(" (", readableName_, ")");
+      LOG(INFO) << "Finished writing a compressed vocabulary" << nameString
+                << ". The compressed size is " << compressedSize_
+                << " compared to " << uncompressedSize_ << " uncompressed ("
+                << compressionRatio << "%)." << std::endl;
       if (numBlocksLargerWhenCompressed_ > 0) {
         LOG(WARN)
             << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
@@ -173,6 +177,10 @@ class CompressedVocabulary {
             << std::endl;
       }
     }
+
+    // Access the human-readable description for the vocabulary to be written
+    // that will be used in log message.
+    std::string& readableName() { return readableName_; }
 
     // Call `finish`, does nothing if `finish` has been manually called.
     ~DiskWriterFromUncompressedWords() noexcept {

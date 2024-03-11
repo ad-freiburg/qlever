@@ -21,8 +21,13 @@ namespace ad_utility {
 // _____________________________________________________________________________
 std::string MemorySize::asString() const {
   // Convert number and memory unit name to the string, we want to return.
-  auto toString = [](const auto number, std::string_view unitName) {
-    return absl::StrCat(number, " ", unitName);
+  auto toString = []<typename T>(const T number, std::string_view unitName) {
+    if constexpr (std::integral<T>) {
+      return absl::StrCat(number, " ", unitName);
+    } else {
+      static_assert(std::floating_point<T>);
+      return absl::StrFormat("%.1f %s", number, unitName);
+    }
   };
 
   /*
