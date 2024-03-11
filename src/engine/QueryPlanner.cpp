@@ -104,6 +104,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
                      return alias._expression.containsAggregate();
                    });
 
+  // Set TEXTLIMIT
+  _qec->_textLimit = pq._limitOffset._textLimit;
+
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
   plans.push_back(optimize(&pq._rootGraphPattern));
@@ -161,10 +164,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     }
   }
 
-  _qec->_textLimit = pq._limitOffset._textLimit;
-  for (auto& plan : lastRow) {
-    plan._qet->setTextLimit(pq._limitOffset._textLimit);
-  }
+  // for (auto& plan : lastRow) {
+  //   plan._qet->setTextLimit(pq._limitOffset._textLimit);
+  // }
   checkCancellation();
   return lastRow;
 }
@@ -1465,6 +1467,9 @@ void QueryPlanner::applyTextLimitsIfPossible(
 
   // Note: we are first collecting the newly added plans and then adding them
   // in one go. Changing `row` inside the loop would invalidate the iterators.
+  if (!_qec->_textLimit.has_value()) {
+    return;
+  }
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
     size_t i = 0;
@@ -1490,7 +1495,7 @@ void QueryPlanner::applyTextLimitsIfPossible(
         return result;
       };
       SubtreePlan newPlan = makeSubtreePlan<TextLimit>(
-          _qec, plan._qet, plan._qet.get()->getVariableColumn(textVar),
+          _qec, _qec->_textLimit.value(), plan._qet, plan._qet.get()->getVariableColumn(textVar),
           getVarColumns(textLimit._entityVars),
           getVarColumns(textLimit._scoreVars));
       newPlan._idsOfIncludedTextLimits = plan._idsOfIncludedTextLimits;

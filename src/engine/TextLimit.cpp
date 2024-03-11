@@ -5,13 +5,14 @@
 #include "./TextLimit.h"
 
 // _____________________________________________________________________________
-TextLimit::TextLimit(QueryExecutionContext* qec,
+TextLimit::TextLimit(QueryExecutionContext* qec, const size_t n,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
                      const vector<ColumnIndex>& entityColumns,
                      const vector<ColumnIndex>& scoreColumns)
     : Operation(qec),
       qec_(qec),
+      n_(n),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
       entityColumns_(entityColumns),
@@ -21,7 +22,7 @@ TextLimit::TextLimit(QueryExecutionContext* qec,
 ResultTable TextLimit::computeResult() {
   shared_ptr<const ResultTable> childRes = child_->getResult();
 
-  if (qec_->_textLimit == 0) {
+  if (n_ == 0) {
     return {IdTable(childRes->width(), getExecutionContext()->getAllocator()),
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
@@ -84,7 +85,7 @@ ResultTable TextLimit::computeResult() {
     } else if (idTable[i][textRecordColumn_] !=
                idTable[i - 1][textRecordColumn_]) {
       // Case: new text record.
-      if (currentEntityCount >= qec_->_textLimit) {
+      if (currentEntityCount >= n_) {
         // Case: new text record and reached the limit.
         idTable.erase(idTable.begin() + i);
         --i;
@@ -138,7 +139,7 @@ vector<ColumnIndex> TextLimit::resultSortedOn() const {
 // _____________________________________________________________________________
 string TextLimit::getDescriptor() const {
   std::ostringstream os;
-  os << "TextLimit with limit n: " << qec_->_textLimit;
+  os << "TextLimit with limit n: " << n_;
   return os.str();
 }
 
@@ -146,7 +147,7 @@ string TextLimit::getDescriptor() const {
 string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
-     << " with n: " << qec_->_textLimit
+     << " with n: " << n_
      << ", with child: " << child_->getCacheKey()
      << " and ColumnIndices: " << std::to_string(textRecordColumn_) << ", {";
   for (const auto& column : entityColumns_) {

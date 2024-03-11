@@ -9,6 +9,7 @@
 class TextLimit : public Operation {
  private:
   const QueryExecutionContext* qec_;
+  const size_t n_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
   const vector<ColumnIndex> entityColumns_;
@@ -16,6 +17,7 @@ class TextLimit : public Operation {
 
  public:
   TextLimit(QueryExecutionContext* qec,
+            const size_t n,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
             const vector<ColumnIndex>& entityColumns,
@@ -43,7 +45,7 @@ class TextLimit : public Operation {
   }
 
   bool knownEmptyResult() override {
-    return qec_->_textLimit == 0 || child_->knownEmptyResult();
+    return n_ == 0 || child_->knownEmptyResult();
   }
 
   vector<ColumnIndex> resultSortedOn() const override;

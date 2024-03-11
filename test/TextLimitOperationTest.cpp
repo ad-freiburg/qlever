@@ -17,14 +17,13 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
                         const vector<ColumnIndex>& entityColumns,
                         const vector<ColumnIndex>& scoreColumns) {
   auto qec = ad_utility::testing::getQec();
-  qec->_textLimit = n;
   std::vector<std::optional<Variable>> vars;
   for (size_t i = 0; i < input.numColumns(); ++i) {
     vars.emplace_back("?" + std::to_string(i));
   }
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       ad_utility::testing::getQec(), std::move(input), vars);
-  return TextLimit{qec, std::move(subtree), textRecordColumn, entityColumns,
+  return TextLimit{qec, n, std::move(subtree), textRecordColumn, entityColumns,
                    scoreColumns};
 }
 
@@ -376,39 +375,31 @@ TEST(TextLimit, CacheKey) {
   VectorTable input{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}};
   IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
-  string textLimit1Desc = textLimit1.getDescriptor();
-  string textLimit1CacheKey = textLimit1.getCacheKey();
-  ASSERT_EQ(textLimit1Desc, "TextLimit with limit n: 4");
+  ASSERT_EQ(textLimit1.getDescriptor(), "TextLimit with limit n: 4");
 
-  string textLimit2CacheKey =
-      makeTextLimit(inputTable.clone(), 4, 0, {1}, {2}).getCacheKey();
+  TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
   // Every argument is the same.
-  ASSERT_EQ(textLimit1CacheKey, textLimit2CacheKey);
+  ASSERT_EQ(textLimit1.getCacheKey(), textLimit2.getCacheKey());
 
-  string textLimit3CacheKey =
-      makeTextLimit(inputTable.clone(), 5, 0, {1}, {2}).getCacheKey();
+  TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 5, 0, {1}, {2});
   // The limit is different.
-  ASSERT_NE(textLimit1CacheKey, textLimit3CacheKey);
+  ASSERT_NE(textLimit1.getCacheKey(), textLimit3.getCacheKey());
 
-  string textLimit4CacheKey =
-      makeTextLimit(inputTable.clone(), 4, 1, {1}, {2}).getCacheKey();
+  TextLimit textLimit4 = makeTextLimit(inputTable.clone(), 4, 1, {1}, {2});
   // The textRecordColumn is different.
-  ASSERT_NE(textLimit1CacheKey, textLimit4CacheKey);
+  ASSERT_NE(textLimit1.getCacheKey(), textLimit4.getCacheKey());
 
-  string textLimit5CacheKey =
-      makeTextLimit(inputTable.clone(), 4, 0, {2}, {2}).getCacheKey();
+  TextLimit textLimit5 = makeTextLimit(inputTable.clone(), 4, 0, {2}, {2});
   // The entityColumn is different.
-  ASSERT_NE(textLimit1CacheKey, textLimit5CacheKey);
+  ASSERT_NE(textLimit1.getCacheKey(), textLimit5.getCacheKey());
 
-  string textLimit6CacheKey =
-      makeTextLimit(inputTable.clone(), 4, 0, {1}, {3}).getCacheKey();
+  TextLimit textLimit6 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {3});
   // The scoreColumn is different.
-  ASSERT_NE(textLimit1CacheKey, textLimit6CacheKey);
+  ASSERT_NE(textLimit1.getCacheKey(), textLimit6.getCacheKey());
 
   input = {{1, 2, 3}, {1, 2, 3}, {1, 2, 4}};
   inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
-  string textLimit7CacheKey =
-      makeTextLimit(inputTable.clone(), 4, 0, {1}, {2}).getCacheKey();
+  TextLimit textLimit7 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
   // The input is different.
-  ASSERT_NE(textLimit1CacheKey, textLimit7CacheKey);
+  ASSERT_NE(textLimit1.getCacheKey(), textLimit7.getCacheKey());
 }

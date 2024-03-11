@@ -144,7 +144,7 @@ class QueryExecutionContext {
 
   bool _pinSubtrees;
   bool _pinResult;
-  size_t _textLimit = TEXT_LIMIT_DEFAULT;
+  std::optional<size_t> _textLimit = std::nullopt;
 
  private:
   const Index& _index;
