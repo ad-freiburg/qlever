@@ -422,8 +422,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
 
-  LOG(INFO) << "Merging partial vocabularies in Unicode order "
-            << "(internal and external) ..." << std::endl;
+  LOG(INFO) << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {

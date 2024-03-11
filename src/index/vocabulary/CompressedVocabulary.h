@@ -163,18 +163,17 @@ class CompressedVocabulary {
       auto compressionRatio =
           (100ULL * std::max(compressedSize_.getBytes(), size_t(1))) /
           std::max(uncompressedSize_.getBytes(), size_t(1));
-      std::string nameString = readableName_.empty()
-                                   ? std::string{""}
-                                   : absl::StrCat(" (", readableName_, ")");
-      LOG(INFO) << "Finished writing the compressed " << nameString
-                << ", compressed size = " << compressedSize_
-                << ", uncompressed size = " << uncompressedSize_
-                << ", ratio = " << compressionRatio << "% " << std::endl;
+      std::string nameString =
+          readableName_.empty() ? std::string{"vocabulary"} : readableName_;
+      LOG(INFO) << "Finished writing compressed " << nameString
+                << ", size = " << compressedSize_
+                << " [uncompressed = " << uncompressedSize_
+                << ", ratio = " << compressionRatio << "%]" << std::endl;
       if (numBlocksLargerWhenCompressed_ > 0) {
-        LOG(WARN)
-            << "# blocks made larger by the compression instead of smaller: "
-            << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
-            << std::endl;
+        LOG(WARN) << "Number of blocks made larger by the compression instead "
+                     "of smaller: "
+                  << numBlocksLargerWhenCompressed_ << " of " << numBlocks_
+                  << std::endl;
       }
     }
 
