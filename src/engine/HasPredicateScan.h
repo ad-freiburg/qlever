@@ -70,8 +70,6 @@ class HasPredicateScan : public Operation {
 
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override;
-
   bool knownEmptyResult() override;
 
   float getMultiplicity(size_t col) override;

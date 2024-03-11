@@ -164,9 +164,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
     }
   }
 
-  // for (auto& plan : lastRow) {
-  //   plan._qet->setTextLimit(pq._limitOffset._textLimit);
-  // }
   checkCancellation();
   return lastRow;
 }
@@ -1495,7 +1492,8 @@ void QueryPlanner::applyTextLimitsIfPossible(
         return result;
       };
       SubtreePlan newPlan = makeSubtreePlan<TextLimit>(
-          _qec, _textLimit.value(), plan._qet, plan._qet.get()->getVariableColumn(textVar),
+          _qec, _textLimit.value(), plan._qet,
+          plan._qet.get()->getVariableColumn(textVar),
           getVarColumns(textLimit._entityVars),
           getVarColumns(textLimit._scoreVars));
       newPlan._idsOfIncludedTextLimits = plan._idsOfIncludedTextLimits;

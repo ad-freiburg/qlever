@@ -28,7 +28,6 @@ class Bind : public Operation {
   [[nodiscard]] string getDescriptor() const override;
   [[nodiscard]] size_t getResultWidth() const override;
   std::vector<QueryExecutionTree*> getChildren() override;
-  void setTextLimit(size_t limit) override;
   size_t getCostEstimate() override;
 
  private:

@@ -90,8 +90,6 @@ class ValuesForTesting : public Operation {
     return resultSortedColumns_;
   }
 
-  void setTextLimit(size_t limit) override { (void)limit; }
-
   size_t getCostEstimate() override { return costEstimate_; }
 
  private:

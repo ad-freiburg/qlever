@@ -57,12 +57,6 @@ class CountAvailablePredicates : public Operation {
     return subtree_ != nullptr ? R{subtree_.get()} : R{};
   }
 
-  void setTextLimit(size_t limit) override {
-    if (subtree_ != nullptr) {
-      subtree_->setTextLimit(limit);
-    }
-  }
-
   bool knownEmptyResult() override {
     if (subtree_ != nullptr) {
       return subtree_->knownEmptyResult();
