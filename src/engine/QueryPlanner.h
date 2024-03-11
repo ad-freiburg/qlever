@@ -228,6 +228,8 @@ class QueryPlanner {
 
   CancellationHandle cancellationHandle_;
 
+  std::optional<size_t> _textLimit = std::nullopt;
+
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 

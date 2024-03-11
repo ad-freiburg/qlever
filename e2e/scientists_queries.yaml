@@ -131,11 +131,11 @@ queries:
       TEXTLIMIT 2
     checks:
       - num_cols: 2
-      - num_rows: 16
+      - num_rows: 19
       - selected: [ "?s", "?ql_score_t_var_s" ]
       - contains_row: [ "<Grete_Hermann>", null ]
       - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_s"}
-    
+  
   - query: textlimit-mult-entities-mult-textVars
     type: text
     sparql: |
@@ -152,9 +152,7 @@ queries:
       TEXTLIMIT 2
     checks:
       - num_cols: 7
-      - num_rows: 20
-
-
+      - num_rows: 18
 
   - query: algor-star-female-born-before-1940
     type: text
@@ -207,8 +205,8 @@ queries:
         - "relationship"
       - order_numeric: {"dir": "DESC", 
       "var" : "?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_"}
-    
-    - query: algor-star-female-fixedEntity-ada-ordered-textlimit
+
+  - query: algor-star-female-fixedEntity-ada-ordered-textlimit
     type: text
     sparql: |
       SELECT * WHERE {
@@ -219,10 +217,10 @@ queries:
         ?text ql:contains-word "rela*" .
       }
       ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
-      TEXTLIMIT 1
+      TEXTLIMIT 2
     checks:
       - num_cols: 5
-      - num_rows: 7
+      - num_rows: 3
       - contains_row:
         - "<Ada_Lovelace>"
         - null

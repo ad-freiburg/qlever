@@ -14,7 +14,7 @@ using Var = Variable;
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
-  return QueryPlanner{ad_utility::testing::getQec(),
+  return QueryPlanner{nullptr,
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
