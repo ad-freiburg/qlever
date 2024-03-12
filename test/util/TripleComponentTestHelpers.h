@@ -12,9 +12,9 @@ namespace ad_utility::testing {
 // `TripleComponent`. The contents of the literal are obtained by normalizing
 // `literal` (which must be enclosed in double quotes) and the optional
 // `langtagOrDatatype` (which must start with `@` or `^^`).
-inline auto tripleComponentLiteral = [](const std::string& literal,
-                                        std::string_view langtagOrDatatype =
-                                            "") {
+constexpr auto tripleComponentLiteral = [](const std::string& literal,
+                                           std::string_view langtagOrDatatype =
+                                               "") {
   if (langtagOrDatatype.starts_with("@")) {
     return TripleComponent::Literal::literalWithQuotes(
         literal, std::string(langtagOrDatatype));
@@ -27,5 +27,9 @@ inline auto tripleComponentLiteral = [](const std::string& literal,
     return TripleComponent::Literal::literalWithQuotes(literal);
   }
 };
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
+
+// Create a `TripleComponent` that stores an `Iri` from the given `<iriref>`
+constexpr auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::iriref(s);
+};
 }  // namespace ad_utility::testing

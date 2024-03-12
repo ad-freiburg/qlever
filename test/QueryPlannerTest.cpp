@@ -12,7 +12,7 @@
 namespace h = queryPlannerTestHelpers;
 namespace {
 using Var = Variable;
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
+constexpr auto iri = ad_utility::testing::iri;
 }  // namespace
 using ::testing::HasSubstr;
 
