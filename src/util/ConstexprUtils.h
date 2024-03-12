@@ -222,7 +222,7 @@ struct forEachTypeInTemplateTypeImpl;
 
 template <template <typename...> typename Template, typename... Ts>
 struct forEachTypeInTemplateTypeImpl<Template<Ts...>> {
-  void operator()(const auto& lambda) const {
+  constexpr void operator()(const auto& lambda) const {
     forEachTypeInParameterPack<Ts...>(lambda);
   }
 };

@@ -48,7 +48,6 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
   LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
   internalVocabulary_.close();
-  ad_utility::serialization::FileReadSerializer file(fileName);
   internalVocabulary_.open(fileName);
   LOG(INFO) << "Done, number of words: " << internalVocabulary_.size()
             << std::endl;
@@ -79,18 +78,8 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-template <typename, typename>
-void Vocabulary<S, C, I>::writeToFile(const string& fileName) const {
-  LOG(TRACE) << "BEGIN Vocabulary::writeToFile" << std::endl;
-  ad_utility::serialization::FileWriteSerializer file{fileName};
-  internalVocabulary_.getUnderlyingVocabulary().writeToFile(fileName);
-  LOG(TRACE) << "END Vocabulary::writeToFile" << std::endl;
-}
-
-// _____________________________________________________________________________
-template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
-    const ad_utility::HashSet<std::string>& set) {
+    const ad_utility::HashSet<std::string>& set, const std::string& filename) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
   internalVocabulary_.close();
   std::vector<std::string> words(set.begin(), set.end());
@@ -98,7 +87,7 @@ void Vocabulary<S, C, I>::createFromSet(
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  internalVocabulary_.build(words);
+  internalVocabulary_.build(words, filename);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
@@ -189,15 +178,6 @@ string Vocabulary<S, C, I>::getLanguage(const string& literal) {
     }
   }
   return "";
-}
-
-// _____________________________________________________________________________
-template <class S, class C, class I>
-template <class StringRange, typename, typename>
-void Vocabulary<S, C, I>::buildCodebookForPrefixCompression(
-    const StringRange& prefixes) {
-  internalVocabulary_.getUnderlyingVocabulary().getCompressor().buildCodebook(
-      prefixes);
 }
 
 // ______________________________________________________________________________
@@ -328,15 +308,9 @@ template class Vocabulary<CompressedString, TripleComponentComparator,
                           VocabIndex>;
 template class Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
 
-template void RdfsVocabulary::buildCodebookForPrefixCompression<
-    std::vector<std::string>, CompressedString, void>(
-    const std::vector<std::string>&);
 template void RdfsVocabulary::initializeInternalizedLangs<nlohmann::json>(
     const nlohmann::json&);
 template void RdfsVocabulary::initializeExternalizePrefixes<nlohmann::json>(
     const nlohmann::json& prefixes);
 template void RdfsVocabulary::initializeExternalizePrefixes<
     std::vector<std::string>>(const std::vector<std::string>& prefixes);
-
-template void TextVocabulary::writeToFile<std::string, void>(
-    const string& fileName) const;

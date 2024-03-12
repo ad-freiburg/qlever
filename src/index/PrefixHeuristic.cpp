@@ -161,89 +161,12 @@ void TreeNode::penaltize() {
 }  // namespace ad_utility
 
 // ______________________________________________________________________________________
-std::vector<string> calculatePrefixes(const string& filename,
+std::vector<string> calculatePrefixes(const std::vector<string>& vocabulary,
                                       size_t numPrefixes, size_t codelength,
                                       bool alwaysAddCode) {
-  auto ifs = ad_utility::makeIfstream(filename);
-
-  size_t MinPrefixLength = alwaysAddCode ? 1 : codelength + 1;
-  size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
-  string lastWord;
-
-  if (!std::getline(ifs, lastWord)) {
-    // file is empty
-    return {};
-  }
-
-  size_t totalChars = lastWord.size();
-  ad_utility::Tree t;
-  ad_utility::TreeNode* lastPos{nullptr};
-  string nextWord;
-  // The total amount of saved characters. For very few input words (e.g. in
-  // unit tests) this might become negative, so we need a signed integer to
-  // make the UB sanitizer happy.
-  int64_t totalSavings = 0;
-  size_t numWords = 0;
-
-  LOG(INFO) << "Building prefix tree from internal vocabulary ..." << std::endl;
-  // Insert all prefix candidates into  the tree.
-  while (std::getline(ifs, nextWord)) {
-    nextWord = RdfEscaping::unescapeNewlinesAndBackslashes(nextWord);
-    totalChars += nextWord.size();
-    // the longest common prefixes between two adjacent words are our candidates
-    // for compression
-    string_view pref = ad_utility::commonPrefix(lastWord, nextWord);
-    if (pref.size() >= MinPrefixLength) {
-      // since our words are sorted, we assume that we can insert near the last
-      // position
-      lastPos = t.insert(pref, lastPos);
-    } else {
-      lastPos = nullptr;
-    }
-    lastWord = std::move(nextWord);
-
-    numWords++;
-    if (numWords % 100'000'000 == 0) {
-      LOG(INFO) << "Words processed: " << numWords << std::endl;
-    }
-  }
-
-  LOG(INFO) << "Computing maximally compressing prefixes (greedy algorithm) "
-               "..."
-            << std::endl;
-  std::vector<string> res;
-  res.reserve(numPrefixes);
-  for (size_t i = 0; i < numPrefixes; ++i) {
-    auto p = t.getAndDeleteMaximum(actualCodeLength);
-    if (p.second.empty()) {
-      break;
-    }
-    totalSavings += p.first;
-    LOG(DEBUG) << "Found prefix " << p.second
-               << " with number of bytes gained: " << p.first << std::endl;
-    res.push_back(std::move(p.second));
-  }
-  // if we always add an encoding we have calculated with a codelength of 0 so
-  // far, so the actual encoding length has to be added here
-  if (alwaysAddCode) {
-    totalSavings -= static_cast<int64_t>(codelength) * numWords;
-  }
-  int64_t reductionInPercent =
-      totalChars > 0 ? std::lround(100.0 * static_cast<double>(totalSavings) /
-                                   static_cast<double>(totalChars))
-                     : 0;
-  LOG(DEBUG) << "Total number of bytes : " << totalChars << std::endl;
-  LOG(DEBUG) << "Total chars compressed : " << totalSavings << '\n';
-  LOG(INFO) << "Reduction of size of internal vocabulary: "
-            << reductionInPercent << "%" << std::endl;
-  return res;
-}
-
-// ______________________________________________________________________________________
-std::vector<string> calculatePrefixes(std::vector<string> vocabulary,
-                                      size_t numPrefixes, size_t codelength) {
   // same function, just for vector of strings
-  static const size_t MIN_PREFIX_LENGTH = 3;
+  size_t minPrefixLength = alwaysAddCode ? 1 : codelength + 1;
+  size_t actualCodeLength = alwaysAddCode ? 0 : codelength;
   if (vocabulary.empty()) {
     return {};
   }
@@ -253,7 +176,7 @@ std::vector<string> calculatePrefixes(std::vector<string> vocabulary,
   const string* lastWord = &(vocabulary[0]);
   for (size_t i = 1; i < vocabulary.size(); ++i) {
     auto pref = ad_utility::commonPrefix(*lastWord, vocabulary[i]);
-    if (pref.size() >= MIN_PREFIX_LENGTH) {
+    if (pref.size() >= minPrefixLength) {
       lastPos = t.insert(pref, lastPos);
     } else {
       // lastPos.reset(nullptr);
@@ -264,7 +187,7 @@ std::vector<string> calculatePrefixes(std::vector<string> vocabulary,
   std::vector<string> res;
   res.reserve(numPrefixes);
   for (size_t i = 0; i < numPrefixes; ++i) {
-    res.push_back(t.getAndDeleteMaximum(codelength).second);
+    res.push_back(t.getAndDeleteMaximum(actualCodeLength).second);
   }
   return res;
 }

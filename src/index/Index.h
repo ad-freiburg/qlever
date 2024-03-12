@@ -192,8 +192,6 @@ class Index {
 
   void setSettingsFile(const std::string& filename);
 
-  void setPrefixCompression(bool compressed);
-
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
   const std::string& getTextName() const;

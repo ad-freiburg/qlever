@@ -158,6 +158,59 @@ auto transformArray(Array&& input, Function function) {
       AD_FWD(input));
 }
 
+// Same as `std::lower_bound`, but the comparator doesn't compare two values,
+// but an iterator (first argument) and a value (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
+template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
+constexpr ForwardIterator lower_bound_iterator(ForwardIterator first,
+                                               ForwardIterator last,
+                                               const Tp& val, Compare comp) {
+  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(middle, val)) {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    } else
+      len = half;
+  }
+  return first;
+}
+
+// Same as `std::upper_bound`, but the comparator doesn't compare two values,
+// but a value (first argument) and an iterator (second argument). The
+// implementation is copied from libstdc++ which has this function as an
+// internal detail, but doesn't expose it to the outside.
+template <std::forward_iterator ForwardIterator, typename Tp, typename Compare>
+constexpr ForwardIterator upper_bound_iterator(ForwardIterator first,
+                                               ForwardIterator last,
+                                               const Tp& val, Compare comp) {
+  using DistanceType = std::iterator_traits<ForwardIterator>::difference_type;
+
+  DistanceType len = std::distance(first, last);
+
+  while (len > 0) {
+    DistanceType half = len >> 1;
+    ForwardIterator middle = first;
+    std::advance(middle, half);
+    if (comp(val, middle))
+      len = half;
+    else {
+      first = middle;
+      ++first;
+      len = len - half - 1;
+    }
+  }
+  return first;
+}
+
 }  // namespace ad_utility
 
 #endif  // QLEVER_ALGORITHM_H

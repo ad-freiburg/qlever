@@ -203,11 +203,6 @@ void Index::setSettingsFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::setPrefixCompression(bool compressed) {
-  return pimpl_->setPrefixCompression(compressed);
-}
-
-// ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
 }

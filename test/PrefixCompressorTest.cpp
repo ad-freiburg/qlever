@@ -2,9 +2,11 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
-#include "../src/index/vocabulary/PrefixCompressor.h"
+#include "index/PrefixHeuristic.h"
+#include "index/vocabulary/PrefixCompressor.h"
+#include "util/Views.h"
 
 TEST(PrefixCompressor, CompressionPreservesWords) {
   PrefixCompressor p;
@@ -62,4 +64,18 @@ TEST(PrefixCompressor, MaximumNumberOfPrefixes) {
     ASSERT_EQ(comp.size(), 1u);
     ASSERT_EQ(prefix, p.decompress(comp));
   }
+}
+
+TEST(PrefixCompressor, NewlinesInPrefixCompression) {
+  std::vector<std::string> input;
+  for (size_t i : ad_utility::integerRange(200UL)) {
+    input.push_back(absl::StrCat("\"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\""));
+  }
+  using namespace ::testing;
+
+  const auto& prefixes = calculatePrefixes(input, 127, 1, true);
+
+  // There must be at least one of the compression prefixes that compresses the
+  // common structure of the literals.
+  EXPECT_THAT(prefixes, Contains(ContainsRegex("\nabc\t\n")));
 }

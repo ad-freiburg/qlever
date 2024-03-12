@@ -588,27 +588,3 @@ TEST(IndexTest, trivialGettersAndSetters) {
   EXPECT_EQ(index.memoryLimitIndexBuilding(), 7_kB);
   EXPECT_EQ(std::as_const(index).memoryLimitIndexBuilding(), 7_kB);
 }
-
-TEST(IndexTest, NewlinesInPrefixCompression) {
-  std::string input;
-  for (size_t i : ad_utility::integerRange(200UL)) {
-    input.append(
-        absl::StrCat("<a> <b> \"\"\"\nabc\t\n34as\n\ndj", i, "\"\"\".\n"));
-  }
-  const QueryExecutionContext* ctx = nullptr;
-
-  ASSERT_NO_THROW(ctx = getQec(input));
-  AD_CORRECTNESS_CHECK(ctx != nullptr);
-  using namespace ::testing;
-
-  const auto& prefixes = ctx->getIndex()
-                             .getVocab()
-                             .getInternalVocab()
-                             .getUnderlyingVocabulary()
-                             .getCompressor()
-                             .prefixToCode();
-
-  // There must be at least one of the compression prefixes that compresses the
-  // common structure of the literals.
-  EXPECT_THAT(prefixes, Contains(ContainsRegex("\nabc\t\n")));
-}

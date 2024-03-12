@@ -60,41 +60,6 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   return {indexBuilderData, std::move(firstSorter)};
 }
 
-// _____________________________________________________________________________
-void IndexImpl::compressInternalVocabularyIfSpecified(
-    const std::vector<std::string>& prefixes) {
-  // If we have no compression, this will also copy the whole vocabulary.
-  // but since we expect compression to be the default case, this  should not
-  // hurt.
-  string vocabFile = onDiskBase_ + INTERNAL_VOCAB_SUFFIX;
-  string vocabFileTmp = onDiskBase_ + ".vocabularyTmp";
-  if (vocabPrefixCompressed_) {
-    auto prefixFile = ad_utility::makeOfstream(onDiskBase_ + PREFIX_FILE);
-    for (const auto& prefix : prefixes) {
-      prefixFile << RdfEscaping::escapeNewlinesAndBackslashes(prefix)
-                 << std::endl;
-    }
-  }
-  configurationJson_["prefixes"] = vocabPrefixCompressed_;
-  LOG(INFO) << "Writing compressed vocabulary to disk ..." << std::endl;
-
-  vocab_.buildCodebookForPrefixCompression(prefixes);
-  auto wordReader = RdfsVocabulary::makeUncompressedDiskIterator(vocabFile);
-  auto wordWriter = vocab_.makeCompressedWordWriter(vocabFileTmp);
-  for (const auto& word : wordReader) {
-    wordWriter.push(word);
-  }
-  wordWriter.finish();
-  LOG(DEBUG) << "Finished writing compressed vocabulary" << std::endl;
-
-  if (std::rename(vocabFileTmp.c_str(), vocabFile.c_str())) {
-    LOG(INFO) << "Error: Rename the prefixed vocab file " << vocabFileTmp
-              << " to " << vocabFile << " set errno to " << errno
-              << ". Terminating..." << std::endl;
-    AD_FAIL();
-  }
-}
-
 std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
     const std::string& filename) {
   auto setTokenizer = [this,
@@ -283,8 +248,6 @@ void IndexImpl::createFromFile(const string& filename) {
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
       createIdTriplesAndVocab(makeTurtleParser(filename));
 
-  compressInternalVocabularyIfSpecified(indexBuilderData.prefixes_);
-
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
   writeConfiguration();
@@ -458,52 +421,19 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   size_t sizeInternalVocabulary = 0;
   std::vector<std::string> prefixes;
-  if (vocabPrefixCompressed_) {
-    LOG(INFO) << "Merging partial vocabularies in byte order "
-              << "(internal only) ..." << std::endl;
-    auto compressionOutfile = ad_utility::makeOfstream(
-        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyActionCompression =
-        [&compressionOutfile](const auto& word) {
-          compressionOutfile << RdfEscaping::escapeNewlinesAndBackslashes(word)
-                             << '\n';
-        };
-    auto externalActionCompression = ad_utility::noop;
-    auto mergeResult = ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_ + TMP_BASENAME_COMPRESSION, numFiles, std::less<>(),
-        internalVocabularyActionCompression, externalActionCompression,
-        memoryLimitIndexBuilding(),
-        ad_utility::vocabulary_merger::WithIdMaps::False);
-    sizeInternalVocabulary = mergeResult.numWordsTotal_;
-    LOG(INFO) << "Number of words in internal vocabulary: "
-              << sizeInternalVocabulary << std::endl;
-    // Flush and close the created vocabulary, s.t. the prefix compression sees
-    // all of its contents.
-    compressionOutfile.close();
-    // We have to use the "normally" sorted vocabulary for the prefix
-    // compression.
-    std::string vocabFileForPrefixCalculation =
-        onDiskBase_ + TMP_BASENAME_COMPRESSION + INTERNAL_VOCAB_SUFFIX;
-    prefixes = calculatePrefixes(vocabFileForPrefixCalculation,
-                                 NUM_COMPRESSION_PREFIXES, 1, true);
-    ad_utility::deleteFile(vocabFileForPrefixCalculation);
-  }
 
-  LOG(INFO) << "Merging partial vocabularies in Unicode order "
-            << "(internal and external) ..." << std::endl;
+  LOG(INFO) << "Merging partial vocabularies ..." << std::endl;
   const ad_utility::vocabulary_merger::VocabularyMetaData mergeRes = [&]() {
     auto sortPred = [cmp = &(vocab_.getCaseComparator())](std::string_view a,
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto wordWriter =
-        vocab_.makeUncompressingWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&wordWriter](const auto& word) {
-      wordWriter.push(word.data(), word.size());
-    };
-
+    auto internalVocabularyAction = vocab_.makeWordWriterForInternalVocabulary(
+        onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+    internalVocabularyAction.readableName() = "internal vocabulary";
     auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
         onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+    externalVocabularyAction.readableName() = "external vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, internalVocabularyAction,
         externalVocabularyAction, memoryLimitIndexBuilding());
@@ -511,7 +441,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
-  res.prefixes_ = std::move(prefixes);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
@@ -522,10 +451,6 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(INFO) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
-    if (vocabPrefixCompressed_) {
-      deleteTemporaryFile(absl::StrCat(onDiskBase_, TMP_BASENAME_COMPRESSION,
-                                       PARTIAL_VOCAB_FILE_NAME, n));
-    }
   }
 
   return res;
@@ -881,11 +806,6 @@ void IndexImpl::setSettingsFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void IndexImpl::setPrefixCompression(bool compressed) {
-  vocabPrefixCompressed_ = compressed;
-}
-
-// ____________________________________________________________________________
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
@@ -942,20 +862,6 @@ void IndexImpl::readConfiguration() {
                << std::endl;
     throw std::runtime_error{
         "Incompatible index format, see log message for details"};
-  }
-
-  if (configurationJson_.find("prefixes") != configurationJson_.end()) {
-    if (configurationJson_["prefixes"]) {
-      vector<string> prefixes;
-      auto prefixFile = ad_utility::makeIfstream(onDiskBase_ + PREFIX_FILE);
-      for (string prefix; std::getline(prefixFile, prefix);) {
-        prefixes.emplace_back(
-            RdfEscaping::unescapeNewlinesAndBackslashes(prefix));
-      }
-      vocab_.buildCodebookForPrefixCompression(prefixes);
-    } else {
-      vocab_.buildCodebookForPrefixCompression(std::vector<std::string>());
-    }
   }
 
   if (configurationJson_.find("prefixes-external") !=
@@ -1216,8 +1122,7 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
 
   auto lambda = [localIds = std::move(localIds), globalWritePtr,
                  items = std::move(items), vocab = &vocab_, partialFilename,
-                 partialCompressionFilename, numFiles,
-                 vocabPrefixCompressed = vocabPrefixCompressed_]() mutable {
+                 partialCompressionFilename, numFiles]() mutable {
     auto vec = [&]() {
       ad_utility::TimeBlockAndLog l{"vocab maps to vector"};
       return vocabMapsToVector(*items);
@@ -1261,22 +1166,6 @@ std::future<void> IndexImpl::writeNextPartialVocabulary(
     {
       ad_utility::TimeBlockAndLog l{"write partial vocabulary"};
       writePartialVocabularyToFile(vec, partialFilename);
-    }
-    if (vocabPrefixCompressed) {
-      // sort according to the actual byte values
-      LOG(TRACE) << "Start sorting of vocabulary for prefix compression"
-                 << std::endl;
-      std::erase_if(vec, [](const auto& a) {
-        return a.second.splitVal_.isExternalized_;
-      });
-      {
-        ad_utility::TimeBlockAndLog l{"sorting for compression"};
-        sortVocabVector(
-            &vec,
-            [](const auto& a, const auto& b) { return a.first < b.first; },
-            true);
-      }
-      writePartialVocabularyToFile(vec, partialCompressionFilename);
     }
     LOG(TRACE) << "Finished writing the partial vocabulary" << std::endl;
     vec.clear();
