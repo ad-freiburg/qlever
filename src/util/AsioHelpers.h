@@ -148,7 +148,7 @@ inline net::awaitable<T> interruptible(
   auto wrapper = [](net::awaitable<T> awaitable,
                     std::shared_ptr<net::steady_timer> timer) mutable
       -> net::awaitable<T> {
-    absl::Cleanup cleanup{[timer = std::move(timer)]() {
+    absl::Cleanup cleanup{[timer = std::move(timer)]() mutable {
       auto strand = timer->get_executor();
       net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
     }};
