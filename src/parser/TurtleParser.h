@@ -46,21 +46,6 @@ struct TurtleTriple {
   bool operator==(const TurtleTriple&) const = default;
 };
 
-inline std::string_view stripAngleBrackets(std::string_view input) {
-  AD_CONTRACT_CHECK(input.starts_with('<') && input.ends_with('>'));
-  input.remove_prefix(1);
-  input.remove_suffix(1);
-  return input;
-}
-
-inline std::string_view stripDoubleQuotes(std::string_view input) {
-  AD_CONTRACT_CHECK(input.starts_with('"') && input.ends_with('"') &&
-                    input.size() >= 2);
-  input.remove_prefix(1);
-  input.remove_suffix(1);
-  return input;
-}
-
 // A base class for all the different turtle parsers.
 class TurtleParserBase {
  private:
