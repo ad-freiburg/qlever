@@ -793,9 +793,15 @@ boost::asio::awaitable<void> Server::processQuery(
 template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
-  auto timerRunning = std::make_shared<std::atomic_flag>(true);
-  auto inner = [function = std::move(function), timerRunning]() mutable -> T {
-    timerRunning->clear();
+  std::promise<std::function<void()>> callbackPromise{};
+  auto callbackFuture = callbackPromise.get_future();
+
+  auto inner = [function = std::move(function),
+                callbackFuture = std::move(callbackFuture)]() mutable -> T {
+    // Ensure future is ready by the time this is called.
+    AD_CORRECTNESS_CHECK(callbackFuture.wait_for(std::chrono::milliseconds{
+                             0}) == std::future_status::ready);
+    callbackFuture.get()();
     return std::invoke(std::move(function));
   };
   // interruptible doesn't make the awaitable return faster when cancelled,
@@ -804,7 +810,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
   return ad_utility::interruptible(
       ad_utility::runFunctionOnExecutor(threadPool_.get_executor(),
                                         std::move(inner), net::use_awaitable),
-      std::move(handle), std::move(timerRunning));
+      std::move(handle), std::move(callbackPromise));
 }
 
 // _____________________________________________________________________________

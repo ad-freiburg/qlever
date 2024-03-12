@@ -20,8 +20,7 @@ TEST(AsioHelpers, runFunctionOnExecutorVoid) {
   net::io_context ctx;
   bool a = false;
   auto workGuard = makeWorkGuard(ctx);
-  runFunctionOnExecutor(
-      ctx.get_executor(), [&]() { a = true; }, net::detached);
+  runFunctionOnExecutor(ctx.get_executor(), [&]() { a = true; }, net::detached);
   EXPECT_FALSE(a);
   ctx.poll();
   EXPECT_TRUE(a);
@@ -160,15 +159,21 @@ ASYNC_TEST(AsioHelpers, verifyInterruptibleDoesPropagateError) {
 }
 
 // _________________________________________________________________________
-ASYNC_TEST(AsioHelpers, verifyNoCheckIsPerformedWhenTimerIsCancelledEarly) {
+ASYNC_TEST(AsioHelpers, verifyEarlyCancellationOfCallbackDoesCancelEarly) {
   ad_utility::SharedCancellationHandle handle =
       std::make_shared<ad_utility::CancellationHandle<>>();
-  handle->cancel(ad_utility::CancellationState::MANUAL);
   auto sleeperTask = []() -> net::awaitable<void> { co_return; }();
+  std::promise<std::function<void()>> promise{};
+  auto future = promise.get_future();
+  ad_utility::JThread cancelTask{[&future, &handle]() {
+    future.get()();
+    // Make sure first iteration is not affected
+    std::this_thread::sleep_for(std::chrono::milliseconds{5});
+    handle->cancel(ad_utility::CancellationState::MANUAL);
+  }};
 
   EXPECT_NO_THROW(co_await ad_utility::interruptible(
-      std::move(sleeperTask), handle,
-      std::make_shared<std::atomic_flag>(false)));
+      std::move(sleeperTask), handle, std::move(promise)));
 }
 
 // _________________________________________________________________________
