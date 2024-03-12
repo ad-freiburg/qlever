@@ -24,7 +24,6 @@
 #include "index/StringSortComparator.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
-#include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
 #include "util/Exception.h"
@@ -62,16 +61,6 @@ inline std::ostream& operator<<(std::ostream& stream,
                                 const IdRange<IndexType>& idRange) {
   return stream << '[' << idRange.first_ << ", " << idRange.last_ << ']';
 }
-
-// simple class for members of a prefix compression codebook
-struct Prefix {
-  Prefix() = default;
-  Prefix(char prefix, const string& fulltext)
-      : prefix_(prefix), fulltext_(fulltext) {}
-
-  char prefix_;
-  string fulltext_;
-};
 
 // A vocabulary. Wraps a vector of strings and provides additional methods for
 // retrieval. Template parameters that are supported are:
@@ -124,19 +113,16 @@ class Vocabulary {
   // externalized.
   vector<std::string> externalizedPrefixes_;
 
-  using PrefixCompressedVocabulary =
-      CompressedVocabulary<VocabularyInMemory, PrefixCompressor>;
-  using InternalCompressedVocabulary =
-      UnicodeVocabulary<PrefixCompressedVocabulary, ComparatorType>;
-  using InternalUncompressedVocabulary =
-      UnicodeVocabulary<VocabularyInMemory, ComparatorType>;
+  using InternalUnderlyingVocabulary =
+      std::conditional_t<isCompressed_,
+                         CompressedVocabulary<VocabularyInMemory>,
+                         VocabularyInMemory>;
   using InternalVocabulary =
-      std::conditional_t<isCompressed_, InternalCompressedVocabulary,
-                         InternalUncompressedVocabulary>;
+      UnicodeVocabulary<InternalUnderlyingVocabulary, ComparatorType>;
   InternalVocabulary internalVocabulary_;
 
   using ExternalVocabulary =
-      UnicodeVocabulary<VocabularyOnDisk, ComparatorType>;
+      UnicodeVocabulary<CompressedVocabulary<VocabularyOnDisk>, ComparatorType>;
   ExternalVocabulary externalVocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
@@ -159,12 +145,6 @@ class Vocabulary {
 
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName, const string& extLitsFileName = "");
-
-  //! Write the vocabulary to a file.
-  // We don't need to write compressed vocabularies with the current index
-  // building procedure
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  void writeToFile(const string& fileName) const;
 
   //! Get the word with the given idx or an empty optional if the
   //! word is not in the vocabulary.
@@ -206,14 +186,9 @@ class Vocabulary {
   std::optional<IdRange<IndexType>> getIdRangeForFullTextPrefix(
       const string& word) const;
 
-  ad_utility::HashMap<Datatypes, std::pair<IndexType, IndexType>>
-  getRangesForDatatypes() const;
-
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  void printRangesForDatatypes();
-
   // only used during Index building, not needed for compressed vocabulary
-  void createFromSet(const ad_utility::HashSet<std::string>& set);
+  void createFromSet(const ad_utility::HashSet<std::string>& set,
+                     const std::string& filename);
 
   static bool stringIsLiteral(const string& s);
 
@@ -229,16 +204,6 @@ class Vocabulary {
   bool shouldLiteralBeExternalized(const string& word) const;
 
   static string getLanguage(const string& literal);
-
-  // initialize compression with a list of prefixes
-  // The prefixes do not have to be in any specific order
-  //
-  // StringRange prefixes can be of any type where
-  // for (const string& el : prefixes {}
-  // works
-  template <typename StringRange, typename U = StringType,
-            typename = enable_if_compressed<U>>
-  void buildCodebookForPrefixCompression(const StringRange& prefixes);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -289,26 +254,25 @@ class Vocabulary {
     return internalVocabulary_;
   }
 
-  // Get a writer for the external vocab that has a `push` method to which the
-  // single words have to be pushed one by one to add words to the vocabulary.
-  VocabularyOnDisk::WordWriter makeWordWriterForExternalVocabulary(
-      const std::string& filename) const {
-    return VocabularyOnDisk::WordWriter(filename);
-  }
-
-  VocabularyInMemory::WordWriter makeUncompressingWordWriter(
-      const std::string& filename) const {
-    return VocabularyInMemory::WordWriter{filename};
-  }
-
-  template <typename U = StringType, typename = enable_if_compressed<U>>
-  auto makeCompressedWordWriter(const std::string& filename) {
-    return internalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
+  // Get a writer for the external vocab that has an `operator()` method to
+  // which the single words have to be pushed one by one to add words to the
+  // vocabulary.
+  CompressedVocabulary<VocabularyOnDisk>::WordWriter
+  makeWordWriterForExternalVocabulary(const std::string& filename) const {
+    return externalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
         filename);
   }
 
-  static auto makeUncompressedDiskIterator(const string& filename) {
-    return VocabularyInMemory::makeWordDiskIterator(filename);
+  // Same as `makeWordWriterForExternalVocabulary`, but for the internal
+  // vocabulary.
+  // TODO<joka921> Fix the unicode inconsistencies in Wikidata, and then let the
+  // UnicodeVocabulary hand out the writer including assertions that the
+  // vocabulary is sorted. Then we don't need the call to
+  // `getUnderlyingVocabulary()` here.
+  InternalUnderlyingVocabulary::WordWriter makeWordWriterForInternalVocabulary(
+      const std::string& filename) const {
+    return internalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
+        filename);
   }
 };
 

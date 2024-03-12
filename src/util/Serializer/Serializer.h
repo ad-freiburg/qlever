@@ -7,8 +7,8 @@
 #ifndef QLEVER_SERIALIZER_SERIALIZER
 #define QLEVER_SERIALIZER_SERIALIZER
 
-#include "../Forward.h"
-#include "../TypeTraits.h"
+#include "util/Forward.h"
+#include "util/TypeTraits.h"
 
 /**
  * \file Serializer.h

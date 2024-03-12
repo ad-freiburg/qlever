@@ -66,7 +66,6 @@ int main(int argc, char** argv) {
   string settingsFile;
   string filetype;
   string inputFile;
-  bool noPrefixCompression = false;
   bool noPatterns = false;
   bool onlyAddTextIndex = false;
   bool keepTemporaryFiles = false;
@@ -117,8 +116,6 @@ int main(int argc, char** argv) {
       "documentation).");
   add("no-patterns", po::bool_switch(&noPatterns),
       "Disable the precomputation for `ql:has-predicate`.");
-  add("no-compressed-vocabulary,N", po::bool_switch(&noPrefixCompression),
-      "Do not apply prefix compression to the vocabulary (default: do apply).");
   add("only-pso-and-pos-permutations,o", po::bool_switch(&onlyPsoAndPos),
       "Only build the PSO and POS permutations. This is faster, but then "
       "queries with predicate variables are not supported");
@@ -180,7 +177,6 @@ int main(int argc, char** argv) {
     index.setOnDiskBase(baseName);
     index.setKeepTempFiles(keepTemporaryFiles);
     index.setSettingsFile(settingsFile);
-    index.setPrefixCompression(!noPrefixCompression);
     index.loadAllPermutations() = !onlyPsoAndPos;
     // NOTE: If `onlyAddTextIndex` is true, we do not want to construct an
     // index, but we assume that it already exists. In particular, we then need

@@ -7,7 +7,9 @@
 #include "../src/util/Random.h"
 #include "../src/util/Serializer/ByteBufferSerializer.h"
 #include "../src/util/Serializer/FileSerializer.h"
+#include "../src/util/Serializer/SerializeArrayOrTuple.h"
 #include "../src/util/Serializer/SerializeHashMap.h"
+#include "../src/util/Serializer/SerializePair.h"
 #include "../src/util/Serializer/SerializeString.h"
 #include "../src/util/Serializer/SerializeVector.h"
 #include "../src/util/Serializer/Serializer.h"
@@ -366,6 +368,57 @@ TEST(Serializer, Vector) {
     std::vector<std::string> w;
     reader | w;
     ASSERT_EQ(v, w);
+  };
+
+  testWithAllSerializers(testTriviallyCopyableDatatype);
+  testWithAllSerializers(testNonTriviallyCopyableDatatype);
+}
+
+TEST(Serializer, Array) {
+  auto testTriviallyCopyableDatatype = [](auto&& writer,
+                                          auto makeReaderFromWriter) {
+    std::array v_in{5, 6, 89, 42, -23948165, 0, 59309289, -42};
+    std::tuple t_in{5, 3.16, 'a', 42, -23948165, 0, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
+    using namespace ad_utility::serialization;
+    static_assert(TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
+    static_assert(
+        ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t_in)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
+  };
+
+  auto testNonTriviallyCopyableDatatype = [](auto&& writer,
+                                             auto makeReaderFromWriter) {
+    using namespace std::string_literals;
+    std::array v_in{"hi"s, "bye"s};
+    std::tuple t_in{5,         3.16,   'a',      "bimmbamm"s,
+                    -23948165, "ups"s, 59309289, -42};
+    writer | v_in;
+    writer | t_in;
+    using namespace ad_utility::serialization;
+    static_assert(!TriviallySerializable<decltype(v_in)>);
+    static_assert(!TriviallySerializable<decltype(t_in)>);
+    static_assert(
+        !ad_utility::serialization::detail::tupleTriviallySerializableImpl<
+            decltype(t_in)>());
+
+    auto reader = makeReaderFromWriter();
+    decltype(v_in) v_out;
+    decltype(t_in) t_out;
+    reader | v_out;
+    reader | t_out;
+    ASSERT_EQ(v_in, v_out);
+    ASSERT_EQ(t_in, t_out);
   };
 
   testWithAllSerializers(testTriviallyCopyableDatatype);

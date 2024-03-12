@@ -9,6 +9,7 @@
 
 #include "global/Id.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
@@ -47,7 +48,7 @@ class VocabularyOnDisk {
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
-  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets.mmap";
+  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets";
 
  public:
   // A helper class that is used to build a vocabulary word by word.
@@ -118,6 +119,18 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  // Same as `lower_bound`, but the `comparator` compares an `iterator` (first
+  // argument) and a `WordAndIndex` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
+  template <typename Comparator>
+  WordAndIndex lower_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
+    auto it = ad_utility::lower_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
@@ -126,6 +139,18 @@ class VocabularyOnDisk {
   WordAndIndex upper_bound(const auto& word, Comparator comparator) const {
     auto it =
         std::upper_bound(begin(), end(), word, transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
+  // Same as `upper_bound`, but the `comparator` compares a `WordAndIndex`
+  // (first argument) and an `Iterator` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
+  template <typename Comparator>
+  WordAndIndex upper_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
+    auto it = ad_utility::upper_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
 
@@ -144,17 +169,10 @@ class VocabularyOnDisk {
     OffsetAndSize() = default;
   };
 
- private:
-  // Return the `i`-th element from this vocabulary. Note that this is (in
-  // general) NOT the element with the ID `i`, because the ID space is not
-  // contiguous.
-  WordAndIndex getIthElement(size_t n) const;
-
   // Helper function for implementing a random access iterator.
   using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
     return vocabulary.getIthElement(index);
   });
-
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =
@@ -162,14 +180,20 @@ class VocabularyOnDisk {
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
+ private:
+  // Return the `i`-th element from this vocabulary. Note that this is (in
+  // general) NOT the element with the ID `i`, because the ID space is not
+  // contiguous.
+  WordAndIndex getIthElement(size_t n) const;
+
   // Takes a lambda that compares two string-like objects and returns a lambda
   // that compares two objects, either of which can be string-like or
   // `WordAndIndex`.
   auto transformComparator(auto comparator) const {
     // For a `WordAndIndex`, return the word, else (for string types) just
     // return the input.
-    auto getString = [&](const auto& input) {
-      if constexpr (ad_utility::isSimilar<decltype(input), WordAndIndex>) {
+    auto getString = [&]<typename T>(const T& input) -> decltype(auto) {
+      if constexpr (ad_utility::isSimilar<T, WordAndIndex>) {
         AD_CONTRACT_CHECK(input._word.has_value());
         return input._word.value();
       } else {

@@ -383,3 +383,5 @@ addLinkAndDiscoverTest(ConstantsTest)
 addLinkAndDiscoverTest(JThreadTest)
 
 addLinkAndDiscoverTest(ChunkedForLoopTest)
+
+addLinkAndDiscoverTest(FsstCompressorTest fsst)
