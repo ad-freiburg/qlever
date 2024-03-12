@@ -167,14 +167,13 @@ inline T runAndWaitForAwaitable(net::awaitable<T> awaitable,
   auto future = net::co_spawn(net::make_strand(ioContext), std::move(awaitable),
                               net::use_future);
 
-  while (true) {
-    auto futureStatus = future.wait_for(std::chrono::milliseconds{0});
-    if (futureStatus == std::future_status::ready) {
-      break;
-    }
+  std::future_status futureStatus;
+  do {
+    ioContext.poll();
+    // 5ms is an arbitrarily chosen interval to not overload the CPU.
+    futureStatus = future.wait_for(std::chrono::milliseconds{5});
     AD_CORRECTNESS_CHECK(futureStatus != std::future_status::deferred);
-    ioContext.poll_one();
-  }
+  } while (futureStatus != std::future_status::ready);
   return future.get();
 }
 }  // namespace ad_utility
