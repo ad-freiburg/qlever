@@ -6,7 +6,6 @@
 
 #include <memory>
 
-#include "./IndexTestHelpers.h"
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/QueryExecutionTree.h"

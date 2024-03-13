@@ -10,6 +10,7 @@
 using std::string;
 
 class SparqlTriple;
+class SparqlTripleSimple;
 
 class IndexScan : public Operation {
  private:
@@ -30,6 +31,8 @@ class IndexScan : public Operation {
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTriple& triple);
+  IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
+            const SparqlTripleSimple& triple);
 
   virtual ~IndexScan() = default;
 
@@ -97,6 +100,11 @@ class IndexScan : public Operation {
 
   Permutation::Enum permutation() const { return permutation_; }
 
+  // Return the stored triple in the order that corresponds to the
+  // `permutation_`. For example if `permutation_ == PSO` then the result is
+  // {&predicate_, &subject_, &object_}
+  std::array<const TripleComponent* const, 3> getPermutedTriple() const;
+
  private:
   ResultTable computeResult() override;
 
@@ -109,11 +117,6 @@ class IndexScan : public Operation {
   string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  // Return the stored triple in the order that corresponds to the
-  // `permutation_`. For example if `permutation_ == PSO` then the result is
-  // {&predicate_, &subject_, &object_}
-  std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
   static Permutation::IdTableGenerator getLazyScan(

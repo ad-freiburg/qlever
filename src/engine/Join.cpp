@@ -32,8 +32,9 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   t1 = QueryExecutionTree::createSortedTree(std::move(t1), {t1JoinCol});
   t2 = QueryExecutionTree::createSortedTree(std::move(t2), {t2JoinCol});
 
-  // Make sure that the subtrees are ordered so that identical queries can be
-  // identified.
+  // Make the order of the two subtrees deterministic. That way, queries that
+  // are identical except for the order of the join operands, are easier to
+  // identify.
   auto swapChildren = [&]() {
     std::swap(t1, t2);
     std::swap(t1JoinCol, t2JoinCol);
@@ -41,11 +42,11 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   if (t1->getCacheKey() > t2->getCacheKey()) {
     swapChildren();
   }
-  if (isFullScanDummy(t1)) {
-    AD_CONTRACT_CHECK(!isFullScanDummy(t2));
-    swapChildren();
-  } else if (t1->getType() == QueryExecutionTree::SCAN &&
-             t2->getType() != QueryExecutionTree::SCAN) {
+  // If one of the inputs is a SCAN and the other one is not, always make the
+  // SCAN the right child (which also gives a deterministic order of the
+  // subtrees). This simplifies several branches in the `computeResult` method.
+  if (t1->getType() == QueryExecutionTree::SCAN &&
+      t2->getType() != QueryExecutionTree::SCAN) {
     swapChildren();
   }
   _left = std::move(t1);
@@ -98,12 +99,6 @@ ResultTable Join::computeResult() {
     _left->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     return {std::move(idTable), resultSortedOn(), LocalVocab()};
-  }
-
-  // Check for joins with dummy
-  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
-  if (isFullScanDummy(_right)) {
-    return computeResultForJoinWithFullScanDummy();
   }
 
   // Always materialize results that meet one of the following criteria:
@@ -197,10 +192,6 @@ ResultTable Join::computeResult() {
 
 // _____________________________________________________________________________
 VariableToColumnMap Join::computeVariableToColumnMap() const {
-  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left));
-  if (isFullScanDummy(_right)) {
-    AD_CORRECTNESS_CHECK(_rightJoinCol == ColumnIndex{0});
-  }
   return makeVarToColMapForJoinOperation(
       _left->getVariableColumns(), _right->getVariableColumns(),
       {{_leftJoinCol, _rightJoinCol}}, BinOpType::Join,
@@ -216,17 +207,11 @@ size_t Join::getResultWidth() const {
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> Join::resultSortedOn() const {
-  if (!isFullScanDummy(_left)) {
-    return {_leftJoinCol};
-  } else {
-    return {ColumnIndex{2 + _rightJoinCol}};
-  }
-}
+vector<ColumnIndex> Join::resultSortedOn() const { return {_leftJoinCol}; }
 
 // _____________________________________________________________________________
 float Join::getMultiplicity(size_t col) {
-  if (_multiplicities.size() == 0) {
+  if (_multiplicities.empty()) {
     computeSizeEstimateAndMultiplicities();
     _sizeEstimateComputed = true;
   }
@@ -235,119 +220,14 @@ float Join::getMultiplicity(size_t col) {
 
 // _____________________________________________________________________________
 size_t Join::getCostEstimate() {
-  size_t costJoin;
-
-  // The cost estimates of the "Join with full scan" case must be consistent
-  // with the estimates for the materialization of a full scan. For a detailed
-  // discussion see the comments in `IndexScan::getCostEstimate()` (in
-  // `IndexScan.cpp`)
-  if (isFullScanDummy(_left)) {
-    size_t nofDistinctTabJc = static_cast<size_t>(
-        _right->getSizeEstimate() / _right->getMultiplicity(_rightJoinCol));
-    float averageScanSize = _left->getMultiplicity(_leftJoinCol);
-
-    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
-  } else if (isFullScanDummy(_right)) {
-    size_t nofDistinctTabJc = static_cast<size_t>(
-        _left->getSizeEstimate() / _left->getMultiplicity(_leftJoinCol));
-    float averageScanSize = _right->getMultiplicity(_rightJoinCol);
-    costJoin = nofDistinctTabJc * averageScanSize * 10'000;
-  } else {
-    // Normal case:
-    costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
-  }
+  size_t costJoin = _left->getSizeEstimate() + _right->getSizeEstimate();
 
   // TODO<joka921> once the `getCostEstimate` functions are `const`,
   // the argument can also be `const auto`
-  auto costIfNotFullScan = [](auto& subtree) {
-    return isFullScanDummy(subtree) ? size_t{0} : subtree->getCostEstimate();
-  };
+  auto costOfSubtree = [](auto& subtree) { return subtree->getCostEstimate(); };
 
-  return getSizeEstimateBeforeLimit() + costJoin + costIfNotFullScan(_left) +
-         costIfNotFullScan(_right);
-}
-
-// _____________________________________________________________________________
-ResultTable Join::computeResultForJoinWithFullScanDummy() {
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  LOG(DEBUG) << "Join by making multiple scans..." << endl;
-  AD_CORRECTNESS_CHECK(!isFullScanDummy(_left) && isFullScanDummy(_right));
-  _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
-      {}, RuntimeInformation::Status::lazilyMaterialized);
-  idTable.setNumColumns(_left->getResultWidth() + 2);
-
-  shared_ptr<const ResultTable> nonDummyRes = _left->getResult();
-
-  doComputeJoinWithFullScanDummyRight(nonDummyRes->idTable(), &idTable);
-  LOG(DEBUG) << "Join (with dummy) done. Size: " << idTable.size() << endl;
-  checkCancellation();
-  return {std::move(idTable), resultSortedOn(),
-          nonDummyRes->getSharedLocalVocab()};
-}
-
-// _____________________________________________________________________________
-Join::ScanMethodType Join::getScanMethod(
-    std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const {
-  ScanMethodType scanMethod;
-  IndexScan& scan =
-      *static_cast<IndexScan*>(fullScanDummyTree->getRootOperation().get());
-
-  // this works because the join operations execution Context never changes
-  // during its lifetime
-  const auto& idx = _executionContext->getIndex();
-  const auto scanLambda =
-      [&idx, &scan](const Permutation::Enum perm,
-                    ad_utility::SharedCancellationHandle cancellationHandle) {
-        return [&idx, perm, &scan,
-                cancellationHandle = std::move(cancellationHandle)](Id id) {
-          return idx.scan(id, std::nullopt, perm, scan.additionalColumns(),
-                          cancellationHandle);
-        };
-      };
-  AD_CORRECTNESS_CHECK(scan.getResultWidth() == 3);
-  return scanLambda(scan.permutation(), cancellationHandle_);
-}
-
-// _____________________________________________________________________________
-void Join::doComputeJoinWithFullScanDummyRight(const IdTable& ndr,
-                                               IdTable* res) const {
-  if (ndr.empty()) {
-    return;
-  }
-  // Get the scan method (depends on type of dummy tree), use a function ptr.
-  const ScanMethodType scan = getScanMethod(_right);
-  // Iterate through non-dummy.
-  Id currentJoinId = ndr(0, _leftJoinCol);
-  // TODO<C++23> This can be simplified using `std::views::chunk_by`.
-  auto joinItemFrom = ndr.begin();
-  auto joinItemEnd = ndr.begin();
-  for (size_t i = 0; i < ndr.size(); ++i) {
-    // For each different element in the join column.
-    if (ndr(i, _leftJoinCol) == currentJoinId) {
-      ++joinItemEnd;
-    } else {
-      // Do a scan.
-      LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-      // The scan is a relatively expensive disk operation, so we can afford to
-      // check for timeouts before each call.
-      checkCancellation();
-      IdTable jr = scan(currentJoinId);
-      LOG(TRACE) << "Got #items: " << jr.size() << endl;
-      // Build the cross product.
-      appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(),
-                         res);
-      // Reset
-      currentJoinId = ndr[i][_leftJoinCol];
-      joinItemFrom = joinItemEnd;
-      ++joinItemEnd;
-    }
-  }
-  // Do the scan for the final element.
-  LOG(TRACE) << "Inner scan with ID: " << currentJoinId << endl;
-  IdTable jr = scan(currentJoinId);
-  LOG(TRACE) << "Got #items: " << jr.size() << endl;
-  // Build the cross product.
-  appendCrossProduct(joinItemFrom, joinItemEnd, jr.cbegin(), jr.cend(), res);
+  return getSizeEstimateBeforeLimit() + costJoin + costOfSubtree(_left) +
+         costOfSubtree(_right);
 }
 
 // _____________________________________________________________________________
@@ -376,14 +256,10 @@ void Join::computeSizeEstimateAndMultiplicities() {
       _right->getSizeEstimate() *
       (static_cast<double>(nofDistinctInResult) / nofDistinctRight);
 
-  double corrFactor =
-      _executionContext
-          ? ((isFullScanDummy(_left) || isFullScanDummy(_right))
-                 ? _executionContext->getCostFactor(
-                       "DUMMY_JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")
-                 : _executionContext->getCostFactor(
-                       "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR"))
-          : 1;
+  double corrFactor = _executionContext
+                          ? _executionContext->getCostFactor(
+                                "JOIN_SIZE_ESTIMATE_CORRECTION_FACTOR")
+                          : 1.0;
 
   double jcMultiplicityInResult = _left->getMultiplicity(_leftJoinCol) *
                                   _right->getMultiplicity(_rightJoinCol);
@@ -395,8 +271,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
              << " * " << jcMultiplicityInResult << " * " << nofDistinctInResult
              << std::endl;
 
-  for (auto i = isFullScanDummy(_left) ? ColumnIndex{1} : ColumnIndex{0};
-       i < _left->getResultWidth(); ++i) {
+  for (auto i = ColumnIndex{0}; i < _left->getResultWidth(); ++i) {
     double oldMult = _left->getMultiplicity(i);
     double m = std::max(
         1.0, oldMult * _right->getMultiplicity(_rightJoinCol) * corrFactor);
@@ -408,7 +283,7 @@ void Join::computeSizeEstimateAndMultiplicities() {
     _multiplicities.emplace_back(m);
   }
   for (auto i = ColumnIndex{0}; i < _right->getResultWidth(); ++i) {
-    if (i == _rightJoinCol && !isFullScanDummy(_left)) {
+    if (i == _rightJoinCol) {
       continue;
     }
     double oldMult = _right->getMultiplicity(i);
@@ -423,28 +298,6 @@ void Join::computeSizeEstimateAndMultiplicities() {
   }
 
   assert(_multiplicities.size() == getResultWidth());
-}
-
-// ______________________________________________________________________________
-void Join::appendCrossProduct(const IdTable::const_iterator& leftBegin,
-                              const IdTable::const_iterator& leftEnd,
-                              const IdTable::const_iterator& rightBegin,
-                              const IdTable::const_iterator& rightEnd,
-                              IdTable* res) const {
-  for (auto itl = leftBegin; itl != leftEnd; ++itl) {
-    for (auto itr = rightBegin; itr != rightEnd; ++itr) {
-      const auto& l = *itl;
-      const auto& r = *itr;
-      res->emplace_back();
-      size_t backIdx = res->size() - 1;
-      for (size_t i = 0; i < l.numColumns(); i++) {
-        (*res)(backIdx, i) = l[i];
-      }
-      for (size_t i = 0; i < r.numColumns(); i++) {
-        (*res)(backIdx, l.numColumns() + i) = r[i];
-      }
-    }
-  }
 }
 
 // ______________________________________________________________________________
@@ -470,8 +323,8 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
   auto aPermuted = a.asColumnSubsetView(joinColumnData.permutationLeft());
   auto bPermuted = b.asColumnSubsetView(joinColumnData.permutationRight());
 
-  auto rowAdder = ad_utility::AddCombinedRowToIdTable(1, aPermuted, bPermuted,
-                                                      std::move(*result));
+  auto rowAdder = ad_utility::AddCombinedRowToIdTable(
+      1, aPermuted, bPermuted, std::move(*result), cancellationHandle_);
   auto addRow = [beginLeft = joinColumnL.begin(),
                  beginRight = joinColumnR.begin(),
                  &rowAdder](const auto& itLeft, const auto& itRight) {
@@ -717,7 +570,8 @@ IdTable Join::computeResultForTwoIndexScans() {
   // class to work correctly.
   AD_CORRECTNESS_CHECK(_leftJoinCol == 0 && _rightJoinCol == 0);
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+      cancellationHandle_};
 
   auto& leftScan = dynamic_cast<IndexScan&>(*_left->getRootOperation());
   auto& rightScan = dynamic_cast<IndexScan&>(*_right->getRootOperation());
@@ -762,7 +616,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
   auto joinColMap = ad_utility::JoinColumnMapping{
       {{jcLeft, jcRight}}, numColsLeft, numColsRight};
   ad_utility::AddCombinedRowToIdTable rowAdder{
-      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()}};
+      1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
+      cancellationHandle_};
 
   AD_CORRECTNESS_CHECK(joinColScan == 0);
   auto permutationIdTable =

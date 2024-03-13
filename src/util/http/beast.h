@@ -13,9 +13,8 @@
 // Without explicitly including the `<utility>` header, an error occurs when
 // compiling the `boost::asio` code included below with gcc 12. We hope and
 // expect that this will go away with future version of `boost::asio`.
+#include <coroutine>
 #include <utility>
-
-#include "util/Coroutines.h"
 
 // libc++ needs <experimental/coroutine>, libstdc++ needs <coroutine>
 #ifndef BOOST_ASIO_HAS_CO_AWAIT
@@ -36,16 +35,6 @@
 #if defined BOOST_BEAST_VERSION && BOOST_BEAST_VERSION < 345
 #define BOOST_BEAST_USE_STD_STRING_VIEW
 #endif
-
-// Boost::ASIO currently seems to have a bug when multiple coroutine streams are
-// concurrently in flight because there were multiple calls to `co_spawn`.
-// `ASIO` recycles the memory for awaitable frames, but there seems to only be
-// one global unsynchronized memory pool for this recycling, which leads to all
-// kinds of race conditions. The following constant disables the memory
-// recycling and gets rid of all of those errors and crashes.
-// TODO<joka921> Further analyze and then report this bug to the ASIO
-// developers.
-#define BOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING
 
 #include <boost/asio.hpp>
 #include <boost/asio/ssl/stream.hpp>

@@ -18,28 +18,28 @@ template <bool isPersistentMetaData>
 void IndexMetaData<MapType>::add(AddType addedValue) {
   // only add rmd to _data if it's not already present there
   if constexpr (!isPersistentMetaData) {
-    _totalElements += addedValue.getNofElements();
-    _data.set(addedValue.col0Id_, addedValue);
+    totalElements_ += addedValue.getNofElements();
+    data_.set(addedValue.col0Id_, addedValue);
   }
 }
 
 // _____________________________________________________________________________
 template <class MapType>
 off_t IndexMetaData<MapType>::getOffsetAfter() const {
-  return _offsetAfter;
+  return offsetAfter_;
 }
 
 // _____________________________________________________________________________
 template <class MapType>
 typename IndexMetaData<MapType>::GetType IndexMetaData<MapType>::getMetaData(
     Id col0Id) const {
-  return _data.getAsserted(col0Id);
+  return data_.getAsserted(col0Id);
 }
 
 // _____________________________________________________________________________
 template <class MapType>
 bool IndexMetaData<MapType>::col0IdExists(Id col0Id) const {
-  return _data.count(col0Id) > 0;
+  return data_.count(col0Id) > 0;
 }
 
 // ____________________________________________________________________________
@@ -94,26 +94,18 @@ string IndexMetaData<MapType>::statistics() const {
   ad_utility::ReadableNumberFacet facet(1);
   std::locale locWithNumberGrouping(loc, &facet);
   os.imbue(locWithNumberGrouping);
-  os << "#relations = " << _data.size() << ", #blocks = " << _blockData.size()
-     << ", #triples = " << _totalElements;
+  os << "#relations = " << numDistinctCol0_
+     << ", #blocks = " << blockData_.size()
+     << ", #triples = " << totalElements_;
   return std::move(os).str();
-}
-
-// ______________________________________________
-template <class MapType>
-size_t IndexMetaData<MapType>::getNofDistinctC1() const {
-  return _data.size();
 }
 
 // __________________________________________________________________
 template <class MapType>
-void IndexMetaData<MapType>::calculateExpensiveStatistics() {
-  _totalElements = 0;
-  _totalBytes = 0;
-  _totalBlocks = 0;
-  for (auto it = _data.cbegin(); it != _data.cend(); ++it) {
-    auto el = *it;
-    _totalElements += el.second.getNofElements();
-    _totalBytes += getTotalBytesForRelation(el.first);
+void IndexMetaData<MapType>::calculateStatistics(size_t numDistinctCol0) {
+  totalElements_ = 0;
+  numDistinctCol0_ = numDistinctCol0;
+  for (const auto& block : blockData_) {
+    totalElements_ += block.numRows_;
   }
 }

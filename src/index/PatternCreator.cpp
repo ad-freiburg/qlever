@@ -15,13 +15,13 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
     tripleBuffer_.emplace_back(triple, ignoreForPatterns);
     return;
   }
-  if (!currentSubjectIndex_.has_value()) {
-    // This is the first triple
-    currentSubjectIndex_ = triple[0].getVocabIndex();
-  } else if (triple[0].getVocabIndex() != currentSubjectIndex_) {
+  if (!currentSubject_.has_value()) {
+    // This is the first triple.
+    currentSubject_ = triple[0];
+  } else if (triple[0] != currentSubject_) {
     // New subject.
-    finishSubject(currentSubjectIndex_.value(), currentPattern_);
-    currentSubjectIndex_ = triple[0].getVocabIndex();
+    finishSubject(currentSubject_.value(), currentPattern_);
+    currentSubject_ = triple[0];
     currentPattern_.clear();
   }
   tripleBuffer_.emplace_back(triple, ignoreForPatterns);
@@ -32,8 +32,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
 }
 
 // ________________________________________________________________________________
-void PatternCreator::finishSubject(VocabIndex subjectIndex,
-                                   const Pattern& pattern) {
+void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   numDistinctSubjects_++;
   numDistinctSubjectPredicatePairs_ += pattern.size();
   PatternID patternId;
@@ -55,10 +54,10 @@ void PatternCreator::finishSubject(VocabIndex subjectIndex,
     it->second.count_++;
   }
 
-  auto additionalTriple = std::array{Id::makeFromVocabIndex(subjectIndex),
-                                     hasPatternId, Id::makeFromInt(patternId)};
+  auto additionalTriple =
+      std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
   tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
-  auto curSubject = Id::makeFromVocabIndex(currentSubjectIndex_.value());
+  auto curSubject = currentSubject_.value();
   std::ranges::for_each(tripleBuffer_, [this, patternId,
                                         &curSubject](const auto& t) {
     const auto& [s, p, o] = t.triple_;
@@ -80,8 +79,8 @@ void PatternCreator::finish() {
   isFinished_ = true;
 
   // Write the pattern of the last subject.
-  if (currentSubjectIndex_.has_value()) {
-    finishSubject(currentSubjectIndex_.value(), currentPattern_);
+  if (currentSubject_.has_value()) {
+    finishSubject(currentSubject_.value(), currentPattern_);
   }
 
   // Store all data in the file

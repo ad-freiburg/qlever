@@ -44,6 +44,7 @@ struct TripleComponentWithIndex {
   [[nodiscard]] auto& isExternal() { return isExternal_; }
   [[nodiscard]] const auto& iriOrLiteral() const { return iriOrLiteral_; }
   [[nodiscard]] auto& iriOrLiteral() { return iriOrLiteral_; }
+  bool isBlankNode() const { return iriOrLiteral_.starts_with("_:"); }
 
   AD_SERIALIZE_FRIEND_FUNCTION(TripleComponentWithIndex) {
     serializer | arg.iriOrLiteral_;

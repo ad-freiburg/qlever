@@ -2,12 +2,12 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#include "./IndexTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "util/IndexTestHelpers.h"
 
 #pragma once
 
@@ -80,7 +80,7 @@ struct TestContext {
     A = getId("\"A\"");
     Beta = getId("\"Beta\"");
     zz = getId("\"zz\"@en");
-    blank = getId("_:u_blank");
+    blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
     notInVocabA = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));

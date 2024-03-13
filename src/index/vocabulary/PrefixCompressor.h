@@ -12,6 +12,8 @@
 #include "global/Constants.h"
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/StringUtils.h"
 
 // TODO<joka921> Include the relevant constants directly here.
@@ -29,6 +31,10 @@ class PrefixCompressor {
 
     std::string code_;
     std::string prefix_;
+    AD_SERIALIZE_FRIEND_FUNCTION(PrefixCode) {
+      serializer | arg.code_;
+      serializer | arg.prefix_;
+    }
   };
 
   // List of all prefixes, sorted descending by the length
@@ -38,6 +44,11 @@ class PrefixCompressor {
   // maps (numeric) keys to the prefix they encode.
   // currently only 128 prefixes are supported.
   std::array<std::string, NUM_COMPRESSION_PREFIXES> prefixToCode_{""};
+
+  AD_SERIALIZE_FRIEND_FUNCTION(PrefixCompressor) {
+    serializer | arg.codeToPrefix_;
+    serializer | arg.prefixToCode_;
+  }
 
  public:
   // Compress the given `word`. Note: This iterates over all prefixes in the

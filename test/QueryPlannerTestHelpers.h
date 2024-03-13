@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -13,6 +12,7 @@
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
@@ -22,6 +22,7 @@
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::source_location;
 
@@ -236,6 +237,25 @@ inline auto TransitivePath =
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
     };
+
+// Match a `Filter` operation. The matching of the expression is currently only
+// done via the descriptor.
+constexpr auto Filter = [](std::string_view descriptor,
+                           const QetMatcher& childMatcher) {
+  return RootOperation<::Filter>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
+};
+
+// Match an `OrderBy` operation
+constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
+                            const QetMatcher& childMatcher) {
+  return RootOperation<::OrderBy>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
+};
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

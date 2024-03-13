@@ -33,9 +33,11 @@
 class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
-  using GetTsvFunction = std::function<std::istringstream(
-      ad_utility::httpUtils::Url, const boost::beast::http::verb&,
-      std::string_view, std::string_view, std::string_view)>;
+  using GetTsvFunction = std::function<cppcoro::generator<std::span<std::byte>>(
+      const ad_utility::httpUtils::Url&,
+      ad_utility::SharedCancellationHandle handle,
+      const boost::beast::http::verb&, std::string_view, std::string_view,
+      std::string_view)>;
 
  private:
   // The parsed SERVICE clause.
@@ -89,8 +91,8 @@ class Service : public Operation {
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse TSV here and not a VALUES clause. Note that the only reason that
   // `tsvResult` is not `const` here is because the method iterates over the
-  // `std::istringstream` and thus changes it.
+  // input range and thus changes it.
   template <size_t I>
-  void writeTsvResult(std::istringstream tsvResult, IdTable* idTable,
-                      LocalVocab* localVocab);
+  void writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
+                      IdTable* idTable, LocalVocab* localVocab);
 };

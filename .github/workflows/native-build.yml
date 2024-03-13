@@ -57,35 +57,34 @@ jobs:
 
 
     steps:
-    - uses: actions/checkout@v3
-      with:
+      - uses: actions/checkout@v3
+        with:
           submodules: 'recursive'
-    - name: Install dependencies
-      uses: ./.github/workflows/install-dependencies-ubuntu
-    - name: Install compiler
-      uses: ./.github/workflows/install-compiler-ubuntu
-      with:
-        compiler: ${{matrix.compiler}}
-        compiler-version: ${{matrix.compiler-version}}
+      - name: Install dependencies
+        uses: ./.github/workflows/install-dependencies-ubuntu
+      - name: Install compiler
+        uses: ./.github/workflows/install-compiler-ubuntu
+        with:
+          compiler: ${{matrix.compiler}}
+          compiler-version: ${{matrix.compiler-version}}
 
-    - name: Configure CMake
-      # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
-      # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true
+      - name: Configure CMake
+        # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
+        # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
+        run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{matrix.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/toolchains/${{matrix.compiler}}${{matrix.compiler-version}}.cmake" -DADDITIONAL_COMPILER_FLAGS="${{matrix.warnings}} ${{matrix.asan-flags}} ${{matrix.ubsan-flags}}" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=${{matrix.expensive-tests}} -DENABLE_EXPENSIVE_CHECKS=true
 
-    - name: Build
+      - name: Build
         # Build your program with the given configuration
-      run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
+        run: cmake --build ${{github.workspace}}/build --config ${{matrix.build-type}} -- -j $(nproc)
 
-    - name: Test
-      working-directory: ${{github.workspace}}/build/test
-      # Execute tests defined by the CMake configuration.
-      # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
-      run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
+      - name: Test
+        working-directory: ${{github.workspace}}/build/test
+        # Execute tests defined by the CMake configuration.
+        # See https://cmake.org/cmake/help/latest/manual/ctest.1.html for more detail
+        run: env CTEST_OUTPUT_ON_FAILURE=1 ctest -C ${{matrix.build-type}} .
 
-    - name: Running and printing the benchmark examples.
-      run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
+      - name: Running and printing the benchmark examples.
+        run: ${{github.workspace}}/build/benchmark/BenchmarkExamples -p
 
-    - name: E2E
-      run: ${{github.workspace}}/e2e/e2e.sh
-
+      - name: E2E
+        run: ${{github.workspace}}/e2e/e2e.sh

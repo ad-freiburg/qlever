@@ -12,6 +12,15 @@ if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
 endif()
 
+# Boost::ASIO currently seems to have a bug when multiple coroutine streams are
+# concurrently in flight because there were multiple calls to `co_spawn`.
+# `ASIO` recycles the memory for awaitable frames, but there seems to only be
+# one global unsynchronized memory pool for this recycling, which leads to all
+# kinds of race conditions. The following constant disables the memory
+# recycling and gets rid of all of those errors and crashes.
+# TODO<joka921> Further analyze and then report this bug to the ASIO
+# developers.
+add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
@@ -176,7 +185,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -215,13 +224,6 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
 
 set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
-
-
-################################
-# NLOHNMANN-JSON
-################################
-# Header only, nothing to include
-include_directories(third_party/json/)
 
 ################################
 # CTRE, Compile-Time-Regular-Expressions
@@ -292,6 +294,16 @@ FetchContent_Declare(
 )
 
 ################################
+# FSST
+################################
+FetchContent_Declare(
+        fsst
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG c541ffdc2be43443c6a772eb6207eec1b587dbe8
+)
+
+
+################################
 # RE2
 ################################
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
@@ -306,11 +318,17 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
-# Disable some warnings in RE2 and STXXL
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
+# Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
+target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
+target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
+include_directories(${fsst_SOURCE_DIR})
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -395,9 +413,6 @@ qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Bo
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
-
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
-qlever_target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(TurtleParserMain src/TurtleParserMain.cpp)
 qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})

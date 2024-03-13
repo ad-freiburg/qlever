@@ -731,10 +731,11 @@ TEST(SparqlExpression, isSomethingFunctions) {
   Id iri = testContext().x;
   Id literal = testContext().zz;
   Id blank = testContext().blank;
+  Id blank2 = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(12));
   Id localLiteral = testContext().notInVocabA;
 
-  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      "_:b", iri,  literal,
-                              blank, localLiteral, I(42), D(1), U};
+  IdOrStrings testIdOrStrings{"<i>", "\"l\"",      blank2, iri,  literal,
+                              blank, localLiteral, I(42),  D(1), U};
   testUnaryExpression<makeIsIriExpression>(testIdOrStrings,
                                            Ids{T, F, F, T, F, F, F, F, F, F});
   testUnaryExpression<makeIsBlankExpression>(testIdOrStrings,
@@ -791,7 +792,12 @@ TEST(SparqlExpression, ifAndCoalesce) {
                 std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
                            IdOrString{"eins"}, Ids{U, U, U, U, U, D(5.0)}});
 
+  // Check COALESCE with no arguments or empty arguments.
   checkCoalesce(IdOrStrings{}, std::tuple{});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}});
+  checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}, Ids{}});
+
   auto coalesceExpr =
       makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
                                      std::make_unique<IriExpression>("<bam>"));

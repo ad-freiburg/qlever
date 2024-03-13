@@ -203,11 +203,6 @@ void Index::setSettingsFile(const std::string& filename) {
 }
 
 // ____________________________________________________________________________
-void Index::setPrefixCompression(bool compressed) {
-  return pimpl_->setPrefixCompression(compressed);
-}
-
-// ____________________________________________________________________________
 void Index::setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
   return pimpl_->setNumTriplesPerBatch(numTriplesPerBatch);
 }
@@ -273,7 +268,7 @@ IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
                       std::move(cancellationHandle));
 }
@@ -282,7 +277,7 @@ IdTable Index::scan(
 IdTable Index::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
   return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
                       std::move(cancellationHandle));
 }

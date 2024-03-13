@@ -53,6 +53,9 @@ class CoalesceExpression : public VariadicExpression {
     VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
                 IdOrString{Id::makeUndefined()});
+    if (result.empty()) {
+      return result;
+    }
 
     ctx->cancellationHandle_->throwIfCancelled();
 
