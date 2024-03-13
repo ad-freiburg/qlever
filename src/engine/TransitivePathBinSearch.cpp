@@ -20,7 +20,11 @@ TransitivePathBinSearch::TransitivePathBinSearch(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist)
-    : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist) {}
+    : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist) {
+  auto [startSide, targetSide] = decideDirection();
+  subtree_ = QueryExecutionTree::createSortedTree(
+      subtree_, {startSide.subCol_, targetSide.subCol_});
+}
 
 // _____________________________________________________________________________
 template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
@@ -130,8 +134,6 @@ ResultTable TransitivePathBinSearch::computeResult() {
         "not supported");
   }
   auto [startSide, targetSide] = decideDirection();
-  subtree_ = QueryExecutionTree::createSortedTree(
-      subtree_, {startSide.subCol_, targetSide.subCol_});
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   IdTable idTable{allocator()};

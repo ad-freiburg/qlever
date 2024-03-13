@@ -241,14 +241,16 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   // `Operation`, which  would then ignore the changes in `variableColumnMap_`
   // made below (see `Operation::getInternallyVisibleVariableColumns` and
   // `Operation::getExternallyVariableColumns`).
+  auto lhs = lhs_;
+  auto rhs = rhs_;
+  if (isLeft) {
+    lhs.treeAndCol_ = {leftOrRightOp, inputCol};
+  } else {
+    rhs.treeAndCol_ = {leftOrRightOp, inputCol};
+  }
   std::shared_ptr<TransitivePathBase> p =
       TransitivePathBase::makeTransitivePath(getExecutionContext(), subtree_,
-                                             lhs_, rhs_, minDist_, maxDist_);
-  if (isLeft) {
-    p->lhs_.treeAndCol_ = {leftOrRightOp, inputCol};
-  } else {
-    p->rhs_.treeAndCol_ = {leftOrRightOp, inputCol};
-  }
+                                             lhs, rhs, minDist_, maxDist_);
 
   // Note: The `variable` in the following structured binding is `const`, even
   // if we bind by value. We deliberately make one unnecessary copy of the
