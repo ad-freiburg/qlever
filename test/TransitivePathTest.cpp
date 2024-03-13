@@ -8,6 +8,7 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
