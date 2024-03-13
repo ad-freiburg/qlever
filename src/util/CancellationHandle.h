@@ -290,6 +290,7 @@ class CancellationHandle {
   FRIEND_TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog);
   FRIEND_TEST(CancellationHandle,
               verifyPleaseWatchDogDoesNotAcceptInvalidState);
+  FRIEND_TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled);
 };
 
 using SharedCancellationHandle = std::shared_ptr<CancellationHandle<>>;
