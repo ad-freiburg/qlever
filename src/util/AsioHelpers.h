@@ -125,18 +125,21 @@ inline net::awaitable<T> interruptible(
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
-  auto cancelTimer = [timer]() mutable {
+  auto running = std::make_shared<std::atomic_flag>(true);
+  auto cancelTimer = [timer, running]() mutable {
     auto strand = timer->get_executor();
+    running->clear();
     net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
   };
   // Provide callback to outer world in order to cancel the timer pre-emptively.
   cancelCallback.set_value(cancelTimer);
 
   auto timerLoop = [](std::shared_ptr<net::steady_timer> timer,
+                      std::shared_ptr<std::atomic_flag> running,
                       ad_utility::SharedCancellationHandle handle,
                       ad_utility::source_location loc) -> net::awaitable<void> {
     constexpr auto timeout = DESIRED_CANCELLATION_CHECK_INTERVAL / 2;
-    while (true) {
+    while (running->test()) {
       handle->throwIfCancelled(loc);
       timer->expires_after(timeout);
       auto [ec] = co_await timer->async_wait(net::as_tuple(net::deferred));
@@ -153,9 +156,9 @@ inline net::awaitable<T> interruptible(
   };
 
   try {
-    co_return co_await (
-        timerLoop(std::move(timer), std::move(handle), std::move(loc)) &&
-        wrapper(std::move(awaitable), std::move(cancelTimer)));
+    co_return co_await (timerLoop(std::move(timer), std::move(running),
+                                  std::move(handle), std::move(loc)) &&
+                        wrapper(std::move(awaitable), std::move(cancelTimer)));
   } catch (const net::multiple_exceptions& e) {
     // Ignore other exceptions
     std::rethrow_exception(e.first_exception());
