@@ -125,11 +125,12 @@ inline net::awaitable<T> interruptible(
   using namespace net::experimental::awaitable_operators;
   auto timer =
       std::make_shared<net::steady_timer>(co_await net::this_coro::executor);
-  // Provide callback to outer world in order to cancel the timer pre-emptively.
-  cancelCallback.set_value([timer]() {
+  auto cancelTimer = [timer]() mutable {
     auto strand = timer->get_executor();
     net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
-  });
+  };
+  // Provide callback to outer world in order to cancel the timer pre-emptively.
+  cancelCallback.set_value(cancelTimer);
 
   auto timerLoop = [](std::shared_ptr<net::steady_timer> timer,
                       ad_utility::SharedCancellationHandle handle,
@@ -146,20 +147,15 @@ inline net::awaitable<T> interruptible(
     }
   };
   auto wrapper = [](net::awaitable<T> awaitable,
-                    std::shared_ptr<net::steady_timer> timer) mutable
-      -> net::awaitable<T> {
-    absl::Cleanup cleanup{[timer = std::move(timer)]() mutable {
-      auto strand = timer->get_executor();
-      net::dispatch(strand, [timer = std::move(timer)]() { timer->cancel(); });
-    }};
+                    auto cancelTimer) mutable -> net::awaitable<T> {
+    absl::Cleanup cleanup{std::move(cancelTimer)};
     co_return co_await std::move(awaitable);
   };
 
-  auto timerClone = timer;
   try {
     co_return co_await (
-        timerLoop(std::move(timerClone), std::move(handle), std::move(loc)) &&
-        wrapper(std::move(awaitable), std::move(timer)));
+        timerLoop(std::move(timer), std::move(handle), std::move(loc)) &&
+        wrapper(std::move(awaitable), std::move(cancelTimer)));
   } catch (const net::multiple_exceptions& e) {
     // Ignore other exceptions
     std::rethrow_exception(e.first_exception());
@@ -185,9 +181,10 @@ inline T runAndWaitForAwaitable(net::awaitable<T> awaitable,
 
   std::future_status futureStatus;
   do {
-    ioContext.poll();
+    bool computedSomething = ioContext.poll_one();
     // 5ms is an arbitrarily chosen interval to not overload the CPU.
-    futureStatus = future.wait_for(std::chrono::milliseconds{5});
+    std::chrono::milliseconds timeout{computedSomething ? 0 : 5};
+    futureStatus = future.wait_for(timeout);
     AD_CORRECTNESS_CHECK(futureStatus != std::future_status::deferred);
   } while (futureStatus != std::future_status::ready);
   return future.get();
