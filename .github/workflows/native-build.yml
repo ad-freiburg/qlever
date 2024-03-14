@@ -67,6 +67,12 @@ jobs:
         with:
           compiler: ${{matrix.compiler}}
           compiler-version: ${{matrix.compiler-version}}
+      - name: Reduce address randomization to make sanitizers work
+        # For details see for example `https://stackoverflow.com/questions/77850769/fatal-threadsanitizer-unexpected-memory-mapping-when-running-on-linux-kernels`
+        run: |
+          sudo sysctl vm.mmap_rnd_bits
+          sudo sysctl vm.mmap_rnd_bits=28
+        
 
       - name: Configure CMake
         # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
