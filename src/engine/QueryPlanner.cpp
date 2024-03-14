@@ -1001,12 +1001,6 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
     const SparqlTriple& triple) {
   std::shared_ptr<ParsedQuery::GraphPattern> pattern =
       seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
-#if LOGLEVEL >= TRACE
-  std::ostringstream out;
-  pattern->toString(out, 0);
-  LOG(TRACE) << "Turned " << triple.asString() << " into " << std::endl;
-  LOG(TRACE) << std::move(out).str() << std::endl << std::endl;
-#endif
   pattern->recomputeIds();
   return optimize(pattern.get());
 }

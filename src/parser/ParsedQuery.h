@@ -274,8 +274,6 @@ class ParsedQuery {
    */
   void merge(const ParsedQuery& p);
 
-  [[nodiscard]] string asString() const;
-
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.
   [[nodiscard]] const std::vector<Alias>& getAliases() const;
