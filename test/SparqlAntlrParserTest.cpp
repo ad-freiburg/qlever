@@ -925,12 +925,12 @@ TEST(SparqlParser, GroupGraphPattern) {
                       m::Triples({{Var{"?x"}, "<is-a>", iri("<Actor>")},
                                   {Var{"?y"}, "<is-a>", iri("<Actor>")}})));
   expectGraphPattern(
-      "{?x <is-a> <Actor> . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
+      "{?x <is-a> \"Actor\" . FILTER(?x != ?y) . ?y <is-a> <Actor> . ?c "
       "ql:contains-entity ?x . ?c ql:contains-word \"coca* abuse\"}",
       m::GraphPattern(
           false, {"(?x != ?y)"},
           m::Triples(
-              {{Var{"?x"}, "<is-a>", iri("<Actor>")},
+              {{Var{"?x"}, "<is-a>", lit("\"Actor\"")},
                {Var{"?y"}, "<is-a>", iri("<Actor>")},
                {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
                {Var{"?c"}, CONTAINS_WORD_PREDICATE, lit("\"coca* abuse\"")}})));

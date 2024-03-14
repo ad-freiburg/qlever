@@ -27,6 +27,7 @@ const Iri& LiteralOrIri::getIri() const {
   return std::get<Iri>(data_);
 }
 
+/*
 // __________________________________________
 Iri& LiteralOrIri::getIri() {
   if (!isIri()) {
@@ -36,6 +37,7 @@ Iri& LiteralOrIri::getIri() {
   }
   return std::get<Iri>(data_);
 }
+ */
 
 // __________________________________________
 NormalizedStringView LiteralOrIri::getIriContent() const {
@@ -56,6 +58,7 @@ const Literal& LiteralOrIri::getLiteral() const {
   }
   return std::get<Literal>(data_);
 }
+/*
 // __________________________________________
 Literal& LiteralOrIri::getLiteral() {
   if (!isLiteral()) {
@@ -65,6 +68,7 @@ Literal& LiteralOrIri::getLiteral() {
   }
   return std::get<Literal>(data_);
 }
+ */
 
 // __________________________________________
 bool LiteralOrIri::hasLanguageTag() const {
@@ -123,6 +127,7 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
   return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
                                                     std::move(descriptor)));
 }
+/*
 void LiteralOrIri::addLanguageTag(std::string_view languageTag) {
   getLiteral().addLanguageTag(languageTag);
 }
@@ -130,4 +135,5 @@ void LiteralOrIri::addLanguageTag(std::string_view languageTag) {
 void LiteralOrIri::addDatatype(ad_utility::triple_component::Iri datatype) {
   getLiteral().addDatatype(datatype);
 }
+ */
 }  // namespace ad_utility::triple_component
