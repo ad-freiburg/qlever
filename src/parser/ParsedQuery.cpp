@@ -460,21 +460,6 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<const Variable>
-ParsedQuery::getConstructedOrSelectedVariables() const {
-  if (hasSelectClause()) {
-    for (const auto& variable : selectClause().getSelectedVariables()) {
-      co_yield variable;
-    }
-  } else {
-    for (const auto& variable : constructClause().containedVariables()) {
-      co_yield variable;
-    }
-  }
-  // Nothing to yield in the CONSTRUCT case.
-}
-
-// ____________________________________________________________________________
 void ParsedQuery::checkVariableIsVisible(
     const Variable& variable, const std::string& locationDescription,
     const ad_utility::HashSet<Variable>& additionalVisibleVariables,
