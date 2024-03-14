@@ -29,14 +29,12 @@ namespace ad_utility {
  */
 template <typename Container, typename T>
 constexpr bool contains(Container&& container, const T& element) {
-  // Overload for types like std::string that have a `find` member function
-  if constexpr (ad_utility::isSimilar<Container, std::string> ||
-                ad_utility::isSimilar<Container, std::string_view>) {
-    return container.find(element) != container.npos;
-  } else {
-    return std::ranges::find(std::begin(container), std::end(container),
-                             element) != std::end(container);
-  }
+  static_assert(
+      !ad_utility::isSimilar<Container, std::string> &&
+          !ad_utility::isSimilar<Container, std::string_view>,
+      "String and string_view can use member function contains since C++23");
+  return std::ranges::find(std::begin(container), std::end(container),
+                           element) != std::end(container);
 }
 
 /**
