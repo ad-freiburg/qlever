@@ -11,11 +11,22 @@
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
   std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
-  std::optional<std::shared_ptr<QueryExecutionTree>> childRight,
-  int maxDist)
+  std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
             : Operation(qec) {
   triple_ = triple;
-  maxDist_ = maxDist;
+  const std::string input = triple._p._iri;
+  if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
+          input[input.size() - 1] == '>' ) {
+    try {
+      maxDist_ = std::stoi(input.substr(MAX_DIST_IN_METERS.size(),
+        input.size() - MAX_DIST_IN_METERS.size()-1));  // -1: compensate for >
+    } catch(const std::exception& e) {
+      LOG(INFO) << "exception: " << e.what() << std::endl;
+      AD_THROW("parsing of the maximum distance for the SpatialJoin "
+          "operation was not possible");
+    }
+  }
+
   if (childLeft) {
     childLeft_ = childLeft.value();
   }
@@ -37,11 +48,11 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
   if (varOfChild == leftChildVariable) {
     childLeft_ = child;
     return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
-          childLeft_, childRight_, maxDist_);
+          childLeft_, childRight_);
   } else if (varOfChild == rightChildVariable) {
     childRight_ = child;
     return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
-          childLeft_, childRight_, maxDist_);
+          childLeft_, childRight_);
   } else {
     AD_THROW("variable does not match");
   }
@@ -235,8 +246,9 @@ ResultTable SpatialJoin::computeResult() {
             res_right->at(rowRight, rightPointCol), {}).value().first;
     point1 = betweenQuotes(point1);
     point2 = betweenQuotes(point2);
+    std::cerr << point1 << " " << point2 << std::endl;
     double dist = ad_utility::detail::wktDistImpl(point1, point2);
-    return dist * 1000;  // convert to meters
+    return static_cast<int>(dist * 1000);  // convert to meters
   };
 
   // a maximum distance of 0 encodes infinity -> return cross product
@@ -267,9 +279,9 @@ ResultTable SpatialJoin::computeResult() {
         idtable.emplace_back();
         size_t col = 0;
         if (addDistToResult) {
-          double dist = computeDist(idLeft, idRight, i, k,
+          int dist = computeDist(idLeft, idRight, i, k,
                           leftJoinCol, rightJoinCol);
-          idtable[i * numRowsLeft + k][col] = ValueId::makeFromDouble(dist);
+          idtable[i * numRowsLeft + k][col] = ValueId::makeFromInt(dist);
           col += 1;
         }
         // add coloms from the left id table
@@ -329,12 +341,12 @@ ResultTable SpatialJoin::computeResult() {
     for (size_t rowLeft = 0; rowLeft < res_left->size(); rowLeft++) {
       for (size_t rowRight = 0; rowRight < res_right->size(); rowRight++) {
         size_t rescol = 0;
-        double dist = computeDist(res_left, res_right, rowLeft, rowRight,
+        int dist = computeDist(res_left, res_right, rowLeft, rowRight,
               leftJoinCol, rightJoinCol);
         if (dist < maxDist_) {
           result.emplace_back();
           if (addDistToResult) {
-            result.at(resrow, rescol) = ValueId::makeFromDouble(dist);
+            result.at(resrow, rescol) = ValueId::makeFromInt(dist);
             rescol += 1;
           }
           // add columns to result table

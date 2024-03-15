@@ -16,8 +16,7 @@ class SpatialJoin : public Operation {
     // as a match and therefore be part of the result table.
     SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
         std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
-        std::optional<std::shared_ptr<QueryExecutionTree>> childRight_,
-        int maxDist);
+        std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
     std::vector<QueryExecutionTree*> getChildren() override;
     string getCacheKeyImpl() const override; 
     string getDescriptor() const override;
@@ -54,7 +53,7 @@ class SpatialJoin : public Operation {
     // already constructed
     bool isConstructed();
 
-  private:
+  //private:
     ad_utility::MemorySize _limit = ad_utility::MemorySize::bytes(100000000);
     ad_utility::AllocatorWithLimit<ValueId> _allocator =
             ad_utility::makeAllocatorWithLimit<ValueId>(_limit);
