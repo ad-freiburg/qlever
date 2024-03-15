@@ -255,7 +255,7 @@ void createAndTestSpatialJoin(QueryExecutionContext* qec,
   ausgegeben werden*/
 
   std::cerr << res.size() << " " << spatialJoinTriple._p.getIri()
-            << spatialJoin->maxDist_ << " " << std::endl;
+            << spatialJoin->getMaxDist() << " " << std::endl;
   //auto vec = printTable(qec, &res);
   std::cerr << "output" << std::endl;
   print_vec(vec);
@@ -706,6 +706,87 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   // also test the other available functions, even though their main tests are
   // done in other functions in this file
   // TODO ====================================================================
+}
+
+// test if the SpatialJoin operation parses the maximum distance correctly
+void testMaxDistance(std::string distanceIRI, long long distance,
+              bool shouldThrow) {
+  auto qec = getQec();
+  TripleComponent subject{Variable{"?subject"}};
+  TripleComponent object{Variable{"?object"}};
+  SparqlTriple triple{subject, distanceIRI, object};
+  std::cerr << distanceIRI << std::endl;
+  if (shouldThrow) {
+    ASSERT_ANY_THROW(ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+        std::nullopt, std::nullopt));
+  } else {
+    std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+        std::nullopt, std::nullopt);
+    std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+    ASSERT_EQ(spatialJoin->getMaxDist(), distance);
+  }
+}
+
+TEST(SpatialJoin, maxDistanceParsingTest) {
+  testMaxDistance("<max-distance-in-meters:1000>", 1000, false);
+  
+  testMaxDistance("<max-distance-in-meters:0>", 0, false);
+  
+  testMaxDistance("<max-distance-in-meters:20000000>", 20000000, false);
+
+  testMaxDistance("<max-distance-in-meters:123456789>", 123456789, false);
+  
+  // the following distance is slightly bigger than earths circumference.
+  // This distance should still be representable
+  testMaxDistance("<max-distance-in-meters:45000000000>", 45000000000, false);
+
+  // distance must be positive
+  testMaxDistance("<max-distance-in-meters:-10>", -10, true);
+  
+  // some words start with an upper case
+  testMaxDistance("<max-Distance-In-Meters:1000>", 1000, true);
+  
+  // wrong keyword for the spatialJoin operation
+  testMaxDistance("<maxDistanceInMeters:1000>", 1000, true);
+  
+  // "M" in meters is upper case
+  testMaxDistance("<max-distance-in-Meters:1000>", 1000, true);
+
+  // two > at the end
+  testMaxDistance("<maxDistanceInMeters:1000>>", 1000, true);
+  
+  // distance must be given as integer
+  testMaxDistance("<maxDistanceInMeters:oneThousand>", 1000, true);
+  
+  // distance must be given as integer
+  testMaxDistance("<maxDistanceInMeters:1000.54>>", 1000, true);
+
+  // missing > at the end
+  testMaxDistance("<maxDistanceInMeters:1000", 1000, true);
+
+  // prefix before correct iri
+  testMaxDistance("<asdfmax-distance-in-meters:1000>", 1000, true);
+
+  // suffix after correct iri
+  testMaxDistance("<max-distance-in-metersjklö:1000>", 1000, true);
+
+  // suffix after correct iri
+  testMaxDistance("<max-distance-in-meters:qwer1000>", 1000, true);
+
+  // suffix after number.
+  // Note that the usual stoll function would return
+  // 1000 instead of throwing an exception. To fix this mistake, a for loop
+  // has been added to the parsing, which checks, if each character (which
+  // should be converted to a number) is a digit
+  testMaxDistance("<max-distance-in-meters:1000asff>", 1000, true);
+
+  // prefix before <
+  testMaxDistance("yxcv<max-distance-in-metersjklö:1000>", 1000, true);
+
+  // suffix after >
+  testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
 
 // test the compute result method on the large dataset from above

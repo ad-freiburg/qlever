@@ -53,6 +53,9 @@ class SpatialJoin : public Operation {
     // already constructed
     bool isConstructed();
 
+    // this function is used to give the maximum distance for testing purposes
+    long long getMaxDist();
+
   private:
     ad_utility::MemorySize _limit = ad_utility::MemorySize::bytes(100000000);
     ad_utility::AllocatorWithLimit<ValueId> _allocator =
@@ -62,7 +65,8 @@ class SpatialJoin : public Operation {
     std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
     std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
     std::optional<SparqlTriple> triple_ = std::nullopt;
-    int maxDist_ = 0;  // max distance in meters, 0 encodes an infinite distance
+    long long maxDist = 0;  // max distance in meters
+    
     // adds an extra column to the result, which contains the actual distance,
     // between the two objects
     bool addDistToResult = true;

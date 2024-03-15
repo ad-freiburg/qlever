@@ -15,16 +15,29 @@ SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
             : Operation(qec) {
   triple_ = triple;
   const std::string input = triple._p._iri;
+  std::string errormessage = "parsing of the maximum distance for the "
+      "SpatialJoin operation was not possible";
   if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
           input[input.size() - 1] == '>' ) {
     try {
-      maxDist_ = std::stoi(input.substr(MAX_DIST_IN_METERS.size(),
-        input.size() - MAX_DIST_IN_METERS.size()-1));  // -1: compensate for >
+      std::string number = input.substr(MAX_DIST_IN_METERS.size(),
+        input.size() - MAX_DIST_IN_METERS.size()-1);  // -1: compensate for >
+      for (size_t i = 0; i < number.size(); i++) {
+        if (!isdigit(number.at(i))) {
+          AD_THROW(errormessage);
+        }
+      }
+      maxDist = std::stoll(number);
     } catch(const std::exception& e) {
       LOG(INFO) << "exception: " << e.what() << std::endl;
-      AD_THROW("parsing of the maximum distance for the SpatialJoin "
-          "operation was not possible");
+      AD_THROW(errormessage);
     }
+  } else {
+    AD_THROW(errormessage);
+  }
+
+  if (maxDist < 0) {
+    AD_THROW("the maximum distance between two objects must be > 0");
   }
 
   if (childLeft) {
@@ -122,7 +135,7 @@ size_t SpatialJoin::getCostEstimate() {
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
-    if (maxDist_ % 1000 == 2) {
+    if (maxDist % 1000 == 2) {
       return 500;
     }
   } else {
@@ -195,7 +208,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
     // return sizeLeft * sizeRight; // this line is only for testing, seems to introduce mistakes elsewhere
     // return 1;
     // testing starting
-    if (maxDist_ % 1000 == 1) {
+    if (maxDist % 1000 == 1) {
       return 1;
     } else {
       return sizeLeft * sizeRight;
@@ -218,6 +231,10 @@ bool SpatialJoin::knownEmptyResult() {
 // ____________________________________________________________________________
 vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
   return {};  // dummy return for now
+}
+
+long long SpatialJoin::getMaxDist() {
+  return maxDist;
 }
 
 // ____________________________________________________________________________
@@ -246,13 +263,12 @@ ResultTable SpatialJoin::computeResult() {
             res_right->at(rowRight, rightPointCol), {}).value().first;
     point1 = betweenQuotes(point1);
     point2 = betweenQuotes(point2);
-    std::cerr << point1 << " " << point2 << std::endl;
     double dist = ad_utility::detail::wktDistImpl(point1, point2);
     return static_cast<int>(dist * 1000);  // convert to meters
   };
 
   // a maximum distance of 0 encodes infinity -> return cross product
-  if (maxDist_ == 0) {
+  if (maxDist == 0) {
     IdTable idtable = IdTable(0, _allocator);
     idtable.setNumColumns(getResultWidth());
 
@@ -343,7 +359,7 @@ ResultTable SpatialJoin::computeResult() {
         size_t rescol = 0;
         int dist = computeDist(res_left, res_right, rowLeft, rowRight,
               leftJoinCol, rightJoinCol);
-        if (dist < maxDist_) {
+        if (dist < maxDist) {
           result.emplace_back();
           if (addDistToResult) {
             result.at(resrow, rescol) = ValueId::makeFromInt(dist);
