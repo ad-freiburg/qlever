@@ -299,7 +299,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
-        GIT_TAG 7dbeff28d8b4f29e020dbf6e2ab88acc268d0106
+        GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
 )
 
 
