@@ -520,44 +520,74 @@ TEST(SpatialJoin, computeResultSmallDataset) {
                                 "\"POINT(2.29451 48.85825)\""},
   };
 
+  // in all calculations below, the factor 1000 is used to convert from km to m
   // distance from the object to itself should be zero
-  // the factor 1000 is used to convert from km to m
   std::vector<std::string> expectedDistSelf{"0"};
+
+  // distance from Uni Freiburg to Freiburger Müsnster is 2,33 km according to
+  // google maps
   std::vector<std::string> expectedDistUniMun{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.83505 48.01267)", "POINT(7.85298 47.99557)") * 1000))};
+
+  // distance from Uni Freiburg to Eiffel Tower is 419,32 km according to
+  // google maps
   std::vector<std::string> expectedDistUniEif{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.83505 48.01267)", "POINT(2.29451 48.85825)") * 1000))
   };
+
+  // distance from Muenster Freiburg to eiffel tower is 421,09 km according to
+  // google maps
   std::vector<std::string> expectedDistMunEif{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.85298 47.99557)", "POINT(2.29451 48.85825)") * 1000))
   };
+  
+  // distance from london eye to eiffel tower is 340,62 km according to
+  // google maps
   std::vector<std::string> expectedDistEyeEif{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(-0.11957 51.50333)", "POINT(2.29451 48.85825)") * 1000))
   };
+  
+  // distance from Uni Freiburg to London Eye is 690,18 km according to
+  // google maps
   std::vector<std::string> expectedDistUniEye{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.83505 48.01267)", "POINT(-0.11957 51.50333)") * 1000))
   };
+  
+  // distance from Muenster Freiburg to London Eye is 692,39 km according to
+  // google maps
   std::vector<std::string> expectedDistMunEye{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.85298 47.99557)", "POINT(-0.11957 51.50333)") * 1000))
   };
+  
+  // distance from Uni Freiburg to Statue of Liberty is 6249,55 km according to
+  // google maps
   std::vector<std::string> expectedDistUniLib{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.83505 48.01267)", "POINT(-74.04454 40.68925)") * 1000))
   };
+  
+  // distance from Muenster Freiburg to Statue of Liberty is 6251,58 km
+  // according to google maps
   std::vector<std::string> expectedDistMunLib{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(7.85298 47.99557)", "POINT(-74.04454 40.68925)") * 1000))
   };
+  
+  // distance from london eye to statue of liberty is 5575,08 km according to
+  // google maps
   std::vector<std::string> expectedDistEyeLib{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(-0.11957 51.50333)", "POINT(-74.04454 40.68925)") * 1000))
   };
+  
+  // distance from eiffel tower to Statue of liberty is 5837,42 km according to
+  // google maps
   std::vector<std::string> expectedDistEifLib{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
       "POINT(2.29451 48.85825)", "POINT(-74.04454 40.68925)") * 1000))

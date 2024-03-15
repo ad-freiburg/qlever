@@ -53,7 +53,7 @@ class SpatialJoin : public Operation {
     // already constructed
     bool isConstructed();
 
-  //private:
+  private:
     ad_utility::MemorySize _limit = ad_utility::MemorySize::bytes(100000000);
     ad_utility::AllocatorWithLimit<ValueId> _allocator =
             ad_utility::makeAllocatorWithLimit<ValueId>(_limit);
