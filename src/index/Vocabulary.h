@@ -171,7 +171,7 @@ class Vocabulary {
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
-  bool getId(const string& word, IndexType* idx) const;
+  bool getId(std::string_view word, IndexType* idx) const;
 
   // Get the index range for the given prefix or `std::nullopt` if no word with
   // the given prefix exists in the vocabulary.
@@ -190,20 +190,20 @@ class Vocabulary {
   void createFromSet(const ad_utility::HashSet<std::string>& set,
                      const std::string& filename);
 
-  static bool stringIsLiteral(const string& s);
+  static bool stringIsLiteral(std::string_view s);
 
   bool isIri(IndexT index) const { return prefixRangesIris_.contain(index); }
   bool isLiteral(IndexT index) const {
     return prefixRangesLiterals_.contain(index);
   }
 
-  bool shouldBeExternalized(const string& word) const;
+  bool shouldBeExternalized(std::string_view word) const;
 
-  bool shouldEntityBeExternalized(const string& word) const;
+  bool shouldEntityBeExternalized(std::string_view word) const;
 
-  bool shouldLiteralBeExternalized(const string& word) const;
+  bool shouldLiteralBeExternalized(std::string_view word) const;
 
-  static string getLanguage(const string& literal);
+  static string_view getLanguage(std::string_view literal);
 
   // set the list of prefixes for words which will become part of the
   // externalized vocabulary. Good for entity names that normally don't appear
@@ -240,7 +240,7 @@ class Vocabulary {
   }
 
   // Wraps std::lower_bound and returns an index instead of an iterator
-  IndexType lower_bound(const string& word,
+  IndexType lower_bound(std::string_view word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // _______________________________________________________________

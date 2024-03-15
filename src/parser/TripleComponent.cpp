@@ -72,9 +72,9 @@ std::string TripleComponent::toRdfLiteral() const {
   } else if (isString()) {
     return getString();
   } else if (isLiteral()) {
-    return getLiteral().toInternalRepresentation();
+    return std::string{getLiteral().toInternalRepresentation()};
   } else if (isIri()) {
-    return getIri().toInternalRepresentation();
+    return std::string{getIri().toInternalRepresentation()};
   } else {
     auto [value, type] =
         ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(

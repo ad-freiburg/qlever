@@ -47,8 +47,8 @@ Iri Iri::fromInternalRepresentation(std::string_view s) {
 }
 
 // __________________________________________
-std::string Iri::toInternalRepresentation() const {
-  return std::string{asStringViewUnsafe(iri_)};
+std::string_view Iri::toInternalRepresentation() const {
+  return asStringViewUnsafe(iri_);
 }
 
 }  // namespace ad_utility::triple_component

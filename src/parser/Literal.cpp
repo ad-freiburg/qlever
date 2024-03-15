@@ -115,8 +115,8 @@ void Literal::addDatatype(const Iri& datatype) {
 }
 
 // __________________________________________
-std::string Literal::toInternalRepresentation() const {
-  return std::string{asStringViewUnsafe(content_)};
+std::string_view Literal::toInternalRepresentation() const {
+  return asStringViewUnsafe(content_);
 }
 
 // __________________________________________

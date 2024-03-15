@@ -39,7 +39,7 @@ class Literal {
   }
   bool operator==(const Literal&) const = default;
 
-  std::string toInternalRepresentation() const;
+  std::string_view toInternalRepresentation() const;
 
   static Literal fromInternalRepresentation(std::string_view internal);
 

@@ -131,7 +131,7 @@ TEST(IndexTest, createFromTurtleTest) {
         // the largest predicate that occurs and <c2> is larger than the largest
         // subject that appears with <b2>.
         auto testOne = makeTestScanWidthOne(index);
-        testOne("<b2>", "<c2>", Permutation::PSO, {});
+        testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
       }
     }
     {
@@ -338,7 +338,7 @@ TEST(IndexTest, emptyIndex) {
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
   auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
   // Test that scanning an empty index works, but yields an empty permutation.
-  test("<x>", Permutation::PSO, {});
+  test(iri("<x>"), Permutation::PSO, {});
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
@@ -553,7 +553,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
 
   // TODO<joka921> Fix the multiplicity stuff.
-  multiplicities = index.getMultiplicities("<x>", Permutation::SPO);
+  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }

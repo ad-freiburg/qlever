@@ -188,18 +188,14 @@ class TripleComponent {
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
-    if (isString() || isLiteral() || isIri()) {
+    AD_CONTRACT_CHECK(!isString());
+    if (isLiteral() || isIri()) {
       VocabIndex idx;
-      // TODO<joka921> This is inefficient and half wrong
-      const std::string content = [&]() -> std::string {
-        if (isString()) {
-          return getString();
+      const std::string_view content = [&]() {
+        if (isLiteral()) {
+          return getLiteral().toInternalRepresentation();
         } else {
-          if (isLiteral()) {
-            return getLiteral().toInternalRepresentation();
-          } else {
-            return getIri().toInternalRepresentation();
-          }
+          return getIri().toInternalRepresentation();
         }
       }();
       if (vocabulary.getId(content, &idx)) {
@@ -229,14 +225,16 @@ class TripleComponent {
       // look up in (and potentially add to) our local vocabulary.
       AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
       // TODO<joka921> Code duplication + newWord can be moved.
+      // TODO<joka921> We really have to make the internalRepresentation
+      // movable.
       std::string newWord = [&]() -> std::string {
         if (isString()) {
           return getString();
         } else {
           if (isLiteral()) {
-            return getLiteral().toInternalRepresentation();
+            return std::string{getLiteral().toInternalRepresentation()};
           } else {
-            return getIri().toInternalRepresentation();
+            return std::string{getIri().toInternalRepresentation()};
           }
         }
       }();

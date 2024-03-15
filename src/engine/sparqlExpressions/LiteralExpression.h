@@ -49,9 +49,10 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       auto id = context->_qec.getIndex().getId(s);
-      IdOrString result = id.has_value()
-                              ? IdOrString{id.value()}
-                              : IdOrString{s.toInternalRepresentation()};
+      IdOrString result =
+          id.has_value()
+              ? IdOrString{id.value()}
+              : IdOrString{std::string{s.toInternalRepresentation()}};
       auto ptrForCache = std::make_unique<IdOrString>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));

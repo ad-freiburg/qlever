@@ -163,9 +163,8 @@ struct alignas(256) ItemMapManager {
       // We have to first add the string to the buffer, otherwise we don't have
       // a persistent `string_view` to add to the `map`.
       auto keyView = buffer.addString(repr);
-      // TODO<joka921> We really need a flat representation,
-      // and the LocalVocabIndexAndSplitVal should work on the literal or iri
-      // directly.
+      // TODO<joka921> The LocalVocabIndexAndSplitVal should work on
+      // `Literal|Iri|BlankNode` directly.
       map.try_emplace(
           keyView, LocalVocabIndexAndSplitVal{
                        res, comparator_->extractAndTransformComparableNonOwning(

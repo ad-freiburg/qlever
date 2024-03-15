@@ -26,12 +26,10 @@ class LiteralOrIri {
  public:
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
-  // Iri& getIri();
 
   // Return contained Literal object if available, throw exception
   // otherwise
   const Literal& getLiteral() const;
-  // Literal& getLiteral();
 
   // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal literal);
@@ -122,10 +120,5 @@ class LiteralOrIri {
 
   // Create a new iri given a prefix iri and its suffix
   static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix);
-
-  /*
-  void addLanguageTag(std::string_view languageTag);
-  void addDatatype(Iri datatype);
-   */
 };
 }  // namespace ad_utility::triple_component

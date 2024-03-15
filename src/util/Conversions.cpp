@@ -32,7 +32,7 @@ std::string convertToLanguageTaggedPredicate(const string& pred,
   return absl::StrCat("@", langtag, "@", pred);
 }
 
-// TODO<joka921> Cleanup and unify with the above thing.
+// _________________________________________________________
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag) {
   return triple_component::Iri::iriref(absl::StrCat(

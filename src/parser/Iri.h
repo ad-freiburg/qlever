@@ -38,7 +38,7 @@ class Iri {
   bool operator==(const Iri&) const = default;
   static Iri fromInternalRepresentation(std::string_view s);
 
-  std::string toInternalRepresentation() const;
+  std::string_view toInternalRepresentation() const;
 
   // Create a new iri given an iri with brackets
   static Iri iriref(std::string_view stringWithBrackets);

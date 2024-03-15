@@ -1670,13 +1670,10 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
         visit(ctx->rdfLiteral()));
-    if (tripleComponent.isIri()) {
-      return make_unique<IriExpression>(tripleComponent.getIri());
-    } else if (tripleComponent.isLiteral()) {
+    AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
+                         !tripleComponent.isString());
+    if (tripleComponent.isLiteral()) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
-    } else if (tripleComponent.isString()) {
-      // TODO<joka921> This shouldn't be a case at all.
-      AD_FAIL();
     } else {
       return make_unique<IdExpression>(
           tripleComponent.toValueIdIfNotString().value());

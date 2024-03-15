@@ -268,8 +268,8 @@ class TurtleParser : public TurtleParserBase {
   bool doubleParse();
 
   // Two helper functions for the actual conversion from strings to numbers.
-  void parseDoubleConstant(const std::string& input);
-  void parseIntegerConstant(const std::string& input);
+  void parseDoubleConstant(std::string_view input);
+  void parseIntegerConstant(std::string_view input);
 
   // This version only works if no escape sequences were used.
   bool pnameLnRelaxed();

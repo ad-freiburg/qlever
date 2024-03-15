@@ -5,6 +5,8 @@
 
 #include "parser/TurtleParser.h"
 
+#include <absl/strings/charconv.h>
+
 #include <cstring>
 
 #include "parser/RdfEscaping.h"
@@ -275,19 +277,14 @@ bool TurtleParser<T>::collection() {
 
 // ____________________________________________________________________________
 template <class T>
-void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
+void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
   size_t position;
 
   bool errorOccured = false;
-  TripleComponent result;
-  try {
-    // We cannot directly store this in `lastParseResult_` because this might
-    // overwrite `input`.
-    result = std::stod(input, &position);
-  } catch (const std::exception& e) {
-    errorOccured = true;
-  }
-  if (errorOccured || position != input.size()) {
+  double result;
+  auto [firstNonMatching, errorCode] =
+      absl::from_chars(input.data(), input.data() + input.size(), result);
+  if (firstNonMatching != input.end() || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
@@ -297,20 +294,17 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
 
 // ____________________________________________________________________________
 template <class T>
-void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
+void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
   if (integerOverflowBehavior() ==
       TurtleParserIntegerOverflowBehavior::AllToDouble) {
     return parseDoubleConstant(input);
   }
-  size_t position = 0;
-
-  bool errorOccured = false;
-  TripleComponent result;
-  try {
-    // We cannot directly store this in `lastParseResult_` because this might
-    // overwrite `input`.
-    result = std::stoll(input, &position);
-  } catch (const std::out_of_range&) {
+  int64_t result{0ll};
+  // We cannot directly store this in `lastParseResult_` because this might
+  // overwrite `input`.
+  auto [firstNonMatching, errorCode] =
+      std::from_chars(input.data(), input.data() + input.size(), result);
+  if (errorCode == std::errc::result_out_of_range) {
     if (integerOverflowBehavior() ==
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {
       return parseDoubleConstant(input);
@@ -322,10 +316,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
           "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } catch (const std::invalid_argument& e) {
-    errorOccured = true;
-  }
-  if (errorOccured || position != input.size()) {
+  } else if (firstNonMatching != input.end()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
@@ -388,8 +379,8 @@ bool TurtleParser<T>::rdfLiteral() {
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
     auto typeIri = std::move(lastParseResult_.getIri());
     std::string_view type = asStringViewUnsafe(typeIri.getContent());
-    // TODO<joka921> a `std::string_view` should suffice here.
-    std::string strippedLiteral{asStringViewUnsafe(previous.getContent())};
+    std::string_view strippedLiteral =
+        asStringViewUnsafe(previous.getContent());
     try {
       // TODO<joka921> clean this up by moving the check for the types to a
       // separate module.
@@ -428,7 +419,7 @@ bool TurtleParser<T>::rdfLiteral() {
       } else if (type == XSD_GYEAR_TYPE) {
         lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
       } else {
-        previous.addDatatype(std::move(typeIri));
+        previous.addDatatype(typeIri);
         lastParseResult_ = std::move(previous);
       }
       return true;

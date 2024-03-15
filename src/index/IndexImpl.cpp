@@ -964,9 +964,10 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
       continue;
     }
     auto& component = std::get<PossiblyExternalizedIriOrLiteral>(el);
-    auto& iriOrLiteral = component.iriOrLiteral_;
-    // TODO<joka921> Perform this normalization inside the `IriOrLiteralClass`.
-    // iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
+    const auto& iriOrLiteral = component.iriOrLiteral_;
+    // TODO<joka921> Perform this normalization right at the beginning of the
+    // parsing. iriOrLiteral =
+    // vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }
