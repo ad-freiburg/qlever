@@ -1343,7 +1343,29 @@ auto matchUnary(auto makeFunction)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   return matchNary(makeFunction, Variable{"?x"});
 }
+
+template <typename T>
+auto matchLiteralExpression(const T& value)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  using Expr = sparqlExpression::detail::LiteralExpression<T>;
+  return ::testing::Pointee(::testing::WhenDynamicCastTo<const Expr&>(
+      AD_PROPERTY(Expr, value, ::testing::Eq(value))));
+}
 }  // namespace builtInCallTestHelpers
+
+// ___________________________________________________________________________
+TEST(SparqlParser, primaryExpression) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectPrimaryExpression =
+      ExpectCompleteParse<&Parser::primaryExpression>{};
+  auto expectFails = ExpectParseFails<&Parser::primaryExpression>{};
+
+  expectPrimaryExpression("<x>", matchLiteralExpression(iri("<x>")));
+  expectPrimaryExpression("\"x\"@en",
+                          matchLiteralExpression(lit("\"x\"", "@en")));
+  expectPrimaryExpression("27", matchLiteralExpression(IntId(27)));
+}
 
 // ___________________________________________________________________________
 TEST(SparqlParser, builtInCall) {

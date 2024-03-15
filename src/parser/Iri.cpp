@@ -15,14 +15,23 @@ Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
 
 // __________________________________________
 Iri::Iri(const Iri& prefix, NormalizedStringView suffix)
-    : iri_{NormalizedString{prefix.getContent()} + suffix} {};
+    : iri_{asNormalizedStringViewUnsafe("<") +
+           NormalizedString{prefix.getContent()} + suffix +
+           asNormalizedStringViewUnsafe(">")} {};
 
 // __________________________________________
-NormalizedStringView Iri::getContent() const { return iri_; }
+NormalizedStringView Iri::getContent() const {
+  return NormalizedStringView{iri_}.substr(1, iri_.size() - 2);
+}
 
 // __________________________________________
 Iri Iri::iriref(std::string_view stringWithBrackets) {
-  return Iri{RdfEscaping::normalizeIriWithBrackets(stringWithBrackets)};
+  auto first = stringWithBrackets.find('<');
+  AD_CORRECTNESS_CHECK(first != std::string_view::npos);
+  return Iri{
+      asNormalizedStringViewUnsafe(stringWithBrackets.substr(0, first + 1)) +
+      RdfEscaping::normalizeIriWithBrackets(stringWithBrackets.substr(first)) +
+      asNormalizedStringViewUnsafe(">")};
 }
 
 // __________________________________________
@@ -31,15 +40,15 @@ Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
   return Iri{std::move(prefix), asNormalizedStringViewUnsafe(suffixNormalized)};
 }
 
+// __________________________________________
 Iri Iri::fromInternalRepresentation(std::string_view s) {
-  // TODO<joka921> check the tag.
-  s.remove_prefix(1);
-  s.remove_suffix(1);
+  AD_CORRECTNESS_CHECK(s.starts_with("<") || s.starts_with("@"));
   return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
 }
+
+// __________________________________________
 std::string Iri::toInternalRepresentation() const {
-  static_assert(iriPrefix == "<");
-  return absl::StrCat(iriPrefix, asStringViewUnsafe(getContent()), ">");
+  return std::string{asStringViewUnsafe(iri_)};
 }
 
 }  // namespace ad_utility::triple_component

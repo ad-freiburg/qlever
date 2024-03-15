@@ -29,17 +29,14 @@ triple_component::Iri convertLangtagToEntityUri(const string& tag) {
 // _________________________________________________________
 std::string convertToLanguageTaggedPredicate(const string& pred,
                                              const string& langtag) {
-  return "<ql:langtagged" + langtag + ":" + pred.substr(1, pred.size() - 2) +
-         ">";
-  // return '@' + langtag + '@' + pred;
+  return absl::StrCat("@", langtag, "@", pred);
 }
 
 // TODO<joka921> Cleanup and unify with the above thing.
 triple_component::Iri convertToLanguageTaggedPredicate(
     const triple_component::Iri& pred, const std::string& langtag) {
-  return triple_component::Iri::iriref(
-      absl::StrCat("<ql:langtagged", langtag, ":",
-                   asStringViewUnsafe(pred.getContent()), ">"));
+  return triple_component::Iri::iriref(absl::StrCat(
+      "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
 }
 
 }  // namespace ad_utility

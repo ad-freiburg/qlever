@@ -263,7 +263,7 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() {
-      if (el.starts_with('<')) {
+      if (el.starts_with('<') || el.starts_with('@')) {
         return TripleComponent::LiteralOrIri::iriref(el);
       } else {
         AD_CONTRACT_CHECK(el.starts_with('\"'));

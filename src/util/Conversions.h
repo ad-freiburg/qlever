@@ -13,8 +13,7 @@
 
 namespace ad_utility {
 
-static constexpr std::string_view languageTaggedPredicatePrefix =
-    "<ql:langtagged";
+static constexpr std::string_view languageTaggedPredicatePrefix = "@";
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter
 triple_component::Iri convertLangtagToEntityUri(const std::string& tag);
