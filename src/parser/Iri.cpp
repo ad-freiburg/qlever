@@ -37,7 +37,7 @@ Iri Iri::iriref(std::string_view stringWithBrackets) {
 // __________________________________________
 Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
-  return Iri{std::move(prefix), asNormalizedStringViewUnsafe(suffixNormalized)};
+  return Iri{prefix, asNormalizedStringViewUnsafe(suffixNormalized)};
 }
 
 // __________________________________________

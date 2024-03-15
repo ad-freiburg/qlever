@@ -264,10 +264,10 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
     auto literalOrIri = [&el]() {
       if (el.starts_with('<') || el.starts_with('@')) {
-        return TripleComponent::LiteralOrIri::iriref(el);
+        return triple_component::LiteralOrIri::iriref(el);
       } else {
         AD_CONTRACT_CHECK(el.starts_with('\"'));
-        return TripleComponent::LiteralOrIri::fromInternalRepresentation(el);
+        return triple_component::LiteralOrIri::fromInternalRepresentation(el);
       }
     }();
     auto id = index.getId(literalOrIri);

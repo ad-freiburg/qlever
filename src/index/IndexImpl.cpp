@@ -967,7 +967,6 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     auto& iriOrLiteral = component.iriOrLiteral_;
     // TODO<joka921> Perform this normalization inside the `IriOrLiteralClass`.
     // iriOrLiteral = vocab_.getLocaleManager().normalizeUtf8(iriOrLiteral);
-    // TODO<joka921> Fix this, and make it work.
     if (vocab_.shouldBeExternalized(iriOrLiteral.toRdfLiteral())) {
       component.isExternal_ = true;
     }
@@ -1292,8 +1291,7 @@ std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
 }
 
 // ___________________________________________________________________________
-std::optional<Id> IndexImpl::getId(
-    const ad_utility::triple_component::LiteralOrIri& element) const {
+std::optional<Id> IndexImpl::getIdImpl(const auto& element) const {
   VocabIndex vocabIndex;
   auto success =
       getVocab().getId(element.toInternalRepresentation(), &vocabIndex);
@@ -1301,6 +1299,24 @@ std::optional<Id> IndexImpl::getId(
     return std::nullopt;
   }
   return Id::makeFromVocabIndex(vocabIndex);
+}
+
+// ___________________________________________________________________________
+std::optional<Id> IndexImpl::getId(
+    const ad_utility::triple_component::LiteralOrIri& element) const {
+  return getIdImpl(element);
+}
+
+// ___________________________________________________________________________
+std::optional<Id> IndexImpl::getId(
+    const ad_utility::triple_component::Literal& element) const {
+  return getIdImpl(element);
+}
+
+// ___________________________________________________________________________
+std::optional<Id> IndexImpl::getId(
+    const ad_utility::triple_component::Iri& element) const {
+  return getIdImpl(element);
 }
 
 // ___________________________________________________________________________

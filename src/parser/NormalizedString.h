@@ -10,7 +10,6 @@
 struct NormalizedChar {
   char c_;
   auto operator<=>(const NormalizedChar&) const = default;
-  bool operator==(const NormalizedChar&) const = default;
 };
 
 // A bespoke string representation that ensures the content

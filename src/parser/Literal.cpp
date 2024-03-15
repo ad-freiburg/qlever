@@ -11,35 +11,40 @@
 
 namespace ad_utility::triple_component {
 // __________________________________________
-Literal::Literal(NormalizedString content) : content_{std::move(content)} {}
-
-// __________________________________________
-Literal::Literal(NormalizedString content, Iri datatype)
-    : content_{std::move(content)}, descriptor_{std::move(datatype)} {}
-
-// __________________________________________
-Literal::Literal(NormalizedString content, NormalizedString languageTag)
-    : content_{std::move(content)}, descriptor_{std::move(languageTag)} {}
+Literal::Literal(NormalizedString content, size_t beginOfSuffix)
+    : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
+  NormalizedChar quote{'"'};
+  NormalizedChar at{'@'};
+  NormalizedChar hat{'^'};
+  AD_CORRECTNESS_CHECK(content_.starts_with(quote));
+  AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
+  AD_CORRECTNESS_CHECK(content_[beginOfSuffix_ - 1] == quote);
+  AD_CORRECTNESS_CHECK(beginOfSuffix_ == content_.size() ||
+                       content_[beginOfSuffix] == at ||
+                       content_[beginOfSuffix] == hat);
+}
 
 // __________________________________________
 bool Literal::hasLanguageTag() const {
-  return std::holds_alternative<NormalizedString>(descriptor_);
+  return getSuffix().starts_with(NormalizedChar{'@'});
 }
 
 // __________________________________________
 bool Literal::hasDatatype() const {
-  return std::holds_alternative<Iri>(descriptor_);
+  return getSuffix().starts_with(NormalizedChar{'^'});
 }
 
 // __________________________________________
-NormalizedStringView Literal::getContent() const { return content_; }
+NormalizedStringView Literal::getContent() const {
+  return NormalizedStringView{content_}.substr(1, beginOfSuffix_ - 2);
+}
 
 // __________________________________________
-Iri Literal::getDatatype() const {
+NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
-  return std::get<Iri>(descriptor_);
+  return NormalizedStringView{content_}.substr(beginOfSuffix_ + 2);
 }
 
 // __________________________________________
@@ -47,7 +52,7 @@ NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return std::get<NormalizedString>(descriptor_);
+  return NormalizedStringView{content_}.substr(beginOfSuffix_ + 1);
 }
 
 // __________________________________________
@@ -74,69 +79,55 @@ Literal Literal::literalWithoutQuotes(
 Literal Literal::literalWithNormalizedContent(
     NormalizedString normalizedRdfContent,
     std::optional<std::variant<Iri, string>> descriptor) {
+  auto quotes = asNormalizedStringViewUnsafe("\"");
+  auto actualContent = quotes + std::move(normalizedRdfContent) + quotes;
+  auto sz = actualContent.size();
+  auto literal = Literal{std::move(actualContent), sz};
   if (!descriptor.has_value()) {
-    return Literal(std::move(normalizedRdfContent));
+    return literal;
   }
 
   using namespace RdfEscaping;
-  auto visitLanguageTag =
-      [&normalizedRdfContent](std::string&& languageTag) -> Literal {
-    return {std::move(normalizedRdfContent),
-            normalizeLanguageTag(std::move(languageTag))};
+  auto visitLanguageTag = [&literal](std::string_view languageTag) {
+    literal.addLanguageTag(languageTag);
   };
 
-  auto visitDatatype = [&normalizedRdfContent](Iri&& datatype) -> Literal {
-    return {std::move(normalizedRdfContent), std::move(datatype)};
+  auto visitDatatype = [&literal](const Iri& datatype) {
+    literal.addDatatype(datatype);
   };
 
-  return std::visit(
-      ad_utility::OverloadCallOperator{visitDatatype, visitLanguageTag},
-      std::move(descriptor.value()));
+  std::visit(ad_utility::OverloadCallOperator{visitDatatype, visitLanguageTag},
+             std::move(descriptor.value()));
+  return literal;
 }
 
+// __________________________________________
 void Literal::addLanguageTag(std::string_view languageTag) {
-  descriptor_ = RdfEscaping::normalizeLanguageTag(languageTag);
+  content_.push_back(NormalizedChar{'@'});
+  content_.append(RdfEscaping::normalizeLanguageTag(languageTag));
 }
 
-void Literal::addDatatype(Iri datatype) { descriptor_ = std::move(datatype); }
+// __________________________________________
+void Literal::addDatatype(const Iri& datatype) {
+  content_.append(asNormalizedStringViewUnsafe("^^"));
+  content_.append(
+      asNormalizedStringViewUnsafe(datatype.toInternalRepresentation()));
+}
 
+// __________________________________________
 std::string Literal::toInternalRepresentation() const {
-  auto first = literalPrefix;
-  uint64_t sz = getContent().size();
-  if (hasLanguageTag()) {
-    sz |= (1ul << 63);
-  }
-  std::string_view metaData{reinterpret_cast<char*>(&sz), sizeof(sz)};
-  if (hasLanguageTag()) {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()), first, "@",
-                        asStringViewUnsafe(getLanguageTag()));
-  } else if (hasDatatype()) {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()), first, "^^<",
-                        asStringViewUnsafe(getDatatype().getContent()), ">");
-  } else {
-    return absl::StrCat(first, asStringViewUnsafe(getContent()), first);
-  }
+  return std::string{asStringViewUnsafe(content_)};
 }
 
+// __________________________________________
 Literal Literal::fromInternalRepresentation(std::string_view input) {
-  // TODO<joka921> handle the escaping correctly.
-  // TODO<joka921> checkSizes.
-  // TODO<joka921> Check that it is indeed a literal.
-  auto posLastQuote = input.rfind('"');
-  AD_CORRECTNESS_CHECK(posLastQuote > 0 && posLastQuote < input.size());
-  std::string_view content = input.substr(1, posLastQuote - 1);
-  if (posLastQuote + 1 == input.size()) {
-    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)}};
-  } else if (input[posLastQuote + 1] == '@') {
-    std::string_view langtag = input.substr(posLastQuote + 2);
-    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                   NormalizedString{asNormalizedStringViewUnsafe(langtag)}};
-  } else {
-    AD_CORRECTNESS_CHECK(input[posLastQuote + 1] == '^');
-    auto datatype = input.substr(posLastQuote + 3);
-    return Literal{NormalizedString{asNormalizedStringViewUnsafe(content)},
-                   Iri::fromInternalRepresentation(datatype)};
-  }
+  // TODO<joka921> This is a little dangerous as there might be quotes in the
+  // IRI which might lead to unexpected results here.
+  AD_CORRECTNESS_CHECK(input.starts_with('"'));
+  auto endIdx = input.rfind('"');
+  AD_CORRECTNESS_CHECK(endIdx > 0);
+  return Literal{NormalizedString{asNormalizedStringViewUnsafe(input)},
+                 endIdx + 1};
 }
 
 }  // namespace ad_utility::triple_component

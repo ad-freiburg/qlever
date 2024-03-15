@@ -15,24 +15,10 @@ class Literal {
   // marks or trailing descriptor.
   //  "Hello World"@en -> Hello World
   NormalizedString content_;
-
-  using LiteralDescriptorVariant =
-      std::variant<std::monostate, NormalizedString, Iri>;
-
-  // Store the optional language tag or the optional datatype if applicable
-  // without their prefixes.
-  //  "Hello World"@en -> en
-  //  "Hello World"^^test:type -> test:type
-  LiteralDescriptorVariant descriptor_;
+  std::size_t beginOfSuffix_;
 
   // Create a new literal without any descriptor
-  explicit Literal(NormalizedString content);
-
-  // Create a new literal with a datatype
-  Literal(NormalizedString content, Iri datatype);
-
-  // Create a new literal with a language tag
-  Literal(NormalizedString content, NormalizedString languageTag);
+  explicit Literal(NormalizedString content, size_t beginOfSuffix_);
 
   // Similar to `literalWithQuotes`, except the rdfContent is expected to
   // already be normalized
@@ -40,10 +26,16 @@ class Literal {
       NormalizedString normalizedRdfContent,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
+  NormalizedStringView getSuffix() const {
+    NormalizedStringView result = content_;
+    result.remove_prefix(beginOfSuffix_);
+    return result;
+  }
+
  public:
   template <typename H>
   friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
-    return H::combine(std::move(h), asStringViewUnsafe(literal.getContent()));
+    return H::combine(std::move(h), asStringViewUnsafe(literal.content_));
   }
   bool operator==(const Literal&) const = default;
 
@@ -67,7 +59,7 @@ class Literal {
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-  Iri getDatatype() const;
+  NormalizedStringView getDatatype() const;
 
   // For documentation, see documentation of function
   // LiteralORIri::literalWithQuotes
@@ -76,7 +68,7 @@ class Literal {
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);
-  void addDatatype(Iri datatype);
+  void addDatatype(const Iri& datatype);
 
   // For documentation, see documentation of function
   // LiteralORIri::literalWithoutQuotes

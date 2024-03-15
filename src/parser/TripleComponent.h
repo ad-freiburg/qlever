@@ -29,7 +29,6 @@
 /// of any other type).
 class TripleComponent {
  public:
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   using Literal = ad_utility::triple_component::Literal;
   using Iri = ad_utility::triple_component::Iri;
   // Own class for the UNDEF value.
@@ -137,12 +136,6 @@ class TripleComponent {
     return std::holds_alternative<Variable>(_variant);
   }
 
-  /*
-  bool isLiteralOrIri() const {
-    return std::holds_alternative<LiteralOrIri>(_variant);
-  }
-   */
-
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
   Literal& getLiteral() { return std::get<Literal>(_variant); }
   const Literal& getLiteral() const { return std::get<Literal>(_variant); }
@@ -151,12 +144,6 @@ class TripleComponent {
 
   Iri& getIri() { return std::get<Iri>(_variant); }
   const Iri& getIri() const { return std::get<Iri>(_variant); }
-
-  /*
-  LiteralOrIri& getLiteralOrIri() { return std::get<LiteralOrIri>(_variant); }
-  const LiteralOrIri& getLiteralOrIri() const { return
-  std::get<LiteralOrIri>(_variant); }
-   */
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 

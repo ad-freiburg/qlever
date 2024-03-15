@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/TypeTraits.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -41,7 +42,9 @@ class LiteralExpression : public SparqlExpression {
     // Common code for the `Literal` and `Iri` case.
     auto getIdOrString =
         [this,
-         &context](const TripleComponent::LiteralOrIri& s) -> ExpressionResult {
+         &context](const ad_utility::SameAsAny<TripleComponent::Literal,
+                                               TripleComponent::Iri> auto& s)
+        -> ExpressionResult {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
@@ -55,11 +58,9 @@ class LiteralExpression : public SparqlExpression {
       context->cancellationHandle_->throwIfCancelled();
       return result;
     };
-    if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
-      // TODO<joka921> Fix the conversion here...
-      return getIdOrString(TripleComponent::LiteralOrIri{_value});
-    } else if constexpr (std::is_same_v<TripleComponent::Iri, T>) {
-      return getIdOrString(TripleComponent::LiteralOrIri{_value});
+    if constexpr (ad_utility::SameAsAny<T, TripleComponent::Literal,
+                                        TripleComponent::Iri>) {
+      return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
     } else if constexpr (std::is_same_v<VectorWithMemoryLimit<ValueId>, T>) {
