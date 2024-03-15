@@ -43,6 +43,10 @@ void CancellationHandle<Mode>::startWatchDogInternal() requires WatchDogEnabled
         startTimeoutWindow_ = steady_clock::now();
         cancellationState_.compare_exchange_strong(state, CHECK_WINDOW_MISSED,
                                                    std::memory_order_relaxed);
+      } else if (detail::isCancelled(state)) {
+        // No need to keep the watchdog running if the handle was cancelled
+        // already
+        break;
       }
     } while (!watchDogState_.conditionVariable_.wait_for(
         lock, DESIRED_CANCELLATION_CHECK_INTERVAL,
