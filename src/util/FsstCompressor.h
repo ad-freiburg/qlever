@@ -19,14 +19,9 @@
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
 // two types, a thredsafe `FsstDecoder` that can be used to perform
 // decompression, and a single-threaded `FsstEncoder` for compression.
-// TODO<joka921> There are a lot of `const_cast`s that look rather fishy because
-// they cast away constness. `FSST` currently has many function parameters that
-// are logically const, but are not marked as const. I have opened a PR for FSST
-// to make them const, as soon as this is merged, get rid of all the
-// `const_cast`s and `mutable`s in this file.
 class FsstDecoder {
  private:
-  mutable fsst_decoder_t decoder_;
+  fsst_decoder_t decoder_;
 
  public:
   // The default constructor does lead to an invalid decoder, but is required
@@ -44,7 +39,7 @@ class FsstDecoder {
     output.resize(8 * str.size());
     size_t size = fsst_decompress(
         &decoder_, str.size(),
-        reinterpret_cast<unsigned char*>(const_cast<char*>(str.data())),
+        reinterpret_cast<const unsigned char*>(str.data()),
         output.size(), reinterpret_cast<unsigned char*>(output.data()));
     // FSST compresses at most by a factor of 8.
     AD_CORRECTNESS_CHECK(size <= output.size());
@@ -119,7 +114,7 @@ class FsstEncoder {
     output.resize(7 + 2 * len);
     unsigned char* dummyOutput;
     auto data =
-        reinterpret_cast<unsigned char*>(const_cast<char*>(word.data()));
+        reinterpret_cast<const unsigned char*>(word.data());
     size_t outputLen = 0;
     size_t numCompressed =
         fsst_compress(encoder_.get(), 1, &len, &data, output.size(),
