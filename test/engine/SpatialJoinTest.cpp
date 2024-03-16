@@ -135,8 +135,8 @@ std::string createSmallDatasetWithPoints() {
   std::string kg = "<node_1> <name> \"Uni Freiburg TF\" .";
   kg += "<node_1> <hasGeometry> <geometry1> .";
   kg += "<geometry1> <asWKT> \"POINT(7.83505 48.01267)\" .";
-  // Muenster Freiburg
-  kg += "<node_2> <name> \"Muenster Freiburg\" .";
+  // Minster Freiburg
+  kg += "<node_2> <name> \"Minster Freiburg\" .";
   kg += "<node_2> <hasGeometry> <geometry2> .";
   kg += "<geometry2> <asWKT> \"POINT(7.85298 47.99557)\" .";
   // London Eye
@@ -302,30 +302,6 @@ void buildAndTestSmallTestSetLargeChildren(
           geo1,
           geo1, std::string{"<asWKT>"}, 
           point1, joinVar1_1, joinVar1_2);
-  // test of the left child, to ensure the SpatialJoin gets a correct input
-  /*std::shared_ptr<const ResultTable> res5 = leftChild->getResult();
-  size_t result_size5 = res5->size();
-  ASSERT_EQ(result_size5, 5);
-  std::vector<std::string> columnName{
-          "\"Uni Freiburg TF\"", "\"Muenster Freiburg\"", "\"London Eye\"",
-          "\"Statue of liberty\"", "\"eiffel tower\""};
-  std::vector<std::string> columnNode{
-          "<node_1>", "<node_2>", "<node_3>", "<node_4>", "<node_5>"};
-  std::vector<std::string> columnGeometry{
-          "<geometry1>", "<geometry2>", "<geometry3>", "<geometry4>",
-          "<geometry5>"};
-  std::vector<std::string> columnPoint{
-          "\"POINT(7.83505 48.01267)\"", "\"POINT(7.85298 47.99557)\"",
-          "\"POINT(-0.11957 51.50333)\"", "\"POINT(-74.04454 40.68925)\"",
-          "\"POINT(2.29451 48.85825)\""};
-  std::vector<std::vector<std::string>> columns{
-                columnName, columnNode, columnGeometry, columnPoint};
-  std::vector<std::string> columnNames{"?name1", "?obj1", "?geo1", "?point1"};
-  auto columnsTest = orderColAccordingToVarColMap(
-        leftChild->getVariableColumns(), columns, columnNames);
-  auto rows = create_row_vector_from_column_vector(columnsTest);
-  compare_result_table(printTable(qec, res5), &rows);
-  */
   
   // ======================= build the right input ============================
   TripleComponent obj2{Variable{"?obj2"}};
@@ -343,31 +319,6 @@ void buildAndTestSmallTestSetLargeChildren(
           geo2,
           geo2, std::string{"<asWKT>"},
           point2, joinVar2_1, joinVar2_2);
-  
-  // test the right Child, to ensure the SpatialJoin gets a correct input
-  /*std::shared_ptr<const ResultTable> res5 = rightChild->getResult();
-  size_t result_size5 = res5->size();
-  ASSERT_EQ(result_size5, 5);
-  std::vector<std::string> columnName{
-          "\"Uni Freiburg TF\"", "\"Muenster Freiburg\"", "\"London Eye\"",
-          "\"Statue of liberty\"", "\"eiffel tower\""};
-  std::vector<std::string> columnNode{
-          "<node_1>", "<node_2>", "<node_3>", "<node_4>", "<node_5>"};
-  std::vector<std::string> columnGeometry{
-          "<geometry1>", "<geometry2>", "<geometry3>", "<geometry4>",
-          "<geometry5>"};
-  std::vector<std::string> columnPoint{
-          "\"POINT(7.83505 48.01267)\"", "\"POINT(7.85298 47.99557)\"",
-          "\"POINT(-0.11957 51.50333)\"", "\"POINT(-74.04454 40.68925)\"",
-          "\"POINT(2.29451 48.85825)\""};
-  std::vector<std::vector<std::string>> columns{
-                columnName, columnNode, columnGeometry, columnPoint};
-  std::vector<std::string> columnNames{"?name2", "?obj2", "?geo2", "?point2"};
-  auto columnsTest = orderColAccordingToVarColMap(
-        rightChild->getVariableColumns(), columns, columnNames);
-  auto rows = create_row_vector_from_column_vector(columnsTest);
-  compare_result_table(printTable(qec, res5), &rows);
-  */
 
   createAndTestSpatialJoin(qec,
         SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
@@ -510,7 +461,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
   std::vector<std::vector<std::string>> unordered_rows{
     std::vector<std::string>{"\"Uni Freiburg TF\"", "<node_1>", "<geometry1>",
                                 "\"POINT(7.83505 48.01267)\""},
-    std::vector<std::string>{"\"Muenster Freiburg\"", "<node_2>", "<geometry2>",
+    std::vector<std::string>{"\"Minster Freiburg\"", "<node_2>", "<geometry2>",
                                 "\"POINT(7.85298 47.99557)\""},
     std::vector<std::string>{"\"London Eye\"", "<node_3>", "<geometry3>",
                                 "\"POINT(-0.11957 51.50333)\""},
@@ -537,7 +488,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
       "POINT(7.83505 48.01267)", "POINT(2.29451 48.85825)") * 1000))
   };
 
-  // distance from Muenster Freiburg to eiffel tower is 421,09 km according to
+  // distance from Minster Freiburg to eiffel tower is 421,09 km according to
   // google maps
   std::vector<std::string> expectedDistMunEif{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
@@ -558,7 +509,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
       "POINT(7.83505 48.01267)", "POINT(-0.11957 51.50333)") * 1000))
   };
   
-  // distance from Muenster Freiburg to London Eye is 692,39 km according to
+  // distance from Minster Freiburg to London Eye is 692,39 km according to
   // google maps
   std::vector<std::string> expectedDistMunEye{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
@@ -572,7 +523,7 @@ TEST(SpatialJoin, computeResultSmallDataset) {
       "POINT(7.83505 48.01267)", "POINT(-74.04454 40.68925)") * 1000))
   };
   
-  // distance from Muenster Freiburg to Statue of Liberty is 6251,58 km
+  // distance from Minster Freiburg to Statue of Liberty is 6251,58 km
   // according to google maps
   std::vector<std::string> expectedDistMunLib{
     std::to_string(static_cast<int>(ad_utility::detail::wktDistImpl(
@@ -715,7 +666,6 @@ void testMaxDistance(std::string distanceIRI, long long distance,
   TripleComponent subject{Variable{"?subject"}};
   TripleComponent object{Variable{"?object"}};
   SparqlTriple triple{subject, distanceIRI, object};
-  std::cerr << distanceIRI << std::endl;
   if (shouldThrow) {
     ASSERT_ANY_THROW(ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
         std::nullopt, std::nullopt));
