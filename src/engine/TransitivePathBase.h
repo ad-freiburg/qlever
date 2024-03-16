@@ -128,8 +128,8 @@ class TransitivePathBase : public Operation {
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathBase or
-   * TransitivePathGraphblas, depending on the useGraphblas flag.
+   * The concrete object will either be TransitivePathFallback or
+   * TransitivePathBinSearch, depending on the useBinSearch flag.
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
    * @param child QueryExecutionTree for the subquery of the TransitivePath
@@ -139,18 +139,18 @@ class TransitivePathBase : public Operation {
    * number of nodes)
    * @param maxDist Maximum distance a resulting path may have (distance =
    * number of nodes)
-   * @param useGraphblas If true, the returned object will be a
-   * TransitivePathGraphblas. Else it will be a TransitivePathFallback
+   * @param useBinSearch If true, the returned object will be a
+   * TransitivePathBinSearch. Else it will be a TransitivePathFallback
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
       const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
-      size_t minDist, size_t maxDist, bool useGraphblas, bool useBinSearch);
+      size_t minDist, size_t maxDist, bool useBinSearch);
 
   /**
    * @brief Make a concrete TransitivePath object using the given parameters.
-   * The concrete object will either be TransitivePathBase or
-   * TransitivePathGraphblas, depending on the runtime constant "use-graphblas".
+   * The concrete object will either be TransitivePathFallback or
+   * TransitivePathBinSearch, depending on the runtime constant "use-binsearch".
    *
    * @param qec QueryExecutionContext for the TransitivePath Operation
    * @param child QueryExecutionTree for the subquery of the TransitivePath

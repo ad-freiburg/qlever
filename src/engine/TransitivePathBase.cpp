@@ -13,7 +13,6 @@
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathFallback.h"
-#include "engine/TransitivePathGraphblas.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 
@@ -192,21 +191,17 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist) {
-  bool useGraphblas = RuntimeParameters().get<"use-graphblas">();
   bool useBinSearch = RuntimeParameters().get<"use-binsearch">();
   return makeTransitivePath(qec, child, leftSide, rightSide, minDist, maxDist,
-                            useGraphblas, useBinSearch);
+                            useBinSearch);
 }
 
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
-    size_t minDist, size_t maxDist, bool useGraphblas, bool useBinSearch) {
-  if (useGraphblas) {
-    return std::make_shared<TransitivePathGraphblas>(
-        qec, child, leftSide, rightSide, minDist, maxDist);
-  } else if (useBinSearch) {
+    size_t minDist, size_t maxDist, bool useBinSearch) {
+  if (useBinSearch) {
     return std::make_shared<TransitivePathBinSearch>(
         qec, child, leftSide, rightSide, minDist, maxDist);
   } else {

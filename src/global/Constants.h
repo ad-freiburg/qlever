@@ -242,7 +242,6 @@ inline auto& RuntimeParameters() {
             DurationParameter<std::chrono::seconds, "default-query-timeout">{
                 30s}),
         SizeT<"lazy-index-scan-max-size-materialization">{1'000'000},
-        Bool<"use-graphblas">{false},
         Bool<"use-binsearch">{true},
         Bool<"group-by-hash-map-enabled">{false}};
   }();

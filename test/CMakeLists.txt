@@ -149,8 +149,6 @@ addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
 addLinkAndDiscoverTest(IdTableTest util)
 
-addLinkAndDiscoverTest(GrbMatrixTest engine graphblas)
-
 addLinkAndDiscoverTest(TransitivePathTest engine)
 
 addLinkAndDiscoverTest(BatchedPipelineTest)

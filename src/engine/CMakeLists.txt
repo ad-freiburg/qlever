@@ -8,9 +8,9 @@ add_library(engine
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
         Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp TransitivePathFallback.cpp
-        TransitivePathGraphblas.cpp TransitivePathBinSearch.cpp Service.cpp
+        TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp 
-        idTable/CompressedExternalIdTable.h GrbMatrix.cpp)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams graphblas)
+        idTable/CompressedExternalIdTable.h)
+qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
