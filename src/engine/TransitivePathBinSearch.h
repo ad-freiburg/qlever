@@ -20,15 +20,6 @@ struct BinSearchMap {
   std::span<const Id> targetIds_;
 
   std::span<const Id> successors(const Id node) const {
-    // auto startIt = std::lower_bound(startIds_.begin(), startIds_.end(),
-    // node); auto endIt = std::upper_bound(startIds_.begin(), startIds_.end(),
-    // node);
-    //
-    // auto startIndex = std::distance(startIds_.begin(), startIt);
-    // auto endIndex = std::distance(startIds_.begin(), endIt);
-    //
-    // return targetIds_.subspan(startIndex, endIndex - startIndex);
-
     auto range = std::ranges::equal_range(startIds_, node);
 
     auto startIndex = std::distance(startIds_.begin(), range.begin());

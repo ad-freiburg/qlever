@@ -107,6 +107,20 @@ void TransitivePathFallback::computeTransitivePath(
 }
 
 // _____________________________________________________________________________
+std::pair<TransitivePathSide&, TransitivePathSide&>
+TransitivePathFallback::decideDirection() {
+  if (lhs_.isBoundVariable()) {
+    LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+    return {lhs_, rhs_};
+  } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
+    LOG(DEBUG) << "Computing TransitivePath right to left" << std::endl;
+    return {rhs_, lhs_};
+  }
+  LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
+  return {lhs_, rhs_};
+}
+
+// _____________________________________________________________________________
 ResultTable TransitivePathFallback::computeResult() {
   if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
       rhs_.isVariable()) {
@@ -114,6 +128,7 @@ ResultTable TransitivePathFallback::computeResult() {
         "This query might have to evalute the empty path, which is currently "
         "not supported");
   }
+  auto [startSide, targetSide] = decideDirection();
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
   IdTable idTable{allocator()};
@@ -122,38 +137,22 @@ ResultTable TransitivePathFallback::computeResult() {
 
   size_t subWidth = subRes->idTable().numColumns();
 
-  auto computeForOneSide = [this, &idTable, subRes, subWidth](
-                               auto& boundSide,
-                               auto& otherSide) -> ResultTable {
+  if (startSide.isBoundVariable()) {
     shared_ptr<const ResultTable> sideRes =
-        boundSide.treeAndCol_.value().first->getResult();
+        startSide.treeAndCol_.value().first->getResult();
     size_t sideWidth = sideRes->idTable().numColumns();
 
     CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
                     &TransitivePathFallback::computeTransitivePathBound, this,
-                    &idTable, subRes->idTable(), boundSide, otherSide,
+                    &idTable, subRes->idTable(), startSide, targetSide,
                     sideRes->idTable());
 
     return {std::move(idTable), resultSortedOn(),
             ResultTable::getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
-  };
-
-  if (lhs_.isBoundVariable()) {
-    return computeForOneSide(lhs_, rhs_);
-  } else if (rhs_.isBoundVariable()) {
-    return computeForOneSide(rhs_, lhs_);
-    // Right side is an Id
-  } else if (!rhs_.isVariable()) {
-    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
-                    &TransitivePathFallback::computeTransitivePath, this,
-                    &idTable, subRes->idTable(), rhs_, lhs_);
-    // No side is a bound variable, the right side is an unbound variable
-    // and the left side is either an unbound Variable or an ID.
-  } else {
-    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
-                    &TransitivePathFallback::computeTransitivePath, this,
-                    &idTable, subRes->idTable(), lhs_, rhs_);
   }
+  CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
+                  &TransitivePathFallback::computeTransitivePath, this,
+                  &idTable, subRes->idTable(), startSide, targetSide);
 
   // NOTE: The only place, where the input to a transitive path operation is not
   // an index scan (which has an empty local vocabulary by default) is the

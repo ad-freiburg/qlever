@@ -72,6 +72,21 @@ class TransitivePathFallback : public TransitivePathBase {
 
  private:
   /**
+   * @brief Decide on which transitive path side the hull computation should
+   * start and where it should end. The start and target side are chosen by
+   * the following criteria:
+   *
+   * 1. If a side is bound, then this side will be the start side.
+   * 2. If a side is an id, then this side will be the start side.
+   * 3. If both sides are variables, the left side is chosen as start
+   * (arbitrarily).
+   *
+   * @return std::pair<TransitivePathSide&, TransitivePathSide&> The first entry
+   * of the pair is the start side, the second entry is the target side.
+   */
+  std::pair<TransitivePathSide&, TransitivePathSide&> decideDirection();
+
+  /**
    * @brief Compute the result for this TransitivePath operation
    * This function chooses the start and target side for the transitive
    * hull computation. This choice of the start side has a large impact
