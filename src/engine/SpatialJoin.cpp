@@ -81,7 +81,7 @@ bool SpatialJoin::isConstructed() {
 
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
-  if (!(childLeft_ || childRight_)) {
+  if (!(childLeft_ && childRight_)) {
     AD_THROW("SpatialJoin needs two variables");
   }
 
@@ -264,7 +264,7 @@ ResultTable SpatialJoin::computeResult() {
     point1 = betweenQuotes(point1);
     point2 = betweenQuotes(point2);
     double dist = ad_utility::detail::wktDistImpl(point1, point2);
-    return static_cast<int>(dist * 1000);  // convert to meters
+    return static_cast<long long>(dist * 1000);  // convert to meters
   };
 
   // a maximum distance of 0 encodes infinity -> return cross product
@@ -295,7 +295,7 @@ ResultTable SpatialJoin::computeResult() {
         idtable.emplace_back();
         size_t col = 0;
         if (addDistToResult) {
-          int dist = computeDist(idLeft, idRight, i, k,
+          long long dist = computeDist(idLeft, idRight, i, k,
                           leftJoinCol, rightJoinCol);
           idtable[i * numRowsLeft + k][col] = ValueId::makeFromInt(dist);
           col += 1;
@@ -357,7 +357,7 @@ ResultTable SpatialJoin::computeResult() {
     for (size_t rowLeft = 0; rowLeft < res_left->size(); rowLeft++) {
       for (size_t rowRight = 0; rowRight < res_right->size(); rowRight++) {
         size_t rescol = 0;
-        int dist = computeDist(res_left, res_right, rowLeft, rowRight,
+        long long dist = computeDist(res_left, res_right, rowLeft, rowRight,
               leftJoinCol, rightJoinCol);
         if (dist < maxDist) {
           result.emplace_back();

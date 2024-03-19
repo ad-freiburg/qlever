@@ -56,6 +56,18 @@ class SpatialJoin : public Operation {
     // this function is used to give the maximum distance for testing purposes
     long long getMaxDist();
 
+    std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() {
+      return childLeft_;
+    }
+
+    std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() {
+      return childRight_;
+    }
+
+    void onlyForTestingSetAddDistToResult(bool addDistToResult_) {
+      addDistToResult = addDistToResult_;
+    }
+
   private:
     ad_utility::MemorySize _limit = ad_utility::MemorySize::bytes(100000000);
     ad_utility::AllocatorWithLimit<ValueId> _allocator =

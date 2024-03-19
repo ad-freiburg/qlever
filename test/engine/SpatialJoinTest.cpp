@@ -8,6 +8,7 @@
 #include "engine/Join.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "./../../src/util/GeoSparqlHelpers.h"
+#include "./../../src/global/ValueId.h"
 
 using namespace ad_utility::testing;
 
@@ -154,251 +155,6 @@ std::string createSmallDatasetWithPoints() {
   return kg;
 }
 
-std::shared_ptr<QueryExecutionTree> buildIndexScan(QueryExecutionContext* qec,
-      TripleComponent subject, std::string predicate, TripleComponent object) {
-  return ad_utility::makeExecutionTree<IndexScan>(qec, 
-        Permutation::Enum::PSO, SparqlTriple{subject, predicate, object});
-}
-
-std::shared_ptr<QueryExecutionTree> buildJoin(QueryExecutionContext* qec,
-      std::shared_ptr<QueryExecutionTree> tree1,
-      std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
-  auto varCol1 = tree1->getVariableColumns();
-  auto varCol2 = tree2->getVariableColumns();
-  size_t col1 = varCol1[joinVariable].columnIndex_;
-  size_t col2 = varCol2[joinVariable].columnIndex_;
-  return ad_utility::makeExecutionTree<Join>(
-          qec, tree1, tree2, col1, col2, true);
-}
-
-std::shared_ptr<QueryExecutionTree> buildSmallChild(QueryExecutionContext* qec,
-    TripleComponent subject1, std::string predicate1, TripleComponent object1,
-    TripleComponent subject2, std::string predicate2, TripleComponent object2,
-    Variable joinVariable) {
-  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
-  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
-  return buildJoin(qec, scan1, scan2, joinVariable);
-}
-
-std::shared_ptr<QueryExecutionTree> buildMediumChild(QueryExecutionContext* qec,
-    TripleComponent subject1, std::string predicate1, TripleComponent object1,
-    TripleComponent subject2, std::string predicate2, TripleComponent object2,
-    TripleComponent subject3, std::string predicate3, TripleComponent object3,
-    Variable joinVariable1, Variable joinVariable2) {
-  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
-  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
-  auto scan3 = buildIndexScan(qec, subject3, predicate3, object3);
-  auto join = buildJoin(qec, scan1, scan2, joinVariable1);
-  return buildJoin(qec, join, scan3, joinVariable2);
-}
-
-void createAndTestSpatialJoin(QueryExecutionContext* qec,
-      SparqlTriple spatialJoinTriple,
-      std::shared_ptr<QueryExecutionTree> leftChild,
-      std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
-      std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
-      std::vector<std::string> columnNames) {
-  
-  auto swapColumns = [&](std::vector<std::vector<std::string>> toBeSwapped) {
-    std::vector<std::vector<std::string>> result;
-    bool firstIteration = true;
-    for (size_t i = 0; i < toBeSwapped.size(); i++) {
-      for (size_t k = 0; k < toBeSwapped.at(i).size(); k++) {
-        if (firstIteration) {
-          result.push_back(std::vector<std::string>{toBeSwapped.at(i).at(k)});
-        } else {
-          result.at(k).push_back(toBeSwapped.at(i).at(k));
-        }
-      }
-      firstIteration = false;
-    }
-    return result;
-  };
-
-  std::cerr << "starting createAndTest" << std::endl;
-  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
-        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
-        std::nullopt, std::nullopt);
-  // test VariableToColumnMap
-  // test sizeEstimate
-  // test multiplicities
-  // add first child
-  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
-  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
-  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
-  Variable firstVariable = addLeftChildFirst ? 
-        spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
-  Variable secondVariable = addLeftChildFirst ? 
-        spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
-  spatialJoin->addChild(firstChild, firstVariable);
-  
-  // add second child
-  spatialJoin->addChild(secondChild, secondVariable);
-
-  // prepare expected output
-  // swap rows and columns to use the function orderColAccordingToVarColMap
-  auto expectedMaxDistCols = swapColumns(expectedOutputUnorderedRows);
-  auto expectedOutputOrdered = orderColAccordingToVarColMap(
-          spatialJoin->computeVariableToColumnMap(),
-          expectedMaxDistCols, columnNames);
-  auto expectedOutput =
-          createRowVectorFromColumnVector(expectedOutputOrdered);
-  
-  auto res = spatialJoin->computeResult();
-  auto vec = printTable(qec, &res);
-  compareResultTable(vec, &expectedOutput);
-
-  std::cerr << res.size() << " " << spatialJoinTriple._p.getIri()
-            << spatialJoin->getMaxDist() << " " << std::endl;
-  std::cerr << "output" << std::endl;
-  print_vec(vec);
-  std::cerr << "expected" << std::endl;
-  print_vec(expectedOutput);
-  std::cerr << "ending createAndTest" << std::endl;
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation be the
-// last one (the left and right child are maximally large for this test query)
-// the following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?obj1 <name> ?name1 .
-//   ?obj1 <hasGeometry> ?geo1 .
-//   ?geo1 <asWKT> ?point1
-//   ?obj2 <name> ?name2 .
-//   ?obj2 <hasGeometry> ?geo2 .
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetLargeChildren(
-        std::string maxDistanceInMetersString, bool addLeftChildFirst,
-        std::vector<std::vector<std::string>> expectedOutput,
-        std::vector<std::string> columnNames) {
-  std::string kg = createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
-  ASSERT_EQ(numTriples, 15);
-  // ===================== build the first child ===============================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent geo1{Variable{"?geo1"}};
-  TripleComponent point1{Variable{"?point1"}};
-  // needed as getVariable() returns a const variable
-  Variable joinVar1_1 = obj1.getVariable();
-  Variable joinVar1_2 = geo1.getVariable();
-  auto leftChild = buildMediumChild(qec,
-          obj1,
-          std::string{"<name>"},
-          TripleComponent{Variable{"?name1"}},
-          obj1,
-          std::string{"<hasGeometry>"},
-          geo1,
-          geo1, std::string{"<asWKT>"}, 
-          point1, joinVar1_1, joinVar1_2);
-  
-  // ======================= build the second child ============================
-  TripleComponent obj2{Variable{"?obj2"}};
-  TripleComponent geo2{Variable{"?geo2"}};
-  TripleComponent point2{Variable{"?point2"}};
-  // needed as getVariable() returns a const variable
-  Variable joinVar2_1 = obj2.getVariable();
-  Variable joinVar2_2 = geo2.getVariable();
-  auto rightChild = buildMediumChild(qec,
-          obj2,
-          std::string{"<name>"},
-          TripleComponent{Variable{"?name2"}},
-          obj2,
-          std::string{"<hasGeometry>"},
-          geo2,
-          geo2, std::string{"<asWKT>"},
-          point2, joinVar2_1, joinVar2_2);
-
-  createAndTestSpatialJoin(qec,
-        SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
-        rightChild, addLeftChildFirst, expectedOutput, columnNames);
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation.
-// The following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?geo1 <asWKT> ?point1
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetSmallChildren(
-        std::string maxDistanceInMetersString, bool addLeftChildFirst,
-        std::vector<std::vector<std::string>> expectedOutput,
-        std::vector<std::string> columnNames) {
-  std::string kg = createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
-  ASSERT_EQ(numTriples, 15);
-  // ====================== build inputs ===================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
-  TripleComponent point1{Variable{"?point1"}};
-  TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(qec, obj1, std::string{"<asWKT>"}, point1);
-  auto rightChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
-
-  createAndTestSpatialJoin(qec,
-        SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
-        rightChild, addLeftChildFirst, expectedOutput, columnNames);
-}
-
-// build the test using the small dataset. Let the SpatialJoin operation be the
-// last one.
-// the following Query will be simulated, the max distance will be different
-// depending on the test:
-// Select * where {
-//   ?obj1 <name> ?name1 .
-//   ?obj1 <hasGeometry> ?geo1 .
-//   ?geo1 <asWKT> ?point1
-//   ?geo2 <asWKT> ?point2
-//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
-// }
-void buildAndTestSmallTestSetDiffSizeChildren(
-        std::string maxDistanceInMetersString, bool addLeftChildFirst,
-        std::vector<std::vector<std::string>> expectedOutput,
-        std::vector<std::string> columnNames, bool bigChildLeft) {
-  std::string kg = createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
-  ASSERT_EQ(numTriples, 15);
-  // ========================= build big child =================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent geo1{Variable{"?geo1"}};
-  TripleComponent point1{Variable{"?point1"}};
-  // needed as getVariable() returns a const variable
-  Variable joinVar1_1 = obj1.getVariable();
-  Variable joinVar1_2 = geo1.getVariable();
-  auto bigChild = buildMediumChild(qec,
-          obj1,
-          std::string{"<name>"},
-          TripleComponent{Variable{"?name1"}},
-          obj1,
-          std::string{"<hasGeometry>"},
-          geo1,
-          geo1, std::string{"<asWKT>"}, 
-          point1, joinVar1_1, joinVar1_2);
-  
-  // ========================= build small child ===============================
-  TripleComponent obj2{Variable{"?obj2"}};
-  TripleComponent point2{Variable{"?point2"}};
-  auto smallChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
-
-  auto firstChild = bigChildLeft ? bigChild : smallChild;
-  auto secondChild = bigChildLeft ? smallChild : bigChild;
-
-  createAndTestSpatialJoin(qec,
-        SparqlTriple{point1, maxDistanceInMetersString, point2}, firstChild,
-        secondChild, addLeftChildFirst, expectedOutput, columnNames);
-}
-
 // this function creates an input as a test set and returns it
 std::string createTestKnowledgeGraph(bool verbose) {
   auto addPoint = [] (string* kg, double lon, double lat) {
@@ -517,6 +273,242 @@ std::string createTestKnowledgeGraph(bool verbose) {
 }
 
 namespace computeResultTest{
+
+std::shared_ptr<QueryExecutionTree> buildIndexScan(QueryExecutionContext* qec,
+      TripleComponent subject, std::string predicate, TripleComponent object) {
+  return ad_utility::makeExecutionTree<IndexScan>(qec, 
+        Permutation::Enum::PSO, SparqlTriple{subject, predicate, object});
+}
+
+std::shared_ptr<QueryExecutionTree> buildJoin(QueryExecutionContext* qec,
+      std::shared_ptr<QueryExecutionTree> tree1,
+      std::shared_ptr<QueryExecutionTree> tree2, Variable joinVariable) {
+  auto varCol1 = tree1->getVariableColumns();
+  auto varCol2 = tree2->getVariableColumns();
+  size_t col1 = varCol1[joinVariable].columnIndex_;
+  size_t col2 = varCol2[joinVariable].columnIndex_;
+  return ad_utility::makeExecutionTree<Join>(
+          qec, tree1, tree2, col1, col2, true);
+}
+
+std::shared_ptr<QueryExecutionTree> buildMediumChild(
+        QueryExecutionContext* qec,
+        std::string subject1_, std::string predicate1, std::string object1_,
+        std::string subject2_, std::string predicate2, std::string object2_,
+        std::string subject3_, std::string predicate3, std::string object3_,
+        std::string joinVariable1_, std::string joinVariable2_) {
+  TripleComponent subject1{Variable{subject1_}};
+  TripleComponent subject2{Variable{subject2_}};
+  TripleComponent subject3{Variable{subject3_}};
+  TripleComponent object1{Variable{object1_}};
+  TripleComponent object2{Variable{object2_}};
+  TripleComponent object3{Variable{object3_}};
+  Variable joinVariable1{joinVariable1_};
+  Variable joinVariable2{joinVariable2_};
+  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
+  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
+  auto scan3 = buildIndexScan(qec, subject3, predicate3, object3);
+  auto join = buildJoin(qec, scan1, scan2, joinVariable1);
+  return buildJoin(qec, join, scan3, joinVariable2);
+}
+
+std::shared_ptr<QueryExecutionTree> buildSmallChild(
+        QueryExecutionContext* qec,
+        std::string subject1_, std::string predicate1, std::string object1_,
+        std::string subject2_, std::string predicate2, std::string object2_,
+        std::string joinVariable_) {
+  TripleComponent subject1{Variable{subject1_}};
+  TripleComponent subject2{Variable{subject2_}};
+  TripleComponent object1{Variable{object1_}};
+  TripleComponent object2{Variable{object2_}};
+  Variable joinVariable{joinVariable_};
+  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
+  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
+  return buildJoin(qec, scan1, scan2, joinVariable);
+}
+
+void createAndTestSpatialJoin(QueryExecutionContext* qec,
+      SparqlTriple spatialJoinTriple,
+      std::shared_ptr<QueryExecutionTree> leftChild,
+      std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
+      std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
+      std::vector<std::string> columnNames) {
+  
+  auto swapColumns = [&](std::vector<std::vector<std::string>> toBeSwapped) {
+    std::vector<std::vector<std::string>> result;
+    bool firstIteration = true;
+    for (size_t i = 0; i < toBeSwapped.size(); i++) {
+      for (size_t k = 0; k < toBeSwapped.at(i).size(); k++) {
+        if (firstIteration) {
+          result.push_back(std::vector<std::string>{toBeSwapped.at(i).at(k)});
+        } else {
+          result.at(k).push_back(toBeSwapped.at(i).at(k));
+        }
+      }
+      firstIteration = false;
+    }
+    return result;
+  };
+
+  // std::cerr << "starting createAndTest" << std::endl;
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
+        std::nullopt, std::nullopt);
+  // test VariableToColumnMap
+  // test sizeEstimate
+  // test multiplicities
+  // add first child
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable = addLeftChildFirst ? 
+        spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+  Variable secondVariable = addLeftChildFirst ? 
+        spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+  spatialJoin->addChild(firstChild, firstVariable);
+  
+  // add second child
+  spatialJoin->addChild(secondChild, secondVariable);
+
+  // prepare expected output
+  // swap rows and columns to use the function orderColAccordingToVarColMap
+  auto expectedMaxDistCols = swapColumns(expectedOutputUnorderedRows);
+  auto expectedOutputOrdered = orderColAccordingToVarColMap(
+          spatialJoin->computeVariableToColumnMap(),
+          expectedMaxDistCols, columnNames);
+  auto expectedOutput =
+          createRowVectorFromColumnVector(expectedOutputOrdered);
+  
+  auto res = spatialJoin->computeResult();
+  auto vec = printTable(qec, &res);
+  compareResultTable(vec, &expectedOutput);
+
+  /* std::cerr << res.size() << " " << spatialJoinTriple._p.getIri()
+            << spatialJoin->getMaxDist() << " " << std::endl;
+  std::cerr << "output" << std::endl;
+  print_vec(vec);
+  std::cerr << "expected" << std::endl;
+  print_vec(expectedOutput);
+  std::cerr << "ending createAndTest" << std::endl; */
+}
+
+// build the test using the small dataset. Let the SpatialJoin operation be the
+// last one (the left and right child are maximally large for this test query)
+// the following Query will be simulated, the max distance will be different
+// depending on the test:
+// Select * where {
+//   ?obj1 <name> ?name1 .
+//   ?obj1 <hasGeometry> ?geo1 .
+//   ?geo1 <asWKT> ?point1
+//   ?obj2 <name> ?name2 .
+//   ?obj2 <hasGeometry> ?geo2 .
+//   ?geo2 <asWKT> ?point2
+//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
+// }
+void buildAndTestSmallTestSetLargeChildren(
+        std::string maxDistanceInMetersString, bool addLeftChildFirst,
+        std::vector<std::vector<std::string>> expectedOutput,
+        std::vector<std::string> columnNames) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ===================== build the first child ===============================
+  auto leftChild = buildMediumChild(qec,
+          "?obj1", std::string{"<name>"}, "?name1",
+          "?obj1", std::string{"<hasGeometry>"}, "?geo1",
+          "?geo1", std::string{"<asWKT>"}, "?point1",
+          "?obj1", "?geo1");
+  
+  // ======================= build the second child ============================
+  auto rightChild = buildMediumChild(qec,
+          "?obj2", std::string{"<name>"}, "?name2",
+          "?obj2", std::string{"<hasGeometry>"}, "?geo2",
+          "?geo2", std::string{"<asWKT>"}, "?point2",
+          "?obj2", "?geo2");
+
+  createAndTestSpatialJoin(qec,
+        SparqlTriple{TripleComponent{Variable{"?point1"}},
+                      maxDistanceInMetersString,
+                      TripleComponent{Variable{"?point2"}}},
+        leftChild, rightChild, addLeftChildFirst, expectedOutput, columnNames);
+}
+
+// build the test using the small dataset. Let the SpatialJoin operation.
+// The following Query will be simulated, the max distance will be different
+// depending on the test:
+// Select * where {
+//   ?geo1 <asWKT> ?point1
+//   ?geo2 <asWKT> ?point2
+//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
+// }
+void buildAndTestSmallTestSetSmallChildren(
+        std::string maxDistanceInMetersString, bool addLeftChildFirst,
+        std::vector<std::vector<std::string>> expectedOutput,
+        std::vector<std::string> columnNames) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ====================== build inputs ===================================
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto leftChild = buildIndexScan(qec, obj1, std::string{"<asWKT>"}, point1);
+  auto rightChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
+
+  createAndTestSpatialJoin(qec,
+        SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
+        rightChild, addLeftChildFirst, expectedOutput, columnNames);
+}
+
+// build the test using the small dataset. Let the SpatialJoin operation be the
+// last one.
+// the following Query will be simulated, the max distance will be different
+// depending on the test:
+// Select * where {
+//   ?obj1 <name> ?name1 .
+//   ?obj1 <hasGeometry> ?geo1 .
+//   ?geo1 <asWKT> ?point1
+//   ?geo2 <asWKT> ?point2
+//   ?point1 <max-distance-in-meters:XXXX> ?point2 .
+// }
+void buildAndTestSmallTestSetDiffSizeChildren(
+        std::string maxDistanceInMetersString, bool addLeftChildFirst,
+        std::vector<std::vector<std::string>> expectedOutput,
+        std::vector<std::string> columnNames, bool bigChildLeft) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ========================= build big child =================================
+  auto bigChild = buildMediumChild(qec,
+          "?obj1", std::string{"<name>"}, "?name1",
+          "?obj1",std::string{"<hasGeometry>"}, "?geo1",
+          "?geo1", std::string{"<asWKT>"}, "?point1",
+          "?obj1", "?geo1");
+  
+  // ========================= build small child ===============================
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto smallChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
+
+  auto firstChild = bigChildLeft ? bigChild : smallChild;
+  auto secondChild = bigChildLeft ? smallChild : bigChild;
+  auto firstVariable = bigChildLeft ?
+            TripleComponent{Variable{"?point1"}} : point2;
+  auto secondVariable = bigChildLeft ?
+            point2 : TripleComponent{Variable{"?point1"}};
+
+  createAndTestSpatialJoin(qec,
+        SparqlTriple{firstVariable, maxDistanceInMetersString, secondVariable}, firstChild,
+        secondChild, addLeftChildFirst, expectedOutput, columnNames);
+}
 
   std::vector<std::string> mergeToRow(std::vector<std::string> part1,
                         std::vector<std::string> part2,
@@ -1113,6 +1105,8 @@ TEST(SpatialJoin, computeResultSmallDatasetDifferentSizeChildren) {
 
 }  // end of Namespace computeResultTest
 
+namespace maxDistanceParsingTest{
+
 // test if the SpatialJoin operation parses the maximum distance correctly
 void testMaxDistance(std::string distanceIRI, long long distance,
               bool shouldThrow) {
@@ -1192,6 +1186,317 @@ TEST(SpatialJoin, maxDistanceParsingTest) {
   // suffix after >
   testMaxDistance("<max-distance-in-metersjklö:1000>dfgh", 1000, true);
 }
+
+}  // maxDistanceParsingTest
+
+namespace childrenTesting{
+
+void testAddChild(bool addLeftChildFirst) {
+
+  auto checkVariable = [](SpatialJoin* spatialJoin, bool checkLeftVariable) {
+    if (checkLeftVariable) {
+      std::shared_ptr<Operation> op =
+              spatialJoin->onlyForTestingGetLeftChild()->getRootOperation();
+      IndexScan* scan = static_cast<IndexScan*>(op.get());
+      ASSERT_EQ(scan->getSubject().getVariable().name(), "?obj1");
+      ASSERT_EQ(scan->getObject().getVariable().name(), "?point1");
+    } else {
+      std::shared_ptr<Operation> op =
+              spatialJoin->onlyForTestingGetRightChild()->getRootOperation();
+      IndexScan* scan = static_cast<IndexScan*>(op.get());
+      ASSERT_EQ(scan->getSubject().getVariable().name(), "?obj2");
+      ASSERT_EQ(scan->getObject().getVariable().name(), "?point2");
+    }
+  };
+
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ====================== build inputs ===================================
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+            qec, obj1, std::string{"<asWKT>"}, point1);
+  auto rightChild = computeResultTest::buildIndexScan(
+            qec, obj2, std::string{"<asWKT>"}, point2);
+  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+          ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+          std::nullopt, std::nullopt);
+
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable =
+        addLeftChildFirst ? point1.getVariable() : point2.getVariable();
+  Variable secondVariable =
+        addLeftChildFirst ? point2.getVariable() : point1.getVariable();
+  std::string firstSubject = addLeftChildFirst ? "?obj1" : "?obj2";
+  std::string secondSubject = addLeftChildFirst ? "?obj2" : "?obj1";
+  std::string firstObject = addLeftChildFirst ? "?point1" : "?point2";
+  std::string secondObject = addLeftChildFirst ? "?point2" : "?point1";
+
+  ASSERT_EQ(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
+  ASSERT_EQ(spatialJoin->onlyForTestingGetRightChild(), nullptr);
+
+  ASSERT_ANY_THROW(spatialJoin->addChild(firstChild, Variable{"?wrongVar"}));
+  ASSERT_ANY_THROW(spatialJoin->addChild(secondChild, Variable{"?wrongVar"}));
+
+  ASSERT_EQ(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
+  ASSERT_EQ(spatialJoin->onlyForTestingGetRightChild(), nullptr);
+
+  spatialJoin->addChild(firstChild, firstVariable);
+
+  checkVariable(spatialJoin, addLeftChildFirst);
+
+  spatialJoin->addChild(secondChild, secondVariable);
+
+  checkVariable(spatialJoin, (!addLeftChildFirst));
+}
+
+TEST(SpatialJoin, addChild) {
+  testAddChild(true);
+  testAddChild(false);  
+}
+
+TEST(SpatialJoin, isConstructed) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ====================== build inputs ===================================
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+            qec, obj1, std::string{"<asWKT>"}, point1);
+  auto rightChild = computeResultTest::buildIndexScan(
+            qec, obj2, std::string{"<asWKT>"}, point2);
+  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+          ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+          std::nullopt, std::nullopt);
+
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+    SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+
+  ASSERT_FALSE(spatialJoin->isConstructed());
+
+  spatialJoin->addChild(leftChild, point1.getVariable());
+
+  ASSERT_FALSE(spatialJoin->isConstructed());
+
+  spatialJoin->addChild(rightChild, point2.getVariable());
+
+  ASSERT_TRUE(spatialJoin->isConstructed());
+}
+
+TEST(SpatialJoin, getChildren) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ====================== build inputs ===================================
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+            qec, obj1, std::string{"<asWKT>"}, point1);
+  auto rightChild = computeResultTest::buildIndexScan(
+            qec, obj2, std::string{"<asWKT>"}, point2);
+  SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
+
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+          ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+          std::nullopt, std::nullopt);
+
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  
+  ASSERT_ANY_THROW(spatialJoin->getChildren());
+
+  spatialJoin->addChild(leftChild, point1.getVariable());
+
+  ASSERT_ANY_THROW(spatialJoin->getChildren());
+
+  spatialJoin->addChild(rightChild, point2.getVariable());
+
+  ASSERT_EQ(spatialJoin->getChildren().size(), 2);
+  
+  std::shared_ptr<Operation> op1 =
+          spatialJoin->getChildren().at(0)->getRootOperation();
+  IndexScan* scan1 = static_cast<IndexScan*>(op1.get());
+  ASSERT_TRUE((scan1->getSubject().getVariable().name() == "?obj1" || 
+            scan1->getSubject().getVariable().name() == "?obj2"));
+  
+  std::shared_ptr<Operation> op2 =
+          spatialJoin->getChildren().at(1)->getRootOperation();
+  IndexScan* scan2 = static_cast<IndexScan*>(op2.get());
+  ASSERT_TRUE((scan2->getSubject().getVariable().name() == "?obj1" || 
+            scan2->getSubject().getVariable().name() == "?obj2"));
+  
+  ASSERT_TRUE(scan1->getSubject().getVariable().name() !=
+            scan2->getSubject().getVariable().name());
+  
+  
+  ASSERT_TRUE((scan1->getObject().getVariable().name() == "?point1" || 
+            scan1->getObject().getVariable().name() == "?point2"));
+  
+  ASSERT_TRUE((scan2->getObject().getVariable().name() == "?point1" || 
+            scan2->getObject().getVariable().name() == "?point2"));
+  
+  ASSERT_TRUE(scan1->getObject().getVariable().name() !=
+            scan2->getObject().getVariable().name());
+}
+
+}  // namespace childrenTesting
+
+namespace variableColumnMapAndResultWidth{
+
+// only test one at a time. Then the gtest will fail on the test, which
+// failed, instead of failing for both getResultWidth() and
+// computeVariableToColumnMap() if only one of them is wrong
+void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
+      bool rightSideBigChild, bool addLeftChildFirst,
+      size_t expectedResultWidth, bool testVarToColMap=false) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+
+  auto leftChild = leftSideBigChild ?
+        computeResultTest::buildMediumChild(qec,
+                            "?obj1", std::string{"<name>"}, "?name1",
+                            "?obj1",std::string{"<hasGeometry>"}, "?geo1",
+                            "?geo1", std::string{"<asWKT>"}, "?point1",
+                            "?obj1", "?geo1") :
+        computeResultTest::buildSmallChild(qec,
+                            "?obj1",std::string{"<hasGeometry>"}, "?geo1",
+                            "?geo1", std::string{"<asWKT>"}, "?point1",
+                            "?geo1");
+  auto rightChild = rightSideBigChild ?
+        computeResultTest::buildMediumChild(qec,
+                            "?obj2", std::string{"<name>"}, "?name2",
+                            "?obj2",std::string{"<hasGeometry>"}, "?geo2",
+                            "?geo2", std::string{"<asWKT>"}, "?point2",
+                            "?obj2", "?geo2") :
+        computeResultTest::buildSmallChild(qec,
+                            "?obj2",std::string{"<hasGeometry>"}, "?geo2",
+                            "?geo2", std::string{"<asWKT>"}, "?point2",
+                            "?geo2");
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec,
+        SparqlTriple{TripleComponent{Variable{"?point1"}},
+                            std::string{"<max-distance-in-meters:0>"},
+                            TripleComponent{Variable{"?point2"}}},
+        std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable = addLeftChildFirst ? 
+        Variable{"?point1"} : Variable{"?point2"};
+  Variable secondVariable = addLeftChildFirst ? 
+        Variable{"?point2"} : Variable{"?point1"};
+  spatialJoin->addChild(firstChild, firstVariable);
+  spatialJoin->addChild(secondChild, secondVariable);
+
+  if (!testVarToColMap) {
+    ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
+  } else {
+    std::vector<std::pair<std::string, std::string>> expectedColumns{
+                      std::pair{"?distOfTheTwoObjectsAddedInternally", "0"}};
+    
+    if (leftSideBigChild) {
+      expectedColumns.push_back({"?obj1", "<node_"});
+      expectedColumns.push_back({"?geo1", "<geometry"});
+      expectedColumns.push_back({"?name1", "\""});
+      expectedColumns.push_back({"?point1", "\"POINT("});
+    } else {
+      expectedColumns.push_back({"?obj1", "<node_"});
+      expectedColumns.push_back({"?geo1", "<geometry"});
+      expectedColumns.push_back({"?point1", "\"POINT("});
+    }
+
+    if (rightSideBigChild) {
+      expectedColumns.push_back({"?obj2", "<node_"});
+      expectedColumns.push_back({"?geo2", "<geometry"});
+      expectedColumns.push_back({"?name2", "\""});
+      expectedColumns.push_back({"?point2", "\"POINT("});
+    } else {
+      expectedColumns.push_back({"?obj2", "<node_"});
+      expectedColumns.push_back({"?geo2", "<geometry"});
+      expectedColumns.push_back({"?point2", "\"POINT("});
+    }
+    
+    auto varColMap = spatialJoin->computeVariableToColumnMap();
+    auto resultTable = spatialJoin->computeResult();
+
+    // if the size of varColMap and expectedColumns is the same and each element
+    // of expectedColumns is contained in varColMap, then they are the same
+    // (assuming that each element is unique)
+    ASSERT_EQ(varColMap.size(), expectedColumns.size());
+
+    for (size_t i = 0; i < expectedColumns.size(); i++) {
+      ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
+      
+      // test, that the column containes the correct values
+      ColumnIndex ind =
+                varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
+      ValueId tableEntry = resultTable.idTable().at(0, ind);
+      if (tableEntry.getDatatype() == Datatype::VocabIndex) {
+        std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                    qec->getIndex(), tableEntry, {}).value().first;
+        ASSERT_TRUE(
+            value.find(expectedColumns.at(i).second, 0) != string::npos);
+      } else if (tableEntry.getDatatype() == Datatype::Int) {
+        std::string value = ExportQueryExecutionTrees::idToStringAndType(
+                    qec->getIndex(), tableEntry, {}).value().first;
+        ASSERT_EQ(value, expectedColumns.at(i).second);
+      } else {
+        ASSERT_TRUE(false);  // this line should not be reachable
+      }
+    }
+  }
+}
+
+TEST(SpatialJoin, getResultWidth) {
+  testGetResultWidthOrVariableToColumnMap(true, true, false, 9);
+  testGetResultWidthOrVariableToColumnMap(true, true, true, 9);
+  testGetResultWidthOrVariableToColumnMap(true, false, false, 8);
+  testGetResultWidthOrVariableToColumnMap(true, false, true, 8);
+  testGetResultWidthOrVariableToColumnMap(false, true, false, 8);
+  testGetResultWidthOrVariableToColumnMap(false, true, true, 8);
+  testGetResultWidthOrVariableToColumnMap(false, false, false, 7);
+  testGetResultWidthOrVariableToColumnMap(false, false, true, 7);
+}
+
+TEST(SpatialJoin, variableToColumnMap) {
+  testGetResultWidthOrVariableToColumnMap(true, true, false, 9, true);
+  testGetResultWidthOrVariableToColumnMap(true, true, true, 9, true);
+  testGetResultWidthOrVariableToColumnMap(true, false, false, 8, true);
+  testGetResultWidthOrVariableToColumnMap(true, false, true, 8, true);
+  testGetResultWidthOrVariableToColumnMap(false, true, false, 8, true);
+  testGetResultWidthOrVariableToColumnMap(false, true, true, 8, true);
+  testGetResultWidthOrVariableToColumnMap(false, false, false, 7, true);
+  testGetResultWidthOrVariableToColumnMap(false, false, true, 7, true);
+}
+
+}  // namespace variableColumnMapAndResultWidth
 
 // test the compute result method on the large dataset from above
 // TODO
