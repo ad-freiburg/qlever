@@ -44,7 +44,11 @@ NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
-  return NormalizedStringView{content_}.substr(beginOfSuffix_ + 2);
+  // We don't return the enclosing <angle brackets>
+  NormalizedStringView result = content_;
+  result.remove_prefix(beginOfSuffix_ + 3);
+  result.remove_suffix(1);
+  return result;
 }
 
 // __________________________________________

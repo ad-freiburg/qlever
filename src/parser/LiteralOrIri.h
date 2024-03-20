@@ -90,7 +90,7 @@ class LiteralOrIri {
   // Return the datatype of the contained Literal without "^^" prefix.
   // Throw exception if no Literal object is contained or object has no
   // datatype.
-  Iri getDatatype() const;
+  NormalizedStringView getDatatype() const;
 
   // Return the content of the contained Iri, or the contained Literal
   NormalizedStringView getContent() const;

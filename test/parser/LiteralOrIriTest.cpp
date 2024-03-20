@@ -13,7 +13,6 @@
 
 using namespace ad_utility::triple_component;
 
-/*
 TEST(IriTest, IriCreation) {
   Iri iri = Iri::iriref("<http://www.wikidata.org/entity/Q3138>");
 
@@ -40,7 +39,7 @@ TEST(LiteralTest, LiteralTestWithDatatype) {
   EXPECT_THAT("Hello World", asStringViewUnsafe(literal.getContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
-              asStringViewUnsafe(literal.getDatatype().getContent()));
+              asStringViewUnsafe(literal.getDatatype()));
 }
 
 TEST(LiteralTest, LiteralTestWithLanguagetag) {
@@ -121,7 +120,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
   EXPECT_THAT("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
-              asStringViewUnsafe(literal.getDatatype().getContent()));
+              asStringViewUnsafe(literal.getDatatype()));
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
@@ -137,7 +136,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
   EXPECT_THAT("Hello World", asStringViewUnsafe(literal.getLiteralContent()));
   EXPECT_THROW(literal.getLanguageTag(), ad_utility::Exception);
   EXPECT_THAT("http://www.w3.org/2001/XMLSchema#string",
-              asStringViewUnsafe(literal.getDatatype().getContent()));
+              asStringViewUnsafe(literal.getDatatype()));
 }
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndLanguageTag) {
@@ -193,4 +192,3 @@ TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
   EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal2.getContent()));
 }
- */

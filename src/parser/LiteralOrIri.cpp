@@ -66,9 +66,8 @@ NormalizedStringView LiteralOrIri::getLanguageTag() const {
 }
 
 // __________________________________________
-Iri LiteralOrIri::getDatatype() const {
-  return Iri::fromInternalRepresentation(
-      asStringViewUnsafe(getLiteral().getDatatype()));
+NormalizedStringView LiteralOrIri::getDatatype() const {
+  return getLiteral().getDatatype();
 }
 
 // __________________________________________
