@@ -1105,7 +1105,7 @@ TEST(SpatialJoin, computeResultSmallDatasetDifferentSizeChildren) {
 
 }  // end of Namespace computeResultTest
 
-namespace maxDistanceParsingTest{
+namespace maxDistanceParsingTest {
 
 // test if the SpatialJoin operation parses the maximum distance correctly
 void testMaxDistance(std::string distanceIRI, long long distance,
@@ -1189,7 +1189,7 @@ TEST(SpatialJoin, maxDistanceParsingTest) {
 
 }  // maxDistanceParsingTest
 
-namespace childrenTesting{
+namespace childrenTesting {
 
 void testAddChild(bool addLeftChildFirst) {
 
@@ -1363,7 +1363,7 @@ TEST(SpatialJoin, getChildren) {
 
 }  // namespace childrenTesting
 
-namespace variableColumnMapAndResultWidth{
+namespace variableColumnMapAndResultWidth {
 
 // only test one at a time. Then the gtest will fail on the test, which
 // failed, instead of failing for both getResultWidth() and
@@ -1400,7 +1400,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
         ad_utility::makeExecutionTree<SpatialJoin>(qec,
-        SparqlTriple{TripleComponent{Variable{"?point1"}},
+                            SparqlTriple{TripleComponent{Variable{"?point1"}},
                             std::string{"<max-distance-in-meters:0>"},
                             TripleComponent{Variable{"?point2"}}},
         std::nullopt, std::nullopt);
@@ -1468,7 +1468,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
                     qec->getIndex(), tableEntry, {}).value().first;
         ASSERT_EQ(value, expectedColumns.at(i).second);
       } else {
-        ASSERT_TRUE(false);  // this line should not be reachable
+        ASSERT_TRUE(false);  // this line should not be reachable (see dataset)
       }
     }
   }
@@ -1497,6 +1497,82 @@ TEST(SpatialJoin, variableToColumnMap) {
 }
 
 }  // namespace variableColumnMapAndResultWidth
+
+namespace knownEmptyResult {
+
+void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
+      bool addLeftChildFirst) {
+  auto checkEmptyResult = [](SpatialJoin* spatialJoin_, bool shouldBeEmpty) {
+    ASSERT_EQ(spatialJoin_->knownEmptyResult(), shouldBeEmpty);
+  };
+
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+
+  auto leftChild = leftSideEmptyChild ?
+        computeResultTest::buildMediumChild(qec,
+                    "?obj1", std::string{"<notExistingPredicate>"}, "?name1",
+                    "?obj1",std::string{"<hasGeometry>"}, "?geo1",
+                    "?geo1", std::string{"<asWKT>"}, "?point1",
+                    "?obj1", "?geo1") :
+        computeResultTest::buildSmallChild(qec,
+                    "?obj1",std::string{"<hasGeometry>"}, "?geo1",
+                    "?geo1", std::string{"<asWKT>"}, "?point1",
+                    "?geo1");
+  auto rightChild = rightSideEmptyChild ?
+        computeResultTest::buildMediumChild(qec,
+                    "?obj2", std::string{"<notExistingPredicate>"}, "?name2",
+                    "?obj2",std::string{"<hasGeometry>"}, "?geo2",
+                    "?geo2", std::string{"<asWKT>"}, "?point2",
+                    "?obj2", "?geo2") :
+        computeResultTest::buildSmallChild(qec,
+                    "?obj2",std::string{"<hasGeometry>"}, "?geo2",
+                    "?geo2", std::string{"<asWKT>"}, "?point2",
+                    "?geo2");
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec,
+                            SparqlTriple{TripleComponent{Variable{"?point1"}},
+                            std::string{"<max-distance-in-meters:0>"},
+                            TripleComponent{Variable{"?point2"}}},
+        std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable = addLeftChildFirst ? 
+        Variable{"?point1"} : Variable{"?point2"};
+  Variable secondVariable = addLeftChildFirst ? 
+        Variable{"?point2"} : Variable{"?point1"};
+  bool firstChildEmpty =
+            addLeftChildFirst ? leftSideEmptyChild : rightSideEmptyChild;
+  bool secondChildEmpty =
+            addLeftChildFirst ? rightSideEmptyChild : leftSideEmptyChild;
+
+  checkEmptyResult(spatialJoin, false);
+
+  spatialJoin->addChild(firstChild, firstVariable);
+  checkEmptyResult(spatialJoin, firstChildEmpty);
+
+  spatialJoin->addChild(secondChild, secondVariable);
+  checkEmptyResult(spatialJoin, (firstChildEmpty || secondChildEmpty));
+}
+
+TEST(SpatialJoin, knownEmpyResult) {
+  testKnownEmptyResult(true, true, true);
+  testKnownEmptyResult(true, true, false);
+  testKnownEmptyResult(true, false, true);
+  testKnownEmptyResult(true, false, false);
+  testKnownEmptyResult(false, true, true);
+  testKnownEmptyResult(false, true, false);
+  testKnownEmptyResult(false, false, true);
+  testKnownEmptyResult(false, false, false);
+}
+
+}
 
 // test the compute result method on the large dataset from above
 // TODO

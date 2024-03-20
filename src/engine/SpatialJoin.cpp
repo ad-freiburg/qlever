@@ -222,10 +222,22 @@ float SpatialJoin::getMultiplicity(size_t col) {
 
 // ____________________________________________________________________________
 bool SpatialJoin::knownEmptyResult() {
-  if (childLeft_ && childRight_) {
-    return childLeft_->knownEmptyResult() || childRight_->knownEmptyResult();
+  if (childLeft_) {
+    if (childLeft_->knownEmptyResult()) {
+      return true;
+    }
   }
-  return false;  // dummy return, as the class does not have its children yet
+  
+  if (childRight_) {
+    if (childRight_->knownEmptyResult()) {
+      return true;
+    }
+  }
+
+  // return false if either both children don't have an empty result, only one
+  // child is available, which doesn't have a known empty result or neither
+  // child is available
+  return false;
 }
 
 // ____________________________________________________________________________
