@@ -15,18 +15,27 @@
 
 #include "util/Exception.h"
 #include "util/Log.h"
+#include "util/TypeTraits.h"
+
+namespace detail {
+// A helper function to cast `char*` to `unsigned char*` and `const char*` to
+// `const unsigned char*` which is used below because FSST always works on
+// unsigned character types. Note that this is one of the few cases where a
+// `reinterpret_cast` is safe.
+constexpr auto castToUnsignedPtr =
+    []<ad_utility::SameAsAny<char*, const char*> T>(T ptr) {
+      using Res = std::conditional_t<std::same_as<T, const char*>,
+                                     const unsigned char*, unsigned char*>;
+      return reinterpret_cast<Res>(ptr);
+    };
+}  // namespace detail
 
 // A simple C++ wrapper around the C-API of the `FSST` library. It consists of
 // two types, a thredsafe `FsstDecoder` that can be used to perform
 // decompression, and a single-threaded `FsstEncoder` for compression.
-// TODO<joka921> There are a lot of `const_cast`s that look rather fishy because
-// they cast away constness. `FSST` currently has many function parameters that
-// are logically const, but are not marked as const. I have opened a PR for FSST
-// to make them const, as soon as this is merged, get rid of all the
-// `const_cast`s and `mutable`s in this file.
 class FsstDecoder {
  private:
-  mutable fsst_decoder_t decoder_;
+  fsst_decoder_t decoder_;
 
  public:
   // The default constructor does lead to an invalid decoder, but is required
@@ -41,11 +50,10 @@ class FsstDecoder {
   // Decompress a  single string.
   std::string decompress(std::string_view str) const {
     std::string output;
+    auto cast = detail::castToUnsignedPtr;
     output.resize(8 * str.size());
-    size_t size = fsst_decompress(
-        &decoder_, str.size(),
-        reinterpret_cast<unsigned char*>(const_cast<char*>(str.data())),
-        output.size(), reinterpret_cast<unsigned char*>(output.data()));
+    size_t size = fsst_decompress(&decoder_, str.size(), cast(str.data()),
+                                  output.size(), cast(output.data()));
     // FSST compresses at most by a factor of 8.
     AD_CORRECTNESS_CHECK(size <= output.size());
     output.resize(size);
@@ -107,6 +115,7 @@ class FsstEncoder {
   };
   using Encoder = std::unique_ptr<fsst_encoder_t, Deleter>;
   Encoder encoder_;
+  static constexpr auto cast = detail::castToUnsignedPtr;
 
  public:
   // Create an `FsstEncoder`. The given `strings` are used to create the
@@ -120,13 +129,11 @@ class FsstEncoder {
     std::string output;
     output.resize(7 + 2 * len);
     unsigned char* dummyOutput;
-    auto data =
-        reinterpret_cast<unsigned char*>(const_cast<char*>(word.data()));
+    auto data = cast(word.data());
     size_t outputLen = 0;
     size_t numCompressed =
         fsst_compress(encoder_.get(), 1, &len, &data, output.size(),
-                      reinterpret_cast<unsigned char*>(output.data()),
-                      &outputLen, &dummyOutput);
+                      cast(output.data()), &outputLen, &dummyOutput);
     AD_CORRECTNESS_CHECK(numCompressed == 1);
     output.resize(outputLen);
     return output;
@@ -157,13 +164,12 @@ class FsstEncoder {
   static std::conditional_t<alsoCompressAll, BulkResult, Encoder> makeEncoder(
       const auto& strings) {
     std::vector<size_t> lengths;
-    std::vector<unsigned char*> pointers;
+    std::vector<const unsigned char*> pointers;
     [[maybe_unused]] size_t totalSize = 0;
     for (const auto& string : strings) {
       lengths.push_back(string.size());
       totalSize += string.size();
-      pointers.push_back(
-          reinterpret_cast<unsigned char*>(const_cast<char*>(string.data())));
+      pointers.push_back(cast(string.data()));
     }
     auto encoder =
         fsst_create(strings.size(), lengths.data(), pointers.data(), 0);
@@ -181,8 +187,7 @@ class FsstEncoder {
       while (true) {
         size_t numCompressed = fsst_compress(
             encoder, strings.size(), lengths.data(), pointers.data(),
-            output.size(), reinterpret_cast<unsigned char*>(output.data()),
-            outputLengths.data(),
+            output.size(), cast(output.data()), outputLengths.data(),
             reinterpret_cast<unsigned char**>(outputPtrs.data()));
         // Typically one iteration should suffice, we repeat in a loop with
         // exponential growth of the output buffer.
