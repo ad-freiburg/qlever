@@ -91,8 +91,10 @@ class FsstRepeatedDecoder {
     return result;
   }
   // Allow this type to be trivially serializable,
-  friend std::true_type allowTrivialSerialization(
-      std::same_as<FsstRepeatedDecoder> auto, auto);
+  [[maybe_unused]] friend std::true_type allowTrivialSerialization(
+      std::same_as<FsstRepeatedDecoder> auto, auto) {
+    return {};
+  }
 };
 
 // The encoder class.
