@@ -897,6 +897,17 @@ TEST(QueryPlanner, NonDistinctVariablesInTriple) {
                       h::IndexScanFromStrings(internalVar(0), "?s", "<o>")));
 }
 
+TEST(QueryPlanner, emptyGroupGraphPattern) {
+  h::expect("SELECT * WHERE {}", h::NeutralElement());
+  h::expect("SELECT * WHERE { {} }", h::NeutralElement());
+  h::expect("SELECT * WHERE { {} {} }",
+            h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
+  h::expect("SELECT * WHERE { {} UNION {} }",
+            h::Union(h::NeutralElement(), h::NeutralElement()));
+  h::expect("SELECT * WHERE { {} { SELECT * WHERE {}}}",
+            h::CartesianProductJoin(h::NeutralElement(), h::NeutralElement()));
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, TooManyTriples) {
   std::string query = "SELECT * WHERE {";

@@ -180,6 +180,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
+  // Handle the empty pattern
+  if (rootPattern->_graphPatterns.empty()) {
+    return {makeSubtreePlan<NeutralElementOperation>(_qec)};
+  }
   // here we collect a set of possible plans for each of our children.
   // always only holds plans for children that can be joined in an
   // arbitrary order
