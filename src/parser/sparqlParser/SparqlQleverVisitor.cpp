@@ -336,13 +336,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   } else {
     AD_CORRECTNESS_CHECK(ctx->groupGraphPatternSub());
     auto [subOps, filters] = visit(ctx->groupGraphPatternSub());
-
-    if (subOps.empty()) {
-      reportError(ctx,
-                  "QLever currently doesn't support empty GroupGraphPatterns "
-                  "and WHERE clauses");
-    }
-
     pattern._graphPatterns = std::move(subOps);
     for (auto& filter : filters) {
       if (auto langFilterData =

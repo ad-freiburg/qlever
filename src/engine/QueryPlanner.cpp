@@ -216,9 +216,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
     auto v = optimize(pattern);
     if (v.empty()) {
-      throw std::runtime_error(
-          "grandchildren or lower of a Plan to be optimized may never be "
-          "empty");
+      return makeSubtreePlan<NeutralElementOperation>(_qec);
     }
     auto idx = findCheapestExecutionTree(v);
     return std::move(v[idx]);
@@ -280,9 +278,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       static_assert(
           std::is_same_v<std::vector<SubtreePlan>, std::decay_t<decltype(v)>>);
       if (v.empty()) {
-        throw std::runtime_error(
-            "grandchildren or lower of a Plan to be optimized may never be "
-            "empty. Please report this");
+        // This happens for example in the corner case when we have an empty
+        // subquery.
+        candidatePlans.back().push_back(
+            makeSubtreePlan<NeutralElementOperation>(_qec));
+        return;
       }
 
       // optionals that occur before any of their variables have been bound
@@ -382,6 +382,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             makeSubtreePlan<Union>(_qec, left._qet, right._qet);
         joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, p::Subquery>) {
+        ParsedQuery& subquery = arg.get();
         // TODO<joka921> We currently do not optimize across subquery borders
         // but abuse them as "optimization hints". In theory, one could even
         // remove the ORDER BY clauses of a subquery if we can prove that
@@ -389,7 +390,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
         // For a subquery, make sure that one optimal result for each ordering
         // of the result (by a single column) is contained.
-        auto candidatesForSubquery = createExecutionTrees(arg.get());
+        auto candidatesForSubquery = [&]() -> std::vector<SubtreePlan> {
+          if (subquery.children().empty()) {
+            return {makeSubtreePlan<NeutralElementOperation>(_qec)};
+          } else {
+            return createExecutionTrees(subquery);
+          }
+        }();
         // Make sure that variables that are not selected by the subquery are
         // not visible.
         auto setSelectedVariables = [&](SubtreePlan& plan) {
