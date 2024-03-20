@@ -394,13 +394,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
         // For a subquery, make sure that one optimal result for each ordering
         // of the result (by a single column) is contained.
-        auto candidatesForSubquery = [&]() -> std::vector<SubtreePlan> {
-          if (subquery.children().empty()) {
-            return {makeSubtreePlan<NeutralElementOperation>(_qec)};
-          } else {
-            return createExecutionTrees(subquery);
-          }
-        }();
+        auto candidatesForSubquery = createExecutionTrees(subquery);
         // Make sure that variables that are not selected by the subquery are
         // not visible.
         auto setSelectedVariables = [&](SubtreePlan& plan) {
