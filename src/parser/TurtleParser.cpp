@@ -278,10 +278,11 @@ bool TurtleParser<T>::collection() {
 // ____________________________________________________________________________
 template <class T>
 void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
-  size_t position;
-
-  bool errorOccured = false;
   double result;
+  // The functions used below cannot deal with leading redundant '+' signs.
+  if (input.starts_with('+')) {
+    input.remove_prefix(1);
+  }
   auto [firstNonMatching, errorCode] =
       absl::from_chars(input.data(), input.data() + input.size(), result);
   if (firstNonMatching != input.end() || errorCode != std::errc{}) {
@@ -300,6 +301,10 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
     return parseDoubleConstant(input);
   }
   int64_t result{0ll};
+  // The functions used below cannot deal with leading redundant '+' signs.
+  if (input.starts_with('+')) {
+    input.remove_prefix(1);
+  }
   // We cannot directly store this in `lastParseResult_` because this might
   // overwrite `input`.
   auto [firstNonMatching, errorCode] =

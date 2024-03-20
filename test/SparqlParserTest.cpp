@@ -253,12 +253,12 @@ TEST(ParserTest, testParse) {
 
     vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{"<1>"}, {2}};
+    vector<vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<1>", "<2>"}, {1, 2}};
+    vvals = {{iri("<1>"), iri("<2>")}, {1, 2}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -278,13 +278,13 @@ TEST(ParserTest, testParse) {
 
     vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{"<Albert_Einstein>"}};
+    vector<vector<TripleComponent>> vvals = {{iri("<Albert_Einstein>")}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
-             {"<Freiherr>", "<Lord_of_the_Isles>"}};
+    vvals = {{iri("<Marie_Curie>"), iri("<Joseph_Jacobson>")},
+             {iri("<Freiherr>"), iri("<Lord_of_the_Isles>")}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -312,8 +312,8 @@ TEST(ParserTest, testParse) {
     vector<Variable> vvars = {Var{"?citytype"}};
     ASSERT_EQ(vvars, values1._variables);
     vector<vector<TripleComponent>> vvals = {
-        {"<http://www.wikidata.org/entity/Q515>"},
-        {"<http://www.wikidata.org/entity/Q262166>"}};
+        {iri("<http://www.wikidata.org/entity/Q515>")},
+        {iri("<http://www.wikidata.org/entity/Q262166>")}};
     ASSERT_EQ(vvals, values1._values);
   }
 

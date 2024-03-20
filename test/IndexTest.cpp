@@ -552,7 +552,6 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 12.0 / 5.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
 
-  // TODO<joka921> Fix the multiplicity stuff.
   multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);

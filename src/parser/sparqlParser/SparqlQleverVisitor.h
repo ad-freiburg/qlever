@@ -448,7 +448,7 @@ class SparqlQleverVisitor {
   [[nodiscard]] static RdfEscaping::NormalizedRDFString visit(
       Parser::StringContext* ctx);
 
-  [[nodiscard]] string visit(Parser::IriContext* ctx);
+  [[nodiscard]] TripleComponent::Iri visit(Parser::IriContext* ctx);
 
   [[nodiscard]] static string visit(Parser::IrirefContext* ctx);
 
@@ -485,7 +485,7 @@ class SparqlQleverVisitor {
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
   [[nodiscard]] static ExpressionPtr processIriFunctionCall(
-      const std::string& iri, std::vector<ExpressionPtr> argList,
+      const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
       const antlr4::ParserRuleContext*);
 
   void addVisibleVariable(Variable var);

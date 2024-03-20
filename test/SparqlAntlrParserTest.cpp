@@ -470,20 +470,21 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 }
 
 TEST(SparqlParser, Iri) {
+  auto iri = &TripleComponent::Iri::iriref;
   auto expectIri = ExpectCompleteParse<&Parser::iri>{};
-  expectIri("rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>"s,
+  expectIri("rdfs:label", iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
   expectIri(
-      "rdfs:label", "<http://www.w3.org/2000/01/rdf-schema#label>"s,
+      "rdfs:label", iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
       {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}, {"foo", "<bar#>"}});
   expectIri("<http://www.w3.org/2000/01/rdf-schema>"s,
-            "<http://www.w3.org/2000/01/rdf-schema>"s,
+            iri("<http://www.w3.org/2000/01/rdf-schema>"),
             SparqlQleverVisitor::PrefixMap{});
   expectIri("@en@rdfs:label"s,
-            "@en@<http://www.w3.org/2000/01/rdf-schema#label>"s,
+            iri("@en@<http://www.w3.org/2000/01/rdf-schema#label>"),
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});
   expectIri("@en@<http://www.w3.org/2000/01/rdf-schema>"s,
-            "@en@<http://www.w3.org/2000/01/rdf-schema>"s,
+            iri("@en@<http://www.w3.org/2000/01/rdf-schema>"),
             SparqlQleverVisitor::PrefixMap{});
 }
 
@@ -652,17 +653,18 @@ TEST(SparqlParser, DataBlock) {
   expectDataBlock(R"(?foo { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlock(R"(( ?foo ) { })", m::Values({Var{"?foo"}}, {}));
   expectDataBlockFails(R"(( ?foo ?bar ) { (<foo>) (<bar>) })");
-  expectDataBlock(R"(( ?foo ?bar ) { (<foo> <bar>) })",
-                  m::Values({Var{"?foo"}, Var{"?bar"}}, {{"<foo>", "<bar>"}}));
+  expectDataBlock(
+      R"(( ?foo ?bar ) { (<foo> <bar>) })",
+      m::Values({Var{"?foo"}, Var{"?bar"}}, {{iri("<foo>"), iri("<bar>")}}));
   expectDataBlock(
       R"(( ?foo ?bar ) { (<foo> "m") ("1" <bar>) })",
       m::Values({Var{"?foo"}, Var{"?bar"}},
-                {{"<foo>", lit("\"m\"")}, {lit("\"1\""), "<bar>"}}));
+                {{iri("<foo>"), lit("\"m\"")}, {lit("\"1\""), iri("<bar>")}}));
   expectDataBlock(
       R"(( ?foo ?bar ) { (<foo> "m") (<bar> <e>) (1 "f") })",
-      m::Values(
-          {Var{"?foo"}, Var{"?bar"}},
-          {{"<foo>", lit("\"m\"")}, {"<bar>", "<e>"}, {1, lit("\"f\"")}}));
+      m::Values({Var{"?foo"}, Var{"?bar"}}, {{iri("<foo>"), lit("\"m\"")},
+                                             {iri("<bar>"), iri("<e>")},
+                                             {1, lit("\"f\"")}}));
   // TODO<joka921/qup42> implement
   expectDataBlockFails(R"(( ) { (<foo>) })");
 }
@@ -900,10 +902,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                      m::GraphPattern(m::Bind(Var{"?c"}, "3")));
   // The variables `?f` and `?b` have not been used before the BIND clause.
   expectGroupGraphPatternFails("{ BIND (?f - ?b as ?c) }");
-  expectGraphPattern(
-      "{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
-      m::GraphPattern(m::InlineData({Var{"?a"}, Var{"?b"}},
-                                    {{"<foo>", "<bar>"}, {"<a>", "<b>"}})));
+  expectGraphPattern("{ VALUES (?a ?b) { (<foo> <bar>) (<a> <b>) } }",
+                     m::GraphPattern(m::InlineData(
+                         {Var{"?a"}, Var{"?b"}}, {{iri("<foo>"), iri("<bar>")},
+                                                  {iri("<a>"), iri("<b>")}})));
   expectGraphPattern("{ ?x ?y ?z }", m::GraphPattern(DummyTriplesMatcher));
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } }",
@@ -971,9 +973,10 @@ TEST(SparqlParser, GroupGraphPattern) {
                           m::Triples({{Var{"?x"}, "<foo>", iri("<bar>")}}))));
   expectGraphPattern(
       "{ SELECT *  WHERE { ?x ?y ?z } VALUES ?a { <a> <b> } }",
-      m::GraphPattern(m::SubSelect(m::AsteriskSelect(false, false),
-                                   m::GraphPattern(DummyTriplesMatcher)),
-                      m::InlineData({Var{"?a"}}, {{"<a>"}, {"<b>"}})));
+      m::GraphPattern(
+          m::SubSelect(m::AsteriskSelect(false, false),
+                       m::GraphPattern(DummyTriplesMatcher)),
+          m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}})));
   expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
                      m::GraphPattern(m::Service(
                          Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
@@ -1527,8 +1530,10 @@ TEST(SparqlParser, FunctionCall) {
   using namespace builtInCallTestHelpers;
   auto expectFunctionCall = ExpectCompleteParse<&Parser::functionCall>{};
   auto expectFunctionCallFails = ExpectParseFails<&Parser::functionCall>{};
-  auto geof = GEOF_PREFIX.second;
-  auto math = MATH_PREFIX.second;
+  // These prefixes are currently stored without the leading "<", so we have to
+  // manually add it when constructing parser inputs.
+  auto geof = absl::StrCat("<", GEOF_PREFIX.second);
+  auto math = absl::StrCat("<", MATH_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
