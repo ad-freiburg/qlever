@@ -19,7 +19,9 @@ using CtreParser = TurtleStringParser<TokenizerCtre>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
 }  // namespace
 
 // TODO<joka921>: Use the following abstractions and the alias `Parser` in all
@@ -67,7 +69,7 @@ auto checkParseResult =
 
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
-  os << "( " << tr.subject_ << " " << tr.predicate_.toInternalRepresentation()
+  os << "( " << tr.subject_ << " " << tr.predicate_.toStringRepresentation()
      << " " << tr.object_ << ")";
   return os;
 }

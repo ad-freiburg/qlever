@@ -39,7 +39,7 @@ class LiteralOrIri {
 
   std::string toInternalRepresentation() const {
     auto impl = [](const auto& val) {
-      return absl::StrCat(val.toInternalRepresentation());
+      return absl::StrCat(val.toStringRepresentation());
     };
     return std::visit(impl, data_);
   }
@@ -47,10 +47,10 @@ class LiteralOrIri {
   static LiteralOrIri fromInternalRepresentation(std::string_view internal) {
     char tag = internal.front();
     if (tag == iriPrefixChar) {
-      return LiteralOrIri{Iri::fromInternalRepresentation(internal)};
+      return LiteralOrIri{Iri::fromStringRepresentation(internal)};
     } else {
       AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
-      return LiteralOrIri{Literal::fromInternalRepresentation(internal)};
+      return LiteralOrIri{Literal::fromStringRepresentation(internal)};
     }
   }
   template <typename H>
@@ -109,8 +109,8 @@ class LiteralOrIri {
       std::string_view rdfContentWithQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Similar to `literalWithQuotes`, except the rdfContent is expected to NOT BE
-  // surrounded by quotation marks.
+  // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
+  // NOT BE surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);

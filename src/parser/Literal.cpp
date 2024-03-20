@@ -9,13 +9,14 @@
 
 #include "parser/LiteralOrIri.h"
 
+static constexpr NormalizedChar quote{'"'};
+static constexpr NormalizedChar at{'@'};
+static constexpr NormalizedChar hat{'^'};
+
 namespace ad_utility::triple_component {
 // __________________________________________
 Literal::Literal(NormalizedString content, size_t beginOfSuffix)
     : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
-  NormalizedChar quote{'"'};
-  NormalizedChar at{'@'};
-  NormalizedChar hat{'^'};
   AD_CORRECTNESS_CHECK(content_.starts_with(quote));
   AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
   AD_CORRECTNESS_CHECK(content_[beginOfSuffix_ - 1] == quote);
@@ -25,14 +26,10 @@ Literal::Literal(NormalizedString content, size_t beginOfSuffix)
 }
 
 // __________________________________________
-bool Literal::hasLanguageTag() const {
-  return getSuffix().starts_with(NormalizedChar{'@'});
-}
+bool Literal::hasLanguageTag() const { return getSuffix().starts_with(at); }
 
 // __________________________________________
-bool Literal::hasDatatype() const {
-  return getSuffix().starts_with(NormalizedChar{'^'});
-}
+bool Literal::hasDatatype() const { return getSuffix().starts_with(hat); }
 
 // __________________________________________
 NormalizedStringView Literal::getContent() const {
@@ -60,9 +57,9 @@ NormalizedStringView Literal::getLanguageTag() const {
 }
 
 // __________________________________________
-Literal Literal::literalWithQuotes(
+Literal Literal::fromEscapedRdfLiteral(
     std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
 
@@ -107,7 +104,7 @@ Literal Literal::literalWithNormalizedContent(
 
 // __________________________________________
 void Literal::addLanguageTag(std::string_view languageTag) {
-  content_.push_back(NormalizedChar{'@'});
+  content_.push_back(at);
   content_.append(RdfEscaping::normalizeLanguageTag(languageTag));
 }
 
@@ -115,22 +112,22 @@ void Literal::addLanguageTag(std::string_view languageTag) {
 void Literal::addDatatype(const Iri& datatype) {
   content_.append(asNormalizedStringViewUnsafe("^^"));
   content_.append(
-      asNormalizedStringViewUnsafe(datatype.toInternalRepresentation()));
+      asNormalizedStringViewUnsafe(datatype.toStringRepresentation()));
 }
 
 // __________________________________________
-std::string_view Literal::toInternalRepresentation() const {
+std::string_view Literal::toStringRepresentation() const {
   return asStringViewUnsafe(content_);
 }
 
 // __________________________________________
-Literal Literal::fromInternalRepresentation(std::string_view input) {
+Literal Literal::fromStringRepresentation(std::string_view internal) {
   // TODO<joka921> This is a little dangerous as there might be quotes in the
   // IRI which might lead to unexpected results here.
-  AD_CORRECTNESS_CHECK(input.starts_with('"'));
-  auto endIdx = input.rfind('"');
+  AD_CORRECTNESS_CHECK(internal.starts_with('"'));
+  auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
-  return Literal{NormalizedString{asNormalizedStringViewUnsafe(input)},
+  return Literal{NormalizedString{asNormalizedStringViewUnsafe(internal)},
                  endIdx + 1};
 }
 

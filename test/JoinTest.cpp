@@ -34,7 +34,9 @@ using ad_utility::testing::makeAllocator;
 namespace {
 
 using Vars = std::vector<std::optional<Variable>>;
-auto iri = [](std::string_view s) { return TripleComponent::Iri::iriref(s); };
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
 
 /*
  * A structure containing all information needed for a normal join test. A

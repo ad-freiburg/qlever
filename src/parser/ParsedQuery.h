@@ -113,7 +113,7 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
     TripleComponent p =
         isVariable(p_._iri)
             ? TripleComponent{Variable{p_._iri}}
-            : TripleComponent(TripleComponent::Iri::iriref(p_._iri));
+            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
     return {s_, p, o_, additionalScanColumns_};
   }
 };

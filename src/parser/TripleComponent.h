@@ -193,9 +193,9 @@ class TripleComponent {
       VocabIndex idx;
       const std::string_view content = [&]() {
         if (isLiteral()) {
-          return getLiteral().toInternalRepresentation();
+          return getLiteral().toStringRepresentation();
         } else {
-          return getIri().toInternalRepresentation();
+          return getIri().toStringRepresentation();
         }
       }();
       if (vocabulary.getId(content, &idx)) {
@@ -231,9 +231,9 @@ class TripleComponent {
           return getString();
         } else {
           if (isLiteral()) {
-            return std::string{getLiteral().toInternalRepresentation()};
+            return std::string{getLiteral().toStringRepresentation()};
           } else {
-            return std::string{getIri().toInternalRepresentation()};
+            return std::string{getIri().toStringRepresentation()};
           }
         }
       }();

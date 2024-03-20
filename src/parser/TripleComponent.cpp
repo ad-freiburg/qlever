@@ -17,9 +17,9 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
         } else if constexpr (std::is_same_v<T, TripleComponent::UNDEF>) {
           stream << "UNDEF";
         } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-          stream << value.toInternalRepresentation();
+          stream << value.toStringRepresentation();
         } else if constexpr (std::is_same_v<T, TripleComponent::Iri>) {
-          stream << value.toInternalRepresentation();
+          stream << value.toStringRepresentation();
         } else if constexpr (std::is_same_v<T, DateOrLargeYear>) {
           stream << "DATE: " << value.toStringAndType().first;
         } else if constexpr (std::is_same_v<T, bool>) {
@@ -72,9 +72,9 @@ std::string TripleComponent::toRdfLiteral() const {
   } else if (isString()) {
     return getString();
   } else if (isLiteral()) {
-    return std::string{getLiteral().toInternalRepresentation()};
+    return std::string{getLiteral().toStringRepresentation()};
   } else if (isIri()) {
-    return std::string{getIri().toInternalRepresentation()};
+    return std::string{getIri().toStringRepresentation()};
   } else {
     auto [value, type] =
         ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(

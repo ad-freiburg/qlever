@@ -883,8 +883,8 @@ TEST(SparqlExpression, ReplaceExpression) {
 // ______________________________________________________________________________
 TEST(SparqlExpression, literalExpression) {
   TestContext ctx;
-  StringLiteralExpression expr{
-      TripleComponent::Literal::literalWithQuotes("\"notInTheVocabulary\"")};
+  StringLiteralExpression expr{TripleComponent::Literal::fromEscapedRdfLiteral(
+      "\"notInTheVocabulary\"")};
   // Evaluate multiple times to test the caching behavior.
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
@@ -892,7 +892,7 @@ TEST(SparqlExpression, literalExpression) {
   }
   // A similar test with a constant entry that is part of the vocabulary and can
   // therefore be converted to an ID.
-  IriExpression iriExpr{TripleComponent::Iri::iriref("<x>")};
+  IriExpression iriExpr{TripleComponent::Iri::fromIriref("<x>")};
   Id idOfX = ctx.x;
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),

@@ -172,7 +172,7 @@ inline auto IndexScanFromStrings =
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
     } else if (s.starts_with('<')) {
-      return TripleComponent::Iri::iriref(s);
+      return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };

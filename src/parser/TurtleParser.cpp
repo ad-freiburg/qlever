@@ -150,7 +150,7 @@ bool TurtleParser<T>::predicateSpecialA() {
   if (auto [success, word] = tok_.template getNextToken<TurtleTokenId::A>();
       success) {
     (void)word;
-    activePredicate_ = TripleComponent::Iri::iriref(
+    activePredicate_ = TripleComponent::Iri::fromIriref(
         "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
@@ -240,10 +240,10 @@ bool TurtleParser<T>::collection() {
   triples_.resize(triples_.size() - objects.size());
   // TODO<joka921> Move such functionality into a general util.
   auto makeIri = [](std::string_view suffix) {
-    return TripleComponent::Iri::iriref(
+    return TripleComponent::Iri::fromIriref(
         absl::StrCat("<", RDF_PREFIX, suffix, ">"));
   };
-  static const auto nil = makeIri("nil");
+  static const auto nil = TripleComponent{makeIri("nil")};
   static const auto first = makeIri("first");
   static const auto rest = makeIri("rest");
 
@@ -251,7 +251,7 @@ bool TurtleParser<T>::collection() {
     lastParseResult_ = nil;
   } else {
     // Create a new blank node for each collection element.
-    std::vector<std::string> blankNodes;
+    std::vector<TripleComponent> blankNodes;
     blankNodes.reserve(objects.size());
     for (size_t i = 0; i < objects.size(); ++i) {
       blankNodes.push_back(createAnonNode());
@@ -264,11 +264,8 @@ bool TurtleParser<T>::collection() {
     // Add the triples for the linked list structure.
     for (size_t i = 0; i < blankNodes.size(); ++i) {
       triples_.push_back({blankNodes[i], first, objects[i]});
-      if (i + 1 < blankNodes.size()) {
-        triples_.push_back({blankNodes[i], rest, blankNodes[i + 1]});
-      } else {
-        triples_.push_back({blankNodes[i], rest, nil});
-      }
+      triples_.push_back({blankNodes[i], rest,
+                          i + 1 < blankNodes.size() ? blankNodes[i + 1] : nil});
     }
   }
   check(skip<TurtleTokenId::CloseRound>());
@@ -513,7 +510,7 @@ bool TurtleParser<T>::stringParse() {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
-  lastParseResult_ = TripleComponent::Literal::literalWithQuotes(
+  lastParseResult_ = TripleComponent::Literal::fromEscapedRdfLiteral(
       view.substr(0, endPos + startPos));
   tok_.remove_prefix(endPos + startPos);
   return true;
@@ -540,7 +537,7 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  lastParseResult_ = TripleComponent::Iri::prefixed(
+  lastParseResult_ = TripleComponent::Iri::fromPrefixAndSuffix(
       expandPrefix(activePrefix_), lastParseResult_.getString());
   return true;
 }
@@ -641,7 +638,7 @@ bool TurtleParser<T>::iriref() {
       } else {
         tok_.remove_prefix(endPos + 1);
         lastParseResult_ =
-            TripleComponent::Iri::iriref(view.substr(0, endPos + 1));
+            TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
         return true;
       }
     } else {
@@ -652,7 +649,7 @@ bool TurtleParser<T>::iriref() {
       return false;
     }
     lastParseResult_ =
-        TripleComponent::Iri::iriref(lastParseResult_.getString());
+        TripleComponent::Iri::fromIriref(lastParseResult_.getString());
     return true;
   }
 }

@@ -180,8 +180,8 @@ class TurtleParser : public TurtleParserBase {
   void clear() {
     lastParseResult_ = "";
 
-    activeSubject_ = TripleComponent::Iri::iriref("<>");
-    activePredicate_ = TripleComponent::Iri::iriref("<>");
+    activeSubject_ = TripleComponent::Iri::fromIriref("<>");
+    activePredicate_ = TripleComponent::Iri::fromIriref("<>");
     activePrefix_.clear();
 
     prefixMap_.clear();

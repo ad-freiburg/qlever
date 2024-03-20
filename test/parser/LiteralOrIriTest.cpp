@@ -14,7 +14,7 @@
 using namespace ad_utility::triple_component;
 
 TEST(IriTest, IriCreation) {
-  Iri iri = Iri::iriref("<http://www.wikidata.org/entity/Q3138>");
+  Iri iri = Iri::fromIriref("<http://www.wikidata.org/entity/Q3138>");
 
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
               asStringViewUnsafe(iri.getContent()));
@@ -32,7 +32,8 @@ TEST(LiteralTest, LiteralTest) {
 
 TEST(LiteralTest, LiteralTestWithDatatype) {
   Literal literal = Literal::literalWithoutQuotes(
-      "Hello World", Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.hasLanguageTag());
   EXPECT_TRUE(literal.hasDatatype());
@@ -69,7 +70,7 @@ TEST(LiteralOrIri, LiteralOrIriWithIri) {
 
 TEST(LiteralOrIri, LiteralOrIriWithPrefixedIri) {
   LiteralOrIri iri = LiteralOrIri::prefixedIri(
-      Iri::iriref("<http://www.wikidata.org/entity/>"), "Q3138");
+      Iri::fromIriref("<http://www.wikidata.org/entity/>"), "Q3138");
 
   EXPECT_TRUE(iri.isIri());
   EXPECT_THAT("http://www.wikidata.org/entity/Q3138",
@@ -110,7 +111,8 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotes) {
 
 TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
   LiteralOrIri literal = LiteralOrIri::literalWithoutQuotes(
-      "Hello World", Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      "Hello World",
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -126,7 +128,7 @@ TEST(LiteralOrIri, LiteralOrIriWithLiteralAndDatatype) {
 TEST(LiteralOrIri, LiteralOrIriWithLiteralWithQuotesAndDatatype) {
   LiteralOrIri literal = LiteralOrIri::literalWithQuotes(
       "\"Hello World\"",
-      Iri::iriref("<http://www.w3.org/2001/XMLSchema#string>"));
+      Iri::fromIriref("<http://www.w3.org/2001/XMLSchema#string>"));
 
   EXPECT_FALSE(literal.isIri());
   EXPECT_THROW(literal.getIriContent(), ad_utility::Exception);
@@ -172,7 +174,7 @@ TEST(LiteralOrIri, GetContent) {
   LiteralOrIri literalWithLanguageTag =
       LiteralOrIri::literalWithoutQuotes("Hello World", "@de");
   LiteralOrIri literalWithDatatype = LiteralOrIri::literalWithoutQuotes(
-      "ABC", Iri::iriref("<https://example.org>"));
+      "ABC", Iri::fromIriref("<https://example.org>"));
 
   EXPECT_THAT("https://example.org/books/book1",
               asStringViewUnsafe(iri.getContent()));

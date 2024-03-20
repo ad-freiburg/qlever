@@ -470,7 +470,7 @@ TEST(SparqlParser, VarOrTermGraphTerm) {
 }
 
 TEST(SparqlParser, Iri) {
-  auto iri = &TripleComponent::Iri::iriref;
+  auto iri = &TripleComponent::Iri::fromIriref;
   auto expectIri = ExpectCompleteParse<&Parser::iri>{};
   expectIri("rdfs:label", iri("<http://www.w3.org/2000/01/rdf-schema#label>"),
             {{"rdfs", "<http://www.w3.org/2000/01/rdf-schema#>"}});

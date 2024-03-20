@@ -240,7 +240,7 @@ auto getIdMapLambdas(
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
     itemArray[j]->getId(TripleComponent{
-        ad_utility::triple_component::Iri::iriref(LANGUAGE_PREDICATE)});
+        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
@@ -278,8 +278,9 @@ auto getIdMapLambdas(
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(std::array<Id, 3>{
             spoIds[2],
-            map.getId(TripleComponent{
-                ad_utility::triple_component::Iri::iriref(LANGUAGE_PREDICATE)}),
+            map.getId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    LANGUAGE_PREDICATE)}),
             langTagId});
       }
       return res;

@@ -50,9 +50,8 @@ class LiteralExpression : public SparqlExpression {
       }
       auto id = context->_qec.getIndex().getId(s);
       IdOrString result =
-          id.has_value()
-              ? IdOrString{id.value()}
-              : IdOrString{std::string{s.toInternalRepresentation()}};
+          id.has_value() ? IdOrString{id.value()}
+                         : IdOrString{std::string{s.toStringRepresentation()}};
       auto ptrForCache = std::make_unique<IdOrString>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
@@ -104,9 +103,9 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-      return absl::StrCat("#literal: ", _value.toInternalRepresentation());
+      return absl::StrCat("#literal: ", _value.toStringRepresentation());
     } else if constexpr (std::is_same_v<T, TripleComponent::Iri>) {
-      return absl::StrCat("#iri: ", _value.toInternalRepresentation());
+      return absl::StrCat("#iri: ", _value.toStringRepresentation());
     } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<ValueId>>) {
       // We should never cache this, as objects of this type of expression are
       // used exactly *once* in the HashMap optimization of the GROUP BY

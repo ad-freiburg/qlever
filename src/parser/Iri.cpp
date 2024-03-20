@@ -25,7 +25,7 @@ NormalizedStringView Iri::getContent() const {
 }
 
 // __________________________________________
-Iri Iri::iriref(std::string_view stringWithBrackets) {
+Iri Iri::fromIriref(std::string_view stringWithBrackets) {
   auto first = stringWithBrackets.find('<');
   AD_CORRECTNESS_CHECK(first != std::string_view::npos);
   return Iri{
@@ -35,19 +35,19 @@ Iri Iri::iriref(std::string_view stringWithBrackets) {
 }
 
 // __________________________________________
-Iri Iri::prefixed(const Iri& prefix, std::string_view suffix) {
+Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
   return Iri{prefix, asNormalizedStringViewUnsafe(suffixNormalized)};
 }
 
 // __________________________________________
-Iri Iri::fromInternalRepresentation(std::string_view s) {
+Iri Iri::fromStringRepresentation(std::string_view s) {
   AD_CORRECTNESS_CHECK(s.starts_with("<") || s.starts_with("@"));
   return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
 }
 
 // __________________________________________
-std::string_view Iri::toInternalRepresentation() const {
+std::string_view Iri::toStringRepresentation() const {
   return asStringViewUnsafe(iri_);
 }
 

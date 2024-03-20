@@ -1295,7 +1295,7 @@ std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
 std::optional<Id> IndexImpl::getIdImpl(const auto& element) const {
   VocabIndex vocabIndex;
   auto success =
-      getVocab().getId(element.toInternalRepresentation(), &vocabIndex);
+      getVocab().getId(element.toStringRepresentation(), &vocabIndex);
   if (!success) {
     return std::nullopt;
   }

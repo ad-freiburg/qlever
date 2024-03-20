@@ -122,7 +122,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
     }
   }
   reportNotSupported(ctx,
-                     "Function \""s + iri.toInternalRepresentation() + "\" is");
+                     "Function \""s + iri.toStringRepresentation() + "\" is");
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -618,7 +618,7 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  return TripleComponent::Iri::iriref(
+  return TripleComponent::Iri::fromIriref(
       langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName()));
 }
 
@@ -1281,7 +1281,7 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
     return PropertyPath::fromIri(
-        std::string{visit(ctx->iri()).toInternalRepresentation()});
+        std::string{visit(ctx->iri()).toStringRepresentation()});
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -1433,7 +1433,7 @@ GraphTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
     // the parser and from the `TripleComponent`, then this becomes much
     // simpler.
     return GraphTerm{
-        Iri{std::string{visit(ctx->iri()).toInternalRepresentation()}}};
+        Iri{std::string{visit(ctx->iri()).toStringRepresentation()}}};
   }
 }
 
@@ -1443,7 +1443,7 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
     // TODO<joka921> Unify.
-    return Iri{std::string{visit(ctx->iri()).toInternalRepresentation()}};
+    return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
   } else if (ctx->NIL()) {
     return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
   } else {
@@ -1970,7 +1970,7 @@ std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
     // TODO<joka921> Also unify the two Literal classes...
-    ret += ("^^" + std::string{visit(ctx->iri()).toInternalRepresentation()});
+    ret += ("^^" + std::string{visit(ctx->iri()).toStringRepresentation()});
   }
   return ret;
 }
