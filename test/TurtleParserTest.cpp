@@ -203,6 +203,8 @@ TEST(TurtleParserTest, rdfLiteral) {
 
   literals.emplace_back(R"("42.1234"^^)"s + "<" + XSD_DOUBLE_TYPE + ">");
   expected.emplace_back(42.1234);
+  literals.emplace_back(R"("+42.2345"^^)"s + "<" + XSD_DOUBLE_TYPE + ">");
+  expected.emplace_back(42.2345);
   literals.push_back(R"("-142.321"^^)"s + "<" + XSD_DECIMAL_TYPE + ">");
   expected.emplace_back(-142.321);
   literals.push_back(R"("-142321"^^)"s + "<" + XSD_INT_TYPE + ">");

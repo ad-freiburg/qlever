@@ -224,9 +224,8 @@ class TripleComponent {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
       AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
-      // TODO<joka921> Code duplication + newWord can be moved.
-      // TODO<joka921> We really have to make the internalRepresentation
-      // movable.
+      // TODO<joka921> Make the internal representation of the `Literal` and
+      // `Iri` class movable.
       std::string newWord = [&]() -> std::string {
         if (isString()) {
           return getString();

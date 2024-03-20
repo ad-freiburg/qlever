@@ -300,7 +300,7 @@ void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
       TurtleParserIntegerOverflowBehavior::AllToDouble) {
     return parseDoubleConstant(input);
   }
-  int64_t result{0ll};
+  int64_t result{0};
   // The functions used below cannot deal with leading redundant '+' signs.
   if (input.starts_with('+')) {
     input.remove_prefix(1);
