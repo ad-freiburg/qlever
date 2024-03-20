@@ -867,9 +867,11 @@ TEST(SparqlParser, GroupGraphPattern) {
       ExpectParseFails<&Parser::groupGraphPattern>{{}};
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
 
-  // Empty GraphPatterns are not supported.
-  expectGroupGraphPatternFails("{ }");
-  expectGroupGraphPatternFails("{ SELECT *  WHERE { } }");
+  // Empty GraphPatterns.
+  expectGraphPattern("{ }", m::GraphPattern());
+  expectGraphPattern(
+      "{ SELECT *  WHERE { } }",
+      m::GraphPattern(m::SubSelect(::testing::_, m::GraphPattern())));
 
   SparqlTriple abc{Var{"?a"}, "?b", Var{"?c"}};
   SparqlTriple def{Var{"?d"}, "?e", Var{"?f"}};
