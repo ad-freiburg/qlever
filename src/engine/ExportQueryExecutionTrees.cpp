@@ -117,6 +117,8 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   nlohmann::json json = nlohmann::json::array();
 
   for (size_t rowIndex : getRowIndices(limitAndOffset, data)) {
+    // We need the explicit `array` constructor for the special case of zero
+    // variables.
     json.push_back(nlohmann::json::array());
     auto& row = json.back();
     for (const auto& opt : columns) {
