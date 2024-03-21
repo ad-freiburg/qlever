@@ -14,26 +14,6 @@ LocalVocab LocalVocab::clone() const {
   // First, make a deep copy of the `absl::node_hash_map` holding the actual
   // map of strings to indexes.
   localVocabClone.wordsToIndexesMap_ = this->wordsToIndexesMap_;
-  // The next free index should be the same.
-  localVocabClone.nextFreeIndex_ = this->nextFreeIndex_;
-  // The map from local ids to strings stores pointers to strings. So we cannot
-  // just copy these from `this->indexesToWordsMap_` to `localVocabClone`, but
-  // we need to make sure to store the pointers to the strings of the new map
-  // `localVocabClone.wordsToIndexesMap_`.
-  //
-  // NOTE: An alternative algorithm would be to sort the word-index pairs in
-  // `wordsToIndexesMap_` by index and then fill `indexesToWordsMap_` in order.
-  // This would have better locality, but the sorting takes non-linear time plus
-  // the sorting has to handle pairs of `LocalVocabIndex` and `std::string`. So
-  // for very large local vocabularies (and only then is this operation
-  // performance-criticial at all), the simpler approach below is probably
-  // better.
-  const size_t localVocabSize = this->size();
-  localVocabClone.indexesToWordsMap_.resize(localVocabSize);
-  for (const auto& [wordInMap, index] : localVocabClone.wordsToIndexesMap_) {
-    AD_CONTRACT_CHECK(index.get() < localVocabSize);
-    localVocabClone.indexesToWordsMap_[index.get()] = std::addressof(wordInMap);
-  }
   // Return the clone.
   return localVocabClone;
 }
@@ -53,14 +33,11 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // called (even when the ID is not actually needed because the word is already
   // contained in the map).
   //
+  // TODO<joka921> Make this work with transparent hashing and use try_emplace.
   auto [wordInMapAndIndex, isNewWord] =
-      wordsToIndexesMap_.insert({std::forward<WordT>(word), nextFreeIndex_});
-  const auto& [wordInMap, index] = *wordInMapAndIndex;
-  if (isNewWord) {
-    indexesToWordsMap_.push_back(&wordInMap);
-    nextFreeIndex_ = LocalVocabIndex::make(indexesToWordsMap_.size());
-  }
-  return index;
+      wordsToIndexesMap_.insert(AlignedStr{std::forward<WordT>(word)});
+  const auto& wordInMap = *wordInMapAndIndex;
+  return &wordInMap;
 }
 
 // _____________________________________________________________________________
@@ -77,7 +54,9 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 // _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
     const std::string& word) const {
-  auto localVocabIndex = wordsToIndexesMap_.find(word);
+  // TODO<joka921> Maybe we can make this work with transparent hashing,
+  // but if this is only a testing API this is probably not worth the hassle.
+  auto localVocabIndex = wordsToIndexesMap_.find(AlignedStr{word});
   if (localVocabIndex != wordsToIndexesMap_.end()) {
     return localVocabIndex->second;
   } else {

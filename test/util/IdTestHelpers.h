@@ -19,7 +19,7 @@ inline auto VocabId = [](const auto& v) {
 };
 
 inline auto LocalVocabId = [](const auto& v) {
-  return Id::makeFromLocalVocabIndex(LocalVocabIndex::make(v));
+  return Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(v));
 };
 
 inline auto TextRecordId = [](const auto& t) {

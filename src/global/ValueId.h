@@ -211,7 +211,7 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::LocalVocabIndex);
+    return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits, Datatype::LocalVocabIndex);
   }
   static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::WordVocabIndex);
@@ -229,8 +229,8 @@ class ValueId {
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
-  [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
-    return LocalVocabIndex::make(removeDatatypeBits(_bits));
+  [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
+    return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
   }
   [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
     return WordVocabIndex::make(removeDatatypeBits(_bits));
@@ -334,8 +334,11 @@ class ValueId {
         ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
+        AD_CORRECTNESS_CHECK(value != nullptr);
+        ostr << *value;
       } else {
-        // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
+        // T is `VocabIndex | TextRecordIndex`
         ostr << std::to_string(value.get());
       }
     };
