@@ -11,17 +11,16 @@
 
 namespace ad_utility::triple_component {
 // __________________________________________
-Iri::Iri(NormalizedString iri) : iri_{std::move(iri)} {}
+Iri::Iri(std::string iri) : iri_{std::move(iri)} {}
 
 // __________________________________________
 Iri::Iri(const Iri& prefix, NormalizedStringView suffix)
-    : iri_{asNormalizedStringViewUnsafe("<") +
-           NormalizedString{prefix.getContent()} + suffix +
-           asNormalizedStringViewUnsafe(">")} {};
+    : iri_{absl::StrCat("<"sv, asStringViewUnsafe(prefix.getContent()),
+                        asStringViewUnsafe(suffix), ">"sv)} {};
 
 // __________________________________________
 NormalizedStringView Iri::getContent() const {
-  return NormalizedStringView{iri_}.substr(1, iri_.size() - 2);
+  return asNormalizedStringViewUnsafe(iri_).substr(1, iri_.size() - 2);
 }
 
 // __________________________________________
@@ -29,9 +28,10 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
   auto first = stringWithBrackets.find('<');
   AD_CORRECTNESS_CHECK(first != std::string_view::npos);
   return Iri{
-      asNormalizedStringViewUnsafe(stringWithBrackets.substr(0, first + 1)) +
-      RdfEscaping::normalizeIriWithBrackets(stringWithBrackets.substr(first)) +
-      asNormalizedStringViewUnsafe(">")};
+      absl::StrCat(stringWithBrackets.substr(0, first + 1),
+                   asStringViewUnsafe(RdfEscaping::normalizeIriWithBrackets(
+                       stringWithBrackets.substr(first))),
+                   ">"sv)};
 }
 
 // __________________________________________
@@ -41,14 +41,14 @@ Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
 }
 
 // __________________________________________
-Iri Iri::fromStringRepresentation(std::string_view s) {
+Iri Iri::fromStringRepresentation(std::string s) {
   AD_CORRECTNESS_CHECK(s.starts_with("<") || s.starts_with("@"));
-  return Iri{NormalizedString{asNormalizedStringViewUnsafe(s)}};
+  return Iri{std::move(s)};
 }
 
 // __________________________________________
-std::string_view Iri::toStringRepresentation() const {
-  return asStringViewUnsafe(iri_);
-}
+const std::string& Iri::toStringRepresentation() const { return iri_; }
+// __________________________________________
+std::string& Iri::toStringRepresentation() { return iri_; }
 
 }  // namespace ad_utility::triple_component

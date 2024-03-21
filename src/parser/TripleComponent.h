@@ -191,7 +191,7 @@ class TripleComponent {
     AD_CONTRACT_CHECK(!isString());
     if (isLiteral() || isIri()) {
       VocabIndex idx;
-      const std::string_view content = [&]() {
+      const std::string& content = [&]() -> const std::string& {
         if (isLiteral()) {
           return getLiteral().toStringRepresentation();
         } else {
@@ -224,16 +224,14 @@ class TripleComponent {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
       AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
-      // TODO<joka921> Make the internal representation of the `Literal` and
-      // `Iri` class movable.
-      std::string newWord = [&]() -> std::string {
+      std::string& newWord = [&]() -> std::string& {
         if (isString()) {
           return getString();
         } else {
           if (isLiteral()) {
-            return std::string{getLiteral().toStringRepresentation()};
+            return getLiteral().toStringRepresentation();
           } else {
-            return std::string{getIri().toStringRepresentation()};
+            return getIri().toStringRepresentation();
           }
         }
       }();

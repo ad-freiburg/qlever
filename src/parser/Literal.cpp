@@ -9,13 +9,13 @@
 
 #include "parser/LiteralOrIri.h"
 
-static constexpr NormalizedChar quote{'"'};
-static constexpr NormalizedChar at{'@'};
-static constexpr NormalizedChar hat{'^'};
+static constexpr char quote{'"'};
+static constexpr char at{'@'};
+static constexpr char hat{'^'};
 
 namespace ad_utility::triple_component {
 // __________________________________________
-Literal::Literal(NormalizedString content, size_t beginOfSuffix)
+Literal::Literal(std::string content, size_t beginOfSuffix)
     : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
   AD_CORRECTNESS_CHECK(content_.starts_with(quote));
   AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
@@ -33,7 +33,7 @@ bool Literal::hasDatatype() const { return getSuffix().starts_with(hat); }
 
 // __________________________________________
 NormalizedStringView Literal::getContent() const {
-  return NormalizedStringView{content_}.substr(1, beginOfSuffix_ - 2);
+  return content().substr(1, beginOfSuffix_ - 2);
 }
 
 // __________________________________________
@@ -42,7 +42,7 @@ NormalizedStringView Literal::getDatatype() const {
     AD_THROW("The literal does not have an explicit datatype.");
   }
   // We don't return the enclosing <angle brackets>
-  NormalizedStringView result = content_;
+  NormalizedStringView result = content();
   result.remove_prefix(beginOfSuffix_ + 3);
   result.remove_suffix(1);
   return result;
@@ -53,7 +53,7 @@ NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return NormalizedStringView{content_}.substr(beginOfSuffix_ + 1);
+  return content().substr(beginOfSuffix_ + 1);
 }
 
 // __________________________________________
@@ -80,8 +80,9 @@ Literal Literal::literalWithoutQuotes(
 Literal Literal::literalWithNormalizedContent(
     NormalizedString normalizedRdfContent,
     std::optional<std::variant<Iri, string>> descriptor) {
-  auto quotes = asNormalizedStringViewUnsafe("\"");
-  auto actualContent = quotes + std::move(normalizedRdfContent) + quotes;
+  auto quotes = "\""sv;
+  auto actualContent =
+      absl::StrCat(quotes, asStringViewUnsafe(normalizedRdfContent), quotes);
   auto sz = actualContent.size();
   auto literal = Literal{std::move(actualContent), sz};
   if (!descriptor.has_value()) {
@@ -104,31 +105,34 @@ Literal Literal::literalWithNormalizedContent(
 
 // __________________________________________
 void Literal::addLanguageTag(std::string_view languageTag) {
-  content_.push_back(at);
-  content_.append(RdfEscaping::normalizeLanguageTag(languageTag));
+  AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  if (languageTag.starts_with('@')) {
+    absl::StrAppend(&content_, languageTag);
+  } else {
+    absl::StrAppend(&content_, "@"sv, languageTag);
+  }
 }
 
 // __________________________________________
 void Literal::addDatatype(const Iri& datatype) {
-  content_.append(asNormalizedStringViewUnsafe("^^"));
-  content_.append(
-      asNormalizedStringViewUnsafe(datatype.toStringRepresentation()));
+  AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
 }
 
 // __________________________________________
-std::string_view Literal::toStringRepresentation() const {
-  return asStringViewUnsafe(content_);
-}
+const std::string& Literal::toStringRepresentation() const { return content_; }
 
 // __________________________________________
-Literal Literal::fromStringRepresentation(std::string_view internal) {
+std::string& Literal::toStringRepresentation() { return content_; }
+
+// __________________________________________
+Literal Literal::fromStringRepresentation(std::string internal) {
   // TODO<joka921> This is a little dangerous as there might be quotes in the
   // IRI which might lead to unexpected results here.
   AD_CORRECTNESS_CHECK(internal.starts_with('"'));
   auto endIdx = internal.rfind('"');
   AD_CORRECTNESS_CHECK(endIdx > 0);
-  return Literal{NormalizedString{asNormalizedStringViewUnsafe(internal)},
-                 endIdx + 1};
+  return Literal{std::move(internal), endIdx + 1};
 }
 
 }  // namespace ad_utility::triple_component

@@ -37,20 +37,21 @@ class LiteralOrIri {
   // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri iri);
 
-  std::string toInternalRepresentation() const {
-    auto impl = [](const auto& val) {
-      return absl::StrCat(val.toStringRepresentation());
+  const std::string& toStringRepresentation() const {
+    auto impl = [](const auto& val) -> decltype(auto) {
+      return val.toStringRepresentation();
     };
     return std::visit(impl, data_);
   }
 
-  static LiteralOrIri fromInternalRepresentation(std::string_view internal) {
+  static LiteralOrIri fromStringRepresentation(std::string internal) {
     char tag = internal.front();
     if (tag == iriPrefixChar) {
-      return LiteralOrIri{Iri::fromStringRepresentation(internal)};
+      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     } else {
       AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
-      return LiteralOrIri{Literal::fromStringRepresentation(internal)};
+      return LiteralOrIri{
+          Literal::fromStringRepresentation(std::move(internal))};
     }
   }
   template <typename H>

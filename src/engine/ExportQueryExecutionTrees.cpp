@@ -207,8 +207,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
           index.idToOptionalString(id.getVocabIndex());
       AD_CONTRACT_CHECK(entity.has_value());
       // TODO<joka921> make this more efficient AND more correct
-      auto litOrIri = ad_utility::triple_component::LiteralOrIri::
-          fromInternalRepresentation(entity.value());
+      auto litOrIri =
+          ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+              entity.value());
       if constexpr (onlyReturnLiterals) {
         if (!litOrIri.isLiteral()) {
           return std::nullopt;

@@ -267,7 +267,7 @@ std::function<Id(const std::string&)> makeGetId(const Index& index) {
         return triple_component::LiteralOrIri::iriref(el);
       } else {
         AD_CONTRACT_CHECK(el.starts_with('\"'));
-        return triple_component::LiteralOrIri::fromInternalRepresentation(el);
+        return triple_component::LiteralOrIri::fromStringRepresentation(el);
       }
     }();
     auto id = index.getId(literalOrIri);

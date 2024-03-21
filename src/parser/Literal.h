@@ -16,14 +16,14 @@ class Literal {
   //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
   //  that the quote in the middle is unescaped because this is the normalized
   //  form that QLever stores.
-  NormalizedString content_;
+  std::string content_;
   // The position after the closing `"`, so either the size of the string, or
   // the position of the `@` or `^^` for literals with language tags or
   // datatypes.
   std::size_t beginOfSuffix_;
 
   // Create a new literal without any descriptor
-  explicit Literal(NormalizedString content, size_t beginOfSuffix_);
+  explicit Literal(std::string content, size_t beginOfSuffix_);
 
   // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
   // already be normalized
@@ -33,22 +33,27 @@ class Literal {
 
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
-  NormalizedStringView getSuffix() const {
-    NormalizedStringView result = content_;
+  std::string_view getSuffix() const {
+    std::string_view result = content_;
     result.remove_prefix(beginOfSuffix_);
     return result;
+  }
+
+  NormalizedStringView content() const {
+    return asNormalizedStringViewUnsafe(content_);
   }
 
  public:
   template <typename H>
   friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
-    return H::combine(std::move(h), asStringViewUnsafe(literal.content_));
+    return H::combine(std::move(h), literal.content_);
   }
   bool operator==(const Literal&) const = default;
 
-  std::string_view toStringRepresentation() const;
+  const std::string& toStringRepresentation() const;
+  std::string& toStringRepresentation();
 
-  static Literal fromStringRepresentation(std::string_view internal);
+  static Literal fromStringRepresentation(std::string internal);
 
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
