@@ -19,7 +19,7 @@ struct alignas(16) AlignedStr : public std::string {
   using std::string::basic_string;
   explicit AlignedStr(std::string s) : std::string{std::move(s)} {}
 };
-//using LocalVocabIndex = ad_utility::TypedIndex<uint64_t, "LocalVocabIndex">;
+// using LocalVocabIndex = ad_utility::TypedIndex<uint64_t, "LocalVocabIndex">;
 using LocalVocabIndex = const AlignedStr*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;

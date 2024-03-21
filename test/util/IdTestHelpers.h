@@ -18,8 +18,13 @@ inline auto VocabId = [](const auto& v) {
   return Id::makeFromVocabIndex(VocabIndex::make(v));
 };
 
-inline auto LocalVocabId = [](const auto& v) {
-  return Id::makeFromLocalVocabIndex(reinterpret_cast<LocalVocabIndex>(v));
+inline auto LocalVocabId = []<typename T>(const T& v) {
+  if constexpr (std::integral<T>) {
+    return Id::makeFromLocalVocabIndex(
+        std::bit_cast<LocalVocabIndex>(static_cast<uint64_t>(v)));
+  } else {
+    return Id::makeFromLocalVocabIndex(std::bit_cast<LocalVocabIndex>(v));
+  }
 };
 
 inline auto TextRecordId = [](const auto& t) {

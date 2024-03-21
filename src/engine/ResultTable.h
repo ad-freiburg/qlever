@@ -150,6 +150,13 @@ class ResultTable {
                                const ResultTable&>
   static SharedLocalVocabWrapper getSharedLocalVocabFromNonEmptyOf(
       R&& subResults) {
+    // TODO<joka921> Implement this much better.
+    LocalVocab res;
+    for (const ResultTable& table : subResults) {
+      res = LocalVocab::merge(res, *table.localVocab_);
+    }
+    return SharedLocalVocabWrapper{std::move(res)};
+    /*
     AD_CONTRACT_CHECK(!std::ranges::empty(subResults));
     auto hasNonEmptyVocab = [](const ResultTable& tbl) {
       return !tbl.localVocab_->empty();
@@ -173,6 +180,7 @@ class ResultTable {
               *std::ranges::find_if(subResults, hasNonEmptyVocab))
               .localVocab_};
     }
+     */
   }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this

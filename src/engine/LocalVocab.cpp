@@ -11,11 +11,20 @@
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
   LocalVocab localVocabClone;
-  // First, make a deep copy of the `absl::node_hash_map` holding the actual
-  // map of strings to indexes.
-  localVocabClone.wordsToIndexesMap_ = this->wordsToIndexesMap_;
+  localVocabClone.previousSets_ = previousSets_;
+  localVocabClone.previousSets_.push_back(wordsToIndexesMap_);
   // Return the clone.
   return localVocabClone;
+}
+
+LocalVocab LocalVocab::merge(const LocalVocab& a, const LocalVocab& b) {
+  LocalVocab res;
+  auto inserter = std::back_inserter(res.previousSets_);
+  std::ranges::copy(a.previousSets_, inserter);
+  std::ranges::copy(b.previousSets_, inserter);
+  *inserter = a.wordsToIndexesMap_;
+  *inserter = b.wordsToIndexesMap_;
+  return res;
 }
 
 // _____________________________________________________________________________
@@ -35,7 +44,7 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   //
   // TODO<joka921> Make this work with transparent hashing and use try_emplace.
   auto [wordInMapAndIndex, isNewWord] =
-      wordsToIndexesMap_.insert(AlignedStr{std::forward<WordT>(word)});
+      wordsToIndexesMap().insert(AlignedStr{std::forward<WordT>(word)});
   const auto& wordInMap = *wordInMapAndIndex;
   return &wordInMap;
 }
@@ -56,9 +65,9 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
     const std::string& word) const {
   // TODO<joka921> Maybe we can make this work with transparent hashing,
   // but if this is only a testing API this is probably not worth the hassle.
-  auto localVocabIndex = wordsToIndexesMap_.find(AlignedStr{word});
-  if (localVocabIndex != wordsToIndexesMap_.end()) {
-    return localVocabIndex->second;
+  auto localVocabIndex = wordsToIndexesMap().find(AlignedStr{word});
+  if (localVocabIndex != wordsToIndexesMap().end()) {
+    return &(*localVocabIndex);
   } else {
     return std::nullopt;
   }
@@ -66,11 +75,5 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
 
 // _____________________________________________________________________________
 const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
-  if (localVocabIndex.get() >= indexesToWordsMap_.size()) {
-    throw std::runtime_error(absl::StrCat(
-        "LocalVocab error: request for word with local vocab index ",
-        localVocabIndex.get(), ", but size of local vocab is only ",
-        indexesToWordsMap_.size(), ", please contact the developers"));
-  }
-  return *(indexesToWordsMap_.at(localVocabIndex.get()));
+  return *localVocabIndex;
 }

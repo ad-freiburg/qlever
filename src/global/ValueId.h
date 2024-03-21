@@ -136,6 +136,10 @@ class ValueId {
   /// TODO<joka921> Is this ordering also consistent for corner cases of doubles
   /// (inf, nan, denormalized numbers, negative zero)?
   constexpr auto operator<=>(const ValueId& other) const {
+    if (getDatatype() == Datatype::LocalVocabIndex &&
+        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
+    }
     return _bits <=> other._bits;
   }
 
@@ -211,7 +215,8 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
-    return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits, Datatype::LocalVocabIndex);
+    return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
+                         Datatype::LocalVocabIndex);
   }
   static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::WordVocabIndex);
