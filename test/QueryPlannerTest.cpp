@@ -589,15 +589,13 @@ TEST(QueryPlanner, testSimpleOptional) {
 TEST(QueryPlanner, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
+  auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
   // exactly the same result. The query planner consistently chooses one of
   // them.
-  h::expect("SELECT * WHERE { ?s <p> <o> }",
-            h::IndexScanFromStrings("?s", "<p>", "<o>", {POS}));
-  h::expect("SELECT * WHERE { <s> ?p <o> }",
-            h::IndexScanFromStrings("<s>", "?p", "<o>", {SOP}));
-  h::expect("SELECT * WHERE { <s> <p> ?o }",
-            h::IndexScanFromStrings("<s>", "<p>", "?o", {PSO}));
+  h::expect("SELECT * WHERE { ?s <p> <o> }", scan("?s", "<p>", "<o>", {POS}));
+  h::expect("SELECT * WHERE { <s> ?p <o> }", scan("<s>", "?p", "<o>", {SOP}));
+  h::expect("SELECT * WHERE { <s> <p> ?o }", scan("<s>", "<p>", "?o", {PSO}));
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {

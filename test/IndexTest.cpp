@@ -415,10 +415,6 @@ TEST(IndexTest, getIgnoredIdRanges) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
   };
 
-  for (size_t i = 0; i < 13; ++i) {
-    LOG(INFO) << index.getVocab().at(VocabIndex::make(i)) << std::endl;
-  }
-
   // The range of all entities that start with
   // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
