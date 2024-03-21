@@ -117,7 +117,9 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   nlohmann::json json = nlohmann::json::array();
 
   for (size_t rowIndex : getRowIndices(limitAndOffset, data)) {
-    json.emplace_back();
+    // We need the explicit `array` constructor for the special case of zero
+    // variables.
+    json.push_back(nlohmann::json::array());
     auto& row = json.back();
     for (const auto& opt : columns) {
       if (!opt) {
@@ -390,12 +392,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  // This can never happen, because empty SELECT clauses are not supported by
-  // QLever. Should we ever support triples without variables then this might
-  // theoretically happen in combination with `SELECT *`, but then this still
-  // can be changed.
-  AD_CORRECTNESS_CHECK(!selectedColumnIndices.empty());
-
   return ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       qet, limitAndOffset, selectedColumnIndices, std::move(resultTable),
       std::move(cancellationHandle));
@@ -425,11 +421,6 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
              << std::endl;
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
-  // This case should only fail if we have no variables selected at all.
-  // This case should be handled earlier by the parser.
-  // TODO<joka921, hannahbast> What do we want to do for variables that don't
-  // appear in the query body?
-  AD_CONTRACT_CHECK(!selectedColumnIndices.empty());
 
   const auto& idTable = resultTable->idTable();
   // special case : binary export of IdTable
