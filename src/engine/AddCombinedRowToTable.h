@@ -226,8 +226,13 @@ class AddCombinedRowToIdTable {
     // and simply copy the values from this column without looking at the other
     // input.
     auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
+      // NOTE: For localVocabIndices we cannot use the simple bitwise OR.
+      if (a.isUndefined()) {return b;}
+      return a;
+      /*
       static_assert(ValueId::makeUndefined().getBits() == 0u);
       return ValueId::fromBits(a.getBits() | b.getBits());
+       */
     };
 
     // A lambda that writes the join column with the given `colIdx` to the
