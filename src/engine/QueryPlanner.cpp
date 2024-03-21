@@ -219,9 +219,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // find a single best candidate for a given graph pattern
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
     auto v = optimize(pattern);
-    if (v.empty()) {
-      return makeSubtreePlan<NeutralElementOperation>(_qec);
-    }
     auto idx = findCheapestExecutionTree(v);
     return std::move(v[idx]);
   };
@@ -281,13 +278,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     } else {
       static_assert(
           std::is_same_v<std::vector<SubtreePlan>, std::decay_t<decltype(v)>>);
-      if (v.empty()) {
-        // This happens for example in the corner case when we have an empty
-        // subquery.
-        candidatePlans.back().push_back(
-            makeSubtreePlan<NeutralElementOperation>(_qec));
-        return;
-      }
+      // Empty group graph patterns should have been handled previously.
+      AD_CORRECTNESS_CHECK(!v.empty());
 
       // optionals that occur before any of their variables have been bound
       // actually behave like ordinary (Group)GraphPatterns
