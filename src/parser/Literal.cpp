@@ -7,37 +7,45 @@
 #include <utility>
 #include <variant>
 
+#include "parser/LiteralOrIri.h"
+
+static constexpr char quote{'"'};
+static constexpr char at{'@'};
+static constexpr char hat{'^'};
+
 namespace ad_utility::triple_component {
 // __________________________________________
-Literal::Literal(NormalizedString content) : content_{std::move(content)} {}
-
-// __________________________________________
-Literal::Literal(NormalizedString content, Iri datatype)
-    : content_{std::move(content)}, descriptor_{std::move(datatype)} {}
-
-// __________________________________________
-Literal::Literal(NormalizedString content, NormalizedString languageTag)
-    : content_{std::move(content)}, descriptor_{std::move(languageTag)} {}
-
-// __________________________________________
-bool Literal::hasLanguageTag() const {
-  return std::holds_alternative<NormalizedString>(descriptor_);
+Literal::Literal(std::string content, size_t beginOfSuffix)
+    : content_{std::move(content)}, beginOfSuffix_{beginOfSuffix} {
+  AD_CORRECTNESS_CHECK(content_.starts_with(quote));
+  AD_CORRECTNESS_CHECK(beginOfSuffix_ >= 2);
+  AD_CORRECTNESS_CHECK(content_[beginOfSuffix_ - 1] == quote);
+  AD_CORRECTNESS_CHECK(beginOfSuffix_ == content_.size() ||
+                       content_[beginOfSuffix] == at ||
+                       content_[beginOfSuffix] == hat);
 }
 
 // __________________________________________
-bool Literal::hasDatatype() const {
-  return std::holds_alternative<Iri>(descriptor_);
+bool Literal::hasLanguageTag() const { return getSuffix().starts_with(at); }
+
+// __________________________________________
+bool Literal::hasDatatype() const { return getSuffix().starts_with(hat); }
+
+// __________________________________________
+NormalizedStringView Literal::getContent() const {
+  return content().substr(1, beginOfSuffix_ - 2);
 }
 
 // __________________________________________
-NormalizedStringView Literal::getContent() const { return content_; }
-
-// __________________________________________
-Iri Literal::getDatatype() const {
+NormalizedStringView Literal::getDatatype() const {
   if (!hasDatatype()) {
     AD_THROW("The literal does not have an explicit datatype.");
   }
-  return std::get<Iri>(descriptor_);
+  // We don't return the enclosing <angle brackets>
+  NormalizedStringView result = content();
+  result.remove_prefix(beginOfSuffix_ + 3);
+  result.remove_suffix(1);
+  return result;
 }
 
 // __________________________________________
@@ -45,13 +53,13 @@ NormalizedStringView Literal::getLanguageTag() const {
   if (!hasLanguageTag()) {
     AD_THROW("The literal does not have an explicit language tag.");
   }
-  return std::get<NormalizedString>(descriptor_);
+  return content().substr(beginOfSuffix_ + 1);
 }
 
 // __________________________________________
-Literal Literal::literalWithQuotes(
+Literal Literal::fromEscapedRdfLiteral(
     std::string_view rdfContentWithQuotes,
-    std::optional<std::variant<Iri, string>> descriptor) {
+    std::optional<std::variant<Iri, std::string>> descriptor) {
   NormalizedString content =
       RdfEscaping::normalizeLiteralWithQuotes(rdfContentWithQuotes);
 
@@ -72,24 +80,59 @@ Literal Literal::literalWithoutQuotes(
 Literal Literal::literalWithNormalizedContent(
     NormalizedString normalizedRdfContent,
     std::optional<std::variant<Iri, string>> descriptor) {
+  auto quotes = "\""sv;
+  auto actualContent =
+      absl::StrCat(quotes, asStringViewUnsafe(normalizedRdfContent), quotes);
+  auto sz = actualContent.size();
+  auto literal = Literal{std::move(actualContent), sz};
   if (!descriptor.has_value()) {
-    return Literal(std::move(normalizedRdfContent));
+    return literal;
   }
 
   using namespace RdfEscaping;
-  auto visitLanguageTag =
-      [&normalizedRdfContent](std::string&& languageTag) -> Literal {
-    return {std::move(normalizedRdfContent),
-            normalizeLanguageTag(std::move(languageTag))};
+  auto visitLanguageTag = [&literal](std::string_view languageTag) {
+    literal.addLanguageTag(languageTag);
   };
 
-  auto visitDatatype = [&normalizedRdfContent](Iri&& datatype) -> Literal {
-    return {std::move(normalizedRdfContent), std::move(datatype)};
+  auto visitDatatype = [&literal](const Iri& datatype) {
+    literal.addDatatype(datatype);
   };
 
-  return std::visit(
-      ad_utility::OverloadCallOperator{visitDatatype, visitLanguageTag},
-      std::move(descriptor.value()));
+  std::visit(ad_utility::OverloadCallOperator{visitDatatype, visitLanguageTag},
+             std::move(descriptor.value()));
+  return literal;
+}
+
+// __________________________________________
+void Literal::addLanguageTag(std::string_view languageTag) {
+  AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  if (languageTag.starts_with('@')) {
+    absl::StrAppend(&content_, languageTag);
+  } else {
+    absl::StrAppend(&content_, "@"sv, languageTag);
+  }
+}
+
+// __________________________________________
+void Literal::addDatatype(const Iri& datatype) {
+  AD_CORRECTNESS_CHECK(!hasDatatype() && !hasLanguageTag());
+  absl::StrAppend(&content_, "^^"sv, datatype.toStringRepresentation());
+}
+
+// __________________________________________
+const std::string& Literal::toStringRepresentation() const { return content_; }
+
+// __________________________________________
+std::string& Literal::toStringRepresentation() { return content_; }
+
+// __________________________________________
+Literal Literal::fromStringRepresentation(std::string internal) {
+  // TODO<joka921> This is a little dangerous as there might be quotes in the
+  // IRI which might lead to unexpected results here.
+  AD_CORRECTNESS_CHECK(internal.starts_with('"'));
+  auto endIdx = internal.rfind('"');
+  AD_CORRECTNESS_CHECK(endIdx > 0);
+  return Literal{std::move(internal), endIdx + 1};
 }
 
 }  // namespace ad_utility::triple_component

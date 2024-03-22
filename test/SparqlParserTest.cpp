@@ -19,7 +19,8 @@ namespace p = parsedQuery;
 using Var = Variable;
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
-}
+auto iri = ad_utility::testing::iri;
+}  // namespace
 
 TEST(ParserTest, testParse) {
   {
@@ -56,7 +57,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", triples[2].p_._iri);
-    ASSERT_EQ("<http://abc.de>", triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -85,7 +86,7 @@ TEST(ParserTest, testParse) {
     ASSERT_EQ(Var{"?z"}, triples[1].o_);
     ASSERT_EQ(Var{"?y"}, triples[2].s_);
     ASSERT_EQ("<nsx:rel2>", triples[2].p_._iri);
-    ASSERT_EQ("<http://abc.de>", triples[2].o_);
+    ASSERT_EQ(iri("<http://abc.de>"), triples[2].o_);
     ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
     ASSERT_EQ(0, pq._limitOffset._offset);
   }
@@ -252,12 +253,12 @@ TEST(ParserTest, testParse) {
 
     vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{"<1>"}, {2}};
+    vector<vector<TripleComponent>> vvals = {{iri("<1>")}, {2}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<1>", "<2>"}, {1, 2}};
+    vvals = {{iri("<1>"), iri("<2>")}, {1, 2}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -277,13 +278,13 @@ TEST(ParserTest, testParse) {
 
     vector<Variable> vvars = {Var{"?a"}};
     ASSERT_EQ(vvars, values1._variables);
-    vector<vector<TripleComponent>> vvals = {{"<Albert_Einstein>"}};
+    vector<vector<TripleComponent>> vvals = {{iri("<Albert_Einstein>")}};
     ASSERT_EQ(vvals, values1._values);
 
     vvars = {Var{"?b"}, Var{"?c"}};
     ASSERT_EQ(vvars, values2._variables);
-    vvals = {{"<Marie_Curie>", "<Joseph_Jacobson>"},
-             {"<Freiherr>", "<Lord_of_the_Isles>"}};
+    vvals = {{iri("<Marie_Curie>"), iri("<Joseph_Jacobson>")},
+             {iri("<Freiherr>"), iri("<Lord_of_the_Isles>")}};
     ASSERT_EQ(vvals, values2._values);
   }
 
@@ -311,8 +312,8 @@ TEST(ParserTest, testParse) {
     vector<Variable> vvars = {Var{"?citytype"}};
     ASSERT_EQ(vvars, values1._variables);
     vector<vector<TripleComponent>> vvals = {
-        {"<http://www.wikidata.org/entity/Q515>"},
-        {"<http://www.wikidata.org/entity/Q262166>"}};
+        {iri("<http://www.wikidata.org/entity/Q515>")},
+        {iri("<http://www.wikidata.org/entity/Q262166>")}};
     ASSERT_EQ(vvals, values1._values);
   }
 
@@ -484,7 +485,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(c._triples[0].p_._iri, "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, "<Scott%2C%20Ridley>");
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -561,7 +562,7 @@ TEST(ParserTest, testParse) {
 
     ASSERT_EQ(c._triples[0].s_, Var{"?movie"});
     ASSERT_EQ(c._triples[0].p_._iri, "<directed-by>");
-    ASSERT_EQ(c._triples[0].o_, "<Scott%2C%20Ridley>");
+    ASSERT_EQ(c._triples[0].o_, iri("<Scott%2C%20Ridley>"));
 
     ASSERT_EQ(20u, pq._limitOffset._limit);
     ASSERT_EQ(true, pq._orderBy[0].isDescending_);
@@ -747,7 +748,7 @@ TEST(ParserTest, testExpandPrefixes) {
   ASSERT_EQ(Var{"?z"}, c._triples[1].o_);
   ASSERT_EQ(Var{"?y"}, c._triples[2].s_);
   ASSERT_EQ("<nsx:rel2>", c._triples[2].p_._iri);
-  ASSERT_EQ("<http://abc.de>", c._triples[2].o_);
+  ASSERT_EQ(iri("<http://abc.de>"), c._triples[2].o_);
   ASSERT_EQ(std::nullopt, pq._limitOffset._limit);
   ASSERT_EQ(0, pq._limitOffset._offset);
 }
@@ -909,7 +910,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", c._triples[1].p_._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -932,7 +933,7 @@ TEST(ParserTest, testSolutionModifiers) {
     ASSERT_EQ(DateOrLargeYear{Date(2000, 1, 1)}, c._triples[0].o_);
     ASSERT_EQ(Var{"?movie"}, c._triples[1].s_);
     ASSERT_EQ("<directed-by>", c._triples[1].p_._iri);
-    ASSERT_EQ("<Scott%2C%20Ridley>", c._triples[1].o_);
+    ASSERT_EQ(iri("<Scott%2C%20Ridley>"), c._triples[1].o_);
   }
 
   {
@@ -1164,7 +1165,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(1u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"}, PropertyPath::fromIri("@en@<label>"),
+    ASSERT_EQ((SparqlTriple{Var{"?x"},
+                            PropertyPath::fromIri(
+                                ad_utility::convertToLanguageTaggedPredicate(
+                                    "<label>", "en")),
                             Var{"?y"}}),
               triples[0]);
   }
@@ -1175,15 +1179,15 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ(
-        (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
-        triples[0]);
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), PropertyPath::fromIri("?p"),
+                            Var{"?y"}}),
+              triples[0]);
     ASSERT_EQ(
         (SparqlTriple{
             Var{"?y"},
             PropertyPath::fromIri(
                 "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+            ad_utility::convertLangtagToEntityUri("en")}),
         triples[1]);
   }
 
@@ -1197,7 +1201,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(2u, triples.size());
-    ASSERT_EQ((SparqlTriple{Var{"?x"}, PropertyPath::fromIri("@en@<label>"),
+    ASSERT_EQ((SparqlTriple{Var{"?x"},
+                            PropertyPath::fromIri(
+                                ad_utility::convertToLanguageTaggedPredicate(
+                                    "<label>", "en")),
                             Var{"?y"}}),
               triples[0]);
     ASSERT_EQ((SparqlTriple{Var{"?text"},
@@ -1213,9 +1220,9 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     const auto& triples =
         q._rootGraphPattern._graphPatterns[0].getBasic()._triples;
     ASSERT_EQ(3u, triples.size());
-    ASSERT_EQ(
-        (SparqlTriple{"<somebody>", PropertyPath::fromIri("?p"), Var{"?y"}}),
-        triples[0]);
+    ASSERT_EQ((SparqlTriple{iri("<somebody>"), PropertyPath::fromIri("?p"),
+                            Var{"?y"}}),
+              triples[0]);
     ASSERT_EQ((SparqlTriple{Var{"?text"},
                             PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
                             Var{"?y"}}),
@@ -1225,7 +1232,7 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
             Var{"?y"},
             PropertyPath::fromIri(
                 "<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>"),
-            "<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>"}),
+            iri("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>")}),
         triples[2]);
   }
 }

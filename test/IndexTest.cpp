@@ -30,14 +30,13 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
 auto makeTestScanWidthOne = [](const IndexImpl& index) {
-  return [&index](const std::string& c0, const std::string& c1,
+  return [&index](const TripleComponent& c0, const TripleComponent& c1,
                   Permutation::Enum permutation, const VectorTable& expected,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    TripleComponent c1Tc{c1};
     IdTable result = index.scan(
-        c0, std::cref(c1Tc), permutation, Permutation::ColumnIndicesRef{},
+        c0, std::cref(c1), permutation, Permutation::ColumnIndicesRef{},
         std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
@@ -48,7 +47,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
 // of the `index` and checks whether the result of the
 // scan matches `expected`.
 auto makeTestScanWidthTwo = [](const IndexImpl& index) {
-  return [&index](const std::string& c0, Permutation::Enum permutation,
+  return [&index](const TripleComponent& c0, Permutation::Enum permutation,
                   const VectorTable& expected,
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
@@ -118,11 +117,11 @@ TEST(IndexTest, createFromTurtleTest) {
       // Relation b
       // Pair index
       auto testTwo = makeTestScanWidthTwo(index);
-      testTwo("<b>", Permutation::PSO, {{a, c}, {a, c2}});
+      testTwo(iri("<b>"), Permutation::PSO, {{a, c}, {a, c2}});
       std::vector<std::array<Id, 2>> buffer;
 
       // Relation b2
-      testTwo("<b2>", Permutation::PSO, {{a, c}, {a2, c2}});
+      testTwo(iri("<b2>"), Permutation::PSO, {{a, c}, {a2, c2}});
 
       {
         // Test for a previous bug in the scan of two fixed elements: An
@@ -132,7 +131,7 @@ TEST(IndexTest, createFromTurtleTest) {
         // the largest predicate that occurs and <c2> is larger than the largest
         // subject that appears with <b2>.
         auto testOne = makeTestScanWidthOne(index);
-        testOne("<b2>", "<c2>", Permutation::PSO, {});
+        testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
       }
     }
     {
@@ -166,7 +165,7 @@ TEST(IndexTest, createFromTurtleTest) {
       ASSERT_FALSE(index.POS().getMetadata(isA).value().isFunctional());
 
       auto testTwo = makeTestScanWidthTwo(index);
-      testTwo("<is-a>", Permutation::PSO,
+      testTwo(iri("<is-a>"), Permutation::PSO,
               {{a, zero},
                {a, one},
                {a, two},
@@ -176,7 +175,7 @@ TEST(IndexTest, createFromTurtleTest) {
                {c, two}});
 
       // is-a for POS
-      testTwo("<is-a>", Permutation::POS,
+      testTwo(iri("<is-a>"), Permutation::POS,
               {{zero, a},
                {zero, b},
                {one, a},
@@ -256,19 +255,19 @@ TEST(IndexTest, scanTest) {
       Id c2 = getId("<c2>");
       auto testTwo = makeTestScanWidthTwo(index);
 
-      testTwo("<b>", PSO, {{a, c}, {a, c2}});
-      testTwo("<x>", PSO, {});
-      testTwo("<c>", PSO, {});
-      testTwo("<b>", POS, {{c, a}, {c2, a}});
-      testTwo("<x>", POS, {});
-      testTwo("<c>", POS, {});
+      testTwo(iri("<b>"), PSO, {{a, c}, {a, c2}});
+      testTwo(iri("<x>"), PSO, {});
+      testTwo(iri("<c>"), PSO, {});
+      testTwo(iri("<b>"), POS, {{c, a}, {c2, a}});
+      testTwo(iri("<x>"), POS, {});
+      testTwo(iri("<c>"), POS, {});
 
       auto testOne = makeTestScanWidthOne(index);
 
-      testOne("<b>", "<a>", PSO, {{c}, {c2}});
-      testOne("<b>", "<c>", PSO, {});
-      testOne("<b2>", "<c2>", POS, {{a2}});
-      testOne("<notExisting>", "<a>", PSO, {});
+      testOne(iri("<b>"), iri("<a>"), PSO, {{c}, {c2}});
+      testOne(iri("<b>"), iri("<c>"), PSO, {});
+      testOne(iri("<b2>"), iri("<c2>"), POS, {{a2}});
+      testOne(iri("<notExisting>"), iri("<a>"), PSO, {});
     }
     kb = "<a> <is-a> <1> . \n"
          "<a> <is-a> <2> . \n"
@@ -294,7 +293,7 @@ TEST(IndexTest, scanTest) {
       Id three = getId("<3>");
 
       auto testTwo = makeTestScanWidthTwo(index);
-      testTwo("<is-a>", PSO,
+      testTwo(iri("<is-a>"), PSO,
               {{{a, zero},
                 {a, one},
                 {a, two},
@@ -302,7 +301,7 @@ TEST(IndexTest, scanTest) {
                 {b, three},
                 {c, one},
                 {c, two}}});
-      testTwo("<is-a>", POS,
+      testTwo(iri("<is-a>"), POS,
               {{zero, a},
                {zero, b},
                {one, a},
@@ -313,13 +312,13 @@ TEST(IndexTest, scanTest) {
 
       auto testWidthOne = makeTestScanWidthOne(index);
 
-      testWidthOne("<is-a>", "<0>", POS, {{a}, {b}});
-      testWidthOne("<is-a>", "<1>", POS, {{a}, {c}});
-      testWidthOne("<is-a>", "<2>", POS, {{a}, {c}});
-      testWidthOne("<is-a>", "<3>", POS, {{b}});
-      testWidthOne("<is-a>", "<a>", PSO, {{zero}, {one}, {two}});
-      testWidthOne("<is-a>", "<b>", PSO, {{zero}, {three}});
-      testWidthOne("<is-a>", "<c>", PSO, {{one}, {two}});
+      testWidthOne(iri("<is-a>"), iri("<0>"), POS, {{a}, {b}});
+      testWidthOne(iri("<is-a>"), iri("<1>"), POS, {{a}, {c}});
+      testWidthOne(iri("<is-a>"), iri("<2>"), POS, {{a}, {c}});
+      testWidthOne(iri("<is-a>"), iri("<3>"), POS, {{b}});
+      testWidthOne(iri("<is-a>"), iri("<a>"), PSO, {{zero}, {one}, {two}});
+      testWidthOne(iri("<is-a>"), iri("<b>"), PSO, {{zero}, {three}});
+      testWidthOne(iri("<is-a>"), iri("<c>"), PSO, {{one}, {two}});
     }
   };
   testWithAndWithoutPrefixCompression(true);
@@ -339,75 +338,78 @@ TEST(IndexTest, emptyIndex) {
   EXPECT_EQ(emptyIndexWithoutCompression.numTriples().internal, 0u);
   auto test = makeTestScanWidthTwo(emptyIndexWithCompression);
   // Test that scanning an empty index works, but yields an empty permutation.
-  test("<x>", Permutation::PSO, {});
+  test(iri("<x>"), Permutation::PSO, {});
 }
 
 // Returns true iff `arg` (the first argument of `EXPECT_THAT` below) holds a
 // `PossiblyExternalizedIriOrLiteral` that matches the string `content` and the
 // bool `isExternal`.
-MATCHER_P2(IsPossiblyExternalString, content, isExternal, "") {
-  if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(arg)) {
-    return false;
-  }
-  const auto& el = std::get<PossiblyExternalizedIriOrLiteral>(arg);
-  return (el.iriOrLiteral_ == content) && (isExternal == el.isExternal_);
-}
+
+auto IsPossiblyExternalString = [](TripleComponent content, bool isExternal) {
+  return ::testing::VariantWith<PossiblyExternalizedIriOrLiteral>(
+      ::testing::AllOf(AD_FIELD(PossiblyExternalizedIriOrLiteral, iriOrLiteral_,
+                                ::testing::Eq(content)),
+                       AD_FIELD(PossiblyExternalizedIriOrLiteral, isExternal_,
+                                ::testing::Eq(isExternal))));
+};
 
 TEST(IndexTest, TripleToInternalRepresentation) {
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
-    TurtleTriple turtleTriple{"<subject>", "<predicate>", lit("\"literal\"")};
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
+                              lit("\"literal\"")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_TRUE(res.langtag_.empty());
-    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", false));
-    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
-    EXPECT_THAT(res.triple_[2], IsPossiblyExternalString("\"literal\"", false));
+    EXPECT_TRUE(res.langtag_.empty());
+    EXPECT_THAT(res.triple_[0],
+                IsPossiblyExternalString(iri("<subject>"), false));
+    EXPECT_THAT(res.triple_[1],
+                IsPossiblyExternalString(iri("<predicate>"), false));
+    EXPECT_THAT(res.triple_[2],
+                IsPossiblyExternalString(lit("\"literal\""), false));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
     index.getNonConstVocabForTesting().initializeExternalizePrefixes(
         std::vector{"<subj"s});
-    TurtleTriple turtleTriple{"<subject>", "<predicate>",
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"),
                               lit("\"literal\"", "@fr")};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(res.langtag_, "fr");
-    EXPECT_THAT(res.triple_[0], IsPossiblyExternalString("<subject>", true));
-    EXPECT_THAT(res.triple_[1], IsPossiblyExternalString("<predicate>", false));
+    EXPECT_EQ(res.langtag_, "fr");
+    EXPECT_THAT(res.triple_[0],
+                IsPossiblyExternalString(iri("<subject>"), true));
+    EXPECT_THAT(res.triple_[1],
+                IsPossiblyExternalString(iri("<predicate>"), false));
     // By default all languages other than English are externalized.
     EXPECT_THAT(res.triple_[2],
-                IsPossiblyExternalString("\"literal\"@fr", true));
+                IsPossiblyExternalString(lit("\"literal\"", "@fr"), true));
   }
   {
     IndexImpl index{ad_utility::makeUnlimitedAllocator<Id>()};
-    TurtleTriple turtleTriple{"<subject>", "<predicate>", 42.0};
+    TurtleTriple turtleTriple{iri("<subject>"), iri("<predicate>"), 42.0};
     LangtagAndTriple res =
         index.tripleToInternalRepresentation(std::move(turtleTriple));
-    ASSERT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
+    EXPECT_EQ(Id::makeFromDouble(42.0), std::get<Id>(res.triple_[2]));
   }
 }
 
 TEST(IndexTest, getIgnoredIdRanges) {
-  const IndexImpl& index = getQec()->getIndex().getImpl();
+  const Index& indexNoImpl = getQec()->getIndex();
+  const IndexImpl& index = indexNoImpl.getImpl();
 
   // First manually get the IDs of the vocabulary elements that might appear
   // in added triples.
-  auto getId = [&index](const std::string& s) {
-    Id id;
-    bool success = index.getId(s, &id);
-    AD_CONTRACT_CHECK(success);
-    return id;
-  };
-
-  Id qlLangtag =
-      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
-  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
-  Id enLabel = getId("@en@<label>");
+  auto getId = makeGetId(indexNoImpl);
   Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
   Id lastLiteral = getId("\"zz\"@en");
   Id x = getId("<x>");
+  Id enLabel =
+      getId(ad_utility::convertToLanguageTaggedPredicate("<label>", "en"));
+  Id qlLangtag =
+      getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/langtag>");
+  Id en = getId("<http://qlever.cs.uni-freiburg.de/builtin-functions/@en>");
 
   auto increment = [](Id id) {
     return Id::makeFromVocabIndex(id.getVocabIndex().incremented());
@@ -546,7 +548,7 @@ TEST(IndexTest, NumDistinctEntities) {
   EXPECT_FLOAT_EQ(multiplicities[1], 12.0 / 5.0);
   EXPECT_FLOAT_EQ(multiplicities[2], 12.0 / 8.0);
 
-  multiplicities = index.getMultiplicities("<x>", Permutation::SPO);
+  multiplicities = index.getMultiplicities(iri("<x>"), Permutation::SPO);
   EXPECT_FLOAT_EQ(multiplicities[0], 2.5);
   EXPECT_FLOAT_EQ(multiplicities[1], 1);
 }

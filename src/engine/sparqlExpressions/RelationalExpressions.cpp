@@ -299,7 +299,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
         varPtr->variable(),
-        std::string{langPtr->value().normalizedLiteralContent().get()}};
+        std::string{asStringViewUnsafe(langPtr->value().getContent())}};
   };
 
   const auto& child1 = children_[0];

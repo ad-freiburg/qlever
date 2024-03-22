@@ -9,6 +9,7 @@
 
 struct NormalizedChar {
   char c_;
+  auto operator<=>(const NormalizedChar&) const = default;
 };
 
 // A bespoke string representation that ensures the content
@@ -23,4 +24,8 @@ inline std::string_view asStringViewUnsafe(
     NormalizedStringView normalizedStringView) {
   return {reinterpret_cast<const char*>(normalizedStringView.data()),
           normalizedStringView.size()};
+}
+inline NormalizedStringView asNormalizedStringViewUnsafe(
+    std::string_view input) {
+  return {reinterpret_cast<const NormalizedChar*>(input.data()), input.size()};
 }

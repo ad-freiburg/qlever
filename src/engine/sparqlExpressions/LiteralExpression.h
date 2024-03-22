@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "util/TypeTraits.h"
 
 namespace sparqlExpression {
 namespace detail {
@@ -38,24 +39,27 @@ class LiteralExpression : public SparqlExpression {
 
   // Evaluating just returns the constant/literal value.
   ExpressionResult evaluate(EvaluationContext* context) const override {
-    // Common code for the `Literal` and `std::string` case.
-    auto getIdOrString = [this,
-                          &context](const std::string& s) -> ExpressionResult {
+    // Common code for the `Literal` and `Iri` case.
+    auto getIdOrString =
+        [this,
+         &context](const ad_utility::SameAsAny<TripleComponent::Literal,
+                                               TripleComponent::Iri> auto& s)
+        -> ExpressionResult {
       if (auto ptr = cachedResult_.load(std::memory_order_relaxed)) {
         return *ptr;
       }
-      Id id;
-      bool idWasFound = context->_qec.getIndex().getId(s, &id);
-      IdOrString result = idWasFound ? IdOrString{id} : IdOrString{s};
+      auto id = context->_qec.getIndex().getId(s);
+      IdOrString result =
+          id.has_value() ? IdOrString{id.value()}
+                         : IdOrString{std::string{s.toStringRepresentation()}};
       auto ptrForCache = std::make_unique<IdOrString>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
       context->cancellationHandle_->throwIfCancelled();
       return result;
     };
-    if constexpr (std::is_same_v<TripleComponent::Literal, T>) {
-      return getIdOrString(_value.rawContent());
-    } else if constexpr (std::is_same_v<string, T>) {
+    if constexpr (ad_utility::SameAsAny<T, TripleComponent::Literal,
+                                        TripleComponent::Iri>) {
       return getIdOrString(_value);
     } else if constexpr (std::is_same_v<Variable, T>) {
       return evaluateIfVariable(context, _value);
@@ -99,7 +103,9 @@ class LiteralExpression : public SparqlExpression {
     } else if constexpr (std::is_same_v<T, ValueId>) {
       return absl::StrCat("#valueId ", _value.getBits(), "#");
     } else if constexpr (std::is_same_v<T, TripleComponent::Literal>) {
-      return absl::StrCat("#literal: ", _value.rawContent());
+      return absl::StrCat("#literal: ", _value.toStringRepresentation());
+    } else if constexpr (std::is_same_v<T, TripleComponent::Iri>) {
+      return absl::StrCat("#iri: ", _value.toStringRepresentation());
     } else if constexpr (std::is_same_v<T, VectorWithMemoryLimit<ValueId>>) {
       // We should never cache this, as objects of this type of expression are
       // used exactly *once* in the HashMap optimization of the GROUP BY
@@ -175,7 +181,7 @@ class LiteralExpression : public SparqlExpression {
 
 ///  The actual instantiations and aliases of LiteralExpressions.
 using VariableExpression = detail::LiteralExpression<::Variable>;
-using IriExpression = detail::LiteralExpression<string>;
+using IriExpression = detail::LiteralExpression<TripleComponent::Iri>;
 using StringLiteralExpression =
     detail::LiteralExpression<TripleComponent::Literal>;
 using IdExpression = detail::LiteralExpression<ValueId>;

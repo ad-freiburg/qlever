@@ -11,36 +11,50 @@ namespace ad_utility::triple_component {
 // A class to hold literal values.
 class Literal {
  private:
-  // Store the string value of the literal without the surrounding quotation
-  // marks or trailing descriptor.
-  //  "Hello World"@en -> Hello World
-  NormalizedString content_;
-
-  using LiteralDescriptorVariant =
-      std::variant<std::monostate, NormalizedString, Iri>;
-
-  // Store the optional language tag or the optional datatype if applicable
-  // without their prefixes.
-  //  "Hello World"@en -> en
-  //  "Hello World"^^test:type -> test:type
-  LiteralDescriptorVariant descriptor_;
+  // Store the normalized version of the literal, including possible datatypes
+  // and descriptors.
+  //  For example `"Hello World"@en`  or `"With"Quote"^^<someDatatype>` (note
+  //  that the quote in the middle is unescaped because this is the normalized
+  //  form that QLever stores.
+  std::string content_;
+  // The position after the closing `"`, so either the size of the string, or
+  // the position of the `@` or `^^` for literals with language tags or
+  // datatypes.
+  std::size_t beginOfSuffix_;
 
   // Create a new literal without any descriptor
-  explicit Literal(NormalizedString content);
+  explicit Literal(std::string content, size_t beginOfSuffix_);
 
-  // Create a new literal with a datatype
-  Literal(NormalizedString content, Iri datatype);
-
-  // Create a new literal with a language tag
-  Literal(NormalizedString content, NormalizedString languageTag);
-
-  // Similar to `literalWithQuotes`, except the rdfContent is expected to
+  // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
   // already be normalized
   static Literal literalWithNormalizedContent(
       NormalizedString normalizedRdfContent,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Internal helper function. Return either the empty string (for a plain
+  // literal), `@langtag` or `^^<datatypeIri>`.
+  std::string_view getSuffix() const {
+    std::string_view result = content_;
+    result.remove_prefix(beginOfSuffix_);
+    return result;
+  }
+
+  NormalizedStringView content() const {
+    return asNormalizedStringViewUnsafe(content_);
+  }
 
  public:
+  template <typename H>
+  friend H AbslHashValue(H h, const std::same_as<Literal> auto& literal) {
+    return H::combine(std::move(h), literal.content_);
+  }
+  bool operator==(const Literal&) const = default;
+
+  const std::string& toStringRepresentation() const;
+  std::string& toStringRepresentation();
+
+  static Literal fromStringRepresentation(std::string internal);
+
   // Return true if the literal has an assigned language tag
   bool hasLanguageTag() const;
 
@@ -57,18 +71,21 @@ class Literal {
 
   // Return the datatype of the literal, if available, without leading ^^
   // prefix. Throws an exception if the literal has no datatype.
-  Iri getDatatype() const;
+  NormalizedStringView getDatatype() const;
 
   // For documentation, see documentation of function
-  // LiteralORIri::literalWithQuotes
-  static Literal literalWithQuotes(
+  // LiteralORIri::fromEscapedRdfLiteral
+  static Literal fromEscapedRdfLiteral(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  void addLanguageTag(std::string_view languageTag);
+  void addDatatype(const Iri& datatype);
 
   // For documentation, see documentation of function
   // LiteralORIri::literalWithoutQuotes
   static Literal literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 };
 }  // namespace ad_utility::triple_component

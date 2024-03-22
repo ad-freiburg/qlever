@@ -55,20 +55,18 @@ std::string Visitor::getOriginalInputForContext(
 
 // ___________________________________________________________________________
 ExpressionPtr Visitor::processIriFunctionCall(
-    const std::string& iri, std::vector<ExpressionPtr> argList,
+    const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
     const antlr4::ParserRuleContext* ctx) {
-  std::string_view functionName = iri;
+  std::string_view functionName = asStringViewUnsafe(iri.getContent());
   std::string_view prefixName;
   // Helper lambda that checks if `functionName` starts with the given prefix.
-  // If yes, remove the prefix and the final `>` from `functionName` and set
+  // If yes, remove the prefix from `functionName` and set
   // `prefixName` to the short name of the prefix; see `global/Constants.h`.
   auto checkPrefix = [&functionName, &prefixName](
                          std::pair<std::string_view, std::string_view> prefix) {
     if (functionName.starts_with(prefix.second)) {
       prefixName = prefix.first;
       functionName.remove_prefix(prefix.second.size());
-      AD_CONTRACT_CHECK(functionName.ends_with('>'));
-      functionName.remove_suffix(1);
       return true;
     } else {
       return false;
@@ -123,7 +121,8 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   }
-  reportNotSupported(ctx, "Function \"" + iri + "\" is");
+  reportNotSupported(ctx,
+                     "Function \""s + iri.toStringRepresentation() + "\" is");
 }
 
 void Visitor::addVisibleVariable(Variable var) {
@@ -397,7 +396,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
     return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
       if constexpr (std::is_same_v<T, Variable>) {
         return element;
-      } else if constexpr (std::is_same_v<T, Literal>) {
+      } else if constexpr (std::is_same_v<T, Literal> ||
+                           std::is_same_v<T, Iri>) {
         return TurtleStringParser<TokenizerCtre>::parseTripleObject(
             element.toSparql());
       } else {
@@ -608,11 +608,11 @@ RdfEscaping::NormalizedRDFString Visitor::visit(Parser::StringContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-string Visitor::visit(Parser::IriContext* ctx) {
-  // TODO return an IRI, not a std::string.
+TripleComponent::Iri Visitor::visit(Parser::IriContext* ctx) {
   string langtag =
       ctx->PREFIX_LANGTAG() ? ctx->PREFIX_LANGTAG()->getText() : "";
-  return langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName());
+  return TripleComponent::Iri::fromIriref(
+      langtag + visitAlternative<string>(ctx->iriref(), ctx->prefixedName()));
 }
 
 // ____________________________________________________________________________________
@@ -1273,7 +1273,8 @@ PropertyPath Visitor::visit(Parser::PathPrimaryContext* ctx) {
   //  simple `return visit(...)`. Then the three cases which are not the
   //  `special a` case can be merged into a `visitAlternative(...)`.
   if (ctx->iri()) {
-    return PropertyPath::fromIri(visit(ctx->iri()));
+    return PropertyPath::fromIri(
+        std::string{visit(ctx->iri()).toStringRepresentation()});
   } else if (ctx->path()) {
     return visit(ctx->path());
   } else if (ctx->pathNegatedPropertySet()) {
@@ -1421,7 +1422,11 @@ GraphTerm Visitor::visit(Parser::VarOrIriContext* ctx) {
     // TODO<qup42> If `visit` returns an `Iri` and `GraphTerm` can be
     // constructed from an `Iri`, this whole function becomes
     // `visitAlternative`.
-    return GraphTerm{Iri{visit(ctx->iri())}};
+    // TODO<joka921> If we unify the two IRI and Literal types (the ones from
+    // the parser and from the `TripleComponent`, then this becomes much
+    // simpler.
+    return GraphTerm{
+        Iri{std::string{visit(ctx->iri()).toStringRepresentation()}}};
   }
 }
 
@@ -1430,7 +1435,8 @@ GraphTerm Visitor::visit(Parser::GraphTermContext* ctx) {
   if (ctx->blankNode()) {
     return visit(ctx->blankNode());
   } else if (ctx->iri()) {
-    return Iri{visit(ctx->iri())};
+    // TODO<joka921> Unify.
+    return Iri{std::string{visit(ctx->iri()).toStringRepresentation()}};
   } else if (ctx->NIL()) {
     return Iri{"<http://www.w3.org/1999/02/22-rdf-syntax-ns#nil>"};
   } else {
@@ -1662,9 +1668,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   if (ctx->rdfLiteral()) {
     auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
         visit(ctx->rdfLiteral()));
-    if (tripleComponent.isString()) {
-      return make_unique<IriExpression>(tripleComponent.getString());
-    } else if (tripleComponent.isLiteral()) {
+    AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
+                         !tripleComponent.isString());
+    if (tripleComponent.isLiteral()) {
       return make_unique<StringLiteralExpression>(tripleComponent.getLiteral());
     } else {
       return make_unique<IdExpression>(
@@ -1956,7 +1962,8 @@ std::string Visitor::visit(Parser::RdfLiteralContext* ctx) {
   if (ctx->LANGTAG()) {
     ret += ctx->LANGTAG()->getText();
   } else if (ctx->iri()) {
-    ret += ("^^" + visit(ctx->iri()));
+    // TODO<joka921> Also unify the two Literal classes...
+    ret += ("^^" + std::string{visit(ctx->iri()).toStringRepresentation()});
   }
   return ret;
 }

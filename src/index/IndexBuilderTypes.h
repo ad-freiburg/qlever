@@ -13,6 +13,7 @@
 #include "global/Id.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "index/StringSortComparator.h"
+#include "parser/TripleComponent.h"
 #include "util/Conversions.h"
 #include "util/HashMap.h"
 #include "util/Serializer/Serializer.h"
@@ -22,11 +23,11 @@
 // An IRI or a literal together with the information, whether it should be part
 // of the external vocabulary
 struct PossiblyExternalizedIriOrLiteral {
-  PossiblyExternalizedIriOrLiteral(std::string iriOrLiteral,
+  PossiblyExternalizedIriOrLiteral(TripleComponent iriOrLiteral,
                                    bool isExternal = false)
       : iriOrLiteral_{std::move(iriOrLiteral)}, isExternal_{isExternal} {}
   PossiblyExternalizedIriOrLiteral() = default;
-  std::string iriOrLiteral_;
+  TripleComponent iriOrLiteral_;
   bool isExternal_ = false;
 
   AD_SERIALIZE_FRIEND_FUNCTION(PossiblyExternalizedIriOrLiteral) {
@@ -155,17 +156,19 @@ struct alignas(256) ItemMapManager {
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     auto& map = map_.map_;
     auto& buffer = map_.buffer_;
-    auto it = map.find(key.iriOrLiteral_);
+    auto repr = key.iriOrLiteral_.toRdfLiteral();
+    auto it = map.find(repr);
     if (it == map.end()) {
       uint64_t res = map.size() + minId_;
       // We have to first add the string to the buffer, otherwise we don't have
       // a persistent `string_view` to add to the `map`.
-      auto keyView = buffer.addString(key.iriOrLiteral_);
+      auto keyView = buffer.addString(repr);
+      // TODO<joka921> The LocalVocabIndexAndSplitVal should work on
+      // `Literal|Iri|BlankNode` directly.
       map.try_emplace(
           keyView, LocalVocabIndexAndSplitVal{
                        res, comparator_->extractAndTransformComparableNonOwning(
-                                key.iriOrLiteral_,
-                                TripleComponentComparator::Level::TOTAL,
+                                repr, TripleComponentComparator::Level::TOTAL,
                                 key.isExternal_, &buffer.charAllocator())});
       return Id::makeFromVocabIndex(VocabIndex::make(res));
     } else {
@@ -236,7 +239,8 @@ auto getIdMapLambdas(
     // The LANGUAGE_PREDICATE gets the first ID in each map. TODO<joka921>
     // This is not necessary for the actual QLever code, but certain unit tests
     // currently fail without it.
-    itemArray[j]->getId(LANGUAGE_PREDICATE);
+    itemArray[j]->getId(TripleComponent{
+        ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
   using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
 
@@ -257,14 +261,14 @@ auto getIdMapLambdas(
       if (!lt.langtag_.empty()) {  // the object of the triple was a literal
                                    // with a language tag
         // get the Id for the corresponding langtag Entity
-        auto langTagId =
-            map.getId(ad_utility::convertLangtagToEntityUri(lt.langtag_));
+        auto langTagId = map.getId(TripleComponent{
+            ad_utility::convertLangtagToEntityUri(lt.langtag_)});
         // get the Id for the tagged predicate, e.g. @en@rdfs:label
-        auto langTaggedPredId =
-            map.getId(ad_utility::convertToLanguageTaggedPredicate(
-                std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])
-                    .iriOrLiteral_,
-                lt.langtag_));
+        const auto& iri =
+            std::get<PossiblyExternalizedIriOrLiteral>(lt.triple_[1])
+                .iriOrLiteral_.getIri();
+        auto langTaggedPredId = map.getId(TripleComponent{
+            ad_utility::convertToLanguageTaggedPredicate(iri, lt.langtag_)});
         auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
@@ -273,7 +277,11 @@ auto getIdMapLambdas(
             std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(std::array<Id, 3>{
-            spoIds[2], map.getId(LANGUAGE_PREDICATE), langTagId});
+            spoIds[2],
+            map.getId(
+                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
+                    LANGUAGE_PREDICATE)}),
+            langTagId});
       }
       return res;
     };
