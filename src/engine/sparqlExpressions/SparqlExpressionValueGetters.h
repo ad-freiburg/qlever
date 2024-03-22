@@ -20,6 +20,8 @@
 
 namespace sparqlExpression::detail {
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.
 struct NotNumeric {};
@@ -67,7 +69,7 @@ struct Mixin {
 // Return `NumericValue` which is then used as the input to numeric expressions.
 struct NumericValueGetter : Mixin<NumericValueGetter> {
   using Mixin<NumericValueGetter>::operator();
-  NumericValue operator()(const string&, const EvaluationContext*) const {
+  NumericValue operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return NotNumeric{};
   }
 
@@ -91,7 +93,7 @@ struct IsValidValueGetter : Mixin<IsValidValueGetter> {
   // check for NULL/UNDEF values.
   bool operator()(ValueId id, const EvaluationContext*) const;
 
-  bool operator()(const string&, const EvaluationContext*) const {
+  bool operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return true;
   }
 };
@@ -105,8 +107,8 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   Result operator()(ValueId id, const EvaluationContext*) const;
 
   // Nonempty strings are true.
-  Result operator()(const std::string& s, const EvaluationContext*) const {
-    return s.empty() ? Result::False : Result::True;
+  Result operator()(const LiteralOrIri& s, const EvaluationContext*) const {
+    return s.getContent().empty() ? Result::False : Result::True;
   }
 };
 
@@ -116,13 +118,11 @@ struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
-  std::optional<string> operator()(string s, const EvaluationContext*) const {
-    // Strip quotes
-    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
-    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
-      return s.substr(1, s.size() - 2);
-    }
-    return s;
+  // TODO<joka921> probably we should return a reference or a view here.
+  // TODO<joka921> use a `NormalizedStringView` inside the expressions.
+  std::optional<string> operator()(const LiteralOrIri& s,
+                                   const EvaluationContext*) const {
+    return std::string(asStringViewUnsafe(s.getContent()));
   }
 };
 
@@ -133,7 +133,7 @@ struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
     return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
   }
 
-  Id operator()(const std::string&, const EvaluationContext*) const {
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return Id::makeFromBool(false);
   }
 };
@@ -145,8 +145,9 @@ struct IsSomethingValueGetter
   using Mixin<IsSomethingValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext* context) const;
 
-  Id operator()(const std::string& s, const EvaluationContext*) const {
-    return Id::makeFromBool(s.starts_with(prefix));
+  Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
+    // TODO<joka921> Use the `isLiteral` etc. functions directly.
+    return Id::makeFromBool(s.toStringRepresentation().starts_with(prefix));
   }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
@@ -166,7 +167,7 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
     return Id::makeFromBool(datatype == Datatype::Double ||
                             datatype == Datatype::Int);
   }
-  Id operator()(const std::string&, const EvaluationContext*) const {
+  Id operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return Id::makeFromBool(false);
   }
 };
@@ -185,7 +186,7 @@ struct DateValueGetter : Mixin<DateValueGetter> {
     }
   }
 
-  Opt operator()(const std::string&, const EvaluationContext*) const {
+  Opt operator()(const LiteralOrIri&, const EvaluationContext*) const {
     return std::nullopt;
   }
 };
@@ -198,14 +199,12 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
   using Mixin<LiteralFromIdGetter>::operator();
   std::optional<string> operator()(ValueId id,
                                    const EvaluationContext* context) const;
-  std::optional<string> operator()(std::string s,
+  std::optional<string> operator()(const LiteralOrIri& s,
                                    const EvaluationContext*) const {
-    // Strip quotes
-    // TODO<joka921> Use stronger types to encode literals/ IRIs/ ETC
-    if (s.size() >= 2 && s.starts_with('"') && s.ends_with('"')) {
-      return s.substr(1, s.size() - 2);
+    if (s.isIri()) {
+      return std::nullopt;
     }
-    return s;
+    return std::string{asStringViewUnsafe(s.getContent())};
   }
 };
 

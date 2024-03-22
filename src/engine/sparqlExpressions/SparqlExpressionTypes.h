@@ -10,6 +10,7 @@
 #include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
@@ -56,14 +57,17 @@ class VectorWithMemoryLimit
 // that can only yield strings. It is currently implemented as a thin wrapper
 // around a `variant`, but a more sophisticated implementation could be done in
 // the future.
-using IdOrStringBase = std::variant<ValueId, std::string>;
+using IdOrStringBase =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
 class IdOrString : public IdOrStringBase,
                    public VisitMixin<IdOrString, IdOrStringBase> {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
  public:
   using IdOrStringBase::IdOrStringBase;
-  explicit IdOrString(std::optional<std::string> s) {
+  explicit IdOrString(std::optional<LiteralOrIri> s) {
     if (s.has_value()) {
-      emplace<std::string>(std::move(s.value()));
+      emplace<LiteralOrIri>(std::move(s.value()));
     } else {
       emplace<Id>(Id::makeUndefined());
     }
@@ -73,9 +77,13 @@ class IdOrString : public IdOrStringBase,
 // Print an `IdOrString` for googletest.
 inline void PrintTo(const IdOrString& var, std::ostream* os) {
   std::visit(
-      [&os](const auto& s) {
+      [&os]<typename T>(const T& s) {
         auto& stream = *os;
-        stream << s;
+        if constexpr (std::same_as<T, ValueId>) {
+          stream << s;
+        } else {
+          stream << s.toStringRepresentation();
+        }
       },
       var);
 }
@@ -247,9 +255,11 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
     return std::visit(
         [&localVocab]<typename R>(R&& el) mutable {
-          if constexpr (ad_utility::isSimilar<R, string>) {
+          if constexpr (ad_utility::isSimilar<
+                            R, ad_utility::triple_component::LiteralOrIri>) {
             return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+                localVocab.getIndexAndAddIfNotContained(
+                    AD_FWD(el.toStringRepresentation())));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

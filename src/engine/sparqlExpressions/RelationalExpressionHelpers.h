@@ -113,13 +113,16 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // collation level.
 // TODO<joka921> Make the collation level configurable.
 inline std::pair<ValueId, ValueId> getRangeFromVocab(
-    const std::string& s, const EvaluationContext* context) {
+    const ad_utility::triple_component::LiteralOrIri& s,
+    const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
-  const ValueId lower = Id::makeFromVocabIndex(
-      context->_qec.getIndex().getVocab().lower_bound(s, level));
-  const ValueId upper = Id::makeFromVocabIndex(
-      context->_qec.getIndex().getVocab().upper_bound(s, level));
+  const ValueId lower =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().lower_bound(
+          s.toStringRepresentation(), level));
+  const ValueId upper =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().upper_bound(
+          s.toStringRepresentation(), level));
   return {lower, upper};
 }
 
@@ -127,8 +130,9 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // consecutive range of IDs. For its usage see below.
 template <typename S>
 concept StoresStringOrId =
-    ad_utility::SimilarToAny<S, ValueId, std::string, IdOrString,
-                             std::pair<Id, Id>>;
+    ad_utility::SimilarToAny<S, ValueId,
+                             ad_utility::triple_component::LiteralOrIri,
+                             IdOrString, std::pair<Id, Id>>;
 // Convert a string or `IdOrString` value into the (possibly empty) range of
 // corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
@@ -155,7 +159,8 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     return value.visit(visitor);
 
   } else {
-    static_assert(ad_utility::isSimilar<S, std::string>);
+    static_assert(
+        ad_utility::isSimilar<S, ad_utility::triple_component::LiteralOrIri>);
     return getRangeFromVocab(value, context);
   }
 };
