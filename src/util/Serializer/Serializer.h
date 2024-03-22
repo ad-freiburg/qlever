@@ -234,7 +234,7 @@ void serialize(S& serializer, T&& t) {
 /// serialized.
 template <typename T>
 requires std::is_arithmetic_v<std::decay_t<T>>
-std::true_type allowTrivialSerialization(T, auto) {
+[[maybe_unused]] std::true_type allowTrivialSerialization(T, auto) {
   return {};
 }
 
