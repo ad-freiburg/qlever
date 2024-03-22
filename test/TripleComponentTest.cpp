@@ -143,22 +143,22 @@ TEST(TripleComponent, toValueId) {
   auto qec = getQec("<x> <y> <z>. <x> <y> \"alpha\".");
   const auto& vocab = qec->getIndex().getVocab();
 
-  TripleComponent tc = "<x>";
-  Id id = I(10293478);
-  qec->getIndex().getId("<x>", &id);
+  TripleComponent tc = iri("<x>");
+  auto getId = makeGetId(qec->getIndex());
+  Id id = getId("<x>");
   ASSERT_EQ(tc.toValueId(vocab).value(), id);
 
   tc = lit("\"alpha\"");
-  qec->getIndex().getId("\"alpha\"", &id);
+  id = getId("\"alpha\"");
   EXPECT_EQ(tc.toValueId(vocab).value(), id);
 
-  tc = "<notexisting>";
+  tc = iri("<notexisting>");
   ASSERT_FALSE(tc.toValueId(vocab).has_value());
   tc = 42;
 
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
 
-  tc = HAS_PATTERN_PREDICATE;
+  tc = iri(HAS_PATTERN_PREDICATE);
   ASSERT_EQ(tc.toValueId(vocab).value(),
             qlever::specialIds.at(HAS_PATTERN_PREDICATE));
 }

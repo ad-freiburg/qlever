@@ -208,15 +208,19 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       std::optional<string> entity =
           index.idToOptionalString(id.getVocabIndex());
       AD_CONTRACT_CHECK(entity.has_value());
+      // TODO<joka921> make this more efficient AND more correct
+      auto litOrIri =
+          ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
+              entity.value());
       if constexpr (onlyReturnLiterals) {
-        if (!entity.value().starts_with('"')) {
+        if (!litOrIri.isLiteral()) {
           return std::nullopt;
         }
       }
       if constexpr (removeQuotesAndAngleBrackets) {
-        entity = RdfEscaping::normalizedContentFromLiteralOrIri(
-            std::move(entity.value()));
+        entity = asStringViewUnsafe(litOrIri.getContent());
       }
+      // TODO<joka921> handle the exporting of literals more correctly.
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case LocalVocabIndex: {

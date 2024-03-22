@@ -10,7 +10,10 @@
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
+namespace {
 using Var = Variable;
+constexpr auto iri = ad_utility::testing::iri;
+}  // namespace
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
@@ -52,7 +55,7 @@ TEST(QueryPlanner, createTripleGraph) {
                  QueryPlanner::TripleGraph::Node(
                      2, SparqlTriple(Var{"?y"},
                                      "<http://rdf.myprefix.com/xxx/rel2>",
-                                     "<http://abc.de>")),
+                                     iri("<http://abc.de>"))),
                  {0, 1})}));
 
     ASSERT_TRUE(tg.isSimilar(expected));
@@ -67,15 +70,15 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>(
             {std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     0, SparqlTriple(Var{"?x"}, "?p", "<X>")),
+                     0, SparqlTriple(Var{"?x"}, "?p", iri("<X>"))),
                  {1, 2}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     1, SparqlTriple(Var{"?x"}, "?p2", "<Y>")),
+                     1, SparqlTriple(Var{"?x"}, "?p2", iri("<Y>"))),
                  {0}),
              std::make_pair<Node, vector<size_t>>(
                  QueryPlanner::TripleGraph::Node(
-                     2, SparqlTriple("<X>", "?p", "<Y>")),
+                     2, SparqlTriple(iri("<X>"), "?p", iri("<Y>"))),
                  {0})}));
     ASSERT_TRUE(tg.isSimilar(expected));
   }
@@ -91,12 +94,12 @@ TEST(QueryPlanner, createTripleGraph) {
         TripleGraph(std::vector<std::pair<Node, std::vector<size_t>>>({
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
-                    0, SparqlTriple(Var{"?x"}, "<is-a>", "<Book>")),
+                    0, SparqlTriple(Var{"?x"}, "<is-a>", iri("<Book>"))),
                 {1}),
             std::make_pair<Node, vector<size_t>>(
                 QueryPlanner::TripleGraph::Node(
                     1, SparqlTriple(Var{"?x"}, "<Author>",
-                                    "<Anthony_Newman_(Author)>")),
+                                    iri("<Anthony_Newman_(Author)>"))),
                 {0}),
         }));
     ASSERT_TRUE(tg.isSimilar(expected));
@@ -336,27 +339,24 @@ TEST(QueryPlanner, threeVarTriples) {
 
 TEST(QueryPlanner, threeVarTriplesTCJ) {
   auto qec = ad_utility::testing::getQec("<s> <p> <x>");
+  auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?x ?p ?o WHERE {"
       "<s> ?p ?x . ?x ?p ?o }",
-      h::MultiColumnJoin(h::IndexScan("<s>", Var{"?p"}, Var{"?x"}),
-                         h::IndexScan(Var{"?x"}, Var{"?p"}, Var{"?o"})),
-      qec);
+      h::MultiColumnJoin(scan("<s>", "?p", "?x"), scan("?x", "?p", "?o")), qec);
 
   h::expect(
       "SELECT ?s ?p ?o WHERE {"
       "?s ?p ?o . ?s ?p <x> }",
-      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s"}, Var{"?p"}, "<x>")),
-      qec);
+      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s", "?p", "<x>")), qec);
 }
 
 TEST(QueryPlanner, threeVarXthreeVarException) {
+  auto scan = h::IndexScanFromStrings;
   h::expect(
       "SELECT ?s ?s2 WHERE {"
       "?s ?p ?o . ?s2 ?p ?o }",
-      h::MultiColumnJoin(h::IndexScan(Var{"?s"}, Var{"?p"}, Var{"?o"}),
-                         h::IndexScan(Var{"?s2"}, Var{"?p"}, Var{"?o"})));
+      h::MultiColumnJoin(scan("?s", "?p", "?o"), scan("?s2", "?p", "?o")));
 }
 
 TEST(QueryExecutionTreeTest, testBooksbyNewman) {
@@ -589,15 +589,13 @@ TEST(QueryPlanner, testSimpleOptional) {
 TEST(QueryPlanner, SimpleTripleOneVariable) {
   using enum Permutation::Enum;
 
+  auto scan = h::IndexScanFromStrings;
   // With only one variable, there are always two permutations that will yield
   // exactly the same result. The query planner consistently chooses one of
   // them.
-  h::expect("SELECT * WHERE { ?s <p> <o> }",
-            h::IndexScan(Var{"?s"}, "<p>", "<o>", {POS}));
-  h::expect("SELECT * WHERE { <s> ?p <o> }",
-            h::IndexScan("<s>", Var{"?p"}, "<o>", {SOP}));
-  h::expect("SELECT * WHERE { <s> <p> ?o }",
-            h::IndexScan("<s>", "<p>", Var{"?o"}, {PSO}));
+  h::expect("SELECT * WHERE { ?s <p> <o> }", scan("?s", "<p>", "<o>", {POS}));
+  h::expect("SELECT * WHERE { <s> ?p <o> }", scan("<s>", "?p", "<o>", {SOP}));
+  h::expect("SELECT * WHERE { <s> <p> ?o }", scan("<s>", "<p>", "?o", {PSO}));
 }
 
 TEST(QueryPlanner, SimpleTripleTwoVariables) {
@@ -610,33 +608,34 @@ TEST(QueryPlanner, SimpleTripleTwoVariables) {
   // to be empty).
 
   auto qec = ad_utility::testing::getQec("<s> <p> <o>");
+  auto scan = h::IndexScanFromStrings;
 
   // Fixed predicate.
 
   // Without `Order By`, two orderings are possible, both are fine.
-  h::expect("SELECT * WHERE { ?s <p> ?o }",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS, PSO}), qec);
+  h::expect("SELECT * WHERE { ?s <p> ?o }", scan("?s", "<p>", "?o", {POS, PSO}),
+            qec);
   // Must always be a single index scan, never index scan + sorting.
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?o",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {POS}), qec);
+            scan("?s", "<p>", "?o", {POS}), qec);
   h::expect("SELECT * WHERE { ?s <p> ?o } INTERNAL SORT BY ?s",
-            h::IndexScan(Var{"?s"}, "<p>", Var{"?o"}, {PSO}), qec);
+            scan("?s", "<p>", "?o", {PSO}), qec);
 
   // Fixed subject.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}), qec);
+            scan("<s>", "?p", "?o", {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}), qec);
+            scan("<s>", "?p", "?o", {SPO}), qec);
 
   // Fixed object.
-  h::expect("SELECT * WHERE { <s> ?p ?o }",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP, SPO}), qec);
+  h::expect("SELECT * WHERE { <s> ?p ?o }", scan("<s>", "?p", "?o", {SOP, SPO}),
+            qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?o",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SOP}), qec);
+            scan("<s>", "?p", "?o", {SOP}), qec);
   h::expect("SELECT * WHERE { <s> ?p ?o } INTERNAL SORT BY ?p",
-            h::IndexScan("<s>", Var{"?p"}, Var{"?o"}, {SPO}), qec);
+            scan("<s>", "?p", "?o", {SPO}), qec);
 }
 
 TEST(QueryPlanner, SimpleTripleThreeVariables) {

@@ -168,9 +168,9 @@ TEST_F(ServiceTest, computeResult) {
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
   // that `<bla>`, `<bli>`, `<blu>` were added to the (initially empty) local
   // vocabulary. On the way, obtain their IDs, which we then need below.
-  Id idX, idY;
-  EXPECT_TRUE(testQec->getIndex().getId("<x>", &idX));
-  EXPECT_TRUE(testQec->getIndex().getId("<y>", &idY));
+  auto getId = ad_utility::testing::makeGetId(testQec->getIndex());
+  Id idX = getId("<x>");
+  Id idY = getId("<y>");
   const auto& localVocab = result->localVocab();
   EXPECT_EQ(localVocab.size(), 3);
   std::optional<LocalVocabIndex> idxBla = localVocab.getIndexOrNullopt("<bla>");

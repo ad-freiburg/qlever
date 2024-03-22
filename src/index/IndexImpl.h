@@ -260,8 +260,18 @@ class IndexImpl {
 
   std::optional<string> idToOptionalString(WordVocabIndex id) const;
 
+ private:
   // ___________________________________________________________________________
-  bool getId(const string& element, Id* id) const;
+  std::optional<Id> getIdImpl(const auto& element) const;
+
+ public:
+  // ___________________________________________________________________________
+  std::optional<Id> getId(
+      const ad_utility::triple_component::LiteralOrIri& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Literal& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Iri& element) const;
 
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
@@ -654,10 +664,13 @@ class IndexImpl {
     std::vector<std::pair<Id, Id>> ignoredRanges;
     ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
-    auto literalRanges = getVocab().prefixRanges("\"");
-    auto taggedPredicatesRanges = getVocab().prefixRanges("@");
-    auto internalEntitiesRanges =
-        getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
+    auto literalRanges =
+        getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
+    auto taggedPredicatesRanges =
+        getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
+    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    internal[0] = ad_utility::triple_component::iriPrefixChar;
+    auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 
     auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
       for (const auto& range : ranges.ranges()) {

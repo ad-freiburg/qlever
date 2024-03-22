@@ -177,6 +177,8 @@ inline auto IndexScanFromStrings =
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
+    } else if (s.starts_with('<')) {
+      return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };
