@@ -251,7 +251,7 @@ inline const auto compareIdsOrStrings =
 template <valueIdComparators::Comparison comparison>
 inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
                                                 const T& a, const T& b,
-                                                EvaluationContext* ctx) {
+                                                const EvaluationContext* ctx) {
   auto actualImpl = [ctx](const auto& x, const auto& y) {
     return compareIdsOrStrings<comparison>(x, y, ctx);
   };

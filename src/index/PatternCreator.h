@@ -96,8 +96,8 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<VocabIndex> currentSubjectIndex_;
-  // The pattern of `currentSubjectIndex_`. This might still be incomplete,
+  std::optional<Id> currentSubject_;
+  // The pattern of `currentSubject_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;
 
@@ -175,7 +175,7 @@ class PatternCreator {
   }
 
  private:
-  void finishSubject(VocabIndex subjectIndex, const Pattern& pattern);
+  void finishSubject(Id subject, const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

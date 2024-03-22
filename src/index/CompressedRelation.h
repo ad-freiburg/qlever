@@ -19,7 +19,7 @@
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/ByteBufferSerializer.h"
-#include "util/Serializer/SerializeArray.h"
+#include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"

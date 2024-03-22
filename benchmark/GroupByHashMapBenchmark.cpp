@@ -130,65 +130,94 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   }
 
   void runNumericBenchmarks(BenchmarkResults& results) {
-    for (int i = 0; i < 2; i++) {
-      for (auto multiplicity : multiplicities) {
-        for (auto valueIdType : numericValueIdTypes) {
-          //-----------------------------------------------------------------------------------------------------
-          runTests<AvgExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+    for (auto multiplicity : multiplicities) {
+      for (auto valueIdType : numericValueIdTypes) {
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<AvgExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<AvgExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<SumExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<SumExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<SumExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<SumExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<CountExpression>(results, multiplicity, valueIdType, false,
-                                    static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<CountExpression>(results, multiplicity, valueIdType, false,
+                                  false);
 
-          runTests<CountExpression>(results, multiplicity, valueIdType, true,
-                                    static_cast<bool>(i));
+        runTests<CountExpression>(results, multiplicity, valueIdType, true,
+                                  false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<MinExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<MinExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<MinExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
+        runTests<MinExpression>(results, multiplicity, valueIdType, true,
+                                false);
 
-          //-----------------------------------------------------------------------------------------------------
-          runTests<MaxExpression>(results, multiplicity, valueIdType, false,
-                                  static_cast<bool>(i));
+        //-----------------------------------------------------------------------------------------------------
+        runTests<MaxExpression>(results, multiplicity, valueIdType, false,
+                                false);
 
-          runTests<MaxExpression>(results, multiplicity, valueIdType, true,
-                                  static_cast<bool>(i));
-        }
+        runTests<MaxExpression>(results, multiplicity, valueIdType, true,
+                                false);
+      }
+    }
+  }
+
+  void runTwoAggregateBenchmarks(BenchmarkResults& results) {
+    for (auto multiplicity : multiplicities) {
+      for (auto valueIdType : numericValueIdTypes) {
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression, SumExpression>(results, multiplicity,
+                                               valueIdType, false, false);
+
+        runTests<AvgExpression, SumExpression>(results, multiplicity,
+                                               valueIdType, true, false);
+
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression, MaxExpression>(results, multiplicity,
+                                               valueIdType, false, false);
+
+        runTests<AvgExpression, MaxExpression>(results, multiplicity,
+                                               valueIdType, true, false);
+
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression, MinExpression>(results, multiplicity,
+                                               valueIdType, false, false);
+
+        runTests<AvgExpression, MinExpression>(results, multiplicity,
+                                               valueIdType, true, false);
+
+        //-----------------------------------------------------------------------------------------------------
+        runTests<AvgExpression, CountExpression>(results, multiplicity,
+                                                 valueIdType, false, false);
+
+        runTests<AvgExpression, CountExpression>(results, multiplicity,
+                                                 valueIdType, true, false);
       }
     }
   }
 
   void runStringBenchmarks(BenchmarkResults& results) {
-    for (int i = 0; i < 2; i++) {
-      for (auto multiplicity : multiplicities) {
-        runTests<GroupConcatExpression>(results, multiplicity,
-                                        ValueIdType::Strings, false,
-                                        static_cast<bool>(i));
-        runTests<GroupConcatExpression>(results, multiplicity,
-                                        ValueIdType::Strings, true,
-                                        static_cast<bool>(i));
-      }
+    for (auto multiplicity : multiplicities) {
+      runTests<GroupConcatExpression>(results, multiplicity,
+                                      ValueIdType::Strings, false, false);
+      runTests<GroupConcatExpression>(results, multiplicity,
+                                      ValueIdType::Strings, true, false);
     }
   }
 
   BenchmarkResults runAllBenchmarks() final {
     BenchmarkResults results{};
 
-    runStringBenchmarks(results);
+    // runTwoAggregateBenchmarks(results);
+    // runStringBenchmarks(results);
     runNumericBenchmarks(results);
 
     return results;
@@ -199,8 +228,8 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
   std::mt19937_64 randomEngine{rd()};
   static constexpr size_t numInputRows = 10'000'000;
   static constexpr size_t numMeasurements = 4;
-  static constexpr size_t multiplicities[] = {5'000'000, 500'000, 50'000, 5'000,
-                                              500,       50,      5};
+  static constexpr size_t multiplicities[] = {
+      5'000'000, 500'000, 50'000, 5'000, 500, 50, 5, 3, 1};
   static constexpr size_t randomStringLength = 3;
 
   template <typename T>
@@ -223,10 +252,10 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     // Create `Alias` object
     auto expr1 = createExpression(ti<T>);
     auto alias1 =
-        Alias{SparqlExpressionPimpl{std::move(expr1), "NUMERIC_AGGREGATE(?b)"},
+        Alias{SparqlExpressionPimpl{std::move(expr1), "AGGREGATE(?b)"},
               Variable{"?x"}};
 
-    // SELECT (NUMERIC_AGGREGATE(?b) AS ?x) WHERE {
+    // SELECT (AGGREGATE(?b) AS ?x) WHERE {
     //   VALUES ...
     // } GROUP BY ?a
     GroupBy groupBy{ad_utility::testing::getQec(),
@@ -239,7 +268,58 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
     qec->clearCacheUnpinnedOnly();
   };
 
-  template <typename T>
+  template <typename T1, typename T2>
+  static void computeGroupByTwoAggregates(
+      QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> subtree,
+      bool useOptimization) {
+    RuntimeParameters().set<"group-by-hash-map-enabled">(useOptimization);
+
+    using namespace sparqlExpression;
+
+    auto createExpression1 = []<typename A>(TI<A>) {
+      if constexpr (std::same_as<A, GroupConcatExpression>)
+        return std::make_unique<T1>(
+            false, makeVariableExpression(Variable{"?b"}), "'");
+      else
+        return std::make_unique<T1>(false,
+                                    makeVariableExpression(Variable{"?b"}));
+    };
+
+    auto createExpression2 = []<typename A>(TI<A>) {
+      if constexpr (std::same_as<A, GroupConcatExpression>)
+        return std::make_unique<T2>(
+            false, makeVariableExpression(Variable{"?b"}), "'");
+      else
+        return std::make_unique<T2>(false,
+                                    makeVariableExpression(Variable{"?b"}));
+    };
+
+    // Create `Alias` object
+    auto expr1 = createExpression1(ti<T1>);
+    auto alias1 =
+        Alias{SparqlExpressionPimpl{std::move(expr1), "AGGREGATE1(?b)"},
+              Variable{"?x"}};
+
+    // Create `Alias` object
+    auto expr2 = createExpression2(ti<T2>);
+    auto alias2 =
+        Alias{SparqlExpressionPimpl{std::move(expr2), "AGGREGATE2(?b)"},
+              Variable{"?y"}};
+
+    // SELECT (AGGREGATE1(?b) AS ?x) (AGGREGATE2(?b) AS ?y) WHERE {
+    //   VALUES ...
+    // } GROUP BY ?a
+    GroupBy groupBy{ad_utility::testing::getQec(),
+                    {Variable{"?a"}},
+                    {std::move(alias1), std::move(alias2)},
+                    std::move(subtree)};
+    auto result = groupBy.getResult();
+    (void)result->idTable();
+
+    qec->clearCacheUnpinnedOnly();
+  };
+
+  template <typename T1, typename T2 = std::nullopt_t>
   void runTests(BenchmarkResults& results, size_t multiplicity,
                 ValueIdType valueTypes, bool optimizationEnabled, bool sorted) {
     // For coin flipping if `ValueIdType` is `RandomlyMixed`
@@ -247,19 +327,24 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     // Initialize benchmark results group
     std::ostringstream buffer;
+    std::ostringstream opString;
+    if constexpr (std::same_as<T2, std::nullopt_t>) {
+      opString << determineAggregateString(ti<T1>);
+    } else {
+      opString << determineAggregateString(ti<T1>) << ", "
+               << determineAggregateString(ti<T2>);
+    }
     buffer << "M: " << multiplicity
            << ", T: " << determineTypeString(valueTypes)
-           << ", OP: " << determineAggregateString(ti<T>)
-           << ", MAP: " << std::boolalpha << optimizationEnabled
-           << ", SORTED: " << sorted;
+           << ", OP: " << opString.str() << ", MAP: " << std::boolalpha
+           << optimizationEnabled << ", SORTED: " << sorted;
     auto& group = results.addGroup(buffer.str());
     group.metadata().addKeyValuePair("Rows", numInputRows);
     group.metadata().addKeyValuePair("Multiplicity", multiplicity);
     group.metadata().addKeyValuePair("Type", determineTypeString(valueTypes));
     group.metadata().addKeyValuePair("Sorted", sorted);
     group.metadata().addKeyValuePair("HashMap", optimizationEnabled);
-    group.metadata().addKeyValuePair("Operation",
-                                     determineAggregateString(ti<T>));
+    group.metadata().addKeyValuePair("Operation", opString.str());
 
     // Create `ValuesForTesting` object
     auto qec = ad_utility::testing::getQec();
@@ -326,7 +411,12 @@ class GroupByHashMapBenchmark : public BenchmarkInterface {
 
     for (size_t i = 0; i < numMeasurements; i++)
       group.addMeasurement(std::to_string(i), [&]() {
-        computeGroupBy<T>(qec, valueTree, optimizationEnabled);
+        if constexpr (std::same_as<T2, std::nullopt_t>) {
+          computeGroupBy<T1>(qec, valueTree, optimizationEnabled);
+        } else {
+          computeGroupByTwoAggregates<T1, T2>(qec, valueTree,
+                                              optimizationEnabled);
+        }
       });
   };
 };

@@ -7,6 +7,9 @@
 
 #include <gtest/gtest.h>
 
+#include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
+
 namespace vocabulary_test {
 
 // Can be used to compare arbitrary vocabularies to each other and to
@@ -125,8 +128,8 @@ void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
  *           returns a vocabulary.
  */
 void testUpperAndLowerBoundWithStdLess(auto createVocabulary) {
-  const std::vector<string> words{"alpha", "beta",    "camma",
-                                  "delta", "epsilon", "frikadelle"};
+  const std::vector<std::string> words{"alpha", "beta",    "camma",
+                                       "delta", "epsilon", "frikadelle"};
 
   std::vector<uint64_t> ids;
   for (size_t i = 0; i < words.size(); ++i) {
@@ -166,7 +169,7 @@ void testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
  *        returns a vocabulary.
  */
 void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
-  const std::vector<string> words{"4", "33", "222", "1111"};
+  const std::vector<std::string> words{"4", "33", "222", "1111"};
   std::vector<uint64_t> ids;
   for (size_t i = 0; i < words.size(); ++i) {
     ids.push_back(i);

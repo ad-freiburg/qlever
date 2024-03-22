@@ -67,10 +67,13 @@ struct VocabularyMetaData {
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
-
-  size_t numWordsTotal_ = 0;  // that many distinct words were found (size of
-  // the vocabulary)
-  IdRangeForPrefix langTaggedPredicates_{"@"};
+  // The number of distinct words (size of the created vocabulary).
+  size_t numWordsTotal_ = 0;
+  // The number of distinct blank nodes that were found and immediately
+  // converted to an ID without becoming part of the vocabulary.
+  size_t numBlankNodesTotal_ = 0;
+  IdRangeForPrefix langTaggedPredicates_{
+      std::string{ad_utility::languageTaggedPredicatePrefix}};
   IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
 
   // Return true iff the `id` belongs to one of the two ranges that contain
@@ -88,27 +91,18 @@ struct VocabularyMetaData {
 // language tagged predicates. Argument `comparator` gives the way to order
 // strings (case-sensitive or not). Arguments `internalVocabAction` and
 // `externalVocabAction` are called for each merged word in the
-// internal/external vocabulary in the order of their appearance. If
-// `WithIdMaps::False` is passed as the last argument, then only the merged
-// vocabulary is created, but not the mapping from the local to global IDs.
-enum class WithIdMaps { False, True };
+// internal/external vocabulary in the order of their appearance.
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
                                    WordCallback auto& externalWordCallback,
-                                   ad_utility::MemorySize memoryToUse,
-                                   WithIdMaps = WithIdMaps::True);
+                                   ad_utility::MemorySize memoryToUse);
 
 // A helper class that implements the `mergeVocabulary` function (see
 // above). Everything in this class is private and only the
 // `mergeVocabulary` function is a friend.
 class VocabularyMerger {
  private:
-  // If this is set, then we will only output the internal vocabulary.
-  // This is useful for the prefix compression, where we don't need the
-  // external part of the vocabulary and the mapping from local to global IDs.
-  bool noIdMapsAndIgnoreExternalVocab_ = false;
-
   // private data members
 
   // The result (mostly metadata) which we'll return.
@@ -124,7 +118,7 @@ class VocabularyMerger {
       const std::string& basename, size_t numFiles,
       WordComparator auto comparator, WordCallback auto& internalWordCallback,
       WordCallback auto& externalWordCallback,
-      ad_utility::MemorySize memoryToUse, WithIdMaps withIdMaps);
+      ad_utility::MemorySize memoryToUse);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
@@ -171,21 +165,22 @@ class VocabularyMerger {
       std::predicate<TripleComponentWithIndex,
                      TripleComponentWithIndex> auto const& lessThan);
 
-  // close all associated files and MmapVectors and reset all internal variables
+  // Close all associated files and MmapVectors and reset all internal
+  // variables.
   void clear() {
     metaData_ = VocabularyMetaData{};
     lastTripleComponent_ = std::nullopt;
     idVecs_.clear();
   }
 
-  // inner helper function for the parallel pipeline. perform the actual write
-  // to the IdPairVecs. Format of argument is <vecToWriteTo<internalId,
-  // globalId>>
+  // Inner helper function for the parallel pipeline, which performs the actual
+  // write to the IdPairVecs. Format of argument is `<vecToWriteTo<internalId,
+  // globalId>>`.
   void doActualWrite(
-      const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer);
+      const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer);
 };
 
-// _________________________________________________________________________________________
+// ____________________________________________________________________________
 ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename);
 

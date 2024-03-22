@@ -12,24 +12,8 @@
 // A simple greedy algorithm the calculates prefixes of a given vocabulary which
 // are suitable for compression.
 //
-// Arguments: vocabulary  - the vocabulary we want to compress, must be sorted
-//                          ascending alphabetically
-//            numPrefixes - the number of prefixes we want to compute
-//            codelength  - the (fixed) length of the code for the prefixes we
-//                          want the algorithm to assume.
-// Returns:   vector of suitable  prefixes  which have been selected by the
-//            algorthm
-//
-std::vector<std::string> calculatePrefixes(std::vector<std::string> vocabulary,
-                                           size_t numPrefixes,
-                                           size_t codelength);
-
-// A simple greedy algorithm the calculates prefixes of a given vocabulary which
-// are suitable for compression.
-//
-// Arguments: filename    - path to a file from which the vocabulary is read.
-//                          Must be one word per line and sorted ascending
-//                          alphabetically
+// Arguments: vocabulary  - The vocabulary that is to be compressed. Must be
+//                          sorted ascending by `std::less<std::string>`
 //            numPrefixes - the number of prefixes we want to compute
 //            codelength  - the (fixed) length of the code for the prefixes we
 //                          want the algorithm to assume.
@@ -39,13 +23,13 @@ std::vector<std::string> calculatePrefixes(std::vector<std::string> vocabulary,
 //                            vocabulary in QLever). The Algorithm has to know
 //                            this in order to chosse the correct prefixes.
 //
-// Returns:   vector of suitable  prefixes  which have been selected by the
-//            algorthm
+// Returns:   Vector of suitable prefixes which have been selected by the
+//            algorithm
 //
-std::vector<std::string> calculatePrefixes(const std::string& filename,
-                                           size_t numPrefixes,
-                                           size_t codelength,
-                                           bool alwaysAddCode = false);
+std::vector<std::string> calculatePrefixes(
+    const std::vector<std::string>& vocabulary, size_t numPrefixes,
+    size_t codelength, bool alwaysAddCode = false);
+
 namespace ad_utility {
 using std::string;
 using std::string_view;

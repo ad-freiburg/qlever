@@ -388,9 +388,8 @@ void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-void ParsedQuery::GraphPattern::addLanguageFilter(
-    const Variable& variable, const std::string& languageInQuotes) {
-  auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
+void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
+                                                  const std::string& langTag) {
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
@@ -418,7 +417,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->p_._iri = '@' + langTag + '@' + triplePtr->p_._iri;
+    triplePtr->p_._iri = ad_utility::convertToLanguageTaggedPredicate(
+        triplePtr->p_._iri, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this

@@ -7,7 +7,7 @@
 #include <algorithm>
 #include <iterator>
 
-#include "../src/global/Pattern.h"
+#include "global/Pattern.h"
 
 std::vector<std::string> strings{"alpha", "b", "3920193",
                                  "<Qlever-internal-langtag>"};

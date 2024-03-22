@@ -530,54 +530,66 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
     const ScanSpecification& scanSpec,
     const std::vector<CompressedBlockMetadata>& allBlocksMetadata,
     const CancellationHandle& cancellationHandle) const {
+  // The result has two columns: one for the distinct `Id`s and one for their
+  // counts.
   IdTableStatic<2> table(allocator_);
-  std::span<const CompressedBlockMetadata> relationBlocksMetadata =
-      getRelevantBlocks(scanSpec, allBlocksMetadata);
 
-  // Iterate over the blocks and only read (and decompress) those which
-  // contain more than one different `col1Id`. For the others, we can determine
-  // the count from the metadata.
-  std::optional<Id> currentCol1Id;
+  // The current `colId` and its current count.
+  std::optional<Id> currentColId;
   size_t currentCount = 0;
-  // Helper lambda that processes a single `col1Id` (with `howMany`
-  // occurrences). If it's new, a row with the previous `col1Id` and
-  // `currentCount` is added to `table`, and `currentCol1Id` and `currentCount`
-  // are reset.
-  auto processCol1Id = [&table, &currentCol1Id, &currentCount](
-                           std::optional<Id> col1Id, size_t howMany) {
-    if (col1Id != currentCol1Id) {
-      if (currentCol1Id.has_value()) {
-        table.push_back({currentCol1Id.value(), Id::makeFromInt(currentCount)});
+
+  // Helper lambda that processes the next `colId` and a count. If it's new, a
+  // row with the previous `currentColId` and its count are added to the
+  // result, and `currentColId` and its count are updated to the new `colId`.
+  auto processColId = [&table, &currentColId, &currentCount](
+                          std::optional<Id> colId, size_t colIdCount) {
+    if (colId != currentColId) {
+      if (currentColId.has_value()) {
+        table.push_back({currentColId.value(), Id::makeFromInt(currentCount)});
       }
-      currentCol1Id = col1Id;
+      currentColId = colId;
       currentCount = 0;
     }
-    currentCount += howMany;
+    currentCount += colIdCount;
   };
-  for (size_t i = 0; i < relationBlocksMetadata.size(); ++i) {
-    const auto& blockMetadata = relationBlocksMetadata[i];
-    Id firstCol1Id = std::invoke(idGetter, blockMetadata.firstTriple_);
-    Id lastCol1Id = std::invoke(idGetter, blockMetadata.lastTriple_);
-    if (firstCol1Id == lastCol1Id) {
-      // The whole block has the same `col1Id`.
-      processCol1Id(firstCol1Id, blockMetadata.numRows_);
+
+  // Get the blocks needed for the scan.
+  std::span<const CompressedBlockMetadata> relevantBlocksMetadata =
+      getRelevantBlocks(scanSpec, allBlocksMetadata);
+
+  // Get the index of the column with the `colId`s that we are interested in.
+  auto relevantColumnIndex = prepareColumnIndices(scanSpec, {});
+  AD_CORRECTNESS_CHECK(!relevantColumnIndex.empty());
+  relevantColumnIndex.resize(1);
+
+  // Iterate over the blocks and only read (and decompress) those which contain
+  // more than one different `colId`. For the others, we can determine the
+  // count from the metadata.
+  for (size_t i = 0; i < relevantBlocksMetadata.size(); ++i) {
+    const auto& blockMetadata = relevantBlocksMetadata[i];
+    Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
+    Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
+    if (firstColId == lastColId) {
+      // The whole block has the same `colId` -> we get all the information
+      // from the metadata.
+      processColId(firstColId, blockMetadata.numRows_);
     } else {
-      // Multiple `col1Id`s in one block.
-      std::array<ColumnIndex, 1> columnIndices{1u};
+      // Multiple `colId`s -> we have to read the block.
       const auto& block =
-          i == 0 ? readPossiblyIncompleteBlock(scanSpec, blockMetadata,
-                                               std::nullopt, columnIndices)
-                 : readAndDecompressBlock(blockMetadata, columnIndices);
+          i == 0
+              ? readPossiblyIncompleteBlock(scanSpec, blockMetadata,
+                                            std::nullopt, relevantColumnIndex)
+              : readAndDecompressBlock(blockMetadata, relevantColumnIndex);
       cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
-        Id col1Id = block(j, 0);
-        processCol1Id(col1Id, 1);
+        Id colId = block(j, 0);
+        processColId(colId, 1);
       }
     }
   }
   // Don't forget to add the last `col1Id` and its count.
-  processCol1Id(std::nullopt, 0);
+  processColId(std::nullopt, 0);
   return std::move(table).toDynamic();
 }
 

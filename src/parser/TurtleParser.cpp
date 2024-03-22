@@ -5,6 +5,8 @@
 
 #include "parser/TurtleParser.h"
 
+#include <absl/strings/charconv.h>
+
 #include <cstring>
 
 #include "parser/RdfEscaping.h"
@@ -32,8 +34,7 @@ bool TurtleParser<T>::prefixID() {
     if (check(pnameNS()) && check(iriref()) &&
         check(skip<TurtleTokenId::Dot>())) {
       // strip  the angled brackes <bla> -> bla
-      prefixMap_[activePrefix_] =
-          stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[activePrefix_] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing @prefix definition failed");
@@ -48,7 +49,7 @@ template <class T>
 bool TurtleParser<T>::base() {
   if (skip<TurtleTokenId::TurtleBase>()) {
     if (iriref() && check(skip<TurtleTokenId::Dot>())) {
-      prefixMap_[""] = stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[""] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing @base definition failed");
@@ -63,8 +64,7 @@ template <class T>
 bool TurtleParser<T>::sparqlPrefix() {
   if (skip<TurtleTokenId::SparqlPrefix>()) {
     if (pnameNS() && iriref()) {
-      prefixMap_[activePrefix_] =
-          stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[activePrefix_] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing PREFIX definition failed");
@@ -79,7 +79,7 @@ template <class T>
 bool TurtleParser<T>::sparqlBase() {
   if (skip<TurtleTokenId::SparqlBase>()) {
     if (iriref()) {
-      prefixMap_[""] = stripAngleBrackets(lastParseResult_.getString());
+      prefixMap_[""] = lastParseResult_.getIri();
       return true;
     } else {
       raise("Parsing BASE definition failed");
@@ -100,7 +100,7 @@ bool TurtleParser<T>::triples() {
     }
   } else {
     if (blankNodePropertyList()) {
-      activeSubject_ = lastParseResult_.getString();
+      activeSubject_ = lastParseResult_;
       predicateObjectList();
       return true;
     } else {
@@ -150,7 +150,8 @@ bool TurtleParser<T>::predicateSpecialA() {
   if (auto [success, word] = tok_.template getNextToken<TurtleTokenId::A>();
       success) {
     (void)word;
-    activePredicate_ = "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>"s;
+    activePredicate_ = TripleComponent::Iri::fromIriref(
+        "<http://www.w3.org/1999/02/22-rdf-syntax-ns#type>");
     return true;
   } else {
     return false;
@@ -161,7 +162,7 @@ bool TurtleParser<T>::predicateSpecialA() {
 template <class T>
 bool TurtleParser<T>::subject() {
   if (blankNode() || iri() || collection()) {
-    activeSubject_ = lastParseResult_.getString();
+    activeSubject_ = lastParseResult_.getIri();
     return true;
   } else {
     return false;
@@ -172,7 +173,7 @@ bool TurtleParser<T>::subject() {
 template <class T>
 bool TurtleParser<T>::predicate() {
   if (iri()) {
-    activePredicate_ = lastParseResult_.getString();
+    activePredicate_ = lastParseResult_.getIri();
     return true;
   } else {
     return false;
@@ -208,8 +209,8 @@ bool TurtleParser<T>::blankNodePropertyList() {
     return false;
   }
   // save subject and predicate
-  string savedSubject = activeSubject_;
-  string savedPredicate = activePredicate_;
+  auto savedSubject = activeSubject_;
+  auto savedPredicate = activePredicate_;
   // new triple with blank node as object
   string blank = createAnonNode();
   // the following triples have the blank node as subject
@@ -239,17 +240,18 @@ bool TurtleParser<T>::collection() {
   triples_.resize(triples_.size() - objects.size());
   // TODO<joka921> Move such functionality into a general util.
   auto makeIri = [](std::string_view suffix) {
-    return absl::StrCat("<", RDF_PREFIX, suffix, ">");
+    return TripleComponent::Iri::fromIriref(
+        absl::StrCat("<", RDF_PREFIX, suffix, ">"));
   };
-  static const std::string nil = makeIri("nil");
-  static const std::string first = makeIri("first");
-  static const std::string rest = makeIri("rest");
+  static const auto nil = TripleComponent{makeIri("nil")};
+  static const auto first = makeIri("first");
+  static const auto rest = makeIri("rest");
 
   if (objects.empty()) {
     lastParseResult_ = nil;
   } else {
     // Create a new blank node for each collection element.
-    std::vector<std::string> blankNodes;
+    std::vector<TripleComponent> blankNodes;
     blankNodes.reserve(objects.size());
     for (size_t i = 0; i < objects.size(); ++i) {
       blankNodes.push_back(createAnonNode());
@@ -272,19 +274,15 @@ bool TurtleParser<T>::collection() {
 
 // ____________________________________________________________________________
 template <class T>
-void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
-  size_t position;
-
-  bool errorOccured = false;
-  TripleComponent result;
-  try {
-    // We cannot directly store this in `lastParseResult_` because this might
-    // overwrite `input`.
-    result = std::stod(input, &position);
-  } catch (const std::exception& e) {
-    errorOccured = true;
+void TurtleParser<T>::parseDoubleConstant(std::string_view input) {
+  double result;
+  // The functions used below cannot deal with leading redundant '+' signs.
+  if (input.starts_with('+')) {
+    input.remove_prefix(1);
   }
-  if (errorOccured || position != input.size()) {
+  auto [firstNonMatching, errorCode] =
+      absl::from_chars(input.data(), input.data() + input.size(), result);
+  if (firstNonMatching != input.end() || errorCode != std::errc{}) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as a floating point value");
     raiseOrIgnoreTriple(errorMessage);
@@ -294,20 +292,21 @@ void TurtleParser<T>::parseDoubleConstant(const std::string& input) {
 
 // ____________________________________________________________________________
 template <class T>
-void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
+void TurtleParser<T>::parseIntegerConstant(std::string_view input) {
   if (integerOverflowBehavior() ==
       TurtleParserIntegerOverflowBehavior::AllToDouble) {
     return parseDoubleConstant(input);
   }
-  size_t position = 0;
-
-  bool errorOccured = false;
-  TripleComponent result;
-  try {
-    // We cannot directly store this in `lastParseResult_` because this might
-    // overwrite `input`.
-    result = std::stoll(input, &position);
-  } catch (const std::out_of_range&) {
+  int64_t result{0};
+  // The functions used below cannot deal with leading redundant '+' signs.
+  if (input.starts_with('+')) {
+    input.remove_prefix(1);
+  }
+  // We cannot directly store this in `lastParseResult_` because this might
+  // overwrite `input`.
+  auto [firstNonMatching, errorCode] =
+      std::from_chars(input.data(), input.data() + input.size(), result);
+  if (errorCode == std::errc::result_out_of_range) {
     if (integerOverflowBehavior() ==
         TurtleParserIntegerOverflowBehavior::OverflowingToDouble) {
       return parseDoubleConstant(input);
@@ -319,10 +318,7 @@ void TurtleParser<T>::parseIntegerConstant(const std::string& input) {
           "\"parser-integer-overflow-behavior\"");
       raiseOrIgnoreTriple(errorMessage);
     }
-  } catch (const std::invalid_argument& e) {
-    errorOccured = true;
-  }
-  if (errorOccured || position != input.size()) {
+  } else if (firstNonMatching != input.end()) {
     auto errorMessage = absl::StrCat(
         "Value ", input, " could not be parsed as an integer value");
     raiseOrIgnoreTriple(errorMessage);
@@ -375,18 +371,18 @@ bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
-  RdfEscaping::NormalizedRDFString literalString{
-      lastParseResult_.getLiteral().normalizedLiteralContent()};
+  auto previous = lastParseResult_.getLiteral();
   if (langtag()) {
-    lastParseResult_ =
-        TripleComponent::Literal{literalString, lastParseResult_.getString()};
+    previous.addLanguageTag(lastParseResult_.getString());
+    lastParseResult_ = std::move(previous);
     return true;
     // TODO<joka921> this allows spaces here since the ^^ is unique in the
     // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    const auto typeIri = std::move(lastParseResult_.getString());
-    auto type = stripAngleBrackets(typeIri);
-    std::string strippedLiteral{stripDoubleQuotes(literalString.get())};
+    auto typeIri = std::move(lastParseResult_.getIri());
+    std::string_view type = asStringViewUnsafe(typeIri.getContent());
+    std::string_view strippedLiteral =
+        asStringViewUnsafe(previous.getContent());
     try {
       // TODO<joka921> clean this up by moving the check for the types to a
       // separate module.
@@ -406,12 +402,12 @@ bool TurtleParser<T>::rdfLiteral() {
           lastParseResult_ = false;
         } else {
           LOG(DEBUG)
-              << literalString.get()
-              << " could not be parsed as a boolean object of type " << typeIri
+              << strippedLiteral
+              << " could not be parsed as a boolean object of type " << type
               << ". It is treated as a plain string literal without datatype "
                  "instead"
               << std::endl;
-          lastParseResult_ = TripleComponent::Literal{literalString};
+          lastParseResult_ = std::move(previous);
         }
       } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
                  type == XSD_FLOAT_TYPE) {
@@ -425,28 +421,28 @@ bool TurtleParser<T>::rdfLiteral() {
       } else if (type == XSD_GYEAR_TYPE) {
         lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
       } else {
-        lastParseResult_ = TripleComponent::Literal{
-            literalString, absl::StrCat("^^", typeIri)};
+        previous.addDatatype(typeIri);
+        lastParseResult_ = std::move(previous);
       }
       return true;
     } catch (const DateParseException&) {
       LOG(DEBUG)
-          << literalString.get()
-          << " could not be parsed as a date object of type " << typeIri
+          << strippedLiteral << " could not be parsed as a date object of type "
+          << type
           << ". It is treated as a plain string literal without datatype "
              "instead"
           << std::endl;
-      lastParseResult_ = TripleComponent::Literal{literalString};
+      lastParseResult_ = std::move(previous);
       return true;
     } catch (const DateOutOfRangeException& ex) {
       LOG(DEBUG)
-          << literalString.get()
+          << strippedLiteral
           << " could not be parsed as a date object for the following reason: "
           << ex.what()
           << ". It is treated as a plain string literal without datatype "
              "instead"
           << std::endl;
-      lastParseResult_ = TripleComponent::Literal{literalString};
+      lastParseResult_ = std::move(previous);
       return true;
     } catch (const std::exception& e) {
       raise(e.what());
@@ -514,8 +510,8 @@ bool TurtleParser<T>::stringParse() {
     raise("Unterminated string literal");
   }
   // also include the quotation marks in the word
-  lastParseResult_ = TripleComponent::Literal{
-      RdfEscaping::normalizeRDFLiteral(view.substr(0, endPos + startPos)), ""};
+  lastParseResult_ = TripleComponent::Literal::fromEscapedRdfLiteral(
+      view.substr(0, endPos + startPos));
   tok_.remove_prefix(endPos + startPos);
   return true;
 }
@@ -541,9 +537,8 @@ bool TurtleParser<T>::prefixedName() {
     }
     parseTerminal<TurtleTokenId::PnLocal, false>();
   }
-  lastParseResult_ =
-      '<' + expandPrefix(activePrefix_) +
-      RdfEscaping::unescapePrefixedIri(lastParseResult_.getString()) + '>';
+  lastParseResult_ = TripleComponent::Iri::fromPrefixAndSuffix(
+      expandPrefix(activePrefix_), lastParseResult_.getString());
   return true;
 }
 
@@ -643,7 +638,7 @@ bool TurtleParser<T>::iriref() {
       } else {
         tok_.remove_prefix(endPos + 1);
         lastParseResult_ =
-            RdfEscaping::unescapeIriref(view.substr(0, endPos + 1));
+            TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
         return true;
       }
     } else {
@@ -654,7 +649,7 @@ bool TurtleParser<T>::iriref() {
       return false;
     }
     lastParseResult_ =
-        RdfEscaping::unescapeIriref(lastParseResult_.getString());
+        TripleComponent::Iri::fromIriref(lastParseResult_.getString());
     return true;
   }
 }

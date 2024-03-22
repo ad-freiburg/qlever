@@ -187,3 +187,73 @@ TEST(Views, inPlaceTransform) {
   EXPECT_THAT(res2, ::testing::ElementsAreArray(res1));
   EXPECT_THAT(res3, ::testing::ElementsAreArray(res1));
 }
+
+// __________________________________________________________________________
+
+std::string_view toView(std::span<char> span) {
+  return {span.data(), span.size()};
+}
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithMinimalChunks) {
+  auto range =
+      std::string_view{"\nabc\ndefghij\n"} |
+      std::views::transform([](char c) { return std::ranges::single_view(c); });
+  auto lineByLineGenerator =
+      ad_utility::reChunkAtSeparator(std::move(range), '\n');
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "abc");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "defghij");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithNoTrailingNewline) {
+  auto range = std::string_view{"abc"} | std::views::transform([](char c) {
+                 return std::ranges::single_view(c);
+               });
+
+  auto lineByLineGenerator =
+      ad_utility::reChunkAtSeparator(std::move(range), '\n');
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "abc");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}
+
+// __________________________________________________________________________
+TEST(Views, verifyLineByLineWorksWithChunksBiggerThanLines) {
+  using namespace std::string_view_literals;
+
+  auto lineByLineGenerator = ad_utility::reChunkAtSeparator(
+      std::vector{"\nabc\nd"sv, "efghij"sv, "\n"sv}, '\n');
+
+  auto iterator = lineByLineGenerator.begin();
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "abc");
+
+  ++iterator;
+  ASSERT_NE(iterator, lineByLineGenerator.end());
+  EXPECT_EQ(toView(*iterator), "defghij");
+
+  ++iterator;
+  ASSERT_EQ(iterator, lineByLineGenerator.end());
+}

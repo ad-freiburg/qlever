@@ -8,6 +8,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/ResultTable.h"
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
@@ -15,6 +16,10 @@
 
 using TC = TripleComponent;
 using ValuesComponents = std::vector<std::vector<TripleComponent>>;
+
+namespace {
+auto iri = ad_utility::testing::iri;
+}
 
 // Check the basic methods of the `Values` clause.
 TEST(Values, basicMethods) {
@@ -62,13 +67,12 @@ TEST(Values, emptyValuesClause) {
 // correct result table.
 TEST(Values, computeResult) {
   auto testQec = ad_utility::testing::getQec("<x> <x> <x> .");
-  ValuesComponents values{{TC{12}, TC{"<x>"}}, {TC::UNDEF{}, TC{"<y>"}}};
+  ValuesComponents values{{TC{12}, TC{iri("<x>")}},
+                          {TC::UNDEF{}, TC{iri("<y>")}}};
   Values valuesOperation(testQec, {{Variable{"?x"}, Variable{"?y"}}, values});
   auto result = valuesOperation.getResult();
   const auto& table = result->idTable();
-  Id x;
-  bool success = testQec->getIndex().getId("<x>", &x);
-  AD_CORRECTNESS_CHECK(success);
+  Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
   auto L = ad_utility::testing::LocalVocabId;
   auto U = Id::makeUndefined();

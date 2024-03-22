@@ -39,6 +39,7 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
   }
   return testCollectionOfWords;
 }
+auto iri = ad_utility::testing::iri;
 }  // namespace
 
 // _____________________________________________________________________________
@@ -178,33 +179,33 @@ TEST(LocalVocab, propagation) {
   // values are moved out by `Values::writeValues` and would then no longer be
   // there in the subsequent uses of `values1` and `values2` if it were not
   // copied.
-  //
-  // Note 2: For literals, the quotes are part of the name, so if we wanted the
-  // literal "x", we would have to write TripleComponent{"\"x\""}. For the
-  // purposes of this test, we just want something that's not yet in the index,
-  // so "x" etc. is just fine (and also different from the "<x>" below).
-  Values values1(testQec, {{Variable{"?x"}, Variable{"?y"}},
-                           {{TripleComponent{"x"}, TripleComponent{"y1"}},
-                            {TripleComponent{"x"}, TripleComponent{"y2"}}}});
+  Values values1(
+      testQec,
+      {{Variable{"?x"}, Variable{"?y"}},
+       {{TripleComponent{iri("<x1>")}, TripleComponent{iri("<y1>")}},
+        {TripleComponent{iri("<x1>")}, TripleComponent{iri("<y2>")}}}});
   Values values1copy = values1;
-  checkLocalVocab(values1copy, std::vector<std::string>{"x", "y1", "y2"});
+  std::vector<std::string> expectedVocab{"<x1>", "<y1>", "<y2>"};
+
+  checkLocalVocab(values1copy, expectedVocab);
 
   // VALUES operation that uses an existing literal (from the test index).
-  Values values2(testQec, {{Variable{"?x"}, Variable{"?y"}},
-                           {{TripleComponent{"<x>"}, TripleComponent{"<y>"}}}});
+  Values values2(
+      testQec, {{Variable{"?x"}, Variable{"?y"}},
+                {{TripleComponent{iri("<x>")}, TripleComponent{iri("<y>")}}}});
   Values values2copy = values2;
   checkLocalVocab(values2copy, std::vector<std::string>{});
 
   // JOIN operation with exactly one non-empty local vocab and with two
   // non-empty local vocabs (the last two arguments are the two join columns).
   Join join1(testQec, qet(values1), qet(values2), 0, 0);
-  checkLocalVocab(join1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(join1, expectedVocab);
   Join join2(testQec, qet(values1), qet(values1), 0, 0);
   checkThrow(join2);
 
   // OPTIONAL JOIN operation with exactly one non-empty local vocab.
   OptionalJoin optJoin1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(optJoin1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(optJoin1, expectedVocab);
 
   // OPTIONAL JOIN operation with two non-empty local vocab.
   OptionalJoin optJoin2(testQec, qet(values1), qet(values1));
@@ -213,23 +214,23 @@ TEST(LocalVocab, propagation) {
   // MULTI-COLUMN JOIN operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs.
   MultiColumnJoin multiJoin1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(multiJoin1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(multiJoin1, expectedVocab);
   MultiColumnJoin multiJoin2(testQec, qet(values1), qet(values1));
   checkThrow(multiJoin2);
 
   // ORDER BY operation (the third argument are the indices of the columns to be
   // sorted, and the sort order; not important for this test).
   OrderBy orderBy(testQec, qet(values1), {{0, true}, {1, true}});
-  checkLocalVocab(orderBy, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(orderBy, expectedVocab);
 
   // SORT operation (the third operation is the sort column).
   Sort sort(testQec, qet(values1), {0});
-  checkLocalVocab(sort, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(sort, expectedVocab);
 
   // DISTINCT operation (the third argument are the indices of the input columns
   // that are considered for the output; not important for this test).
   Distinct distinct1(testQec, qet(values1), {0, 1});
-  checkLocalVocab(distinct1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(distinct1, expectedVocab);
 
   // GROUP BY operation.
   auto groupConcatExpression =
@@ -248,25 +249,26 @@ TEST(LocalVocab, propagation) {
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
       qet(values1));
-  checkLocalVocab(groupBy, std::vector<std::string>{"x", "y1", "y2", "y1|y2"});
+  checkLocalVocab(groupBy,
+                  std::vector<std::string>{"<x1>", "<y1>", "<y2>", "y1|y2"});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
   // as it did before GroupBy::computeResult copied it's local vocabulary).
   Distinct distinct2(testQec, qet(values1), {0});
-  checkLocalVocab(distinct2, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(distinct2, expectedVocab);
 
   // UNION operation with exactly one non-empty local vocab and with two
   // non-empy local vocabs.
   Union union1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(union1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(union1, expectedVocab);
   Union union2(testQec, qet(values1), qet(values1));
   checkThrow(union2);
 
   // MINUS operation with exactly one non-empty local vocab and with
   // two non-empty local vocabs.
   Minus minus1(testQec, qet(values1), qet(values2));
-  checkLocalVocab(minus1, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(minus1, expectedVocab);
   Minus minus2(testQec, qet(values1), qet(values1));
   checkThrow(minus2);
 
@@ -276,7 +278,7 @@ TEST(LocalVocab, propagation) {
       testQec, qet(values1),
       {std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
        "Expression ?x"});
-  checkLocalVocab(filter, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(filter, expectedVocab);
 
   // BIND operation (the third argument is a `parsedQuery::Bind` object).
   Bind bind(
@@ -284,7 +286,7 @@ TEST(LocalVocab, propagation) {
       {{std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
         "Expression ?x"},
        Variable{"?z"}});
-  checkLocalVocab(bind, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(bind, expectedVocab);
 
   // TRANSITIVE PATH operation.
   //
@@ -294,15 +296,14 @@ TEST(LocalVocab, propagation) {
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
   TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
   TransitivePath transitivePath(testQec, qet(values1), left, right, 1, 1);
-  checkLocalVocab(transitivePath, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(transitivePath, expectedVocab);
 
   // PATTERN TRICK operations.
   HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
-  checkLocalVocab(hasPredicateScan, std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(hasPredicateScan, expectedVocab);
   CountAvailablePredicates countAvailablePredictes(
       testQec, qet(values1), 0, Variable{"?x"}, Variable{"?y"});
-  checkLocalVocab(countAvailablePredictes,
-                  std::vector<std::string>{"x", "y1", "y2"});
+  checkLocalVocab(countAvailablePredictes, expectedVocab);
 
   // TEXT operations.
   //

@@ -79,13 +79,16 @@ class MergeVocabularyTest : public ::testing::Test {
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
-    std::vector<TripleComponentWithIndex> words0{{"\"ape\"", false, 0},
-                                                 {"\"gorilla\"", false, 2},
-                                                 {"\"monkey\"", false, 3},
-                                                 {"\"bla\"", true, 5}};
-    std::vector<TripleComponentWithIndex> words1{{"\"bear\"", false, 1},
-                                                 {"\"monkey\"", false, 3},
-                                                 {"\"zebra\"", false, 4}};
+    std::vector<TripleComponentWithIndex> words0{
+        {"\"ape\"", false, 0},    {"\"gorilla\"", false, 2},
+        {"\"monkey\"", false, 3}, {"_:blank", false, 0},
+        {"_:blunk", false, 1},    {"\"bla\"", true, 5}};
+    std::vector<TripleComponentWithIndex> words1{
+        {"\"bear\"", false, 1},
+        {"\"monkey\"", false, 3},
+        {"\"zebra\"", false, 4},
+        {"_:blunk", false, 1},
+    };
 
     // write expected vocabulary files
     std::ofstream expVoc(_pathVocabExp);
@@ -107,7 +110,13 @@ class MergeVocabularyTest : public ::testing::Test {
             w.index_ = localIdx;
             partialVocab << w;
             if (mapping) {
-              mapping->emplace_back(V(localIdx), V(globalId));
+              if (w.isBlankNode()) {
+                mapping->emplace_back(
+                    V(localIdx),
+                    Id::makeFromBlankNodeIndex(BlankNodeIndex::make(globalId)));
+              } else {
+                mapping->emplace_back(V(localIdx), V(globalId));
+              }
             }
             localIdx++;
           }

@@ -114,7 +114,6 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
   size_t nofLines =
       processWordsForVocabulary(contextFile, addWordsFromLiterals);
-  textVocab_.writeToFile(onDiskBase_ + ".text.vocabulary");
 
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
@@ -224,7 +223,7 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
       distinctWords.insert(line._word);
     }
   }
-  textVocab_.createFromSet(distinctWords);
+  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
   return numLines;
 }
 
@@ -774,6 +773,7 @@ IdTable IndexImpl::getWordPostingsForTerm(
     const ad_utility::AllocatorWithLimit<Id>& allocator) const {
   LOG(DEBUG) << "Getting word postings for term: " << term << '\n';
   IdTable idTable{allocator};
+  idTable.setNumColumns(term.ends_with('*') ? 2 : 1);
   auto optionalTbmd = getTextBlockMetadataForWordOrPrefix(term);
   if (!optionalTbmd.has_value()) {
     return idTable;

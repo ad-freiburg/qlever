@@ -80,7 +80,7 @@ struct TestContext {
     A = getId("\"A\"");
     Beta = getId("\"Beta\"");
     zz = getId("\"zz\"@en");
-    blank = getId("_:u_blank");
+    blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
     notInVocabA = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));

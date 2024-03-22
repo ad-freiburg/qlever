@@ -50,18 +50,28 @@ Id makeNumericId(T t) {
   }
 }
 
+// All the numeric value getters have an `operator()` for `ValueId` and one for
+// `std::string`. This mixin adds the `operator()` for the `IdOrString` variant
+// via the CRTP pattern.
+template <typename Self>
+struct Mixin {
+  decltype(auto) operator()(IdOrString s, const EvaluationContext* ctx) const {
+    return std::visit(
+        [this, ctx](auto el) {
+          return static_cast<const Self*>(this)->operator()(el, ctx);
+        },
+        std::move(s));
+  }
+};
+
 // Return `NumericValue` which is then used as the input to numeric expressions.
-struct NumericValueGetter {
+struct NumericValueGetter : Mixin<NumericValueGetter> {
+  using Mixin<NumericValueGetter>::operator();
   NumericValue operator()(const string&, const EvaluationContext*) const {
     return NotNumeric{};
   }
 
   NumericValue operator()(ValueId id, const EvaluationContext*) const;
-
-  NumericValue operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
-  }
 };
 
 /// Return the type exactly as it was passed in.
@@ -76,22 +86,20 @@ struct ActualValueGetter {
 
 /// Returns true iff the valid is not a NULL/UNDEF value (from optional) and
 /// not a nan (signalling an error in a previous calculation).
-struct IsValidValueGetter {
+struct IsValidValueGetter : Mixin<IsValidValueGetter> {
+  using Mixin<IsValidValueGetter>::operator();
   // check for NULL/UNDEF values.
   bool operator()(ValueId id, const EvaluationContext*) const;
 
   bool operator()(const string&, const EvaluationContext*) const {
     return true;
   }
-  bool operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
-  }
 };
 
 // Return a boolean value that is used for AND, OR and NOT expressions.
 // See section 17.2.2 of the Sparql Standard
-struct EffectiveBooleanValueGetter {
+struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
+  using Mixin<EffectiveBooleanValueGetter>::operator();
   enum struct Result { False, True, Undef };
 
   Result operator()(ValueId id, const EvaluationContext*) const;
@@ -100,16 +108,12 @@ struct EffectiveBooleanValueGetter {
   Result operator()(const std::string& s, const EvaluationContext*) const {
     return s.empty() ? Result::False : Result::True;
   }
-
-  Result operator()(const IdOrString& s, const EvaluationContext* ctx) const {
-    return std::visit(
-        [this, ctx](const auto& el) { return operator()(el, ctx); }, s);
-  }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a string value.
-struct StringValueGetter {
+struct StringValueGetter : Mixin<StringValueGetter> {
+  using Mixin<StringValueGetter>::operator();
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
 
   std::optional<string> operator()(string s, const EvaluationContext*) const {
@@ -120,43 +124,43 @@ struct StringValueGetter {
     }
     return s;
   }
+};
 
-  std::optional<string> operator()(IdOrString s,
-                                   const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
+// Value getter for `isBlank`.
+struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
+  using Mixin<IsBlankNodeValueGetter>::operator();
+  Id operator()(ValueId id, const EvaluationContext*) const {
+    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
+  }
+
+  Id operator()(const std::string&, const EvaluationContext*) const {
+    return Id::makeFromBool(false);
   }
 };
 
 // Value getters for `isIRI`, `isBlank`, and `isLiteral`.
 template <auto isSomethingFunction, auto prefix>
-struct IsSomethingValueGetter {
+struct IsSomethingValueGetter
+    : Mixin<IsSomethingValueGetter<isSomethingFunction, prefix>> {
+  using Mixin<IsSomethingValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext* context) const;
 
   Id operator()(const std::string& s, const EvaluationContext*) const {
     return Id::makeFromBool(s.starts_with(prefix));
   }
-
-  Id operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit(
-        [self = this, ctx](auto el) { return self->operator()(el, ctx); },
-        std::move(s));
-  }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
-static constexpr auto isBlankPrefix = ad_utility::ConstexprSmallString<3>{"_:"};
 static constexpr auto isLiteralPrefix =
     ad_utility::ConstexprSmallString<2>{"\""};
 using IsIriValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isIri, isIriPrefix>;
-using IsBlankNodeValueGetter =
-    IsSomethingValueGetter<&Index::Vocab::isBlankNode, isBlankPrefix>;
 using IsLiteralValueGetter =
     IsSomethingValueGetter<&Index::Vocab::isLiteral, isLiteralPrefix>;
 
 // Value getter for `isNumeric`. Regarding which datatypes count as numeric,
 // see https://www.w3.org/TR/sparql11-query/#operandDataTypes .
-struct IsNumericValueGetter {
+struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
+  using Mixin<IsNumericValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
     Datatype datatype = id.getDatatype();
     return Id::makeFromBool(datatype == Datatype::Double ||
@@ -165,15 +169,12 @@ struct IsNumericValueGetter {
   Id operator()(const std::string&, const EvaluationContext*) const {
     return Id::makeFromBool(false);
   }
-  Id operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
-  }
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
 /// templates. It produces a `std::optional<DateOrLargeYear>`.
-struct DateValueGetter {
+struct DateValueGetter : Mixin<DateValueGetter> {
+  using Mixin<DateValueGetter>::operator();
   using Opt = std::optional<DateOrLargeYear>;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
@@ -187,17 +188,14 @@ struct DateValueGetter {
   Opt operator()(const std::string&, const EvaluationContext*) const {
     return std::nullopt;
   }
-  Opt operator()(IdOrString s, const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
-  }
 };
 
 // If the `id` points to a literal, return the contents of that literal (without
 // the quotation marks). For all other types (IRIs, numbers, etc.) return
 // `std::nullopt`. This is used for expressions that work on strings, but for
 // the input of which the `STR()` function was not used in a query.
-struct LiteralFromIdGetter {
+struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
+  using Mixin<LiteralFromIdGetter>::operator();
   std::optional<string> operator()(ValueId id,
                                    const EvaluationContext* context) const;
   std::optional<string> operator()(std::string s,
@@ -208,12 +206,6 @@ struct LiteralFromIdGetter {
       return s.substr(1, s.size() - 2);
     }
     return s;
-  }
-
-  std::optional<string> operator()(IdOrString s,
-                                   const EvaluationContext* ctx) const {
-    return std::visit([this, ctx](auto el) { return operator()(el, ctx); },
-                      std::move(s));
   }
 };
 
