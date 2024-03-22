@@ -32,6 +32,16 @@ class TextLimit : public Operation {
 
   size_t getCostEstimate() override;
 
+  size_t getTextLimit() const { return n_; }
+
+  string getChildCacheKey() const { return child_->getCacheKey(); }
+
+  ColumnIndex getTextRecordColumn() const { return textRecordColumn_; }
+
+  vector<ColumnIndex> getEntityColumns() const { return entityColumns_; }
+
+  vector<ColumnIndex> getScoreColumns() const { return scoreColumns_; }
+
   uint64_t getSizeEstimateBeforeLimit() override;
 
   float getMultiplicity(size_t col) override {

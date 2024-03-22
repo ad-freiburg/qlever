@@ -18,6 +18,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
+#include "engine/TextLimit.h"
 #include "engine/TransitivePath.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
@@ -97,6 +98,30 @@ inline auto TextIndexScanForWord = [](Variable textRecordVar,
                   Eq(1 + word.ends_with('*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
+};
+
+inline auto TextLimit = [](const size_t n, QueryExecutionTree child,
+                           const Variable& textRecVar,
+                           const vector<Variable>& entityVars,
+                           const vector<Variable>& scoreVars) -> QetMatcher {
+  size_t textRecColumn = child.getVariableColumn(textRecVar);
+  vector<size_t> entityColumns;
+  for (const auto& entityVar : entityVars) {
+    entityColumns.push_back(child.getVariableColumn(entityVar));
+  }
+  vector<size_t> scoreColumns;
+  for (const auto& scoreVar : scoreVars) {
+    scoreColumns.push_back(child.getVariableColumn(scoreVar));
+  }
+  string childCacheKey = child.getCacheKey();
+  return RootOperation<::TextLimit>(
+      AllOf(AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
+            AD_PROPERTY(::TextLimit, getChildCacheKey, Eq(childCacheKey)),
+            AD_PROPERTY(::TextLimit, getTextRecordColumn, Eq(textRecColumn)),
+            AD_PROPERTY(::TextLimit, getEntityColumns,
+                        UnorderedElementsAreArray(entityColumns)),
+            AD_PROPERTY(::TextLimit, getScoreColumns,
+                        UnorderedElementsAreArray(scoreColumns))));
 };
 
 inline auto TextIndexScanForEntity =
