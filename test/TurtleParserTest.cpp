@@ -247,8 +247,12 @@ TEST(TurtleParserTest, blankNode) {
   };
   auto checkRe2 = checkParseResult<Re2Parser, &Re2Parser::blankNode, 4>;
   auto checkCtre = checkParseResult<CtreParser, &CtreParser::blankNode, 4>;
+  auto checkRe2Subject = checkParseResult<Re2Parser, &Re2Parser::subject, 4>;
+  auto checkCtreSubject = checkParseResult<CtreParser, &CtreParser::subject, 4>;
   runCommonTests(checkRe2);
   runCommonTests(checkCtre);
+  runCommonTests(checkRe2Subject);
+  runCommonTests(checkCtreSubject);
 }
 
 TEST(TurtleParserTest, blankNodePropertyList) {
