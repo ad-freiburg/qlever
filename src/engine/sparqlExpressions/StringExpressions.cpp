@@ -9,9 +9,22 @@
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
+constexpr auto toLiteral = [](std::string_view normalizedContent) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(normalizedContent))};
+};
+
 // String functions.
-[[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
-  return IdOrString{std::move(s)};
+[[maybe_unused]] auto strImpl = [](std::optional<std::string> s) -> IdOrString {
+  if (s.has_value()) {
+    return IdOrString{toLiteral(s.value())};
+  } else {
+    return Id::makeUndefined();
+  }
 };
 NARY_EXPRESSION(StrExpressionImpl, 1, FV<decltype(strImpl), StringValueGetter>);
 
@@ -81,7 +94,7 @@ struct LiftStringFunction {
     using ResultOfFunction =
         decltype(std::invoke(Function{}, std::move(arguments.value())...));
     static_assert(std::same_as<ResultOfFunction, Id> ||
-                      std::same_as<ResultOfFunction, std::string>,
+                      std::same_as<ResultOfFunction, LiteralOrIri>,
                   "Template argument of `LiftStringFunction` must return `Id` "
                   "or `std::string`");
     using Result =
@@ -108,7 +121,7 @@ using StrlenExpression =
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::utf8ToLower(input.value());
+    return toLiteral(ad_utility::utf8ToLower(input.value()));
   }
 };
 using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
@@ -119,7 +132,7 @@ using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::utf8ToUpper(input.value());
+    return toLiteral(ad_utility::utf8ToUpper(input.value()));
   }
 };
 using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
@@ -157,7 +170,7 @@ class SubstrImpl {
     }
 
     if (isNan(start) || isNan(length)) {
-      return std::string{};
+      return toLiteral("");
     }
 
     // In SPARQL indices are 1-based, but the implementation we use is 0 based,
@@ -185,8 +198,8 @@ class SubstrImpl {
       return static_cast<size_t>(n);
     };
 
-    return std::string{
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt))};
+    return toLiteral(
+        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)));
   }
 };
 
@@ -226,20 +239,20 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string text, std::string_view pattern) -> std::string {
+    [](std::string text, std::string_view pattern) -> LiteralOrIri {
   // Required by the SPARQL standard.
   if (pattern.empty()) {
-    return text;
+    return toLiteral(text);
   }
   auto pos = text.find(pattern);
   if (pos >= text.size()) {
-    return "";
+    return toLiteral("");
   }
   if constexpr (isStrAfter) {
-    return text.substr(pos + pattern.size());
+    return toLiteral(text.substr(pos + pattern.size()));
   } else {
     // STRBEFORE
-    return text.substr(0, pos);
+    return toLiteral(text.substr(0, pos));
   }
 };
 
@@ -269,7 +282,7 @@ using StrBeforeExpression =
   }
   const auto& repl = replacement.value();
   re2::RE2::GlobalReplace(&in, pat, repl);
-  return std::move(in);
+  return toLiteral(in);
 };
 
 using ReplaceExpression =
@@ -355,12 +368,13 @@ class ConcatExpression : public detail::VariadicExpression {
     // Lift the result from `string` to `IdOrString` which is needed for the
     // expression module.
     if (std::holds_alternative<std::string>(result)) {
-      return IdOrString{std::move(std::get<std::string>(result))};
+      return IdOrString{toLiteral(std::get<std::string>(result))};
     } else {
       auto& stringVec = std::get<StringVec>(result);
-      VectorWithMemoryLimit<IdOrString> resultAsVec{
-          std::make_move_iterator(stringVec.begin()),
-          std::make_move_iterator(stringVec.end()), ctx->_allocator};
+      VectorWithMemoryLimit<IdOrString> resultAsVec(ctx->_allocator);
+      resultAsVec.reserve(stringVec.size());
+      std::ranges::copy(stringVec | std::views::transform(toLiteral),
+                        std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }
@@ -375,13 +389,15 @@ class ConcatExpression : public detail::VariadicExpression {
     std::string_view value{input.value()};
 
     if (value.starts_with("\"")) {
+      // TODO<joka921> This actually shouldn't happen/be necessary-> debug.
       auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
       if (contentEnd != 0) {
         std::string_view content = value.substr(1, contentEnd - 1);
-        return boost::urls::encode(content, boost::urls::unreserved_chars);
+        return toLiteral(
+            boost::urls::encode(content, boost::urls::unreserved_chars));
       }
     }
-    return boost::urls::encode(value, boost::urls::unreserved_chars);
+    return toLiteral(boost::urls::encode(value, boost::urls::unreserved_chars));
   }
 };
 using EncodeForUriExpression =

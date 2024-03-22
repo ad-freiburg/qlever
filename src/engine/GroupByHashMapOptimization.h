@@ -88,10 +88,12 @@ struct ExtremumAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
     auto valueIdResultGetter = [](ValueId id) { return id; };
-    auto stringResultGetter = [localVocab](const std::string& str) {
-      auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-      return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-    };
+    auto stringResultGetter =
+        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
+              str.toStringRepresentation());
+          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+        };
     return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
                                                        stringResultGetter),
                       currentValue_);

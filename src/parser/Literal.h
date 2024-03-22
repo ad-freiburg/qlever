@@ -25,12 +25,6 @@ class Literal {
   // Create a new literal without any descriptor
   explicit Literal(std::string content, size_t beginOfSuffix_);
 
-  // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
-  // already be normalized
-  static Literal literalWithNormalizedContent(
-      NormalizedString normalizedRdfContent,
-      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
-
   // Internal helper function. Return either the empty string (for a plain
   // literal), `@langtag` or `^^<datatypeIri>`.
   std::string_view getSuffix() const {
@@ -77,6 +71,12 @@ class Literal {
   // LiteralORIri::fromEscapedRdfLiteral
   static Literal fromEscapedRdfLiteral(
       std::string_view rdfContentWithQuotes,
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
+
+  // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
+  // already be normalized
+  static Literal literalWithNormalizedContent(
+      NormalizedStringView normalizedRdfContent,
       std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   void addLanguageTag(std::string_view languageTag);

@@ -176,11 +176,13 @@ inline const auto compareIdsOrStrings =
     []<StoresStringOrId T, StoresStringOrId U>(
         const T& a, const U& b,
         const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
-  if constexpr (ad_utility::isSimilar<std::string, T> &&
-                ad_utility::isSimilar<std::string, U>) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  if constexpr (ad_utility::isSimilar<LiteralOrIri, T> &&
+                ad_utility::isSimilar<LiteralOrIri, U>) {
     // TODO<joka921> integrate comparison via ICU and proper handling for
     // IRIs/ Literals/etc.
-    return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
+    return valueIdComparators::fromBool(applyComparison<Comp>(
+        a.toStringRepresentation(), b.toStringRepresentation()));
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);
