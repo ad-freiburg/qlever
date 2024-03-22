@@ -34,6 +34,9 @@ using ad_utility::testing::makeAllocator;
 namespace {
 
 using Vars = std::vector<std::optional<Variable>>;
+auto iri = [](std::string_view s) {
+  return TripleComponent::Iri::fromIriref(s);
+};
 
 /*
  * A structure containing all information needed for a normal join test. A
@@ -261,11 +264,11 @@ ExpectedColumns makeExpectedColumns(const VariableToColumnMap& varToColMap,
 // will be thrown.
 std::shared_ptr<QueryExecutionTree> makeValuesForSingleVariable(
     QueryExecutionContext* qec, std::string variable,
-    std::vector<std::string> values) {
+    std::vector<TripleComponent> values) {
   parsedQuery::SparqlValues sparqlValues;
   sparqlValues._variables.emplace_back(std::move(variable));
   for (auto& value : values) {
-    sparqlValues._values.push_back({TripleComponent{std::move(value)}});
+    sparqlValues._values.push_back({std::move(value)});
   }
   return ad_utility::makeExecutionTree<Values>(qec, sparqlValues);
 }
@@ -281,7 +284,8 @@ TEST(JoinTest, joinWithFullScanPSO) {
   // Test the combination of parsing and evaluating such queries.
   auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
       qec, PSO, SparqlTriple{Var{"?s"}, "?p", Var{"?o"}});
-  auto valuesTree = makeValuesForSingleVariable(qec, "?p", {"<o>", "<a>"});
+  auto valuesTree =
+      makeValuesForSingleVariable(qec, "?p", {iri("<o>"), iri("<a>")});
 
   auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
 
@@ -333,7 +337,7 @@ TEST(JoinTest, joinWithColumnAndScan) {
     qec->getQueryTreeCache().clearAll();
     auto fullScanPSO = ad_utility::makeExecutionTree<IndexScan>(
         qec, PSO, SparqlTriple{Var{"?s"}, "<p>", Var{"?o"}});
-    auto valuesTree = makeValuesForSingleVariable(qec, "?s", {"<x>"});
+    auto valuesTree = makeValuesForSingleVariable(qec, "?s", {iri("<x>")});
 
     auto join = Join{qec, fullScanPSO, valuesTree, 0, 0};
     EXPECT_EQ(join.getDescriptor(), "Join on ?s");

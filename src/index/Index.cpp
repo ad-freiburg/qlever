@@ -78,8 +78,19 @@ std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
 }
 
 // ____________________________________________________________________________
-bool Index::getId(const std::string& element, Id* id) const {
-  return pimpl_->getId(element, id);
+std::optional<Id> Index::getId(
+    const ad_utility::triple_component::LiteralOrIri& element) const {
+  return pimpl_->getId(element);
+}
+// ____________________________________________________________________________
+std::optional<Id> Index::getId(
+    const ad_utility::triple_component::Iri& element) const {
+  return pimpl_->getId(element);
+}
+// ____________________________________________________________________________
+std::optional<Id> Index::getId(
+    const ad_utility::triple_component::Literal& element) const {
+  return pimpl_->getId(element);
 }
 
 // ____________________________________________________________________________
@@ -200,11 +211,6 @@ void Index::setOnDiskBase(const std::string& onDiskBase) {
 // ____________________________________________________________________________
 void Index::setSettingsFile(const std::string& filename) {
   return pimpl_->setSettingsFile(filename);
-}
-
-// ____________________________________________________________________________
-void Index::setPrefixCompression(bool compressed) {
-  return pimpl_->setPrefixCompression(compressed);
 }
 
 // ____________________________________________________________________________

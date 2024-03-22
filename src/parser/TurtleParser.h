@@ -38,27 +38,13 @@ enum class TurtleParserIntegerOverflowBehavior {
 };
 
 struct TurtleTriple {
-  std::string subject_;
-  std::string predicate_;
+  // TODO<joka921> The subject can only be IRI or BlankNode.
+  TripleComponent subject_;
+  TripleComponent::Iri predicate_;
   TripleComponent object_;
 
   bool operator==(const TurtleTriple&) const = default;
 };
-
-inline std::string_view stripAngleBrackets(std::string_view input) {
-  AD_CONTRACT_CHECK(input.starts_with('<') && input.ends_with('>'));
-  input.remove_prefix(1);
-  input.remove_suffix(1);
-  return input;
-}
-
-inline std::string_view stripDoubleQuotes(std::string_view input) {
-  AD_CONTRACT_CHECK(input.starts_with('"') && input.ends_with('"') &&
-                    input.size() >= 2);
-  input.remove_prefix(1);
-  input.remove_suffix(1);
-  return input;
-}
 
 // A base class for all the different turtle parsers.
 class TurtleParserBase {
@@ -168,13 +154,13 @@ class TurtleParser : public TurtleParserBase {
 
   // Maps prefixes to their expanded form, initialized with the empty base
   // (i.e. the prefix ":" maps to the empty IRI).
-  ad_utility::HashMap<std::string, std::string> prefixMap_{{"", ""}};
+  ad_utility::HashMap<std::string, TripleComponent::Iri> prefixMap_{{{}, {}}};
 
   // There are turtle constructs that reuse prefixes, subjects and predicates
   // so we have to save the last seen ones.
   std::string activePrefix_;
-  std::string activeSubject_;
-  std::string activePredicate_;
+  TripleComponent activeSubject_;
+  TripleComponent::Iri activePredicate_;
   size_t numBlankNodes_ = 0;
 
   bool currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
@@ -194,8 +180,8 @@ class TurtleParser : public TurtleParserBase {
   void clear() {
     lastParseResult_ = "";
 
-    activeSubject_.clear();
-    activePredicate_.clear();
+    activeSubject_ = TripleComponent::Iri::fromIriref("<>");
+    activePredicate_ = TripleComponent::Iri::fromIriref("<>");
     activePrefix_.clear();
 
     prefixMap_.clear();
@@ -282,8 +268,8 @@ class TurtleParser : public TurtleParserBase {
   bool doubleParse();
 
   // Two helper functions for the actual conversion from strings to numbers.
-  void parseDoubleConstant(const std::string& input);
-  void parseIntegerConstant(const std::string& input);
+  void parseDoubleConstant(std::string_view input);
+  void parseIntegerConstant(std::string_view input);
 
   // This version only works if no escape sequences were used.
   bool pnameLnRelaxed();
@@ -337,7 +323,7 @@ class TurtleParser : public TurtleParserBase {
 
   // map a turtle prefix to its expanded form. Throws if the prefix was not
   // properly registered before
-  string expandPrefix(const string& prefix) {
+  TripleComponent::Iri expandPrefix(const std::string& prefix) {
     if (!prefixMap_.count(prefix)) {
       raise("Prefix " + prefix +
             " was not previously defined using a PREFIX or @prefix "

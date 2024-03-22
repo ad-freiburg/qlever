@@ -8,6 +8,7 @@
 #include <algorithm>
 
 #include "util/Algorithm.h"
+#include "util/Random.h"
 
 using namespace ad_utility;
 
@@ -160,4 +161,26 @@ TEST(AlgorithmTest, transformArray) {
   auto str = [](size_t x) { return std::string(x, 'a'); };
   ASSERT_EQ(transformArray(std::array{1, 3, 5}, str),
             (std::array{"a"s, "aaa"s, "aaaaa"s}));
+}
+
+TEST(AlgorithmTest, lowerUpperBoundIterator) {
+  std::vector<size_t> input;
+  FastRandomIntGenerator<size_t> randomGenerator;
+  std::ranges::generate_n(std::back_inserter(input), 1000,
+                          std::ref(randomGenerator));
+
+  auto compForLowerBound = [](auto iterator, size_t value) {
+    return *iterator < value;
+  };
+  auto compForUpperBound = [](size_t value, auto iterator) {
+    return value < *iterator;
+  };
+  for (auto value : input) {
+    EXPECT_EQ(ad_utility::lower_bound_iterator(input.begin(), input.end(),
+                                               value, compForLowerBound),
+              std::ranges::lower_bound(input, value));
+    EXPECT_EQ(ad_utility::upper_bound_iterator(input.begin(), input.end(),
+                                               value, compForUpperBound),
+              std::ranges::upper_bound(input, value));
+  }
 }

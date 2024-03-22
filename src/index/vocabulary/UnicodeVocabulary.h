@@ -104,8 +104,8 @@ class UnicodeVocabulary {
 
   void close() { _underlyingVocabulary.close(); }
 
-  void build(const std::vector<std::string>& v) {
-    _underlyingVocabulary.build(v);
+  void build(const std::vector<std::string>& v, const std::string& filename) {
+    _underlyingVocabulary.build(v, filename);
   }
 };
 

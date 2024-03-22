@@ -793,13 +793,27 @@ boost::asio::awaitable<void> Server::processQuery(
 template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
+  // `interruptible` will set the shared state of this promise
+  // with a function that can be used to cancel the timer.
+  std::promise<std::function<void()>> cancelTimerPromise{};
+  auto cancelTimerFuture = cancelTimerPromise.get_future();
+
   auto inner = [function = std::move(function),
-                handle = std::move(handle)]() mutable -> T {
-    handle->resetWatchDogState();
+                cancelTimerFuture =
+                    std::move(cancelTimerFuture)]() mutable -> T {
+    // Ensure future is ready by the time this is called.
+    AD_CORRECTNESS_CHECK(cancelTimerFuture.wait_for(std::chrono::milliseconds{
+                             0}) == std::future_status::ready);
+    cancelTimerFuture.get()();
     return std::invoke(std::move(function));
   };
-  return ad_utility::runFunctionOnExecutor(
-      threadPool_.get_executor(), std::move(inner), net::use_awaitable);
+  // interruptible doesn't make the awaitable return faster when cancelled,
+  // this might still block. However it will make the code check the
+  // cancellation handle while waiting for a thread in the pool to become ready.
+  return ad_utility::interruptible(
+      ad_utility::runFunctionOnExecutor(threadPool_.get_executor(),
+                                        std::move(inner), net::use_awaitable),
+      std::move(handle), std::move(cancelTimerPromise));
 }
 
 // _____________________________________________________________________________

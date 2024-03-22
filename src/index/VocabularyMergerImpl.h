@@ -33,12 +33,8 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
                                    WordCallback auto& externalWordCallback,
-                                   ad_utility::MemorySize memoryToUse,
-                                   WithIdMaps withIdMaps) {
+                                   ad_utility::MemorySize memoryToUse) {
   VocabularyMerger merger;
-  if (withIdMaps == WithIdMaps::False) {
-    merger.noIdMapsAndIgnoreExternalVocab_ = true;
-  }
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, externalWordCallback,
                                 memoryToUse);
@@ -85,9 +81,7 @@ auto VocabularyMerger::mergeVocabulary(
   generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
     generators.push_back(makeGenerator(i));
-    if (!noIdMapsAndIgnoreExternalVocab_) {
-      idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
-    }
+    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -104,15 +98,7 @@ auto VocabularyMerger::mergeVocabulary(
                                         decltype(sizeOfQueueWord)>(
           0.8 * memoryToUse, generators, lessThanForQueue);
   for (QueueWord& currentWord : std::views::join(mergedWords)) {
-    // for the prefix compression vocabulary, we don't need the external
-    // vocabulary
-    // TODO<joka921> Don't include external literals at all in this
-    // vocabulary.
-    if (noIdMapsAndIgnoreExternalVocab_ && currentWord.isExternal()) {
-      break;
-    }
-
-    // accumulated the globally ordered queue words in a buffer.
+    // Accumulate the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(currentWord));
 
     if (sortedBuffer.size() >= bufferSize_) {
@@ -247,9 +233,6 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 // ____________________________________________________________________________
 inline void VocabularyMerger::doActualWrite(
     const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
-  if (noIdMapsAndIgnoreExternalVocab_) {
-    return;
-  }
   for (const auto& [id, value] : buffer) {
     idVecs_[id].push_back(
         {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});

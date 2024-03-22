@@ -384,6 +384,6 @@ addLinkAndDiscoverTest(ConstantsTest)
 
 addLinkAndDiscoverTest(JThreadTest)
 
-addLinkAndDiscoverTest(PointerGuardTest)
-
 addLinkAndDiscoverTest(ChunkedForLoopTest)
+
+addLinkAndDiscoverTest(FsstCompressorTest fsst)

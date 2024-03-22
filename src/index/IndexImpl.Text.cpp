@@ -114,7 +114,6 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
   size_t nofLines =
       processWordsForVocabulary(contextFile, addWordsFromLiterals);
-  textVocab_.writeToFile(onDiskBase_ + ".text.vocabulary");
 
   // Build the half-inverted lists (second scan over the text records).
   LOG(INFO) << "Building the half-inverted index lists ..." << std::endl;
@@ -224,7 +223,7 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
       distinctWords.insert(line._word);
     }
   }
-  textVocab_.createFromSet(distinctWords);
+  textVocab_.createFromSet(distinctWords, onDiskBase_ + ".text.vocabulary");
   return numLines;
 }
 

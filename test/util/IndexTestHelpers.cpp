@@ -5,6 +5,7 @@
 #include "IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
+#include "./TripleComponentTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
 
@@ -43,7 +44,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
+          indexBasename + ".vocabulary.external.idsAndOffsets"};
 }
 
 namespace {
@@ -125,7 +126,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
-                    bool usePrefixCompression,
+                    [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex) {
   // Ignore the (irrelevant) log output of the index building and loading during
@@ -156,7 +157,6 @@ Index makeTestIndex(const std::string& indexBasename,
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = usePatterns;
-    index.setPrefixCompression(usePrefixCompression);
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {
@@ -262,10 +262,17 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 // ___________________________________________________________
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
-    Id id;
-    bool success = index.getId(el, &id);
-    AD_CONTRACT_CHECK(success);
-    return id;
+    auto literalOrIri = [&el]() {
+      if (el.starts_with('<') || el.starts_with('@')) {
+        return triple_component::LiteralOrIri::iriref(el);
+      } else {
+        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        return triple_component::LiteralOrIri::fromStringRepresentation(el);
+      }
+    }();
+    auto id = index.getId(literalOrIri);
+    AD_CONTRACT_CHECK(id.has_value());
+    return id.value();
   };
 }
 }  // namespace ad_utility::testing

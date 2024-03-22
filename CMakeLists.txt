@@ -185,7 +185,7 @@ find_package(OpenSSL REQUIRED)
 function (qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
         absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl)
+        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
@@ -294,6 +294,16 @@ FetchContent_Declare(
 )
 
 ################################
+# FSST
+################################
+FetchContent_Declare(
+        fsst
+        GIT_REPOSITORY https://github.com/cwida/fsst.git
+        GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
+)
+
+
+################################
 # RE2
 ################################
 set(RE2_BUILD_TESTING OFF CACHE BOOL "enable testing for RE2" FORCE)
@@ -308,7 +318,7 @@ FetchContent_Declare(
 ################################
 # Apply FetchContent
 ################################
-FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl)
+FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
@@ -316,6 +326,9 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
 endif()
 include_directories(${ctre_SOURCE_DIR}/single-header)
+target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
+target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
+include_directories(${fsst_SOURCE_DIR})
 
 message(STATUS ---)
 message(STATUS "CXX_FLAGS are : " ${CMAKE_CXX_FLAGS})
@@ -400,12 +413,6 @@ qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Bo
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
-
-add_executable(PrefixHeuristicEvaluatorMain src/PrefixHeuristicEvaluatorMain.cpp)
-qlever_target_link_libraries (PrefixHeuristicEvaluatorMain index ${CMAKE_THREAD_LIBS_INIT})
-
-add_executable(TurtleParserMain src/TurtleParserMain.cpp)
-qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})
