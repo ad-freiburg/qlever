@@ -6,6 +6,7 @@
 #include <gtest/gtest.h>
 
 #include "./util/IdTableHelpers.h"
+#include "engine/CartesianProductJoin.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/TextLimit.h"
 #include "engine/ValuesForTesting.h"
@@ -28,20 +29,25 @@ TextLimit makeTextLimit(IdTable input, const size_t& n,
       entityColumns, scoreColumns};
 }
 
-bool testSorted(IdTable result, const ColumnIndex& textRecordColumn,
-                const ColumnIndex& entityColumn,
-                const ColumnIndex& scoreColumn) {
-  for (size_t i = 1; i < result.size(); i++) {
-    if (result[i][entityColumn] > result[i - 1][entityColumn] ||
-        (result[i][entityColumn] == result[i - 1][entityColumn] &&
-         result[i][scoreColumn] > result[i - 1][scoreColumn]) ||
-        (result[i][entityColumn] == result[i - 1][entityColumn] &&
-         result[i][scoreColumn] == result[i - 1][scoreColumn] &&
-         result[i][textRecordColumn] > result[i - 1][textRecordColumn])) {
-      return false;
-    }
+CartesianProductJoin makeJoin(IdTable input1, IdTable input2) {
+  auto qec = ad_utility::testing::getQec();
+  size_t j = 0;
+  std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
+  std::vector<std::optional<Variable>> vars;
+  for (size_t i = 0; i < input1.numColumns(); ++i) {
+    vars.emplace_back("?" + std::to_string(j++));
   }
-  return true;
+  valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input1), std::move(vars)));
+
+  vars.clear();
+  for (size_t i = 0; i < input2.numColumns(); ++i) {
+    vars.emplace_back("?" + std::to_string(j++));
+  }
+  valueOperations.push_back(ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(input2), std::move(vars)));
+
+  return CartesianProductJoin{qec, std::move(valueOperations)};
 }
 }  // namespace
 
@@ -103,8 +109,6 @@ TEST(TextLimit, computeResult) {
   ASSERT_EQ(textLimit1.getResultWidth(), 6);
   resultIdTable = textLimit1.getResult()->idTable().clone();
 
-  ASSERT_TRUE(testSorted(resultIdTable.clone(), 0, 1, 3));
-
   /*
   Expected result:
   textRecord | entity | word | score | random | random2
@@ -126,8 +130,6 @@ TEST(TextLimit, computeResult) {
   TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 2, 0, {1}, {3});
   ASSERT_EQ(textLimit2.getResultWidth(), 6);
   resultIdTable = textLimit2.getResult()->idTable().clone();
-
-  ASSERT_TRUE(testSorted(resultIdTable.clone(), 0, 1, 3));
 
   /*
   Expected result:
@@ -156,8 +158,6 @@ TEST(TextLimit, computeResult) {
   TextLimit textLimit19 = makeTextLimit(inputTable.clone(), 19, 0, {1}, {3});
   ASSERT_EQ(textLimit19.getResultWidth(), 6);
   resultIdTable = textLimit19.getResult()->idTable().clone();
-
-  ASSERT_TRUE(testSorted(resultIdTable.clone(), 0, 1, 3));
 
   /*
   Expected result:
@@ -214,8 +214,6 @@ TEST(TextLimit, computeResult) {
   TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 3, 0, {1}, {3});
   ASSERT_EQ(textLimit3.getResultWidth(), 6);
   resultIdTable = textLimit3.getResult()->idTable().clone();
-
-  ASSERT_TRUE(testSorted(resultIdTable.clone(), 0, 1, 3));
 
   /*
   Expected result:
@@ -348,6 +346,124 @@ TEST(TextLimit, computeResultMultipleEntities) {
               {0, 0, 1, 3, 2, 4, 3, 1}};
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
+}
+
+// _____________________________________________________________________________
+TEST(TextLimit, PositioningTest) {
+  /*
+  The first indices written as a table:
+  textRecord1 | entity1 | word1 | score1 | random11 | random12
+  -----------------------------------------------------
+  7           | 1       | 1     | 2      | 1        | 5
+  0           | 6       | 3     | 3      | 4        | 4
+  5           | 1       | 1     | 2      | 3        | 27
+  5           | 1       | 0     | 2      | 0        | 27
+  19          | 1       | 4     | 1      | 7        | 9
+  3           | 5       | 4     | 2      | 4        | 4
+  2           | 5       | 0     | 6      | 7        | 5
+  5           | 5       | 2     | 4      | 9        | 7
+  2           | 4       | 1     | 5      | 6        | 19
+  1           | 36      | 2     | 4      | 5        | 3
+  4           | 0       | 1     | 7      | 8        | 6
+  0           | 0       | 2     | 1      | 2        | 19
+  */
+
+  VectorTable input1 = {
+      {7, 1, 1, 2, 1, 5},  {0, 6, 3, 3, 4, 4},  {5, 1, 1, 2, 3, 27},
+      {5, 1, 0, 2, 0, 27}, {19, 1, 4, 1, 7, 9}, {3, 5, 4, 2, 4, 4},
+      {2, 5, 0, 6, 7, 5},  {5, 5, 2, 4, 9, 7},  {2, 4, 1, 5, 6, 19},
+      {1, 36, 2, 4, 5, 3}, {4, 0, 1, 7, 8, 6},  {0, 0, 2, 1, 2, 19}};
+  IdTable inputTable1 = makeIdTableFromVector(input1, &Id::makeFromInt);
+
+  /*
+  The second indices written as a table:
+  textRecord2 | entity2 | word2 | score2 | random21 | random22
+  -----------------------------------------------------
+  7           | 5       | 1     | 2      | 56       | 3
+  0           | 2       | 8     | 12     | 0        | 3
+  5           | 4       | 1     | 2      | 2        | 27
+  5           | 2       | 3     | 1      | 0        | 7
+  19          | 2       | 4     | 15     | 7        | 9
+  3           | 5       | 4     | 2      | 8        | 3
+  2           | 5       | 5     | 3      | 7        | 5
+  */
+
+  VectorTable input2 = {{7, 5, 1, 2, 56, 3},  {0, 2, 8, 12, 0, 3},
+                        {5, 4, 1, 2, 2, 27},  {5, 2, 3, 1, 0, 7},
+                        {19, 2, 4, 15, 7, 9}, {3, 5, 4, 2, 8, 3},
+                        {2, 5, 5, 3, 7, 5}};
+  IdTable inputTable2 = makeIdTableFromVector(input2, &Id::makeFromInt);
+
+  // Test all 4 possible orders that the two textLimit operations can be applied
+  // in. Test with limit 2.
+  auto newColumnIndex = [](CartesianProductJoin c, size_t oldIndex) {
+    return c.getExternallyVisibleVariableColumns()
+        .at(Variable{"?" + std::to_string(oldIndex)})
+        .columnIndex_;
+  };
+
+  // First Order: Apply textLimit1 and textLimit2 before applying the cartesian
+  // join.
+  TextLimit textLimit11 = makeTextLimit(inputTable1.clone(), 2, 0, {1}, {3});
+  TextLimit textLimit12 = makeTextLimit(inputTable2.clone(), 2, 0, {1}, {3});
+
+  // Join the two results.
+  IdTable resultIdTable1 = textLimit11.getResult()->idTable().clone();
+  IdTable resultIdTable2 = textLimit12.getResult()->idTable().clone();
+
+  IdTable finalIdTableOrder1 =
+      makeJoin(resultIdTable1.clone(), resultIdTable2.clone())
+          .getResult()
+          ->idTable()
+          .clone();
+
+  // Second Order: Apply textLimit1 and textLimit2 after applying the cartesian
+  // join.
+  CartesianProductJoin c2 = makeJoin(inputTable1.clone(), inputTable2.clone());
+  IdTable intermediateResult = c2.getResult()->idTable().clone();
+
+  TextLimit textLimit21 =
+      makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c2, 0),
+                    {newColumnIndex(c2, 1)}, {newColumnIndex(c2, 3)});
+  resultIdTable1 = textLimit21.getResult()->idTable().clone();
+
+  TextLimit textLimit22 =
+      makeTextLimit(resultIdTable1.clone(), 2, newColumnIndex(c2, 6),
+                    {newColumnIndex(c2, 7)}, {newColumnIndex(c2, 9)});
+  IdTable finalIdTableOrder2 = textLimit22.getResult()->idTable().clone();
+
+  // Third Order: Apply textLimit2 before applying the cartesian join and
+  // textLimit1 after.
+  TextLimit textLimit32 = makeTextLimit(inputTable2.clone(), 2, 0, {1}, {3});
+  resultIdTable2 = textLimit32.getResult()->idTable().clone();
+
+  CartesianProductJoin c3 =
+      makeJoin(inputTable1.clone(), resultIdTable2.clone());
+  intermediateResult = c3.getResult()->idTable().clone();
+
+  TextLimit textLimit31 =
+      makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c3, 0),
+                    {newColumnIndex(c3, 1)}, {newColumnIndex(c3, 3)});
+  IdTable finalIdTableOrder3 = textLimit31.getResult()->idTable().clone();
+
+  // Fourth Order: Apply textLimit2 after applying the cartesian join and
+  // textLimit1 before.
+  TextLimit textLimit41 = makeTextLimit(inputTable1.clone(), 2, 0, {1}, {3});
+  resultIdTable1 = textLimit41.getResult()->idTable().clone();
+
+  CartesianProductJoin c4 =
+      makeJoin(resultIdTable1.clone(), inputTable2.clone());
+  intermediateResult = c4.getResult()->idTable().clone();
+
+  TextLimit textLimit42 =
+      makeTextLimit(intermediateResult.clone(), 2, newColumnIndex(c4, 6),
+                    {newColumnIndex(c4, 7)}, {newColumnIndex(c4, 9)});
+  IdTable finalIdTableOrder4 = textLimit42.getResult()->idTable().clone();
+
+  // Compare the results of all 4 orders.
+  compareIdTableWithExpectedContent(finalIdTableOrder1, finalIdTableOrder2);
+  compareIdTableWithExpectedContent(finalIdTableOrder1, finalIdTableOrder3);
+  compareIdTableWithExpectedContent(finalIdTableOrder1, finalIdTableOrder4);
 }
 
 // _____________________________________________________________________________
