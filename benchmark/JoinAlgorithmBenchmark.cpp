@@ -2113,6 +2113,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
 AD_REGISTER_BENCHMARK(BmSameSizeRowGrowth);
 AD_REGISTER_BENCHMARK(BmOnlySmallerTableSizeChanges);
 AD_REGISTER_BENCHMARK(BmOnlyBiggerTableSizeChanges);
-AD_REGISTER_BENCHMARK(BmSampleSizeRatio);
+// TODO Uncomment! Currently only commented out for debugging purpose!
+// AD_REGISTER_BENCHMARK(BmSampleSizeRatio);
 AD_REGISTER_BENCHMARK(BmSmallerTableGrowsBiggerTableRemainsSameSize);
 }  // namespace ad_benchmark
