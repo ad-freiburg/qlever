@@ -45,7 +45,8 @@ inline ValueId makeVocabId(uint64_t value) {
   return ValueId::makeFromVocabIndex(VocabIndex::make(value));
 }
 inline ValueId makeLocalVocabId(uint64_t value) {
-  return ValueId::makeFromLocalVocabIndex(LocalVocabIndex::make(value));
+  return ValueId::makeFromLocalVocabIndex(
+      std::bit_cast<LocalVocabIndex>(value << 4));
 }
 inline ValueId makeTextRecordId(uint64_t value) {
   return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
@@ -58,8 +59,9 @@ inline ValueId makeBlankNodeId(uint64_t value) {
 }
 
 inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
+// TODO<joka921> Make the tests more precise for the localVocabIndices.
 inline uint64_t getLocalVocabIndex(ValueId id) {
-  return id.getLocalVocabIndex().get();
+  return std::bit_cast<uint64_t>(id.getLocalVocabIndex()) >> 4;
 }
 inline uint64_t getTextRecordIndex(ValueId id) {
   return id.getTextRecordIndex().get();
