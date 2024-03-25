@@ -67,15 +67,6 @@ std::optional<std::string> getPrefixRegex(std::string regex) {
   return regex;
 }
 
-// Assert that `input` starts and ends with double quotes `"` and remove those
-// quotes.
-std::string removeQuotes(std::string_view input) {
-  AD_CORRECTNESS_CHECK(input.size() >= 2 && input.starts_with('"') &&
-                       input.ends_with('"'));
-  input.remove_prefix(1);
-  input.remove_suffix(1);
-  return std::string{input};
-}
 }  // namespace sparqlExpression::detail
 
 namespace sparqlExpression {
@@ -93,16 +84,15 @@ RegexExpression::RegexExpression(
         "REGEX expressions are currently supported only on variables.");
   }
   std::string regexString;
-  std::string originalRegexString;
   if (auto regexPtr =
           dynamic_cast<const StringLiteralExpression*>(regex.get())) {
-    originalRegexString = regexPtr->value().normalizedLiteralContent().get();
-    if (!regexPtr->value().datatypeOrLangtag().empty()) {
+    const auto& regexLiteral = regexPtr->value();
+    regexString = asStringViewUnsafe(regexLiteral.getContent());
+    if (regexLiteral.hasDatatype() || regexLiteral.hasLanguageTag()) {
       throw std::runtime_error(
           "The second argument to the REGEX function (which contains the "
           "regular expression) must not contain a language tag or a datatype");
     }
-    regexString = detail::removeQuotes(originalRegexString);
   } else {
     throw std::runtime_error(
         "The second argument to the REGEX function must be a "
@@ -111,15 +101,14 @@ RegexExpression::RegexExpression(
   if (optionalFlags.has_value()) {
     if (auto flagsPtr = dynamic_cast<const StringLiteralExpression*>(
             optionalFlags.value().get())) {
-      std::string_view originalFlags =
-          flagsPtr->value().normalizedLiteralContent().get();
-      if (!flagsPtr->value().datatypeOrLangtag().empty()) {
+      const auto& flagsLiteral = flagsPtr->value();
+      std::string_view flags = asStringViewUnsafe(flagsLiteral.getContent());
+      if (flagsLiteral.hasDatatype() || flagsLiteral.hasLanguageTag()) {
         throw std::runtime_error(
             "The third argument to the REGEX function (which contains optional "
             "flags to configure the evaluation) must not contain a language "
             "tag or a datatype");
       }
-      auto flags = detail::removeQuotes(originalFlags);
       auto firstInvalidFlag = flags.find_first_not_of("imsu");
       if (firstInvalidFlag != std::string::npos) {
         throw std::runtime_error{absl::StrCat(
@@ -148,8 +137,8 @@ RegexExpression::RegexExpression(
     const auto& r = std::get<RE2>(regex_);
     if (r.error_code() != RE2::NoError) {
       throw std::runtime_error{absl::StrCat(
-          "The regex ", originalRegexString,
-          " is not supported by QLever (which uses Google's RE2 library). "
+          "The regex \"", regexString,
+          "\" is not supported by QLever (which uses Google's RE2 library). "
           "Error from RE2 is: ",
           r.error())};
     }

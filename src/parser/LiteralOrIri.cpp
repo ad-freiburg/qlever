@@ -66,7 +66,9 @@ NormalizedStringView LiteralOrIri::getLanguageTag() const {
 }
 
 // __________________________________________
-Iri LiteralOrIri::getDatatype() const { return getLiteral().getDatatype(); }
+NormalizedStringView LiteralOrIri::getDatatype() const {
+  return getLiteral().getDatatype();
+}
 
 // __________________________________________
 NormalizedStringView LiteralOrIri::getContent() const {
@@ -80,21 +82,21 @@ NormalizedStringView LiteralOrIri::getContent() const {
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::iriref(const std::string& stringWithBrackets) {
-  return LiteralOrIri{Iri::iriref(stringWithBrackets)};
+  return LiteralOrIri{Iri::fromIriref(stringWithBrackets)};
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::prefixedIri(const Iri& prefix,
                                        std::string_view suffix) {
-  return LiteralOrIri{Iri::prefixed(prefix, suffix)};
+  return LiteralOrIri{Iri::fromPrefixAndSuffix(prefix, suffix)};
 }
 
 // __________________________________________
 LiteralOrIri LiteralOrIri::literalWithQuotes(
     std::string_view rdfContentWithQuotes,
     std::optional<std::variant<Iri, string>> descriptor) {
-  return LiteralOrIri(
-      Literal::literalWithQuotes(rdfContentWithQuotes, std::move(descriptor)));
+  return LiteralOrIri(Literal::fromEscapedRdfLiteral(rdfContentWithQuotes,
+                                                     std::move(descriptor)));
 }
 
 // __________________________________________

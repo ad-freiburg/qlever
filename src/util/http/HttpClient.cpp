@@ -107,9 +107,7 @@ HttpClientImpl<StreamType>::sendRequest(
                   ad_utility::source_location loc =
                       ad_utility::source_location::current()) -> T {
     return ad_utility::runAndWaitForAwaitable(
-        ad_utility::interruptible(std::move(awaitable), handle,
-                                  std::make_shared<std::atomic_flag>(true),
-                                  std::move(loc)),
+        ad_utility::interruptible(std::move(awaitable), handle, std::move(loc)),
         ioContext_);
   };
 

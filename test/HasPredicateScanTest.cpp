@@ -9,6 +9,7 @@
 
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/CountAvailablePredicates.h"
 #include "engine/HasPredicateScan.h"
@@ -18,6 +19,7 @@
 namespace {
 using ad_utility::testing::makeAllocator;
 auto Int = ad_utility::testing::IntId;
+auto iri = ad_utility::testing::iri;
 
 // A text fixture that is used in the following. It consists of a small index
 // and variables for all the IDs that appear in the index.
@@ -63,7 +65,7 @@ class HasPredicateScanTest : public ::testing::Test {
 TEST_F(HasPredicateScanTest, freeS) {
   // ?x ql:has-predicate <p>, expected result : <x> and <y>
   auto scan = HasPredicateScan{
-      qec, SparqlTriple{Variable{"?x"}, HAS_PREDICATE_PREDICATE, "<p>"}};
+      qec, SparqlTriple{Variable{"?x"}, HAS_PREDICATE_PREDICATE, iri("<p>")}};
   runTest(scan, {{x}, {y}});
 }
 
@@ -71,7 +73,7 @@ TEST_F(HasPredicateScanTest, freeS) {
 TEST_F(HasPredicateScanTest, freeO) {
   // <x> ql:has-predicate ?p, expected result : <p> and <p2>
   auto scan = HasPredicateScan{
-      qec, SparqlTriple{"<x>", HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
+      qec, SparqlTriple{iri("<x>"), HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
   runTest(scan, {{p}, {p2}});
 }
 
@@ -109,7 +111,7 @@ TEST_F(HasPredicateScanTest, subtree) {
   // The first triple matches only `<y> <p3> <o4>`, so we get the pattern
   // for `y` with an additional column that always is `<p3.`
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", "<o4>"});
+      qec, Permutation::Enum::OPS, SparqlTriple{V{"?x"}, "?y", iri("<o4>")});
   auto scan = HasPredicateScan{qec, indexScan, 1, V{"?predicate"}};
   runTest(scan, {{p3, y, p}, {p3, y, p3}});
 }
@@ -143,7 +145,7 @@ TEST_F(HasPredicateScanTest, patternTrickWithSubtreeTwoFixedElements) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, "<p3>", "<o4>"};
+  auto triple = SparqlTriple{V{"?x"}, "<p3>", iri("<o4>")};
   triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, Variable{"?predicate"});
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(

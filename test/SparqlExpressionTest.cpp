@@ -9,6 +9,7 @@
 
 #include "./SparqlExpressionTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -23,6 +24,7 @@ using ad_utility::source_location;
 // Some useful shortcuts for the tests below.
 using namespace sparqlExpression;
 using namespace std::literals;
+using ad_utility::testing::iri;
 template <typename T>
 using V = VectorWithMemoryLimit<T>;
 
@@ -520,20 +522,22 @@ TEST(SparqlExpression, stringOperators) {
            IdOrStrings{"one", "two", "three"});
 
   // A simple test for uniqueness of the cache key.
-  auto c1a = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+  auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
                  ->getCacheKey({});
-  auto c1b = makeStrlenExpression(std::make_unique<IriExpression>("<bim>"))
+  auto c1b = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
                  ->getCacheKey({});
-  auto c2a = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+  auto c2a = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
                  ->getCacheKey({});
-  auto c2b = makeStrExpression(std::make_unique<IriExpression>("<bim>"))
+  auto c2b = makeStrExpression(std::make_unique<IriExpression>(iri("<bim>")))
                  ->getCacheKey({});
-  auto c3a = makeStrlenExpression(
-                 makeStrExpression(std::make_unique<IriExpression>("<bim>")))
-                 ->getCacheKey({});
-  auto c3b = makeStrlenExpression(
-                 makeStrExpression(std::make_unique<IriExpression>("<bim>")))
-                 ->getCacheKey({});
+  auto c3a =
+      makeStrlenExpression(
+          makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
+          ->getCacheKey({});
+  auto c3b =
+      makeStrlenExpression(
+          makeStrExpression(std::make_unique<IriExpression>(iri("<bim>"))))
+          ->getCacheKey({});
 
   EXPECT_EQ(c1a, c1b);
   EXPECT_EQ(c2a, c2b);
@@ -798,12 +802,13 @@ TEST(SparqlExpression, ifAndCoalesce) {
   checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}});
   checkCoalesce(IdOrStrings{}, std::tuple{Ids{}, Ids{}, Ids{}});
 
-  auto coalesceExpr =
-      makeCoalesceExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
-                                     std::make_unique<IriExpression>("<bam>"));
+  auto coalesceExpr = makeCoalesceExpressionVariadic(
+      std::make_unique<IriExpression>(iri("<bim>")),
+      std::make_unique<IriExpression>(iri("<bam>")));
   ASSERT_THAT(coalesceExpr->getCacheKey({}),
               testing::AllOf(::testing::ContainsRegex("CoalesceExpression"),
-                             ::testing::ContainsRegex("<bim>, <bam>)")));
+                             ::testing::HasSubstr("<bim>"),
+                             ::testing::HasSubstr("<bam>")));
 }
 
 // ________________________________________________________________________________________
@@ -830,12 +835,13 @@ TEST(SparqlExpression, concatExpression) {
               std::tuple{T, IdOrString{"Me"}, Ids{I(1), I(2)}});
 
   checkConcat(IdOrString{""}, std::tuple{});
-  auto coalesceExpr =
-      makeConcatExpressionVariadic(std::make_unique<IriExpression>("<bim>"),
-                                   std::make_unique<IriExpression>("<bam>"));
+  auto coalesceExpr = makeConcatExpressionVariadic(
+      std::make_unique<IriExpression>(iri("<bim>")),
+      std::make_unique<IriExpression>(iri("<bam>")));
   ASSERT_THAT(coalesceExpr->getCacheKey({}),
               testing::AllOf(::testing::ContainsRegex("ConcatExpression"),
-                             ::testing::ContainsRegex("<bim>, <bam>)")));
+                             ::testing::HasSubstr("<bim>"),
+                             ::testing::HasSubstr("<bam>")));
 }
 
 // ______________________________________________________________________________
@@ -877,8 +883,8 @@ TEST(SparqlExpression, ReplaceExpression) {
 // ______________________________________________________________________________
 TEST(SparqlExpression, literalExpression) {
   TestContext ctx;
-  StringLiteralExpression expr{TripleComponent::Literal{
-      RdfEscaping::normalizeRDFLiteral("\"notInTheVocabulary\"")}};
+  StringLiteralExpression expr{TripleComponent::Literal::fromEscapedRdfLiteral(
+      "\"notInTheVocabulary\"")};
   // Evaluate multiple times to test the caching behavior.
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{"\"notInTheVocabulary\""}}),
@@ -886,7 +892,7 @@ TEST(SparqlExpression, literalExpression) {
   }
   // A similar test with a constant entry that is part of the vocabulary and can
   // therefore be converted to an ID.
-  IriExpression iriExpr{"<x>"};
+  IriExpression iriExpr{TripleComponent::Iri::fromIriref("<x>")};
   Id idOfX = ctx.x;
   for (size_t i = 0; i < 15; ++i) {
     ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),

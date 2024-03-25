@@ -299,7 +299,7 @@ FetchContent_Declare(
 FetchContent_Declare(
         fsst
         GIT_REPOSITORY https://github.com/cwida/fsst.git
-        GIT_TAG c541ffdc2be43443c6a772eb6207eec1b587dbe8
+        GIT_TAG c8719ef0aa3740da9685ad2738bb9c8ecc327944
 )
 
 
@@ -413,9 +413,6 @@ qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Bo
 add_executable(ServerMain src/ServerMain.cpp)
 qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
-
-add_executable(TurtleParserMain src/TurtleParserMain.cpp)
-qlever_target_link_libraries(TurtleParserMain parser ${CMAKE_THREAD_LIBS_INIT})
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)
 qlever_target_link_libraries(VocabularyMergerMain index ${CMAKE_THREAD_LIBS_INIT})

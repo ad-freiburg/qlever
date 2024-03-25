@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
 using ad_utility::testing::makeAllocator;

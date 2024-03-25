@@ -110,8 +110,10 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   // actually is a property path.
   SparqlTripleSimple getSimple() const {
     AD_CONTRACT_CHECK(p_.isIri());
-    TripleComponent p = isVariable(p_._iri) ? TripleComponent{Variable{p_._iri}}
-                                            : TripleComponent(p_._iri);
+    TripleComponent p =
+        isVariable(p_._iri)
+            ? TripleComponent{Variable{p_._iri}}
+            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
     return {s_, p, o_, additionalScanColumns_};
   }
 };

@@ -93,13 +93,13 @@ void Vocabulary<S, C, I>::createFromSet(
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::stringIsLiteral(const string& s) {
+bool Vocabulary<S, C, I>::stringIsLiteral(std::string_view s) {
   return s.starts_with('"');
 }
 
 // _____________________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
+bool Vocabulary<S, C, I>::shouldBeExternalized(string_view s) const {
   // TODO<joka921> Completely refactor the Vocabulary on the different
   // Types, it is a mess.
 
@@ -118,7 +118,8 @@ bool Vocabulary<S, C, I>::shouldBeExternalized(const string& s) const {
 
 // ___________________________________________________________________
 template <class S, class C, class I>
-bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
+bool Vocabulary<S, C, I>::shouldEntityBeExternalized(
+    std::string_view word) const {
   // Never externalize the internal IRIs as they are sometimes added before or
   // after the externalization happens and we thus get inconsistent behavior
   // etc. for `ql:langtag`.
@@ -144,7 +145,7 @@ bool Vocabulary<S, C, I>::shouldEntityBeExternalized(const string& word) const {
 // ___________________________________________________________________
 template <class S, class C, class I>
 bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
-    const string& word) const {
+    std::string_view word) const {
   for (const auto& p : externalizedPrefixes_) {
     if (word.starts_with(p)) {
       return true;
@@ -155,7 +156,7 @@ bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
     return true;
   }
 
-  const string lang = getLanguage(word);
+  const std::string_view lang = getLanguage(word);
   if (lang == "") {
     return false;
   }
@@ -169,7 +170,7 @@ bool Vocabulary<S, C, I>::shouldLiteralBeExternalized(
 }
 // _____________________________________________________________________________
 template <class S, class C, class I>
-string Vocabulary<S, C, I>::getLanguage(const string& literal) {
+std::string_view Vocabulary<S, C, I>::getLanguage(std::string_view literal) {
   auto lioAt = literal.rfind('@');
   if (lioAt != string::npos) {
     auto lioQ = literal.rfind('\"');
@@ -231,7 +232,7 @@ auto Vocabulary<S, C, I>::upper_bound(const string& word,
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-auto Vocabulary<S, C, I>::lower_bound(const string& word,
+auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
   return IndexType::make(internalVocabulary_.lower_bound(word, level)._index);
@@ -258,7 +259,7 @@ AccessReturnType_t<StringType> Vocabulary<StringType, C, I>::at(
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-bool Vocabulary<S, C, I>::getId(const string& word, IndexType* idx) const {
+bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   if (!shouldBeExternalized(word)) {
     // need the TOTAL level because we want the unique word.
     *idx = lower_bound(word, SortLevel::TOTAL);

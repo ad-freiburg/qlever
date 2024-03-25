@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         compiler: [gcc, clang]
-        compiler-version: [11, 12, 13, 16, 17]
+        compiler-version: [11, 12, 13, 16, 17, 18]
         warnings: [  "-Wall -Wextra -Werror " ]
         build-type: [Release]
         expensive-tests: [true]
@@ -30,6 +30,8 @@ jobs:
             compiler-version: 16
           - compiler: gcc
             compiler-version: 17
+          - compiler: gcc
+            compiler-version: 18
           - compiler: clang
             compiler-version: 11
           - compiler: clang

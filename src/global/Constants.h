@@ -64,9 +64,9 @@ static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
 static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
-    "geof:", "<http://www.opengis.net/def/function/geosparql/"};
+    "geof:", "http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
-    "math:", "<http://www.w3.org/2005/xpath-functions/math#"};
+    "math:", "http://www.w3.org/2005/xpath-functions/math#"};
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";

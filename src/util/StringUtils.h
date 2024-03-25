@@ -310,8 +310,8 @@ std::string insertThousandSeparator(const std::string_view str,
 // these overloads are missing in the STL
 // TODO they can be constexpr once the compiler completely supports C++20
 template <typename Char>
-inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
-                                         std::basic_string_view<Char> b) {
+inline std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
+                                          std::basic_string_view<Char> b) {
   std::basic_string<Char> res;
   res.reserve(a.size() + b.size());
   res += a;
@@ -319,10 +319,18 @@ inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
   return res;
 }
 
+template <typename Char>
+inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
+                                         std::basic_string_view<Char> b) {
+  return strCatImpl(std::basic_string_view<Char>{a}, b);
+}
+
+template <typename Char>
+inline std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
+                                         std::basic_string<Char> b) {
+  return strCatImpl(a, std::basic_string_view<Char>{b});
+}
+
 inline std::string operator+(char c, std::string_view b) {
-  std::string res;
-  res.reserve(1 + b.size());
-  res += c;
-  res += b;
-  return res;
+  return strCatImpl(std::string_view(&c, 1), b);
 }

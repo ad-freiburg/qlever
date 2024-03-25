@@ -180,6 +180,10 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
+  // Handle the empty pattern
+  if (rootPattern->_graphPatterns.empty()) {
+    return {makeSubtreePlan<NeutralElementOperation>(_qec)};
+  }
   // here we collect a set of possible plans for each of our children.
   // always only holds plans for children that can be joined in an
   // arbitrary order
@@ -215,11 +219,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // find a single best candidate for a given graph pattern
   auto optimizeSingle = [this](const auto pattern) -> SubtreePlan {
     auto v = optimize(pattern);
-    if (v.empty()) {
-      throw std::runtime_error(
-          "grandchildren or lower of a Plan to be optimized may never be "
-          "empty");
-    }
     auto idx = findCheapestExecutionTree(v);
     return std::move(v[idx]);
   };
@@ -279,11 +278,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     } else {
       static_assert(
           std::is_same_v<std::vector<SubtreePlan>, std::decay_t<decltype(v)>>);
-      if (v.empty()) {
-        throw std::runtime_error(
-            "grandchildren or lower of a Plan to be optimized may never be "
-            "empty. Please report this");
-      }
+      // Empty group graph patterns should have been handled previously.
+      AD_CORRECTNESS_CHECK(!v.empty());
 
       // optionals that occur before any of their variables have been bound
       // actually behave like ordinary (Group)GraphPatterns
@@ -382,6 +378,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
             makeSubtreePlan<Union>(_qec, left._qet, right._qet);
         joinCandidates(std::vector{std::move(candidate)});
       } else if constexpr (std::is_same_v<T, p::Subquery>) {
+        ParsedQuery& subquery = arg.get();
         // TODO<joka921> We currently do not optimize across subquery borders
         // but abuse them as "optimization hints". In theory, one could even
         // remove the ORDER BY clauses of a subquery if we can prove that
@@ -389,7 +386,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
         // For a subquery, make sure that one optimal result for each ordering
         // of the result (by a single column) is contained.
-        auto candidatesForSubquery = createExecutionTrees(arg.get());
+        auto candidatesForSubquery = createExecutionTrees(subquery);
         // Make sure that variables that are not selected by the subquery are
         // not visible.
         auto setSelectedVariables = [&](SubtreePlan& plan) {

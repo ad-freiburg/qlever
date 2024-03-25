@@ -15,6 +15,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "global/SpecialIds.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/Variable.h"
 #include "util/Date.h"
@@ -28,6 +29,8 @@
 /// of any other type).
 class TripleComponent {
  public:
+  using Literal = ad_utility::triple_component::Literal;
+  using Iri = ad_utility::triple_component::Iri;
   // Own class for the UNDEF value.
   struct UNDEF {
     // Default equality operator.
@@ -40,53 +43,10 @@ class TripleComponent {
     }
   };
 
-  // A class that stores a normalized RDF literal together with its datatype or
-  // language tag.
-  struct Literal {
-   private:
-    // The underlying storage. It consists of the normalized RDF literal
-    // concatenated with its datatype or language tag.
-    std::string content_;
-    // The index in the `content_` member, where the datatype or language tag
-    // begins.
-    size_t startOfDatatype_ = 0;
-
-   public:
-    // Construct from a normalized literal and the (possibly empty) language tag
-    // or datatype.
-    explicit Literal(const RdfEscaping::NormalizedRDFString& literal,
-                     std::string_view langtagOrDatatype = "");
-
-    // Get the literal in the form in which it is stored (the normalized literal
-    // concatenated with the language tag or datatype). It is only allowed to
-    // read the content or to move it out. That way the `Literal` can never
-    // become invalid via the `rawContent` method.
-    const std::string& rawContent() const& { return content_; }
-    std::string&& rawContent() && { return std::move(content_); }
-
-    // Only get the normalized literal without the language tag or datatype.
-    RdfEscaping::NormalizedRDFStringView normalizedLiteralContent() const {
-      return RdfEscaping::NormalizedRDFStringView::make(
-          std::string_view{content_}.substr(0, startOfDatatype_));
-    }
-
-    // Only get the datatype or language tag.
-    std::string_view datatypeOrLangtag() const {
-      return std::string_view{content_}.substr(startOfDatatype_);
-    }
-
-    // Equality and hashing are needed to store a `Literal` in a `HashMap`.
-    bool operator==(const Literal&) const = default;
-    template <typename H>
-    friend H AbslHashValue(H h, const Literal& l) {
-      return H::combine(std::move(h), l.content_);
-    }
-  };
-
  private:
   // The underlying variant type.
   using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
-                               Variable, Literal, DateOrLargeYear>;
+                               Variable, Literal, Iri, DateOrLargeYear>;
   Variant _variant;
 
  public:
@@ -177,6 +137,13 @@ class TripleComponent {
   }
 
   bool isLiteral() const { return std::holds_alternative<Literal>(_variant); }
+  Literal& getLiteral() { return std::get<Literal>(_variant); }
+  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
+
+  bool isIri() const { return std::holds_alternative<Iri>(_variant); }
+
+  Iri& getIri() { return std::get<Iri>(_variant); }
+  const Iri& getIri() const { return std::get<Iri>(_variant); }
 
   bool isUndef() const { return std::holds_alternative<UNDEF>(_variant); }
 
@@ -201,9 +168,6 @@ class TripleComponent {
   }
   [[nodiscard]] Variable& getVariable() { return std::get<Variable>(_variant); }
 
-  const Literal& getLiteral() const { return std::get<Literal>(_variant); }
-  Literal& getLiteral() { return std::get<Literal>(_variant); }
-
   /// Convert to an RDF literal. `std::strings` will be emitted directly,
   /// `int64_t` is converted to a `xsd:integer` literal, and a `double` is
   /// converted to a `xsd:double`.
@@ -224,10 +188,16 @@ class TripleComponent {
   template <typename Vocabulary>
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
-    if (isString() || isLiteral()) {
+    AD_CONTRACT_CHECK(!isString());
+    if (isLiteral() || isIri()) {
       VocabIndex idx;
-      const std::string& content =
-          isString() ? getString() : getLiteral().rawContent();
+      const std::string& content = [&]() -> const std::string& {
+        if (isLiteral()) {
+          return getLiteral().toStringRepresentation();
+        } else {
+          return getIri().toStringRepresentation();
+        }
+      }();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else if (qlever::specialIds.contains(content)) {
@@ -253,11 +223,20 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isString() || isLiteral());
+      AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
+      std::string& newWord = [&]() -> std::string& {
+        if (isString()) {
+          return getString();
+        } else {
+          if (isLiteral()) {
+            return getLiteral().toStringRepresentation();
+          } else {
+            return getIri().toStringRepresentation();
+          }
+        }
+      }();
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
       // Otherwise, `newWord` would be copied here despite the `std::move`.
-      std::string&& newWord = isString() ? std::move(getString())
-                                         : std::move(getLiteral()).rawContent();
       id = Id::makeFromLocalVocabIndex(
           localVocab.getIndexAndAddIfNotContained(std::move(newWord)));
     }

@@ -19,6 +19,7 @@
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TransitivePathBase.h"
+#include "engine/Union.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
@@ -71,7 +72,7 @@ inline auto MatchTypeAndOrderedChildren =
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
 /// that the `ScanType` of this `IndexScan` is any of the given
 /// `allowedPermutations`.
-inline auto IndexScan =
+constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {})
@@ -90,8 +91,13 @@ inline auto IndexScan =
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
 };
 
-inline auto TextIndexScanForWord = [](Variable textRecordVar,
-                                      string word) -> QetMatcher {
+// Match the `NeutralElementOperation`.
+constexpr auto NeutralElement = []() -> QetMatcher {
+  return MatchTypeAndOrderedChildren<::NeutralElementOperation>();
+};
+
+constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
+                                         string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(1 + word.ends_with('*'))),
@@ -149,7 +155,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -171,6 +178,8 @@ inline auto IndexScanFromStrings =
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
+    } else if (s.starts_with('<')) {
+      return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };
@@ -255,6 +264,9 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
                      ElementsAre(Pointee(childMatcher))),
             AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
 };
+
+// Match a `UNION` operation.
+constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`
