@@ -149,8 +149,7 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1)
-{
+        requires(sizeof...(childMatchers) <= 1) {
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),

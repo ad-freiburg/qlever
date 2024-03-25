@@ -129,7 +129,8 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
       auto sz = local.size();
       LOG(INFO) << "Local size " << sz << std::endl;
       auto* qec = qet.getQec();
-      LOG(INFO) << qec->getIndex().getVocab().size() << "end of bla size" << std::endl;
+      LOG(INFO) << qec->getIndex().getVocab().size() << "end of bla size"
+                << std::endl;
       const auto& optionalStringAndXsdType = idToStringAndType(
           qet.getQec()->getIndex(), currentId, resultTable->localVocab());
       if (!optionalStringAndXsdType.has_value()) {
