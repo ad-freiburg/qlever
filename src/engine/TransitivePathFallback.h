@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include <functional>
 #include <memory>
 
 #include "TransitivePathBase.h"
@@ -13,17 +12,6 @@
 #include "engine/idTable/IdTable.h"
 
 class TransitivePathFallback : public TransitivePathBase {
-  // We deliberately use the `std::` variants of a hash set and hash map because
-  // `absl`s types are not exception safe.
-  constexpr static auto hash = [](Id id) {
-    return std::hash<uint64_t>{}(id.getBits());
-  };
-  using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>,
-                                 ad_utility::AllocatorWithLimit<Id>>;
-  using Map = std::unordered_map<
-      Id, Set, decltype(hash), std::equal_to<Id>,
-      ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
-
  public:
   TransitivePathFallback(QueryExecutionContext* qec,
                          std::shared_ptr<QueryExecutionTree> child,
