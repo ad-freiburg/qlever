@@ -118,13 +118,6 @@ VariableToColumnMap TransitivePath::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-void TransitivePath::setTextLimit(size_t limit) {
-  for (auto child : getChildren()) {
-    child->setTextLimit(limit);
-  }
-}
-
-// _____________________________________________________________________________
 bool TransitivePath::knownEmptyResult() { return subtree_->knownEmptyResult(); }
 
 // _____________________________________________________________________________

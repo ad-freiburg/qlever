@@ -32,8 +32,6 @@ class Values : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override { (void)limit; }
-
   virtual bool knownEmptyResult() override {
     return parsedValues_._variables.empty() || parsedValues_._values.empty();
   }

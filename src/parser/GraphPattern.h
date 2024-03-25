@@ -15,6 +15,12 @@ namespace parsedQuery {
 // Forward declarations.
 struct GraphPatternOperation;
 
+struct TextLimitMetaObject {
+  vector<Variable> _entityVars;
+  vector<Variable> _scoreVars;
+  uint64_t _idsOfMustBeFinishedOperations;
+};
+
 // Groups triplets and filters. Represents a node in a tree (as graph patterns
 // are recursive).
 class GraphPattern {
@@ -48,5 +54,6 @@ class GraphPattern {
   // become children.
   std::vector<SparqlFilter> _filters;
   std::vector<GraphPatternOperation> _graphPatterns;
+  ad_utility::HashMap<Variable, TextLimitMetaObject> _textLimits;
 };
 }  // namespace parsedQuery

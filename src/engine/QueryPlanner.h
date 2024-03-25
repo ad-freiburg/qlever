@@ -13,6 +13,7 @@
 #include "engine/CheckUsePatternTrick.h"
 #include "engine/Filter.h"
 #include "engine/QueryExecutionTree.h"
+#include "parser/GraphPattern.h"
 #include "parser/ParsedQuery.h"
 
 using std::vector;
@@ -137,6 +138,7 @@ class QueryPlanner {
     bool _isCached = false;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
+    uint64_t _idsOfIncludedTextLimits = 0;
     Type type = Type::BASIC;
 
     size_t getCostEstimate() const;
@@ -226,6 +228,8 @@ class QueryPlanner {
 
   CancellationHandle cancellationHandle_;
 
+  std::optional<size_t> _textLimit = std::nullopt;
+
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
 
@@ -265,7 +269,9 @@ class QueryPlanner {
 
   [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
-      const vector<vector<QueryPlanner::SubtreePlan>>& children);
+      const vector<vector<QueryPlanner::SubtreePlan>>& children,
+      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -378,6 +384,12 @@ class QueryPlanner {
       std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,
       bool replaceInsteadOfAddPlans) const;
 
+  [[nodiscard]] void applyTextLimitsIfPossible(
+      std::vector<SubtreePlan>& row,
+      const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits,
+      bool replaceInsteadOfAddPlans) const;
+
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates
    * for child graph patterns
@@ -437,6 +449,8 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
+      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits,
       const vector<vector<SubtreePlan>>& children);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
@@ -445,11 +459,15 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters, const TripleGraph& tg) const;
+      const vector<SparqlFilter>& filters,
+      const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits,
+      const TripleGraph& tg) const;
 
   [[nodiscard]] SubtreePlan getTextLeafPlan(
-      const TripleGraph::Node& node) const;
-
+      const TripleGraph::Node& node,
+      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+          textLimits) const;
   /**
    * @brief return the index of the cheapest execution tree in the argument.
    *

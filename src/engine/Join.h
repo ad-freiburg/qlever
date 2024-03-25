@@ -53,12 +53,6 @@ class Join : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-    _sizeEstimateComputed = false;
-  }
-
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     if (!_sizeEstimateComputed) {

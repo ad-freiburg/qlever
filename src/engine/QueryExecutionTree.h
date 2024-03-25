@@ -44,6 +44,7 @@ class QueryExecutionTree {
     DISTINCT,
     TEXT_INDEX_SCAN_FOR_WORD,
     TEXT_INDEX_SCAN_FOR_ENTITY,
+    TEXT_LIMIT,
     OPTIONAL_JOIN,
     COUNT_AVAILABLE_PREDICATES,
     GROUP_BY,
@@ -113,11 +114,6 @@ class QueryExecutionTree {
 
   const std::vector<ColumnIndex>& resultSortedOn() const {
     return rootOperation_->getResultSortedOn();
-  }
-
-  void setTextLimit(size_t limit) {
-    rootOperation_->setTextLimit(limit);
-    sizeEstimate_ = std::nullopt;
   }
 
   size_t getCostEstimate();

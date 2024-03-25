@@ -176,13 +176,6 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
 }
 
 // ___________________________________________________________________________
-void HasPredicateScan::setTextLimit(size_t limit) {
-  if (type_ == ScanType::SUBQUERY_S) {
-    subtree().setTextLimit(limit);
-  }
-}
-
-// ___________________________________________________________________________
 bool HasPredicateScan::knownEmptyResult() {
   if (type_ == ScanType::SUBQUERY_S) {
     return subtree().knownEmptyResult();

@@ -36,8 +36,6 @@ class Filter : public Operation {
     return _subtree->resultSortedOn();
   }
 
-  void setTextLimit(size_t limit) override { _subtree->setTextLimit(limit); }
-
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 

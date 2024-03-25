@@ -19,7 +19,6 @@ TEST(ValuesForTesting, valuesForTesting) {
       getQec(), table.clone(), {Variable{"?x"}, {Variable{"?y"}}}};
   // The following line has no effect. TODO<joka921> provide default
   // implementations for such boilerplate methods in the `Operation` base class.
-  v.setTextLimit(12340);
   ASSERT_EQ(v.getResultWidth(), 2u);
   ASSERT_EQ(v.getSizeEstimate(), 3u);
   ASSERT_EQ(v.getCostEstimate(), 3u);

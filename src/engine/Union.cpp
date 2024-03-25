@@ -112,11 +112,6 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   return variableColumns;
 }
 
-void Union::setTextLimit(size_t limit) {
-  _subtrees[0]->setTextLimit(limit);
-  _subtrees[1]->setTextLimit(limit);
-}
-
 bool Union::knownEmptyResult() {
   return _subtrees[0]->knownEmptyResult() && _subtrees[1]->knownEmptyResult();
 }

@@ -116,6 +116,8 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
+addLinkAndDiscoverTest(TextLimitOperationTest engine)
+
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
