@@ -41,7 +41,6 @@ jobs:
         run:  |
           brew install llvm@16
           brew install conan@2
-          brew install suite-sparse
           echo 'export PATH="/usr/local/opt/llvm@16/bin:$PATH"' >> ~/.bash_profile
           echo PATH="/usr/local/opt/llvm@16/bin:$PATH" >> $GITHUB_ENV 
           echo 'export LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++"' >> ~/.bash_profile

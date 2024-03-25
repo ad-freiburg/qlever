@@ -19,7 +19,7 @@ runs:
     - name: Install third-party libraries
       if: inputs.install-third-party-libraries == 'true'
       run:  |
-        sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev libgraphblas-dev
+        sudo apt-get install -y libicu-dev tzdata libzstd-dev libjemalloc-dev
       shell: bash
 
     - name: Install boost from PPA
