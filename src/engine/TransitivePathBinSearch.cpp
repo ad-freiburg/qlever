@@ -191,10 +191,8 @@ TransitivePathBinSearch::Map TransitivePathBinSearch::transitiveHull(
     }
 
     while (stack.size() > 0) {
-      // auto [node, steps] = stack.back();
-      auto pair = stack.back();
-      auto node = pair.first;
-      auto steps = pair.second;
+      checkCancellation();
+      auto [node, steps] = stack.back();
       stack.pop_back();
 
       if (steps <= maxDist_ && marks.count(node) == 0) {
