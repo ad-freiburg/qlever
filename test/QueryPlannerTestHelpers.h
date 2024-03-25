@@ -18,7 +18,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
@@ -234,14 +234,15 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 inline auto TransitivePath =
     [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
        size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::TransitivePath>(AllOf(
-          Property("getChildren", &Operation::getChildren,
-                   ElementsAre(Pointee(childMatchers)...)),
-          AD_PROPERTY(TransitivePath, getMinDist, Eq(minDist)),
-          AD_PROPERTY(TransitivePath, getMaxDist, Eq(maxDist)),
-          AD_PROPERTY(TransitivePath, getLeft, TransitivePathSideMatcher(left)),
-          AD_PROPERTY(TransitivePath, getRight,
-                      TransitivePathSideMatcher(right))));
+      return RootOperation<::TransitivePathBase>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...)),
+                AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
+                AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
+                AD_PROPERTY(TransitivePathBase, getLeft,
+                            TransitivePathSideMatcher(left)),
+                AD_PROPERTY(TransitivePathBase, getRight,
+                            TransitivePathSideMatcher(right))));
     };
 
 // Match a `Filter` operation. The matching of the expression is currently only

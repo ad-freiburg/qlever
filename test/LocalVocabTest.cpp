@@ -22,7 +22,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/ResultTable.h"
 #include "engine/Sort.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
@@ -295,8 +295,9 @@ TEST(LocalVocab, propagation) {
   // local-vocabulary. Still, it doesn't harm to test this.
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
   TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
-  TransitivePath transitivePath(testQec, qet(values1), left, right, 1, 1);
-  checkLocalVocab(transitivePath, expectedVocab);
+  auto transitivePath = TransitivePathBase::makeTransitivePath(
+      testQec, qet(values1), left, right, 1, 1);
+  checkLocalVocab(*transitivePath, expectedVocab);
 
   // PATTERN TRICK operations.
   HasPredicateScan hasPredicateScan(testQec, qet(values1), 0, Variable{"?z"});
