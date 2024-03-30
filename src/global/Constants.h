@@ -151,9 +151,7 @@ static const std::string WARNING_ASCII_ONLY_PREFIXES =
 
 static const std::string WARNING_PARALLEL_PARSING =
     "You specified \"parallel-parsing = true\", which enables faster parsing "
-    "for TTL files that don't include multiline literals with unescaped "
-    "newline characters and that have newline characters after the end of "
-    "triples.";
+    "for TTL files with a well-behaved use of newlines";
 static const std::string LOCALE_DEFAULT_LANG = "en";
 static const std::string LOCALE_DEFAULT_COUNTRY = "US";
 static constexpr bool LOCALE_DEFAULT_IGNORE_PUNCTUATION = false;

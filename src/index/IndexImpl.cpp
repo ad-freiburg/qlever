@@ -24,6 +24,7 @@
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
@@ -314,9 +315,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
+  LOG(INFO) << "Parsing input triples and creating partial vocabularies (one "
+               "per batch) ..."
+            << std::endl;
   bool parserExhausted = false;
 
-  size_t i = 0;
   // already count the numbers of triples that will be used for the language
   // filter
   size_t numFiles = 0;
@@ -330,6 +333,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
+  size_t numTriplesProcessed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples parsed: "};
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -355,15 +360,15 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                   this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
-        i++;
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
           }
         }
-        if (i % 100'000'000 == 0) {
-          LOG(INFO) << "Input triples processed: " << i << std::endl;
+        numTriplesProcessed++;
+        if (progressBar.update()) {
+          LOG(INFO) << progressBar.getProgressString() << std::flush;
         }
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
@@ -399,22 +404,21 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       *(it - 1) = std::move(*it);
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
-        writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
-                                   std::move(oldItemPtr),
-                                   std::move(localWriter), &idTriples);
+        writeNextPartialVocabulary(
+            numTriplesProcessed, numFiles, actualCurrentPartialSize,
+            std::move(oldItemPtr), std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
   for (auto& future : writePartialVocabularyFuture) {
     if (future.valid()) {
       future.get();
     }
   }
-  LOG(INFO) << "Done, total number of triples read: " << i
-            << " [may contain duplicates]" << std::endl;
   LOG(INFO) << "Number of QLever-internal triples created: "
             << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
@@ -477,7 +481,6 @@ IndexImpl::convertPartialToGlobalIds(
     }
   }();
   auto& result = *resultPtr;
-  size_t i = 0;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<3>;
@@ -507,18 +510,19 @@ IndexImpl::convertPartialToGlobalIds(
 
   // Return a lambda that pushes all the triples to the sorter. Must only be
   // called single-threaded.
-  auto getWriteTask = [&result, &i](Buffer triples) {
-    return [&result, &i,
+  size_t numTriplesConverted = 0;
+  ad_utility::ProgressBar progressBar{numTriplesConverted,
+                                      "Triples converted: "};
+  auto getWriteTask = [&result, &numTriplesConverted,
+                       &progressBar](Buffer triples) {
+    return [&result, &numTriplesConverted, &progressBar,
             triples = std::make_shared<IdTableStatic<0>>(
                 std::move(triples).toDynamic())] {
       result.pushBlock(*triples);
-      size_t newI = i + triples->size();
-      static constexpr size_t progressInterval = 100'000'000;
-      if ((newI / progressInterval) > (i / progressInterval)) {
-        LOG(INFO) << "Triples converted: "
-                  << (newI / progressInterval) * progressInterval << std::endl;
+      numTriplesConverted += triples->size();
+      if (progressBar.update()) {
+        LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
-      i = newI;
     };
   };
 
@@ -591,7 +595,7 @@ IndexImpl::convertPartialToGlobalIds(
   }
   lookupQueue.finish();
   writeQueue.finish();
-  LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
   return resultPtr;
 }
 
