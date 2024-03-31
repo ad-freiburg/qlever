@@ -25,9 +25,17 @@ TEST(ProgressBar, typicalUsage) {
     // update string with 303'000 steps.
     //
     // TODO: Why does \\d instead of [0-9] not work in the following regex?
+    //
+    // NOTE: For macOS, `std::this_thread::sleep_for` can take much longer
+    // than indicated, resulting in a much lower speed than expected.
     std::string expectedSpeedRegex =
+#ifndef __APPLE__
         "\\[average speed [234]\\.[0-9] M/s, last batch [234]\\.[0-9] M/s"
         ", fastest [234]\\.[0-9] M/s, slowest [234]\\.[0-9] M/s\\] ";
+#else
+        "\\[average speed [0-9]\\.[0-9] M/s, last batch [0-9]\\.[0-9] M/s"
+        ", fastest [0-9]\\.[0-9] M/s, slowest [0-9]\\.[0-9] M/s\\] ";
+#endif
     char lastChar = displayOption == ProgressBar::ReuseLine ? '\r' : '\n';
     std::vector<std::string> expectedUpdateRegexes = {
         "Steps: 100,000 " + expectedSpeedRegex + lastChar,
@@ -59,7 +67,11 @@ TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
   ProgressBar progressBar(numSteps, "Steps: ", 5'000);
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
   std::string expectedUpdateRegex =
+#ifndef __APPLE__
       "Steps: 3,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
+#else
+      "Steps: 3,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";
+#endif
   ASSERT_THAT(progressBar.getFinalProgressString(),
               ::testing::MatchesRegex(expectedUpdateRegex));
 }

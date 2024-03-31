@@ -97,14 +97,15 @@ class ProgressBar {
   }
 
   // Progress string with statistics.
-  std::string getProgressString() {
+  std::string getProgressString() const {
     bool notYetFinished = timer_.isRunning();
     // Two helper functions.
     auto withThousandSeparators = [](size_t number) {
       return ad_utility::insertThousandSeparator(std::to_string(number), ',');
     };
     auto speed = [this](size_t numSteps, Timer::Duration duration) {
-      return this->getSpeedDescription_(numSteps / Timer::toSeconds(duration));
+      return this->getSpeedDescription_(static_cast<double>(numSteps) /
+                                        Timer::toSeconds(duration));
     };
     // In the typical use case, where the total number of steps is at least the
     // batch size, show the full statistics. Otherwise, only show the average
@@ -112,12 +113,12 @@ class ProgressBar {
     if (numStepsProcessed_ >= statisticsBatchSize_) {
       // During the computation, always show the last multiple of the batch
       // size. In the end, show the exact number of processed steps.
-      size_t numStepsProcessedShow_ =
+      size_t numStepsProcessedShow =
           notYetFinished
               ? updateWhenThisManyStepsProcessed_ - statisticsBatchSize_
               : numStepsProcessed_;
       return absl::StrCat(
-          displayStringPrefix_, withThousandSeparators(numStepsProcessedShow_),
+          displayStringPrefix_, withThousandSeparators(numStepsProcessedShow),
           " [average speed ", speed(numStepsProcessed_, totalDuration_),
           ", last batch ", speed(statisticsBatchSize_, lastBatchDuration_),
           ", fastest ", speed(statisticsBatchSize_, minBatchDuration_),
@@ -131,7 +132,7 @@ class ProgressBar {
     }
   }
 
-  // Final progress string (should only be called once aftr the computation has
+  // Final progress string (should only be called once after the computation has
   // finished).
   std::string getFinalProgressString() {
     AD_CONTRACT_CHECK(timer_.isRunning(),
