@@ -12,15 +12,13 @@
 #include "util/StringUtils.h"
 #include "util/Timer.h"
 
-// Default batch size for progress bar.
-static constexpr size_t DEFAULT_PROGRESS_BAR_BATCH_SIZE = 10'000'000;
+// Default batch size for progress bar (not const so that we can change it in
+// our tests).
+inline size_t DEFAULT_PROGRESS_BAR_BATCH_SIZE = 10'000'000;
 
 // Default function for computing speed descriptions.
-static std::string DEFAULT_SPEED_DESCRIPTION_FUNCTION(
-    size_t numSteps, ad_utility::Timer::Duration duration) {
-  double durationSecs = ad_utility::Timer::toSeconds(duration);
-  double speed = (numSteps / 1'000'000.0) / durationSecs;
-  return absl::StrCat(absl::StrFormat("%.1f", speed), " M/s");
+inline std::string DEFAULT_SPEED_DESCRIPTION_FUNCTION(double stepsPerSecond) {
+  return absl::StrCat(absl::StrFormat("%.1f", stepsPerSecond / 1e6), " M/s");
 }
 
 namespace ad_utility {
@@ -36,7 +34,8 @@ namespace ad_utility {
 // the batch size is purely a parameter of this class, the actual computation
 // need not proceed in batches in any way.
 //
-// Exampe usage:
+// Typical usage (note the `std::flush` at the end of the `LOG(INFO)` calls in
+// order to ensure a flush for lines ending in `\r` instead of `\n`):
 //
 // numTriplesProcessed = 0;
 // ad_utility::ProgressBar progressBar(numTriplesProcessed,
@@ -58,9 +57,8 @@ class ProgressBar {
   static constexpr auto ReuseLine = DisplayUpdateOptions::ReuseLine;
 
   // Function that returns a string with a speed description (e.g., "3.4 M/s")
-  // from a number of steps and a `Timer::Duration`.
-  using SpeedDescriptionFunction =
-      std::function<std::string(size_t, Timer::Duration)>;
+  // from a speed given as steps per second.
+  using SpeedDescriptionFunction = std::function<std::string(double)>;
 
   // Create and initialize a progress bar.
   //
@@ -101,23 +99,36 @@ class ProgressBar {
   // Progress string with statistics.
   std::string getProgressString() {
     bool notYetFinished = timer_.isRunning();
-    auto& speed = getSpeedDescription_;
+    // Two helper functions.
     auto withThousandSeparators = [](size_t number) {
       return ad_utility::insertThousandSeparator(std::to_string(number), ',');
     };
-    // During the computation, always show the last multiple of the batch size.
-    // In the end, show the exact (and final) number of processed steps.
-    size_t numStepsProcessedShow_ =
-        notYetFinished
-            ? updateWhenThisManyStepsProcessed_ - statisticsBatchSize_
-            : numStepsProcessed_;
-    return absl::StrCat(
-        displayStringPrefix_, withThousandSeparators(numStepsProcessedShow_),
-        " [average speed ", speed(numStepsProcessed_, totalDuration_),
-        ", last batch ", speed(statisticsBatchSize_, lastBatchDuration_),
-        ", fastest ", speed(statisticsBatchSize_, minBatchDuration_),
-        ", slowest ", speed(statisticsBatchSize_, maxBatchDuration_), "] ",
-        displayUpdateOptions_ == ReuseLine && notYetFinished ? "\r" : "\n");
+    auto speed = [this](size_t numSteps, Timer::Duration duration) {
+      return this->getSpeedDescription_(numSteps / Timer::toSeconds(duration));
+    };
+    // In the typical use case, where the total number of steps is at least the
+    // batch size, show the full statistics. Otherwise, only show the average
+    // speed.
+    if (numStepsProcessed_ >= statisticsBatchSize_) {
+      // During the computation, always show the last multiple of the batch
+      // size. In the end, show the exact number of processed steps.
+      size_t numStepsProcessedShow_ =
+          notYetFinished
+              ? updateWhenThisManyStepsProcessed_ - statisticsBatchSize_
+              : numStepsProcessed_;
+      return absl::StrCat(
+          displayStringPrefix_, withThousandSeparators(numStepsProcessedShow_),
+          " [average speed ", speed(numStepsProcessed_, totalDuration_),
+          ", last batch ", speed(statisticsBatchSize_, lastBatchDuration_),
+          ", fastest ", speed(statisticsBatchSize_, minBatchDuration_),
+          ", slowest ", speed(statisticsBatchSize_, maxBatchDuration_), "] ",
+          displayUpdateOptions_ == ReuseLine && notYetFinished ? "\r" : "\n");
+    } else {
+      return absl::StrCat(displayStringPrefix_,
+                          withThousandSeparators(numStepsProcessed_),
+                          " [average speed ",
+                          speed(numStepsProcessed_, totalDuration_), "] \n");
+    }
   }
 
   // Final progress string (should only be called once aftr the computation has
