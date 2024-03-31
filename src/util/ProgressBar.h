@@ -19,7 +19,7 @@ static constexpr size_t DEFAULT_PROGRESS_BAR_BATCH_SIZE = 10'000'000;
 static std::string DEFAULT_SPEED_DESCRIPTION_FUNCTION(
     size_t numSteps, ad_utility::Timer::Duration duration) {
   double durationSecs = ad_utility::Timer::toSeconds(duration);
-  double speed = (numSteps / 1'000'000) / durationSecs;
+  double speed = (numSteps / 1'000'000.0) / durationSecs;
   return absl::StrCat(absl::StrFormat("%.1f", speed), " M/s");
 }
 

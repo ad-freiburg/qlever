@@ -372,6 +372,8 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 
 addLinkAndDiscoverTest(CancellationHandleTest util)
 
+addLinkAndDiscoverTest(ProgressBarTest util)
+
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
