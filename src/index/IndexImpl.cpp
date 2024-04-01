@@ -223,7 +223,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
             << " triples to the POS and PSO permutation for "
-               "`ql:has-pattern` ..."
+               "the internal `ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 3);
@@ -315,8 +315,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
-  LOG(INFO) << "Parsing input triples and creating partial vocabularies (one "
-               "per batch) ..."
+  LOG(INFO) << "Parsing input triples and creating partial vocabularies, one "
+               "per batch ..."
             << std::endl;
   bool parserExhausted = false;
 
@@ -419,7 +419,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       future.get();
     }
   }
-  LOG(INFO) << "Number of QLever-internal triples created: "
+  LOG(INFO) << "Number of triples created (including QLever-internal ones): "
             << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
 
@@ -452,7 +452,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
-  LOG(INFO) << "Removing temporary files ..." << std::endl;
+  LOG(DEBUG) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
   }
@@ -607,7 +607,6 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      auto&& sortedTriples,
                                      std::array<size_t, 3> permutation,
                                      auto&&... perTripleCallbacks) {
-  LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   static_assert(MetaData::isMmapBased_);
@@ -656,6 +655,8 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
+  LOG(INFO) << "Creating permutations " << p1.readableName() << " and "
+            << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
       onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
@@ -689,8 +690,8 @@ size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
         absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
     metaData.appendToFile(&f);
   };
-  LOG(INFO) << "Writing meta data for " << p1.readableName() << " and "
-            << p2.readableName() << " ..." << std::endl;
+  LOG(DEBUG) << "Writing meta data for " << p1.readableName() << " and "
+             << p2.readableName() << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
   return numDistinctC0;
@@ -1106,8 +1107,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   } else {
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
-    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
-                 "exception (this is the default behavior)"
+    LOG(INFO) << "By default, integers that cannot be represented by QLever "
+                 "will throw an "
+                 "exception"
               << std::endl;
   }
 }
