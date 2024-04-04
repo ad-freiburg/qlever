@@ -781,7 +781,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                                  size_t minNumRows) {
           return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory), "smaller table",
-              smallerTableNumColumns, minNumRows);
+              minNumRows, smallerTableNumColumns);
         },
         absl::StrCat("'",
                      maxMemoryInStringFormat.getConfigOption().getIdentifier(),
@@ -794,7 +794,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                                  size_t minNumRows) {
           return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory), "bigger table",
-              biggerTableNumColumns, minNumRows);
+              minNumRows, biggerTableNumColumns);
         },
         absl::StrCat("'",
                      maxMemoryInStringFormat.getConfigOption().getIdentifier(),
@@ -807,8 +807,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                                                  size_t biggerTableNumColumns) {
           return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory),
-              "result of joining the smaller and bigger table",
-              smallerTableNumColumns + biggerTableNumColumns - 1, 1);
+              "result of joining the smaller and bigger table", 1,
+              smallerTableNumColumns + biggerTableNumColumns - 1);
         },
         absl::StrCat("'",
                      maxMemoryInStringFormat.getConfigOption().getIdentifier(),
