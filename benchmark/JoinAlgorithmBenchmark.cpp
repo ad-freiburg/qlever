@@ -751,60 +751,64 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Adding the validators.
 
     /*
-    Is `max-memory` big enough, to even allow for one row of the smaller
-    table, bigger table, or the table resulting from joining the smaller and
-    bigger table?`
+    Is `max-memory` big enough, to even allow for minimum amount of row of the
+    smaller table, bigger table, or the table resulting from joining the smaller
+    and bigger table?
     If not, return an error message.
     */
-    auto checkIfMaxMemoryBigEnoughForOneRow =
+    auto checkIfMaxMemoryBigEnoughForMinNumRows =
         [&maxMemoryInStringFormat](const ad_utility::MemorySize maxMemory,
                                    const std::string_view tableName,
+                                   const size_t numRows,
                                    const size_t numColumns)
         -> std::optional<ad_utility::ErrorMessage> {
-      const ad_utility::MemorySize memoryNeededForOneRow =
-          approximateMemoryNeededByIdTable(1, numColumns);
+      const ad_utility::MemorySize memoryNeededForMinNumRows =
+          approximateMemoryNeededByIdTable(numRows, numColumns);
       // Remember: `0` is for unlimited memory.
-      if (maxMemory == 0_B || memoryNeededForOneRow <= maxMemory) {
+      if (maxMemory == 0_B || memoryNeededForMinNumRows <= maxMemory) {
         return std::nullopt;
       } else {
         return std::make_optional<ad_utility::ErrorMessage>(absl::StrCat(
             "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
-            "' (", maxMemory.asString(),
-            ") must be big enough, for at least one row in the ", tableName,
-            ", which requires at least ", memoryNeededForOneRow.asString(),
-            "."));
+            "' (", maxMemory.asString(), ") must be big enough, for at least ",
+            numRows, " rows in the ", tableName, ", which requires at least ",
+            memoryNeededForMinNumRows.asString(), "."));
       }
     };
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t smallerTableNumColumns) {
-          return checkIfMaxMemoryBigEnoughForOneRow(
+        [checkIfMaxMemoryBigEnoughForMinNumRows](std::string_view maxMemory,
+                                                 size_t smallerTableNumColumns,
+                                                 size_t minNumRows) {
+          return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory), "smaller table",
-              smallerTableNumColumns);
+              smallerTableNumColumns, minNumRows);
         },
-        absl::StrCat(
-            "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
-            "' must be big enough, for at least one row in the smaller table."),
-        maxMemoryInStringFormat, smallerTableNumColumns);
+        absl::StrCat("'",
+                     maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+                     "' must be big enough, for at least the minimum number of "
+                     "rows in the smaller table."),
+        maxMemoryInStringFormat, smallerTableNumColumns, minSmallerTableRows);
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t biggerTableNumColumns) {
-          return checkIfMaxMemoryBigEnoughForOneRow(
+        [checkIfMaxMemoryBigEnoughForMinNumRows](std::string_view maxMemory,
+                                                 size_t biggerTableNumColumns,
+                                                 size_t minNumRows) {
+          return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory), "bigger table",
-              biggerTableNumColumns);
+              biggerTableNumColumns, minNumRows);
         },
-        absl::StrCat(
-            "'", maxMemoryInStringFormat.getConfigOption().getIdentifier(),
-            "' must be big enough, for at least one row in the bigger table."),
-        maxMemoryInStringFormat, biggerTableNumColumns);
+        absl::StrCat("'",
+                     maxMemoryInStringFormat.getConfigOption().getIdentifier(),
+                     "' must be big enough, for at least the minimum number of "
+                     "rows in the bigger table."),
+        maxMemoryInStringFormat, biggerTableNumColumns, minBiggerTableRows);
     config.addValidator(
-        [checkIfMaxMemoryBigEnoughForOneRow](std::string_view maxMemory,
-                                             size_t smallerTableNumColumns,
-                                             size_t biggerTableNumColumns) {
-          return checkIfMaxMemoryBigEnoughForOneRow(
+        [checkIfMaxMemoryBigEnoughForMinNumRows](std::string_view maxMemory,
+                                                 size_t smallerTableNumColumns,
+                                                 size_t biggerTableNumColumns) {
+          return checkIfMaxMemoryBigEnoughForMinNumRows(
               ad_utility::MemorySize::parse(maxMemory),
               "result of joining the smaller and bigger table",
-              smallerTableNumColumns + biggerTableNumColumns - 1);
+              smallerTableNumColumns + biggerTableNumColumns - 1, 1);
         },
         absl::StrCat("'",
                      maxMemoryInStringFormat.getConfigOption().getIdentifier(),
