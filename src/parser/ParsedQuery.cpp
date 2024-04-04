@@ -20,74 +20,6 @@ using std::string;
 using std::vector;
 
 // _____________________________________________________________________________
-string ParsedQuery::asString() const {
-  std::ostringstream os;
-
-  bool usesSelect = hasSelectClause();
-  bool usesAsterisk = usesSelect && selectClause().isAsterisk();
-
-  if (usesSelect) {
-    const auto& selectClause = this->selectClause();
-    // SELECT
-    os << "\nSELECT: {\n\t";
-    // TODO<joka921> is this needed?
-    /*
-    os <<
-    absl::StrJoin(selectClause.varsAndAliasesOrAsterisk_.getSelectedVariables(),
-                        ", ");
-                        */
-    os << "\n}";
-
-    // ALIASES
-    os << "\nALIASES: {\n\t";
-    if (!usesAsterisk) {
-      for (const auto& alias : selectClause.getAliases()) {
-        os << alias._expression.getDescriptor() << "\n\t";
-      }
-      os << "{";
-    }
-  } else if (hasConstructClause()) {
-    const auto& constructClause = this->constructClause().triples_;
-    os << "\n CONSTRUCT {\n\t";
-    for (const auto& triple : constructClause) {
-      os << triple[0].toSparql();
-      os << ' ';
-      os << triple[1].toSparql();
-      os << ' ';
-      os << triple[2].toSparql();
-      os << " .\n";
-    }
-    os << "}";
-  }
-
-  // WHERE
-  os << "\nWHERE: \n";
-  _rootGraphPattern.toString(os, 1);
-
-  os << "\nLIMIT: " << (_limitOffset.limitOrDefault());
-  os << "\nTEXTLIMIT: " << (_limitOffset._textLimit);
-  os << "\nOFFSET: " << (_limitOffset._offset);
-  if (usesSelect) {
-    const auto& selectClause = this->selectClause();
-    os << "\nDISTINCT modifier is " << (selectClause.distinct_ ? "" : "not ")
-       << "present.";
-    os << "\nREDUCED modifier is " << (selectClause.reduced_ ? "" : "not ")
-       << "present.";
-  }
-  os << "\nORDER BY: ";
-  if (_orderBy.empty()) {
-    os << "not specified";
-  } else {
-    for (auto& key : _orderBy) {
-      os << key.variable_.name() << (key.isDescending_ ? " (DESC)" : " (ASC)")
-         << "\t";
-    }
-  }
-  os << "\n";
-  return std::move(os).str();
-}
-
-// _____________________________________________________________________________
 string SparqlPrefix::asString() const {
   std::ostringstream os;
   os << "{" << _prefix << ": " << _uri << "}";
@@ -320,30 +252,6 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
 }
 
 // _____________________________________________________________________________
-void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
-                                         int indentation) const {
-  for (int j = 1; j < indentation; ++j) os << "  ";
-  os << "{";
-  for (size_t i = 0; i + 1 < _filters.size(); ++i) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _filters[i].asString() << ',';
-  }
-  if (!_filters.empty()) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _filters.back().asString();
-  }
-  for (const GraphPatternOperation& child : _graphPatterns) {
-    os << "\n";
-    child.toString(os, indentation + 1);
-  }
-  os << "\n";
-  for (int j = 1; j < indentation; ++j) os << "  ";
-  os << "}";
-}
-
-// _____________________________________________________________________________
 void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
   bool allocatedIdCounter = false;
   if (id_count == nullptr) {
@@ -457,21 +365,6 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
     static const std::vector<Alias> dummyForConstructClause;
     return dummyForConstructClause;
   }
-}
-
-// ____________________________________________________________________________
-cppcoro::generator<const Variable>
-ParsedQuery::getConstructedOrSelectedVariables() const {
-  if (hasSelectClause()) {
-    for (const auto& variable : selectClause().getSelectedVariables()) {
-      co_yield variable;
-    }
-  } else {
-    for (const auto& variable : constructClause().containedVariables()) {
-      co_yield variable;
-    }
-  }
-  // Nothing to yield in the CONSTRUCT case.
 }
 
 // ____________________________________________________________________________
