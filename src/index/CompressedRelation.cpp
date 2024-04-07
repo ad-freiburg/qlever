@@ -7,6 +7,7 @@
 #include <ranges>
 
 #include "engine/idTable/IdTable.h"
+#include "global/RuntimeParameters.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"

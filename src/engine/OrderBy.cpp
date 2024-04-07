@@ -9,6 +9,7 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
 
 using std::endl;

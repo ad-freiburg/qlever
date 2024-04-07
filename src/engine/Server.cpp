@@ -12,6 +12,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "global/RuntimeParameters.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"

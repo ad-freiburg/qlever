@@ -9,6 +9,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "global/ValueId.h"
+#include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"

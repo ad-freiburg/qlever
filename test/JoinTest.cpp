@@ -25,6 +25,7 @@
 #include "engine/Values.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
+#include "global/RuntimeParameters.h"
 #include "util/Forward.h"
 #include "util/IndexTestHelpers.h"
 #include "util/Random.h"
