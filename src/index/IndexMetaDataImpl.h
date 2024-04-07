@@ -6,6 +6,7 @@
 #pragma once
 
 #include "../util/File.h"
+#include "../util/Serializer/ByteBufferSerializer.h"
 #include "../util/Serializer/FileSerializer.h"
 #include "../util/Serializer/SerializeHashMap.h"
 #include "../util/Serializer/SerializeString.h"

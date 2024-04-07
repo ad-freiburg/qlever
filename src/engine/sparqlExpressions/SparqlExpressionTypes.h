@@ -7,15 +7,11 @@
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
-#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/ConstexprSmallString.h"
-#include "util/Generator.h"
-#include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VisitMixin.h"
 
