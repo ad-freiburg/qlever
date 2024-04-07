@@ -7,19 +7,11 @@
 
 #include <memory>
 #include <span>
-#include <variant>
 #include <vector>
 
-#include "engine/CallFixedSize.h"
-#include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
-#include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
-#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-#include "global/Id.h"
 #include "parser/data/Variable.h"
-#include "util/ConstexprSmallString.h"
 
 namespace sparqlExpression {
 
@@ -43,8 +35,8 @@ class SparqlExpression {
 
   /// Return all variables and IRIs, needed for certain parser methods.
   /// TODO<joka921> should be called getStringLiteralsAndVariables
-  virtual vector<const Variable*> containedVariables() const final {
-    vector<const Variable*> result;
+  virtual std::vector<const Variable*> containedVariables() const final {
+    std::vector<const Variable*> result;
     // Recursively aggregate the strings from all children.
     for (const auto& child : children()) {
       auto variablesFromChild = child->containedVariables();
@@ -62,7 +54,7 @@ class SparqlExpression {
 
   /// Return all the variables that occur in the expression, but are not
   /// aggregated.
-  virtual vector<Variable> getUnaggregatedVariables() {
+  virtual std::vector<Variable> getUnaggregatedVariables() {
     // Default implementation: This expression adds no variables, but all
     // unaggregated variables from the children remain unaggregated.
     std::vector<Variable> result;
