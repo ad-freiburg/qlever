@@ -14,11 +14,12 @@ IdOrString::IdOrString(std::optional<std::string> s) {
   }
 }
 
+// _____________________________________________________________________________
 void PrintTo(const IdOrString& var, std::ostream* os) {
   std::visit([&os](const auto& s) { *os << s; }, var);
 }
 
-/// Constructor for evaluating an expression on the complete input.
+// _____________________________________________________________________________
 EvaluationContext::EvaluationContext(
     const QueryExecutionContext& qec,
     const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
@@ -34,6 +35,7 @@ EvaluationContext::EvaluationContext(
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 
+// _____________________________________________________________________________
 bool EvaluationContext::isResultSortedBy(const Variable& variable) {
   if (_columnsByWhichResultIsSorted.empty()) {
     return false;
@@ -45,12 +47,13 @@ bool EvaluationContext::isResultSortedBy(const Variable& variable) {
   return getColumnIndexForVariable(variable) ==
          _columnsByWhichResultIsSorted[0];
 }
-// The size (in number of elements) that this evaluation context refers to.
+
+// _____________________________________________________________________________
 [[nodiscard]] size_t EvaluationContext::size() const {
   return _endIndex - _beginIndex;
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 [[nodiscard]] ColumnIndex EvaluationContext::getColumnIndexForVariable(
     const Variable& var) const {
   const auto& map = _variableToColumnMap;
