@@ -6,7 +6,6 @@
 
 #include <memory>
 #include <optional>
-#include <ostream>
 #include <string>
 #include <utility>
 
@@ -31,8 +30,6 @@ template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
 void TransitivePathBinSearch::computeTransitivePathBound(
     IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide, const IdTable& startSideTable) const {
-  IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
-
   auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
   timer.start();
 
@@ -54,9 +51,9 @@ void TransitivePathBinSearch::computeTransitivePathBound(
   auto hullTime = timer.msecs();
   timer.start();
 
-  TransitivePathBinSearch::fillTableWithHull<RES_WIDTH, SIDE_WIDTH>(
-      res, hull, nodes, startSide.outputCol_, targetSide.outputCol_,
-      startSideTable, startSide.treeAndCol_.value().second);
+  fillTableWithHull(*dynRes, hull, nodes, startSide.outputCol_,
+                    targetSide.outputCol_, startSideTable,
+                    startSide.treeAndCol_.value().second);
 
   timer.stop();
   auto fillTime = timer.msecs();
@@ -65,8 +62,6 @@ void TransitivePathBinSearch::computeTransitivePathBound(
   info.addDetail("Initialization time", initTime.count());
   info.addDetail("Hull time", hullTime.count());
   info.addDetail("IdTable fill time", fillTime.count());
-
-  *dynRes = std::move(res).toDynamic();
 }
 
 // _____________________________________________________________________________
@@ -74,8 +69,6 @@ template <size_t RES_WIDTH, size_t SUB_WIDTH>
 void TransitivePathBinSearch::computeTransitivePath(
     IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  IdTableStatic<RES_WIDTH> res = std::move(*dynRes).toStatic<RES_WIDTH>();
-
   auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
   timer.start();
 
@@ -97,9 +90,7 @@ void TransitivePathBinSearch::computeTransitivePath(
   auto hullTime = timer.msecs();
   timer.start();
 
-  TransitivePathBinSearch::fillTableWithHull<RES_WIDTH>(
-      res, hull, startSide.outputCol_, targetSide.outputCol_);
-
+  fillTableWithHull(*dynRes, hull, startSide.outputCol_, targetSide.outputCol_);
   timer.stop();
   auto fillTime = timer.msecs();
 
@@ -107,22 +98,6 @@ void TransitivePathBinSearch::computeTransitivePath(
   info.addDetail("Initialization time", initTime.count());
   info.addDetail("Hull time", hullTime.count());
   info.addDetail("IdTable fill time", fillTime.count());
-
-  *dynRes = std::move(res).toDynamic();
-}
-
-// _____________________________________________________________________________
-std::pair<TransitivePathSide&, TransitivePathSide&>
-TransitivePathBinSearch::decideDirection() {
-  if (lhs_.isBoundVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
-    return {lhs_, rhs_};
-  } else if (rhs_.isBoundVariable() || !rhs_.isVariable()) {
-    LOG(DEBUG) << "Computing TransitivePath right to left" << std::endl;
-    return {rhs_, lhs_};
-  }
-  LOG(DEBUG) << "Computing TransitivePath left to right" << std::endl;
-  return {lhs_, rhs_};
 }
 
 // _____________________________________________________________________________
@@ -214,54 +189,6 @@ TransitivePathBinSearch::Map TransitivePathBinSearch::transitiveHull(
 }
 
 // _____________________________________________________________________________
-template <size_t WIDTH, size_t START_WIDTH>
-void TransitivePathBinSearch::fillTableWithHull(
-    IdTableStatic<WIDTH>& table, const Map& hull, std::vector<Id>& nodes,
-    size_t startSideCol, size_t targetSideCol, const IdTable& startSideTable,
-    size_t skipCol) {
-  IdTableView<START_WIDTH> startView =
-      startSideTable.asStaticView<START_WIDTH>();
-
-  size_t rowIndex = 0;
-  for (size_t i = 0; i < nodes.size(); i++) {
-    Id node = nodes[i];
-    auto it = hull.find(node);
-    if (it == hull.end()) {
-      continue;
-    }
-
-    for (Id otherNode : it->second) {
-      table.emplace_back();
-      table(rowIndex, startSideCol) = node;
-      table(rowIndex, targetSideCol) = otherNode;
-
-      TransitivePathBinSearch::copyColumns<START_WIDTH, WIDTH>(
-          startView, table, i, rowIndex, skipCol);
-
-      rowIndex++;
-    }
-  }
-}
-
-// _____________________________________________________________________________
-template <size_t WIDTH>
-void TransitivePathBinSearch::fillTableWithHull(IdTableStatic<WIDTH>& table,
-                                                const Map& hull,
-                                                size_t startSideCol,
-                                                size_t targetSideCol) {
-  size_t rowIndex = 0;
-  for (auto const& [node, linkedNodes] : hull) {
-    for (Id linkedNode : linkedNodes) {
-      table.emplace_back();
-      table(rowIndex, startSideCol) = node;
-      table(rowIndex, targetSideCol) = linkedNode;
-
-      rowIndex++;
-    }
-  }
-}
-
-// _____________________________________________________________________________
 template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
 std::pair<BinSearchMap, std::vector<Id>>
 TransitivePathBinSearch::setupMapAndNodes(const IdTable& sub,
@@ -272,8 +199,8 @@ TransitivePathBinSearch::setupMapAndNodes(const IdTable& sub,
   auto edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
   // Bound -> var|id
-  std::span<const Id> startNodes = setupNodes<SIDE_WIDTH>(
-      startSideTable, startSide.treeAndCol_.value().second);
+  std::span<const Id> startNodes =
+      startSideTable.getColumn(startSide.treeAndCol_.value().second);
   nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
 
   return {std::move(edges), std::move(nodes)};
@@ -293,12 +220,10 @@ TransitivePathBinSearch::setupMapAndNodes(
     nodes.push_back(std::get<Id>(startSide.value_));
     // var -> var
   } else {
-    std::span<const Id> startNodes =
-        setupNodes<SUB_WIDTH>(sub, startSide.subCol_);
+    std::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
     nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
     if (minDist_ == 0) {
-      std::span<const Id> targetNodes =
-          setupNodes<SUB_WIDTH>(sub, targetSide.subCol_);
+      std::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
       nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
     }
   }
@@ -317,37 +242,4 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
   BinSearchMap edges{startCol, targetCol};
 
   return edges;
-}
-
-// _____________________________________________________________________________
-template <size_t WIDTH>
-std::span<const Id> TransitivePathBinSearch::setupNodes(const IdTable& table,
-                                                        size_t col) {
-  return table.getColumn(col);
-}
-
-// _____________________________________________________________________________
-template <size_t INPUT_WIDTH, size_t OUTPUT_WIDTH>
-void TransitivePathBinSearch::copyColumns(
-    const IdTableView<INPUT_WIDTH>& inputTable,
-    IdTableStatic<OUTPUT_WIDTH>& outputTable, size_t inputRow, size_t outputRow,
-    size_t skipCol) {
-  size_t inCol = 0;
-  size_t outCol = 2;
-  while (inCol < inputTable.numColumns() && outCol < outputTable.numColumns()) {
-    if (skipCol == inCol) {
-      inCol++;
-      continue;
-    }
-
-    outputTable(outputRow, outCol) = inputTable(inputRow, inCol);
-    inCol++;
-    outCol++;
-  }
-}
-
-// _____________________________________________________________________________
-void TransitivePathBinSearch::insertIntoMap(Map& map, Id key, Id value) const {
-  auto [it, success] = map.try_emplace(key, allocator());
-  it->second.insert(value);
 }
