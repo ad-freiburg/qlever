@@ -98,12 +98,11 @@ TEST(LocalVocab, constructionAndAccess) {
 }
 
 // _____________________________________________________________________________
-/*
 TEST(LocalVocab, clone) {
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
-  for (auto& word : getTestCollectionOfWords(localVocabSize)) {
+  for (const auto& word : getTestCollectionOfWords(localVocabSize)) {
     localVocabOriginal.getIndexAndAddIfNotContained(word);
   }
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
@@ -113,26 +112,17 @@ TEST(LocalVocab, clone) {
   LocalVocab localVocabClone = localVocabOriginal.clone();
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
   ASSERT_EQ(localVocabClone.size(), localVocabSize);
-  for (size_t i = 0; i < localVocabSize; ++i) {
-    LocalVocabIndex idx = LocalVocabIndex::make(i);
-    const std::string& wordFromOriginal = localVocabOriginal.getWord(idx);
-    const std::string& wordFromClone = localVocabClone.getWord(idx);
-    ASSERT_EQ(wordFromOriginal, wordFromClone);
-    ASSERT_NE(&wordFromOriginal, &wordFromClone);
+  for (const auto& word : getTestCollectionOfWords(localVocabSize)) {
+    auto fromOrig = localVocabOriginal.getIndexOrNullopt(word).value();
+    auto fromClone = localVocabClone.getIndexOrNullopt(word).value();
+    ASSERT_EQ(fromOrig, fromClone);
+    ASSERT_EQ(word, *fromOrig);
   }
-
-  // Check that `nextFreeIndex_` of the clone is OK by adding another word to
-  // the clone.
-  localVocabClone.getIndexAndAddIfNotContained("blubb");
-  ASSERT_EQ(localVocabClone.getIndexAndAddIfNotContained("blubb"),
-            LocalVocabIndex::make(localVocabSize));
 }
- */
 
+// TODO<joka921> Rewrite
 // _____________________________________________________________________________
 TEST(LocalVocab, propagation) {
-  // TODO<joka921> This test has to be rewritten
-  /*
   // Query execution context (with small test index), see `IndexTestHelpers.h`.
   using ad_utility::AllocatorWithLimit;
   QueryExecutionContext* testQec = ad_utility::testing::getQec();
@@ -306,5 +296,5 @@ TEST(LocalVocab, propagation) {
   //
   // TODO<joka921> Maybe add tests for the new TextIndexScanFor... classes,
   // they never introduce any local vocab.
-   */
 }
+*/
