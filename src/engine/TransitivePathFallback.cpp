@@ -139,9 +139,9 @@ ResultTable TransitivePathFallback::computeResult() {
 }
 
 // _____________________________________________________________________________
-TransitivePathFallback::Map TransitivePathFallback::transitiveHull(
-    const Map& edges, const std::vector<Id>& startNodes,
-    std::optional<Id> target) const {
+Map TransitivePathFallback::transitiveHull(const Map& edges,
+                                           const std::vector<Id>& startNodes,
+                                           std::optional<Id> target) const {
   using MapIt = Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull{allocator()};
@@ -218,11 +218,9 @@ TransitivePathFallback::Map TransitivePathFallback::transitiveHull(
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-std::pair<TransitivePathFallback::Map, std::vector<Id>>
-TransitivePathFallback::setupMapAndNodes(const IdTable& sub,
-                                         const TransitivePathSide& startSide,
-                                         const TransitivePathSide& targetSide,
-                                         const IdTable& startSideTable) const {
+std::pair<Map, std::vector<Id>> TransitivePathFallback::setupMapAndNodes(
+    const IdTable& sub, const TransitivePathSide& startSide,
+    const TransitivePathSide& targetSide, const IdTable& startSideTable) const {
   std::vector<Id> nodes;
   Map edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
 
@@ -236,8 +234,7 @@ TransitivePathFallback::setupMapAndNodes(const IdTable& sub,
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-std::pair<TransitivePathFallback::Map, std::vector<Id>>
-TransitivePathFallback::setupMapAndNodes(
+std::pair<Map, std::vector<Id>> TransitivePathFallback::setupMapAndNodes(
     const IdTable& sub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   std::vector<Id> nodes;
@@ -261,7 +258,7 @@ TransitivePathFallback::setupMapAndNodes(
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-TransitivePathFallback::Map TransitivePathFallback::setupEdgesMap(
+Map TransitivePathFallback::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();

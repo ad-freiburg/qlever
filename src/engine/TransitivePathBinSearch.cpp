@@ -142,9 +142,9 @@ ResultTable TransitivePathBinSearch::computeResult() {
 }
 
 // _____________________________________________________________________________
-TransitivePathBinSearch::Map TransitivePathBinSearch::transitiveHull(
-    const BinSearchMap& edges, const std::vector<Id>& startNodes,
-    std::optional<Id> target) const {
+Map TransitivePathBinSearch::transitiveHull(const BinSearchMap& edges,
+                                            const std::vector<Id>& startNodes,
+                                            std::optional<Id> target) const {
   // For every node do a dfs on the graph
   Map hull{allocator()};
 
