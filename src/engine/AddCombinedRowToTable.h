@@ -227,7 +227,9 @@ class AddCombinedRowToIdTable {
     // input.
     auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
       // NOTE: For localVocabIndices we cannot use the simple bitwise OR.
-      if (a.isUndefined()) {return b;}
+      if (a.isUndefined()) {
+        return b;
+      }
       return a;
       /*
       static_assert(ValueId::makeUndefined().getBits() == 0u);

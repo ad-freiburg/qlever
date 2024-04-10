@@ -77,3 +77,13 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
 const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
   return *localVocabIndex;
 }
+
+// _____________________________________________________________________________
+std::vector<std::string> LocalVocab::getAllWordsForTesting() const {
+  std::vector<std::string> result;
+  std::ranges::copy(wordsToIndexesMap(), std::back_inserter(result));
+  for (const auto& previous : previousSets_) {
+    std::ranges::copy(*previous, std::back_inserter(result));
+  }
+  return result;
+}

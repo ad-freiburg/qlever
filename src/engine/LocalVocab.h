@@ -27,8 +27,7 @@ class LocalVocab {
   // we refer to them in `wordsToIdsMap_` below.
   using Set = absl::node_hash_set<AlignedStr>;
   std::vector<std::shared_ptr<const Set>> previousSets_;
-  std::shared_ptr<Set> wordsToIndexesMap_ =
-      std::make_shared<absl::node_hash_set<AlignedStr>>();
+  std::shared_ptr<Set> wordsToIndexesMap_ = std::make_shared<Set>();
 
   auto& wordsToIndexesMap() { return *wordsToIndexesMap_; }
   const auto& wordsToIndexesMap() const { return *wordsToIndexesMap_; }
@@ -61,15 +60,23 @@ class LocalVocab {
       const std::string& word) const;
 
   // The number of words in the vocabulary.
-  size_t size() const { return wordsToIndexesMap().size(); }
+  size_t size() const {
+    auto result = wordsToIndexesMap().size();
+    for (const auto& previous : previousSets_) {
+      result += previous->size();
+    }
+    return result;
+  }
 
   // Return true if and only if the local vocabulary is empty.
-  bool empty() const { return wordsToIndexesMap().empty(); }
+  bool empty() const { return size() == 0; }
 
   // Return a const reference to the word.
   const std::string& getWord(LocalVocabIndex localVocabIndex) const;
 
   static LocalVocab merge(const LocalVocab& a, const LocalVocab& b);
+
+  std::vector<std::string> getAllWordsForTesting() const;
 
  private:
   // Common implementation for the two variants of

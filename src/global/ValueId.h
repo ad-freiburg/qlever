@@ -123,7 +123,13 @@ class ValueId {
 
   /// Equality comparison is performed directly on the underlying
   /// representation.
-  constexpr bool operator==(const ValueId&) const = default;
+  constexpr bool operator==(const ValueId& other) const {
+    if (getDatatype() == Datatype::LocalVocabIndex &&
+        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+      return *getLocalVocabIndex() == *other.getLocalVocabIndex();
+    }
+    return _bits == other._bits;
+  }
 
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
