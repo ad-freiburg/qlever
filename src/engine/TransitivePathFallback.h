@@ -6,57 +6,18 @@
 
 #include <memory>
 
-#include "TransitivePathBase.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
-class TransitivePathFallback : public TransitivePathBase {
+class TransitivePathFallback : public TransitivePathImpl<Map> {
  public:
   TransitivePathFallback(QueryExecutionContext* qec,
                          std::shared_ptr<QueryExecutionTree> child,
                          const TransitivePathSide& leftSide,
                          const TransitivePathSide& rightSide, size_t minDist,
                          size_t maxDist);
-
-  /**
-   * @brief Compute the transitive hull with a bound side.
-   * This function is called when the startSide is bound and
-   * it is a variable. The other IdTable contains the result
-   * of the start side and will be used to get the start nodes.
-   *
-   * @tparam RES_WIDTH Number of columns of the result table
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the
-   * @param res The result table which will be filled in-place
-   * @param sub The IdTable for the sub result
-   * @param startSide The start side for the transitive hull
-   * @param targetSide The target side for the transitive hull
-   * @param startSideTable The IdTable of the startSide
-   */
-
-  template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  void computeTransitivePathBound(IdTable* res, const IdTable& sub,
-                                  const TransitivePathSide& startSide,
-                                  const TransitivePathSide& targetSide,
-                                  const IdTable& startSideTable) const;
-
-  /**
-   * @brief Compute the transitive hull.
-   * This function is called when no side is bound (or an id).
-   *
-   * @tparam RES_WIDTH Number of columns of the result table
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param res The result table which will be filled in-place
-   * @param sub The IdTable for the sub result
-   * @param startSide The start side for the transitive hull
-   * @param targetSide The target side for the transitive hull
-   */
-
-  template <size_t RES_WIDTH, size_t SUB_WIDTH>
-  void computeTransitivePath(IdTable* res, const IdTable& sub,
-                             const TransitivePathSide& startSide,
-                             const TransitivePathSide& targetSide) const;
 
  private:
   /**
@@ -84,7 +45,7 @@ class TransitivePathFallback : public TransitivePathBase {
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
   Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes,
-                     std::optional<Id> target) const;
+                     std::optional<Id> target) const override;
 
   /**
    * @brief Prepare a Map and a nodes vector for the transitive hull
@@ -122,6 +83,9 @@ class TransitivePathFallback : public TransitivePathBase {
       const TransitivePathSide& targetSide) const;
 
   // initialize the map from the subresult
+  Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
+                    const TransitivePathSide& targetSide) const override;
+
   template <size_t SUB_WIDTH>
   Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
                     const TransitivePathSide& targetSide) const;

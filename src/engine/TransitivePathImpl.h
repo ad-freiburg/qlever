@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#pragma once
+
 #include "engine/TransitivePathBase.h"
 #include "util/Timer.h"
 
@@ -30,7 +32,6 @@ class TransitivePathImpl : public TransitivePathBase {
    * @param targetSide The target side for the transitive hull
    * @param startSideTable The IdTable of the startSide
    */
-
   template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
   void computeTransitivePathBound(IdTable* dynRes, const IdTable& dynSub,
                                   const TransitivePathSide& startSide,
