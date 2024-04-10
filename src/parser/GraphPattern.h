@@ -27,7 +27,6 @@ class GraphPattern {
   GraphPattern& operator=(const GraphPattern& other);
   GraphPattern& operator=(GraphPattern&& other) noexcept;
   ~GraphPattern();
-  void toString(std::ostringstream& os, int indentation = 0) const;
   // Traverse the graph pattern tree and assigns a unique ID to every graph
   // pattern.
   void recomputeIds(size_t* id_count = nullptr);

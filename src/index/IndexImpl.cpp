@@ -24,6 +24,7 @@
 #include "util/CachingMemoryResource.h"
 #include "util/HashMap.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
+#include "util/ProgressBar.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/TupleHelpers.h"
@@ -222,7 +223,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // part of the PSO and POS permutation.
   LOG(INFO) << "Adding " << hasPatternPredicateSortedByPSO->size()
             << " triples to the POS and PSO permutation for "
-               "`ql:has-pattern` ..."
+               "the internal `ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 3);
@@ -314,9 +315,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
       std::make_unique<TripleVec>(onDiskBase_ + ".unsorted-triples.dat", 1_GB,
                                   allocator_));
+  LOG(INFO) << "Parsing input triples and creating partial vocabularies, one "
+               "per batch ..."
+            << std::endl;
   bool parserExhausted = false;
 
-  size_t i = 0;
   // already count the numbers of triples that will be used for the language
   // filter
   size_t numFiles = 0;
@@ -330,6 +333,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
 
   ad_utility::CachingMemoryResource cachingMemoryResource;
   ItemAlloc itemAlloc(&cachingMemoryResource);
+  size_t numTriplesProcessed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples parsed: "};
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
@@ -355,15 +360,15 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                   this, itemAlloc));
 
       while (auto opt = p.getNextValue()) {
-        i++;
         for (const auto& innerOpt : opt.value()) {
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
           }
         }
-        if (i % 100'000'000 == 0) {
-          LOG(INFO) << "Input triples processed: " << i << std::endl;
+        numTriplesProcessed++;
+        if (progressBar.update()) {
+          LOG(INFO) << progressBar.getProgressString() << std::flush;
         }
       }
       LOG(TIMING) << "WaitTimes for Pipeline in msecs\n";
@@ -399,23 +404,22 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       *(it - 1) = std::move(*it);
     }
     writePartialVocabularyFuture[writePartialVocabularyFuture.size() - 1] =
-        writeNextPartialVocabulary(i, numFiles, actualCurrentPartialSize,
-                                   std::move(oldItemPtr),
-                                   std::move(localWriter), &idTriples);
+        writeNextPartialVocabulary(
+            numTriplesProcessed, numFiles, actualCurrentPartialSize,
+            std::move(oldItemPtr), std::move(localWriter), &idTriples);
     numFiles++;
     // Save the information how many triples this partial vocabulary actually
     // deals with we will use this later for mapping from partial to global
     // ids
     actualPartialSizes.push_back(actualCurrentPartialSize);
   }
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
   for (auto& future : writePartialVocabularyFuture) {
     if (future.valid()) {
       future.get();
     }
   }
-  LOG(INFO) << "Done, total number of triples read: " << i
-            << " [may contain duplicates]" << std::endl;
-  LOG(INFO) << "Number of QLever-internal triples created: "
+  LOG(INFO) << "Number of triples created (including QLever-internal ones): "
             << (*idTriples.wlock())->size() << " [may contain duplicates]"
             << std::endl;
 
@@ -448,7 +452,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   res.idTriples = std::move(*idTriples.wlock());
   res.actualPartialSizes = std::move(actualPartialSizes);
 
-  LOG(INFO) << "Removing temporary files ..." << std::endl;
+  LOG(DEBUG) << "Removing temporary files ..." << std::endl;
   for (size_t n = 0; n < numFiles; ++n) {
     deleteTemporaryFile(absl::StrCat(onDiskBase_, PARTIAL_VOCAB_FILE_NAME, n));
   }
@@ -477,7 +481,6 @@ IndexImpl::convertPartialToGlobalIds(
     }
   }();
   auto& result = *resultPtr;
-  size_t i = 0;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<3>;
@@ -507,18 +510,19 @@ IndexImpl::convertPartialToGlobalIds(
 
   // Return a lambda that pushes all the triples to the sorter. Must only be
   // called single-threaded.
-  auto getWriteTask = [&result, &i](Buffer triples) {
-    return [&result, &i,
+  size_t numTriplesConverted = 0;
+  ad_utility::ProgressBar progressBar{numTriplesConverted,
+                                      "Triples converted: "};
+  auto getWriteTask = [&result, &numTriplesConverted,
+                       &progressBar](Buffer triples) {
+    return [&result, &numTriplesConverted, &progressBar,
             triples = std::make_shared<IdTableStatic<0>>(
                 std::move(triples).toDynamic())] {
       result.pushBlock(*triples);
-      size_t newI = i + triples->size();
-      static constexpr size_t progressInterval = 100'000'000;
-      if ((newI / progressInterval) > (i / progressInterval)) {
-        LOG(INFO) << "Triples converted: "
-                  << (newI / progressInterval) * progressInterval << std::endl;
+      numTriplesConverted += triples->size();
+      if (progressBar.update()) {
+        LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
-      i = newI;
     };
   };
 
@@ -591,7 +595,7 @@ IndexImpl::convertPartialToGlobalIds(
   }
   lookupQueue.finish();
   writeQueue.finish();
-  LOG(INFO) << "Done, total number of triples converted: " << i << std::endl;
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
   return resultPtr;
 }
 
@@ -603,7 +607,6 @@ IndexImpl::createPermutationPairImpl(size_t numColumns, const string& fileName1,
                                      auto&& sortedTriples,
                                      std::array<size_t, 3> permutation,
                                      auto&&... perTripleCallbacks) {
-  LOG(INFO) << "Creating a pair of index permutations ..." << std::endl;
   using MetaData = IndexMetaDataMmapDispatcher::WriteType;
   MetaData metaData1, metaData2;
   static_assert(MetaData::isMmapBased_);
@@ -652,6 +655,8 @@ std::tuple<size_t, IndexImpl::IndexMetaDataMmapDispatcher::WriteType,
 IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
                               const Permutation& p1, const Permutation& p2,
                               auto&&... perTripleCallbacks) {
+  LOG(INFO) << "Creating permutations " << p1.readableName() << " and "
+            << p2.readableName() << " ..." << std::endl;
   auto metaData = createPermutationPairImpl(
       numColumns, onDiskBase_ + ".index" + p1.fileSuffix(),
       onDiskBase_ + ".index" + p2.fileSuffix(), AD_FWD(sortedTriples),
@@ -685,8 +690,8 @@ size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
         absl::StrCat(onDiskBase_, ".index", permutation.fileSuffix()), "r+");
     metaData.appendToFile(&f);
   };
-  LOG(INFO) << "Writing meta data for " << p1.readableName() << " and "
-            << p2.readableName() << " ..." << std::endl;
+  LOG(DEBUG) << "Writing meta data for " << p1.readableName() << " and "
+             << p2.readableName() << " ..." << std::endl;
   writeMetadata(metaData1, p1);
   writeMetadata(metaData2, p2);
   return numDistinctC0;
@@ -1102,8 +1107,9 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
   } else {
     turtleParserIntegerOverflowBehavior_ =
         TurtleParserIntegerOverflowBehavior::Error;
-    LOG(INFO) << "Integers that cannot be represented by QLever will throw an "
-                 "exception (this is the default behavior)"
+    LOG(INFO) << "By default, integers that cannot be represented by QLever "
+                 "will throw an "
+                 "exception"
               << std::endl;
   }
 }
