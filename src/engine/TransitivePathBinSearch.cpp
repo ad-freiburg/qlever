@@ -6,98 +6,22 @@
 
 #include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 
 #include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
 #include "util/Exception.h"
-#include "util/Timer.h"
 
 // _____________________________________________________________________________
 TransitivePathBinSearch::TransitivePathBinSearch(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist)
-    : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist) {
+    : TransitivePathImpl<BinSearchMap>(qec, child, leftSide, rightSide, minDist,
+                                       maxDist) {
   auto [startSide, targetSide] = decideDirection();
   subtree_ = QueryExecutionTree::createSortedTree(
       subtree_, {startSide.subCol_, targetSide.subCol_});
-}
-
-// _____________________________________________________________________________
-template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
-void TransitivePathBinSearch::computeTransitivePathBound(
-    IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide, const IdTable& startSideTable) const {
-  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
-  timer.start();
-
-  auto [edges, nodes] = setupMapAndNodes<SUB_WIDTH, SIDE_WIDTH>(
-      dynSub, startSide, targetSide, startSideTable);
-
-  timer.stop();
-  auto initTime = timer.msecs();
-  timer.start();
-
-  Map hull(allocator());
-  if (!targetSide.isVariable()) {
-    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
-  } else {
-    hull = transitiveHull(edges, nodes, std::nullopt);
-  }
-
-  timer.stop();
-  auto hullTime = timer.msecs();
-  timer.start();
-
-  fillTableWithHull(*dynRes, hull, nodes, startSide.outputCol_,
-                    targetSide.outputCol_, startSideTable,
-                    startSide.treeAndCol_.value().second);
-
-  timer.stop();
-  auto fillTime = timer.msecs();
-
-  auto& info = runtimeInfo();
-  info.addDetail("Initialization time", initTime.count());
-  info.addDetail("Hull time", hullTime.count());
-  info.addDetail("IdTable fill time", fillTime.count());
-}
-
-// _____________________________________________________________________________
-template <size_t RES_WIDTH, size_t SUB_WIDTH>
-void TransitivePathBinSearch::computeTransitivePath(
-    IdTable* dynRes, const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide) const {
-  auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
-  timer.start();
-
-  auto [edges, nodes] =
-      setupMapAndNodes<SUB_WIDTH>(dynSub, startSide, targetSide);
-
-  timer.stop();
-  auto initTime = timer.msecs();
-  timer.start();
-
-  Map hull{allocator()};
-  if (!targetSide.isVariable()) {
-    hull = transitiveHull(edges, nodes, std::get<Id>(targetSide.value_));
-  } else {
-    hull = transitiveHull(edges, nodes, std::nullopt);
-  }
-
-  timer.stop();
-  auto hullTime = timer.msecs();
-  timer.start();
-
-  fillTableWithHull(*dynRes, hull, startSide.outputCol_, targetSide.outputCol_);
-  timer.stop();
-  auto fillTime = timer.msecs();
-
-  auto& info = runtimeInfo();
-  info.addDetail("Initialization time", initTime.count());
-  info.addDetail("Hull time", hullTime.count());
-  info.addDetail("IdTable fill time", fillTime.count());
 }
 
 // _____________________________________________________________________________
@@ -189,46 +113,12 @@ Map TransitivePathBinSearch::transitiveHull(const BinSearchMap& edges,
 }
 
 // _____________________________________________________________________________
-template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-std::pair<BinSearchMap, std::vector<Id>>
-TransitivePathBinSearch::setupMapAndNodes(const IdTable& sub,
-                                          const TransitivePathSide& startSide,
-                                          const TransitivePathSide& targetSide,
-                                          const IdTable& startSideTable) const {
-  std::vector<Id> nodes;
-  auto edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
-
-  // Bound -> var|id
-  std::span<const Id> startNodes =
-      startSideTable.getColumn(startSide.treeAndCol_.value().second);
-  nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
-
-  return {std::move(edges), std::move(nodes)};
-}
-
-// _____________________________________________________________________________
-template <size_t SUB_WIDTH>
-std::pair<BinSearchMap, std::vector<Id>>
-TransitivePathBinSearch::setupMapAndNodes(
-    const IdTable& sub, const TransitivePathSide& startSide,
+BinSearchMap TransitivePathBinSearch::setupEdgesMap(
+    const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  std::vector<Id> nodes;
-  auto edges = setupEdgesMap<SUB_WIDTH>(sub, startSide, targetSide);
-
-  // id -> var|id
-  if (!startSide.isVariable()) {
-    nodes.push_back(std::get<Id>(startSide.value_));
-    // var -> var
-  } else {
-    std::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
-    nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
-    if (minDist_ == 0) {
-      std::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
-      nodes.insert(nodes.end(), targetNodes.begin(), targetNodes.end());
-    }
-  }
-
-  return {std::move(edges), std::move(nodes)};
+  return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
+                         &TransitivePathBinSearch::setupEdgesMap, this, dynSub,
+                         startSide, targetSide);
 }
 
 // _____________________________________________________________________________

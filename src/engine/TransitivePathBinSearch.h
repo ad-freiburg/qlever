@@ -6,13 +6,12 @@
 
 #include <bits/ranges_algo.h>
 
-#include <functional>
 #include <iterator>
 #include <memory>
 
-#include "TransitivePathBase.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
+#include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
 struct BinSearchMap {
@@ -28,52 +27,13 @@ struct BinSearchMap {
   }
 };
 
-class TransitivePathBinSearch : public TransitivePathBase {
+class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
  public:
   TransitivePathBinSearch(QueryExecutionContext* qec,
                           std::shared_ptr<QueryExecutionTree> child,
                           const TransitivePathSide& leftSide,
                           const TransitivePathSide& rightSide, size_t minDist,
                           size_t maxDist);
-
-  /**
-   * @brief Compute the transitive hull with a bound side.
-   * This function is called when the startSide is bound and
-   * it is a variable. The other IdTable contains the result
-   * of the start side and will be used to get the start nodes.
-   *
-   * @tparam RES_WIDTH Number of columns of the result table
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the
-   * @param res The result table which will be filled in-place
-   * @param sub The IdTable for the sub result
-   * @param startSide The start side for the transitive hull
-   * @param targetSide The target side for the transitive hull
-   * @param startSideTable The IdTable of the startSide
-   */
-
-  template <size_t RES_WIDTH, size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  void computeTransitivePathBound(IdTable* res, const IdTable& sub,
-                                  const TransitivePathSide& startSide,
-                                  const TransitivePathSide& targetSide,
-                                  const IdTable& startSideTable) const;
-
-  /**
-   * @brief Compute the transitive hull.
-   * This function is called when no side is bound (or an id).
-   *
-   * @tparam RES_WIDTH Number of columns of the result table
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param res The result table which will be filled in-place
-   * @param sub The IdTable for the sub result
-   * @param startSide The start side for the transitive hull
-   * @param targetSide The target side for the transitive hull
-   */
-
-  template <size_t RES_WIDTH, size_t SUB_WIDTH>
-  void computeTransitivePath(IdTable* res, const IdTable& sub,
-                             const TransitivePathSide& startSide,
-                             const TransitivePathSide& targetSide) const;
 
  private:
   /**
@@ -102,42 +62,12 @@ class TransitivePathBinSearch : public TransitivePathBase {
    */
   Map transitiveHull(const BinSearchMap& edges,
                      const std::vector<Id>& startNodes,
-                     std::optional<Id> target) const;
+                     std::optional<Id> target) const override;
 
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @tparam SIDE_WIDTH Number of columns of the startSideTable
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @param startSideTable An IdTable containing the Ids for the startSide
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH, size_t SIDE_WIDTH>
-  std::pair<BinSearchMap, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide,
-      const IdTable& startSideTable) const;
-
-  /**
-   * @brief Prepare a Map and a nodes vector for the transitive hull
-   * computation.
-   *
-   * @tparam SUB_WIDTH Number of columns of the sub table
-   * @param sub The sub table result
-   * @param startSide The TransitivePathSide where the edges start
-   * @param targetSide The TransitivePathSide where the edges end
-   * @return std::pair<Map, std::vector<Id>> A Map and Id vector (nodes) for the
-   * transitive hull computation
-   */
-  template <size_t SUB_WIDTH>
-  std::pair<BinSearchMap, std::vector<Id>> setupMapAndNodes(
-      const IdTable& sub, const TransitivePathSide& startSide,
-      const TransitivePathSide& targetSide) const;
+  // initialize the map from the subresult
+  BinSearchMap setupEdgesMap(
+      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const TransitivePathSide& targetSide) const override;
 
   // initialize the map from the subresult
   template <size_t SUB_WIDTH>

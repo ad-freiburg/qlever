@@ -138,8 +138,6 @@ class TransitivePathBase : public Operation {
    * startSideTable to fill in the rest of the columns.
    * This function is called if the start side is bound and a variable.
    *
-   * @tparam WIDTH The number of columns of the result table.
-   * @tparam START_WIDTH The number of columns of the start table.
    * @param table The result table which will be filled.
    * @param hull The transitive hull.
    * @param nodes The start nodes of the transitive hull. These need to be in
@@ -162,7 +160,6 @@ class TransitivePathBase : public Operation {
    * @brief Fill the given table with the transitive hull.
    * This function is called if the sides are unbound or ids.
    *
-   * @tparam WIDTH The number of columns of the result table.
    * @param table The result table which will be filled.
    * @param hull The transitive hull.
    * @param startSideCol The column of the result table for the startSide of the
