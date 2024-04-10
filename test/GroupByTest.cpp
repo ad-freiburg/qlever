@@ -8,6 +8,7 @@
 
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
@@ -377,7 +378,7 @@ struct GroupByOptimizations : ::testing::Test {
       makeExecutionTree<IndexScan>(qec, Permutation::Enum::POS, xyzTriple);
   Tree xScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{"<x>"}, {"<label>"}, Variable{"?x"}});
+      SparqlTriple{iri("<x>"), {"<label>"}, Variable{"?x"}});
   Tree xyScan = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
@@ -386,7 +387,7 @@ struct GroupByOptimizations : ::testing::Test {
       SparqlTriple{Variable{"?x"}, {"<label>"}, Variable{"?y"}});
   Tree xScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{{"<x>"}, {"<notInVocab>"}, Variable{"?x"}});
+      SparqlTriple{{iri("<x>")}, {"<notInVocab>"}, Variable{"?x"}});
   Tree xyScanIriNotInVocab = makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
       SparqlTriple{Variable{"?x"}, {"<notInVocab>"}, Variable{"?y"}});
@@ -1253,12 +1254,12 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   using TC = TripleComponent;
 
   input._variables = std::vector{varX, varY};
-  input._values.push_back(std::vector{TC(1.0), TC("B")});
-  input._values.push_back(std::vector{TC(1.0), TC("A")});
-  input._values.push_back(std::vector{TC(1.0), TC("C")});
-  input._values.push_back(std::vector{TC(3.0), TC("g")});
-  input._values.push_back(std::vector{TC(3.0), TC("h")});
-  input._values.push_back(std::vector{TC(3.0), TC("f")});
+  input._values.push_back(std::vector{TC(1.0), TC{iri("<B>")}});
+  input._values.push_back(std::vector{TC(1.0), TC{iri("<A>")}});
+  input._values.push_back(std::vector{TC(1.0), TC{iri("<C>")}});
+  input._values.push_back(std::vector{TC(3.0), TC{iri("<g>")}});
+  input._values.push_back(std::vector{TC(3.0), TC{iri("<h>")}});
+  input._values.push_back(std::vector{TC(3.0), TC{iri("<f>")}});
   auto qec = ad_utility::testing::getQec();
   auto values = ad_utility::makeExecutionTree<Values>(qec, input);
 
@@ -1502,9 +1503,10 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // (`<x>` and `<y>`) actually appear in the test knowledge graph.
     parsedQuery::SparqlValues sparqlValues;
     sparqlValues._variables.push_back(varX);
-    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<x>"}});
-    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<xa>"}});
-    sparqlValues._values.emplace_back(std::vector{TripleComponent{"<y>"}});
+    sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<x>")}});
+    sparqlValues._values.emplace_back(
+        std::vector{TripleComponent{iri("<xa>")}});
+    sparqlValues._values.emplace_back(std::vector{TripleComponent{iri("<y>")}});
     auto values = makeExecutionTree<Values>(qec, sparqlValues);
     // Set up a GROUP BY operation for which the optimization can be applied.
     // The last two arguments of the `Join` constructor are the indices of the
@@ -1524,10 +1526,10 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // subject, and 1 triple with `y` as a subject.
     ASSERT_EQ(result.numColumns(), 2u);
     ASSERT_EQ(result.size(), 2u);
-    Id idOfX;
-    Id idOfY;
-    qec->getIndex().getId("<x>", &idOfX);
-    qec->getIndex().getId("<y>", &idOfY);
+
+    auto getId = makeGetId(qec->getIndex());
+    Id idOfX = getId("<x>");
+    Id idOfY = getId("<y>");
 
     ASSERT_EQ(result(0, 0), idOfX);
     ASSERT_EQ(result(0, 1), Id::makeFromInt(7));

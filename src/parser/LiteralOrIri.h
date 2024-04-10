@@ -4,18 +4,26 @@
 
 #pragma once
 
+#include <absl/strings/str_cat.h>
+
 #include <variant>
 
 #include "parser/Iri.h"
 #include "parser/Literal.h"
+#include "util/Exception.h"
 
 namespace ad_utility::triple_component {
+static constexpr char literalPrefixChar = '"';
+static constexpr char iriPrefixChar = '<';
+static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
+static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // A wrapper class that can contain either an Iri or a Literal object.
 class LiteralOrIri {
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
 
+ public:
   // Return contained Iri object if available, throw exception otherwise
   const Iri& getIri() const;
 
@@ -23,12 +31,35 @@ class LiteralOrIri {
   // otherwise
   const Literal& getLiteral() const;
 
- public:
   // Create a new LiteralOrIri based on a Literal object
   explicit LiteralOrIri(Literal literal);
 
   // Create a new LiteralOrIri based on an Iri object
   explicit LiteralOrIri(Iri iri);
+
+  const std::string& toStringRepresentation() const {
+    auto impl = [](const auto& val) -> decltype(auto) {
+      return val.toStringRepresentation();
+    };
+    return std::visit(impl, data_);
+  }
+
+  static LiteralOrIri fromStringRepresentation(std::string internal) {
+    char tag = internal.front();
+    if (tag == iriPrefixChar) {
+      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
+    } else {
+      AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
+      return LiteralOrIri{
+          Literal::fromStringRepresentation(std::move(internal))};
+    }
+  }
+  template <typename H>
+  friend H AbslHashValue(H h,
+                         const std::same_as<LiteralOrIri> auto& literalOrIri) {
+    return H::combine(std::move(h), literalOrIri.data_);
+  }
+  bool operator==(const LiteralOrIri&) const = default;
 
   // Return true if object contains an Iri object
   bool isIri() const;
@@ -60,7 +91,7 @@ class LiteralOrIri {
   // Return the datatype of the contained Literal without "^^" prefix.
   // Throw exception if no Literal object is contained or object has no
   // datatype.
-  Iri getDatatype() const;
+  NormalizedStringView getDatatype() const;
 
   // Return the content of the contained Iri, or the contained Literal
   NormalizedStringView getContent() const;
@@ -77,13 +108,13 @@ class LiteralOrIri {
   //   without any descriptor.
   static LiteralOrIri literalWithQuotes(
       std::string_view rdfContentWithQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
-  // Similar to `literalWithQuotes`, except the rdfContent is expected to NOT BE
-  // surrounded by quotation marks.
+  // Similar to `fromEscapedRdfLiteral`, except the rdfContent is expected to
+  // NOT BE surrounded by quotation marks.
   static LiteralOrIri literalWithoutQuotes(
       std::string_view rdfContentWithoutQuotes,
-      std::optional<std::variant<Iri, string>> descriptor = std::nullopt);
+      std::optional<std::variant<Iri, std::string>> descriptor = std::nullopt);
 
   // Create a new iri given an iri with surrounding brackets
   static LiteralOrIri iriref(const std::string& stringWithBrackets);
