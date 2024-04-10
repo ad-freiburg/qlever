@@ -123,6 +123,11 @@ class ValueId {
 
   /// Equality comparison is performed directly on the underlying
   /// representation.
+  // NOTE: (Also for the operator<=> below: These comparisons only work
+  // correctly if we only store entries in the local vocab that are NOT part of
+  // the vocabulary. This is currently not true for expression results from
+  // GROUP BY and BIND operations (for performance reaons). So a join with such
+  // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
@@ -139,8 +144,6 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  /// TODO<joka921> Is this ordering also consistent for corner cases of doubles
-  /// (inf, nan, denormalized numbers, negative zero)?
   constexpr auto operator<=>(const ValueId& other) const {
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
@@ -221,6 +224,9 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
+    // The last `numDatatypeBits` of a `LocalVocabIndex` are always zero, so we
+    // can reuse them for the datatype.
+    static_assert(alignof(decltype(*index)) >= (1u << numDatatypeBits));
     return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
                          Datatype::LocalVocabIndex);
   }

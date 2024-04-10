@@ -24,13 +24,17 @@ class LocalVocab {
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
   // `std::string`) to remain stable over their lifetime in the hash map because
-  // we refer to them in `wordsToIdsMap_` below.
-  using Set = absl::node_hash_set<AlignedStr>;
-  std::vector<std::shared_ptr<const Set>> previousSets_;
-  std::shared_ptr<Set> wordsToIndexesMap_ = std::make_shared<Set>();
+  // we hand out pointers to them.
+  using Set = absl::node_hash_set<StringAligned16>;
+  std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
-  auto& wordsToIndexesMap() { return *wordsToIndexesMap_; }
-  const auto& wordsToIndexesMap() const { return *wordsToIndexesMap_; }
+  // Local vocabularies from child operations that were merged into this
+  // vocabulary s.t. the pointers are kept alive. They have to be `const`
+  // because they are possibly shared concurrently (for example via the cache).
+  std::vector<std::shared_ptr<const Set>> otherWordSets_;
+
+  auto& primaryWordSet() { return *primaryWordSet_; }
+  const auto& primaryWordSet() const { return *primaryWordSet_; }
 
  public:
   // Create a new, empty local vocabulary.
@@ -40,7 +44,9 @@ class LocalVocab {
   LocalVocab(const LocalVocab&) = delete;
   LocalVocab& operator=(const LocalVocab&) = delete;
 
-  // Make a deep copy explicitly.
+  // Make a logical copy. The clone will have an empty primary set so it can
+  // safely be modified. The contents are copied as shared pointers to const, so
+  // the function runs in linear time in the number of word sets.
   LocalVocab clone() const;
 
   // Moving a local vocabulary is not problematic (though the typical use case
@@ -60,9 +66,10 @@ class LocalVocab {
       const std::string& word) const;
 
   // The number of words in the vocabulary.
+  // Note: This is not constant time, but linear in the number of word sets.
   size_t size() const {
-    auto result = wordsToIndexesMap().size();
-    for (const auto& previous : previousSets_) {
+    auto result = primaryWordSet().size();
+    for (const auto& previous : otherWordSets_) {
       result += previous->size();
     }
     return result;
@@ -74,8 +81,11 @@ class LocalVocab {
   // Return a const reference to the word.
   const std::string& getWord(LocalVocabIndex localVocabIndex) const;
 
+  // Create a local vocab that contains and keeps alive all the words from `a`
+  // as well as `b`.
   static LocalVocab merge(const LocalVocab& a, const LocalVocab& b);
 
+  // Return all the words from all the word sets as a vector.
   std::vector<std::string> getAllWordsForTesting() const;
 
  private:
