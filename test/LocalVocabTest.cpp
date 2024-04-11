@@ -110,8 +110,7 @@ TEST(LocalVocab, clone) {
   }
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
 
-  // Clone it and test that the clone contains the same words, but under
-  // different addresses (that is, the word strings were deeply copied).
+  // Clone it and test that the clone contains the same words.
   LocalVocab localVocabClone = localVocabOriginal.clone();
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
   ASSERT_EQ(localVocabClone.size(), localVocabSize);
@@ -138,8 +137,7 @@ TEST(LocalVocab, merge) {
   indices.push_back(vocA.getIndexAndAddIfNotContained("oneB"));
   indices.push_back(vocA.getIndexAndAddIfNotContained("twoB"));
 
-  // Clone it and test that the clone contains the same words, but under
-  // different addresses (that is, the word strings were deeply copied).
+  // Clone it and test that the clone contains the same words.
   auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
   LocalVocab localVocabMerged = LocalVocab::merge(vocabs);
   ASSERT_EQ(localVocabMerged.size(), 4u);

@@ -463,17 +463,15 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
 
   auto visitor = [comparator]<typename A, typename B>(
                      const A& aValue, const B& bValue) -> ComparisonResult {
-    if constexpr (std::is_same_v<A, LocalVocabIndex>) {
-      if constexpr (!std::is_same_v<B, LocalVocabIndex>) {
-        AD_FAIL();
-      } else {
-        // TODO<joka921> This is one of the places that has to be changed once
-        // we want to implement correct comparisons for the local vocab that use
-        // ICU collation.
-        return fromBool(std::invoke(comparator, *aValue, *bValue));
-      }
-    }
-    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+    if constexpr (std::is_same_v<A, LocalVocabIndex> &&
+                  std::is_same_v<B, LocalVocabIndex>) {
+      // TODO<joka921> This is one of the places that has to be changed once
+      // we want to implement correct comparisons for the local vocab that use
+      // ICU collation.
+      return fromBool(std::invoke(comparator, *aValue, *bValue));
+    } else if constexpr (requires() {
+                           std::invoke(comparator, aValue, bValue);
+                         }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
       AD_FAIL();

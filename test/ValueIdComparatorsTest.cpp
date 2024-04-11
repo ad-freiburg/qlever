@@ -116,9 +116,6 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
       }
     }
     while (it != end) {
-      if (isMatching(*it, id)) {
-        LOG(INFO) << "bum" << std::endl;
-      }
       ASSERT_FALSE(isMatching(*it, id)) << *it << ", " << id << comparison;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
