@@ -14,7 +14,7 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
-#include "engine/TransitivePathFallback.h"
+#include "engine/TransitivePathHashMap.h"
 #include "global/Constants.h"
 #include "util/Exception.h"
 
@@ -294,8 +294,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     return std::make_shared<TransitivePathBinSearch>(
         qec, child, leftSide, rightSide, minDist, maxDist);
   } else {
-    return std::make_shared<TransitivePathFallback>(
-        qec, child, leftSide, rightSide, minDist, maxDist);
+    return std::make_shared<TransitivePathHashMap>(qec, child, leftSide,
+                                                   rightSide, minDist, maxDist);
   }
 }
 

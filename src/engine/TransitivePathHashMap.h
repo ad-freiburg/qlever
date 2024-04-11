@@ -12,13 +12,13 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
-class TransitivePathFallback : public TransitivePathImpl<Map> {
+class TransitivePathHashMap : public TransitivePathImpl<Map> {
  public:
-  TransitivePathFallback(QueryExecutionContext* qec,
-                         std::shared_ptr<QueryExecutionTree> child,
-                         const TransitivePathSide& leftSide,
-                         const TransitivePathSide& rightSide, size_t minDist,
-                         size_t maxDist);
+  TransitivePathHashMap(QueryExecutionContext* qec,
+                        std::shared_ptr<QueryExecutionTree> child,
+                        const TransitivePathSide& leftSide,
+                        const TransitivePathSide& rightSide, size_t minDist,
+                        size_t maxDist);
 
  private:
   /**

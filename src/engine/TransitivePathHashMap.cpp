@@ -3,7 +3,7 @@
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
 //         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
-#include "TransitivePathFallback.h"
+#include "TransitivePathHashMap.h"
 
 #include <memory>
 #include <optional>
@@ -12,7 +12,7 @@
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
-TransitivePathFallback::TransitivePathFallback(
+TransitivePathHashMap::TransitivePathHashMap(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist)
@@ -20,9 +20,9 @@ TransitivePathFallback::TransitivePathFallback(
                               maxDist) {}
 
 // _____________________________________________________________________________
-Map TransitivePathFallback::transitiveHull(const Map& edges,
-                                           const std::vector<Id>& startNodes,
-                                           std::optional<Id> target) const {
+Map TransitivePathHashMap::transitiveHull(const Map& edges,
+                                          const std::vector<Id>& startNodes,
+                                          std::optional<Id> target) const {
   using MapIt = Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull{allocator()};
@@ -98,17 +98,17 @@ Map TransitivePathFallback::transitiveHull(const Map& edges,
 }
 
 // _____________________________________________________________________________
-Map TransitivePathFallback::setupEdgesMap(
+Map TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
-                         &TransitivePathFallback::setupEdgesMap, this, dynSub,
+                         &TransitivePathHashMap::setupEdgesMap, this, dynSub,
                          startSide, targetSide);
 }
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-Map TransitivePathFallback::setupEdgesMap(
+Map TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
