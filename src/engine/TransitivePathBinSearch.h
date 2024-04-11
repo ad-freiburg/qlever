@@ -35,17 +35,6 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
 
  private:
   /**
-   * @brief Compute the result for this TransitivePath operation
-   * This function chooses the start and target side for the transitive
-   * hull computation. This choice of the start side has a large impact
-   * on the time it takes to compute the hull. The set of nodes on the
-   * start side should be as small as possible.
-   *
-   * @return ResultTable The result of the TransitivePath operation
-   */
-  ResultTable computeResult() override;
-
-  /**
    * @brief Compute the transitive hull starting at the given nodes,
    * using the given Map.
    *

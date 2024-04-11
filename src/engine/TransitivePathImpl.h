@@ -4,7 +4,10 @@
 
 #pragma once
 
+#include <utility>
+
 #include "engine/TransitivePathBase.h"
+#include "util/Exception.h"
 #include "util/Timer.h"
 
 template <typename T>
@@ -119,6 +122,57 @@ class TransitivePathImpl : public TransitivePathBase {
   };
 
  protected:
+  /**
+   * @brief Compute the result for this TransitivePath operation
+   * This function chooses the start and target side for the transitive
+   * hull computation. This choice of the start side has a large impact
+   * on the time it takes to compute the hull. The set of nodes on the
+   * start side should be as small as possible.
+   *
+   * @return ResultTable The result of the TransitivePath operation
+   */
+  ResultTable computeResult() override {
+    if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
+        rhs_.isVariable()) {
+      AD_THROW(
+          "This query might have to evalute the empty path, which is currently "
+          "not supported");
+    }
+    auto [startSide, targetSide] = decideDirection();
+    shared_ptr<const ResultTable> subRes = subtree_->getResult();
+
+    IdTable idTable{allocator()};
+
+    idTable.setNumColumns(getResultWidth());
+
+    size_t subWidth = subRes->idTable().numColumns();
+
+    if (startSide.isBoundVariable()) {
+      shared_ptr<const ResultTable> sideRes =
+          startSide.treeAndCol_.value().first->getResult();
+      size_t sideWidth = sideRes->idTable().numColumns();
+
+      CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
+                      &TransitivePathImpl<T>::computeTransitivePathBound, this,
+                      &idTable, subRes->idTable(), startSide, targetSide,
+                      sideRes->idTable());
+
+      return {
+          std::move(idTable), resultSortedOn(),
+          ResultTable::getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
+    }
+    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
+                    &TransitivePathImpl<T>::computeTransitivePath, this,
+                    &idTable, subRes->idTable(), startSide, targetSide);
+
+    // NOTE: The only place, where the input to a transitive path operation is
+    // not an index scan (which has an empty local vocabulary by default) is the
+    // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
+    // either.
+    return {std::move(idTable), resultSortedOn(),
+            subRes->getSharedLocalVocab()};
+  };
+
   /**
    * @brief Prepare a Map and a nodes vector for the transitive hull
    * computation.

@@ -7,11 +7,9 @@
 
 #include <memory>
 #include <optional>
-#include <utility>
 
 #include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
-#include "util/Exception.h"
 
 // _____________________________________________________________________________
 TransitivePathFallback::TransitivePathFallback(
@@ -20,46 +18,6 @@ TransitivePathFallback::TransitivePathFallback(
     size_t minDist, size_t maxDist)
     : TransitivePathImpl<Map>(qec, child, leftSide, rightSide, minDist,
                               maxDist) {}
-// _____________________________________________________________________________
-ResultTable TransitivePathFallback::computeResult() {
-  if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
-      rhs_.isVariable()) {
-    AD_THROW(
-        "This query might have to evalute the empty path, which is currently "
-        "not supported");
-  }
-  auto [startSide, targetSide] = decideDirection();
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
-
-  IdTable idTable{allocator()};
-
-  idTable.setNumColumns(getResultWidth());
-
-  size_t subWidth = subRes->idTable().numColumns();
-
-  if (startSide.isBoundVariable()) {
-    shared_ptr<const ResultTable> sideRes =
-        startSide.treeAndCol_.value().first->getResult();
-    size_t sideWidth = sideRes->idTable().numColumns();
-
-    CALL_FIXED_SIZE((std::array{resultWidth_, subWidth, sideWidth}),
-                    &TransitivePathFallback::computeTransitivePathBound, this,
-                    &idTable, subRes->idTable(), startSide, targetSide,
-                    sideRes->idTable());
-
-    return {std::move(idTable), resultSortedOn(),
-            ResultTable::getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
-  }
-  CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
-                  &TransitivePathFallback::computeTransitivePath, this,
-                  &idTable, subRes->idTable(), startSide, targetSide);
-
-  // NOTE: The only place, where the input to a transitive path operation is not
-  // an index scan (which has an empty local vocabulary by default) is the
-  // `LocalVocabTest`. But it doesn't harm to propagate the local vocab here
-  // either.
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
-}
 
 // _____________________________________________________________________________
 Map TransitivePathFallback::transitiveHull(const Map& edges,
