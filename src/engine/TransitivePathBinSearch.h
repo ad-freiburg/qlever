@@ -4,8 +4,6 @@
 
 #pragma once
 
-#include <bits/ranges_algo.h>
-
 #include <iterator>
 #include <memory>
 
