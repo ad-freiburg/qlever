@@ -39,7 +39,7 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
       primaryWordSet().emplace(std::forward<WordT>(word));
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.
-  return std::to_address(wordIterator);
+  return &(*wordIterator);
 }
 
 // _____________________________________________________________________________
