@@ -39,14 +39,14 @@ jobs:
 
       - name: Install dependencies
         run:  |
-          brew install llvm@16
+          brew install llvm@18
           brew install conan@2
-          echo 'export PATH="/usr/local/opt/llvm@16/bin:$PATH"' >> ~/.bash_profile
-          echo PATH="/usr/local/opt/llvm@16/bin:$PATH" >> $GITHUB_ENV 
-          echo 'export LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++"' >> ~/.bash_profile
-          echo LDFLAGS="-L/usr/local/opt/llvm@16/lib -L/usr/local/opt/llvm@16/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@16/lib/c++" >> $GITHUB_ENV 
-          echo 'export CPPFLAGS="-I/usr/local/opt/llvm@16/include"' >> ~/.bash_profile
-          echo  CPPFLAGS="/usr/local/opt/llvm@16/include" >> $GITHUB_ENV 
+          echo 'export PATH="/usr/local/opt/llvm@18/bin:$PATH"' >> ~/.bash_profile
+          echo PATH="/usr/local/opt/llvm@18/bin:$PATH" >> $GITHUB_ENV 
+          echo 'export LDFLAGS="-L/usr/local/opt/llvm@18/lib -L/usr/local/opt/llvm@18/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@18/lib/c++"' >> ~/.bash_profile
+          echo LDFLAGS="-L/usr/local/opt/llvm@18/lib -L/usr/local/opt/llvm@18/lib/c++ -Wl,-rpath,/usr/local/opt/llvm@18/lib/c++" >> $GITHUB_ENV 
+          echo 'export CPPFLAGS="-I/usr/local/opt/llvm@18/include"' >> ~/.bash_profile
+          echo  CPPFLAGS="/usr/local/opt/llvm@18/include" >> $GITHUB_ENV 
           source ~/.bash_profile
       - name: Print clang version
         run: clang++ --version
@@ -57,15 +57,15 @@ jobs:
           cache-name: cache-conan-modules
         with:
           path: ~/.conan2
-          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('conanfile.txt') }}-${{ hashFiles('conanprofiles/clang-18-macos')}}
       - name: Create build directory
         run: mkdir ${{github.workspace}}/build
       - name: Install and run conan
         working-directory: ${{github.workspace}}/build
         run: >
-          conan install .. -pr:b=../conanprofiles/clang-16-macos -pr:h=../conanprofiles/clang-16-macos -of=. --build=missing;
+          conan install .. -pr:b=../conanprofiles/clang-18-macos -pr:h=../conanprofiles/clang-18-macos -of=. --build=missing;
       - name: Configure CMake
-        # For std::ranges::join_view we need the -fexperimental-library flag on libc++16, which on Mac requires to manually tinker with the linking flags.
+        # For std::ranges::join_view we need the -fexperimental-library flag on libc++18, which on Mac requires to manually tinker with the linking flags.
         run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.build-type}} -DCMAKE_TOOLCHAIN_FILE="$(pwd)/build/conan_toolchain.cmake" -DUSE_PARALLEL=true -DRUN_EXPENSIVE_TESTS=false -DENABLE_EXPENSIVE_CHECKS=true -DCMAKE_CXX_COMPILER=clang++ -DADDITIONAL_COMPILER_FLAGS="-fexperimental-library" -DADDITIONAL_LINKER_FLAGS="-L$(brew --prefix llvm)/lib/c++"
 
       - name: Build
