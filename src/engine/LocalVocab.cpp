@@ -37,6 +37,8 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
   // explicit conversion from `string` to `AlignedString16`.
   auto [wordIterator, isNewWord] =
       primaryWordSet().emplace(std::forward<WordT>(word));
+  // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
+  // the MacOS build.
   return std::to_address(wordIterator);
 }
 
@@ -54,11 +56,11 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
 // _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
     const std::string& word) const {
-  // TODO<joka921> Maybe we can make this work with transparent hashing,
-  // but if this is only a testing API this is probably not worth the hassle.
   auto localVocabIndex = primaryWordSet().find(StringAligned16{word});
   if (localVocabIndex != primaryWordSet().end()) {
-    return std::to_address(localVocabIndex);
+    // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
+    // the MacOS build.
+    return &(*localVocabIndex);
   } else {
     return std::nullopt;
   }
