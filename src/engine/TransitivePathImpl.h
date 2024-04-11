@@ -10,11 +10,10 @@
 template <typename T>
 class TransitivePathImpl : public TransitivePathBase {
  public:
-  TransitivePathImpl<T>(QueryExecutionContext* qec,
-                        std::shared_ptr<QueryExecutionTree> child,
-                        TransitivePathSide leftSide,
-                        TransitivePathSide rightSide, size_t minDist,
-                        size_t maxDist)
+  TransitivePathImpl(QueryExecutionContext* qec,
+                     std::shared_ptr<QueryExecutionTree> child,
+                     TransitivePathSide leftSide, TransitivePathSide rightSide,
+                     size_t minDist, size_t maxDist)
       : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist){};
 
   /**
