@@ -54,27 +54,9 @@ class VectorWithMemoryLimit
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings. It is currently implemented as a thin wrapper
-// around a `variant`, but a more sophisticated implementation could be done in
-// the future.
-using IdOrStringBase =
+// that can only yield strings.
+using IdOrString =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
-class IdOrString : public IdOrStringBase,
-                   public VisitMixin<IdOrString, IdOrStringBase> {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-
- public:
-  using IdOrStringBase::IdOrStringBase;
-  explicit IdOrString(std::optional<LiteralOrIri> s) {
-    if (s.has_value()) {
-      emplace<LiteralOrIri>(std::move(s.value()));
-    } else {
-      emplace<Id>(Id::makeUndefined());
-    }
-  }
-};
-
-// Print an `IdOrString` for googletest.
 inline void PrintTo(const IdOrString& var, std::ostream* os) {
   std::visit(
       [&os]<typename T>(const T& s) {

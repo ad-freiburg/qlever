@@ -194,3 +194,10 @@ TEST(LiteralOrIri, EnsureLiteralsAreEncoded) {
   EXPECT_THAT(R"(This is to be "\ encoded)",
               asStringViewUnsafe(literal2.getContent()));
 }
+
+TEST(LiteralOrIri, Printing) {
+  LiteralOrIri literal1 = LiteralOrIri::literalWithoutQuotes("hallo");
+  std::stringstream str;
+  PrintTo(literal1, &str);
+  EXPECT_EQ(str.str(), "\"hallo\"");
+}

@@ -156,7 +156,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
         return res;
       }
     };
-    return value.visit(visitor);
+    return std::visit(visitor, value);
 
   } else {
     static_assert(

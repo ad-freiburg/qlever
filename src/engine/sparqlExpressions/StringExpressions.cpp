@@ -239,22 +239,22 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string text, std::string_view pattern) -> LiteralOrIri {
-  // Required by the SPARQL standard.
-  if (pattern.empty()) {
-    return toLiteral(text);
-  }
-  auto pos = text.find(pattern);
-  if (pos >= text.size()) {
-    return toLiteral("");
-  }
-  if constexpr (isStrAfter) {
-    return toLiteral(text.substr(pos + pattern.size()));
-  } else {
-    // STRBEFORE
-    return toLiteral(text.substr(0, pos));
-  }
-};
+    [](std::string_view text, std::string_view pattern) {
+      // Required by the SPARQL standard.
+      if (pattern.empty()) {
+        return toLiteral(text);
+      }
+      auto pos = text.find(pattern);
+      if (pos >= text.size()) {
+        return toLiteral("");
+      }
+      if constexpr (isStrAfter) {
+        return toLiteral(text.substr(pos + pattern.size()));
+      } else {
+        // STRBEFORE
+        return toLiteral(text.substr(0, pos));
+      }
+    };
 
 auto strAfter = strAfterOrBeforeImpl<true>;
 
@@ -388,6 +388,7 @@ class ConcatExpression : public detail::VariadicExpression {
   } else {
     std::string_view value{input.value()};
 
+    /*
     if (value.starts_with("\"")) {
       // TODO<joka921> This actually shouldn't happen/be necessary-> debug.
       auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
@@ -397,6 +398,7 @@ class ConcatExpression : public detail::VariadicExpression {
             boost::urls::encode(content, boost::urls::unreserved_chars));
       }
     }
+     */
     return toLiteral(boost::urls::encode(value, boost::urls::unreserved_chars));
   }
 };

@@ -954,12 +954,15 @@ TEST(SparqlExpression, literalExpression) {
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
   using IoS = IdOrString;
+  auto l = [](std::string_view s, std::string_view langOrDatatype = "") {
+    return IoS{lit(s, langOrDatatype)};
+  };
   checkEncodeForUri("Los Angeles", "Los%20Angeles");
-  checkEncodeForUri("\"Los Angeles\"@en", "Los%20Angeles");
-  checkEncodeForUri("\"Los Angeles\"^^xsd:string", "Los%20Angeles");
-  checkEncodeForUri("\"Los Ängeles\"^^xsd:string", "Los%20%C3%84ngeles");
-  checkEncodeForUri("\"Los Angeles", "%22Los%20Angeles");
-  checkEncodeForUri("L\"os \"Angeles", "L%22os%20%22Angeles");
+  checkEncodeForUri(l("Los Angeles", "@en"), "Los%20Angeles");
+  checkEncodeForUri(l("Los Angeles", "^^<someDatatype>"), "Los%20Angeles");
+  checkEncodeForUri(l("Los Ängeles", "^^<someDatatype>"), "Los%20%C3%84ngeles");
+  checkEncodeForUri(l("\"Los Angeles"), "%22Los%20Angeles");
+  checkEncodeForUri(l("L\"os \"Angeles"), "L%22os%20%22Angeles");
   // Literals from the global and local vocab.
   checkEncodeForUri(testContext().aelpha, "%C3%A4lpha");
   checkEncodeForUri(testContext().notInVocabA, "notInVocabA");

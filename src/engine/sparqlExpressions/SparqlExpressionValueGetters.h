@@ -139,15 +139,18 @@ struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
 };
 
 // Value getters for `isIRI`, `isBlank`, and `isLiteral`.
-template <auto isSomethingFunction, auto prefix>
+template <auto isSomethingFunction, auto isLiteralOrIriSomethingFunction>
 struct IsSomethingValueGetter
-    : Mixin<IsSomethingValueGetter<isSomethingFunction, prefix>> {
+    : Mixin<IsSomethingValueGetter<isSomethingFunction,
+                                   isLiteralOrIriSomethingFunction>> {
   using Mixin<IsSomethingValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext* context) const;
 
   Id operator()(const LiteralOrIri& s, const EvaluationContext*) const {
-    // TODO<joka921> Use the `isLiteral` etc. functions directly.
-    return Id::makeFromBool(s.toStringRepresentation().starts_with(prefix));
+    // TODO<joka921> Use the `isLiteral` etc. functions directly as soon as the
+    // local vocabulary also stores `LiteralOrIri`.
+    return Id::makeFromBool(s.toStringRepresentation().starts_with(
+        isLiteralOrIriSomethingFunction));
   }
 };
 static constexpr auto isIriPrefix = ad_utility::ConstexprSmallString<2>{"<"};
