@@ -7,7 +7,7 @@ add_library(engine
         Distinct.cpp OrderBy.cpp Filter.cpp
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
-        Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp TransitivePathImpl.cpp
+        Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
         TransitivePathFallback.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
