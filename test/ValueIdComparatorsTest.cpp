@@ -12,6 +12,32 @@
 #include "util/Random.h"
 
 using namespace valueIdComparators;
+namespace valueIdComparators {
+inline std::ostream& operator<<(std::ostream& str, Comparison c) {
+  switch (c) {
+    using enum Comparison;
+    case LT:
+      str << "LT";
+      break;
+    case LE:
+      str << "LE";
+      break;
+    case EQ:
+      str << "EQ";
+      break;
+    case NE:
+      str << "NE";
+      break;
+    case GE:
+      str << "GE";
+      break;
+    case GT:
+      str << "GT";
+      break;
+  }
+  return str;
+}
+}  // namespace valueIdComparators
 using ad_utility::source_location;
 
 TEST(ValueIdComparators, GetRangeForDatatype) {

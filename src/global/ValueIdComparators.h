@@ -15,30 +15,6 @@ namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
-inline std::ostream& operator<<(std::ostream& str, Comparison c) {
-  switch (c) {
-    using enum Comparison;
-    case LT:
-      str << "LT";
-      break;
-    case LE:
-      str << "LE";
-      break;
-    case EQ:
-      str << "EQ";
-      break;
-    case NE:
-      str << "NE";
-      break;
-    case GE:
-      str << "GE";
-      break;
-    case GT:
-      str << "GT";
-      break;
-  }
-  return str;
-}
 
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
