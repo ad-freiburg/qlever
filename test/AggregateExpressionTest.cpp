@@ -6,6 +6,7 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "gtest/gtest.h"
@@ -20,6 +21,10 @@ auto V = VocabId;
 auto U = Id::makeUndefined();
 auto L = LocalVocabId;
 auto D = DoubleId;
+auto lit = [](auto s) {
+  return IdOrString(
+      ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)));
+};
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
 }  // namespace
 
@@ -52,7 +57,8 @@ TEST(AggregateExpression, max) {
 
   auto testMaxString = testAggregate<MaxExpression, IdOrString>;
   // TODO<joka921> Implement correct comparison on strings
-  testMaxString({"alpha", "äpfel", "Beta", "unfug"}, "äpfel");
+  auto l = lit;
+  testMaxString({l("alpha"), l("äpfel"), l("Beta"), l("unfug")}, l("äpfel"));
 }
 
 // ______________________________________________________________________________
@@ -65,7 +71,8 @@ TEST(AggregateExpression, min) {
 
   auto testMinString = testAggregate<MinExpression, IdOrString>;
   // TODO<joka921> Implement correct comparison on strings
-  testMinString({"alpha", "äpfel", "Beta", "unfug"}, "Beta");
+  auto l = lit;
+  testMinString({l("alpha"), l("äpfel"), l("Beta"), l("unfug")}, l("Beta"));
 }
 
 // ______________________________________________________________________________
@@ -78,8 +85,7 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), NaN}, NaN);
 
   auto testSumString = testAggregate<SumExpression, IdOrString, Id>;
-  // TODO<joka921> The result should be `UNDEF` not `NaN`
-  testSumString({"alpha", "äpfel", "Beta", "unfug"}, U);
+  testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
 // ______________________________________________________________________________
@@ -92,5 +98,5 @@ TEST(AggregateExpression, count) {
   testCountId({I(3), NaN, NaN}, I(2), true);
 
   auto testCountString = testAggregate<CountExpression, IdOrString, Id>;
-  testCountString({"alpha", "äpfel", "", "unfug"}, I(4));
+  testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
