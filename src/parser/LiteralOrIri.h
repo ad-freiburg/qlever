@@ -121,5 +121,12 @@ class LiteralOrIri {
 
   // Create a new iri given a prefix iri and its suffix
   static LiteralOrIri prefixedIri(const Iri& prefix, std::string_view suffix);
+
+  // Printing for GTest
+  friend void PrintTo(const LiteralOrIri& literalOrIri, std::ostream* os) {
+    auto& s = *os;
+    s << literalOrIri.toStringRepresentation();
+  }
 };
+
 }  // namespace ad_utility::triple_component

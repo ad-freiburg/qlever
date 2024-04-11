@@ -41,11 +41,9 @@ auto U = Id::makeUndefined();
 using Ids = std::vector<Id>;
 using IdOrStrings = std::vector<IdOrString>;
 
-auto lit = [](std::string_view s) {
-  std::string input =
-      s.starts_with('"') ? std::string{s} : absl::StrCat("\"", s, "\"");
+auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return ad_utility::triple_component::LiteralOrIri(
-      ad_utility::testing::tripleComponentLiteral(input));
+      ad_utility::testing::tripleComponentLiteral(s, langtagOrDatatype));
 };
 
 auto iriref = [](std::string_view s) {
@@ -957,14 +955,11 @@ TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
   using IoS = IdOrString;
   checkEncodeForUri("Los Angeles", "Los%20Angeles");
-  // TODO<joka921> Reinstate this. We need a proper literal with language tag
-  // here.
-  // checkEncodeForUri("\"Los Angeles\"@en", "Los%20Angeles");
-  // checkEncodeForUri("\"Los Angeles\"^^xsd:string", "Los%20Angeles");
-  // checkEncodeForUri("\"Los \\\"Angeles\"^^xsd:string",
-  // "Los%20%5C%22Angeles"); checkEncodeForUri("\"Los Angeles",
-  // "%22Los%20Angeles"); checkEncodeForUri("L\"os \"Angeles",
-  // "L%22os%20%22Angeles");
+  checkEncodeForUri("\"Los Angeles\"@en", "Los%20Angeles");
+  checkEncodeForUri("\"Los Angeles\"^^xsd:string", "Los%20Angeles");
+  checkEncodeForUri("\"Los Ängeles\"^^xsd:string", "Los%20%C3%84ngeles");
+  checkEncodeForUri("\"Los Angeles", "%22Los%20Angeles");
+  checkEncodeForUri("L\"os \"Angeles", "L%22os%20%22Angeles");
   // Literals from the global and local vocab.
   checkEncodeForUri(testContext().aelpha, "%C3%A4lpha");
   checkEncodeForUri(testContext().notInVocabA, "notInVocabA");
