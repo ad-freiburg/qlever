@@ -437,7 +437,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           size_t max = arg._max;
           auto transitivePath = TransitivePathBase::makeTransitivePath(
               _qec, sub._qet, left, right, min, max);
-          auto plan = makeSubtreePlan<TransitivePathBase>(transitivePath);
+          auto plan =
+              makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
           candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
