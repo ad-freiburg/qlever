@@ -299,6 +299,21 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 }
 
 // _____________________________________________________________________________
+vector<QueryExecutionTree*> TransitivePathBase::getChildren() {
+  std::vector<QueryExecutionTree*> res;
+  auto addChildren = [](std::vector<QueryExecutionTree*>& res,
+                        TransitivePathSide side) {
+    if (side.treeAndCol_.has_value()) {
+      res.push_back(side.treeAndCol_.value().first.get());
+    }
+  };
+  addChildren(res, lhs_);
+  addChildren(res, rhs_);
+  res.push_back(subtree_.get());
+  return res;
+}
+
+// _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftSide(
     std::shared_ptr<QueryExecutionTree> leftop, size_t inputCol) const {
   return bindLeftOrRightSide(std::move(leftop), inputCol, true);

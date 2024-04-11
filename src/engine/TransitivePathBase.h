@@ -251,19 +251,7 @@ class TransitivePathBase : public Operation {
       const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
       size_t minDist, size_t maxDist);
 
-  vector<QueryExecutionTree*> getChildren() override {
-    std::vector<QueryExecutionTree*> res;
-    auto addChildren = [](std::vector<QueryExecutionTree*>& res,
-                          TransitivePathSide side) {
-      if (side.treeAndCol_.has_value()) {
-        res.push_back(side.treeAndCol_.value().first.get());
-      }
-    };
-    addChildren(res, lhs_);
-    addChildren(res, rhs_);
-    res.push_back(subtree_.get());
-    return res;
-  }
+  vector<QueryExecutionTree*> getChildren() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
