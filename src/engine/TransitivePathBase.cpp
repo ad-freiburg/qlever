@@ -1,6 +1,7 @@
 // Copyright 2019, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@neptun.uni-freiburg.de)
+//         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
 #include "TransitivePathBase.h"
 
