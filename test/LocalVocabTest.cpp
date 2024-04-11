@@ -103,8 +103,10 @@ TEST(LocalVocab, clone) {
   // Create a small local vocabulary.
   size_t localVocabSize = 100;
   LocalVocab localVocabOriginal;
-  for (const auto& word : getTestCollectionOfWords(localVocabSize)) {
-    localVocabOriginal.getIndexAndAddIfNotContained(word);
+  std::vector<LocalVocabIndex> indices;
+  auto inputWords = getTestCollectionOfWords(localVocabSize);
+  for (const auto& word : inputWords) {
+    indices.push_back(localVocabOriginal.getIndexAndAddIfNotContained(word));
   }
   ASSERT_EQ(localVocabOriginal.size(), localVocabSize);
 
@@ -116,7 +118,39 @@ TEST(LocalVocab, clone) {
   ASSERT_THAT(localVocabClone.getAllWordsForTesting(),
               ::testing::UnorderedElementsAreArray(
                   localVocabOriginal.getAllWordsForTesting()));
-  // TODO<joka921> Maybe also test the indices.
+
+  // Test that the indices are still valid after the original vocabulary was
+  // destroyed.
+  localVocabOriginal = LocalVocab{};
+
+  for (size_t i = 0; i < inputWords.size(); ++i) {
+    EXPECT_EQ(*indices[i], inputWords[i]);
+  }
+}
+// _____________________________________________________________________________
+TEST(LocalVocab, merge) {
+  // Create a small local vocabulary.
+  std::vector<LocalVocabIndex> indices;
+  LocalVocab vocA;
+  LocalVocab vocB;
+  indices.push_back(vocA.getIndexAndAddIfNotContained("oneA"));
+  indices.push_back(vocA.getIndexAndAddIfNotContained("twoA"));
+  indices.push_back(vocA.getIndexAndAddIfNotContained("oneB"));
+  indices.push_back(vocA.getIndexAndAddIfNotContained("twoB"));
+
+  // Clone it and test that the clone contains the same words, but under
+  // different addresses (that is, the word strings were deeply copied).
+  auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
+  LocalVocab localVocabMerged = LocalVocab::merge(vocabs);
+  ASSERT_EQ(localVocabMerged.size(), 4u);
+  ASSERT_THAT(localVocabMerged.getAllWordsForTesting(),
+              ::testing::UnorderedElementsAre("oneA", "twoA", "oneB", "twoB"));
+  vocA = LocalVocab{};
+  vocB = LocalVocab{};
+  EXPECT_EQ(*indices[0], "oneA");
+  EXPECT_EQ(*indices[1], "twoA");
+  EXPECT_EQ(*indices[2], "oneB");
+  EXPECT_EQ(*indices[3], "twoB");
 }
 
 // _____________________________________________________________________________

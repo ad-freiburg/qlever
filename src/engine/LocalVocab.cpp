@@ -18,29 +18,26 @@ LocalVocab LocalVocab::clone() const {
 }
 
 // _____________________________________________________________________________
-LocalVocab LocalVocab::merge(const LocalVocab& a, const LocalVocab& b) {
+LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
   LocalVocab res;
   auto inserter = std::back_inserter(res.otherWordSets_);
-  std::ranges::copy(a.otherWordSets_, inserter);
-  std::ranges::copy(b.otherWordSets_, inserter);
-  *inserter = a.primaryWordSet_;
-  *inserter = b.primaryWordSet_;
+  for (const auto* vocab : vocabs) {
+    std::ranges::copy(vocab->otherWordSets_, inserter);
+    *inserter = vocab->primaryWordSet_;
+  }
   return res;
 }
 
 // _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
-  // The following code contains a subtle, but important optimizations:
-  //
-  // 1. The variant of `insert` used covers the case that `word` was already
-  // contained in the map as well as the case that it is newly inserted. This
-  // avoids computing the hash for `word` twice in case we see it for the first
-  // time (note that hashing a string is not cheap).
-  // TODO<joka921> Make this work with transparent hashing and use try_emplace.
+  // TODO<joka921> As soon as we store `IdOrString` in the local vocab, we
+  // should definitely use `insert` instead of `emplace` here for some
+  // transparency optimizations. We currently need `emplace` because of the
+  // explicit conversion from `string` to `AlignedString16`.
   auto [wordIterator, isNewWord] =
-      primaryWordSet().insert(StringAligned16{std::forward<WordT>(word)});
-  return std::addressof(*wordIterator);
+      primaryWordSet().emplace(std::forward<WordT>(word));
+  return std::to_address(wordIterator);
 }
 
 // _____________________________________________________________________________
@@ -61,7 +58,7 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
   // but if this is only a testing API this is probably not worth the hassle.
   auto localVocabIndex = primaryWordSet().find(StringAligned16{word});
   if (localVocabIndex != primaryWordSet().end()) {
-    return &(*localVocabIndex);
+    return std::to_address(localVocabIndex);
   } else {
     return std::nullopt;
   }

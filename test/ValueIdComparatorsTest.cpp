@@ -77,20 +77,23 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
+        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id << comparison;
         auto expected = isMatchingDatatype(*it) ? False : Undef;
         ASSERT_EQ(compareIds(*it, id, comparison), expected)
             << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
+        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id << comparison;
         ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(isMatching(*it, id));
+      if (isMatching(*it, id)) {
+        LOG(INFO) << "bum" << std::endl;
+      }
+      ASSERT_FALSE(isMatching(*it, id)) << *it << ", " << id << comparison;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
@@ -213,8 +216,6 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
 // index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,
 // `WordVocabIndex`).
-// TODO<joka921> Reinstate all the tests..
-/*
 TEST(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
@@ -257,7 +258,6 @@ TEST(ValueIdComparators, IndexTypes) {
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
   testImpl.operator()<Datatype::WordVocabIndex>(&getWordVocabIndex);
 }
- */
 
 // _______________________________________________________________________
 TEST(ValueIdComparators, undefinedWithItself) {

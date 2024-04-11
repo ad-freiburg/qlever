@@ -15,6 +15,30 @@ namespace valueIdComparators {
 // This enum encodes the different numeric comparators LessThan, LessEqual,
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
+inline std::ostream& operator<<(std::ostream& str, Comparison c) {
+  switch (c) {
+    using enum Comparison;
+    case LT:
+      str << "LT";
+      break;
+    case LE:
+      str << "LE";
+      break;
+    case EQ:
+      str << "EQ";
+      break;
+    case NE:
+      str << "NE";
+      break;
+    case GE:
+      str << "GE";
+      break;
+    case GT:
+      str << "GT";
+      break;
+  }
+  return str;
+}
 
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
@@ -72,9 +96,7 @@ inline ValueId toValueId(ComparisonResult comparisonResult) {
 // negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
 // -0.0, ... -infinity]. This is a direct consequence of comparing the bit
 // representation of these values as unsigned integers.
-inline bool compareByBits(ValueId a, ValueId b) {
-  return a.getBits() < b.getBits();
-}
+inline bool compareByBits(ValueId a, ValueId b) { return a < b; }
 
 namespace detail {
 
@@ -308,6 +330,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
+
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
@@ -462,8 +485,18 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     }
   }
 
-  auto visitor = [comparator](const auto& aValue,
-                              const auto& bValue) -> ComparisonResult {
+  auto visitor = [comparator]<typename A, typename B>(
+                     const A& aValue, const B& bValue) -> ComparisonResult {
+    if constexpr (std::is_same_v<A, LocalVocabIndex>) {
+      if constexpr (!std::is_same_v<B, LocalVocabIndex>) {
+        AD_FAIL();
+      } else {
+        // TODO<joka921> This is one of the places that has to be changed once
+        // we want to implement correct comparisons for the local vocab that use
+        // ICU collation.
+        return fromBool(std::invoke(comparator, *aValue, *bValue));
+      }
+    }
     if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {

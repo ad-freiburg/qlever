@@ -245,8 +245,7 @@ class AddCombinedRowToIdTable {
       // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
         auto resultId =
-            getJoinValue(colLeft[sourceIndices[0]],
-                                           colRight[sourceIndices[1]]);
+            getJoinValue(colLeft[sourceIndices[0]], colRight[sourceIndices[1]]);
         numUndef += static_cast<size_t>(resultId.isUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }

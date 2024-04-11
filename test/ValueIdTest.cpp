@@ -121,7 +121,11 @@ TEST(ValueId, Indices) {
   testRandomIds(&makeTextRecordId, &getTextRecordIndex,
                 Datatype::TextRecordIndex);
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
-  testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
+
+  auto localVocabWordToInt = [](const auto& input) {
+    return std::atoll(getLocalVocabIndex(input).c_str());
+  };
+  testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
@@ -131,7 +135,6 @@ TEST(ValueId, Undefined) {
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 }
 
-/*
 TEST(ValueId, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
@@ -142,9 +145,7 @@ TEST(ValueId, OrderingDifferentDatatypes) {
   ASSERT_TRUE(
       std::is_sorted(ids.begin(), ids.end(), compareByDatatypeAndIndexTypes));
 }
- */
 
-/*
 TEST(ValueId, IndexOrdering) {
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<ValueId> ids;
@@ -168,7 +169,6 @@ TEST(ValueId, IndexOrdering) {
   testOrder(&makeWordVocabId, &getWordVocabIndex);
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
- */
 
 TEST(ValueId, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
@@ -263,7 +263,6 @@ TEST(ValueId, Serialization) {
   }
 }
 
-/*
 TEST(ValueId, Hashing) {
   auto ids = makeRandomIds();
   ad_utility::HashSet<ValueId> idsWithoutDuplicates;
@@ -282,7 +281,6 @@ TEST(ValueId, Hashing) {
 
   ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
 }
- */
 
 TEST(ValueId, toDebugString) {
   auto test = [](ValueId id, std::string_view expected) {

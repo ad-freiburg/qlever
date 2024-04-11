@@ -81,9 +81,9 @@ class LocalVocab {
   // Return a const reference to the word.
   const std::string& getWord(LocalVocabIndex localVocabIndex) const;
 
-  // Create a local vocab that contains and keeps alive all the words from `a`
-  // as well as `b`.
-  static LocalVocab merge(const LocalVocab& a, const LocalVocab& b);
+  // Create a local vocab that contains and keeps alive all the words from each
+  // of the `vocabs`.
+  static LocalVocab merge(std::span<const LocalVocab*> vocabs);
 
   // Return all the words from all the word sets as a vector.
   std::vector<std::string> getAllWordsForTesting() const;

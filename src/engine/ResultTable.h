@@ -143,15 +143,11 @@ class ResultTable {
   requires std::convertible_to<std::ranges::range_value_t<R>,
                                const ResultTable&>
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
-    // We could implement the k-way merge much smarter, but in practice we
-    // rarely have more than two inputs, so the performance should be fine (we
-    // are only copying a few shared pointers after all).
-    // TODO<joka921> implement `LocalVocab::merge` in an n-way fashion`.
-    LocalVocab res;
+    std::vector<const LocalVocab*> vocabs;
     for (const ResultTable& table : subResults) {
-      res = LocalVocab::merge(res, *table.localVocab_);
+      vocabs.push_back(std::to_address(table.localVocab_));
     }
-    return SharedLocalVocabWrapper{std::move(res)};
+    return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
   }
 
   // Get a (deep) copy of the local vocabulary from the given result. Use this
