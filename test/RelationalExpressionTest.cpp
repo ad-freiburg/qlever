@@ -25,10 +25,7 @@ using valueIdComparators::Comparison;
 namespace {
 
 auto lit = [](std::string_view s) {
-  std::string input =
-      s.starts_with('"') ? std::string{s} : absl::StrCat("\"", s, "\"");
-  return ad_utility::triple_component::LiteralOrIri(
-      tripleComponentLiteral(input));
+  return ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s));
 };
 
 auto iriref = [](std::string_view s) {
@@ -307,31 +304,31 @@ TEST(RelationalExpression, DoubleAndDouble) {
 }
 
 TEST(RelationalExpression, StringAndString) {
-  testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>(
+  testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri, IdOrLiteralOrIri>(
       {lit("alpha"), lit("beta")}, {lit("sigma"), lit("delta")},
       {lit("epsilon"), lit("epsilon")});
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions.
   // TODO<joka921> Add an example for strings that are bytewise different but
   // equal on the unicode level (e.g.`ä` vs `a + dots`.
-  // testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>({"Alpha",
-  // "beta"},
+  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
+  // IdOrLiteralOrIri>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
 TEST(RelationalExpression, NumericAndStringAreNeverEqual) {
-  auto stringVec = VectorWithMemoryLimit<IdOrString>(
+  auto stringVec = VectorWithMemoryLimit<IdOrLiteralOrIri>(
       {lit("hallo"), lit("by"), lit("")}, makeAllocator());
   auto intVec =
       VectorWithMemoryLimit<int64_t>({-12365, 0, 12}, makeAllocator());
   auto doubleVec =
       VectorWithMemoryLimit<double>({-12.365, 0, 12.1e5}, makeAllocator());
-  testUndefHelper(int64_t{3}, IdOrString{lit("hallo")});
-  testUndefHelper(int64_t{3}, IdOrString{lit("3")});
-  testUndefHelper(-12.0, IdOrString{lit("hallo")});
-  testUndefHelper(-12.0, IdOrString{lit("-12.0")});
-  testUndefHelper(intVec.clone(), IdOrString{lit("someString")});
-  testUndefHelper(doubleVec.clone(), IdOrString{lit("someString")});
+  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("hallo")});
+  testUndefHelper(int64_t{3}, IdOrLiteralOrIri{lit("3")});
+  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("hallo")});
+  testUndefHelper(-12.0, IdOrLiteralOrIri{lit("-12.0")});
+  testUndefHelper(intVec.clone(), IdOrLiteralOrIri{lit("someString")});
+  testUndefHelper(doubleVec.clone(), IdOrLiteralOrIri{lit("someString")});
   testUndefHelper(int64_t{3}, stringVec.clone());
   testUndefHelper(intVec.clone(), stringVec.clone());
   testUndefHelper(doubleVec.clone(), stringVec.clone());
@@ -548,21 +545,21 @@ TEST(RelationalExpression, NumericConstantAndNumericVector) {
 }
 
 TEST(RelationalExpression, StringConstantsAndStringVector) {
-  VectorWithMemoryLimit<IdOrString> vec(
+  VectorWithMemoryLimit<IdOrLiteralOrIri> vec(
       {lit("alpha"), lit("alpaka"), lit("bertram"), lit("sigma"), lit("zeta"),
        lit("kaulquappe"), lit("caesar"), lit("caesar"), lit("caesar")},
       makeAllocator());
-  testLessThanGreaterThanEqualMultipleValuesHelper(IdOrString{lit("caesar")},
-                                                   vec.clone());
+  testLessThanGreaterThanEqualMultipleValuesHelper(
+      IdOrLiteralOrIri{lit("caesar")}, vec.clone());
 
   // TODO<joka921> These tests only work, when we actually use unicode
   // comparisons for the string based expressions. TODDO<joka921> Add an example
   // for strings that are bytewise different but equal on the unicode level
   // (e.g.`ä` vs `a + dots`.
-  // VectorWithMemoryLimit<IdOrString> vec2({"AlpHa", "älpaka", "Æ", "sigma",
-  // "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
-  // testLessThanGreaterThanEqualHelper<IdOrString, IdOrString>({"Alpha",
-  // "beta"},
+  // VectorWithMemoryLimit<IdOrLiteralOrIri> vec2({"AlpHa", "älpaka", "Æ",
+  // "sigma", "Eta", "kaulQuappe", "Caesar", "Caesar", "Caesare"}, alloc);
+  // testLessThanGreaterThanEqualHelper<IdOrLiteralOrIri,
+  // IdOrLiteralOrIri>({"Alpha", "beta"},
   // {"beta", "äpfel"}, {"xxx", "xxx"});
 }
 
@@ -605,11 +602,11 @@ TEST(RelationalExpression, DoubleVectorAndIntVector) {
 }
 
 TEST(RelationalExpression, StringVectorAndStringVector) {
-  VectorWithMemoryLimit<IdOrString> vecA{
+  VectorWithMemoryLimit<IdOrLiteralOrIri> vecA{
       {lit("alpha"), lit("beta"), lit("g"), lit("epsilon"), lit("fraud"),
        lit("capitalism"), lit(""), lit("bo'sä30"), lit("Me")},
       makeAllocator()};
-  VectorWithMemoryLimit<IdOrString> vecB{
+  VectorWithMemoryLimit<IdOrLiteralOrIri> vecB{
       {lit("alph"), lit("alpha"), lit("f"), lit("epsiloo"), lit("freud"),
        lit("communism"), lit(""), lit("bo'sä30"), lit("Me")},
       makeAllocator()};
@@ -669,20 +666,22 @@ TEST(RelationalExpression, VariableAndConstant) {
                              {false, false, true});
 
   // ?vocab column is `"Beta", "alpha", "älpha"
-  testWithExplicitResult<LE>(Variable{"?vocab"}, IdOrString{lit("\"älpha\"")},
+  testWithExplicitResult<LE>(Variable{"?vocab"},
+                             IdOrLiteralOrIri{lit("\"älpha\"")},
                              {false, true, true});
-  testWithExplicitResult<GT>(Variable{"?vocab"}, IdOrString{lit("\"alpha\"")},
+  testWithExplicitResult<GT>(Variable{"?vocab"},
+                             IdOrLiteralOrIri{lit("\"alpha\"")},
                              {true, false, true});
-  testWithExplicitResult<LT>(IdOrString{lit("\"atm\"")}, Variable{"?vocab"},
-                             {true, false, false});
+  testWithExplicitResult<LT>(IdOrLiteralOrIri{lit("\"atm\"")},
+                             Variable{"?vocab"}, {true, false, false});
 
   // ?mixed column is `1, -0.1, <x>`
   auto U = Id::makeUndefined();
   auto B = ad_utility::testing::BoolId;
-  testWithExplicitIdResult<GT>(IdOrString{iriref("<xa>")}, Variable{"?mixed"},
-                               {U, U, B(true)});
-  testWithExplicitIdResult<LT>(IdOrString{iriref("<u>")}, Variable{"?mixed"},
-                               {U, U, B(true)});
+  testWithExplicitIdResult<GT>(IdOrLiteralOrIri{iriref("<xa>")},
+                               Variable{"?mixed"}, {U, U, B(true)});
+  testWithExplicitIdResult<LT>(IdOrLiteralOrIri{iriref("<u>")},
+                               Variable{"?mixed"}, {U, U, B(true)});
 
   // Note: `1` and `<x>` are "not compatible", so even the "not equal"
   // comparison returns false.
@@ -767,7 +766,8 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GE>(ints, int64_t{-1}, {{{0, 3}}});
   testSortedVariableAndConstant<LE>(ints, 0.3, {{{0, 1}, {2, 3}}});
   // ints and strings are always incompatible.
-  testSortedVariableAndConstant<NE>(ints, IdOrString{lit("a string")}, {});
+  testSortedVariableAndConstant<NE>(ints, IdOrLiteralOrIri{lit("a string")},
+                                    {});
 
   testSortedVariableAndConstant<GT>(doubles, int64_t{0}, {{{0, 2}}});
   testSortedVariableAndConstant<EQ>(doubles, 2.8, {{{1, 2}}});
@@ -777,13 +777,13 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<EQ>(numeric, 1.0, {{{0, 1}}});
   testSortedVariableAndConstant<NE>(numeric, 3.4, {{{0, 1}, {2, 3}}});
 
-  testSortedVariableAndConstant<GT>(vocab, IdOrString{lit("\"alpha\"")},
+  testSortedVariableAndConstant<GT>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
                                     {{{1, 3}}});
-  testSortedVariableAndConstant<GE>(vocab, IdOrString{lit("\"alpha\"")},
+  testSortedVariableAndConstant<GE>(vocab, IdOrLiteralOrIri{lit("\"alpha\"")},
                                     {{{0, 3}}});
-  testSortedVariableAndConstant<LE>(vocab, IdOrString{lit("\"ball\"")},
+  testSortedVariableAndConstant<LE>(vocab, IdOrLiteralOrIri{lit("\"ball\"")},
                                     {{{0, 2}}});
-  testSortedVariableAndConstant<NE>(vocab, IdOrString{lit("\"älpha\"")},
+  testSortedVariableAndConstant<NE>(vocab, IdOrLiteralOrIri{lit("\"älpha\"")},
                                     {{{0, 1}, {2, 3}}});
   testSortedVariableAndConstant<LE>(vocab, inf, {});
 
@@ -794,7 +794,7 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   // Note: only *numeric* values that are not equal to 1.0 are considered here.
   testSortedVariableAndConstant<NE>(mixed, 1.0, {{{1, 2}}});
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
-  testSortedVariableAndConstant<LE>(mixed, IdOrString{iriref("<z>")},
+  testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
                                     {{{2, 3}}});
 }
 

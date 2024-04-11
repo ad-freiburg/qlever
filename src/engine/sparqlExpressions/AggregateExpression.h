@@ -237,15 +237,16 @@ using AvgExpression =
 // TODO<joka921> Comment
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(const T& a, const U& b,
-                               const EvaluationContext* ctx) -> IdOrString {
+    []<typename T, typename U>(
+        const T& a, const U& b,
+        const EvaluationContext* ctx) -> IdOrLiteralOrIri {
   // TODO<joka921> moveTheStrings.
   return toBoolNotUndef(
              sparqlExpression::compareIdsOrStrings<
                  Comp, valueIdComparators::ComparisonForIncompatibleTypes::
                            CompareByType>(a, b, ctx))
-             ? IdOrString{a}
-             : IdOrString{b};
+             ? IdOrLiteralOrIri{a}
+             : IdOrLiteralOrIri{b};
 };
 // Min and Max.
 template <valueIdComparators::Comparison comparison>

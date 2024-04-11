@@ -39,7 +39,7 @@ auto Voc = ad_utility::testing::VocabId;
 auto U = Id::makeUndefined();
 
 using Ids = std::vector<Id>;
-using IdOrStrings = std::vector<IdOrString>;
+using IdOrStrings = std::vector<IdOrLiteralOrIri>;
 
 auto lit = [](std::string_view s, std::string_view langtagOrDatatype = "") {
   return ad_utility::triple_component::LiteralOrIri(
@@ -100,7 +100,7 @@ SingleExpressionResult auto toExpressionResult(T vec) {
     return vec;
   } else if constexpr (std::convertible_to<T, std::string_view>) {
     // TODO<joka921> Make a generic testing utility for the string case...
-    return IdOrString{lit(vec)};
+    return IdOrLiteralOrIri{lit(vec)};
   } else {
     return VectorWithMemoryLimit<typename T::value_type>{
         std::make_move_iterator(vec.begin()),
@@ -129,16 +129,16 @@ SingleExpressionResult auto toExpressionResult(T vec) {
 }
 
 // Return a matcher that matches a result of an expression that is not a vector.
-// If it is an ID (possibly contained in the `IdOrString` variant), then the
-// `matchId` matcher from above is used, else we test for equality.
+// If it is an ID (possibly contained in the `IdOrLiteralOrIri` variant), then
+// the `matchId` matcher from above is used, else we test for equality.
 template <typename T>
 requires(!isVectorResult<T>) auto nonVectorResultMatcher(const T& expected) {
   if constexpr (std::is_same_v<T, Id>) {
     return matchId(expected);
-  } else if constexpr (std::is_same_v<T, IdOrString>) {
+  } else if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
     return std::visit(
         []<typename U>(const U& el) {
-          return ::testing::MatcherCast<const IdOrString&>(
+          return ::testing::MatcherCast<const IdOrLiteralOrIri&>(
               ::testing::VariantWith<U>(nonVectorResultMatcher(el)));
         },
         expected);
@@ -278,7 +278,7 @@ TEST(SparqlExpression, logicalOperators) {
           alloc};
   V<Id> dAsBool{{B(true), B(true), B(false), B(false)}, alloc};
 
-  V<IdOrString> s{{lit("true"), lit(""), lit("false"), lit("")}, alloc};
+  V<IdOrLiteralOrIri> s{{lit("true"), lit(""), lit("false"), lit("")}, alloc};
   V<Id> sAsBool{{B(true), B(false), B(true), B(false)}, alloc};
 
   V<Id> i{{I(32), I(-42), I(0), I(5)}, alloc};
@@ -347,10 +347,10 @@ TEST(SparqlExpression, logicalOperators) {
   testAnd(allFalse, b, D(nan));
   testAnd(b, b, D(2839.123));
 
-  testOr(allTrue, b, IdOrString{lit("halo")});
-  testOr(b, b, IdOrString(lit("")));
-  testAnd(allFalse, b, IdOrString(lit("")));
-  testAnd(b, b, IdOrString(lit("yellow")));
+  testOr(allTrue, b, IdOrLiteralOrIri{lit("halo")});
+  testOr(b, b, IdOrLiteralOrIri(lit("")));
+  testAnd(allFalse, b, IdOrLiteralOrIri(lit("")));
+  testAnd(b, b, IdOrLiteralOrIri(lit("yellow")));
 
   // Test the behavior in the presence of UNDEF values.
   Id t = B(true);
@@ -635,7 +635,7 @@ static auto checkSubstr =
     std::bind_front(testNaryExpression, makeSubstrExpression);
 TEST(SparqlExpression, substr) {
   auto strs = [](const std::vector<std::variant<Id, std::string>>& input) {
-    VectorWithMemoryLimit<IdOrString> result(alloc);
+    VectorWithMemoryLimit<IdOrLiteralOrIri> result(alloc);
     for (const auto& el : input) {
       if (std::holds_alternative<Id>(el)) {
         result.push_back(std::get<Id>(el));
@@ -687,15 +687,17 @@ TEST(SparqlExpression, substr) {
 
   // Invalid datatypes
   // First must be string.
-  auto Ux = IdOrString{U};
+  auto Ux = IdOrLiteralOrIri{U};
   checkSubstr(Ux, I(3), I(4), I(7));
   checkSubstr(Ux, U, I(4), I(7));
   checkSubstr(Ux, Ux, I(4), I(7));
   // Second and third must be numeric;
-  checkSubstr(Ux, IdOrString{lit("hello")}, U, I(4));
-  checkSubstr(Ux, IdOrString{lit("hello")}, IdOrString{lit("bye")}, I(17));
-  checkSubstr(Ux, IdOrString{lit("hello")}, I(4), U);
-  checkSubstr(Ux, IdOrString{lit("hello")}, I(4), IdOrString{lit("bye")});
+  checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, U, I(4));
+  checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, IdOrLiteralOrIri{lit("bye")},
+              I(17));
+  checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
+  checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
+              IdOrLiteralOrIri{lit("bye")});
 }
 
 // _____________________________________________________________________________________
@@ -808,14 +810,16 @@ TEST(SparqlExpression, geoSparqlExpressions) {
            Ids{D(26.8), U, U});
   checkLong(idOrStrings({D(4.2), "POINT(24.3 26.8)", "NotAPoint"}),
             Ids{U, D(24.3), U});
-  checkDist(D(0.0), IdOrString{lit("POINT(24.3 26.8)")},
-            IdOrString{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrString{lit("POINT(24.3 26.8)")}, IdOrString{I(12)});
-  checkDist(U, IdOrString{I(12)}, IdOrString{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrString{lit("POINT(24.3 26.8)"s)},
-            IdOrString{lit("NotAPoint")});
-  checkDist(U, IdOrString{lit("NotAPoint")},
-            IdOrString{lit("POINT(24.3 26.8)")});
+  checkDist(D(0.0), IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
+            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
+            IdOrLiteralOrIri{I(12)});
+  checkDist(U, IdOrLiteralOrIri{I(12)},
+            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)"s)},
+            IdOrLiteralOrIri{lit("NotAPoint")});
+  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")},
+            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
 }
 
 // ________________________________________________________________________________________
@@ -843,7 +847,7 @@ TEST(SparqlExpression, ifAndCoalesce) {
       idOrStrings({I(0), "eins", I(2), I(3), "eins", D(5.0)}),
       // UNDEF and the empty string are considered to be `false`.
       std::tuple{Ids{I(0), U, I(2), I(3), U, D(5.0)}, U,
-                 IdOrString{lit("eins")}, Ids{U, U, U, U, U, D(5.0)}});
+                 IdOrLiteralOrIri{lit("eins")}, Ids{U, U, U, U, U, D(5.0)}});
 
   // Check COALESCE with no arguments or empty arguments.
   checkCoalesce(IdOrStrings{}, std::tuple{});
@@ -871,20 +875,21 @@ TEST(SparqlExpression, concatExpression) {
                          idOrStrings({"null", "eins", "zwei", "drei", U, U}),
                          Ids{U, U, U, U, U, D(5.2)}});
   // Example with some constants in the middle.
-  checkConcat(idOrStrings({"0trueeins", "trueeins", "2trueeins", "3trueeins",
-                           "trueeins", "12.3trueeins-2.1"}),
-              // UNDEF and the empty string are considered to be `false`.
-              std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
-                         IdOrString{lit("eins")}, Ids{U, U, U, U, U, D(-2.1)}});
+  checkConcat(
+      idOrStrings({"0trueeins", "trueeins", "2trueeins", "3trueeins",
+                   "trueeins", "12.3trueeins-2.1"}),
+      // UNDEF and the empty string are considered to be `false`.
+      std::tuple{Ids{I(0), U, I(2), I(3), U, D(12.3)}, T,
+                 IdOrLiteralOrIri{lit("eins")}, Ids{U, U, U, U, U, D(-2.1)}});
 
   // Only constants
-  checkConcat(IdOrString{lit("trueMe1")},
-              std::tuple{T, IdOrString{lit("Me")}, I(1)});
+  checkConcat(IdOrLiteralOrIri{lit("trueMe1")},
+              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, I(1)});
   // Constants at the beginning.
   checkConcat(IdOrStrings{lit("trueMe1"), lit("trueMe2")},
-              std::tuple{T, IdOrString{lit("Me")}, Ids{I(1), I(2)}});
+              std::tuple{T, IdOrLiteralOrIri{lit("Me")}, Ids{I(1), I(2)}});
 
-  checkConcat(IdOrString{lit("")}, std::tuple{});
+  checkConcat(IdOrLiteralOrIri{lit("")}, std::tuple{});
   auto coalesceExpr = makeConcatExpressionVariadic(
       std::make_unique<IriExpression>(iri("<bim>")),
       std::make_unique<IriExpression>(iri("<bam>")));
@@ -898,36 +903,41 @@ TEST(SparqlExpression, concatExpression) {
 TEST(SparqlExpression, ReplaceExpression) {
   auto checkReplace = testNaryExpressionVec<&makeReplaceExpression>;
   // A simple replace( no regexes involved).
-  checkReplace(idOrStrings({"null", "Eins", "zwEi", "drEi", U, U}),
-               std::tuple{idOrStrings({"null", "eins", "zwei", "drei", U, U}),
-                          IdOrString{lit("e")}, IdOrString{lit("E")}});
+  checkReplace(
+      idOrStrings({"null", "Eins", "zwEi", "drEi", U, U}),
+      std::tuple{idOrStrings({"null", "eins", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("e")}, IdOrLiteralOrIri{lit("E")}});
   // A somewhat more involved regex
-  checkReplace(idOrStrings({"null", "Xs", "zwei", "drei", U, U}),
-               std::tuple{idOrStrings({"null", "eins", "zwei", "drei", U, U}),
-                          IdOrString{lit("e.[a-z]")}, IdOrString{lit("X")}});
+  checkReplace(
+      idOrStrings({"null", "Xs", "zwei", "drei", U, U}),
+      std::tuple{idOrStrings({"null", "eins", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("e.[a-z]")}, IdOrLiteralOrIri{lit("X")}});
 
   // Case-insensitive matching using the hack for google regex:
   checkReplace(idOrStrings({"null", "xxns", "zwxx", "drxx"}),
                std::tuple{idOrStrings({"null", "eIns", "zwEi", "drei"}),
-                          IdOrString{lit("(?i)[ei]")}, IdOrString{lit("x")}});
+                          IdOrLiteralOrIri{lit("(?i)[ei]")},
+                          IdOrLiteralOrIri{lit("x")}});
 
   // Multiple matches withing the same string
-  checkReplace(IdOrString{lit("wEeDEflE")},
-               std::tuple{IdOrString{lit("weeeDeeflee")}, IdOrString{lit("ee")},
-                          IdOrString{lit("E")}});
+  checkReplace(
+      IdOrLiteralOrIri{lit("wEeDEflE")},
+      std::tuple{IdOrLiteralOrIri{lit("weeeDeeflee")},
+                 IdOrLiteralOrIri{lit("ee")}, IdOrLiteralOrIri{lit("E")}});
 
   // Illegal regex.
-  checkReplace(IdOrStrings{U, U, U, U, U, U},
-               std::tuple{idOrStrings({"null", "Xs", "zwei", "drei", U, U}),
-                          IdOrString{lit("e.[a-z")}, IdOrString{lit("X")}});
+  checkReplace(
+      IdOrStrings{U, U, U, U, U, U},
+      std::tuple{idOrStrings({"null", "Xs", "zwei", "drei", U, U}),
+                 IdOrLiteralOrIri{lit("e.[a-z")}, IdOrLiteralOrIri{lit("X")}});
   // Undefined regex
   checkReplace(IdOrStrings{U, U, U, U, U, U},
                std::tuple{idOrStrings({"null", "Xs", "zwei", "drei", U, U}), U,
-                          IdOrString{lit("X")}});
+                          IdOrLiteralOrIri{lit("X")}});
   // Illegal replacement.
   checkReplace(IdOrStrings{U, U, U, U, U, U},
                std::tuple{idOrStrings({"null", "Xs", "zwei", "drei", U, U}),
-                          IdOrString{lit("e")}, Id::makeUndefined()});
+                          IdOrLiteralOrIri{lit("e")}, Id::makeUndefined()});
 }
 
 // ______________________________________________________________________________
@@ -937,15 +947,16 @@ TEST(SparqlExpression, literalExpression) {
       "\"notInTheVocabulary\"")};
   // Evaluate multiple times to test the caching behavior.
   for (size_t i = 0; i < 15; ++i) {
-    ASSERT_EQ((ExpressionResult{IdOrString{lit("\"notInTheVocabulary\"")}}),
-              expr.evaluate(&ctx.context));
+    ASSERT_EQ(
+        (ExpressionResult{IdOrLiteralOrIri{lit("\"notInTheVocabulary\"")}}),
+        expr.evaluate(&ctx.context));
   }
   // A similar test with a constant entry that is part of the vocabulary and can
   // therefore be converted to an ID.
   IriExpression iriExpr{TripleComponent::Iri::fromIriref("<x>")};
   Id idOfX = ctx.x;
   for (size_t i = 0; i < 15; ++i) {
-    ASSERT_EQ((ExpressionResult{IdOrString{idOfX}}),
+    ASSERT_EQ((ExpressionResult{IdOrLiteralOrIri{idOfX}}),
               iriExpr.evaluate(&ctx.context));
   }
 }
@@ -953,7 +964,7 @@ TEST(SparqlExpression, literalExpression) {
 // ______________________________________________________________________________
 TEST(SparqlExpression, encodeForUri) {
   auto checkEncodeForUri = testUnaryExpression<&makeEncodeForUriExpression>;
-  using IoS = IdOrString;
+  using IoS = IdOrLiteralOrIri;
   auto l = [](std::string_view s, std::string_view langOrDatatype = "") {
     return IoS{lit(s, langOrDatatype)};
   };

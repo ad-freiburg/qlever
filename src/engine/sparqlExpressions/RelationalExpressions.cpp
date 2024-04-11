@@ -159,7 +159,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrString>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
       resultFromBinarySearch =
           std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {

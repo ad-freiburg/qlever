@@ -22,7 +22,7 @@ auto U = Id::makeUndefined();
 auto L = LocalVocabId;
 auto D = DoubleId;
 auto lit = [](auto s) {
-  return IdOrString(
+  return IdOrLiteralOrIri(
       ad_utility::triple_component::LiteralOrIri(tripleComponentLiteral(s)));
 };
 static const Id NaN = D(std::numeric_limits<double>::quiet_NaN());
@@ -55,10 +55,10 @@ TEST(AggregateExpression, max) {
   testMaxId({V(7), U, V(2), V(4)}, V(7));
   testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
 
-  auto testMaxString = testAggregate<MaxExpression, IdOrString>;
+  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
   // TODO<joka921> Implement correct comparison on strings
-  auto l = lit;
-  testMaxString({l("alpha"), l("äpfel"), l("Beta"), l("unfug")}, l("äpfel"));
+  testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
+                lit("äpfel"));
 }
 
 // ______________________________________________________________________________
@@ -69,10 +69,10 @@ TEST(AggregateExpression, min) {
   testMinId({V(7), U, V(2), V(4)}, U);
   testMinId({I(3), V(0), L(3), (I(-1))}, I(-1));
 
-  auto testMinString = testAggregate<MinExpression, IdOrString>;
+  auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   // TODO<joka921> Implement correct comparison on strings
-  auto l = lit;
-  testMinString({l("alpha"), l("äpfel"), l("Beta"), l("unfug")}, l("Beta"));
+  testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
+                lit("Beta"));
 }
 
 // ______________________________________________________________________________
@@ -84,7 +84,7 @@ TEST(AggregateExpression, sum) {
   testSumId({I(3), U}, U);
   testSumId({I(3), NaN}, NaN);
 
-  auto testSumString = testAggregate<SumExpression, IdOrString, Id>;
+  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
   testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
@@ -97,6 +97,6 @@ TEST(AggregateExpression, count) {
   testCountId({U, I(3), U}, I(1));
   testCountId({I(3), NaN, NaN}, I(2), true);
 
-  auto testCountString = testAggregate<CountExpression, IdOrString, Id>;
+  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }

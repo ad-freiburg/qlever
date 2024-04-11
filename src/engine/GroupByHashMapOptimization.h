@@ -69,11 +69,11 @@ struct CountAggregationData {
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
 template <valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
-  sparqlExpression::IdOrString currentValue_;
+  sparqlExpression::IdOrLiteralOrIri currentValue_;
   bool firstValueSet_ = false;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrString& value,
+  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
                 const sparqlExpression::EvaluationContext* ctx) {
     if (!firstValueSet_) {
       currentValue_ = value;

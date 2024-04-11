@@ -32,7 +32,7 @@ TEST(SparqlExpressionTypes, printIdOrString) {
   using namespace ad_utility::triple_component;
   std::stringstream str;
 
-  IdOrString idOrString{Id::makeUndefined()};
+  IdOrLiteralOrIri idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "Undefined:Undefined");
   idOrString = LiteralOrIri::literalWithoutQuotes("bimm");

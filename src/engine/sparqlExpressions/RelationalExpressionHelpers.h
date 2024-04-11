@@ -132,9 +132,9 @@ template <typename S>
 concept StoresStringOrId =
     ad_utility::SimilarToAny<S, ValueId,
                              ad_utility::triple_component::LiteralOrIri,
-                             IdOrString, std::pair<Id, Id>>;
-// Convert a string or `IdOrString` value into the (possibly empty) range of
-// corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
+                             IdOrLiteralOrIri, std::pair<Id, Id>>;
+// Convert a string or `IdOrLiteralOrIri` value into the (possibly empty) range
+// of corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
 // and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
 // the usage of this function easier.
@@ -144,7 +144,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, std::pair<Id, Id>>) {
     return value;
-  } else if constexpr (ad_utility::isSimilar<S, IdOrString>) {
+  } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
