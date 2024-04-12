@@ -12,33 +12,19 @@
 using OffsetAndSize = VocabularyOnDisk::OffsetAndSize;
 
 // ____________________________________________________________________________
-std::optional<OffsetAndSize> VocabularyOnDisk::getOffsetAndSize(
-    uint64_t idx) const {
-  if (idx >= offsets_.size()) {
-    return std::nullopt;
-  }
-  return getOffsetAndSizeForIthElement(idx);
-}
-
-// ____________________________________________________________________________
-VocabularyOnDisk::OffsetSizeId VocabularyOnDisk::getOffsetSizeIdForIthElement(
-    uint64_t i) const {
-  AD_CONTRACT_CHECK(i < size());
+OffsetAndSize VocabularyOnDisk::getOffsetAndSize(uint64_t i) const {
+  AD_CORRECTNESS_CHECK(i < size());
   const auto offset = offsets_[i];
   const auto nextOffset = offsets_[i + 1];
-  return OffsetSizeId{offset, nextOffset - offset, i};
+  return {offset, nextOffset - offset};
 }
 
 // _____________________________________________________________________________
-std::optional<string> VocabularyOnDisk::operator[](uint64_t idx) const {
-  auto optionalOffsetAndSize = getOffsetAndSize(idx);
-  if (!optionalOffsetAndSize.has_value()) {
-    return std::nullopt;
-  }
-
-  string result(optionalOffsetAndSize->_size, '\0');
-  file_.read(result.data(), optionalOffsetAndSize->_size,
-             optionalOffsetAndSize->_offset);
+std::string VocabularyOnDisk::operator[](uint64_t idx) const {
+  AD_CONTRACT_CHECK(idx < size());
+  auto offsetAndSize = getOffsetAndSize(idx);
+  string result(offsetAndSize._size, '\0');
+  file_.read(result.data(), offsetAndSize._size, offsetAndSize._offset);
   return result;
 }
 
@@ -109,20 +95,9 @@ void VocabularyOnDisk::buildFromStringsAndIds(
 void VocabularyOnDisk::open(const std::string& filename) {
   file_.open(filename.c_str(), "r");
   offsets_.open(filename + offsetSuffix_);
-  AD_CONTRACT_CHECK(offsets_.size() > 0);
+  AD_CORRECTNESS_CHECK(offsets_.size() > 0);
   size_ = offsets_.size() - 1;
   if (size_ > 0) {
-    highestIdx_ = (*(end() - 1))._index;
+    highestIdx_ = size_ - 1;
   }
-}
-
-// ____________________________________________________________________________
-WordAndIndex VocabularyOnDisk::getIthElement(size_t n) const {
-  AD_CONTRACT_CHECK(n < offsets_.size());
-  auto offsetSizeId = getOffsetSizeIdForIthElement(n);
-
-  std::string result(offsetSizeId._size, '\0');
-  file_.read(result.data(), offsetSizeId._size, offsetSizeId._offset);
-
-  return {std::move(result), offsetSizeId._id};
 }
