@@ -55,8 +55,8 @@ class TransitivePathTest : public testing::TestWithParam<bool> {
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
     return {TransitivePathBase::makeTransitivePath(
-                qec, subtree, std::move(left), std::move(right), minDist,
-                maxDist, useBinSearch),
+                qec, std::move(subtree), std::move(left), std::move(right),
+                minDist, maxDist, useBinSearch),
             qec};
   }
 

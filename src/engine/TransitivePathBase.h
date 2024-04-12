@@ -230,7 +230,7 @@ class TransitivePathBase : public Operation {
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-      const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+      const TransitivePathSide leftSide, const TransitivePathSide rightSide,
       size_t minDist, size_t maxDist, bool useBinSearch);
 
   /**
@@ -249,7 +249,7 @@ class TransitivePathBase : public Operation {
    */
   static std::shared_ptr<TransitivePathBase> makeTransitivePath(
       QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-      const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+      const TransitivePathSide leftSide, const TransitivePathSide rightSide,
       size_t minDist, size_t maxDist);
 
   vector<QueryExecutionTree*> getChildren() override;

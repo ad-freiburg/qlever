@@ -14,10 +14,11 @@
 // _____________________________________________________________________________
 TransitivePathBinSearch::TransitivePathBinSearch(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
+    const TransitivePathSide leftSide, const TransitivePathSide rightSide,
     size_t minDist, size_t maxDist)
-    : TransitivePathImpl<BinSearchMap>(qec, child, leftSide, rightSide, minDist,
-                                       maxDist) {
+    : TransitivePathImpl<BinSearchMap>(qec, std::move(child),
+                                       std::move(leftSide),
+                                       std::move(rightSide), minDist, maxDist) {
   auto [startSide, targetSide] = decideDirection();
   subtree_ = QueryExecutionTree::createSortedTree(
       subtree_, {startSide.subCol_, targetSide.subCol_});

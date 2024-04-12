@@ -325,7 +325,7 @@ TEST(LocalVocab, propagation) {
   TransitivePathSide left(std::nullopt, 0, Variable{"?x"});
   TransitivePathSide right(std::nullopt, 1, Variable{"?y"});
   auto transitivePath = TransitivePathBase::makeTransitivePath(
-      testQec, qet(values1), left, right, 1, 1);
+      testQec, qet(values1), std::move(left), std::move(right), 1, 1);
   checkLocalVocab(*transitivePath, localVocab1);
 
   // PATTERN TRICK operations.

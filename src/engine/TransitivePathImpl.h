@@ -18,7 +18,8 @@ class TransitivePathImpl : public TransitivePathBase {
                      std::shared_ptr<QueryExecutionTree> child,
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist)
-      : TransitivePathBase(qec, child, leftSide, rightSide, minDist, maxDist){};
+      : TransitivePathBase(qec, std::move(child), std::move(leftSide),
+                           std::move(rightSide), minDist, maxDist){};
 
   /**
    * @brief Compute the transitive hull with a bound side.
