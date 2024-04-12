@@ -19,24 +19,13 @@
 // then binary search for a string can be performed.
 class VocabularyOnDisk {
  private:
-  // An ID and the offset of the corresponding word in the underlying file.
-  struct IndexAndOffset {
-    uint64_t idx_;
-    uint64_t offset_;
-    // Compare only by the IDs.
-    auto operator<=>(const IndexAndOffset& rhs) const {
-      return idx_ <=> rhs.idx_;
-    }
-    // Equality comparison is currently unused, but it must be declared to be
-    // able to use `std::ranges::lower_bound` etc.
-    bool operator==(const IndexAndOffset& rhs) const;
-  };
-
+  // The offset of a word in the underlying file.
+  using Offset = uint64_t;
   // The file in which the words are stored.
   mutable ad_utility::File file_;
 
   // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<IndexAndOffset> idsAndOffsets_;
+  ad_utility::MmapVectorView<Offset> offsets_;
 
   // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
   // this will be Id(-1), s.t. highestIdx_ + 1 will overflow to 0.
@@ -59,10 +48,8 @@ class VocabularyOnDisk {
   class WordWriter {
    private:
     ad_utility::File file_;
-    ad_utility::MmapVector<IndexAndOffset> idsAndOffsets_;
+    ad_utility::MmapVector<Offset> offsets_;
     uint64_t currentOffset_ = 0;
-    std::optional<uint64_t> previousId_ = std::nullopt;
-    uint64_t currentIndex_ = 0;
     bool isFinished_ = false;
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
 
