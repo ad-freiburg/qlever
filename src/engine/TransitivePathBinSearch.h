@@ -16,7 +16,7 @@ struct BinSearchMap {
   std::span<const Id> startIds_;
   std::span<const Id> targetIds_;
 
-  std::span<const Id> successors(const Id node) const {
+  auto successors(const Id node) const {
     auto range = std::ranges::equal_range(startIds_, node);
 
     auto startIndex = std::distance(startIds_.begin(), range.begin());
