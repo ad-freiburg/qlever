@@ -75,20 +75,6 @@ Map TransitivePathBinSearch::transitiveHull(const BinSearchMap& edges,
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
-                         &TransitivePathBinSearch::setupEdgesMap, this, dynSub,
-                         startSide, targetSide);
-}
-
-// _____________________________________________________________________________
-template <size_t SUB_WIDTH>
-BinSearchMap TransitivePathBinSearch::setupEdgesMap(
-    const IdTable& dynSub, const TransitivePathSide& startSide,
-    const TransitivePathSide& targetSide) const {
-  const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
-  decltype(auto) startCol = sub.getColumn(startSide.subCol_);
-  decltype(auto) targetCol = sub.getColumn(targetSide.subCol_);
-  BinSearchMap edges{startCol, targetCol};
-
-  return edges;
+  return BinSearchMap(dynSub.getColumn(startSide.subCol_),
+                      dynSub.getColumn(targetSide.subCol_));
 }

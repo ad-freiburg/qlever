@@ -85,10 +85,4 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
   BinSearchMap setupEdgesMap(
       const IdTable& dynSub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
-
-  // initialize the map from the subresult
-  template <size_t SUB_WIDTH>
-  BinSearchMap setupEdgesMap(const IdTable& dynSub,
-                             const TransitivePathSide& startSide,
-                             const TransitivePathSide& targetSide) const;
 };
