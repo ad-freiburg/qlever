@@ -198,6 +198,7 @@ class TransitivePathImpl : public TransitivePathBase {
       // var -> var
     } else {
       std::span<const Id> startNodes = sub.getColumn(startSide.subCol_);
+      // TODO<C++23> Use ranges::to.
       nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
       if (minDist_ == 0) {
         std::span<const Id> targetNodes = sub.getColumn(targetSide.subCol_);
@@ -232,6 +233,7 @@ class TransitivePathImpl : public TransitivePathBase {
     // Bound -> var|id
     std::span<const Id> startNodes =
         startSideTable.getColumn(startSide.treeAndCol_.value().second);
+    // TODO<C++23> Use ranges::to.
     nodes.insert(nodes.end(), startNodes.begin(), startNodes.end());
 
     return {std::move(edges), std::move(nodes)};
