@@ -202,7 +202,7 @@ ResultTable CartesianProductJoin::computeResult() {
   auto subResultsDeref = std::views::transform(
       subResults, [](auto& x) -> decltype(auto) { return *x; });
   return {std::move(result), resultSortedOn(),
-          ResultTable::getSharedLocalVocabFromNonEmptyOf(subResultsDeref)};
+          ResultTable::getMergedLocalVocab(subResultsDeref)};
 }
 
 // ____________________________________________________________________________

@@ -187,7 +187,7 @@ ResultTable Join::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getSharedLocalVocabFromNonEmptyOf(*leftRes, *rightRes)};
+          ResultTable::getMergedLocalVocab(*leftRes, *rightRes)};
 }
 
 // _____________________________________________________________________________

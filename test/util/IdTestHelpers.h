@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include "engine/LocalVocab.h"
 #include "global/Id.h"
 
 // Lambdas to simply create an `Id` with a given value and type during unit
@@ -18,8 +19,10 @@ inline auto VocabId = [](const auto& v) {
   return Id::makeFromVocabIndex(VocabIndex::make(v));
 };
 
-inline auto LocalVocabId = [](const auto& v) {
-  return Id::makeFromLocalVocabIndex(LocalVocabIndex::make(v));
+inline auto LocalVocabId = [](std::integral auto v) {
+  static ad_utility::Synchronized<LocalVocab> localVocab;
+  return Id::makeFromLocalVocabIndex(
+      localVocab.wlock()->getIndexAndAddIfNotContained(std::to_string(v)));
 };
 
 inline auto TextRecordId = [](const auto& t) {
