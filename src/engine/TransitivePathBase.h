@@ -91,7 +91,7 @@ class TransitivePathBase : public Operation {
                      TransitivePathSide leftSide, TransitivePathSide rightSide,
                      size_t minDist, size_t maxDist);
 
-  virtual ~TransitivePathBase() {}
+  virtual ~TransitivePathBase() = 0;
 
   /**
    * Returns a new TransitivePath operation that uses the fact that leftop

@@ -46,6 +46,9 @@ TransitivePathBase::TransitivePathBase(
 }
 
 // _____________________________________________________________________________
+TransitivePathBase::~TransitivePathBase() {}
+
+// _____________________________________________________________________________
 std::pair<TransitivePathSide&, TransitivePathSide&>
 TransitivePathBase::decideDirection() {
   if (lhs_.isBoundVariable()) {
