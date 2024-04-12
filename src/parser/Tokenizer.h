@@ -4,7 +4,7 @@
 //
 #pragma once
 
-#include <gtest/gtest.h>
+#include <gtest/gtest_prod.h>
 #include <re2/re2.h>
 
 #include <regex>
