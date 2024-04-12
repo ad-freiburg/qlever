@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "global/RuntimeParameters.h"
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"

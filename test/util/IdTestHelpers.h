@@ -6,6 +6,7 @@
 
 #include "engine/LocalVocab.h"
 #include "global/Id.h"
+#include "util/Synchronized.h"
 
 // Lambdas to simply create an `Id` with a given value and type during unit
 // tests.

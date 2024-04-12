@@ -8,6 +8,7 @@
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueIdComparators.h"
 
 namespace sparqlExpression {

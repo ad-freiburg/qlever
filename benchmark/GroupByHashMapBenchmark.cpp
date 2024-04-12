@@ -15,6 +15,7 @@
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "global/RuntimeParameters.h"
 #include "util/Log.h"
 #include "util/Random.h"
 #include "util/TypeIdentity.h"

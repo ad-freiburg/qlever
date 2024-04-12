@@ -6,17 +6,16 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
+#include <vector>
+
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/ConstexprSmallString.h"
-#include "util/Generator.h"
-#include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VisitMixin.h"
 
@@ -178,53 +177,19 @@ struct EvaluationContext {
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle)
-      : _qec{qec},
-        _variableToColumnMap{variableToColumnMap},
-        _inputTable{inputTable},
-        _allocator{allocator},
-        _localVocab{localVocab},
-        cancellationHandle_{std::move(cancellationHandle)} {
-    AD_CONTRACT_CHECK(cancellationHandle_);
-  }
+                    ad_utility::SharedCancellationHandle cancellationHandle);
 
-  bool isResultSortedBy(const Variable& variable) {
-    if (_columnsByWhichResultIsSorted.empty()) {
-      return false;
-    }
-    if (!_variableToColumnMap.contains(variable)) {
-      return false;
-    }
-
-    return getColumnIndexForVariable(variable) ==
-           _columnsByWhichResultIsSorted[0];
-  }
+  bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
-  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
+  [[nodiscard]] size_t size() const;
 
   // ____________________________________________________________________________
   [[nodiscard]] ColumnIndex getColumnIndexForVariable(
-      const Variable& var) const {
-    const auto& map = _variableToColumnMap;
-    if (!map.contains(var)) {
-      throw std::runtime_error(absl::StrCat(
-          "Variable ", var.name(), " was not found in input to expression."));
-    }
-    return map.at(var).columnIndex_;
-  }
+      const Variable& var) const;
 
   // _____________________________________________________________________________
   std::optional<ExpressionResult> getResultFromPreviousAggregate(
-      const Variable& var) const {
-    const auto& map = _variableToColumnMapPreviousResults;
-    if (!map.contains(var)) {
-      return std::nullopt;
-    }
-    ColumnIndex idx = map.at(var).columnIndex_;
-    AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
-
-    return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
-  }
+      const Variable& var) const;
 };
 
 namespace detail {
@@ -252,11 +217,6 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
     static_assert(ad_utility::alwaysFalse<T>);
   }
 }
-
-/// A Tag type that has to be used as the `CalculationWithSetOfIntervals`
-/// template parameter in `NaryExpression.h` and `AggregateExpression.h` when
-/// no such calculation is possible
-struct NoCalculationWithSetOfIntervals {};
 
 /// A `Function` and one or more `ValueGetters`, that are applied to the
 /// operands of the function before passing them. The number of `ValueGetters`
