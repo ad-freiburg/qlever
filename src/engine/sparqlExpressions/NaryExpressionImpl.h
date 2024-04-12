@@ -8,6 +8,7 @@
 
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 namespace sparqlExpression::detail {
 template <typename NaryOperation>

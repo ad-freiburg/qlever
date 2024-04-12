@@ -6,6 +6,8 @@
 #ifndef QLEVER_ASIOHELPERS_H
 #define QLEVER_ASIOHELPERS_H
 
+#include <absl/cleanup/cleanup.h>
+
 #include <boost/asio/experimental/awaitable_operators.hpp>
 
 #include "global/Constants.h"

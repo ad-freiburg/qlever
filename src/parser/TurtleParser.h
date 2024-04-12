@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+#include <sys/mman.h>
+
 #include <codecvt>
 #include <exception>
 #include <future>
@@ -12,16 +15,13 @@
 
 #include "absl/strings/str_cat.h"
 #include "global/Constants.h"
-#include "gtest/gtest.h"
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/ParallelBuffer.h"
 #include "parser/Tokenizer.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/BlankNode.h"
-#include "sys/mman.h"
 #include "util/Exception.h"
-#include "util/ExceptionHandling.h"
 #include "util/File.h"
 #include "util/HashMap.h"
 #include "util/Log.h"

@@ -6,11 +6,13 @@
 
 #include "./RegexExpression.h"
 
+#include <re2/re2.h>
+
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueIdComparators.h"
-#include "re2/re2.h"
 
 using namespace std::literals;
 
