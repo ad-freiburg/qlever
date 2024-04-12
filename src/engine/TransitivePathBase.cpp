@@ -280,7 +280,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     const TransitivePathSide& leftSide, const TransitivePathSide& rightSide,
     size_t minDist, size_t maxDist) {
-  bool useBinSearch = RuntimeParameters().get<"use-binsearch">();
+  bool useBinSearch =
+      RuntimeParameters().get<"use-binsearch-transitive-path">();
   return makeTransitivePath(qec, child, leftSide, rightSide, minDist, maxDist,
                             useBinSearch);
 }
