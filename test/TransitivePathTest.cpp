@@ -12,6 +12,7 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
+#include "gtest/gtest.h"
 #include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
@@ -21,8 +22,8 @@ auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
 
 // First sort both of the inputs and then ASSERT their equality. Needed for
-// results of the TransitivePath operations which have a non-deterministic order
-// because of the hash maps which are used internally.
+// results of the TransitivePath operations which have a non-deterministic
+// order because of the hash maps which are used internally.
 void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
   auto aCpy = a.clone();
   auto bCpy = b.clone();
@@ -42,18 +43,21 @@ void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
 }
 }  // namespace
 
-std::shared_ptr<TransitivePathBase> makePath(IdTable input, Vars vars,
-                                             TransitivePathSide& left,
-                                             TransitivePathSide& right,
-                                             size_t minDist, size_t maxDist) {
-  auto qec = getQec();
-  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
-      qec, std::move(input), vars);
-  return TransitivePathBase::makeTransitivePath(qec, subtree, left, right,
-                                                minDist, maxDist);
-}
+class TransitivePathTest : public testing::TestWithParam<bool> {
+ public:
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePath(
+      IdTable input, Vars vars, TransitivePathSide& left,
+      TransitivePathSide& right, size_t minDist, size_t maxDist) {
+    bool useBinSearch = GetParam();
+    auto qec = getQec();
+    auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(input), vars);
+    return TransitivePathBase::makeTransitivePath(
+        qec, subtree, left, right, minDist, maxDist, useBinSearch);
+  }
+};
 
-TEST(TransitivePathTest, idToId) {
+TEST_P(TransitivePathTest, idToId) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(1)});
   sub.push_back({V(1), V(2)});
@@ -72,7 +76,7 @@ TEST(TransitivePathTest, idToId) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, idToVar) {
+TEST_P(TransitivePathTest, idToVar) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(1)});
   sub.push_back({V(1), V(2)});
@@ -93,7 +97,7 @@ TEST(TransitivePathTest, idToVar) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, varToId) {
+TEST_P(TransitivePathTest, varToId) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(1)});
   sub.push_back({V(1), V(2)});
@@ -114,7 +118,7 @@ TEST(TransitivePathTest, varToId) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, varTovar) {
+TEST_P(TransitivePathTest, varTovar) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(1)});
   sub.push_back({V(1), V(2)});
@@ -138,7 +142,7 @@ TEST(TransitivePathTest, varTovar) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, unlimitedMaxLength) {
+TEST_P(TransitivePathTest, unlimitedMaxLength) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(2)});
   sub.push_back({V(2), V(4)});
@@ -178,7 +182,7 @@ TEST(TransitivePathTest, unlimitedMaxLength) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, maxLength2FromVariable) {
+TEST_P(TransitivePathTest, maxLength2FromVariable) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(2)});
   sub.push_back({V(2), V(4)});
@@ -213,7 +217,7 @@ TEST(TransitivePathTest, maxLength2FromVariable) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, maxLength2FromId) {
+TEST_P(TransitivePathTest, maxLength2FromId) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(2)});
   sub.push_back({V(2), V(4)});
@@ -238,7 +242,7 @@ TEST(TransitivePathTest, maxLength2FromId) {
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
 
-TEST(TransitivePathTest, maxLength2ToId) {
+TEST_P(TransitivePathTest, maxLength2ToId) {
   IdTable sub(2, makeAllocator());
   sub.push_back({V(0), V(2)});
   sub.push_back({V(2), V(4)});
@@ -261,3 +265,10 @@ TEST(TransitivePathTest, maxLength2ToId) {
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
+
+INSTANTIATE_TEST_SUITE_P(TransitivePathTestSuite, TransitivePathTest,
+                         testing::Bool(),
+                         [](const testing::TestParamInfo<bool>& info) {
+                           return info.param ? "TransitivePathBinSearch"
+                                             : "TransitivePathHashMap";
+                         });
