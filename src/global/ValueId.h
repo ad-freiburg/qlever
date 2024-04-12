@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <sstream>
 
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
