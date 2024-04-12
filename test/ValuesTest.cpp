@@ -74,9 +74,12 @@ TEST(Values, computeResult) {
   const auto& table = result->idTable();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
-  auto L = ad_utility::testing::LocalVocabId;
+  auto l = result->localVocab().getIndexOrNullopt("<y>");
+  ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
-  ASSERT_EQ(table, makeIdTableFromVector({{I(12), x}, {U, L(0)}}));
+  ASSERT_EQ(table,
+            makeIdTableFromVector(
+                {{I(12), x}, {U, Id::makeFromLocalVocabIndex(l.value())}}));
 }
 
 // Check that if the number of variables and the number of values in each row

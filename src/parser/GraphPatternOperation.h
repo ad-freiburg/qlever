@@ -164,13 +164,5 @@ struct GraphPatternOperation
   [[nodiscard]] const auto& getBasic() const {
     return std::get<BasicGraphPattern>(*this);
   }
-
-  // A string representation of the operation.
-  //
-  // TODO: The implementation of this method duplicates code found in the
-  // implementations of `getCacheKeyImpl` for the individual operations in
-  // `src/engine`. This function is therefore probably redundant (but currently
-  // used in some of our unit tests).
-  void toString(std::ostringstream& os, int indentation = 0) const;
 };
 }  // namespace parsedQuery

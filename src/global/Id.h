@@ -8,7 +8,6 @@
 #include <cstdint>
 #include <limits>
 
-#include "global/IndexTypes.h"
 #include "global/ValueId.h"
 #include "util/Exception.h"
 

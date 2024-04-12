@@ -157,9 +157,8 @@ class TransitivePathImpl : public TransitivePathBase {
                       &idTable, subRes->idTable(), startSide, targetSide,
                       sideRes->idTable());
 
-      return {
-          std::move(idTable), resultSortedOn(),
-          ResultTable::getSharedLocalVocabFromNonEmptyOf(*sideRes, *subRes)};
+      return {std::move(idTable), resultSortedOn(),
+              ResultTable::getMergedLocalVocab(*sideRes, *subRes)};
     }
     CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                     &TransitivePathImpl<T>::computeTransitivePath, this,

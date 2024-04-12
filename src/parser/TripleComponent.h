@@ -191,13 +191,9 @@ class TripleComponent {
     AD_CONTRACT_CHECK(!isString());
     if (isLiteral() || isIri()) {
       VocabIndex idx;
-      const std::string& content = [&]() -> const std::string& {
-        if (isLiteral()) {
-          return getLiteral().toStringRepresentation();
-        } else {
-          return getIri().toStringRepresentation();
-        }
-      }();
+      const std::string& content = isLiteral()
+                                       ? getLiteral().toStringRepresentation()
+                                       : getIri().toStringRepresentation();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
       } else if (qlever::specialIds.contains(content)) {

@@ -11,13 +11,12 @@
 #define QLEVER_PATTERNCREATOR_H
 
 #include "engine/idTable/CompressedExternalIdTable.h"
-#include "global/Constants.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
-#include "util/Serializer/SerializeVector.h"
+#include "util/HashMap.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TypeTraits.h"
 

@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include <gtest/gtest.h>
+#include <gtest/gtest_prod.h>
 
 #include <cstdlib>
 #include <ctre-unicode.hpp>
@@ -13,8 +13,6 @@
 #include "parser/Tokenizer.h"
 #include "parser/TurtleTokenId.h"
 #include "util/CtreHelpers.h"
-#include "util/Log.h"
-#include "util/StringUtils.h"
 
 using ctll::fixed_string;
 using namespace ctre::literals;
