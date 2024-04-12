@@ -68,6 +68,13 @@ using Map = std::unordered_map<
     Id, Set, decltype(hash), std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
+/**
+ * @class TransitivePathBase
+ * @brief A common base class for different implementations of the Transitive
+ * Path operation. To create an actual object use the static factory function
+ * `makeStaticPath`.
+ *
+ */
 class TransitivePathBase : public Operation {
  protected:
   std::shared_ptr<QueryExecutionTree> subtree_;

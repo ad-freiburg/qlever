@@ -11,6 +11,15 @@
 #include "util/Exception.h"
 #include "util/Timer.h"
 
+/**
+ * @class TransitivePathImpl
+ * @brief This class implements common functions for the concrete TransitivePath
+ * classes TransitivePathBinSearch and TransitivePathHashMap. The template can
+ * be set to a map data structure which is used for the transitive hull
+ * computation.
+ *
+ * @tparam T A map data structure for the transitive hull computation.
+ */
 template <typename T>
 class TransitivePathImpl : public TransitivePathBase {
  public:

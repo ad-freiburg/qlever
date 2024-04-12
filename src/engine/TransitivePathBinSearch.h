@@ -12,10 +12,40 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
+/**
+ * @class BinSearchMap
+ * @brief This struct represents a simple Binary Search Map. Given an Id, the
+ * BinSearchMap can return a list (i.e. span) of successor Ids.
+ *
+ * It is expected that the two input spans startIds_ and targetIds_ are sorted
+ * first by start id and then by target id.
+ * Example:
+ *
+ * startId | targetId
+ * ------------------
+ *       1 |        1
+ *       1 |        2
+ *       2 |        4
+ *       3 |        2
+ *       3 |        4
+ *       3 |        6
+ *       5 |        2
+ *       5 |        6
+ *
+ */
 struct BinSearchMap {
   std::span<const Id> startIds_;
   std::span<const Id> targetIds_;
 
+  /**
+   * @brief Return the successors for the given id.
+   * The successors are all target ids, where the corresponding start id is
+   * equal to the given id `node`.
+   *
+   * @param node The input id, which will be looked up in startIds_
+   * @return A std::span<Id>, which consists of all targetIds_ where
+   * startIds_ == node.
+   */
   auto successors(const Id node) const {
     auto range = std::ranges::equal_range(startIds_, node);
 
