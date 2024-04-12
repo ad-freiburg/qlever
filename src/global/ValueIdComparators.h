@@ -462,16 +462,15 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     }
   }
 
-  auto visitor = [comparator](const auto& aValue,
-                              const auto& bValue) -> ComparisonResult {
-    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
-      return fromBool(std::invoke(comparator, aValue, bValue));
-    } else {
-      AD_FAIL();
-    }
-  };
-
-  return ValueId::visitTwo(visitor, a, b);
+  return a.visit([&](const auto& aValue) {
+    return b.visit([&](const auto& bValue) -> ComparisonResult {
+      if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+        return fromBool(std::invoke(comparator, aValue, bValue));
+      } else {
+        AD_FAIL();
+      }
+    });
+  });
 }
 }  // namespace detail
 
