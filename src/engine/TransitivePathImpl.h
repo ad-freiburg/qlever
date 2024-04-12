@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
 #include "util/Exception.h"
 #include "util/Timer.h"

@@ -15,7 +15,7 @@
 #include "engine/IndexScan.h"
 #include "engine/TransitivePathBinSearch.h"
 #include "engine/TransitivePathHashMap.h"
-#include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
