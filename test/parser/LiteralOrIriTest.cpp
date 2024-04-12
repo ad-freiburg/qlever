@@ -10,6 +10,7 @@
 #include "parser/Literal.h"
 #include "parser/LiteralOrIri.h"
 #include "parser/NormalizedString.h"
+#include "util/HashSet.h"
 
 using namespace ad_utility::triple_component;
 
@@ -200,4 +201,11 @@ TEST(LiteralOrIri, Printing) {
   std::stringstream str;
   PrintTo(literal1, &str);
   EXPECT_EQ(str.str(), "\"hallo\"");
+}
+
+TEST(LiteralOrIri, Hashing) {
+  auto lit = LiteralOrIri::literalWithoutQuotes("bimbamm");
+  auto iri = LiteralOrIri::iriref("<bimbamm>");
+  ad_utility::HashSet<LiteralOrIri> set{lit, iri};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(lit, iri));
 }
