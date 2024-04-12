@@ -108,18 +108,24 @@ TEST(ValueId, Indices) {
     testSingle(0);
     testSingle(ValueId::maxIndex);
 
-    for (size_t idx = 0; idx < 10'000; ++idx) {
-      auto value = invalidIndexGenerator();
-      ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
-      AD_EXPECT_THROW_WITH_MESSAGE(makeId(value),
-                                   ::testing::ContainsRegex("is bigger than"));
+    if (type != Datatype::LocalVocabIndex) {
+      for (size_t idx = 0; idx < 10'000; ++idx) {
+        auto value = invalidIndexGenerator();
+        ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            makeId(value), ::testing::ContainsRegex("is bigger than"));
+      }
     }
   };
 
   testRandomIds(&makeTextRecordId, &getTextRecordIndex,
                 Datatype::TextRecordIndex);
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
-  testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
+
+  auto localVocabWordToInt = [](const auto& input) {
+    return std::atoll(getLocalVocabIndex(input).c_str());
+  };
+  testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
@@ -288,7 +294,8 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeFromBool(false), "Bool:false");
   test(ValueId::makeFromBool(true), "Bool:true");
   test(makeVocabId(15), "VocabIndex:15");
-  test(makeLocalVocabId(25), "LocalVocabIndex:25");
+  StringAligned16 str{"SomeValue"};
+  test(ValueId::makeFromLocalVocabIndex(&str), "LocalVocabIndex:SomeValue");
   test(makeTextRecordId(37), "TextRecordIndex:37");
   test(makeWordVocabId(42), "WordVocabIndex:42");
   test(makeBlankNodeId(27), "BlankNodeIndex:27");

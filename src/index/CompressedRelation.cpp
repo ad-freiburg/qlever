@@ -13,6 +13,7 @@
 #include "util/Generator.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/OverloadCallOperator.h"
+#include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
 #include "util/TypeTraits.h"
@@ -1098,7 +1099,6 @@ auto CompressedRelationWriter::createPermutationPair(
     relation.clear();
     numBlocksCurrentRel = 0;
   };
-  size_t i = 0;
   // All columns n the order in which they have to be added to
   // the relation.
   std::vector<ColumnIndex> permutedColIndices{c0, c1, c2};
@@ -1106,6 +1106,8 @@ auto CompressedRelationWriter::createPermutationPair(
     permutedColIndices.push_back(colIdx);
   }
   inputWaitTimer.cont();
+  size_t numTriplesProcessed = 0;
+  ad_utility::ProgressBar progressBar{numTriplesProcessed, "Triples sorted: "};
   for (auto& block : AD_FWD(sortedTriples)) {
     AD_CORRECTNESS_CHECK(block.numColumns() == numColumns);
     inputWaitTimer.stop();
@@ -1131,9 +1133,9 @@ auto CompressedRelationWriter::createPermutationPair(
       if (relation.size() >= blocksize) {
         addBlockForLargeRelation();
       }
-      ++i;
-      if (i % 100'000'000 == 0) {
-        LOG(INFO) << "Triples processed: " << i << std::endl;
+      ++numTriplesProcessed;
+      if (progressBar.update()) {
+        LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
     }
     // Call each of the `perBlockCallbacks` for the current block.
@@ -1149,6 +1151,7 @@ auto CompressedRelationWriter::createPermutationPair(
     blockCallbackTimer.stop();
     inputWaitTimer.cont();
   }
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
   inputWaitTimer.stop();
   if (!relation.empty() || numBlocksCurrentRel > 0) {
     finishRelation();

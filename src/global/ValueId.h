@@ -123,7 +123,18 @@ class ValueId {
 
   /// Equality comparison is performed directly on the underlying
   /// representation.
-  constexpr bool operator==(const ValueId&) const = default;
+  // NOTE: (Also for the operator<=> below: These comparisons only work
+  // correctly if we only store entries in the local vocab that are NOT part of
+  // the vocabulary. This is currently not true for expression results from
+  // GROUP BY and BIND operations (for performance reaons). So a join with such
+  // results will currently lead to wrong results.
+  constexpr bool operator==(const ValueId& other) const {
+    if (getDatatype() == Datatype::LocalVocabIndex &&
+        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+      return *getLocalVocabIndex() == *other.getLocalVocabIndex();
+    }
+    return _bits == other._bits;
+  }
 
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
@@ -133,9 +144,11 @@ class ValueId {
   /// For doubles it is first the positive doubles in order, then the negative
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
-  /// TODO<joka921> Is this ordering also consistent for corner cases of doubles
-  /// (inf, nan, denormalized numbers, negative zero)?
   constexpr auto operator<=>(const ValueId& other) const {
+    if (getDatatype() == Datatype::LocalVocabIndex &&
+        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
+    }
     return _bits <=> other._bits;
   }
 
@@ -211,7 +224,11 @@ class ValueId {
     return makeFromIndex(index.get(), Datatype::TextRecordIndex);
   }
   static ValueId makeFromLocalVocabIndex(LocalVocabIndex index) {
-    return makeFromIndex(index.get(), Datatype::LocalVocabIndex);
+    // The last `numDatatypeBits` of a `LocalVocabIndex` are always zero, so we
+    // can reuse them for the datatype.
+    static_assert(alignof(decltype(*index)) >= (1u << numDatatypeBits));
+    return makeFromIndex(reinterpret_cast<T>(index) >> numDatatypeBits,
+                         Datatype::LocalVocabIndex);
   }
   static ValueId makeFromWordVocabIndex(WordVocabIndex index) {
     return makeFromIndex(index.get(), Datatype::WordVocabIndex);
@@ -229,8 +246,8 @@ class ValueId {
   [[nodiscard]] constexpr TextRecordIndex getTextRecordIndex() const noexcept {
     return TextRecordIndex::make(removeDatatypeBits(_bits));
   }
-  [[nodiscard]] constexpr LocalVocabIndex getLocalVocabIndex() const noexcept {
-    return LocalVocabIndex::make(removeDatatypeBits(_bits));
+  [[nodiscard]] LocalVocabIndex getLocalVocabIndex() const noexcept {
+    return reinterpret_cast<LocalVocabIndex>(_bits << numDatatypeBits);
   }
   [[nodiscard]] constexpr WordVocabIndex getWordVocabIndex() const noexcept {
     return WordVocabIndex::make(removeDatatypeBits(_bits));
@@ -334,8 +351,11 @@ class ValueId {
         ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
         ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
+        AD_CORRECTNESS_CHECK(value != nullptr);
+        ostr << *value;
       } else {
-        // T is `VocabIndex || LocalVocabIndex || TextRecordIndex`
+        // T is `VocabIndex | TextRecordIndex`
         ostr << std::to_string(value.get());
       }
     };

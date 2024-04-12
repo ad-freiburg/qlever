@@ -162,7 +162,7 @@ bool TurtleParser<T>::predicateSpecialA() {
 template <class T>
 bool TurtleParser<T>::subject() {
   if (blankNode() || iri() || collection()) {
-    activeSubject_ = lastParseResult_.getIri();
+    activeSubject_ = lastParseResult_;
     return true;
   } else {
     return false;

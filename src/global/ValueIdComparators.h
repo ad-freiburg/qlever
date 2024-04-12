@@ -72,9 +72,7 @@ inline ValueId toValueId(ComparisonResult comparisonResult) {
 // negative doubles in reversed order. In detail it is [0.0 ... infinity, NaN,
 // -0.0, ... -infinity]. This is a direct consequence of comparing the bit
 // representation of these values as unsigned integers.
-inline bool compareByBits(ValueId a, ValueId b) {
-  return a.getBits() < b.getBits();
-}
+inline bool compareByBits(ValueId a, ValueId b) { return a < b; }
 
 namespace detail {
 
@@ -308,6 +306,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForIndexTypes(
   RangeFilter<RandomIt> rangeFilter{comparison};
   auto [eqBegin, eqEnd] =
       std::equal_range(beginType, endType, valueId, &compareByBits);
+
   rangeFilter.addSmaller(beginType, eqBegin);
   rangeFilter.addEqual(eqBegin, eqEnd);
   rangeFilter.addGreater(eqEnd, endType);
@@ -462,9 +461,17 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     }
   }
 
-  auto visitor = [comparator](const auto& aValue,
-                              const auto& bValue) -> ComparisonResult {
-    if constexpr (requires() { std::invoke(comparator, aValue, bValue); }) {
+  auto visitor = [comparator]<typename A, typename B>(
+                     const A& aValue, const B& bValue) -> ComparisonResult {
+    if constexpr (std::is_same_v<A, LocalVocabIndex> &&
+                  std::is_same_v<B, LocalVocabIndex>) {
+      // TODO<joka921> This is one of the places that has to be changed once
+      // we want to implement correct comparisons for the local vocab that use
+      // ICU collation.
+      return fromBool(std::invoke(comparator, *aValue, *bValue));
+    } else if constexpr (requires() {
+                           std::invoke(comparator, aValue, bValue);
+                         }) {
       return fromBool(std::invoke(comparator, aValue, bValue));
     } else {
       AD_FAIL();
