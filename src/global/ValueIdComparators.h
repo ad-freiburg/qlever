@@ -477,8 +477,11 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
       AD_FAIL();
     }
   };
-
-  return ValueId::visitTwo(visitor, a, b);
+  return a.visit([&visitor, &b](const auto& aValue) {
+    return b.visit([&visitor, aValue](const auto& bValue) -> ComparisonResult {
+      return visitor(aValue, bValue);
+    });
+  });
 }
 }  // namespace detail
 

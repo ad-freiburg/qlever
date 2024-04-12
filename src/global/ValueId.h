@@ -11,7 +11,6 @@
 #include <cstdint>
 #include <functional>
 #include <limits>
-#include <sstream>
 
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
@@ -322,19 +321,6 @@ class ValueId {
         return std::invoke(visitor, getBlankNodeIndex());
     }
     AD_FAIL();
-  }
-
-  /// Similar to `visit` (see above). Extracts the values from `a` and `b` and
-  /// calls `visitor(aValue, bValue)`. `visitor` must be callable for any
-  /// combination of two types.
-  template <typename Visitor>
-  static decltype(auto) visitTwo(Visitor&& visitor, ValueId a, ValueId b) {
-    return a.visit([&](const auto& aValue) {
-      auto innerVisitor = [&](const auto& bValue) {
-        return std::invoke(visitor, aValue, bValue);
-      };
-      return b.visit(innerVisitor);
-    });
   }
 
   /// This operator is only for debugging and testing. It returns a

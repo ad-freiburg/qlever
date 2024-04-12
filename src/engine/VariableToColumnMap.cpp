@@ -4,6 +4,8 @@
 
 #include "engine/VariableToColumnMap.h"
 
+#include "util/TransparentFunctors.h"
+
 // _____________________________________________________________________________
 std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>>
 copySortedByColumnIndex(VariableToColumnMap map) {

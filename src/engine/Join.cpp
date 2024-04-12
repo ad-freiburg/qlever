@@ -4,19 +4,21 @@
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
-#include <engine/AddCombinedRowToTable.h>
-#include <engine/CallFixedSize.h>
-#include <engine/IndexScan.h>
-#include <engine/Join.h>
-#include <global/Constants.h>
-#include <global/Id.h>
-#include <util/Exception.h>
-#include <util/HashMap.h>
+#include "engine/Join.h"
 
 #include <functional>
 #include <sstream>
 #include <type_traits>
 #include <vector>
+
+#include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
+#include "engine/IndexScan.h"
+#include "global/Constants.h"
+#include "global/Id.h"
+#include "global/RuntimeParameters.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
 
 using std::endl;
 using std::string;

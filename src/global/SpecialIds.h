@@ -8,6 +8,7 @@
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "util/HashMap.h"
+#include "util/HashSet.h"
 
 namespace qlever {
 

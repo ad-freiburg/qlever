@@ -5,7 +5,6 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <array>
 #include <optional>
 #include <string>
 #include <vector>
