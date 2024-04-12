@@ -56,18 +56,8 @@ class VectorWithMemoryLimit
 // that can only yield strings.
 using IdOrLiteralOrIri =
     std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
-inline void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
-  std::visit(
-      [&os]<typename T>(const T& s) {
-        auto& stream = *os;
-        if constexpr (std::same_as<T, ValueId>) {
-          stream << s;
-        } else {
-          stream << s.toStringRepresentation();
-        }
-      },
-      var);
-}
+// Printing for GTest.
+void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
