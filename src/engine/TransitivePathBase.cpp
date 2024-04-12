@@ -281,8 +281,8 @@ size_t TransitivePathBase::getCostEstimate() {
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    const TransitivePathSide leftSide, const TransitivePathSide rightSide,
-    size_t minDist, size_t maxDist) {
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist) {
   bool useBinSearch =
       RuntimeParameters().get<"use-binsearch-transitive-path">();
   return makeTransitivePath(qec, std::move(child), std::move(leftSide),
@@ -293,8 +293,8 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
 // _____________________________________________________________________________
 std::shared_ptr<TransitivePathBase> TransitivePathBase::makeTransitivePath(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    const TransitivePathSide leftSide, const TransitivePathSide rightSide,
-    size_t minDist, size_t maxDist, bool useBinSearch) {
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist, bool useBinSearch) {
   if (useBinSearch) {
     return std::make_shared<TransitivePathBinSearch>(
         qec, std::move(child), std::move(leftSide), std::move(rightSide),

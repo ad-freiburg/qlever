@@ -14,8 +14,8 @@
 // _____________________________________________________________________________
 TransitivePathHashMap::TransitivePathHashMap(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
-    const TransitivePathSide leftSide, const TransitivePathSide rightSide,
-    size_t minDist, size_t maxDist)
+    TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
+    size_t maxDist)
     : TransitivePathImpl<Map>(qec, std::move(child), std::move(leftSide),
                               std::move(rightSide), minDist, maxDist) {}
 
