@@ -4,6 +4,7 @@
 
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 
 #include "./util/AllocatorTestHelpers.h"
@@ -45,15 +46,48 @@ void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
 
 class TransitivePathTest : public testing::TestWithParam<bool> {
  public:
-  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePath(
-      IdTable input, Vars vars, TransitivePathSide& left,
-      TransitivePathSide& right, size_t minDist, size_t maxDist) {
+  [[nodiscard]] static std::pair<std::shared_ptr<TransitivePathBase>,
+                                 QueryExecutionContext*>
+  makePath(IdTable input, Vars vars, TransitivePathSide left,
+           TransitivePathSide right, size_t minDist, size_t maxDist) {
     bool useBinSearch = GetParam();
     auto qec = getQec();
     auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
         qec, std::move(input), vars);
-    return TransitivePathBase::makeTransitivePath(
-        qec, subtree, left, right, minDist, maxDist, useBinSearch);
+    return {TransitivePathBase::makeTransitivePath(
+                qec, subtree, std::move(left), std::move(right), minDist,
+                maxDist, useBinSearch),
+            qec};
+  }
+
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathUnbound(
+      IdTable input, Vars vars, TransitivePathSide left,
+      TransitivePathSide right, size_t minDist, size_t maxDist) {
+    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
+                             std::move(right), minDist, maxDist);
+    return T;
+  }
+
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathLeftBound(
+      IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
+      Vars sideVars, TransitivePathSide left, TransitivePathSide right,
+      size_t minDist, size_t maxDist) {
+    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
+                             std::move(right), minDist, maxDist);
+    auto leftOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(sideTable), sideVars);
+    return T->bindLeftSide(leftOp, sideTableCol);
+  }
+
+  [[nodiscard]] static std::shared_ptr<TransitivePathBase> makePathRightBound(
+      IdTable input, Vars vars, IdTable sideTable, size_t sideTableCol,
+      Vars sideVars, TransitivePathSide left, TransitivePathSide right,
+      size_t minDist, size_t maxDist) {
+    auto [T, qec] = makePath(std::move(input), vars, std::move(left),
+                             std::move(right), minDist, maxDist);
+    auto rightOp = ad_utility::makeExecutionTree<ValuesForTesting>(
+        qec, std::move(sideTable), sideVars);
+    return T->bindRightSide(rightOp, sideTableCol);
   }
 };
 
@@ -69,8 +103,9 @@ TEST_P(TransitivePathTest, idToId) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, std::numeric_limits<size_t>::max());
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
@@ -90,8 +125,9 @@ TEST_P(TransitivePathTest, idToVar) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, std::numeric_limits<size_t>::max());
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
@@ -111,8 +147,9 @@ TEST_P(TransitivePathTest, varToId) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, std::numeric_limits<size_t>::max());
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
@@ -135,8 +172,9 @@ TEST_P(TransitivePathTest, varTovar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, std::numeric_limits<size_t>::max());
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
@@ -175,8 +213,135 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, std::numeric_limits<size_t>::max());
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  assertSameUnorderedContent(expected, resultTable.idTable());
+}
+
+TEST_P(TransitivePathTest, idToLeftBound) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(1)});
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(1), V(3)});
+  sub.push_back({V(2), V(3)});
+  sub.push_back({V(3), V(4)});
+
+  IdTable leftOpTable(2, makeAllocator());
+  leftOpTable.push_back({V(0), V(1)});
+  leftOpTable.push_back({V(0), V(2)});
+  leftOpTable.push_back({V(0), V(3)});
+
+  IdTable expected(3, makeAllocator());
+  expected.push_back({V(1), V(4), V(0)});
+  expected.push_back({V(2), V(4), V(0)});
+  expected.push_back({V(3), V(4), V(0)});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, V(4), 1);
+  auto T = makePathLeftBound(
+      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+      std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
+      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  assertSameUnorderedContent(expected, resultTable.idTable());
+}
+
+TEST_P(TransitivePathTest, idToRightBound) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(0), V(1)});
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(1), V(3)});
+  sub.push_back({V(2), V(3)});
+  sub.push_back({V(3), V(4)});
+
+  IdTable rightOpTable(2, makeAllocator());
+  rightOpTable.push_back({V(2), V(5)});
+  rightOpTable.push_back({V(3), V(5)});
+  rightOpTable.push_back({V(4), V(5)});
+
+  IdTable expected(3, makeAllocator());
+  expected.push_back({V(0), V(2), V(5)});
+  expected.push_back({V(0), V(3), V(5)});
+  expected.push_back({V(0), V(4), V(5)});
+
+  TransitivePathSide left(std::nullopt, 0, V(0), 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathRightBound(
+      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+      std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
+      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  assertSameUnorderedContent(expected, resultTable.idTable());
+}
+
+TEST_P(TransitivePathTest, leftBoundToVar) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(2), V(3)});
+  sub.push_back({V(2), V(4)});
+  sub.push_back({V(3), V(4)});
+
+  IdTable leftOpTable(2, makeAllocator());
+  leftOpTable.push_back({V(0), V(1)});
+  leftOpTable.push_back({V(0), V(2)});
+  leftOpTable.push_back({V(0), V(3)});
+
+  IdTable expected(3, makeAllocator());
+  expected.push_back({V(1), V(1), V(0)});
+  expected.push_back({V(1), V(2), V(0)});
+  expected.push_back({V(1), V(3), V(0)});
+  expected.push_back({V(1), V(4), V(0)});
+  expected.push_back({V(2), V(2), V(0)});
+  expected.push_back({V(2), V(3), V(0)});
+  expected.push_back({V(2), V(4), V(0)});
+  expected.push_back({V(3), V(3), V(0)});
+  expected.push_back({V(3), V(4), V(0)});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathLeftBound(
+      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+      std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
+      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  assertSameUnorderedContent(expected, resultTable.idTable());
+}
+
+TEST_P(TransitivePathTest, rightBoundToVar) {
+  IdTable sub(2, makeAllocator());
+  sub.push_back({V(1), V(2)});
+  sub.push_back({V(2), V(3)});
+  sub.push_back({V(2), V(4)});
+  sub.push_back({V(3), V(4)});
+
+  IdTable rightOpTable(2, makeAllocator());
+  rightOpTable.push_back({V(2), V(5)});
+  rightOpTable.push_back({V(3), V(5)});
+  rightOpTable.push_back({V(4), V(5)});
+
+  IdTable expected(3, makeAllocator());
+  expected.push_back({V(1), V(2), V(5)});
+  expected.push_back({V(1), V(3), V(5)});
+  expected.push_back({V(1), V(4), V(5)});
+  expected.push_back({V(2), V(2), V(5)});
+  expected.push_back({V(2), V(3), V(5)});
+  expected.push_back({V(2), V(4), V(5)});
+  expected.push_back({V(3), V(3), V(5)});
+  expected.push_back({V(3), V(4), V(5)});
+  expected.push_back({V(4), V(4), V(5)});
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T = makePathRightBound(
+      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+      std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
+      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
@@ -211,8 +376,9 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, 2);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
@@ -236,8 +402,9 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
 
   TransitivePathSide left(std::nullopt, 0, V(7), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, 2);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
@@ -260,8 +427,9 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(2), 1);
-  auto T = makePath(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-                    left, right, 1, 2);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
   assertSameUnorderedContent(expected, resultTable.idTable());
 }
