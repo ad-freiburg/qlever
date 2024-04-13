@@ -7,9 +7,7 @@
 #pragma once
 
 #include <iomanip>
-#include <iostream>
 #include <memory>
-#include <utility>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
@@ -19,9 +17,6 @@
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
-#include "util/Exception.h"
-#include "util/Log.h"
-#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;

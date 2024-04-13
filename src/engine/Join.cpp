@@ -47,8 +47,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // If one of the inputs is a SCAN and the other one is not, always make the
   // SCAN the right child (which also gives a deterministic order of the
   // subtrees). This simplifies several branches in the `computeResult` method.
-  if (t1->getType() == QueryExecutionTree::SCAN &&
-      t2->getType() != QueryExecutionTree::SCAN) {
+  if (std::dynamic_pointer_cast<IndexScan>(t1->getRootOperation()) &&
+      !std::dynamic_pointer_cast<IndexScan>(t2->getRootOperation())) {
     swapChildren();
   }
   _left = std::move(t1);
@@ -131,8 +131,8 @@ ResultTable Join::computeResult() {
   auto rightResIfCached = getCachedOrSmallResult(*_right, _rightJoinCol);
   checkCancellation();
 
-  if (_left->getType() == QueryExecutionTree::SCAN &&
-      _right->getType() == QueryExecutionTree::SCAN) {
+  if (std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation()) &&
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
     if (rightResIfCached && !leftResIfCached) {
       idTable = computeResultForIndexScanAndIdTable<true>(
           rightResIfCached->idTable(), _rightJoinCol,
@@ -169,8 +169,8 @@ ResultTable Join::computeResult() {
   const auto& leftIdTable = leftRes->idTable();
   auto leftHasUndef =
       !leftIdTable.empty() && leftIdTable.at(0, _leftJoinCol).isUndefined();
-  if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached &&
-      !leftHasUndef) {
+  if (std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation()) &&
+      !rightResIfCached && !leftHasUndef) {
     idTable = computeResultForIndexScanAndIdTable<false>(
         leftRes->idTable(), _leftJoinCol,
         dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);
@@ -565,8 +565,9 @@ void updateRuntimeInfoForLazyScan(
 
 // ______________________________________________________________________________________________________
 IdTable Join::computeResultForTwoIndexScans() {
-  AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
-                       _right->getType() == QueryExecutionTree::SCAN);
+  AD_CORRECTNESS_CHECK(
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation()) &&
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation()));
   // The join column already is the first column in both inputs, so we don't
   // have to permute the inputs and results for the `AddCombinedRowToIdTable`
   // class to work correctly.

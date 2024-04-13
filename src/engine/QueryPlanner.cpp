@@ -1368,7 +1368,7 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    if (plan._qet->getType() == QueryExecutionTree::SCAN &&
+    if (std::dynamic_pointer_cast<IndexScan>(plan._qet->getRootOperation()) &&
         plan._qet->getResultWidth() == 3 && !replace) {
       // Do not apply filters to dummies, except at the very end of query
       // planning.
@@ -1790,9 +1790,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   const auto& b = !swapForTesting ? bin : ain;
   std::vector<SubtreePlan> candidates;
 
-  // We often query for the type of an operation, so we shorten these checks.
-  using enum QueryExecutionTree::OperationType;
-
   // TODO<joka921> find out, what is ACTUALLY the use case for the triple
   // graph. Is it only meant for (questionable) performance reasons
   // or does it change the meaning.
@@ -1846,8 +1843,10 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // CASE: JOIN ON ONE COLUMN ONLY.
 
   // Skip if we have two operations, where all three positions are variables.
-  if (a._qet->getType() == SCAN && a._qet->getResultWidth() == 3 &&
-      b._qet->getType() == SCAN && b._qet->getResultWidth() == 3) {
+  if (std::dynamic_pointer_cast<IndexScan>(a._qet->getRootOperation()) &&
+      a._qet->getResultWidth() == 3 &&
+      std::dynamic_pointer_cast<IndexScan>(b._qet->getRootOperation()) &&
+      b._qet->getResultWidth() == 3) {
     return candidates;
   }
 
@@ -1880,9 +1879,10 @@ auto QueryPlanner::createJoinWithTransitivePath(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
-  using enum QueryExecutionTree::OperationType;
-  const bool aIsTransPath = a._qet->getType() == TRANSITIVE_PATH;
-  const bool bIsTransPath = b._qet->getType() == TRANSITIVE_PATH;
+  const bool aIsTransPath{
+      std::dynamic_pointer_cast<TransitivePath>(a._qet->getRootOperation())};
+  const bool bIsTransPath{
+      std::dynamic_pointer_cast<TransitivePath>(b._qet->getRootOperation())};
 
   if (!(aIsTransPath || bIsTransPath)) {
     return std::nullopt;
@@ -1931,11 +1931,11 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   // If the join column corresponds to the has-predicate scan's
   // subject column we can use a specialized join that avoids
   // loading the full has-predicate predicate.
-  using enum QueryExecutionTree::OperationType;
   auto isSuitablePredicateScan = [](const auto& tree, size_t joinColumn) {
-    return tree._qet->getType() == HAS_PREDICATE_SCAN && joinColumn == 0 &&
-           static_cast<HasPredicateScan*>(tree._qet->getRootOperation().get())
-                   ->getType() == HasPredicateScan::ScanType::FULL_SCAN;
+    auto rootOperation = std::dynamic_pointer_cast<HasPredicateScan>(
+        tree._qet->getRootOperation());
+    return rootOperation && joinColumn == 0 &&
+           rootOperation->getType() == HasPredicateScan::ScanType::FULL_SCAN;
   };
 
   const bool aIsSuitablePredicateScan = isSuitablePredicateScan(a, jcs[0][0]);

@@ -4,6 +4,7 @@
 
 #include "engine/Operation.h"
 
+#include "engine/IndexScan.h"
 #include "engine/QueryExecutionTree.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/TransparentFunctors.h"
@@ -100,7 +101,10 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     auto lock =
         getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
+      // TODO ideally Operation should not need to know about its subtypes
+      // so, it would be a good idea to move this into a virtual method
+      // that is no-op for all types except IndexScan.
+      if (std::dynamic_pointer_cast<IndexScan>(child->getRootOperation()) &&
           child->getResultWidth() == 1) {
         (*lock)[child->getRootOperation()->getCacheKey()] =
             child->getSizeEstimate();
