@@ -33,7 +33,6 @@
 #include "engine/TransitivePath.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
 #include "parser/RdfEscaping.h"
 
 using std::string;
