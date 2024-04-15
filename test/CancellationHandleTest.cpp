@@ -153,7 +153,7 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
-#ifdef __APPLE__
+#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   CancellationHandle<ENABLED> handle;
@@ -172,7 +172,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
-#ifdef __APPLE__
+#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   CancellationHandle<ENABLED> handle;
