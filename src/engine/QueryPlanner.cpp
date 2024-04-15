@@ -227,8 +227,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // Can either be passed a BasicGraphPattern directly or a set
   // of possible candidate plans for a single child pattern
   auto joinCandidates = [this, &candidatePlans, &candidateTriples,
-                         &optimizeCommutativ, &boundVariables,
-                         &rootPattern](auto&& v) {
+                         &optimizeCommutativ, &boundVariables, &rootPattern](
+                            auto&& v,
+                            const auto& graphPatternOperationVisitor) -> void {
     if constexpr (std::is_same_v<p::BasicGraphPattern,
                                  std::decay_t<decltype(v)>>) {
       // we only consist of triples, store them and all the bound variables.
@@ -243,10 +244,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           boundVariables.insert(t.o_.getVariable());
         }
       }
-      candidateTriples._triples.insert(
-          candidateTriples._triples.end(),
-          std::make_move_iterator(v._triples.begin()),
-          std::make_move_iterator(v._triples.end()));
+
+      for (const auto& triple : v._triples) {
+        if (triple.p_._operation == PropertyPath::Operation::IRI) {
+          candidateTriples._triples.push_back(triple);
+        } else {
+          auto children = seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
+          for (auto& child : children->_graphPatterns) {
+            std::visit(
+                [&graphPatternOperationVisitor](auto&& arg) {
+                  graphPatternOperationVisitor(std::move(arg),
+                                               graphPatternOperationVisitor);
+                },
+                std::move(child));
+          }
+        }
+      }
     } else if constexpr (std::is_same_v<p::Bind, std::decay_t<decltype(v)>>) {
       if (boundVariables.contains(v._target)) {
         AD_THROW(
@@ -354,116 +367,121 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
 
   // go through the child patterns in order, set up all their candidatePlans
   // and then call the joinCandidates call back
-  for (auto& child : rootPattern->_graphPatterns) {
-    child.visit([&optimizeSingle, &joinCandidates, this](auto&& arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, p::Optional> ||
-                    std::is_same_v<T, p::GroupGraphPattern>) {
-        auto candidates = optimize(&arg._child);
-        if constexpr (std::is_same_v<T, p::Optional>) {
-          for (auto& c : candidates) {
-            c.type = SubtreePlan::OPTIONAL;
-          }
-        }
-        joinCandidates(std::move(candidates));
-      } else if constexpr (std::is_same_v<T, p::Union>) {
-        // TODO<joka921> here we could keep all the candidates, and create a
-        // "sorted union" by merging as additional candidates if the inputs
-        // are presorted.
-        SubtreePlan left = optimizeSingle(&arg._child1);
-        SubtreePlan right = optimizeSingle(&arg._child2);
 
-        // create a new subtree plan
-        SubtreePlan candidate =
-            makeSubtreePlan<Union>(_qec, left._qet, right._qet);
-        joinCandidates(std::vector{std::move(candidate)});
-      } else if constexpr (std::is_same_v<T, p::Subquery>) {
-        ParsedQuery& subquery = arg.get();
-        // TODO<joka921> We currently do not optimize across subquery borders
-        // but abuse them as "optimization hints". In theory, one could even
-        // remove the ORDER BY clauses of a subquery if we can prove that
-        // the results will be reordered anyway.
-
-        // For a subquery, make sure that one optimal result for each ordering
-        // of the result (by a single column) is contained.
-        auto candidatesForSubquery = createExecutionTrees(subquery);
-        // Make sure that variables that are not selected by the subquery are
-        // not visible.
-        auto setSelectedVariables = [&](SubtreePlan& plan) {
-          plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
-              arg.get().selectClause().getSelectedVariables());
-        };
-        std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
-        // A subquery must also respect LIMIT and OFFSET clauses
-        std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
-          plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
-        });
-        joinCandidates(std::move(candidatesForSubquery));
-      } else if constexpr (std::is_same_v<T, p::TransPath>) {
-        // TODO<kramerfl> This is obviously how you set up transitive paths.
-        // maybe factor this out and comment it somewhere
-        auto candidatesIn = optimize(&arg._childGraphPattern);
-        std::vector<SubtreePlan> candidatesOut;
-
-        for (auto& sub : candidatesIn) {
-          TransitivePathSide left;
-          TransitivePathSide right;
-          // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
-          // have to specify a `Variable` that isn't used at all in the case of
-          // a fixed subject or object.
-          auto getSideValue = [this](const TripleComponent& side) {
-            std::variant<Id, Variable> value;
-            if (isVariable(side)) {
-              value = Variable{side.getVariable()};
-            } else {
-              value = generateUniqueVarName();
-              if (auto opt = side.toValueId(_qec->getIndex().getVocab());
-                  opt.has_value()) {
-                value = opt.value();
-              } else {
-                AD_THROW("No vocabulary entry for " + side.toString());
-              }
-            }
-            return value;
-          };
-
-          left.subCol_ =
-              sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-          left.value_ = getSideValue(arg._left);
-          right.subCol_ =
-              sub._qet->getVariableColumn(arg._innerRight.getVariable());
-          right.value_ = getSideValue(arg._right);
-          size_t min = arg._min;
-          size_t max = arg._max;
-          auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,
-                                                      right, min, max);
-          candidatesOut.push_back(std::move(plan));
-        }
-        joinCandidates(std::move(candidatesOut));
-
-      } else if constexpr (std::is_same_v<T, p::Values>) {
-        SubtreePlan valuesPlan =
-            makeSubtreePlan<Values>(_qec, arg._inlineValues);
-        joinCandidates(std::vector{std::move(valuesPlan)});
-      } else if constexpr (std::is_same_v<T, p::Service>) {
-        SubtreePlan servicePlan = makeSubtreePlan<Service>(_qec, arg);
-        joinCandidates(std::vector{std::move(servicePlan)});
-      } else if constexpr (std::is_same_v<T, p::Bind>) {
-        // The logic of the BIND operation is implemented in the joinCandidates
-        // lambda. Reason: BIND does not add a new join operation like for the
-        // other operations above.
-        joinCandidates(arg);
-      } else if constexpr (std::is_same_v<T, p::Minus>) {
-        auto candidates = optimize(&arg._child);
+  auto graphPatternOperationVisitor = [&optimizeSingle, &joinCandidates, this](
+                                          auto&& arg, const auto& self) {
+    using T = std::decay_t<decltype(arg)>;
+    if constexpr (std::is_same_v<T, p::Optional> ||
+                  std::is_same_v<T, p::GroupGraphPattern>) {
+      auto candidates = optimize(&arg._child);
+      if constexpr (std::is_same_v<T, p::Optional>) {
         for (auto& c : candidates) {
-          c.type = SubtreePlan::MINUS;
+          c.type = SubtreePlan::OPTIONAL;
         }
-        joinCandidates(std::move(candidates));
-      } else {
-        static_assert(std::is_same_v<T, p::BasicGraphPattern>);
-        // just add all the triples directly.
-        joinCandidates(arg);
       }
+      joinCandidates(std::move(candidates), self);
+    } else if constexpr (std::is_same_v<T, p::Union>) {
+      // TODO<joka921> here we could keep all the candidates, and create a
+      // "sorted union" by merging as additional candidates if the inputs
+      // are presorted.
+      SubtreePlan left = optimizeSingle(&arg._child1);
+      SubtreePlan right = optimizeSingle(&arg._child2);
+
+      // create a new subtree plan
+      SubtreePlan candidate =
+          makeSubtreePlan<Union>(_qec, left._qet, right._qet);
+      joinCandidates(std::vector{std::move(candidate)}, self);
+    } else if constexpr (std::is_same_v<T, p::Subquery>) {
+      ParsedQuery& subquery = arg.get();
+      // TODO<joka921> We currently do not optimize across subquery borders
+      // but abuse them as "optimization hints". In theory, one could even
+      // remove the ORDER BY clauses of a subquery if we can prove that
+      // the results will be reordered anyway.
+
+      // For a subquery, make sure that one optimal result for each ordering
+      // of the result (by a single column) is contained.
+      auto candidatesForSubquery = createExecutionTrees(subquery);
+      // Make sure that variables that are not selected by the subquery are
+      // not visible.
+      auto setSelectedVariables = [&](SubtreePlan& plan) {
+        plan._qet->getRootOperation()->setSelectedVariablesForSubquery(
+            arg.get().selectClause().getSelectedVariables());
+      };
+      std::ranges::for_each(candidatesForSubquery, setSelectedVariables);
+      // A subquery must also respect LIMIT and OFFSET clauses
+      std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
+        plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
+      });
+      joinCandidates(std::move(candidatesForSubquery), self);
+    } else if constexpr (std::is_same_v<T, p::TransPath>) {
+      // TODO<kramerfl> This is obviously how you set up transitive paths.
+      // maybe factor this out and comment it somewhere
+      auto candidatesIn = optimize(&arg._childGraphPattern);
+      std::vector<SubtreePlan> candidatesOut;
+
+      for (auto& sub : candidatesIn) {
+        TransitivePathSide left;
+        TransitivePathSide right;
+        // TODO<joka921> Refactor the `TransitivePath` class s.t. we don't
+        // have to specify a `Variable` that isn't used at all in the case of
+        // a fixed subject or object.
+        auto getSideValue = [this](const TripleComponent& side) {
+          std::variant<Id, Variable> value;
+          if (isVariable(side)) {
+            value = Variable{side.getVariable()};
+          } else {
+            value = generateUniqueVarName();
+            if (auto opt = side.toValueId(_qec->getIndex().getVocab());
+                opt.has_value()) {
+              value = opt.value();
+            } else {
+              AD_THROW("No vocabulary entry for " + side.toString());
+            }
+          }
+          return value;
+        };
+
+        left.subCol_ =
+            sub._qet->getVariableColumn(arg._innerLeft.getVariable());
+        left.value_ = getSideValue(arg._left);
+        right.subCol_ =
+            sub._qet->getVariableColumn(arg._innerRight.getVariable());
+        right.value_ = getSideValue(arg._right);
+        size_t min = arg._min;
+        size_t max = arg._max;
+        auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left, right,
+                                                    min, max);
+        candidatesOut.push_back(std::move(plan));
+      }
+      joinCandidates(std::move(candidatesOut), self);
+
+    } else if constexpr (std::is_same_v<T, p::Values>) {
+      SubtreePlan valuesPlan = makeSubtreePlan<Values>(_qec, arg._inlineValues);
+      joinCandidates(std::vector{std::move(valuesPlan)}, self);
+    } else if constexpr (std::is_same_v<T, p::Service>) {
+      SubtreePlan servicePlan = makeSubtreePlan<Service>(_qec, arg);
+      joinCandidates(std::vector{std::move(servicePlan)}, self);
+    } else if constexpr (std::is_same_v<T, p::Bind>) {
+      // The logic of the BIND operation is implemented in the joinCandidates
+      // lambda. Reason: BIND does not add a new join operation like for the
+      // other operations above.
+      joinCandidates(arg, self);
+    } else if constexpr (std::is_same_v<T, p::Minus>) {
+      auto candidates = optimize(&arg._child);
+      for (auto& c : candidates) {
+        c.type = SubtreePlan::MINUS;
+      }
+      joinCandidates(std::move(candidates), self);
+    } else {
+      static_assert(std::is_same_v<T, p::BasicGraphPattern>);
+      // just add all the triples directly.
+      joinCandidates(arg, self);
+    }
+  };
+  for (auto& child : rootPattern->_graphPatterns) {
+    child.visit([&graphPatternOperationVisitor](auto&& arg) {
+      return graphPatternOperationVisitor(AD_FWD(arg),
+                                          graphPatternOperationVisitor);
     });
     checkCancellation();
   }
@@ -950,15 +968,9 @@ auto QueryPlanner::seedWithScansAndText(
                node.triple_.asString());
     }
 
-    // If the predicate is a property path, we have to recursively set up the
-    // index scans.
-    if (node.triple_.p_._operation != PropertyPath::Operation::IRI) {
-      for (SubtreePlan& plan : seedFromPropertyPathTriple(node.triple_)) {
-        pushPlan(std::move(plan));
-      }
-      continue;
-    }
-
+    // Property paths must have been handled previously.
+    AD_CORRECTNESS_CHECK(node.triple_.p_._operation ==
+                         PropertyPath::Operation::IRI);
     // At this point, we know that the predicate is a simple IRI or a variable.
 
     if (_qec && !_qec->getIndex().hasAllPermutations() &&
@@ -997,14 +1009,6 @@ auto QueryPlanner::seedWithScansAndText(
 }
 
 // _____________________________________________________________________________
-vector<QueryPlanner::SubtreePlan> QueryPlanner::seedFromPropertyPathTriple(
-    const SparqlTriple& triple) {
-  std::shared_ptr<ParsedQuery::GraphPattern> pattern =
-      seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
-  pattern->recomputeIds();
-  return optimize(pattern.get());
-}
-
 std::shared_ptr<ParsedQuery::GraphPattern> QueryPlanner::seedFromPropertyPath(
     const TripleComponent& left, const PropertyPath& path,
     const TripleComponent& right) {

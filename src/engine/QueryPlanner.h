@@ -268,14 +268,6 @@ class QueryPlanner {
       const vector<vector<QueryPlanner::SubtreePlan>>& children);
 
   /**
-   * @brief Returns a subtree plan that will compute the values for the
-   * variables in this single triple. Depending on the triple's PropertyPath
-   * this subtree can be arbitrarily large.
-   */
-  [[nodiscard]] vector<SubtreePlan> seedFromPropertyPathTriple(
-      const SparqlTriple& triple);
-
-  /**
    * @brief Returns a parsed query for the property path.
    */
   [[nodiscard]] std::shared_ptr<ParsedQuery::GraphPattern> seedFromPropertyPath(
@@ -333,14 +325,6 @@ class QueryPlanner {
   // Else returns `std::nullopt`.
   [[nodiscard]] static std::optional<SubtreePlan>
   createJoinWithHasPredicateScan(
-      SubtreePlan a, SubtreePlan b,
-      const std::vector<std::array<ColumnIndex, 2>>& jcs);
-
-  // Used internally by `createJoinCandidates`. If  `a` or `b` is a
-  // `TextOperationWithoutFilter` create a `TextOperationWithFilter` that takes
-  // the result of the other input as the filter input. Else return
-  // `std::nullopt`.
-  [[nodiscard]] static std::optional<SubtreePlan> createJoinAsTextFilter(
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
