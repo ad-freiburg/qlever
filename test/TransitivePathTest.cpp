@@ -2,6 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <limits>
@@ -21,27 +22,6 @@ using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
-
-// First sort both of the inputs and then ASSERT their equality. Needed for
-// results of the TransitivePath operations which have a non-deterministic
-// order because of the hash maps which are used internally.
-void assertSameUnorderedContent(const IdTable& a, const IdTable& b) {
-  auto aCpy = a.clone();
-  auto bCpy = b.clone();
-  ASSERT_EQ(a.numColumns(), b.numColumns());
-  auto sorter = [](const auto& rowFromA, const auto& rowFromB) {
-    for (size_t i = 0; i < rowFromA.numColumns(); ++i) {
-      if (rowFromA[i] != rowFromB[i]) {
-        return rowFromA[i] < rowFromB[i];
-      }
-    }
-    // equal means "not smaller"
-    return false;
-  };
-  std::sort(aCpy.begin(), aCpy.end(), sorter);
-  std::sort(bCpy.begin(), bCpy.end(), sorter);
-  ASSERT_EQ(aCpy, bCpy);
-}
 }  // namespace
 
 class TransitivePathTest : public testing::TestWithParam<bool> {
@@ -108,7 +88,8 @@ TEST_P(TransitivePathTest, idToId) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, idToVar) {
@@ -130,7 +111,8 @@ TEST_P(TransitivePathTest, idToVar) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, varToId) {
@@ -152,7 +134,8 @@ TEST_P(TransitivePathTest, varToId) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, varTovar) {
@@ -177,7 +160,8 @@ TEST_P(TransitivePathTest, varTovar) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, unlimitedMaxLength) {
@@ -218,7 +202,8 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
                       left, right, 1, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, idToLeftBound) {
@@ -247,7 +232,8 @@ TEST_P(TransitivePathTest, idToLeftBound) {
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, idToRightBound) {
@@ -276,7 +262,8 @@ TEST_P(TransitivePathTest, idToRightBound) {
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, leftBoundToVar) {
@@ -310,7 +297,8 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, rightBoundToVar) {
@@ -344,7 +332,8 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
       std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
 
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
@@ -380,7 +369,8 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, maxLength2FromId) {
@@ -406,7 +396,8 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 TEST_P(TransitivePathTest, maxLength2ToId) {
@@ -431,7 +422,8 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
       makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
                       left, right, 1, 2);
   auto resultTable = T->computeResultOnlyForTesting();
-  assertSameUnorderedContent(expected, resultTable.idTable());
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
 }
 
 INSTANTIATE_TEST_SUITE_P(TransitivePathTestSuite, TransitivePathTest,
