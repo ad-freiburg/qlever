@@ -184,6 +184,65 @@ class TransitivePathImpl : public TransitivePathBase {
   };
 
   /**
+   * @brief Compute the transitive hull starting at the given nodes,
+   * using the given Map.
+   *
+   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
+   * Ids.
+   * @param nodes A list of Ids. These Ids are used as starting points for the
+   * transitive hull. Thus, this parameter guides the performance of this
+   * algorithm.
+   * @param target Optional target Id. If supplied, only paths which end
+   * in this Id are added to the hull.
+   * @return Map Maps each Id to its connected Ids in the transitive hull
+   */
+  Map transitiveHull(const T& edges, const std::vector<Id>& startNodes,
+                     std::optional<Id> target) const {
+    // For every node do a dfs on the graph
+    Map hull{allocator()};
+
+    std::vector<std::pair<Id, size_t>> stack;
+    ad_utility::HashSetWithMemoryLimit<Id> marks{
+        getExecutionContext()->getAllocator()};
+    for (auto startNode : startNodes) {
+      if (hull.contains(startNode)) {
+        // We have already computed the hull for this node
+        continue;
+      }
+
+      marks.clear();
+      stack.clear();
+      stack.push_back({startNode, 0});
+
+      if (minDist_ == 0 &&
+          (!target.has_value() || startNode == target.value())) {
+        insertIntoMap(hull, startNode, startNode);
+      }
+
+      while (stack.size() > 0) {
+        checkCancellation();
+        auto [node, steps] = stack.back();
+        stack.pop_back();
+
+        if (steps <= maxDist_ && marks.count(node) == 0) {
+          if (steps >= minDist_) {
+            marks.insert(node);
+            if (!target.has_value() || node == target.value()) {
+              insertIntoMap(hull, startNode, node);
+            }
+          }
+
+          auto successors = edges.successors(node);
+          for (auto successor : successors) {
+            stack.push_back({successor, steps + 1});
+          }
+        }
+      }
+    }
+    return hull;
+  }
+
+  /**
    * @brief Prepare a Map and a nodes vector for the transitive hull
    * computation.
    *
@@ -247,22 +306,6 @@ class TransitivePathImpl : public TransitivePathBase {
 
     return {std::move(edges), std::move(nodes)};
   };
-
-  /**
-   * @brief Compute the transitive hull starting at the given nodes,
-   * using the given Map.
-   *
-   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param nodes A list of Ids. These Ids are used as starting points for the
-   * transitive hull. Thus, this parameter guides the performance of this
-   * algorithm.
-   * @param target Optional target Id. If supplied, only paths which end
-   * in this Id are added to the hull.
-   * @return Map Maps each Id to its connected Ids in the transitive hull
-   */
-  virtual Map transitiveHull(const T& edges, const std::vector<Id>& startNodes,
-                             std::optional<Id> target) const = 0;
 
   virtual T setupEdgesMap(const IdTable& dynSub,
                           const TransitivePathSide& startSide,

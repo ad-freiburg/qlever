@@ -35,23 +35,6 @@ class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
 
  private:
   /**
-   * @brief Compute the transitive hull starting at the given nodes,
-   * using the given Map.
-   *
-   * @param edges Adjacency lists, mapping Ids (nodes) to their connected
-   * Ids.
-   * @param nodes A list of Ids. These Ids are used as starting points for the
-   * transitive hull. Thus, this parameter guides the performance of this
-   * algorithm.
-   * @param target Optional target Id. If supplied, only paths which end
-   * in this Id are added to the hull.
-   * @return Map Maps each Id to its connected Ids in the transitive hull
-   */
-  Map transitiveHull(const HashMapWrapper& edges,
-                     const std::vector<Id>& startNodes,
-                     std::optional<Id> target) const override;
-
-  /**
    * @brief Prepare a Map and a nodes vector for the transitive hull
    * computation.
    *
