@@ -232,7 +232,7 @@ class TransitivePathImpl : public TransitivePathBase {
             }
           }
 
-          auto successors = edges.successors(node);
+          const auto& successors = edges.successors(node);
           for (auto successor : successors) {
             stack.push_back({successor, steps + 1});
           }
