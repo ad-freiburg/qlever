@@ -16,80 +16,50 @@ TransitivePathHashMap::TransitivePathHashMap(
     QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> child,
     TransitivePathSide leftSide, TransitivePathSide rightSide, size_t minDist,
     size_t maxDist)
-    : TransitivePathImpl<Map>(qec, std::move(child), std::move(leftSide),
-                              std::move(rightSide), minDist, maxDist) {}
+    : TransitivePathImpl<HashMapWrapper>(
+          qec, std::move(child), std::move(leftSide), std::move(rightSide),
+          minDist, maxDist) {}
 
 // _____________________________________________________________________________
-Map TransitivePathHashMap::transitiveHull(const Map& edges,
+Map TransitivePathHashMap::transitiveHull(const HashMapWrapper& edges,
                                           const std::vector<Id>& startNodes,
                                           std::optional<Id> target) const {
-  using MapIt = Map::const_iterator;
   // For every node do a dfs on the graph
   Map hull{allocator()};
 
-  // Stores nodes we already have a path to. This avoids cycles.
+  std::vector<std::pair<Id, size_t>> stack;
   ad_utility::HashSetWithMemoryLimit<Id> marks{
       getExecutionContext()->getAllocator()};
-
-  // The stack used to store the dfs' progress
-  std::vector<Set::const_iterator> positions;
-
-  // Used to store all edges leading away from a node for every level.
-  // Reduces access to the hashmap, and is safe as the map will not
-  // be modified after this point.
-  std::vector<const Set*> edgeCache;
-
-  for (Id currentStartNode : startNodes) {
-    if (hull.contains(currentStartNode)) {
+  for (auto startNode : startNodes) {
+    if (hull.contains(startNode)) {
       // We have already computed the hull for this node
       continue;
     }
 
-    // Reset for this iteration
     marks.clear();
+    stack.clear();
+    stack.push_back({startNode, 0});
 
-    MapIt rootEdges = edges.find(currentStartNode);
-    if (rootEdges != edges.end()) {
-      positions.push_back(rootEdges->second.begin());
-      edgeCache.push_back(&rootEdges->second);
-    }
-    if (minDist_ == 0 &&
-        (!target.has_value() || currentStartNode == target.value())) {
-      insertIntoMap(hull, currentStartNode, currentStartNode);
+    if (minDist_ == 0 && (!target.has_value() || startNode == target.value())) {
+      insertIntoMap(hull, startNode, startNode);
     }
 
-    // While we have not found the entire transitive hull and have not reached
-    // the max step limit
-    while (!positions.empty()) {
+    while (stack.size() > 0) {
       checkCancellation();
-      size_t stackIndex = positions.size() - 1;
-      // Process the next child of the node at the top of the stack
-      Set::const_iterator& pos = positions[stackIndex];
-      const Set* nodeEdges = edgeCache.back();
+      auto [node, steps] = stack.back();
+      stack.pop_back();
 
-      if (pos == nodeEdges->end()) {
-        // We finished processing this node
-        positions.pop_back();
-        edgeCache.pop_back();
-        continue;
-      }
-
-      Id child = *pos;
-      ++pos;
-      size_t childDepth = positions.size();
-      if (childDepth <= maxDist_ && marks.count(child) == 0) {
-        // process the child
-        if (childDepth >= minDist_) {
-          marks.insert(child);
-          if (!target.has_value() || child == target.value()) {
-            insertIntoMap(hull, currentStartNode, child);
+      if (steps <= maxDist_ && marks.count(node) == 0) {
+        if (steps >= minDist_) {
+          marks.insert(node);
+          if (!target.has_value() || node == target.value()) {
+            insertIntoMap(hull, startNode, node);
           }
         }
-        // Add the child to the stack
-        MapIt it = edges.find(child);
-        if (it != edges.end()) {
-          positions.push_back(it->second.begin());
-          edgeCache.push_back(&it->second);
+
+        auto successors = edges.successors(node);
+        for (auto successor : successors) {
+          stack.push_back({successor, steps + 1});
         }
       }
     }
@@ -98,7 +68,7 @@ Map TransitivePathHashMap::transitiveHull(const Map& edges,
 }
 
 // _____________________________________________________________________________
-Map TransitivePathHashMap::setupEdgesMap(
+HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   return CALL_FIXED_SIZE((std::array{dynSub.numColumns()}),
@@ -108,7 +78,7 @@ Map TransitivePathHashMap::setupEdgesMap(
 
 // _____________________________________________________________________________
 template <size_t SUB_WIDTH>
-Map TransitivePathHashMap::setupEdgesMap(
+HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
   const IdTableView<SUB_WIDTH> sub = dynSub.asStaticView<SUB_WIDTH>();
@@ -120,5 +90,6 @@ Map TransitivePathHashMap::setupEdgesMap(
     checkCancellation();
     insertIntoMap(edges, startCol[i], targetCol[i]);
   }
-  return edges;
+  auto wrapper = HashMapWrapper(edges);
+  return wrapper;
 }

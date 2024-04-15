@@ -12,7 +12,20 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
-class TransitivePathHashMap : public TransitivePathImpl<Map> {
+struct HashMapWrapper {
+  Map map_;
+
+  auto successors(const Id node) const {
+    auto iterator = map_.find(node);
+    if (iterator == map_.end()) {
+      return std::vector<Id>();
+    }
+    std::vector<Id> result(iterator->second.begin(), iterator->second.end());
+    return result;
+  }
+};
+
+class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
   TransitivePathHashMap(QueryExecutionContext* qec,
                         std::shared_ptr<QueryExecutionTree> child,
@@ -34,7 +47,8 @@ class TransitivePathHashMap : public TransitivePathImpl<Map> {
    * in this Id are added to the hull.
    * @return Map Maps each Id to its connected Ids in the transitive hull
    */
-  Map transitiveHull(const Map& edges, const std::vector<Id>& startNodes,
+  Map transitiveHull(const HashMapWrapper& edges,
+                     const std::vector<Id>& startNodes,
                      std::optional<Id> target) const override;
 
   /**
@@ -73,10 +87,12 @@ class TransitivePathHashMap : public TransitivePathImpl<Map> {
       const TransitivePathSide& targetSide) const;
 
   // initialize the map from the subresult
-  Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
-                    const TransitivePathSide& targetSide) const override;
+  HashMapWrapper setupEdgesMap(
+      const IdTable& dynSub, const TransitivePathSide& startSide,
+      const TransitivePathSide& targetSide) const override;
 
   template <size_t SUB_WIDTH>
-  Map setupEdgesMap(const IdTable& dynSub, const TransitivePathSide& startSide,
-                    const TransitivePathSide& targetSide) const;
+  HashMapWrapper setupEdgesMap(const IdTable& dynSub,
+                               const TransitivePathSide& startSide,
+                               const TransitivePathSide& targetSide) const;
 };
