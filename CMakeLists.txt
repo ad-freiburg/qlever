@@ -256,7 +256,7 @@ endif ()
 
 OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
 if (_NO_TIMING_TESTS)
-    add_definitions("_D_QLEVER_NO_TIMING_TESTS")
+    add_definitions("-D_QLEVER_NO_TIMING_TESTS")
 endif ()
 
 if (USE_TREE_BASED_CACHE)
