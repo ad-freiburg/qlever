@@ -15,10 +15,14 @@ namespace parsedQuery {
 // Forward declarations.
 struct GraphPatternOperation;
 
+// Struct that store meta information about a text limit operation.
+// It is used to store the variables that are used in the operation and the IDs
+// of the operations that must be completed before applying the text limit
+// operation.
 struct TextLimitMetaObject {
-  vector<Variable> _entityVars;
-  vector<Variable> _scoreVars;
-  uint64_t _idsOfMustBeFinishedOperations;
+  vector<Variable> entityVars_;
+  vector<Variable> scoreVars_;
+  uint64_t idsOfMustBeFinishedOperations_;
 };
 
 // Groups triplets and filters. Represents a node in a tree (as graph patterns
@@ -54,6 +58,8 @@ class GraphPattern {
   // become children.
   std::vector<SparqlFilter> _filters;
   std::vector<GraphPatternOperation> _graphPatterns;
-  ad_utility::HashMap<Variable, TextLimitMetaObject> _textLimits;
+
+  // Hashmap that stores for each text variable the corresponding TextLimitMetaObject
+  ad_utility::HashMap<Variable, TextLimitMetaObject> textLimits_;
 };
 }  // namespace parsedQuery

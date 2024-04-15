@@ -19,6 +19,8 @@
 using std::vector;
 
 class QueryPlanner {
+  using TextLimitMap =
+      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
  public:
@@ -138,7 +140,7 @@ class QueryPlanner {
     bool _isCached = false;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
-    uint64_t _idsOfIncludedTextLimits = 0;
+    uint64_t idsOfIncludedTextLimits_ = 0;
     Type type = Type::BASIC;
 
     size_t getCostEstimate() const;
@@ -228,7 +230,7 @@ class QueryPlanner {
 
   CancellationHandle cancellationHandle_;
 
-  std::optional<size_t> _textLimit = std::nullopt;
+  std::optional<size_t> textLimit_ = std::nullopt;
 
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
       ParsedQuery::GraphPattern* rootPattern);
@@ -270,8 +272,7 @@ class QueryPlanner {
   [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
-      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits);
+      TextLimitMap& textLimits);
 
   /**
    * @brief Returns a subtree plan that will compute the values for the
@@ -384,10 +385,12 @@ class QueryPlanner {
       std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,
       bool replaceInsteadOfAddPlans) const;
 
+  // Apply text limits if possible.
+  // A text limit can be applied to a plan if:
+  // 1) There is no text operation for the text record column left.
+  // 2) The text limit has not already been applied to the plan.
   [[nodiscard]] void applyTextLimitsIfPossible(
-      std::vector<SubtreePlan>& row,
-      const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits,
+      std::vector<SubtreePlan>& row, const TextLimitMap& textLimits,
       bool replaceInsteadOfAddPlans) const;
 
   /**
@@ -449,9 +452,7 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits,
-      const vector<vector<SubtreePlan>>& children);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -459,15 +460,13 @@ class QueryPlanner {
   std::vector<QueryPlanner::SubtreePlan>
   runDynamicProgrammingOnConnectedComponent(
       std::vector<SubtreePlan> connectedComponent,
-      const vector<SparqlFilter>& filters,
-      const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits,
+      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
       const TripleGraph& tg) const;
 
-  [[nodiscard]] SubtreePlan getTextLeafPlan(
-      const TripleGraph::Node& node,
-      ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
-          textLimits) const;
+  // Creates a SubtreePlan for the given text leaf node in the triple graph.
+  // While doing this the TextLimitMetaObjects are created and updated according to the text leaf node. 
+  [[nodiscard]] SubtreePlan getTextLeafPlan(const TripleGraph::Node& node,
+                                            TextLimitMap& textLimits) const;
   /**
    * @brief return the index of the cheapest execution tree in the argument.
    *

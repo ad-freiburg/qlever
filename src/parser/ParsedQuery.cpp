@@ -66,7 +66,7 @@ string ParsedQuery::asString() const {
 
   os << "\nLIMIT: " << (_limitOffset.limitOrDefault());
   os << "\nTEXTLIMIT: "
-     << (_limitOffset._textLimit.value_or(
+     << (_limitOffset.textLimit_.value_or(
             std::numeric_limits<uint64_t>::max()));
   os << "\nOFFSET: " << (_limitOffset._offset);
   if (usesSelect) {

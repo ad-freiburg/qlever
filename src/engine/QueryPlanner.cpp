@@ -63,8 +63,8 @@ void mergeSubtreePlanIds(QueryPlanner::SubtreePlan& target,
   target._idsOfIncludedNodes = a._idsOfIncludedNodes | b._idsOfIncludedNodes;
   target._idsOfIncludedFilters =
       a._idsOfIncludedFilters | b._idsOfIncludedFilters;
-  target._idsOfIncludedTextLimits =
-      a._idsOfIncludedTextLimits | b._idsOfIncludedTextLimits;
+  target.idsOfIncludedTextLimits_ =
+      a.idsOfIncludedTextLimits_ | b.idsOfIncludedTextLimits_;
 }
 }  // namespace
 
@@ -105,7 +105,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
                    });
 
   // Set TEXTLIMIT
-  _textLimit = pq._limitOffset._textLimit;
+  textLimit_ = pq._limitOffset.textLimit_;
 
   // Optimize the graph pattern tree
   std::vector<std::vector<SubtreePlan>> plans;
@@ -261,7 +261,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // Assumption for now: BIND does not commute. This is always safe.
       auto lastRow =
           optimizeCommutativ(candidateTriples, candidatePlans,
-                             rootPattern->_filters, rootPattern->_textLimits);
+                             rootPattern->_filters, rootPattern->textLimits_);
       candidateTriples._triples.clear();
       candidatePlans.clear();
       candidatePlans.emplace_back();
@@ -269,7 +269,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
         // create a copy of the Bind prototype and add the corresponding subtree
         SubtreePlan plan = makeSubtreePlan<Bind>(_qec, a._qet, v);
         plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-        plan._idsOfIncludedTextLimits = a._idsOfIncludedTextLimits;
+        plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
         candidatePlans.back().push_back(std::move(plan));
       }
       // Handle the case that the BIND clause is the first clause which means
@@ -325,7 +325,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
       // an optional join.
       auto lastRow =
           optimizeCommutativ(candidateTriples, candidatePlans,
-                             rootPattern->_filters, rootPattern->_textLimits);
+                             rootPattern->_filters, rootPattern->textLimits_);
       candidateTriples._triples.clear();
       candidatePlans.clear();
 
@@ -481,7 +481,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   if (candidatePlans.size() > 1 || !candidateTriples._triples.empty()) {
     auto tg = createTripleGraph(&candidateTriples);
     auto lastRow = fillDpTab(tg, rootPattern->_filters,
-                             rootPattern->_textLimits, candidatePlans)
+                             rootPattern->textLimits_, candidatePlans)
                        .back();
     candidateTriples._triples.clear();
     candidatePlans.clear();
@@ -493,7 +493,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
     applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
-    applyTextLimitsIfPossible(candidatePlans[0], rootPattern->_textLimits,
+    applyTextLimitsIfPossible(candidatePlans[0], rootPattern->textLimits_,
                               true);
     checkCancellation();
   }
@@ -611,7 +611,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getGroupByRow(
     SubtreePlan groupByPlan(_qec);
     groupByPlan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     groupByPlan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    groupByPlan._idsOfIncludedTextLimits = parent._idsOfIncludedTextLimits;
+    groupByPlan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
     std::vector<Alias> aliases;
     if (pq.hasSelectClause()) {
       aliases = pq.selectClause().getAliases();
@@ -637,7 +637,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
     auto& tree = plan._qet;
     plan._idsOfIncludedNodes = parent._idsOfIncludedNodes;
     plan._idsOfIncludedFilters = parent._idsOfIncludedFilters;
-    plan._idsOfIncludedTextLimits = parent._idsOfIncludedTextLimits;
+    plan.idsOfIncludedTextLimits_ = parent.idsOfIncludedTextLimits_;
     vector<pair<ColumnIndex, bool>> sortIndices;
     for (auto& ord : pq._orderBy) {
       sortIndices.emplace_back(parent._qet->getVariableColumn(ord.variable_),
@@ -928,7 +928,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
     const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>& textLimits)
+    TextLimitMap& textLimits)
     -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
@@ -940,7 +940,7 @@ auto QueryPlanner::seedWithScansAndText(
       // give the plan a unique id bit
       newIdPlan._idsOfIncludedNodes = uint64_t(1) << idShift;
       newIdPlan._idsOfIncludedFilters = 0;
-      newIdPlan._idsOfIncludedTextLimits = 0;
+      newIdPlan.idsOfIncludedTextLimits_ = 0;
       seeds.emplace_back(newIdPlan);
     }
     idShift++;
@@ -1007,11 +1007,12 @@ auto QueryPlanner::seedWithScansAndText(
     };
     seedFromOrdinaryTriple(node, addIndexScan, addFilter);
   }
-  // if there is no score variable, there is no ql:contains-entity for this text
+
+  // If there is no score variable, there is no ql:contains-entity for this text
   // variable, so we don't need a text limit and we can delete the object
   vector<Variable> toDelete;
   for (auto limit : textLimits) {
-    if (limit.second._scoreVars.empty()) {
+    if (limit.second.scoreVars_.empty()) {
       toDelete.push_back(limit.first);
     }
   }
@@ -1187,40 +1188,41 @@ Variable QueryPlanner::generateUniqueVarName() {
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node,
-    ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>& textLimits)
+    TextLimitMap& textLimits)
     const {
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
   string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
-  if (!textLimits.contains(node.cvar_.value())) {
-    textLimits[node.cvar_.value()] =
+  const auto& cvar = node.cvar_.value();
+  if (!textLimits.contains(cvar)) {
+    textLimits[cvar] =
         parsedQuery::TextLimitMetaObject({}, {}, 0);
   }
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
       // to make these checks more explicity.
-      Variable evar = *(node._variables.begin()) == node.cvar_.value()
+      Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
-      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, node.cvar_.value(),
+      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar,
                                                      evar, word);
-      textLimits[node.cvar_.value()]._entityVars.push_back(evar);
-      textLimits[node.cvar_.value()]._scoreVars.push_back(
-          node.cvar_.value().getScoreVariable(evar));
+      textLimits[cvar].entityVars_.push_back(evar);
+      textLimits[cvar].scoreVars_.push_back(
+          cvar.getScoreVariable(evar));
     } else {
       // Fixed entity case
       AD_CORRECTNESS_CHECK(node._variables.size() == 1);
       plan = makeSubtreePlan<TextIndexScanForEntity>(
-          _qec, node.cvar_.value(), node.triple_.o_.toString(), word);
-      textLimits[node.cvar_.value()]._scoreVars.push_back(
-          node.cvar_.value().getScoreVariable(node.triple_.o_.toString()));
+          _qec, cvar, node.triple_.o_.toString(), word);
+      textLimits[cvar].scoreVars_.push_back(
+          cvar.getScoreVariable(node.triple_.o_.toString()));
     }
   } else {
     plan =
-        makeSubtreePlan<TextIndexScanForWord>(_qec, node.cvar_.value(), word);
+        makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
   }
-  textLimits[node.cvar_.value()]._idsOfMustBeFinishedOperations |=
+  textLimits[cvar].idsOfMustBeFinishedOperations_ |=
       (size_t(1) << node.id_);
   plan._idsOfIncludedNodes |= (size_t(1) << node.id_);
   return plan;
@@ -1382,7 +1384,7 @@ string QueryPlanner::getPruningKey(
   os << " f: ";
   os << ' ' << plan._idsOfIncludedFilters;
   os << " t: ";
-  os << ' ' << plan._idsOfIncludedTextLimits;
+  os << ' ' << plan.idsOfIncludedTextLimits_;
 
   return std::move(os).str();
 }
@@ -1451,7 +1453,7 @@ void QueryPlanner::applyFiltersIfPossible(
 // _____________________________________________________________________________
 void QueryPlanner::applyTextLimitsIfPossible(
     vector<QueryPlanner::SubtreePlan>& row,
-    const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+    const TextLimitMap&
         textLimits,
     bool replace) const {
   // Apply text limits if possible.
@@ -1461,26 +1463,27 @@ void QueryPlanner::applyTextLimitsIfPossible(
 
   // Note: we are first collecting the newly added plans and then adding them
   // in one go. Changing `row` inside the loop would invalidate the iterators.
-  if (!_textLimit.has_value()) {
+  if (!textLimit_.has_value()) {
     return;
   }
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
     size_t i = 0;
     for (const auto& [textVar, textLimit] : textLimits) {
-      if (((plan._idsOfIncludedTextLimits >> i) & 1) != 0) {
+      if (((plan.idsOfIncludedTextLimits_ >> i) & 1) != 0) {
         // The text limit has already been applied to the plan.
         i++;
         continue;
       }
       if (((plan._idsOfIncludedNodes &
-            textLimit._idsOfMustBeFinishedOperations) ^
-           textLimit._idsOfMustBeFinishedOperations) != 0) {
+            textLimit.idsOfMustBeFinishedOperations_) ^
+           textLimit.idsOfMustBeFinishedOperations_) != 0) {
         // Ther is still an operation that needs to be finished before this text
         // limit can be applied
         i++;
         continue;
       }
+      // TODO<C++23> simplify using ranges::to
       auto getVarColumns = [&plan](const std::vector<Variable>& vars) {
         std::vector<ColumnIndex> result;
         for (const auto& var : vars) {
@@ -1489,12 +1492,12 @@ void QueryPlanner::applyTextLimitsIfPossible(
         return result;
       };
       SubtreePlan newPlan = makeSubtreePlan<TextLimit>(
-          _qec, _textLimit.value(), plan._qet,
+          _qec, textLimit_.value(), plan._qet,
           plan._qet.get()->getVariableColumn(textVar),
-          getVarColumns(textLimit._entityVars),
-          getVarColumns(textLimit._scoreVars));
-      newPlan._idsOfIncludedTextLimits = plan._idsOfIncludedTextLimits;
-      newPlan._idsOfIncludedTextLimits |= (size_t(1) << i);
+          getVarColumns(textLimit.entityVars_),
+          getVarColumns(textLimit.scoreVars_));
+      newPlan.idsOfIncludedTextLimits_ = plan.idsOfIncludedTextLimits_;
+      newPlan.idsOfIncludedTextLimits_ |= (size_t(1) << i);
       newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
       newPlan.type = plan.type;
       i++;
@@ -1513,7 +1516,7 @@ std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
     const vector<SparqlFilter>& filters,
-    const ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>&
+    const TextLimitMap&
         textLimits,
     const TripleGraph& tg) const {
   vector<vector<QueryPlanner::SubtreePlan>> dpTab;
@@ -1550,7 +1553,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 // _____________________________________________________________________________
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
-    ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>& textLimits,
+    TextLimitMap& textLimits,
     const vector<vector<QueryPlanner::SubtreePlan>>& children) {
   auto [initialPlans, additionalFilters] =
       seedWithScansAndText(tg, children, textLimits);

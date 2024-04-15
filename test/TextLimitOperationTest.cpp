@@ -492,7 +492,7 @@ TEST(TextLimit, CacheKey) {
   VectorTable input{{1, 2, 3}, {1, 2, 3}, {1, 2, 3}};
   IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
   TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
-  ASSERT_EQ(textLimit1.getDescriptor(), "TextLimit with limit n: 4");
+  ASSERT_EQ(textLimit1.getDescriptor(), "TextLimit with limit: 4");
 
   TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 4, 0, {1}, {2});
   // Every argument is the same.

@@ -106,28 +106,19 @@ constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
 };
 
-inline auto TextLimit = [](const size_t n, QueryExecutionTree child,
-                           const Variable& textRecVar,
-                           const vector<Variable>& entityVars,
-                           const vector<Variable>& scoreVars) -> QetMatcher {
-  size_t textRecColumn = child.getVariableColumn(textRecVar);
-  vector<size_t> entityColumns;
-  for (const auto& entityVar : entityVars) {
-    entityColumns.push_back(child.getVariableColumn(entityVar));
-  }
-  vector<size_t> scoreColumns;
-  for (const auto& scoreVar : scoreVars) {
-    scoreColumns.push_back(child.getVariableColumn(scoreVar));
-  }
-  string childCacheKey = child.getCacheKey();
-  return RootOperation<::TextLimit>(
-      AllOf(AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
-            AD_PROPERTY(::TextLimit, getChildCacheKey, Eq(childCacheKey)),
-            AD_PROPERTY(::TextLimit, getTextRecordColumn, Eq(textRecColumn)),
-            AD_PROPERTY(::TextLimit, getEntityColumns,
-                        UnorderedElementsAreArray(entityColumns)),
-            AD_PROPERTY(::TextLimit, getScoreColumns,
-                        UnorderedElementsAreArray(scoreColumns))));
+// Matcher for the `TextLimit` Operation.
+constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
+                              const Variable& textRecVar,
+                              const vector<Variable>& entityVars,
+                              const vector<Variable>& scoreVars) -> QetMatcher {
+  return RootOperation<::TextLimit>(AllOf(
+      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
+      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher))),
+      AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
+      AD_PROPERTY(::TextLimit, getEntityVariables,
+                  UnorderedElementsAreArray(entityVars)),
+      AD_PROPERTY(::TextLimit, getScoreVariables,
+                  UnorderedElementsAreArray(scoreVars))));
 };
 
 inline auto TextIndexScanForEntity =
@@ -180,7 +171,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),

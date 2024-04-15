@@ -4,19 +4,21 @@
 
 #pragma once
 
-#include "./Operation.h"
+#include "engine/Operation.h"
 
+// This class implements the TextLimit operation.
+// It only keeps the highest scoring results for the child for each unique
+// entity combination.
 class TextLimit : public Operation {
  private:
-  const QueryExecutionContext* qec_;
-  const size_t n_;
+  const size_t limit_;
   std::shared_ptr<QueryExecutionTree> child_;
   const ColumnIndex textRecordColumn_;
   const vector<ColumnIndex> entityColumns_;
   const vector<ColumnIndex> scoreColumns_;
 
  public:
-  TextLimit(QueryExecutionContext* qec, const size_t n,
+  TextLimit(QueryExecutionContext* qec, const size_t limit,
             std::shared_ptr<QueryExecutionTree> child,
             const ColumnIndex& textRecordColumn,
             const vector<ColumnIndex>& entityColumns,
@@ -32,15 +34,13 @@ class TextLimit : public Operation {
 
   size_t getCostEstimate() override;
 
-  size_t getTextLimit() const { return n_; }
+  size_t getTextLimit() const { return limit_; }
 
-  string getChildCacheKey() const { return child_->getCacheKey(); }
+  Variable getTextRecordVariable() const;
 
-  ColumnIndex getTextRecordColumn() const { return textRecordColumn_; }
+  vector<Variable> getEntityVariables() const;
 
-  vector<ColumnIndex> getEntityColumns() const { return entityColumns_; }
-
-  vector<ColumnIndex> getScoreColumns() const { return scoreColumns_; }
+  vector<Variable> getScoreVariables() const;
 
   uint64_t getSizeEstimateBeforeLimit() override;
 
@@ -50,7 +50,7 @@ class TextLimit : public Operation {
   }
 
   bool knownEmptyResult() override {
-    return n_ == 0 || child_->knownEmptyResult();
+    return limit_ == 0 || child_->knownEmptyResult();
   }
 
   vector<ColumnIndex> resultSortedOn() const override;

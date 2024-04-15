@@ -2,17 +2,16 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Nick Göckel <nick.goeckel@students.uni-freiburg.de>
 
-#include "./TextLimit.h"
+#include "engine/TextLimit.h"
 
 // _____________________________________________________________________________
-TextLimit::TextLimit(QueryExecutionContext* qec, const size_t n,
+TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
                      std::shared_ptr<QueryExecutionTree> child,
                      const ColumnIndex& textRecordColumn,
                      const vector<ColumnIndex>& entityColumns,
                      const vector<ColumnIndex>& scoreColumns)
     : Operation(qec),
-      qec_(qec),
-      n_(n),
+      limit_(limit),
       child_(std::move(child)),
       textRecordColumn_(textRecordColumn),
       entityColumns_(entityColumns),
@@ -22,16 +21,19 @@ TextLimit::TextLimit(QueryExecutionContext* qec, const size_t n,
 ResultTable TextLimit::computeResult() {
   shared_ptr<const ResultTable> childRes = child_->getResult();
 
-  if (n_ == 0) {
+  if (limit_ == 0) {
     return {IdTable(childRes->width(), getExecutionContext()->getAllocator()),
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 
   IdTable idTable =
-      childRes->idTable().clone();  // QUESTION: is there a cheaper solution?
+      childRes->idTable().clone();
+    
   // Sort the table by the entity column, then the score column, then the text
   // column.
 
+
+  // TODO<joka921> Let the SORT class handle this. This requires descending sorting for positive integers though.
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
@@ -85,7 +87,7 @@ ResultTable TextLimit::computeResult() {
     } else if (idTable[i][textRecordColumn_] !=
                idTable[i - 1][textRecordColumn_]) {
       // Case: new text record.
-      if (currentEntityCount >= n_) {
+      if (currentEntityCount >= limit_) {
         // Case: new text record and reached the limit.
         idTable.erase(idTable.begin() + i);
         --i;
@@ -121,11 +123,32 @@ size_t TextLimit::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
+Variable TextLimit::getTextRecordVariable() const {
+    return child_->getVariableAndInfoByColumnIndex(textRecordColumn_).first;
+}
+
+// _____________________________________________________________________________
+vector<Variable> TextLimit::getEntityVariables() const {
+    vector<Variable> entityVars;
+    for(auto col : entityColumns_) {
+      entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
+    }
+    return entityVars;
+}
+
+// _____________________________________________________________________________
+vector<Variable> TextLimit::getScoreVariables() const {
+    vector<Variable> scoreVars;
+    for(auto col : scoreColumns_) {
+      scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
+    }
+    return scoreVars;
+}
+
+// _____________________________________________________________________________
 uint64_t TextLimit::getSizeEstimateBeforeLimit() {
   return child_
-      ->getSizeEstimate();  // QUESTION: Why is getSizeEstimateBeforeLimit() not
-                            // possible? And how come we don't have to implement
-                            // getSizeEstimate() here?
+      ->getSizeEstimate();
 }
 
 // _____________________________________________________________________________
@@ -139,7 +162,7 @@ vector<ColumnIndex> TextLimit::resultSortedOn() const {
 // _____________________________________________________________________________
 string TextLimit::getDescriptor() const {
   std::ostringstream os;
-  os << "TextLimit with limit n: " << n_;
+  os << "TextLimit with limit: " << limit_;
   return os.str();
 }
 
@@ -147,15 +170,15 @@ string TextLimit::getDescriptor() const {
 string TextLimit::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "TEXT LIMIT: "
-     << " with n: " << n_ << ", with child: " << child_->getCacheKey()
-     << " and ColumnIndices: " << std::to_string(textRecordColumn_) << ", {";
+     << " with n: " << limit_ << ", with child: " << child_->getCacheKey()
+     << " and ColumnIndices: " << textRecordColumn_ << ", {";
   for (const auto& column : entityColumns_) {
-    os << std::to_string(column) << ", ";
+    os << column << ", ";
   }
   os.seekp(-2, os.cur);
   os << "}, {";
   for (const auto& column : scoreColumns_) {
-    os << std::to_string(column) << ", ";
+    os << column << ", ";
   }
   os << "}";
   return std::move(os).str();
