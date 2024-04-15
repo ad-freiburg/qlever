@@ -15,6 +15,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
 #include "gtest/gtest.h"
+#include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
@@ -22,6 +23,7 @@ using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
+
 }  // namespace
 
 class TransitivePathTest : public testing::TestWithParam<bool> {
@@ -72,14 +74,10 @@ class TransitivePathTest : public testing::TestWithParam<bool> {
 };
 
 TEST_P(TransitivePathTest, idToId) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
 
-  IdTable expected(2, makeAllocator());
-  expected.push_back({V(0), V(3)});
+  auto expected = makeIdTableFromVector({{V(0), V(3)}});
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
@@ -93,16 +91,11 @@ TEST_P(TransitivePathTest, idToId) {
 }
 
 TEST_P(TransitivePathTest, idToVar) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
 
-  IdTable expected(2, makeAllocator());
-  expected.push_back({V(0), V(1)});
-  expected.push_back({V(0), V(2)});
-  expected.push_back({V(0), V(3)});
+  auto expected =
+      makeIdTableFromVector({{V(0), V(1)}, {V(0), V(2)}, {V(0), V(3)}});
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -116,16 +109,14 @@ TEST_P(TransitivePathTest, idToVar) {
 }
 
 TEST_P(TransitivePathTest, varToId) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
 
-  IdTable expected(2, makeAllocator());
-  expected.push_back({V(2), V(3)});
-  expected.push_back({V(1), V(3)});
-  expected.push_back({V(0), V(3)});
+  auto expected = makeIdTableFromVector({
+      {V(2), V(3)},
+      {V(1), V(3)},
+      {V(0), V(3)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
@@ -139,19 +130,21 @@ TEST_P(TransitivePathTest, varToId) {
 }
 
 TEST_P(TransitivePathTest, varTovar) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
+  auto sub = makeIdTableFromVector({
+      {V(0), V(1)},
+      {V(1), V(2)},
+      {V(1), V(3)},
+      {V(2), V(3)},
+  });
 
-  IdTable expected(2, makeAllocator());
-  expected.push_back({V(0), V(1)});
-  expected.push_back({V(0), V(2)});
-  expected.push_back({V(0), V(3)});
-  expected.push_back({V(1), V(2)});
-  expected.push_back({V(1), V(3)});
-  expected.push_back({V(2), V(3)});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1)},
+      {V(0), V(2)},
+      {V(0), V(3)},
+      {V(1), V(2)},
+      {V(1), V(3)},
+      {V(2), V(3)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -165,35 +158,33 @@ TEST_P(TransitivePathTest, varTovar) {
 }
 
 TEST_P(TransitivePathTest, unlimitedMaxLength) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(2)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(4), V(7)});
-  sub.push_back({V(0), V(7)});
-  sub.push_back({V(3), V(3)});
-  sub.push_back({V(7), V(0)});
-  // Disconnected component.
-  sub.push_back({V(10), V(11)});
+  auto sub = makeIdTableFromVector({{V(0), V(2)},
+                                    {V(2), V(4)},
+                                    {V(4), V(7)},
+                                    {V(0), V(7)},
+                                    {V(3), V(3)},
+                                    {V(7), V(0)},
+                                    // Disconnected component.
+                                    {V(10), V(11)}});
 
-  IdTable expected(2, makeAllocator());
-  expected.push_back({V(0), V(2)});
-  expected.push_back({V(0), V(4)});
-  expected.push_back({V(0), V(7)});
-  expected.push_back({V(0), V(0)});
-  expected.push_back({V(2), V(4)});
-  expected.push_back({V(2), V(7)});
-  expected.push_back({V(2), V(0)});
-  expected.push_back({V(2), V(2)});
-  expected.push_back({V(4), V(7)});
-  expected.push_back({V(4), V(0)});
-  expected.push_back({V(4), V(2)});
-  expected.push_back({V(4), V(4)});
-  expected.push_back({V(3), V(3)});
-  expected.push_back({V(7), V(0)});
-  expected.push_back({V(7), V(2)});
-  expected.push_back({V(7), V(4)});
-  expected.push_back({V(7), V(7)});
-  expected.push_back({V(10), V(11)});
+  auto expected = makeIdTableFromVector({{V(0), V(2)},
+                                         {V(0), V(4)},
+                                         {V(0), V(7)},
+                                         {V(0), V(0)},
+                                         {V(2), V(4)},
+                                         {V(2), V(7)},
+                                         {V(2), V(0)},
+                                         {V(2), V(2)},
+                                         {V(4), V(7)},
+                                         {V(4), V(0)},
+                                         {V(4), V(2)},
+                                         {V(4), V(4)},
+                                         {V(3), V(3)},
+                                         {V(7), V(0)},
+                                         {V(7), V(2)},
+                                         {V(7), V(4)},
+                                         {V(7), V(7)},
+                                         {V(10), V(11)}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -207,22 +198,20 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
 }
 
 TEST_P(TransitivePathTest, idToLeftBound) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
-  sub.push_back({V(3), V(4)});
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}, {V(3), V(4)}});
 
-  IdTable leftOpTable(2, makeAllocator());
-  leftOpTable.push_back({V(0), V(1)});
-  leftOpTable.push_back({V(0), V(2)});
-  leftOpTable.push_back({V(0), V(3)});
+  auto leftOpTable = makeIdTableFromVector({
+      {V(0), V(1)},
+      {V(0), V(2)},
+      {V(0), V(3)},
+  });
 
-  IdTable expected(3, makeAllocator());
-  expected.push_back({V(1), V(4), V(0)});
-  expected.push_back({V(2), V(4), V(0)});
-  expected.push_back({V(3), V(4), V(0)});
+  auto expected = makeIdTableFromVector({
+      {V(1), V(4), V(0)},
+      {V(2), V(4), V(0)},
+      {V(3), V(4), V(0)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(4), 1);
@@ -237,22 +226,25 @@ TEST_P(TransitivePathTest, idToLeftBound) {
 }
 
 TEST_P(TransitivePathTest, idToRightBound) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(1)});
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(1), V(3)});
-  sub.push_back({V(2), V(3)});
-  sub.push_back({V(3), V(4)});
+  auto sub = makeIdTableFromVector({
+      {V(0), V(1)},
+      {V(1), V(2)},
+      {V(1), V(3)},
+      {V(2), V(3)},
+      {V(3), V(4)},
+  });
 
-  IdTable rightOpTable(2, makeAllocator());
-  rightOpTable.push_back({V(2), V(5)});
-  rightOpTable.push_back({V(3), V(5)});
-  rightOpTable.push_back({V(4), V(5)});
+  auto rightOpTable = makeIdTableFromVector({
+      {V(2), V(5)},
+      {V(3), V(5)},
+      {V(4), V(5)},
+  });
 
-  IdTable expected(3, makeAllocator());
-  expected.push_back({V(0), V(2), V(5)});
-  expected.push_back({V(0), V(3), V(5)});
-  expected.push_back({V(0), V(4), V(5)});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2), V(5)},
+      {V(0), V(3), V(5)},
+      {V(0), V(4), V(5)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -267,27 +259,30 @@ TEST_P(TransitivePathTest, idToRightBound) {
 }
 
 TEST_P(TransitivePathTest, leftBoundToVar) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(2), V(3)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(3), V(4)});
+  auto sub = makeIdTableFromVector({
+      {V(1), V(2)},
+      {V(2), V(3)},
+      {V(2), V(4)},
+      {V(3), V(4)},
+  });
 
-  IdTable leftOpTable(2, makeAllocator());
-  leftOpTable.push_back({V(0), V(1)});
-  leftOpTable.push_back({V(0), V(2)});
-  leftOpTable.push_back({V(0), V(3)});
+  auto leftOpTable = makeIdTableFromVector({
+      {V(0), V(1)},
+      {V(0), V(2)},
+      {V(0), V(3)},
+  });
 
-  IdTable expected(3, makeAllocator());
-  expected.push_back({V(1), V(1), V(0)});
-  expected.push_back({V(1), V(2), V(0)});
-  expected.push_back({V(1), V(3), V(0)});
-  expected.push_back({V(1), V(4), V(0)});
-  expected.push_back({V(2), V(2), V(0)});
-  expected.push_back({V(2), V(3), V(0)});
-  expected.push_back({V(2), V(4), V(0)});
-  expected.push_back({V(3), V(3), V(0)});
-  expected.push_back({V(3), V(4), V(0)});
+  auto expected = makeIdTableFromVector({
+      {V(1), V(1), V(0)},
+      {V(1), V(2), V(0)},
+      {V(1), V(3), V(0)},
+      {V(1), V(4), V(0)},
+      {V(2), V(2), V(0)},
+      {V(2), V(3), V(0)},
+      {V(2), V(4), V(0)},
+      {V(3), V(3), V(0)},
+      {V(3), V(4), V(0)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -302,27 +297,30 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
 }
 
 TEST_P(TransitivePathTest, rightBoundToVar) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(1), V(2)});
-  sub.push_back({V(2), V(3)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(3), V(4)});
+  auto sub = makeIdTableFromVector({
+      {V(1), V(2)},
+      {V(2), V(3)},
+      {V(2), V(4)},
+      {V(3), V(4)},
+  });
 
-  IdTable rightOpTable(2, makeAllocator());
-  rightOpTable.push_back({V(2), V(5)});
-  rightOpTable.push_back({V(3), V(5)});
-  rightOpTable.push_back({V(4), V(5)});
+  auto rightOpTable = makeIdTableFromVector({
+      {V(2), V(5)},
+      {V(3), V(5)},
+      {V(4), V(5)},
+  });
 
-  IdTable expected(3, makeAllocator());
-  expected.push_back({V(1), V(2), V(5)});
-  expected.push_back({V(1), V(3), V(5)});
-  expected.push_back({V(1), V(4), V(5)});
-  expected.push_back({V(2), V(2), V(5)});
-  expected.push_back({V(2), V(3), V(5)});
-  expected.push_back({V(2), V(4), V(5)});
-  expected.push_back({V(3), V(3), V(5)});
-  expected.push_back({V(3), V(4), V(5)});
-  expected.push_back({V(4), V(4), V(5)});
+  auto expected = makeIdTableFromVector({
+      {V(1), V(2), V(5)},
+      {V(1), V(3), V(5)},
+      {V(1), V(4), V(5)},
+      {V(2), V(2), V(5)},
+      {V(2), V(3), V(5)},
+      {V(2), V(4), V(5)},
+      {V(3), V(3), V(5)},
+      {V(3), V(4), V(5)},
+      {V(4), V(4), V(5)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -337,31 +335,30 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 }
 
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(2)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(4), V(7)});
-  sub.push_back({V(0), V(7)});
-  sub.push_back({V(3), V(3)});
-  sub.push_back({V(7), V(0)});
-  // Disconnected component.
-  sub.push_back({V(10), V(11)});
+  auto sub = makeIdTableFromVector({
+      {V(0), V(2)},
+      {V(2), V(4)},
+      {V(4), V(7)},
+      {V(0), V(7)},
+      {V(3), V(3)},
+      {V(7), V(0)},
+      // Disconnected component.
+      {V(10), V(11)},
+  });
 
-  IdTable expected(2, makeAllocator());
-
-  expected.push_back({V(0), V(2)});
-  expected.push_back({V(0), V(4)});
-  expected.push_back({V(0), V(7)});
-  expected.push_back({V(0), V(0)});
-  expected.push_back({V(2), V(4)});
-  expected.push_back({V(2), V(7)});
-  expected.push_back({V(4), V(7)});
-  expected.push_back({V(4), V(0)});
-  expected.push_back({V(3), V(3)});
-  expected.push_back({V(7), V(0)});
-  expected.push_back({V(7), V(2)});
-  expected.push_back({V(7), V(7)});
-  expected.push_back({V(10), V(11)});
+  auto expected = makeIdTableFromVector({{V(0), V(2)},
+                                         {V(0), V(4)},
+                                         {V(0), V(7)},
+                                         {V(0), V(0)},
+                                         {V(2), V(4)},
+                                         {V(2), V(7)},
+                                         {V(4), V(7)},
+                                         {V(4), V(0)},
+                                         {V(3), V(3)},
+                                         {V(7), V(0)},
+                                         {V(7), V(2)},
+                                         {V(7), V(7)},
+                                         {V(10), V(11)}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -374,21 +371,22 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
 }
 
 TEST_P(TransitivePathTest, maxLength2FromId) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(2)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(4), V(7)});
-  sub.push_back({V(0), V(7)});
-  sub.push_back({V(3), V(3)});
-  sub.push_back({V(7), V(0)});
-  // Disconnected component.
-  sub.push_back({V(10), V(11)});
+  auto sub = makeIdTableFromVector({
+      {V(0), V(2)},
+      {V(2), V(4)},
+      {V(4), V(7)},
+      {V(0), V(7)},
+      {V(3), V(3)},
+      {V(7), V(0)},
+      // Disconnected component.
+      {V(10), V(11)},
+  });
 
-  IdTable expected(2, makeAllocator());
-
-  expected.push_back({V(7), V(0)});
-  expected.push_back({V(7), V(2)});
-  expected.push_back({V(7), V(7)});
+  auto expected = makeIdTableFromVector({
+      {V(7), V(0)},
+      {V(7), V(2)},
+      {V(7), V(7)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, V(7), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -401,20 +399,21 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
 }
 
 TEST_P(TransitivePathTest, maxLength2ToId) {
-  IdTable sub(2, makeAllocator());
-  sub.push_back({V(0), V(2)});
-  sub.push_back({V(2), V(4)});
-  sub.push_back({V(4), V(7)});
-  sub.push_back({V(0), V(7)});
-  sub.push_back({V(3), V(3)});
-  sub.push_back({V(7), V(0)});
-  // Disconnected component.
-  sub.push_back({V(10), V(11)});
+  auto sub = makeIdTableFromVector({
+      {V(0), V(2)},
+      {V(2), V(4)},
+      {V(4), V(7)},
+      {V(0), V(7)},
+      {V(3), V(3)},
+      {V(7), V(0)},
+      // Disconnected component.
+      {V(10), V(11)},
+  });
 
-  IdTable expected(2, makeAllocator());
-
-  expected.push_back({V(0), V(2)});
-  expected.push_back({V(7), V(2)});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2)},
+      {V(7), V(2)},
+  });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(2), 1);

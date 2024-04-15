@@ -155,7 +155,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -244,6 +245,12 @@ inline auto TransitivePath =
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
     };
+
+inline auto Sort = [](const std::same_as<QetMatcher> auto&... childMatchers) {
+  return RootOperation<::Sort>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatchers)...))));
+};
 
 // Match a `Filter` operation. The matching of the expression is currently only
 // done via the descriptor.
