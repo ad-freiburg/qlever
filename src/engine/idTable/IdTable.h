@@ -651,12 +651,13 @@ class IdTable {
 
   // Add all entries from the `table` at the end of this IdTable.
   void insertAtEnd(const IdTable& table) {
-    AD_CONTRACT_CHECK(table.numColumns() == numColumns());
+    AD_CORRECTNESS_CHECK(table.numColumns() == numColumns());
     auto oldSize = size();
     resize(numRows() + table.numRows_);
-    for (size_t i : ad_utility::integerRange(numColumns())) {
-      std::ranges::copy(table.getColumn(i), getColumn(i).begin() + oldSize);
-    }
+    std::ranges::for_each(
+        ad_utility::integerRange(numColumns()), [this, &table](size_t i) {
+          std::ranges::copy(table.getColumn(i), getColumn(i).begin() + oldSize);
+        });
   }
 
   // Check whether two `IdTables` have the same content. Mostly used for unit
