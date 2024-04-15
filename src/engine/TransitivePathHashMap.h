@@ -25,6 +25,14 @@ struct HashMapWrapper {
   }
 };
 
+/**
+ * @class TransitivePathHashMap
+ * @brief This class implements the transitive path operation. The
+ * implementation uses a hash map to represent the graph and find successors
+ * of given nodes.
+ *
+ *
+ */
 class TransitivePathHashMap : public TransitivePathImpl<HashMapWrapper> {
  public:
   TransitivePathHashMap(QueryExecutionContext* qec,

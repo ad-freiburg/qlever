@@ -55,6 +55,12 @@ struct BinSearchMap {
   }
 };
 
+/**
+ * @class TransitivePathBinSearch
+ * @brief This class implements the transitive path operation. The
+ * implementation represents the graph as adjacency lists and uses binary search
+ * to find successors of given nodes.
+ */
 class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
  public:
   TransitivePathBinSearch(QueryExecutionContext* qec,
