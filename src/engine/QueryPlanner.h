@@ -134,7 +134,6 @@ class QueryPlanner {
 
     std::shared_ptr<QueryExecutionTree> _qet;
     std::shared_ptr<ResultTable> _cachedResult;
-    bool _isCached = false;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     Type type = Type::BASIC;
@@ -142,8 +141,6 @@ class QueryPlanner {
     size_t getCostEstimate() const;
 
     size_t getSizeEstimate() const;
-
-    void addAllNodes(uint64_t otherNodes);
   };
 
   // A helper class to find connected componenents of an RDF query using DFS.

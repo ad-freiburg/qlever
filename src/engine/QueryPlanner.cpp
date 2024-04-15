@@ -1279,11 +1279,6 @@ size_t QueryPlanner::SubtreePlan::getSizeEstimate() const {
 }
 
 // _____________________________________________________________________________
-void QueryPlanner::SubtreePlan::addAllNodes(uint64_t otherNodes) {
-  _idsOfIncludedNodes |= otherNodes;
-}
-
-// _____________________________________________________________________________
 bool QueryPlanner::connected(const QueryPlanner::SubtreePlan& a,
                              const QueryPlanner::SubtreePlan& b,
                              const QueryPlanner::TripleGraph& tg) const {
