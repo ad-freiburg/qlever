@@ -59,13 +59,16 @@ struct TransitivePathSide {
 
 // We deliberately use the `std::` variants of a hash set and hash map because
 // `absl`s types are not exception safe.
-inline constexpr auto hash = [](Id id) {
-  return std::hash<uint64_t>{}(id.getBits());
+struct HashId {
+  auto operator()(Id id) const {
+    return std::hash<uint64_t>{}(id.getBits());
+  }
 };
-using Set = std::unordered_set<Id, decltype(hash), std::equal_to<Id>,
+
+using Set = std::unordered_set<Id, HashId, std::equal_to<Id>,
                                ad_utility::AllocatorWithLimit<Id>>;
 using Map = std::unordered_map<
-    Id, Set, decltype(hash), std::equal_to<Id>,
+    Id, Set, HashId, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, Set>>>;
 
 /**
