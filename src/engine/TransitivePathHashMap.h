@@ -12,6 +12,12 @@
 #include "engine/TransitivePathImpl.h"
 #include "engine/idTable/IdTable.h"
 
+/**
+ * @class HashMapWrapper
+ * @brief A wrapper for the Map class from TransitivePathBase. This wrapper
+ * implements the successors function, which is used in transitiveHull function.
+ *
+ */
 struct HashMapWrapper {
   Map map_;
   Set emptySet_;
@@ -19,6 +25,14 @@ struct HashMapWrapper {
   HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
       : map_(std::move(map)), emptySet_(allocator){};
 
+  /**
+   * @brief Return the successors for the given Id. The successors are all ids,
+   * which are stored under the key 'node'
+   *
+   * @param node The input id
+   * @return A const Set&, consisting of all target ids which have an ingoing
+   * edge from 'node'
+   */
   const auto& successors(const Id node) const {
     auto iterator = map_.find(node);
     if (iterator == map_.end()) {
