@@ -14,14 +14,17 @@
 
 struct HashMapWrapper {
   Map map_;
+  Set emptySet_;
 
-  auto successors(const Id node) const {
+  HashMapWrapper(Map map, ad_utility::AllocatorWithLimit<Id> allocator)
+      : map_(std::move(map)), emptySet_(allocator){};
+
+  const auto& successors(const Id node) const {
     auto iterator = map_.find(node);
     if (iterator == map_.end()) {
-      return std::vector<Id>();
+      return emptySet_;
     }
-    std::vector<Id> result(iterator->second.begin(), iterator->second.end());
-    return result;
+    return iterator->second;
   }
 };
 

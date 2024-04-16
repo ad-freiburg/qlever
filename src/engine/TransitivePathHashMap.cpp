@@ -6,7 +6,6 @@
 #include "TransitivePathHashMap.h"
 
 #include <memory>
-#include <optional>
 
 #include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
@@ -43,6 +42,5 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     checkCancellation();
     insertIntoMap(edges, startCol[i], targetCol[i]);
   }
-  auto wrapper = HashMapWrapper{edges};
-  return wrapper;
+  return HashMapWrapper{std::move(edges), allocator()};
 }
