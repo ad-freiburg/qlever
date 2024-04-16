@@ -131,12 +131,14 @@ ResultTable Join::computeResult() {
   auto rightResIfCached = getCachedOrSmallResult(*_right, _rightJoinCol);
   checkCancellation();
 
-  if (std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation()) &&
+  auto leftIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  if (leftIndexScan &&
       std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
     if (rightResIfCached && !leftResIfCached) {
       idTable = computeResultForIndexScanAndIdTable<true>(
-          rightResIfCached->idTable(), _rightJoinCol,
-          dynamic_cast<IndexScan&>(*_left->getRootOperation()), _leftJoinCol);
+          rightResIfCached->idTable(), _rightJoinCol, *leftIndexScan,
+          _leftJoinCol);
       checkCancellation();
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 
@@ -169,11 +171,11 @@ ResultTable Join::computeResult() {
   const auto& leftIdTable = leftRes->idTable();
   auto leftHasUndef =
       !leftIdTable.empty() && leftIdTable.at(0, _leftJoinCol).isUndefined();
-  if (std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation()) &&
-      !rightResIfCached && !leftHasUndef) {
+  auto rightIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+  if (rightIndexScan && !rightResIfCached && !leftHasUndef) {
     idTable = computeResultForIndexScanAndIdTable<false>(
-        leftRes->idTable(), _leftJoinCol,
-        dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);
+        leftRes->idTable(), _leftJoinCol, *rightIndexScan, _rightJoinCol);
     checkCancellation();
     return {std::move(idTable), resultSortedOn(),
             leftRes->getSharedLocalVocab()};
@@ -565,9 +567,11 @@ void updateRuntimeInfoForLazyScan(
 
 // ______________________________________________________________________________________________________
 IdTable Join::computeResultForTwoIndexScans() {
-  AD_CORRECTNESS_CHECK(
-      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation()) &&
-      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation()));
+  auto leftScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  auto rightScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+  AD_CORRECTNESS_CHECK(leftScan && rightScan);
   // The join column already is the first column in both inputs, so we don't
   // have to permute the inputs and results for the `AddCombinedRowToIdTable`
   // class to work correctly.
@@ -576,12 +580,9 @@ IdTable Join::computeResultForTwoIndexScans() {
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_};
 
-  auto& leftScan = dynamic_cast<IndexScan&>(*_left->getRootOperation());
-  auto& rightScan = dynamic_cast<IndexScan&>(*_right->getRootOperation());
-
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
-      IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
+      IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
@@ -590,8 +591,8 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                               std::less{}, rowAdder);
 
-  updateRuntimeInfoForLazyScan(leftScan, leftBlocks.details());
-  updateRuntimeInfoForLazyScan(rightScan, rightBlocks.details());
+  updateRuntimeInfoForLazyScan(*leftScan, leftBlocks.details());
+  updateRuntimeInfoForLazyScan(*rightScan, rightBlocks.details());
 
   AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
                        rightBlocks.details().numElementsRead_);

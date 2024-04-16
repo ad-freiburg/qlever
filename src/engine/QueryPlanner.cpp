@@ -484,7 +484,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
   if (!candidatePlans.empty()) {
-    applyFiltersIfPossible(candidatePlans[0], rootPattern->_filters, true);
+    applyFiltersIfPossible<true>(candidatePlans[0], rootPattern->_filters);
     checkCancellation();
   }
 
@@ -1341,9 +1341,10 @@ string QueryPlanner::getPruningKey(
 }
 
 // _____________________________________________________________________________
+template <bool replace>
 void QueryPlanner::applyFiltersIfPossible(
-    vector<QueryPlanner::SubtreePlan>& row, const vector<SparqlFilter>& filters,
-    bool replace) const {
+    vector<QueryPlanner::SubtreePlan>& row,
+    const vector<SparqlFilter>& filters) const {
   // Apply every filter possible.
   // It is possible when,
   // 1) the filter has not already been applied
@@ -1368,11 +1369,13 @@ void QueryPlanner::applyFiltersIfPossible(
   // in one go. Changing `row` inside the loop would invalidate the iterators.
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
-    if (std::dynamic_pointer_cast<IndexScan>(plan._qet->getRootOperation()) &&
-        plan._qet->getResultWidth() == 3 && !replace) {
-      // Do not apply filters to dummies, except at the very end of query
-      // planning.
-      continue;
+    if constexpr (!replace) {
+      if (std::dynamic_pointer_cast<IndexScan>(plan._qet->getRootOperation()) &&
+          plan._qet->getResultWidth() == 3) {
+        // Do not apply filters to dummies, except at the very end of query
+        // planning.
+        continue;
+      }
     }
     for (size_t i = 0; i < filters.size(); ++i) {
       if (((plan._idsOfIncludedFilters >> i) & 1) != 0) {
@@ -1390,7 +1393,7 @@ void QueryPlanner::applyFiltersIfPossible(
         newPlan._idsOfIncludedFilters |= (size_t(1) << i);
         newPlan._idsOfIncludedNodes = plan._idsOfIncludedNodes;
         newPlan.type = plan.type;
-        if (replace) {
+        if constexpr (replace) {
           plan = std::move(newPlan);
         } else {
           addedPlans.push_back(std::move(newPlan));
@@ -1400,6 +1403,14 @@ void QueryPlanner::applyFiltersIfPossible(
   }
   row.insert(row.end(), addedPlans.begin(), addedPlans.end());
 }
+
+template void QueryPlanner::applyFiltersIfPossible<true>(
+    vector<QueryPlanner::SubtreePlan>& row,
+    const vector<SparqlFilter>& filters) const;
+
+template void QueryPlanner::applyFiltersIfPossible<false>(
+    vector<QueryPlanner::SubtreePlan>& row,
+    const vector<SparqlFilter>& filters) const;
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
@@ -1411,7 +1422,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   // (there might be duplicates because we already have multiple candidates
   // for each index scan with different permutations.
   dpTab.push_back(std::move(connectedComponent));
-  applyFiltersIfPossible(dpTab.back(), filters, false);
+  applyFiltersIfPossible<false>(dpTab.back(), filters);
   ad_utility::HashSet<uint64_t> uniqueNodeIds;
   std::ranges::copy(
       dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
@@ -1426,7 +1437,7 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
       dpTab[k - 1].insert(dpTab[k - 1].end(), newPlans.begin(), newPlans.end());
-      applyFiltersIfPossible(dpTab.back(), filters, false);
+      applyFiltersIfPossible<false>(dpTab.back(), filters);
     }
     // As we only passed in connected components, we expect the result to always
     // be nonempty.
@@ -1464,7 +1475,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   }
   if (numConnectedComponents == 1) {
     // A Cartesian product is not needed if there is only one component.
-    applyFiltersIfPossible(lastDpRowFromComponents.back(), filters, true);
+    applyFiltersIfPossible<true>(lastDpRowFromComponents.back(), filters);
     return lastDpRowFromComponents;
   }
   // More than one connected component, set up a Cartesian product.
@@ -1480,7 +1491,7 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
       std::back_inserter(subtrees));
   result.at(0).push_back(
       makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
-  applyFiltersIfPossible(result.at(0), filters, true);
+  applyFiltersIfPossible<true>(result.at(0), filters);
   return result;
 }
 
@@ -1879,19 +1890,17 @@ auto QueryPlanner::createJoinWithTransitivePath(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
-  const bool aIsTransPath{
-      std::dynamic_pointer_cast<TransitivePath>(a._qet->getRootOperation())};
-  const bool bIsTransPath{
-      std::dynamic_pointer_cast<TransitivePath>(b._qet->getRootOperation())};
+  auto aTransPath =
+      std::dynamic_pointer_cast<TransitivePath>(a._qet->getRootOperation());
+  auto bTransPath =
+      std::dynamic_pointer_cast<TransitivePath>(b._qet->getRootOperation());
 
-  if (!(aIsTransPath || bIsTransPath)) {
+  if (!(aTransPath || bTransPath)) {
     return std::nullopt;
   }
-  std::shared_ptr<QueryExecutionTree> otherTree =
-      aIsTransPath ? b._qet : a._qet;
-  auto& transPathTree = aIsTransPath ? a._qet : b._qet;
-  auto transPathOperation = std::dynamic_pointer_cast<TransitivePath>(
-      transPathTree->getRootOperation());
+  std::shared_ptr<QueryExecutionTree> otherTree = aTransPath ? b._qet : a._qet;
+  auto& transPathTree = aTransPath ? a._qet : b._qet;
+  auto transPathOperation = aTransPath ? aTransPath : bTransPath;
 
   // TODO: Handle the case of two or more common variables
   if (jcs.size() > 1) {
@@ -1932,10 +1941,13 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   // subject column we can use a specialized join that avoids
   // loading the full has-predicate predicate.
   auto isSuitablePredicateScan = [](const auto& tree, size_t joinColumn) {
-    auto rootOperation = std::dynamic_pointer_cast<HasPredicateScan>(
-        tree._qet->getRootOperation());
-    return rootOperation && joinColumn == 0 &&
-           rootOperation->getType() == HasPredicateScan::ScanType::FULL_SCAN;
+    if (joinColumn == 0) {
+      auto rootOperation = std::dynamic_pointer_cast<HasPredicateScan>(
+          tree._qet->getRootOperation());
+      return rootOperation &&
+             rootOperation->getType() == HasPredicateScan::ScanType::FULL_SCAN;
+    }
+    return false;
   };
 
   const bool aIsSuitablePredicateScan = isSuitablePredicateScan(a, jcs[0][0]);
