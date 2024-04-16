@@ -299,9 +299,9 @@ class RowReferenceImpl {
     }
 
     // Assignment from a `const` RowReference to a `mutable` RowReference
-    This& operator=(
-        const RowReferenceWithRestrictedAccess<
-            Table, ad_utility::IsConst::True>& other) && requires(!isConst) {
+    This& operator=(const RowReferenceWithRestrictedAccess<
+                    Table, ad_utility::IsConst::True>& other) &&
+        requires(!isConst) {
       return assignmentImpl(*this, other);
     }
 
