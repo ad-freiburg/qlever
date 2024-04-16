@@ -26,27 +26,27 @@ namespace ad_utility {
 template <typename Comparator>
 inline auto makeComparatorForNans(Comparator comparator) {
   return [comparator]<typename A, typename B>(const A& a, const B& b)
-      requires std::is_invocable_r_v<bool, Comparator, A, B> {
-    auto isNan = []<typename T>(const T& t) {
-      if constexpr (std::is_floating_point_v<T>) {
-        return std::isnan(t);
-      } else {
-        (void)t;
-        return false;
-      }
-    };
+             requires std::is_invocable_r_v<bool, Comparator, A, B> {
+               auto isNan = []<typename T>(const T& t) {
+                 if constexpr (std::is_floating_point_v<T>) {
+                   return std::isnan(t);
+                 } else {
+                   (void)t;
+                   return false;
+                 }
+               };
 
-    bool aIsNan = isNan(a);
-    bool bIsNan = isNan(b);
-    if (aIsNan && bIsNan) {
-      return comparator(0.0, 0.0);
-    } else if (aIsNan) {
-      return comparator(1.0, 0.0);
-    } else if (bIsNan) {
-      return comparator(0.0, 1.0);
-    } else {
-      return comparator(a, b);
-    }
-  };
+               bool aIsNan = isNan(a);
+               bool bIsNan = isNan(b);
+               if (aIsNan && bIsNan) {
+                 return comparator(0.0, 0.0);
+               } else if (aIsNan) {
+                 return comparator(1.0, 0.0);
+               } else if (bIsNan) {
+                 return comparator(0.0, 1.0);
+               } else {
+                 return comparator(a, b);
+               }
+             };
 }
 }  // namespace ad_utility
