@@ -1899,7 +1899,6 @@ auto QueryPlanner::createJoinWithTransitivePath(
     return std::nullopt;
   }
   std::shared_ptr<QueryExecutionTree> otherTree = aTransPath ? b._qet : a._qet;
-  auto& transPathTree = aTransPath ? a._qet : b._qet;
   auto transPathOperation = aTransPath ? aTransPath : bTransPath;
 
   // TODO: Handle the case of two or more common variables
