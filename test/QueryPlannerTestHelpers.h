@@ -246,11 +246,10 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(right))));
     };
 
-inline auto Sort = [](const std::same_as<QetMatcher> auto&... childMatchers) {
-  return RootOperation<::Sort>(
-      AllOf(Property("getChildren", &Operation::getChildren,
-                     ElementsAre(Pointee(childMatchers)...))));
-};
+// Match a sort operation. Currently, this is only required by the binary search
+// version of the transitive path operation. This matcher checks only the
+// children of the sort operation.
+inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
 
 // Match a `Filter` operation. The matching of the expression is currently only
 // done via the descriptor.
