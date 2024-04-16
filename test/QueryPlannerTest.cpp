@@ -765,6 +765,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
+          // TODO<joka921> Get rid of this sort operation
           h::Sort(scan("?_qlever_internal_variable_query_planner_0", "<p>",
                        "?_qlever_internal_variable_query_planner_1"))));
 }
