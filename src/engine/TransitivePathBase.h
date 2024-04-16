@@ -60,9 +60,7 @@ struct TransitivePathSide {
 // We deliberately use the `std::` variants of a hash set and hash map because
 // `absl`s types are not exception safe.
 struct HashId {
-  auto operator()(Id id) const {
-    return std::hash<uint64_t>{}(id.getBits());
-  }
+  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
 };
 
 using Set = std::unordered_set<Id, HashId, std::equal_to<Id>,
