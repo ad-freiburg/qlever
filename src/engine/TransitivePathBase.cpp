@@ -46,7 +46,7 @@ TransitivePathBase::TransitivePathBase(
 }
 
 // _____________________________________________________________________________
-TransitivePathBase::~TransitivePathBase() {}
+TransitivePathBase::~TransitivePathBase() = default;
 
 // _____________________________________________________________________________
 std::pair<TransitivePathSide&, TransitivePathSide&>

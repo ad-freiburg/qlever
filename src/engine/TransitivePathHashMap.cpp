@@ -43,6 +43,6 @@ HashMapWrapper TransitivePathHashMap::setupEdgesMap(
     checkCancellation();
     insertIntoMap(edges, startCol[i], targetCol[i]);
   }
-  auto wrapper = HashMapWrapper(edges);
+  auto wrapper = HashMapWrapper{edges};
   return wrapper;
 }

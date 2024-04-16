@@ -219,7 +219,7 @@ class TransitivePathImpl : public TransitivePathBase {
         insertIntoMap(hull, startNode, startNode);
       }
 
-      while (stack.size() > 0) {
+      while (!stack.empty()) {
         checkCancellation();
         auto [node, steps] = stack.back();
         stack.pop_back();

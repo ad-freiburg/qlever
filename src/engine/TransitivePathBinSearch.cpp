@@ -5,10 +5,8 @@
 #include "TransitivePathBinSearch.h"
 
 #include <memory>
-#include <optional>
 #include <utility>
 
-#include "engine/CallFixedSize.h"
 #include "engine/TransitivePathBase.h"
 
 // _____________________________________________________________________________
@@ -28,6 +26,6 @@ TransitivePathBinSearch::TransitivePathBinSearch(
 BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const IdTable& dynSub, const TransitivePathSide& startSide,
     const TransitivePathSide& targetSide) const {
-  return BinSearchMap(dynSub.getColumn(startSide.subCol_),
-                      dynSub.getColumn(targetSide.subCol_));
+  return BinSearchMap{dynSub.getColumn(startSide.subCol_),
+                      dynSub.getColumn(targetSide.subCol_)};
 }
