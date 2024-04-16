@@ -1,6 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//         Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -8,7 +9,6 @@
 #include <limits>
 #include <memory>
 
-#include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
@@ -20,7 +20,6 @@
 #include "util/IndexTestHelpers.h"
 
 using ad_utility::testing::getQec;
-using ad_utility::testing::makeAllocator;
 namespace {
 auto V = ad_utility::testing::VocabId;
 using Vars = std::vector<std::optional<Variable>>;
@@ -75,10 +74,9 @@ class TransitivePathTest : public testing::TestWithParam<bool> {
 };
 
 TEST_P(TransitivePathTest, idToId) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
-  auto expected = makeIdTableFromVector({{V(0), V(3)}});
+  auto expected = makeIdTableFromVector({{0, 3}});
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, V(3), 1);
@@ -92,11 +90,9 @@ TEST_P(TransitivePathTest, idToId) {
 }
 
 TEST_P(TransitivePathTest, idToVar) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
-  auto expected =
-      makeIdTableFromVector({{V(0), V(1)}, {V(0), V(2)}, {V(0), V(3)}});
+  auto expected = makeIdTableFromVector({{0, 1}, {0, 2}, {0, 3}});
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -110,13 +106,12 @@ TEST_P(TransitivePathTest, idToVar) {
 }
 
 TEST_P(TransitivePathTest, varToId) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
   auto expected = makeIdTableFromVector({
-      {V(2), V(3)},
-      {V(1), V(3)},
-      {V(0), V(3)},
+      {2, 3},
+      {1, 3},
+      {0, 3},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -131,11 +126,9 @@ TEST_P(TransitivePathTest, varToId) {
 }
 
 TEST_P(TransitivePathTest, idToVarMinLengthZero) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
-  auto expected = makeIdTableFromVector(
-      {{V(0), V(0)}, {V(0), V(1)}, {V(0), V(2)}, {V(0), V(3)}});
+  auto expected = makeIdTableFromVector({{0, 0}, {0, 1}, {0, 2}, {0, 3}});
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -149,14 +142,13 @@ TEST_P(TransitivePathTest, idToVarMinLengthZero) {
 }
 
 TEST_P(TransitivePathTest, varToIdMinLengthZero) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}});
 
   auto expected = makeIdTableFromVector({
-      {V(3), V(3)},
-      {V(2), V(3)},
-      {V(1), V(3)},
-      {V(0), V(3)},
+      {3, 3},
+      {2, 3},
+      {1, 3},
+      {0, 3},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -172,19 +164,19 @@ TEST_P(TransitivePathTest, varToIdMinLengthZero) {
 
 TEST_P(TransitivePathTest, varTovar) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(1)},
-      {V(1), V(2)},
-      {V(1), V(3)},
-      {V(2), V(3)},
+      {0, 1},
+      {1, 2},
+      {1, 3},
+      {2, 3},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(0), V(1)},
-      {V(0), V(2)},
-      {V(0), V(3)},
-      {V(1), V(2)},
-      {V(1), V(3)},
-      {V(2), V(3)},
+      {0, 1},
+      {0, 2},
+      {0, 3},
+      {1, 2},
+      {1, 3},
+      {2, 3},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -199,32 +191,32 @@ TEST_P(TransitivePathTest, varTovar) {
 }
 
 TEST_P(TransitivePathTest, unlimitedMaxLength) {
-  auto sub = makeIdTableFromVector({{V(0), V(2)},
-                                    {V(2), V(4)},
-                                    {V(4), V(7)},
-                                    {V(0), V(7)},
-                                    {V(3), V(3)},
-                                    {V(7), V(0)},
+  auto sub = makeIdTableFromVector({{0, 2},
+                                    {2, 4},
+                                    {4, 7},
+                                    {0, 7},
+                                    {3, 3},
+                                    {7, 0},
                                     // Disconnected component.
                                     {V(10), V(11)}});
 
-  auto expected = makeIdTableFromVector({{V(0), V(2)},
-                                         {V(0), V(4)},
-                                         {V(0), V(7)},
-                                         {V(0), V(0)},
-                                         {V(2), V(4)},
-                                         {V(2), V(7)},
-                                         {V(2), V(0)},
-                                         {V(2), V(2)},
-                                         {V(4), V(7)},
-                                         {V(4), V(0)},
-                                         {V(4), V(2)},
-                                         {V(4), V(4)},
-                                         {V(3), V(3)},
-                                         {V(7), V(0)},
-                                         {V(7), V(2)},
-                                         {V(7), V(4)},
-                                         {V(7), V(7)},
+  auto expected = makeIdTableFromVector({{0, 2},
+                                         {0, 4},
+                                         {0, 7},
+                                         {0, 0},
+                                         {2, 4},
+                                         {2, 7},
+                                         {2, 0},
+                                         {2, 2},
+                                         {4, 7},
+                                         {4, 0},
+                                         {4, 2},
+                                         {4, 4},
+                                         {3, 3},
+                                         {7, 0},
+                                         {7, 2},
+                                         {7, 4},
+                                         {7, 7},
                                          {V(10), V(11)}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -239,19 +231,18 @@ TEST_P(TransitivePathTest, unlimitedMaxLength) {
 }
 
 TEST_P(TransitivePathTest, idToLeftBound) {
-  auto sub = makeIdTableFromVector(
-      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}, {V(3), V(4)}});
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 3}, {3, 4}});
 
   auto leftOpTable = makeIdTableFromVector({
-      {V(0), V(1)},
-      {V(0), V(2)},
-      {V(0), V(3)},
+      {0, 1},
+      {0, 2},
+      {0, 3},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(1), V(4), V(0)},
-      {V(2), V(4), V(0)},
-      {V(3), V(4), V(0)},
+      {1, 4, 0},
+      {2, 4, 0},
+      {3, 4, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -268,23 +259,23 @@ TEST_P(TransitivePathTest, idToLeftBound) {
 
 TEST_P(TransitivePathTest, idToRightBound) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(1)},
-      {V(1), V(2)},
-      {V(1), V(3)},
-      {V(2), V(3)},
-      {V(3), V(4)},
+      {0, 1},
+      {1, 2},
+      {1, 3},
+      {2, 3},
+      {3, 4},
   });
 
   auto rightOpTable = makeIdTableFromVector({
-      {V(2), V(5)},
-      {V(3), V(5)},
-      {V(4), V(5)},
+      {2, 5},
+      {3, 5},
+      {4, 5},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(0), V(2), V(5)},
-      {V(0), V(3), V(5)},
-      {V(0), V(4), V(5)},
+      {0, 2, 5},
+      {0, 3, 5},
+      {0, 4, 5},
   });
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
@@ -301,28 +292,28 @@ TEST_P(TransitivePathTest, idToRightBound) {
 
 TEST_P(TransitivePathTest, leftBoundToVar) {
   auto sub = makeIdTableFromVector({
-      {V(1), V(2)},
-      {V(2), V(3)},
-      {V(2), V(4)},
-      {V(3), V(4)},
+      {1, 2},
+      {2, 3},
+      {2, 4},
+      {3, 4},
   });
 
   auto leftOpTable = makeIdTableFromVector({
-      {V(0), V(1)},
-      {V(0), V(2)},
-      {V(0), V(3)},
+      {0, 1},
+      {0, 2},
+      {0, 3},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(1), V(1), V(0)},
-      {V(1), V(2), V(0)},
-      {V(1), V(3), V(0)},
-      {V(1), V(4), V(0)},
-      {V(2), V(2), V(0)},
-      {V(2), V(3), V(0)},
-      {V(2), V(4), V(0)},
-      {V(3), V(3), V(0)},
-      {V(3), V(4), V(0)},
+      {1, 1, 0},
+      {1, 2, 0},
+      {1, 3, 0},
+      {1, 4, 0},
+      {2, 2, 0},
+      {2, 3, 0},
+      {2, 4, 0},
+      {3, 3, 0},
+      {3, 4, 0},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -339,28 +330,28 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
 
 TEST_P(TransitivePathTest, rightBoundToVar) {
   auto sub = makeIdTableFromVector({
-      {V(1), V(2)},
-      {V(2), V(3)},
-      {V(2), V(4)},
-      {V(3), V(4)},
+      {1, 2},
+      {2, 3},
+      {2, 4},
+      {3, 4},
   });
 
   auto rightOpTable = makeIdTableFromVector({
-      {V(2), V(5)},
-      {V(3), V(5)},
-      {V(4), V(5)},
+      {2, 5},
+      {3, 5},
+      {4, 5},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(1), V(2), V(5)},
-      {V(1), V(3), V(5)},
-      {V(1), V(4), V(5)},
-      {V(2), V(2), V(5)},
-      {V(2), V(3), V(5)},
-      {V(2), V(4), V(5)},
-      {V(3), V(3), V(5)},
-      {V(3), V(4), V(5)},
-      {V(4), V(4), V(5)},
+      {1, 2, 5},
+      {1, 3, 5},
+      {1, 4, 5},
+      {2, 2, 5},
+      {2, 3, 5},
+      {2, 4, 5},
+      {3, 3, 5},
+      {3, 4, 5},
+      {4, 4, 5},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -377,29 +368,29 @@ TEST_P(TransitivePathTest, rightBoundToVar) {
 
 TEST_P(TransitivePathTest, maxLength2FromVariable) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(2)},
-      {V(2), V(4)},
-      {V(4), V(7)},
-      {V(0), V(7)},
-      {V(3), V(3)},
-      {V(7), V(0)},
+      {0, 2},
+      {2, 4},
+      {4, 7},
+      {0, 7},
+      {3, 3},
+      {7, 0},
       // Disconnected component.
-      {V(10), V(11)},
+      {10, 11},
   });
 
-  auto expected = makeIdTableFromVector({{V(0), V(2)},
-                                         {V(0), V(4)},
-                                         {V(0), V(7)},
-                                         {V(0), V(0)},
-                                         {V(2), V(4)},
-                                         {V(2), V(7)},
-                                         {V(4), V(7)},
-                                         {V(4), V(0)},
-                                         {V(3), V(3)},
-                                         {V(7), V(0)},
-                                         {V(7), V(2)},
-                                         {V(7), V(7)},
-                                         {V(10), V(11)}});
+  auto expected = makeIdTableFromVector({{0, 2},
+                                         {0, 4},
+                                         {0, 7},
+                                         {0, 0},
+                                         {2, 4},
+                                         {2, 7},
+                                         {4, 7},
+                                         {4, 0},
+                                         {3, 3},
+                                         {7, 0},
+                                         {7, 2},
+                                         {7, 7},
+                                         {10, 11}});
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
@@ -413,20 +404,20 @@ TEST_P(TransitivePathTest, maxLength2FromVariable) {
 
 TEST_P(TransitivePathTest, maxLength2FromId) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(2)},
-      {V(2), V(4)},
-      {V(4), V(7)},
-      {V(0), V(7)},
-      {V(3), V(3)},
-      {V(7), V(0)},
+      {0, 2},
+      {2, 4},
+      {4, 7},
+      {0, 7},
+      {3, 3},
+      {7, 0},
       // Disconnected component.
-      {V(10), V(11)},
+      {10, 11},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(7), V(0)},
-      {V(7), V(2)},
-      {V(7), V(7)},
+      {7, 0},
+      {7, 2},
+      {7, 7},
   });
 
   TransitivePathSide left(std::nullopt, 0, V(7), 0);
@@ -441,19 +432,19 @@ TEST_P(TransitivePathTest, maxLength2FromId) {
 
 TEST_P(TransitivePathTest, maxLength2ToId) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(2)},
-      {V(2), V(4)},
-      {V(4), V(7)},
-      {V(0), V(7)},
-      {V(3), V(3)},
-      {V(7), V(0)},
+      {0, 2},
+      {2, 4},
+      {4, 7},
+      {0, 7},
+      {3, 3},
+      {7, 0},
       // Disconnected component.
-      {V(10), V(11)},
+      {10, 11},
   });
 
   auto expected = makeIdTableFromVector({
-      {V(0), V(2)},
-      {V(7), V(2)},
+      {0, 2},
+      {7, 2},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
@@ -468,14 +459,14 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
 
 TEST_P(TransitivePathTest, zeroLengthException) {
   auto sub = makeIdTableFromVector({
-      {V(0), V(2)},
-      {V(2), V(4)},
-      {V(4), V(7)},
-      {V(0), V(7)},
-      {V(3), V(3)},
-      {V(7), V(0)},
+      {0, 2},
+      {2, 4},
+      {4, 7},
+      {0, 7},
+      {3, 3},
+      {7, 0},
       // Disconnected component.
-      {V(10), V(11)},
+      {10, 11},
   });
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
