@@ -130,6 +130,46 @@ TEST_P(TransitivePathTest, varToId) {
               ::testing::UnorderedElementsAreArray(expected));
 }
 
+TEST_P(TransitivePathTest, idToVarMinLengthZero) {
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+
+  auto expected = makeIdTableFromVector(
+      {{V(0), V(0)}, {V(0), V(1)}, {V(0), V(2)}, {V(0), V(3)}});
+
+  TransitivePathSide left(std::nullopt, 0, V(0), 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST_P(TransitivePathTest, varToIdMinLengthZero) {
+  auto sub = makeIdTableFromVector(
+      {{V(0), V(1)}, {V(1), V(2)}, {V(1), V(3)}, {V(2), V(3)}});
+
+  auto expected = makeIdTableFromVector({
+      {V(3), V(3)},
+      {V(2), V(3)},
+      {V(1), V(3)},
+      {V(0), V(3)},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, V(3), 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 0, std::numeric_limits<size_t>::max());
+
+  auto resultTable = T->computeResultOnlyForTesting();
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
 TEST_P(TransitivePathTest, varTovar) {
   auto sub = makeIdTableFromVector({
       {V(0), V(1)},
