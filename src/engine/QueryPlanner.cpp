@@ -1908,8 +1908,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
         "Transitive Path operation with more than"
         " two common variables is not supported");
   }
-  const size_t otherCol = aIsTransPath ? jcs[0][1] : jcs[0][0];
-  const size_t thisCol = aIsTransPath ? jcs[0][0] : jcs[0][1];
+  const size_t otherCol = aTransPath ? jcs[0][1] : jcs[0][0];
+  const size_t thisCol = aTransPath ? jcs[0][0] : jcs[0][1];
   // Do not bind the side of a path twice
   if (transPathOperation->isBoundOrId()) {
     return std::nullopt;
