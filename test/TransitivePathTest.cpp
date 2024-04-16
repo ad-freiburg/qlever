@@ -15,6 +15,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/ValuesForTesting.h"
 #include "gtest/gtest.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -423,6 +424,30 @@ TEST_P(TransitivePathTest, maxLength2ToId) {
   auto resultTable = T->computeResultOnlyForTesting();
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST_P(TransitivePathTest, zeroLengthException) {
+  auto sub = makeIdTableFromVector({
+      {V(0), V(2)},
+      {V(2), V(4)},
+      {V(4), V(7)},
+      {V(0), V(7)},
+      {V(3), V(3)},
+      {V(7), V(0)},
+      // Disconnected component.
+      {V(10), V(11)},
+  });
+
+  TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
+  TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
+  auto T =
+      makePathUnbound(std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+                      left, right, 0, std::numeric_limits<size_t>::max());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      T->computeResultOnlyForTesting(),
+      ::testing::ContainsRegex(
+          "This query might have to evalute the empty path, which is currently "
+          "not supported"));
 }
 
 INSTANTIATE_TEST_SUITE_P(TransitivePathTestSuite, TransitivePathTest,
