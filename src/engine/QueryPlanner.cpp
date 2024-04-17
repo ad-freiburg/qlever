@@ -28,7 +28,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "parser/Alias.h"
@@ -435,8 +435,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           right.value_ = getSideValue(arg._right);
           size_t min = arg._min;
           size_t max = arg._max;
-          auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,
-                                                      right, min, max);
+          auto transitivePath = TransitivePathBase::makeTransitivePath(
+              _qec, std::move(sub._qet), std::move(left), std::move(right), min,
+              max);
+          auto plan =
+              makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
           candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
@@ -1880,9 +1883,9 @@ auto QueryPlanner::createJoinWithTransitivePath(
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   auto aTransPath =
-      std::dynamic_pointer_cast<TransitivePath>(a._qet->getRootOperation());
+      std::dynamic_pointer_cast<TransitivePathBase>(a._qet->getRootOperation());
   auto bTransPath =
-      std::dynamic_pointer_cast<TransitivePath>(b._qet->getRootOperation());
+      std::dynamic_pointer_cast<TransitivePathBase>(b._qet->getRootOperation());
 
   if (!(aTransPath || bTransPath)) {
     return std::nullopt;
