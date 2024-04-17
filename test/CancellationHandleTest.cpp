@@ -154,7 +154,7 @@ namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 #ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   CancellationHandle<ENABLED> handle;
 
@@ -173,7 +173,7 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
 #ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   CancellationHandle<ENABLED> handle;
   handle.startWatchDog();

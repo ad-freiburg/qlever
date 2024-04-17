@@ -809,7 +809,7 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
 // currently being parsed.
 TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
 #ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};
   auto testWithParser = [&]<typename Parser>(
