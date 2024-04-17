@@ -34,20 +34,20 @@ void VocabularyOnDisk::buildFromIterable(Iterable&& it,
                                          const string& fileName) {
   {
     file_.open(fileName.c_str(), "w");
-    ad_utility::MmapVector<Offset> idsAndOffsets(fileName + offsetSuffix_,
-                                                 ad_utility::CreateTag{});
+    ad_utility::MmapVector<Offset> offsets(fileName + offsetSuffix_,
+                                           ad_utility::CreateTag{});
     uint64_t currentOffset = 0;
     uint64_t nextId = 0;
     for (const auto& [word, id] : it) {
       AD_CONTRACT_CHECK(nextId == id);
       ++nextId;
-      idsAndOffsets.push_back(currentOffset);
+      offsets.push_back(currentOffset);
       currentOffset += file_.write(word.data(), word.size());
     }
 
     // End offset of last vocabulary entry, also consistent with the empty
     // vocabulary.
-    idsAndOffsets.push_back(currentOffset);
+    offsets.push_back(currentOffset);
     file_.close();
   }  // After this close, the destructor of MmapVector is called, which dumps
      // everything to disk.
