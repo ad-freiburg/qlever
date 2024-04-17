@@ -1370,8 +1370,7 @@ void QueryPlanner::applyFiltersIfPossible(
   std::vector<SubtreePlan> addedPlans;
   for (auto& plan : row) {
     if constexpr (!replace) {
-      if (std::dynamic_pointer_cast<IndexScan>(plan._qet->getRootOperation()) &&
-          plan._qet->getResultWidth() == 3) {
+      if (plan._qet->getRootOperation()->isIndexScanWithNumVariables(3)) {
         // Do not apply filters to dummies, except at the very end of query
         // planning.
         continue;
@@ -1403,14 +1402,6 @@ void QueryPlanner::applyFiltersIfPossible(
   }
   row.insert(row.end(), addedPlans.begin(), addedPlans.end());
 }
-
-template void QueryPlanner::applyFiltersIfPossible<true>(
-    vector<QueryPlanner::SubtreePlan>& row,
-    const vector<SparqlFilter>& filters) const;
-
-template void QueryPlanner::applyFiltersIfPossible<false>(
-    vector<QueryPlanner::SubtreePlan>& row,
-    const vector<SparqlFilter>& filters) const;
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
@@ -1854,10 +1845,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // CASE: JOIN ON ONE COLUMN ONLY.
 
   // Skip if we have two operations, where all three positions are variables.
-  if (std::dynamic_pointer_cast<IndexScan>(a._qet->getRootOperation()) &&
-      a._qet->getResultWidth() == 3 &&
-      std::dynamic_pointer_cast<IndexScan>(b._qet->getRootOperation()) &&
-      b._qet->getResultWidth() == 3) {
+  if (a._qet->getRootOperation()->isIndexScanWithNumVariables(3) &&
+      b._qet->getRootOperation()->isIndexScanWithNumVariables(3)) {
     return candidates;
   }
 

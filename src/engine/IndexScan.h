@@ -93,6 +93,10 @@ class IndexScan : public Operation {
 
   bool knownEmptyResult() override { return getExactSize() == 0; }
 
+  bool isIndexScanWithNumVariables(size_t numVariables) const override {
+    return getResultWidth() == numVariables;
+  }
+
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
     return getResultWidth() == 3;

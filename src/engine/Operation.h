@@ -112,6 +112,11 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
+  virtual bool isIndexScanWithNumVariables(
+      [[maybe_unused]] size_t numVariables) const {
+    return false;
+  }
+
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 
   std::shared_ptr<RuntimeInformation> getRuntimeInfoPointer() {

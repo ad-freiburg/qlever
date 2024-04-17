@@ -6,36 +6,13 @@
 
 #include "./QueryExecutionTree.h"
 
-#include <algorithm>
-#include <sstream>
+#include <array>
+#include <memory>
+#include <ranges>
 #include <string>
-#include <utility>
+#include <vector>
 
-#include "engine/Bind.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/CountAvailablePredicates.h"
-#include "engine/Distinct.h"
-#include "engine/ExportQueryExecutionTrees.h"
-#include "engine/Filter.h"
-#include "engine/GroupBy.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
-#include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/OptionalJoin.h"
-#include "engine/OrderBy.h"
-#include "engine/Service.h"
 #include "engine/Sort.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
-#include "parser/RdfEscaping.h"
-
-using std::string;
 
 using parsedQuery::SelectClause;
 
@@ -44,7 +21,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : qec_(qec) {}
 
 // _____________________________________________________________________________
-string QueryExecutionTree::getCacheKey() const {
+std::string QueryExecutionTree::getCacheKey() const {
   return rootOperation_->getCacheKey();
 }
 
@@ -93,8 +70,7 @@ size_t QueryExecutionTree::getCostEstimate() {
     // result is pinned in cache. Nothing to compute
     return 0;
   }
-  if (std::dynamic_pointer_cast<IndexScan>(getRootOperation()) &&
-      getResultWidth() == 1) {
+  if (getRootOperation()->isIndexScanWithNumVariables(1)) {
     return getSizeEstimate();
   } else {
     return rootOperation_->getCostEstimate();
