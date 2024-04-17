@@ -441,22 +441,22 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           return value;
         };
 
-          left.subCol_ =
-              sub._qet->getVariableColumn(arg._innerLeft.getVariable());
-          left.value_ = getSideValue(arg._left);
-          right.subCol_ =
-              sub._qet->getVariableColumn(arg._innerRight.getVariable());
-          right.value_ = getSideValue(arg._right);
-          size_t min = arg._min;
-          size_t max = arg._max;
-          auto transitivePath = TransitivePathBase::makeTransitivePath(
-              _qec, std::move(sub._qet), std::move(left), std::move(right), min,
-              max);
-          auto plan =
-              makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
-          candidatesOut.push_back(std::move(plan));
-        }
-        joinCandidates(std::move(candidatesOut), self);
+        left.subCol_ =
+            sub._qet->getVariableColumn(arg._innerLeft.getVariable());
+        left.value_ = getSideValue(arg._left);
+        right.subCol_ =
+            sub._qet->getVariableColumn(arg._innerRight.getVariable());
+        right.value_ = getSideValue(arg._right);
+        size_t min = arg._min;
+        size_t max = arg._max;
+        auto transitivePath = TransitivePathBase::makeTransitivePath(
+            _qec, std::move(sub._qet), std::move(left), std::move(right), min,
+            max);
+        auto plan =
+            makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
+        candidatesOut.push_back(std::move(plan));
+      }
+      joinCandidates(std::move(candidatesOut), self);
 
     } else if constexpr (std::is_same_v<T, p::Values>) {
       SubtreePlan valuesPlan = makeSubtreePlan<Values>(_qec, arg._inlineValues);
