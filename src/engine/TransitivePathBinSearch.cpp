@@ -18,6 +18,8 @@ TransitivePathBinSearch::TransitivePathBinSearch(
                                        std::move(leftSide),
                                        std::move(rightSide), minDist, maxDist) {
   auto [startSide, targetSide] = decideDirection();
+  alternativelySortedSubtree_ = QueryExecutionTree::createSortedTree(
+      subtree_, {targetSide.subCol_, targetSide.subCol_});
   subtree_ = QueryExecutionTree::createSortedTree(
       subtree_, {startSide.subCol_, targetSide.subCol_});
 }
@@ -28,4 +30,14 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
     const TransitivePathSide& targetSide) const {
   return BinSearchMap{dynSub.getColumn(startSide.subCol_),
                       dynSub.getColumn(targetSide.subCol_)};
+}
+
+// _____________________________________________________________________________
+std::vector<ColumnIndex> TransitivePathBinSearch::resultSortedOn() const {
+  if (!isBoundOrId()) {
+    AD_CORRECTNESS_CHECK(subtree_);
+    return {subtree_->resultSortedOn().at(1)};
+  } else {
+    return TransitivePathBase::resultSortedOn();
+  }
 }

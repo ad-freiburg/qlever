@@ -69,9 +69,19 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           TransitivePathSide rightSide, size_t minDist,
                           size_t maxDist);
 
+
+  std::vector<ColumnIndex> resultSortedOn() const override;
+
+  // TODO<joka921> Overwrite s.t. we can do this with the alternative subtree.
+  virtual std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
+      std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
+      bool isLeft) const;
+
  private:
   // initialize the map from the subresult
   BinSearchMap setupEdgesMap(
       const IdTable& dynSub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
+
+  std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
 };

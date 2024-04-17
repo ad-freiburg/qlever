@@ -34,7 +34,8 @@ struct TransitivePathSide {
       os << "Id: " << std::get<Id>(value_);
     }
 
-    os << ", subColumn: " << subCol_ << "to " << outputCol_;
+    os << ", subColumn: " <<
+        subCol_ << "to " << outputCol_;
 
     if (treeAndCol_.has_value()) {
       const auto& [tree, col] = treeAndCol_.value();
@@ -266,7 +267,7 @@ class TransitivePathBase : public Operation {
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
-  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
+  virtual std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
       std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
       bool isLeft) const;
 };
