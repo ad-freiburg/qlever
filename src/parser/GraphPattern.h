@@ -59,7 +59,8 @@ class GraphPattern {
   std::vector<SparqlFilter> _filters;
   std::vector<GraphPatternOperation> _graphPatterns;
 
-  // Hashmap that stores for each text variable the corresponding TextLimitMetaObject
+  // Hashmap that stores for each text variable the corresponding
+  // TextLimitMetaObject
   ad_utility::HashMap<Variable, TextLimitMetaObject> textLimits_;
 };
 }  // namespace parsedQuery

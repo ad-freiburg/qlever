@@ -79,21 +79,21 @@ TEST(TextLimit, computeResult) {
   IdTable inputTable = makeIdTableFromVector(input, &Id::makeFromInt);
 
   /*
-  Written as a table sorted on entity, score, textRecord descending:
-  textRecord | entity | word | score | random | random2
+  Written as a table sorted on entity ascending and score, textRecord
+  descending: textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  1          | 36     | 2    | 4     | 5      | 3
-  0          | 6      | 3    | 3     | 4      | 4
+  4          | 0      | 1    | 7     | 8      | 6
+  0          | 0      | 2    | 1     | 2      | 19
+  7          | 1      | 1    | 2     | 1      | 5
+  5          | 1      | 0    | 2     | 0      | 27
+  5          | 1      | 1    | 2     | 3      | 27
+  19         | 1      | 4    | 1     | 7      | 9
+  2          | 4      | 1    | 5     | 6      | 19
   2          | 5      | 0    | 6     | 7      | 5
   5          | 5      | 2    | 4     | 9      | 7
   3          | 5      | 4    | 2     | 4      | 4
-  2          | 4      | 1    | 5     | 6      | 19
-  7          | 1      | 1    | 2     | 1      | 5
-  5          | 1      | 1    | 2     | 3      | 27
-  5          | 1      | 0    | 2     | 0      | 27
-  19         | 1      | 4    | 1     | 7      | 9
-  4          | 0      | 1    | 7     | 8      | 6
-  0          | 0      | 2    | 1     | 2      | 19
+  0          | 6      | 3    | 3     | 4      | 4
+  1          | 36     | 2    | 4     | 5      | 3
   */
 
   // Test with limit 0.
@@ -106,81 +106,73 @@ TEST(TextLimit, computeResult) {
 
   // Test with limit 1.
   TextLimit textLimit1 = makeTextLimit(inputTable.clone(), 1, 0, {1}, {3});
-  ASSERT_EQ(textLimit1.getResultWidth(), 6);
-  resultIdTable = textLimit1.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  1          | 36     | 2    | 4     | 5      | 3
-  0          | 6      | 3    | 3     | 4      | 4
-  2          | 5      | 0    | 6     | 7      | 5
-  2          | 4      | 1    | 5     | 6      | 19
-  7          | 1      | 1    | 2     | 1      | 5
   4          | 0      | 1    | 7     | 8      | 6
+  7          | 1      | 1    | 2     | 1      | 5
+  2          | 4      | 1    | 5     | 6      | 19
+  2          | 5      | 0    | 6     | 7      | 5
+  0          | 6      | 3    | 3     | 4      | 4
+  1          | 36     | 2    | 4     | 5      | 3
   */
-  VectorTable expected = {{1, 36, 2, 4, 5, 3}, {0, 6, 3, 3, 4, 4},
-                          {2, 5, 0, 6, 7, 5},  {2, 4, 1, 5, 6, 19},
-                          {7, 1, 1, 2, 1, 5},  {4, 0, 1, 7, 8, 6}};
+  VectorTable expected = {{4, 0, 1, 7, 8, 6},  {7, 1, 1, 2, 1, 5},
+                          {2, 4, 1, 5, 6, 19}, {2, 5, 0, 6, 7, 5},
+                          {0, 6, 3, 3, 4, 4},  {1, 36, 2, 4, 5, 3}};
+  resultIdTable = textLimit1.getResult()->idTable().clone();
   IdTable expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
   // Test with limit 2.
   TextLimit textLimit2 = makeTextLimit(inputTable.clone(), 2, 0, {1}, {3});
-  ASSERT_EQ(textLimit2.getResultWidth(), 6);
-  resultIdTable = textLimit2.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  1          | 36     | 2    | 4     | 5      | 3
-  0          | 6      | 3    | 3     | 4      | 4
-  2          | 5      | 0    | 6     | 7      | 5
-  5          | 5      | 2    | 4     | 9      | 7
-  2          | 4      | 1    | 5     | 6      | 19
+  4          | 0      | 1    | 7     | 8      | 6
+  0          | 0      | 2    | 1     | 2      | 19
   7          | 1      | 1    | 2     | 1      | 5
   5          | 1      | 1    | 2     | 3      | 27
   5          | 1      | 0    | 2     | 0      | 27
-  4          | 0      | 1    | 7     | 8      | 6
-  0          | 0      | 2    | 1     | 2      | 19
+  2          | 4      | 1    | 5     | 6      | 19
+  2          | 5      | 0    | 6     | 7      | 5
+  5          | 5      | 2    | 4     | 9      | 7
+  0          | 6      | 3    | 3     | 4      | 4
+  1          | 36     | 2    | 4     | 5      | 3
   */
-
-  expected = {{1, 36, 2, 4, 5, 3}, {0, 6, 3, 3, 4, 4},  {2, 5, 0, 6, 7, 5},
-              {5, 5, 2, 4, 9, 7},  {2, 4, 1, 5, 6, 19}, {7, 1, 1, 2, 1, 5},
-              {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27}, {4, 0, 1, 7, 8, 6},
-              {0, 0, 2, 1, 2, 19}};
+  expected = {{4, 0, 1, 7, 8, 6},  {0, 0, 2, 1, 2, 19}, {7, 1, 1, 2, 1, 5},
+              {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27}, {2, 4, 1, 5, 6, 19},
+              {2, 5, 0, 6, 7, 5},  {5, 5, 2, 4, 9, 7},  {0, 6, 3, 3, 4, 4},
+              {1, 36, 2, 4, 5, 3}};
+  resultIdTable = textLimit2.getResult()->idTable().clone();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
   // Test with limit 19.
   TextLimit textLimit19 = makeTextLimit(inputTable.clone(), 19, 0, {1}, {3});
-  ASSERT_EQ(textLimit19.getResultWidth(), 6);
-  resultIdTable = textLimit19.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  1          | 36     | 2    | 4     | 5      | 3
-  0          | 6      | 3    | 3     | 4      | 4
-  2          | 5      | 0    | 6     | 7      | 5
-  5          | 5      | 2    | 4     | 9      | 7
-  3          | 5      | 4    | 2     | 4      | 4
-  2          | 4      | 1    | 5     | 6      | 19
+  4          | 0      | 1    | 7     | 8      | 6
+  0          | 0      | 2    | 1     | 2      | 19
   7          | 1      | 1    | 2     | 1      | 5
   5          | 1      | 1    | 2     | 3      | 27
   5          | 1      | 0    | 2     | 0      | 27
   19         | 1      | 4    | 1     | 7      | 9
-  4          | 0      | 1    | 7     | 8      | 6
-  0          | 0      | 2    | 1     | 2      | 19
+  2          | 4      | 1    | 5     | 6      | 19
+  2          | 5      | 0    | 6     | 7      | 5
+  5          | 5      | 2    | 4     | 9      | 7
+  3          | 5      | 4    | 2     | 4      | 4
+  0          | 6      | 3    | 3     | 4      | 4
+  1          | 36     | 2    | 4     | 5      | 3
   */
-
-  expected = {{1, 36, 2, 4, 5, 3}, {0, 6, 3, 3, 4, 4},  {2, 5, 0, 6, 7, 5},
-              {5, 5, 2, 4, 9, 7},  {3, 5, 4, 2, 4, 4},  {2, 4, 1, 5, 6, 19},
-              {7, 1, 1, 2, 1, 5},  {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27},
-              {19, 1, 4, 1, 7, 9}, {4, 0, 1, 7, 8, 6},  {0, 0, 2, 1, 2, 19}};
+  expected = {{4, 0, 1, 7, 8, 6},  {0, 0, 2, 1, 2, 19}, {7, 1, 1, 2, 1, 5},
+              {5, 1, 1, 2, 3, 27}, {5, 1, 0, 2, 0, 27}, {19, 1, 4, 1, 7, 9},
+              {2, 4, 1, 5, 6, 19}, {2, 5, 0, 6, 7, 5},  {5, 5, 2, 4, 9, 7},
+              {3, 5, 4, 2, 4, 4},  {0, 6, 3, 3, 4, 4},  {1, 36, 2, 4, 5, 3}};
+  resultIdTable = textLimit19.getResult()->idTable().clone();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -195,15 +187,15 @@ TEST(TextLimit, computeResult) {
   19         | 2      | 4    | 1     | 7      | 9
   3          | 5      | 4    | 2     | 4      | 4
 
-  ordered by entity, score, textRecord descending:
+  ordered by entity ascending and score, textRecord descending:
   textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  3          | 5      | 4    | 2     | 4      | 4
+  7          | 1      | 1    | 2     | 1      | 5
   0          | 2      | 3    | 3     | 4      | 4
   5          | 2      | 1    | 2     | 3      | 27
   5          | 2      | 0    | 2     | 0      | 27
   19         | 2      | 4    | 1     | 7      | 9
-  7          | 1      | 1    | 2     | 1      | 5
+  3          | 5      | 4    | 2     | 4      | 4
   */
 
   input = {{7, 1, 1, 2, 1, 5},  {0, 2, 3, 3, 4, 4},  {5, 2, 1, 2, 3, 27},
@@ -212,23 +204,20 @@ TEST(TextLimit, computeResult) {
 
   // Test with limit 3.
   TextLimit textLimit3 = makeTextLimit(inputTable.clone(), 3, 0, {1}, {3});
-  ASSERT_EQ(textLimit3.getResultWidth(), 6);
-  resultIdTable = textLimit3.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity | word | score | random | random2
   -----------------------------------------------------
-  3          | 5      | 4    | 2     | 4      | 4
+  7          | 1      | 1    | 2     | 1      | 5
   0          | 2      | 3    | 3     | 4      | 4
   5          | 2      | 1    | 2     | 3      | 27
   5          | 2      | 0    | 2     | 0      | 27
   19         | 2      | 4    | 1     | 7      | 9
-  7          | 1      | 1    | 2     | 1      | 5
+  3          | 5      | 4    | 2     | 4      | 4
   */
-
-  expected = {{3, 5, 4, 2, 4, 4},  {0, 2, 3, 3, 4, 4},  {5, 2, 1, 2, 3, 27},
-              {5, 2, 0, 2, 0, 27}, {19, 2, 4, 1, 7, 9}, {7, 1, 1, 2, 1, 5}};
+  expected = {{7, 1, 1, 2, 1, 5},  {0, 2, 3, 3, 4, 4},  {5, 2, 1, 2, 3, 27},
+              {5, 2, 0, 2, 0, 27}, {19, 2, 4, 1, 7, 9}, {3, 5, 4, 2, 4, 4}};
+  resultIdTable = textLimit3.getResult()->idTable().clone();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 }
@@ -253,22 +242,22 @@ TEST(TextLimit, computeResultMultipleEntities) {
   0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
 
 
-  ordered by entity1, entity2, entity3, score1+score2+score3, textRecord
-  descending:
-  textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
+  ordered by entity1, entity2, entity3 ascending and score1+score2+score3,
+  textRecord descending: textRecord | entity1 | entity2 | entity3 | word |
+  score1 | score2 | score2
   -------------------------------------------------------------------------
-  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
-  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
-  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
-  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
-  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
-  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
-  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
   19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
   7          | 1       | 1       | 1       | 1    | 2      | 21     | 2
   5          | 1       | 1       | 1       | 0    | 1      | 4      | 2
-  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
-  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
   */
   IdTable inputTable = makeIdTableFromVector({{7, 1, 1, 1, 1, 2, 21, 2},
                                               {0, 6, 7, 6, 3, 5, 1, 3},
@@ -287,33 +276,29 @@ TEST(TextLimit, computeResultMultipleEntities) {
   // Test TextLimit with limit 2.
   TextLimit textLimit2 =
       makeTextLimit(inputTable.clone(), 2, 0, {1, 2, 3}, {5, 6, 7});
-  ASSERT_EQ(textLimit2.getResultWidth(), 8);
-  IdTable resultIdTable = textLimit2.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
   -------------------------------------------------------------------------
-  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
-  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
-  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
-  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
-  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
-  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
-  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
   19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
   7          | 1       | 1       | 1       | 1    | 2      | 21     | 2
-  4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
-  0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  5          | 1       | 1       | 2       | 1    | 1      | 1      | 2
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
   */
-
-  VectorTable expected = {
-      {1, 36, 36, 36, 2, 7, 4, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
-      {5, 5, 23, 17, 2, 6, 6, 4},  {2, 5, 9, 5, 0, 5, 2, 6},
-      {3, 5, 3, 8, 4, 4, 3, 2},    {2, 4, 4, 2, 1, 8, 5, 5},
-      {5, 1, 1, 2, 1, 1, 1, 2},    {19, 1, 1, 1, 4, 22, 2, 1},
-      {7, 1, 1, 1, 1, 2, 21, 2},   {4, 0, 3, 1, 1, 7, 7, 7},
-      {0, 0, 1, 3, 2, 4, 3, 1}};
+  VectorTable expected = {{0, 0, 1, 3, 2, 4, 3, 1},   {4, 0, 3, 1, 1, 7, 7, 7},
+                          {19, 1, 1, 1, 4, 22, 2, 1}, {7, 1, 1, 1, 1, 2, 21, 2},
+                          {5, 1, 1, 2, 1, 1, 1, 2},   {2, 4, 4, 2, 1, 8, 5, 5},
+                          {3, 5, 3, 8, 4, 4, 3, 2},   {2, 5, 9, 5, 0, 5, 2, 6},
+                          {5, 5, 23, 17, 2, 6, 6, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
+                          {1, 36, 36, 36, 2, 7, 4, 4}};
+  IdTable resultIdTable = textLimit2.getResult()->idTable().clone();
   IdTable expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 
@@ -321,29 +306,26 @@ TEST(TextLimit, computeResultMultipleEntities) {
   // is a fixed entity statement.
   TextLimit textLimitFixedEntity =
       makeTextLimit(inputTable.clone(), 1, 0, {1, 2}, {5, 6, 7});
-  ASSERT_EQ(textLimitFixedEntity.getResultWidth(), 8);
-  resultIdTable = textLimitFixedEntity.getResult()->idTable().clone();
-
   /*
   Expected result:
   textRecord | entity1 | entity2 | entity3 | word | score1 | score2 | score2
   -------------------------------------------------------------------------
-  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
-  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
-  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
-  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
-  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
-  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
-  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
   4          | 0       | 3       | 1       | 1    | 7      | 7      | 7
   0          | 0       | 1       | 3       | 2    | 4      | 3      | 1
+  19         | 1       | 1       | 1       | 4    | 22     | 2      | 1
+  2          | 4       | 4       | 2       | 1    | 8      | 5      | 5
+  3          | 5       | 3       | 8       | 4    | 4      | 3      | 2
+  2          | 5       | 9       | 5       | 0    | 5      | 2      | 6
+  5          | 5       | 23      | 17      | 2    | 6      | 6      | 4
+  0          | 6       | 7       | 6       | 3    | 5      | 1      | 3
+  1          | 36      | 36      | 36      | 2    | 7      | 4      | 4
   */
-
-  expected = {{1, 36, 36, 36, 2, 7, 4, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
-              {5, 5, 23, 17, 2, 6, 6, 4},  {2, 5, 9, 5, 0, 5, 2, 6},
-              {3, 5, 3, 8, 4, 4, 3, 2},    {2, 4, 4, 2, 1, 8, 5, 5},
-              {19, 1, 1, 1, 4, 22, 2, 1},  {4, 0, 3, 1, 1, 7, 7, 7},
-              {0, 0, 1, 3, 2, 4, 3, 1}};
+  expected = {{4, 0, 3, 1, 1, 7, 7, 7},   {0, 0, 1, 3, 2, 4, 3, 1},
+              {19, 1, 1, 1, 4, 22, 2, 1}, {2, 4, 4, 2, 1, 8, 5, 5},
+              {3, 5, 3, 8, 4, 4, 3, 2},   {2, 5, 9, 5, 0, 5, 2, 6},
+              {5, 5, 23, 17, 2, 6, 6, 4}, {0, 6, 7, 6, 3, 5, 1, 3},
+              {1, 36, 36, 36, 2, 7, 4, 4}};
+  resultIdTable = textLimitFixedEntity.getResult()->idTable().clone();
   expectedTable = makeIdTableFromVector(expected, &Id::makeFromInt);
   compareIdTableWithExpectedContent(resultIdTable, expectedTable);
 }

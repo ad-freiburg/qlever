@@ -928,8 +928,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
     const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    TextLimitMap& textLimits)
-    -> PlansAndFilters {
+    TextLimitMap& textLimits) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -1188,15 +1187,13 @@ Variable QueryPlanner::generateUniqueVarName() {
 // _____________________________________________________________________________
 QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
     const QueryPlanner::TripleGraph::Node& node,
-    TextLimitMap& textLimits)
-    const {
+    TextLimitMap& textLimits) const {
   AD_CONTRACT_CHECK(node.wordPart_.has_value());
   string word = node.wordPart_.value();
   SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
-    textLimits[cvar] =
-        parsedQuery::TextLimitMetaObject({}, {}, 0);
+    textLimits[cvar] = parsedQuery::TextLimitMetaObject({}, {}, 0);
   }
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
@@ -1205,11 +1202,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
       Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
-      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar,
-                                                     evar, word);
+      plan = makeSubtreePlan<TextIndexScanForEntity>(_qec, cvar, evar, word);
       textLimits[cvar].entityVars_.push_back(evar);
-      textLimits[cvar].scoreVars_.push_back(
-          cvar.getScoreVariable(evar));
+      textLimits[cvar].scoreVars_.push_back(cvar.getScoreVariable(evar));
     } else {
       // Fixed entity case
       AD_CORRECTNESS_CHECK(node._variables.size() == 1);
@@ -1219,11 +1214,9 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
           cvar.getScoreVariable(node.triple_.o_.toString()));
     }
   } else {
-    plan =
-        makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
+    plan = makeSubtreePlan<TextIndexScanForWord>(_qec, cvar, word);
   }
-  textLimits[cvar].idsOfMustBeFinishedOperations_ |=
-      (size_t(1) << node.id_);
+  textLimits[cvar].idsOfMustBeFinishedOperations_ |= (size_t(1) << node.id_);
   plan._idsOfIncludedNodes |= (size_t(1) << node.id_);
   return plan;
 }
@@ -1452,9 +1445,7 @@ void QueryPlanner::applyFiltersIfPossible(
 
 // _____________________________________________________________________________
 void QueryPlanner::applyTextLimitsIfPossible(
-    vector<QueryPlanner::SubtreePlan>& row,
-    const TextLimitMap&
-        textLimits,
+    vector<QueryPlanner::SubtreePlan>& row, const TextLimitMap& textLimits,
     bool replace) const {
   // Apply text limits if possible.
   // A text limit can be applied to a plan if:
@@ -1515,9 +1506,7 @@ void QueryPlanner::applyTextLimitsIfPossible(
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
-    const vector<SparqlFilter>& filters,
-    const TextLimitMap&
-        textLimits,
+    const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
     const TripleGraph& tg) const {
   vector<vector<QueryPlanner::SubtreePlan>> dpTab;
   // find the unique number of nodes in the current connected component

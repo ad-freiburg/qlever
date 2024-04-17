@@ -6,9 +6,13 @@
 
 #include "engine/Operation.h"
 
-// This class implements the TextLimit operation.
-// It only keeps the highest scoring results for the child for each unique
-// entity combination.
+// This class implements the TextLimit operation. It limits the number of texts
+// that are returned for each unique entity combination. The texts are selected
+// based on the score columns.
+// Note that this does not mean that the result will only have n entries for
+// each entity combination (where n is the limit). It will have n texts for each
+// entity combination. But there can be multiple entries with the same entities
+// and text.
 class TextLimit : public Operation {
  private:
   const size_t limit_;

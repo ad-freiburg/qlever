@@ -464,7 +464,8 @@ class QueryPlanner {
       const TripleGraph& tg) const;
 
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
-  // While doing this the TextLimitMetaObjects are created and updated according to the text leaf node. 
+  // While doing this the TextLimitMetaObjects are created and updated according
+  // to the text leaf node.
   [[nodiscard]] SubtreePlan getTextLeafPlan(const TripleGraph::Node& node,
                                             TextLimitMap& textLimits) const;
   /**

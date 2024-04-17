@@ -26,14 +26,10 @@ ResultTable TextLimit::computeResult() {
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 
-  IdTable idTable =
-      childRes->idTable().clone();
-    
-  // Sort the table by the entity column, then the score column, then the text
-  // column.
+  IdTable idTable = childRes->idTable().clone();
 
-
-  // TODO<joka921> Let the SORT class handle this. This requires descending sorting for positive integers though.
+  // TODO<joka921> Let the SORT class handle this. This requires descending
+  // sorting for positive integers though.
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
@@ -45,23 +41,21 @@ ResultTable TextLimit::computeResult() {
       return 1;
     } else if (lhsScore < rhsScore) {
       return -1;
-    } else {
-      return 0;
     }
+    return 0;
   };
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
     for (size_t i = 0; i < entityColumns_.size(); ++i) {
-      if (lhs[entityColumns_[i]] > rhs[entityColumns_[i]]) {
+      if (lhs[entityColumns_[i]] < rhs[entityColumns_[i]]) {
         return 1;
-      } else if (lhs[entityColumns_[i]] < rhs[entityColumns_[i]]) {
+      } else if (lhs[entityColumns_[i]] > rhs[entityColumns_[i]]) {
         return -1;
       }
     }
     return 0;
   };
 
-  // Runtime: O(n log n)
   std::ranges::sort(idTable, [this, compareScores, compareEntities](
                                  const auto& lhs, const auto& rhs) {
     return compareEntities(lhs, rhs) == 1 ||
@@ -70,16 +64,21 @@ ResultTable TextLimit::computeResult() {
              (compareScores(lhs, rhs) == 0 &&
               (lhs[textRecordColumn_] > rhs[textRecordColumn_]))));
   });
-  // NOTE: The algorithm assumes that the scores only depends on entity and text
-  // record.
 
-  // Go through the table and remove all but the first n entries for each
-  // entity.
-
-  // Runtime: O(n)? How expensive is erase?
+  // Go through the table and add the first n texts for each
+  // entity to a new empty table (where n is the limit).
+  IdTable resIdTable(idTable.numColumns(),
+                     getExecutionContext()->getAllocator());
   size_t currentEntityIndex = 0;
-  size_t currentEntityCount = 1;
-  for (size_t i = 1; i < idTable.numRows(); ++i) {
+  size_t currentEntityCount = 0;
+  bool lastRecordAdded = false;
+  for (size_t i = 0; i < idTable.numRows(); ++i) {
+    if (i == 0) {
+      resIdTable.push_back(idTable[i]);
+      lastRecordAdded = true;
+      currentEntityCount = 1;
+      continue;  // handle first row separately to avoid out of bounds access
+    }
     if (compareEntities(idTable[i], idTable[currentEntityIndex]) != 0) {
       // Case: new entity.
       currentEntityIndex = i;
@@ -89,22 +88,26 @@ ResultTable TextLimit::computeResult() {
       // Case: new text record.
       if (currentEntityCount >= limit_) {
         // Case: new text record and reached the limit.
-        idTable.erase(idTable.begin() + i);
-        --i;
+        // If we reached the limit we do not add the row to the result table.
+        lastRecordAdded = false;
+        continue;
       } else {
         // Case: new text record but limit not reached yet.
         ++currentEntityCount;
       }
+    } else if (!lastRecordAdded) {
+      // Case: the text record is the same as the last one but we didn't add
+      // the last one to the result table because we reached the limit.
+      // So we do not add this row to the result table either.
+      continue;
     }
-    // If the we don't have a new text record we don't have to do anything.
-
-    // NOTE: This results that for each entity there only max n texts not
-    // entries!!! So there can be two entries that share the same entity and
-    // text in the result. Could be confusing if only entity and text are
-    // selected.
+    // If the we don't have a new text record we don't have to increase the
+    // counter but we still add the row to the result table.
+    resIdTable.push_back(idTable[i]);
+    lastRecordAdded = true;
   }
 
-  return {std::move(idTable), resultSortedOn(),
+  return {std::move(resIdTable), resultSortedOn(),
           childRes->getSharedLocalVocab()};
 }
 
@@ -124,40 +127,34 @@ size_t TextLimit::getCostEstimate() {
 
 // _____________________________________________________________________________
 Variable TextLimit::getTextRecordVariable() const {
-    return child_->getVariableAndInfoByColumnIndex(textRecordColumn_).first;
+  return child_->getVariableAndInfoByColumnIndex(textRecordColumn_).first;
 }
 
 // _____________________________________________________________________________
 vector<Variable> TextLimit::getEntityVariables() const {
-    vector<Variable> entityVars;
-    for(auto col : entityColumns_) {
-      entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
-    }
-    return entityVars;
+  vector<Variable> entityVars;
+  for (auto col : entityColumns_) {
+    entityVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
+  }
+  return entityVars;
 }
 
 // _____________________________________________________________________________
 vector<Variable> TextLimit::getScoreVariables() const {
-    vector<Variable> scoreVars;
-    for(auto col : scoreColumns_) {
-      scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
-    }
-    return scoreVars;
+  vector<Variable> scoreVars;
+  for (auto col : scoreColumns_) {
+    scoreVars.push_back(child_->getVariableAndInfoByColumnIndex(col).first);
+  }
+  return scoreVars;
 }
 
 // _____________________________________________________________________________
 uint64_t TextLimit::getSizeEstimateBeforeLimit() {
-  return child_
-      ->getSizeEstimate();
+  return child_->getSizeEstimate();
 }
 
 // _____________________________________________________________________________
-vector<ColumnIndex> TextLimit::resultSortedOn() const {
-  return {};  // NOTE: sorted on entity, then score, then text all descending.
-              // But apparently this expects an ascending sort. Possible
-              // solution: sort ascending but go through list from back to
-              // front.
-}
+vector<ColumnIndex> TextLimit::resultSortedOn() const { return entityColumns_; }
 
 // _____________________________________________________________________________
 string TextLimit::getDescriptor() const {
