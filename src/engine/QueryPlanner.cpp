@@ -28,7 +28,7 @@
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
+#include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
 #include "parser/Alias.h"
@@ -435,8 +435,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
           right.value_ = getSideValue(arg._right);
           size_t min = arg._min;
           size_t max = arg._max;
-          auto plan = makeSubtreePlan<TransitivePath>(_qec, sub._qet, left,
-                                                      right, min, max);
+          auto transitivePath = TransitivePathBase::makeTransitivePath(
+              _qec, std::move(sub._qet), std::move(left), std::move(right), min,
+              max);
+          auto plan =
+              makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
           candidatesOut.push_back(std::move(plan));
         }
         joinCandidates(std::move(candidatesOut));
@@ -1890,7 +1893,7 @@ auto QueryPlanner::createJoinWithTransitivePath(
   std::shared_ptr<QueryExecutionTree> otherTree =
       aIsTransPath ? b._qet : a._qet;
   auto& transPathTree = aIsTransPath ? a._qet : b._qet;
-  auto transPathOperation = std::dynamic_pointer_cast<TransitivePath>(
+  auto transPathOperation = std::dynamic_pointer_cast<TransitivePathBase>(
       transPathTree->getRootOperation());
 
   // TODO: Handle the case of two or more common variables
