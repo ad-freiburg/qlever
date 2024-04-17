@@ -808,7 +808,7 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.
 TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
-#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
+#ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   std::string filename{"turtleParserStopParsingOnOutsideFailure.dat"};

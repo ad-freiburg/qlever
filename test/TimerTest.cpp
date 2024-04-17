@@ -32,7 +32,7 @@ void testTime(const ad_utility::Timer& timer,
 }
 
 TEST(Timer, BasicWorkflow) {
-#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
+#ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   Timer t{Timer::Started};
@@ -85,7 +85,7 @@ TEST(Timer, BasicWorkflow) {
 }
 
 TEST(Timer, InitiallyStopped) {
-#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
+#ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   Timer t{Timer::Stopped};
@@ -102,7 +102,7 @@ TEST(Timer, InitiallyStopped) {
 }
 
 TEST(TimeBlockAndLog, TimeBlockAndLog) {
-#if (defined(__APPLE__)) || defined(_QLEVER_NO_TIMING_TESTS)
+#ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("sleep_for is unreliable for macos builds");
 #endif
   std::string s;
