@@ -208,6 +208,11 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // S P O PatternOfS PatternOfO, sorted by OPS.
   auto blockGenerator =
       [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+    absl::Cleanup cl{[&queue](){
+      LOG(WARN) << "Finishing the queue" << std::endl;
+      queue.finish();
+      LOG(WARN) << "Finished the queue" << std::endl;
+    }};
     while (auto block = queue.pop()) {
       co_yield fixBlockAfterPatternJoin(std::move(block));
     }
