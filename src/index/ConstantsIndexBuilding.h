@@ -11,11 +11,6 @@
 
 // Constants which are only used during index creation
 
-// here we store all the literals in a text file, which will be externalized.
-// This file is only temporary since the final extneralized literals format is
-// binary and will be created from this file
-const std::string EXTERNAL_LITS_TEXT_FILE_NAME = ".externalized-text";
-
 // Determines the maximum number of bytes of an internal literal (before
 // compression). Every literal larger as this size is externalized regardless
 // of its language tag

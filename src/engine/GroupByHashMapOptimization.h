@@ -69,11 +69,11 @@ struct CountAggregationData {
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
 template <valueIdComparators::Comparison Comp>
 struct ExtremumAggregationData {
-  sparqlExpression::IdOrString currentValue_;
+  sparqlExpression::IdOrLiteralOrIri currentValue_;
   bool firstValueSet_ = false;
 
   // _____________________________________________________________________________
-  void addValue(const sparqlExpression::IdOrString& value,
+  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
                 const sparqlExpression::EvaluationContext* ctx) {
     if (!firstValueSet_) {
       currentValue_ = value;
@@ -88,10 +88,12 @@ struct ExtremumAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
     auto valueIdResultGetter = [](ValueId id) { return id; };
-    auto stringResultGetter = [localVocab](const std::string& str) {
-      auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-      return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-    };
+    auto stringResultGetter =
+        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
+              str.toStringRepresentation());
+          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+        };
     return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
                                                        stringResultGetter),
                       currentValue_);

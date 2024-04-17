@@ -76,9 +76,9 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
       co_yield previousValueCopy;
     }
   }
-  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique outputs of `uniqueView`: " << numUnique
-            << std::endl;
+  LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(DEBUG) << "Number of unique outputs of `uniqueView`: " << numUnique
+             << std::endl;
 }
 
 // Takes a view of blocks and yields the elements of the same view, but removes
@@ -110,7 +110,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     co_yield block;
   }
   LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
+  LOG(DEBUG) << "Number of unique elements: " << numUnique << std::endl;
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in

@@ -727,8 +727,8 @@ TEST(QueryPlanner, TransitivePathRightId) {
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, getId("<o>"), 1};
   h::expect(
       "SELECT ?y WHERE {"
       "?x <p>+ <o> }",
@@ -765,8 +765,9 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")));
+          // TODO<joka921> Get rid of this sort operation
+          h::Sort(scan("?_qlever_internal_variable_query_planner_0", "<p>",
+                       "?_qlever_internal_variable_query_planner_1"))));
 }
 
 // __________________________________________________________________________

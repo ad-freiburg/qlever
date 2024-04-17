@@ -7,7 +7,6 @@
 #include "global/Id.h"
 #include "parser/data/Variable.h"
 #include "util/HashMap.h"
-#include "util/TransparentFunctors.h"
 
 // Store an index of a column together with additional information about that
 // column which can be inferred from the `QueryExecutionTree` without actually

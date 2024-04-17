@@ -69,12 +69,6 @@ inline void PrintTo(const parsedQuery::GraphPattern& pattern,
   s << ::testing::PrintToString(pattern._graphPatterns);
 }
 
-inline void PrintTo(const parsedQuery::GraphPatternOperation& op,
-                    std::ostream* os) {
-  std::ostringstream str;
-  op.toString(str);
-  (*os) << str.str();
-}
 }  // namespace parsedQuery
 
 inline void PrintTo(const Alias& alias, std::ostream* os) {
@@ -332,7 +326,7 @@ inline auto Expression = [](const std::string& descriptor)
   return AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getDescriptor,
                      testing::Eq(descriptor));
 };
-}
+}  // namespace detail
 
 // A matcher that tests whether a `SparqlExpression::Ptr` (a `unique_ptr`)
 // actually (via dynamic cast) stores an element of type `ExpressionT`.
@@ -350,7 +344,7 @@ auto GraphPatternOperation =
     [](auto subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return testing::VariantWith<T>(subMatcher);
 };
-}
+}  // namespace detail
 
 inline auto BindExpression =
     [](const string& expression) -> Matcher<const p::Bind&> {
@@ -524,7 +518,7 @@ inline auto SelectBase =
       AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced)),
       AD_PROPERTY(p::SelectClause, getAliases, testing::IsEmpty()));
 };
-}
+}  // namespace detail
 
 inline auto AsteriskSelect = [](bool distinct = false,
                                 bool reduced =
@@ -673,7 +667,7 @@ inline auto Optional =
   return detail::GraphPatternOperation<p::Optional>(
       AD_FIELD(p::Optional, _child, subMatcher));
 };
-}
+}  // namespace detail
 
 inline auto Group =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
@@ -738,7 +732,7 @@ inline auto GraphPattern =
       AD_FIELD(ParsedQuery::GraphPattern, _graphPatterns,
                testing::ElementsAre(childMatchers...)));
 };
-}
+}  // namespace detail
 
 inline auto GraphPattern =
     MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
@@ -750,7 +744,7 @@ inline auto OptionalGraphPattern = [](vector<std::string>&& filters,
   return detail::Optional(
       detail::GraphPattern(true, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
@@ -761,7 +755,7 @@ inline auto GroupGraphPattern = [](vector<std::string>&& filters,
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto GroupGraphPattern =
     MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
@@ -772,7 +766,7 @@ inline auto MinusGraphPattern = [](vector<std::string>&& filters,
     -> Matcher<const p::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto MinusGraphPattern =
     MatcherWithDefaultFilters<detail::MinusGraphPattern>{};

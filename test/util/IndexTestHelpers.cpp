@@ -8,6 +8,7 @@
 #include "./TripleComponentTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
+#include "util/ProgressBar.h"
 
 namespace ad_utility::testing {
 
@@ -16,10 +17,11 @@ Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  // Decrease some default batch sizes s.t. the very small indices from the test
-  // cases also consist of multiple batches which improves the test coverage.
+  // Decrease various default batch sizes such that there are multiple batches
+  // also for the very small test indices (important for test coverage).
   BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
   BATCH_SIZE_VOCABULARY_MERGE = 2;
+  DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }

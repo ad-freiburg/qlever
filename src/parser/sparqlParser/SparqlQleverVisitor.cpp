@@ -7,12 +7,12 @@
 
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
 
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
 #include <string>
 #include <vector>
 
-#include "absl/strings/str_join.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
@@ -23,6 +23,7 @@
 #include "parser/data/Variable.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
+#include "util/TransparentFunctors.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
 
 using namespace ad_utility::sparql_types;

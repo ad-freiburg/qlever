@@ -6,24 +6,21 @@
 #define QLEVER_COMPRESSEDRELATION_H
 
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 
-#include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
 #include "util/File.h"
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
-#include "util/TypeTraits.h"
 
 // Forward declaration of the `IdTable` class.
 class IdTable;

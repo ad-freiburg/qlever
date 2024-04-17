@@ -5,12 +5,12 @@
 #ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 #define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <future>
-#include <queue>
 #include <ranges>
 
-#include "absl/strings/str_cat.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -19,7 +19,6 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
-#include "util/http/beast.h"
 
 namespace ad_utility {
 

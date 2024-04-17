@@ -78,7 +78,7 @@ Literal Literal::literalWithoutQuotes(
 
 // __________________________________________
 Literal Literal::literalWithNormalizedContent(
-    NormalizedString normalizedRdfContent,
+    NormalizedStringView normalizedRdfContent,
     std::optional<std::variant<Iri, string>> descriptor) {
   auto quotes = "\""sv;
   auto actualContent =
