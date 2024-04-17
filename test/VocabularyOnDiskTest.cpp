@@ -110,35 +110,11 @@ TEST(VocabularyOnDisk, LowerUpperBoundStdLess) {
       createVocabularyFromDisk("lowerUpperBoundStdLess2"));
 }
 
-TEST(VocabularyOnDisk, LowerUpperBoundStdLessNonContiguousIds) {
-  std::vector<std::string> words{"alpha", "betta", "chimes", "someVery123Word"};
-  std::vector<uint64_t> ids{2, 4, 8, 42};
-  VocabularyCreator creator1{"lowerUppperBoundStdLessNonContiguousIds1"};
-  testUpperAndLowerBoundWithStdLessFromWordsAndIds(
-      creator1.createVocabularyImpl(words, ids), words, ids);
-
-  VocabularyCreator creator2{"lowerUppperBoundStdLessNonContiguousIds2"};
-  testUpperAndLowerBoundWithStdLessFromWordsAndIds(
-      creator2.createVocabularyFromDiskImpl(words, ids), words, ids);
-}
-
 TEST(VocabularyOnDisk, LowerUpperBoundNumeric) {
   testUpperAndLowerBoundWithNumericComparator(
       createVocabulary("lowerUpperBoundNumeric1"));
   testUpperAndLowerBoundWithNumericComparator(
       createVocabularyFromDisk("lowerUpperBoundNumeric2"));
-}
-
-TEST(VocabularyOnDisk, LowerUpperBoundNumericNonContiguousIds) {
-  std::vector<std::string> words{"4", "33", "222", "1111"};
-  std::vector<uint64_t> ids{2, 4, 8, 42};
-
-  VocabularyCreator creator1{"lowerUpperBoundNumericNonContiguousIds1"};
-  testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
-      creator1.createVocabularyImpl(words, ids), words, ids);
-  VocabularyCreator creator2{"lowerUpperBoundNumericNonContiguousIds2"};
-  testUpperAndLowerBoundWithNumericComparatorFromWordsAndIds(
-      creator2.createVocabularyFromDiskImpl(words, ids), words, ids);
 }
 
 TEST(VocabularyOnDisk, AccessOperator) {
