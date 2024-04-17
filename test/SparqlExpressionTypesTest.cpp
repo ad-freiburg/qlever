@@ -29,13 +29,15 @@ TEST(SparqlExpressionTypes, expressionResult) {
 }
 
 TEST(SparqlExpressionTypes, printIdOrString) {
+  using namespace ad_utility::triple_component;
   std::stringstream str;
-  IdOrString idOrString{Id::makeUndefined()};
+
+  IdOrLiteralOrIri idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
   ASSERT_EQ(str.str(), "Undefined:Undefined");
-  idOrString = "bimm";
+  idOrString = LiteralOrIri::literalWithoutQuotes("bimm");
   // Clear the stringstream.
   str.str({});
   PrintTo(idOrString, &str);
-  ASSERT_EQ(str.str(), "bimm");
+  ASSERT_EQ(str.str(), "\"bimm\"");
 }

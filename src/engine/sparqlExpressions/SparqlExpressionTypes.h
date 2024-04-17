@@ -11,6 +11,8 @@
 #include "engine/QueryExecutionContext.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/LiteralOrIri.h"
+#include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/HashSet.h"
@@ -51,19 +53,11 @@ class VectorWithMemoryLimit
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings. It is currently implemented as a thin wrapper
-// around a `variant`, but a more sophisticated implementation could be done in
-// the future.
-using IdOrStringBase = std::variant<ValueId, std::string>;
-class IdOrString : public IdOrStringBase,
-                   public VisitMixin<IdOrString, IdOrStringBase> {
- public:
-  using IdOrStringBase::IdOrStringBase;
-  explicit IdOrString(std::optional<std::string> s);
-};
-
-// Print an `IdOrString` for googletest.
-void PrintTo(const IdOrString& var, std::ostream* os);
+// that can only yield strings.
+using IdOrLiteralOrIri =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
+// Printing for GTest.
+void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -72,7 +66,7 @@ void PrintTo(const IdOrString& var, std::ostream* os);
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrString, ValueId>;
+using ConstantTypes = std::tuple<IdOrLiteralOrIri, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -195,12 +189,14 @@ requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
+  } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
         [&localVocab]<typename R>(R&& el) mutable {
-          if constexpr (ad_utility::isSimilar<R, string>) {
+          if constexpr (ad_utility::isSimilar<
+                            R, ad_utility::triple_component::LiteralOrIri>) {
             return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+                localVocab.getIndexAndAddIfNotContained(
+                    AD_FWD(el).toStringRepresentation()));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

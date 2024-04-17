@@ -53,7 +53,9 @@ class GroupConcatExpression : public SparqlExpression {
         groupConcatImpl(std::move(generator));
       }
       result.shrink_to_fit();
-      return IdOrString(std::move(result));
+      return IdOrLiteralOrIri(ad_utility::triple_component::LiteralOrIri{
+          ad_utility::triple_component::Literal::literalWithNormalizedContent(
+              asNormalizedStringViewUnsafe(result))});
     };
 
     auto childRes = child_->evaluate(context);
