@@ -5,8 +5,9 @@
 #ifndef QLEVER_VALUEIDTESTHELPERS_H
 #define QLEVER_VALUEIDTESTHELPERS_H
 
-#include "../src/global/ValueId.h"
-#include "../src/util/Random.h"
+#include "./util/IdTestHelpers.h"
+#include "global/ValueId.h"
+#include "util/Random.h"
 
 // Enabling cheaper unit tests when building in Debug mode
 #ifdef QLEVER_RUN_EXPENSIVE_TESTS
@@ -45,7 +46,7 @@ inline ValueId makeVocabId(uint64_t value) {
   return ValueId::makeFromVocabIndex(VocabIndex::make(value));
 }
 inline ValueId makeLocalVocabId(uint64_t value) {
-  return ValueId::makeFromLocalVocabIndex(LocalVocabIndex::make(value));
+  return ad_utility::testing::LocalVocabId(value);
 }
 inline ValueId makeTextRecordId(uint64_t value) {
   return ValueId::makeFromTextRecordIndex(TextRecordIndex::make(value));
@@ -58,8 +59,10 @@ inline ValueId makeBlankNodeId(uint64_t value) {
 }
 
 inline uint64_t getVocabIndex(ValueId id) { return id.getVocabIndex().get(); }
-inline uint64_t getLocalVocabIndex(ValueId id) {
-  return id.getLocalVocabIndex().get();
+// TODO<joka921> Make the tests more precise for the localVocabIndices.
+inline std::string getLocalVocabIndex(ValueId id) {
+  AD_CORRECTNESS_CHECK(id.getDatatype() == Datatype::LocalVocabIndex);
+  return *id.getLocalVocabIndex();
 }
 inline uint64_t getTextRecordIndex(ValueId id) {
   return id.getTextRecordIndex().get();
@@ -104,6 +107,7 @@ inline auto makeRandomDoubleIds = []() {
   ad_utility::randomShuffle(ids.begin(), ids.end());
   return ids;
 };
+
 inline auto makeRandomIds = []() {
   std::vector<ValueId> ids = makeRandomDoubleIds();
   addIdsFromGenerator(indexGenerator, &makeVocabId, ids);

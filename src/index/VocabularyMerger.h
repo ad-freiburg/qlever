@@ -14,6 +14,7 @@
 #include "index/Vocabulary.h"
 #include "util/HashMap.h"
 #include "util/MmapVector.h"
+#include "util/ProgressBar.h"
 
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
@@ -163,7 +164,8 @@ class VocabularyMerger {
       WordCallback auto& internalVocabularyAction,
       WordCallback auto& externalVocabularyAction,
       std::predicate<TripleComponentWithIndex,
-                     TripleComponentWithIndex> auto const& lessThan);
+                     TripleComponentWithIndex> auto const& lessThan,
+      ad_utility::ProgressBar& progressBar);
 
   // Close all associated files and MmapVectors and reset all internal
   // variables.

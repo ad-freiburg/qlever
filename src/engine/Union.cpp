@@ -178,9 +178,8 @@ ResultTable Union::computeResult() {
   LOG(DEBUG) << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
-  return ResultTable{
-      std::move(idTable), resultSortedOn(),
-      ResultTable::getSharedLocalVocabFromNonEmptyOf(*subRes1, *subRes2)};
+  return ResultTable{std::move(idTable), resultSortedOn(),
+                     ResultTable::getMergedLocalVocab(*subRes1, *subRes2)};
 }
 
 void Union::computeUnion(

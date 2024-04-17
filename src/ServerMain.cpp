@@ -12,6 +12,7 @@
 #include "CompilationInfo.h"
 #include "engine/Server.h"
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/ParseableDuration.h"
 #include "util/ProgramOptionsHelpers.h"

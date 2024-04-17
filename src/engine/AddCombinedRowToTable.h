@@ -218,21 +218,23 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
-    // Sometimes columns are combined where one value is UNDEF and the other one
-    // is not. This function very efficiently returns the not-UNDEF value in
-    // this case.
-    // TODO<joka921> If we keep track of the information that one of the
-    // involved columns contains no UNDEF values at all, we can omit this step
-    // and simply copy the values from this column without looking at the other
-    // input.
-    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-      static_assert(ValueId::makeUndefined().getBits() == 0u);
-      return ValueId::fromBits(a.getBits() | b.getBits());
+    // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
+    // If exactly one of them is UNDEF, return the other one, else return any of
+    // them (they are equal anyway).
+    auto getJoinValue = [](const ValueId a, const ValueId b) {
+      // NOTE: For localVocabIndices we might have different pointers that
+      // compare equal because they point to the same word. Therefore we cannot
+      // use a simple bitwise operation to handle the "one of them is UNDEF"
+      // case as we previously did.
+      if (a.isUndefined()) {
+        return b;
+      }
+      return a;
     };
 
     // A lambda that writes the join column with the given `colIdx` to the
     // `nextResultColIdx`-th column of the result.
-    auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
+    auto writeJoinColumn = [&result, &getJoinValue, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
       const auto& colLeft = inputLeft().getColumn(colIdx);
       const auto& colRight = inputRight().getColumn(colIdx);
@@ -242,8 +244,8 @@ class AddCombinedRowToIdTable {
 
       // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = mergeWithUndefined(colLeft[sourceIndices[0]],
-                                           colRight[sourceIndices[1]]);
+        auto resultId =
+            getJoinValue(colLeft[sourceIndices[0]], colRight[sourceIndices[1]]);
         numUndef += static_cast<size_t>(resultId.isUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }

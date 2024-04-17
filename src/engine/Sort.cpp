@@ -7,11 +7,9 @@
 
 #include <sstream>
 
-#include "CallFixedSize.h"
-#include "QueryExecutionTree.h"
-
-using std::endl;
-using std::string;
+#include "engine/CallFixedSize.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 
 // _____________________________________________________________________________
 size_t Sort::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -25,7 +23,7 @@ Sort::Sort(QueryExecutionContext* qec,
       sortColumnIndices_{std::move(sortColumnIndices)} {}
 
 // _____________________________________________________________________________
-string Sort::getCacheKeyImpl() const {
+std::string Sort::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "SORT(internal) on columns:";
 
@@ -37,7 +35,7 @@ string Sort::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string Sort::getDescriptor() const {
+std::string Sort::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto sortColumn : sortColumnIndices_) {
@@ -53,6 +51,7 @@ string Sort::getDescriptor() const {
 
 // _____________________________________________________________________________
 ResultTable Sort::computeResult() {
+  using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 

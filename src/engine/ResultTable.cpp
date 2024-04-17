@@ -23,10 +23,10 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getSharedLocalVocabFromNonEmptyOf(
-    const ResultTable& resultTable1, const ResultTable& resultTable2)
+auto ResultTable::getMergedLocalVocab(const ResultTable& resultTable1,
+                                      const ResultTable& resultTable2)
     -> SharedLocalVocabWrapper {
-  return getSharedLocalVocabFromNonEmptyOf(
+  return getMergedLocalVocab(
       std::array{std::cref(resultTable1), std::cref(resultTable2)});
 }
 

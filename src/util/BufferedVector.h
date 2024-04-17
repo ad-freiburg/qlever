@@ -3,8 +3,6 @@
 // Author: Johannes Kalmbach (joka921) <johannes.kalmbach@gmail.com>
 
 #pragma once
-#include <gtest/gtest.h>
-
 #include <vector>
 
 #include "MmapVector.h"

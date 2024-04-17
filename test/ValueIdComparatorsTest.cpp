@@ -12,6 +12,32 @@
 #include "util/Random.h"
 
 using namespace valueIdComparators;
+namespace valueIdComparators {
+inline std::ostream& operator<<(std::ostream& str, Comparison c) {
+  switch (c) {
+    using enum Comparison;
+    case LT:
+      str << "LT";
+      break;
+    case LE:
+      str << "LE";
+      break;
+    case EQ:
+      str << "EQ";
+      break;
+    case NE:
+      str << "NE";
+      break;
+    case GE:
+      str << "GE";
+      break;
+    case GT:
+      str << "GT";
+      break;
+  }
+  return str;
+}
+}  // namespace valueIdComparators
 using ad_utility::source_location;
 
 TEST(ValueIdComparators, GetRangeForDatatype) {
@@ -77,20 +103,20 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
       while (it != rangeBegin) {
-        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id;
+        ASSERT_FALSE(isMatching(*it, id)) << *it << ' ' << id << comparison;
         auto expected = isMatchingDatatype(*it) ? False : Undef;
         ASSERT_EQ(compareIds(*it, id, comparison), expected)
             << *it << ' ' << id;
         ++it;
       }
       while (it != rangeEnd) {
-        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id;
+        ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id << comparison;
         ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
       }
     }
     while (it != end) {
-      ASSERT_FALSE(isMatching(*it, id));
+      ASSERT_FALSE(isMatching(*it, id)) << *it << ", " << id << comparison;
       auto expected = isMatchingDatatype(*it) ? False : Undef;
       ASSERT_EQ(compareIds(*it, id, comparison), expected) << *it << ' ' << id;
       ++it;
