@@ -112,8 +112,11 @@ class Operation {
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
 
+  /// Return true if this object is an instance of `IndexScan` and has the
+  /// specified number of variables. For this to work this function needs to
+  /// be overridden by `IndexScan` to do the right thing.
   virtual bool isIndexScanWithNumVariables(
-      [[maybe_unused]] size_t numVariables) const {
+      [[maybe_unused]] size_t target) const {
     return false;
   }
 
