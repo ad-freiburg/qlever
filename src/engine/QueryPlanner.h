@@ -431,6 +431,61 @@ class QueryPlanner {
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
 
+  struct Optimizer {
+    // TODO<joka921> Can we make this const?
+    QueryPlanner& planner_;
+    ParsedQuery::GraphPattern* rootPattern;
+    // here we collect a set of possible plans for each of our children.
+    // always only holds plans for children that can be joined in an
+    // arbitrary order
+    std::vector<std::vector<SubtreePlan>> candidatePlans{};
+    // triples from BasicGraphPatterns that can be joined arbirarily
+    // with each other and the contents of  candidatePlans
+    parsedQuery::BasicGraphPattern candidateTriples{};
+    // all Variables that have been bound be the children we have dealt with
+    // so far. TODO<joka921> verify that we get no false positives with plans
+    // that create no single binding for a variable "by accident".
+    ad_utility::HashSet<Variable> boundVariables{};
+
+    // the callback that is called after dealing with a child pattern.
+    // Can either be passed a BasicGraphPattern directly or a set
+    // of possible candidate plans for a single child pattern
+    void joinCandidates(std::vector<SubtreePlan>&& v);
+
+    void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
+    void visitBind(const parsedQuery::Bind& bind);
+    void visitTransitivePath(parsedQuery::TransPath& transitivePath);
+    void visitUnion(parsedQuery::Union& un);
+    void visitSubquery(parsedQuery::Subquery& subquery);
+
+    // lambda that optimizes a set of triples, other execution plans and filters
+    // under the assumption that they are commutative and can be joined in an
+    // arbitrary order. When a NON-permuting plan is encountered, then
+    // we first  call this function to optimize the preceding permuting plans,
+    // and subsequently join in the correct order with the non-permuting plan.
+    // Returns the last row of the DP table (a set of possible plans with
+    // possibly different costs and different orderings.
+    void graphPatternOperationVisitor(auto&& arg);
+
+    auto optimizeCommutativ(const auto& triples, const auto& plans,
+                            const auto& filters) {
+      auto tg = planner_.createTripleGraph(&triples);
+      // always apply all filters to be safe.
+      // TODO<joka921> it could be possible, to allow the DpTab to leave
+      // results unfiltered and add the filters later, but this has to be
+      // carefully checked and I currently see no benefit.
+      // TODO<joka921> In fact, for the case of REGEX filters, it could be
+      // beneficial to postpone them if possible
+      return planner_.fillDpTab(tg, filters, plans).back();
+    };
+    // find a single best candidate for a given graph pattern
+    SubtreePlan optimizeSingle(const auto pattern) {
+      auto v = planner_.optimize(pattern);
+      auto idx = planner_.findCheapestExecutionTree(v);
+      return std::move(v[idx]);
+    };
+  };
+
   /**
    * @brief return the index of the cheapest execution tree in the argument.
    *
