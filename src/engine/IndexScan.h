@@ -7,8 +7,6 @@
 
 #include "./Operation.h"
 
-using std::string;
-
 class SparqlTriple;
 class SparqlTripleSimple;
 
@@ -43,7 +41,7 @@ class IndexScan : public Operation {
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
   }
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
@@ -93,6 +91,10 @@ class IndexScan : public Operation {
 
   bool knownEmptyResult() override { return getExactSize() == 0; }
 
+  bool isIndexScanWithNumVariables(size_t target) const override {
+    return numVariables() == target;
+  }
+
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
     return getResultWidth() == 3;
@@ -114,7 +116,7 @@ class IndexScan : public Operation {
 
   size_t computeSizeEstimate() const;
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

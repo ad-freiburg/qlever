@@ -4,6 +4,9 @@
 
 #pragma once
 
+#include <optional>
+#include <variant>
+
 #include "parser/Iri.h"
 #include "parser/NormalizedString.h"
 

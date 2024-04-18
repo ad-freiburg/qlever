@@ -4,16 +4,14 @@
 
 #pragma once
 
-#include <optional>
 #include <string>
 #include <string_view>
 
 #include "parser/LiteralOrIri.h"
-#include "util/StringUtils.h"
 
 namespace ad_utility {
 
-static constexpr std::string_view languageTaggedPredicatePrefix = "@";
+constexpr std::string_view languageTaggedPredicatePrefix = "@";
 //! Convert a language tag like "@en" to the corresponding entity uri
 //! for the efficient language filter.
 // TODO<joka921> The overload that takes and returns `std::string` can be
