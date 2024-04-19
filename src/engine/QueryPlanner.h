@@ -432,20 +432,23 @@ class QueryPlanner {
       const TripleGraph::Node& node) const;
 
   struct Optimizer {
-    // TODO<joka921> Can we make this const?
     QueryPlanner& planner_;
-    ParsedQuery::GraphPattern* rootPattern;
+    ParsedQuery::GraphPattern* rootPattern_;
+    QueryExecutionContext* qec_;
+
+    Optimizer(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
+        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
     // here we collect a set of possible plans for each of our children.
     // always only holds plans for children that can be joined in an
     // arbitrary order
-    std::vector<std::vector<SubtreePlan>> candidatePlans{};
+    std::vector<std::vector<SubtreePlan>> candidatePlans_{};
     // triples from BasicGraphPatterns that can be joined arbirarily
-    // with each other and the contents of  candidatePlans
-    parsedQuery::BasicGraphPattern candidateTriples{};
+    // with each other and the contents of  candidatePlans_
+    parsedQuery::BasicGraphPattern candidateTriples_{};
     // all Variables that have been bound be the children we have dealt with
     // so far. TODO<joka921> verify that we get no false positives with plans
     // that create no single binding for a variable "by accident".
-    ad_utility::HashSet<Variable> boundVariables{};
+    ad_utility::HashSet<Variable> boundVariables_{};
 
     // the callback that is called after dealing with a child pattern.
     // Can either be passed a BasicGraphPattern directly or a set
@@ -478,6 +481,8 @@ class QueryPlanner {
       // beneficial to postpone them if possible
       return planner_.fillDpTab(tg, filters, plans).back();
     };
+
+    void optimizeCommutatively();
     // find a single best candidate for a given graph pattern
     SubtreePlan optimizeSingle(const auto pattern) {
       auto v = planner_.optimize(pattern);

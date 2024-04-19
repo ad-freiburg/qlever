@@ -178,6 +178,7 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
   }
 }
 
+// _____________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
   // Handle the empty pattern
@@ -194,18 +195,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
   // candidates. Do one last pass over them.
-  // TODO<joka921> here is a little bit of duplicate code with the end of the
-  // joinCandidates lambda;
-  auto& candidatePlans = optimizer.candidatePlans;
-  auto& candidateTriples = optimizer.candidateTriples;
-  if (candidatePlans.size() > 1 || !candidateTriples._triples.empty()) {
-    auto tg = createTripleGraph(&candidateTriples);
-    auto lastRow = fillDpTab(tg, rootPattern->_filters, candidatePlans).back();
-    candidateTriples._triples.clear();
-    candidatePlans.clear();
-    candidatePlans.push_back(std::move(lastRow));
-    checkCancellation();
-  }
+  optimizer.optimizeCommutatively();
+  auto& candidatePlans = optimizer.candidatePlans_;
 
   // it might be, that we have not yet applied all the filters
   // (it might be, that the last join was optional and introduced new variables)
@@ -377,6 +368,7 @@ vector<QueryPlanner::SubtreePlan> QueryPlanner::getOrderByRow(
   return added;
 }
 
+// _____________________________________________________________________________
 void QueryPlanner::addNodeToTripleGraph(const TripleGraph::Node& node,
                                         QueryPlanner::TripleGraph& tg) const {
   // TODO<joka921> This needs quite some refactoring: The IDs of the nodes have
@@ -1751,7 +1743,6 @@ void QueryPlanner::checkCancellation(
 
 // _______________________________________________________________
 void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
-  auto* _qec = planner_._qec;
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!v.empty());
 
@@ -1760,7 +1751,7 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
   if (v[0].type == SubtreePlan::OPTIONAL) {
     auto vc = v[0]._qet->getVariableColumns();
     if (std::all_of(vc.begin(), vc.end(), [this](const auto& el) {
-          return !boundVariables.contains(Variable{el.first});
+          return !boundVariables_.contains(Variable{el.first});
         })) {
       // all variables in the optional are unbound so far, so this optional
       // actually is not an optional.
@@ -1776,7 +1767,7 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
   {
     auto vc = v[0]._qet->getVariableColumns();
     std::for_each(vc.begin(), vc.end(), [this](const auto& el) {
-      boundVariables.insert(Variable{el.first});
+      boundVariables_.insert(Variable{el.first});
     });
   }
 
@@ -1784,23 +1775,20 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
   // arbitrarily optimize among our candidates and just append our new
   // candidates.
   if (v[0].type == SubtreePlan::BASIC) {
-    candidatePlans.push_back(std::forward<decltype(v)>(v));
+    candidatePlans_.push_back(std::forward<decltype(v)>(v));
     return;
   }
 
   // v is an optional or minus join, optimization across is forbidden.
   // optimize all previously collected candidates, and then perform
   // an optional join.
-  auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
-                                    rootPattern->_filters);
-  candidateTriples._triples.clear();
-  candidatePlans.clear();
-
+  optimizeCommutatively();
+  AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   std::vector<SubtreePlan> nextCandidates;
   // For each candidate plan, and each plan from the OPTIONAL, create a
   // new plan with an optional join. Note that createJoinCandidates will
   // know that b is from an OPTIONAL.
-  for (const auto& a : lastRow) {
+  for (const auto& a : candidatePlans_.at(0)) {
     for (const auto& b : v) {
       auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
       nextCandidates.insert(nextCandidates.end(),
@@ -1820,15 +1808,14 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
         "patterns. Please report to the developers");
   }
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
-  candidatePlans.push_back({std::move(nextCandidates[idx])});
-  return;
+  candidatePlans_.clear();
+  candidatePlans_.push_back({std::move(nextCandidates[idx])});
 }
 
 // ____________________________________________________________
 void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
   using T = std::decay_t<decltype(arg)>;
   using SubtreePlan = QueryPlanner::SubtreePlan;
-  auto _qec = planner_._qec;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
     auto candidates = planner_.optimize(&arg._child);
@@ -1845,10 +1832,10 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
   } else if constexpr (std::is_same_v<T, p::TransPath>) {
     return visitTransitivePath(arg);
   } else if constexpr (std::is_same_v<T, p::Values>) {
-    SubtreePlan valuesPlan = makeSubtreePlan<Values>(_qec, arg._inlineValues);
+    SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
     joinCandidates(std::vector{std::move(valuesPlan)});
   } else if constexpr (std::is_same_v<T, p::Service>) {
-    SubtreePlan servicePlan = makeSubtreePlan<Service>(_qec, arg);
+    SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
     joinCandidates(std::vector{std::move(servicePlan)});
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
@@ -1870,19 +1857,19 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
   // we only consist of triples, store them and all the bound variables.
   for (const SparqlTriple& t : v._triples) {
     if (isVariable(t.s_)) {
-      boundVariables.insert(t.s_.getVariable());
+      boundVariables_.insert(t.s_.getVariable());
     }
     if (isVariable(t.p_)) {
-      boundVariables.insert(Variable{t.p_._iri});
+      boundVariables_.insert(Variable{t.p_._iri});
     }
     if (isVariable(t.o_)) {
-      boundVariables.insert(t.o_.getVariable());
+      boundVariables_.insert(t.o_.getVariable());
     }
   }
 
   for (const auto& triple : v._triples) {
     if (triple.p_._operation == PropertyPath::Operation::IRI) {
-      candidateTriples._triples.push_back(triple);
+      candidateTriples_._triples.push_back(triple);
     } else {
       auto children =
           planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
@@ -1899,42 +1886,38 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
 
 // _______________________________________________________________
 void QueryPlanner::Optimizer::visitBind(const parsedQuery::Bind& v) {
-  auto* _qec = planner_._qec;
-  if (boundVariables.contains(v._target)) {
+  if (boundVariables_.contains(v._target)) {
     AD_THROW(
         "The target variable of a BIND must not be used before the "
         "BIND clause");
   }
-  boundVariables.insert(v._target);
+  boundVariables_.insert(v._target);
 
   // Assumption for now: BIND does not commute. This is always safe.
-  auto lastRow = optimizeCommutativ(candidateTriples, candidatePlans,
-                                    rootPattern->_filters);
-  candidateTriples._triples.clear();
-  candidatePlans.clear();
-  candidatePlans.emplace_back();
+  auto lastRow = optimizeCommutativ(candidateTriples_, candidatePlans_,
+                                    rootPattern_->_filters);
+  candidateTriples_._triples.clear();
+  candidatePlans_.clear();
+  candidatePlans_.emplace_back();
   for (const auto& a : lastRow) {
     // create a copy of the Bind prototype and add the corresponding subtree
-    SubtreePlan plan = makeSubtreePlan<Bind>(_qec, a._qet, v);
+    SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
-    candidatePlans.back().push_back(std::move(plan));
+    candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case that the BIND clause is the first clause which means
   // that `lastRow` is empty.
   if (lastRow.empty()) {
-    auto neutralElement = makeExecutionTree<NeutralElementOperation>(_qec);
-    candidatePlans.back().push_back(
-        makeSubtreePlan<Bind>(_qec, std::move(neutralElement), v));
+    auto neutralElement = makeExecutionTree<NeutralElementOperation>(qec_);
+    candidatePlans_.back().push_back(
+        makeSubtreePlan<Bind>(qec_, std::move(neutralElement), v));
   }
 }
 
 // _______________________________________________________________
 void QueryPlanner::Optimizer::visitTransitivePath(parsedQuery::TransPath& arg) {
-  // TODO<kramerfl> This is obviously how you set up transitive paths.
-  // maybe factor this out and comment it somewhere
   auto candidatesIn = planner_.optimize(&arg._childGraphPattern);
   std::vector<SubtreePlan> candidatesOut;
-  auto* _qec = planner_._qec;
 
   for (auto& sub : candidatesIn) {
     TransitivePathSide left;
@@ -1960,7 +1943,7 @@ void QueryPlanner::Optimizer::visitTransitivePath(parsedQuery::TransPath& arg) {
     size_t min = arg._min;
     size_t max = arg._max;
     auto transitivePath = TransitivePathBase::makeTransitivePath(
-        _qec, std::move(sub._qet), std::move(left), std::move(right), min, max);
+        qec_, std::move(sub._qet), std::move(left), std::move(right), min, max);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
@@ -2004,4 +1987,18 @@ void QueryPlanner::Optimizer::visitSubquery(parsedQuery::Subquery& arg) {
     plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
   });
   joinCandidates(std::move(candidatesForSubquery));
+}
+// _______________________________________________________________
+
+// _______________________________________________________________
+void QueryPlanner::Optimizer::optimizeCommutatively() {
+  if (candidatePlans_.size() > 1 || !candidateTriples_._triples.empty()) {
+    auto tg = planner_.createTripleGraph(&candidateTriples_);
+    auto lastRow =
+        planner_.fillDpTab(tg, rootPattern_->_filters, candidatePlans_).back();
+    candidateTriples_._triples.clear();
+    candidatePlans_.clear();
+    candidatePlans_.push_back(std::move(lastRow));
+    planner_.checkCancellation();
+  }
 }
