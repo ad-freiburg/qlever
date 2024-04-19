@@ -158,7 +158,7 @@ size_t Union::getCostEstimate() {
          getSizeEstimateBeforeLimit();
 }
 
-Result Union::computeResult() {
+Result Union::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   shared_ptr<const Result> subRes1 = _subtrees[0]->getResult();
   shared_ptr<const Result> subRes2 = _subtrees[1]->getResult();

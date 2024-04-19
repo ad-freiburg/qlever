@@ -147,7 +147,8 @@ class Operation {
    * `onlyReadFromCache` is true.
    */
   shared_ptr<const Result> getResult(bool isRoot = false,
-                                     bool onlyReadFromCache = false);
+                                     bool onlyReadFromCache = false,
+                                     bool requestLazyness = false);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole
@@ -195,7 +196,10 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual Result computeResultOnlyForTesting() final { return computeResult(); }
+  virtual Result computeResultOnlyForTesting(
+      bool requestLazyness = false) final {
+    return computeResult(requestLazyness);
+  }
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -244,7 +248,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual Result computeResult() = 0;
+  virtual Result computeResult(bool requestLazyness) = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.

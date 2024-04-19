@@ -32,7 +32,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-Result Minus::computeResult() {
+Result Minus::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -43,8 +43,9 @@ Result Minus::computeResult() {
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
-  LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
-             << " and " << rightResult->size() << endl;
+  LOG(DEBUG) << "Computing minus of results of size "
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   int leftWidth = leftResult->idTable().numColumns();
   int rightWidth = rightResult->idTable().numColumns();

@@ -67,7 +67,7 @@ class Sort : public Operation {
   }
 
  private:
-  virtual Result computeResult() override;
+  virtual Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

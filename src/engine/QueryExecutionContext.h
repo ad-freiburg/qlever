@@ -47,8 +47,9 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
-        return ad_utility::MemorySize::bytes(tablePtr->size() *
-                                             tablePtr->width() * sizeof(Id));
+        return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
+                                             tablePtr->idTable().numColumns() *
+                                             sizeof(Id));
       } else {
         return 0_B;
       }

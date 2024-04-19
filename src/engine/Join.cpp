@@ -90,7 +90,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-Result Join::computeResult() {
+Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -156,7 +156,7 @@ Result Join::computeResult() {
   shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
-  if (leftRes->size() == 0) {
+  if (leftRes->idTable().size() == 0) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and

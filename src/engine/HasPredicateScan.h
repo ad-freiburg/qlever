@@ -109,7 +109,7 @@ class HasPredicateScan : public Operation {
                                const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  Result computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

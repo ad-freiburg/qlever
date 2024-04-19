@@ -101,7 +101,7 @@ class TextIndexScanForEntity : public Operation {
     return std::get<FixedEntity>(varOrFixed_.entity_).second;
   }
 
-  Result computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 };

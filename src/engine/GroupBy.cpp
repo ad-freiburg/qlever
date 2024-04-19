@@ -309,7 +309,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   *dynResult = std::move(result).toDynamic();
 }
 
-Result GroupBy::computeResult() {
+Result GroupBy::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};

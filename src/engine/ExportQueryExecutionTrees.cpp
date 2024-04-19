@@ -91,8 +91,7 @@ nlohmann::json
 ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> res,
+    const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
     CancellationHandle cancellationHandle) {
   auto generator = constructQueryResultToTriples(qet, constructTriples,
                                                  limitAndOffset, std::move(res),
@@ -605,8 +604,7 @@ ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::constructQueryResultToStream(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset,
-    std::shared_ptr<const Result> resultTable,
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> resultTable,
     CancellationHandle cancellationHandle) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
                 format == MediaType::tsv || format == MediaType::sparqlXml);
@@ -642,7 +640,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
   resultTable->logResultSize();
   auto timeResultComputation = requestTimer.msecs();
 
-  size_t resultSize = resultTable->size();
+  size_t resultSize = resultTable->idTable().size();
 
   nlohmann::json j;
 
