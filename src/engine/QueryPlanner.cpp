@@ -1748,10 +1748,11 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
 
   // optionals that occur before any of their variables have been bound
   // actually behave like ordinary (Group)GraphPatterns
+
+  auto variables = v[0]._qet->getVariableColumns() | std::views::keys;
   if (v[0].type == SubtreePlan::OPTIONAL) {
-    auto vc = v[0]._qet->getVariableColumns();
-    if (std::all_of(vc.begin(), vc.end(), [this](const auto& el) {
-          return !boundVariables_.contains(Variable{el.first});
+    if (std::ranges::all_of(variables, [this](const Variable& var) {
+          return !boundVariables_.contains(var);
         })) {
       // all variables in the optional are unbound so far, so this optional
       // actually is not an optional.
@@ -1764,18 +1765,14 @@ void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
   // and MINUS clauses (this was a bug in the previous version of the code).
-  {
-    auto vc = v[0]._qet->getVariableColumns();
-    std::for_each(vc.begin(), vc.end(), [this](const auto& el) {
-      boundVariables_.insert(Variable{el.first});
-    });
-  }
+  std::ranges::for_each(
+      variables, [this](const Variable& var) { boundVariables_.insert(var); });
 
   // if our input is not optional and not a minus this means we still can
   // arbitrarily optimize among our candidates and just append our new
   // candidates.
   if (v[0].type == SubtreePlan::BASIC) {
-    candidatePlans_.push_back(std::forward<decltype(v)>(v));
+    candidatePlans_.push_back(std::move(v));
     return;
   }
 
@@ -1876,7 +1873,7 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
       for (auto& child : children->_graphPatterns) {
         std::visit(
             [self = this](auto&& arg) {
-              self->graphPatternOperationVisitor(std::move(arg));
+              self->graphPatternOperationVisitor(AD_FWD(arg));
             },
             std::move(child));
       }
