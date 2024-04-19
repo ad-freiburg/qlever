@@ -75,10 +75,10 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
       const IdTable& dynSub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
 
-  // We store the subtree in two different sortings s.t. we also have the
-  // correct sorting if later a right side is bound to this subtree. This avoids
-  // unnecessary sortings of index scans when a right side is bound during the
-  // query planning.
+  // We store the subtree in two different orderings such that we the
+  // appropriate ordering is available when the right side of the transitive
+  // path operation is bound (when the left side is bound, we already have the
+  // correct ordering).
   std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
   std::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
       const override {

@@ -270,10 +270,10 @@ class TransitivePathBase : public Operation {
       std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
       bool isLeft) const;
 
-  // Return a set of subtrees that can be used alternatively when binding a left
-  // or right side. This is used by the `TransitivePathBinSearch` class, which
-  // keeps both possible sortings of the subtree s.t. the case of binding a
-  // right side leads to more efficient execution trees.
+  // Return a set of subtrees that can be used alternatively when the left or
+  // right side is bound. This is used by the `TransitivePathBinSearch` class,
+  // which keeps both possible sortings of the predicate of which transitivity
+  // is computed.
   virtual std::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};

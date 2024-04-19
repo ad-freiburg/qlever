@@ -356,8 +356,9 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
   }
 
   // We use the cheapest tree that can be created using any of the alternative
-  // subtrees. This has the effect, that the `TransitivePathBinSearch` will
-  // never resort an index scan, even if right side is bound.
+  // subtrees. This has the effect that the `TransitivePathBinSearch` will
+  // never re-sort an index scan (which should not happen because we can just
+  // take the appropriate index scan in the first place).
   std::vector<std::shared_ptr<TransitivePathBase>> candidates;
   candidates.push_back(TransitivePathBase::makeTransitivePath(
       getExecutionContext(), subtree_, lhs, rhs, minDist_, maxDist_));
