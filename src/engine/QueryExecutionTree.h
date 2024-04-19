@@ -51,7 +51,7 @@ class QueryExecutionTree {
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
-  std::shared_ptr<const ResultTable> getResult() const {
+  std::shared_ptr<const Result> getResult() const {
     return rootOperation_->getResult(isRoot());
   }
 
@@ -192,7 +192,7 @@ class QueryExecutionTree {
   bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.
 
-  std::shared_ptr<const ResultTable> cachedResult_ = nullptr;
+  std::shared_ptr<const Result> cachedResult_ = nullptr;
 
  public:
   // Helper class to avoid bug in g++ that leads to memory corruption when

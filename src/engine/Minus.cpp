@@ -32,7 +32,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-ResultTable Minus::computeResult() {
+Result Minus::computeResult() {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -56,7 +56,7 @@ ResultTable Minus::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftResult, *rightResult)};
+          Result::getMergedLocalVocab(*leftResult, *rightResult)};
 }
 
 // _____________________________________________________________________________

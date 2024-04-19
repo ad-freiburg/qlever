@@ -37,10 +37,10 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-ResultTable Distinct::computeResult() {
+Result Distinct::computeResult() {
   IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
+  shared_ptr<const Result> subRes = _subtree->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
   idTable.setNumColumns(subRes->idTable().numColumns());

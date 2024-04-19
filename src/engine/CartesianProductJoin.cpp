@@ -132,10 +132,10 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   }
 }
 // ____________________________________________________________________________
-ResultTable CartesianProductJoin::computeResult() {
+Result CartesianProductJoin::computeResult() {
   IdTable result{getExecutionContext()->getAllocator()};
   result.setNumColumns(getResultWidth());
-  std::vector<std::shared_ptr<const ResultTable>> subResults;
+  std::vector<std::shared_ptr<const Result>> subResults;
 
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -210,7 +210,7 @@ ResultTable CartesianProductJoin::computeResult() {
   auto subResultsDeref = std::views::transform(
       subResults, [](auto& x) -> decltype(auto) { return *x; });
   return {std::move(result), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(subResultsDeref)};
+          Result::getMergedLocalVocab(subResultsDeref)};
 }
 
 // ____________________________________________________________________________

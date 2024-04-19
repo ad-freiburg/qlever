@@ -40,7 +40,7 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
-  ResultTable computeResult() override {
+  Result computeResult() override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);

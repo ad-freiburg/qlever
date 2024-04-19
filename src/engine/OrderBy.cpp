@@ -62,10 +62,10 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable OrderBy::computeResult() {
+Result OrderBy::computeResult() {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
   auto sortEstimateCancellationFactor =

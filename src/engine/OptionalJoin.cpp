@@ -88,7 +88,7 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable OptionalJoin::computeResult() {
+Result OptionalJoin::computeResult() {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -115,7 +115,7 @@ ResultTable OptionalJoin::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftResult, *rightResult)};
+          Result::getMergedLocalVocab(*leftResult, *rightResult)};
 }
 
 // _____________________________________________________________________________

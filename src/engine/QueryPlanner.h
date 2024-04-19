@@ -136,7 +136,7 @@ class QueryPlanner {
                                                     std::move(operation))} {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
-    std::shared_ptr<ResultTable> _cachedResult;
+    std::shared_ptr<Result> _cachedResult;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;

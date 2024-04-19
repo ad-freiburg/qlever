@@ -50,10 +50,10 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable Sort::computeResult() {
+Result Sort::computeResult() {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
   auto sortEstimateCancellationFactor =

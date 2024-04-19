@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -146,8 +146,8 @@ class Operation {
    * @return A shared pointer to the result. May only be `nullptr` if
    * `onlyReadFromCache` is true.
    */
-  shared_ptr<const ResultTable> getResult(bool isRoot = false,
-                                          bool onlyReadFromCache = false);
+  shared_ptr<const Result> getResult(bool isRoot = false,
+                                     bool onlyReadFromCache = false);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole
@@ -195,9 +195,7 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ResultTable computeResultOnlyForTesting() final {
-    return computeResult();
-  }
+  virtual Result computeResultOnlyForTesting() final { return computeResult(); }
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -246,7 +244,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ResultTable computeResult() = 0;
+  virtual Result computeResult() = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.
@@ -260,7 +258,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 

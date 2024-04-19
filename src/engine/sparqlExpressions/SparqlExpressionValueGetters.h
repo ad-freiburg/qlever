@@ -9,7 +9,7 @@
 #include <re2/re2.h>
 
 #include "engine/ExportQueryExecutionTrees.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
 #include "global/Id.h"
 #include "util/ConstexprSmallString.h"

@@ -4,13 +4,12 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/ResultTable.h"
-
 #include "engine/LocalVocab.h"
+#include "engine/Result.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-string ResultTable::asDebugString() const {
+string Result::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
@@ -23,21 +22,19 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getMergedLocalVocab(const ResultTable& resultTable1,
-                                      const ResultTable& resultTable2)
+auto Result::getMergedLocalVocab(const Result& resultTable1,
+                                 const Result& resultTable2)
     -> SharedLocalVocabWrapper {
   return getMergedLocalVocab(
       std::array{std::cref(resultTable1), std::cref(resultTable2)});
 }
 
 // _____________________________________________________________________________
-LocalVocab ResultTable::getCopyOfLocalVocab() const {
-  return localVocab().clone();
-}
+LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
-                         SharedLocalVocabWrapper localVocab)
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
     : _idTable{std::move(idTable)},
       _sortedBy{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
@@ -60,13 +57,13 @@ ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
-                         LocalVocab&& localVocab)
-    : ResultTable(std::move(idTable), std::move(sortedBy),
-                  SharedLocalVocabWrapper{std::move(localVocab)}) {}
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result(std::move(idTable), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}) {}
 
 // _____________________________________________________________________________
-void ResultTable::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
@@ -85,7 +82,7 @@ void ResultTable::applyLimitOffset(const LimitOffsetClause& limitOffset) {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getOrComputeDatatypeCountsPerColumn()
+auto Result::getOrComputeDatatypeCountsPerColumn()
     -> const DatatypeCountsPerColumn& {
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
@@ -103,7 +100,7 @@ auto ResultTable::getOrComputeDatatypeCountsPerColumn()
 }
 
 // _____________________________________________________________
-bool ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
+bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
     const auto& [columnIndex, mightContainUndef] = varAndCol.second;
