@@ -458,7 +458,8 @@ class QueryPlanner {
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // ________________________________________________________________________
-    GraphPatternPlanner(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
+    GraphPatternPlanner(QueryPlanner& planner,
+                        ParsedQuery::GraphPattern* rootPattern)
         : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
 
     // This function is called for each of the graph patterns that are contained

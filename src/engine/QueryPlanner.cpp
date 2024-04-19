@@ -1752,13 +1752,13 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
 
   using enum SubtreePlan::Type;
-  if (auto type = candidates[0].type; (type == OPTIONAL || type == MINUS) &&
+  if (auto type = candidates[0].type;
+      (type == OPTIONAL || type == MINUS) &&
       std::ranges::all_of(variables, [this](const Variable& var) {
         return !boundVariables_.contains(var);
       })) {
-
-    // A MINUS clause that doesn't share any variable with the preceding patterns
-    // behaves as if it isn't there.
+    // A MINUS clause that doesn't share any variable with the preceding
+    // patterns behaves as if it isn't there.
     if (type == MINUS) {
       return;
     }
@@ -1919,7 +1919,8 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitTransitivePath(parsedQuery::TransPath& arg) {
+void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
+    parsedQuery::TransPath& arg) {
   auto candidatesIn = planner_.optimize(&arg._childGraphPattern);
   std::vector<SubtreePlan> candidatesOut;
 
@@ -1969,7 +1970,8 @@ void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::visitSubquery(parsedQuery::Subquery& arg) {
+void QueryPlanner::GraphPatternPlanner::visitSubquery(
+    parsedQuery::Subquery& arg) {
   ParsedQuery& subquery = arg.get();
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
