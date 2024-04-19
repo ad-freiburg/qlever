@@ -31,13 +31,3 @@ BinSearchMap TransitivePathBinSearch::setupEdgesMap(
   return BinSearchMap{dynSub.getColumn(startSide.subCol_),
                       dynSub.getColumn(targetSide.subCol_)};
 }
-
-// _____________________________________________________________________________
-std::vector<ColumnIndex> TransitivePathBinSearch::resultSortedOn() const {
-  if (!isBoundOrId()) {
-    AD_CORRECTNESS_CHECK(subtree_);
-    return {subtree_->resultSortedOn().at(1)};
-  } else {
-    return TransitivePathBase::resultSortedOn();
-  }
-}

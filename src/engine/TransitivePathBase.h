@@ -266,10 +266,14 @@ class TransitivePathBase : public Operation {
 
   // The internal implementation of `bindLeftSide` and `bindRightSide` which
   // share a lot of code.
-  virtual std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
+  std::shared_ptr<TransitivePathBase> bindLeftOrRightSide(
       std::shared_ptr<QueryExecutionTree> leftOrRightOp, size_t inputCol,
       bool isLeft) const;
 
+  // Return a set of subtrees that can be used alternatively when binding a left
+  // or right side. This is used by the `TransitivePathBinSearch` class, which
+  // keeps both possible sortings of the subtree s.t. the case of binding a
+  // right side leads to more efficient execution trees.
   virtual std::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};

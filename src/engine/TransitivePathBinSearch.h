@@ -69,14 +69,16 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
                           TransitivePathSide rightSide, size_t minDist,
                           size_t maxDist);
 
-  std::vector<ColumnIndex> resultSortedOn() const override;
-
  private:
   // initialize the map from the subresult
   BinSearchMap setupEdgesMap(
       const IdTable& dynSub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
 
+  // We store the subtree in two different sortings s.t. we also have the
+  // correct sorting if later a right side is bound to this subtree. This avoids
+  // unnecessary sortings of index scans when a right side is bound during the
+  // query planning.
   std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
   std::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
       const override {
