@@ -1,4 +1,4 @@
-// Copyright 2015, University of Freiburg,
+// Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author:
 //   2015-2017 Björn Buchhold (buchhold@informatik.uni-freiburg.de)
@@ -1747,8 +1747,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
 
-  // optionals that occur before any of their variables have been bound
-  // actually behave like ordinary (Group)GraphPatterns
+  // Optionals that occur before any of their variables have been bound,
+  // actually behave like ordinary (Group)GraphPatterns.
   auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
 
   using enum SubtreePlan::Type;
@@ -1765,6 +1765,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
     // All variables in the optional are unbound so far, so this optional
     // actually is not an optional.
+    // All variables in the OPTIONAL are unbound so far, so this OPTIONAL
+    // actually is not an OPTIONAL.
     for (auto& vec : candidates) {
       vec.type = SubtreePlan::BASIC;
     }
@@ -1772,11 +1774,11 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
 
   // All variables seen so far are considered bound and cannot appear as the
   // RHS of a BIND operation. This is also true for variables from OPTIONALs
-  // and MINUS clauses (this was a bug in the previous version of the code).
+  // and MINUS clauses (this used to be a bug in an old version of the code).
   std::ranges::for_each(
       variables, [this](const Variable& var) { boundVariables_.insert(var); });
 
-  // if our input is not optional and not a minus this means we still can
+  // If our input is not OPTIONAL and not a MINUS, this means that we can still
   // arbitrarily optimize among our candidates and just append our new
   // candidates.
   if (candidates[0].type == SubtreePlan::BASIC) {
@@ -1784,15 +1786,15 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     return;
   }
 
-  // candidates is an optional or minus join, optimization across is forbidden.
-  // optimize all previously collected candidates, and then perform
-  // an optional join.
+  // For OPTIONAL or MINUS, optimization "across" the OPTIONAL or MINUS is
+  // forbidden. Optimize all previously collected candidates, and then perform
+  // an optional or minus join.
   optimizeCommutatively();
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   std::vector<SubtreePlan> nextCandidates;
-  // For each candidate plan, and each plan from the OPTIONAL, create a
-  // new plan with an optional join. Note that createJoinCandidates will
-  // know that b is from an OPTIONAL.
+  // For each candidate plan, and each plan from the OPTIONAL or MINUS, create
+  // a new plan with an optional join. Note that `createJoinCandidates` will
+  // whether `b` is from an OPTIONAL or MINUS.
   for (const auto& a : candidatePlans_.at(0)) {
     for (const auto& b : candidates) {
       auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
@@ -1802,16 +1804,14 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     }
   }
 
-  // keep the best found candidate, which is now a non-optional "so far"
-  // solution which can be combined with all upcoming children until we
-  // hit the next optional
-  // TODO<joka921> Also keep one candidate per Ordering to make even
+  // Keep the best found candidate, which can then be combined with potentially
+  // following children, until we hit the next OPTIONAL or MINUS.
+  // TODO<joka921> Also keep one candidate per ordering to make even
   // better plans at this step
-  if (nextCandidates.empty()) {
-    throw std::runtime_error(
-        "Could not find a single candidate join for two optimized Graph "
-        "patterns. Please report to the developers");
-  }
+  AD_CORRECTNESS_CHECK(
+      !nextCandidates.empty(),
+      "Could not find a single candidate join for two optimized graph "
+      "patterns. Please report this to the developers");
   auto idx = planner_.findCheapestExecutionTree(nextCandidates);
   candidatePlans_.clear();
   candidatePlans_.push_back({std::move(nextCandidates[idx])});
