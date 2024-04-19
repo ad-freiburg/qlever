@@ -70,8 +70,8 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // ________________________________________________________________________
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
-                                                   bool onlyReadFromCache) {
+shared_ptr<const Result> Operation::getResult(bool isRoot,
+                                              bool onlyReadFromCache) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -124,7 +124,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      ResultTable result = computeResult();
+      Result result = computeResult();
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -221,7 +221,7 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+    const Result& resultTable, ad_utility::CacheStatus cacheStatus,
     Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
   _runtimeInfo->numRows_ = resultTable.size();

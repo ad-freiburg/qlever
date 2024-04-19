@@ -55,7 +55,7 @@ class Distinct : public Operation {
   [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

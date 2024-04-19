@@ -83,7 +83,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-ResultTable Service::computeResult() {
+Result Service::computeResult() {
   // Get the URL of the SPARQL endpoint.
   std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
   AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&

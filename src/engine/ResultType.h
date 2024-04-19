@@ -6,11 +6,11 @@
 
 namespace qlever {
 
-// Enumerate the types of entries we can have in a `ResultTable`.
+// Enumerate the types of entries we can have in a `Result`.
 //
 // NOTE: This was used in an old version of the QLever code, but no longer is
 // (because reality is more complicated than "one type per column"). The class
-// is still needed for the correctness of the code, see `ResultTable.h`.
+// is still needed for the correctness of the code, see `Result.h`.
 //
 // TODO: Properly keep track of result types again. In particular, efficiency
 // should benefit in the common use case where all entries in a column have a

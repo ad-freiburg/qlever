@@ -16,16 +16,10 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/Log.h"
 
-using std::vector;
-
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is always a table and contained in the member `idTable()`.
-//
-// TODO: I would find it more appropriate to simply call this class `Result`.
-// Otherwise, it's not clear from the names what the difference between a
-// `ResultTable` and an `IdTable` is.
-class ResultTable {
+class Result {
  private:
   // The actual entries.
   IdTable _idTable;
@@ -45,20 +39,20 @@ class ResultTable {
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
-  // `ResultTable` class (where it is `const`). This gives a provable guarantee
+  // `Result` class (where it is `const`). This gives a provable guarantee
   // that the `localVocab_` is not mutated through some other code that still
   // owns a pointer to the same local vocab.
   class SharedLocalVocabWrapper {
    private:
-    // Only the `ResultTable` class is allowed to read or write the stored
+    // Only the `Result` class is allowed to read or write the stored
     // `shared_ptr`. Other code can obtain a `SharedLocalVocabWrapper` from a
-    // `ResultTable` and pass this wrapper into another `ResultTable`, but it
+    // `Result` and pass this wrapper into another `Result`, but it
     // can never access the `shared_ptr` directly.
     std::shared_ptr<const LocalVocab> localVocab_ =
         std::make_shared<const LocalVocab>();
     explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
-    friend class ResultTable;
+    friend class Result;
 
    public:
     // Create a wrapper from a `LocalVocab`. This is safe to call also from
@@ -84,23 +78,23 @@ class ResultTable {
   // if expensive checks are enabled, for example by not defining the `NDEBUG`
   // macro.
   // The first overload of the constructor is for local vocabs that are shared
-  // with another `ResultTable` via the `getSharedLocalVocab...` methods below.
+  // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              SharedLocalVocabWrapper localVocab);
-  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              LocalVocab&& localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         SharedLocalVocabWrapper localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
-  ResultTable(const ResultTable& other) = delete;
-  ResultTable& operator=(const ResultTable& other) = delete;
+  Result(const Result& other) = delete;
+  Result& operator=(const Result& other) = delete;
 
   // Moving of a result table is OK.
-  ResultTable(ResultTable&& other) = default;
-  ResultTable& operator=(ResultTable&& other) = default;
+  Result(Result&& other) = default;
+  Result& operator=(Result&& other) = default;
 
   // Default destructor.
-  virtual ~ResultTable() = default;
+  virtual ~Result() = default;
 
   // Get the number of rows of this result.
   size_t size() const { return _idTable.size(); }
@@ -136,15 +130,14 @@ class ResultTable {
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
   // all the corresponding local vocabs.
   static SharedLocalVocabWrapper getMergedLocalVocab(
-      const ResultTable& resultTable1, const ResultTable& resultTable2);
+      const Result& resultTable1, const Result& resultTable2);
 
-  // Overload for more than two `ResultTables`
+  // Overload for more than two `Results`
   template <std::ranges::forward_range R>
-  requires std::convertible_to<std::ranges::range_value_t<R>,
-                               const ResultTable&>
+  requires std::convertible_to<std::ranges::range_value_t<R>, const Result&>
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
-    for (const ResultTable& table : subResults) {
+    for (const Result& table : subResults) {
       vocabs.push_back(std::to_address(table.localVocab_));
     }
     return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};

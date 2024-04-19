@@ -29,7 +29,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   // Call stack. Most notably the check which columns belongs to this variable
   // should be much further up in the call stack.
   size_t row = context._row;
-  const ResultTable& res = context._res;
+  const Result& res = context._res;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
   const auto& idTable = res.idTable();

@@ -13,7 +13,7 @@
 
 #include "engine/Engine.h"
 #include "engine/QueryPlanningCostFactors.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
 #include "global/Constants.h"
@@ -31,18 +31,15 @@ using std::vector;
 
 class CacheValue {
  private:
-  std::shared_ptr<const ResultTable> _resultTable;
+  std::shared_ptr<const Result> _resultTable;
   RuntimeInformation _runtimeInfo;
 
  public:
-  explicit CacheValue(ResultTable resultTable, RuntimeInformation runtimeInfo)
-      : _resultTable(
-            std::make_shared<const ResultTable>(std::move(resultTable))),
+  explicit CacheValue(Result resultTable, RuntimeInformation runtimeInfo)
+      : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const shared_ptr<const ResultTable>& resultTable() const {
-    return _resultTable;
-  }
+  const shared_ptr<const Result>& resultTable() const { return _resultTable; }
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 

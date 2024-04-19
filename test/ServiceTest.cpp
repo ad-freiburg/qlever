@@ -163,7 +163,7 @@ TEST_F(ServiceTest, computeResult) {
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  std::shared_ptr<const ResultTable> result = serviceOperation4.getResult();
+  std::shared_ptr<const Result> result = serviceOperation4.getResult();
 
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
   // that `<bla>`, `<bli>`, `<blu>` were added to the (initially empty) local

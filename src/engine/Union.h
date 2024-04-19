@@ -61,7 +61,7 @@ class Union : public Operation {
   }
 
  private:
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

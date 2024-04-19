@@ -75,7 +75,7 @@ class OptionalJoin : public Operation {
  private:
   void computeSizeEstimateAndMultiplicities();
 
-  ResultTable computeResult() override;
+  Result computeResult() override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
