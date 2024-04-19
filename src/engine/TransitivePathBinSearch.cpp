@@ -19,7 +19,7 @@ TransitivePathBinSearch::TransitivePathBinSearch(
                                        std::move(rightSide), minDist, maxDist) {
   auto [startSide, targetSide] = decideDirection();
   alternativelySortedSubtree_ = QueryExecutionTree::createSortedTree(
-      subtree_, {targetSide.subCol_, targetSide.subCol_});
+      subtree_, {targetSide.subCol_, startSide.subCol_});
   subtree_ = QueryExecutionTree::createSortedTree(
       subtree_, {startSide.subCol_, targetSide.subCol_});
 }
