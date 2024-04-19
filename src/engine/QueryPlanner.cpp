@@ -1849,7 +1849,8 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(Arg& arg) {
 // _______________________________________________________________
 void QueryPlanner::Optimizer::visitBasicGraphPattern(
     const parsedQuery::BasicGraphPattern& v) {
-  // we only consist of triples, store them and all the bound variables.
+  // A basic graph patterns consists only of triples. First collect all
+  // the bound variables.
   for (const SparqlTriple& t : v._triples) {
     if (isVariable(t.s_)) {
       boundVariables_.insert(t.s_.getVariable());
@@ -1862,6 +1863,8 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
     }
   }
 
+  // Then collect the triples. Transform each triple with a property path to an
+  // equivalent form without property path (using `seedFromPropertyPath`).
   for (const auto& triple : v._triples) {
     if (triple.p_._operation == PropertyPath::Operation::IRI) {
       candidateTriples_._triples.push_back(triple);
@@ -1892,13 +1895,13 @@ void QueryPlanner::Optimizer::visitBind(const parsedQuery::Bind& v) {
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
-    // create a copy of the Bind prototype and add the corresponding subtree
+    // Add the query plan for the BIND.
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
     candidatePlans_.back().push_back(std::move(plan));
   }
-  // Handle the case that the BIND clause is the first clause which means
-  // that `lastRow` is empty.
+  // Handle the case where the BIND clause is the first clause (which is
+  // equivalent to `lastRow` being empty).
   if (lastRow.empty()) {
     auto neutralElement = makeExecutionTree<NeutralElementOperation>(qec_);
     candidatePlans_.back().push_back(
