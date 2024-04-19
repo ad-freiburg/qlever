@@ -80,7 +80,7 @@ class Service : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // Compute the result using `getTsvFunction_`.
-  Result computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.

@@ -100,7 +100,7 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-Result CountAvailablePredicates::computeResult() {
+Result CountAvailablePredicates::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);

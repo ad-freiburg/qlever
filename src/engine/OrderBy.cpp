@@ -62,7 +62,7 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result OrderBy::computeResult() {
+Result OrderBy::computeResult([[maybe_unused]] bool requestLazyness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
   shared_ptr<const Result> subRes = subtree_->getResult();
@@ -71,7 +71,7 @@ Result OrderBy::computeResult() {
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->size(), subRes->width()) >
+          subRes->idTable().size(), subRes->idTable().numColumns()) >
       remainingTime() * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation

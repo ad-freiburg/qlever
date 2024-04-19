@@ -59,7 +59,7 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result MultiColumnJoin::computeResult() {
+Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -75,7 +75,8 @@ Result MultiColumnJoin::computeResult() {
   LOG(DEBUG) << "MultiColumnJoin subresult computation done." << std::endl;
 
   LOG(DEBUG) << "Computing a multi column join between results of size "
-             << leftResult->size() << " and " << rightResult->size() << endl;
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   computeMultiColumnJoin(leftResult->idTable(), rightResult->idTable(),
                          _joinColumns, &idTable);

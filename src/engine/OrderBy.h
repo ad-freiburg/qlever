@@ -78,7 +78,7 @@ class OrderBy : public Operation {
   }
 
  private:
-  Result computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override {
     return subtree_->getVariableColumns();

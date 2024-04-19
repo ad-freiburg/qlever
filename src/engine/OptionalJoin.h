@@ -75,7 +75,7 @@ class OptionalJoin : public Operation {
  private:
   void computeSizeEstimateAndMultiplicities();
 
-  Result computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLazyness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

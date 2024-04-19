@@ -34,7 +34,7 @@ auto Result::getMergedLocalVocab(const Result& resultTable1,
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : _idTable{std::move(idTable)},
       _sortedBy{std::move(sortedBy)},
@@ -58,7 +58,7 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result(std::move(idTable), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}) {}
@@ -112,4 +112,31 @@ bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
            !hasUndefined;
   });
+}
+
+// _____________________________________________________________________________
+const IdTable& Result::idTable() const {
+  AD_CONTRACT_CHECK(isDataEvaluated());
+  return std::get<IdTable>(_idTable);
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<IdTable>& Result::idTables() {
+  AD_CONTRACT_CHECK(!isDataEvaluated());
+  return std::get<cppcoro::generator<IdTable>>(_idTable);
+}
+
+// _____________________________________________________________________________
+bool Result::isDataEvaluated() const {
+  return std::holds_alternative<IdTable>(_idTable);
+}
+
+// _____________________________________________________________________________
+void Result::logResultSize() const {
+  if (isDataEvaluated()) {
+    LOG(INFO) << "Result has size " << idTable().size() << " x "
+              << idTable().numColumns() << std::endl;
+  } else {
+    LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
+  }
 }

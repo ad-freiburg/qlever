@@ -15,6 +15,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/Generator.h"
 #include "util/Log.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
@@ -23,7 +24,8 @@
 class Result {
  private:
   // The actual entries.
-  std::variant<IdTable> _idTable;
+  using TableType = std::variant<IdTable, cppcoro::generator<IdTable>>;
+  TableType _idTable;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
@@ -80,9 +82,9 @@ class Result {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
@@ -96,14 +98,11 @@ class Result {
   // Default destructor.
   virtual ~Result() = default;
 
-  // Get the number of rows of this result.
-  size_t size() const { return std::get<0>(_idTable).size(); }
-
-  // Get the number of columns of this result.
-  size_t width() const { return std::get<0>(_idTable).numColumns(); }
-
   // Const access to the underlying `IdTable`.
-  const IdTable& idTable() const { return std::get<0>(_idTable); }
+  const IdTable& idTable() const;
+
+  // Access to the underlying `IdTable`.
+  cppcoro::generator<IdTable>& idTables();
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
@@ -148,13 +147,13 @@ class Result {
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
 
+  bool isDataEvaluated() const;
+
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
   // place, but for now, this method at least makes sure that these log
   // messages look all the same.
-  void logResultSize() const {
-    LOG(INFO) << "Result has size " << size() << " x " << width() << std::endl;
-  }
+  void logResultSize() const;
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;

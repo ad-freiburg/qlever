@@ -71,7 +71,8 @@ void Operation::recursivelySetTimeConstraint(
 
 // ________________________________________________________________________
 shared_ptr<const Result> Operation::getResult(bool isRoot,
-                                              bool onlyReadFromCache) {
+                                              bool onlyReadFromCache,
+                                              bool requestLazyness) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -120,11 +121,12 @@ shared_ptr<const Result> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer] {
+    auto computeLambda = [this, &timer, requestLazyness] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult();
+      Result result = computeResult(requestLazyness);
+      AD_CONTRACT_CHECK(requestLazyness || result.isDataEvaluated());
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -170,8 +172,9 @@ shared_ptr<const Result> Operation::getResult(bool isRoot,
     }
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->size();
-    auto resultNumCols = result._resultPointer->resultTable()->width();
+    auto resultNumRows = result._resultPointer->resultTable()->idTable().size();
+    auto resultNumCols =
+        result._resultPointer->resultTable()->idTable().numColumns();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->resultTable();
@@ -224,7 +227,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     const Result& resultTable, ad_utility::CacheStatus cacheStatus,
     Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.size();
+  _runtimeInfo->numRows_ = resultTable.idTable().size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;

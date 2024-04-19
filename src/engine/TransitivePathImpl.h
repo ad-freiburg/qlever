@@ -142,7 +142,7 @@ class TransitivePathImpl : public TransitivePathBase {
    *
    * @return Result The result of the TransitivePath operation
    */
-  Result computeResult() override {
+  Result computeResult([[maybe_unused]] bool requestLazyness) override {
     if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
         rhs_.isVariable()) {
       AD_THROW(
