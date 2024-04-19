@@ -46,7 +46,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets"};
+          indexBasename + ".vocabulary.external.offsets"};
 }
 
 namespace {

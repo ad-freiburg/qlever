@@ -6,37 +6,13 @@
 
 #include "./QueryExecutionTree.h"
 
-#include <algorithm>
-#include <sstream>
+#include <array>
+#include <memory>
+#include <ranges>
 #include <string>
-#include <utility>
+#include <vector>
 
-#include "engine/Bind.h"
-#include "engine/CartesianProductJoin.h"
-#include "engine/CountAvailablePredicates.h"
-#include "engine/Distinct.h"
-#include "engine/ExportQueryExecutionTrees.h"
-#include "engine/Filter.h"
-#include "engine/GroupBy.h"
-#include "engine/HasPredicateScan.h"
-#include "engine/IndexScan.h"
-#include "engine/Join.h"
-#include "engine/Minus.h"
-#include "engine/MultiColumnJoin.h"
-#include "engine/NeutralElementOperation.h"
-#include "engine/OptionalJoin.h"
-#include "engine/OrderBy.h"
-#include "engine/Service.h"
 #include "engine/Sort.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
-#include "parser/RdfEscaping.h"
-
-using std::string;
 
 using parsedQuery::SelectClause;
 
@@ -45,7 +21,7 @@ QueryExecutionTree::QueryExecutionTree(QueryExecutionContext* const qec)
     : qec_(qec) {}
 
 // _____________________________________________________________________________
-string QueryExecutionTree::getCacheKey() const {
+std::string QueryExecutionTree::getCacheKey() const {
   return rootOperation_->getCacheKey();
 }
 
@@ -94,7 +70,7 @@ size_t QueryExecutionTree::getCostEstimate() {
     // result is pinned in cache. Nothing to compute
     return 0;
   }
-  if (type_ == QueryExecutionTree::SCAN && getResultWidth() == 1) {
+  if (getRootOperation()->isIndexScanWithNumVariables(1)) {
     return getSizeEstimate();
   } else {
     return rootOperation_->getCostEstimate();
@@ -141,95 +117,6 @@ void QueryExecutionTree::readFromCache() {
     cachedResult_ = res->_resultPointer->resultTable();
   }
 }
-
-template <typename Op>
-void QueryExecutionTree::setOperation(std::shared_ptr<Op> operation) {
-  if constexpr (std::is_same_v<Op, IndexScan>) {
-    type_ = SCAN;
-  } else if constexpr (std::is_same_v<Op, Union>) {
-    type_ = UNION;
-  } else if constexpr (std::is_same_v<Op, Bind>) {
-    type_ = BIND;
-  } else if constexpr (std::is_same_v<Op, Sort>) {
-    type_ = SORT;
-  } else if constexpr (std::is_same_v<Op, Distinct>) {
-    type_ = DISTINCT;
-  } else if constexpr (std::is_same_v<Op, Values>) {
-    type_ = VALUES;
-  } else if constexpr (std::is_same_v<Op, Service>) {
-    type_ = SERVICE;
-  } else if constexpr (std::is_same_v<Op, TransitivePathBase>) {
-    type_ = TRANSITIVE_PATH;
-  } else if constexpr (std::is_same_v<Op, OrderBy>) {
-    type_ = ORDER_BY;
-  } else if constexpr (std::is_same_v<Op, GroupBy>) {
-    type_ = GROUP_BY;
-  } else if constexpr (std::is_same_v<Op, HasPredicateScan>) {
-    type_ = HAS_PREDICATE_SCAN;
-  } else if constexpr (std::is_same_v<Op, Filter>) {
-    type_ = FILTER;
-  } else if constexpr (std::is_same_v<Op, NeutralElementOperation>) {
-    type_ = NEUTRAL_ELEMENT;
-  } else if constexpr (std::is_same_v<Op, Join>) {
-    type_ = JOIN;
-  } else if constexpr (std::is_same_v<Op, TextIndexScanForWord>) {
-    type_ = TEXT_INDEX_SCAN_FOR_WORD;
-  } else if constexpr (std::is_same_v<Op, TextIndexScanForEntity>) {
-    type_ = TEXT_INDEX_SCAN_FOR_ENTITY;
-  } else if constexpr (std::is_same_v<Op, CountAvailablePredicates>) {
-    type_ = COUNT_AVAILABLE_PREDICATES;
-  } else if constexpr (std::is_same_v<Op, Minus>) {
-    type_ = MINUS;
-  } else if constexpr (std::is_same_v<Op, OptionalJoin>) {
-    type_ = OPTIONAL_JOIN;
-  } else if constexpr (std::is_same_v<Op, MultiColumnJoin>) {
-    type_ = MULTICOLUMN_JOIN;
-  } else if constexpr (std::is_same_v<Op, ValuesForTesting> ||
-                       std::is_same_v<Op, ValuesForTestingNoKnownEmptyResult>) {
-    type_ = DUMMY;
-  } else if constexpr (std::is_same_v<Op, CartesianProductJoin>) {
-    type_ = CARTESIAN_PRODUCT_JOIN;
-  } else {
-    static_assert(ad_utility::alwaysFalse<Op>,
-                  "New type of operation that was not yet registered");
-  }
-  rootOperation_ = std::move(operation);
-  readFromCache();
-}
-
-template void QueryExecutionTree::setOperation(std::shared_ptr<IndexScan>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Union>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Bind>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Sort>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Distinct>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Values>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Service>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<TransitivePathBase>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<OrderBy>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<GroupBy>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<HasPredicateScan>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Filter>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<NeutralElementOperation>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Join>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<TextIndexScanForWord>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<TextIndexScanForEntity>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<CountAvailablePredicates>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<Minus>);
-template void QueryExecutionTree::setOperation(std::shared_ptr<OptionalJoin>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<MultiColumnJoin>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<ValuesForTesting>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<ValuesForTestingNoKnownEmptyResult>);
-template void QueryExecutionTree::setOperation(
-    std::shared_ptr<CartesianProductJoin>);
 
 // ________________________________________________________________________________________________________________
 std::shared_ptr<QueryExecutionTree> QueryExecutionTree::createSortedTree(

@@ -159,9 +159,9 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
       return std::nullopt;
     };
     std::optional<ExpressionResult> resultFromBinarySearch;
-    if constexpr (ad_utility::isSimilar<S2, IdOrString>) {
+    if constexpr (ad_utility::isSimilar<S2, IdOrLiteralOrIri>) {
       resultFromBinarySearch =
-          value2.visit([&impl](const auto& x) { return impl(x); });
+          std::visit([&impl](const auto& x) { return impl(x); }, value2);
     } else {
       resultFromBinarySearch = impl(value2);
     }
@@ -186,14 +186,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
                                 AlwaysUndef>(x, y, context)));
       }
     };
-    auto base = []<typename I>(const I& arg) -> decltype(auto) {
-      if constexpr (ad_utility::isSimilar<IdOrString, I>) {
-        return static_cast<const IdOrStringBase&>(arg);
-      } else {
-        return arg;
-      }
-    };
-    ad_utility::visitWithVariantsAndParameters(impl, base(*itA), base(*itB));
+    ad_utility::visitWithVariantsAndParameters(impl, *itA, *itB);
     ++itA;
     ++itB;
     context->cancellationHandle_->throwIfCancelled();

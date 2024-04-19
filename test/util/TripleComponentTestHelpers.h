@@ -13,7 +13,12 @@ namespace ad_utility::testing {
 // `literal` (which must be enclosed in double quotes) and the optional
 // `langtagOrDatatype` (which must start with `@` or `^^`).
 constexpr auto tripleComponentLiteral =
-    [](const std::string& literal, std::string_view langtagOrDatatype = "") {
+    [](std::string_view literal, std::string_view langtagOrDatatype = "") {
+      std::string dummy;
+      if (!(literal.starts_with('"') && literal.ends_with('"'))) {
+        dummy = absl::StrCat("\"", literal, "\"");
+        literal = dummy;
+      }
       if (langtagOrDatatype.starts_with("@")) {
         return TripleComponent::Literal::fromEscapedRdfLiteral(
             literal, std::string(langtagOrDatatype));

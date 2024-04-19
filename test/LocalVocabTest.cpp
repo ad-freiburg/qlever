@@ -278,8 +278,8 @@ TEST(LocalVocab, propagation) {
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
       qet(values1));
-  checkLocalVocab(
-      groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>", "yN1|yN2"});
+  checkLocalVocab(groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>",
+                                                    "\"yN1|yN2\""});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,

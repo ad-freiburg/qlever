@@ -113,13 +113,16 @@ constexpr Comparison getComparisonForSwappedArguments(Comparison comp) {
 // collation level.
 // TODO<joka921> Make the collation level configurable.
 inline std::pair<ValueId, ValueId> getRangeFromVocab(
-    const std::string& s, const EvaluationContext* context) {
+    const ad_utility::triple_component::LiteralOrIri& s,
+    const EvaluationContext* context) {
   auto level = TripleComponentComparator::Level::QUARTERNARY;
   // TODO<joka921> This should be `Vocab::equal_range`
-  const ValueId lower = Id::makeFromVocabIndex(
-      context->_qec.getIndex().getVocab().lower_bound(s, level));
-  const ValueId upper = Id::makeFromVocabIndex(
-      context->_qec.getIndex().getVocab().upper_bound(s, level));
+  const ValueId lower =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().lower_bound(
+          s.toStringRepresentation(), level));
+  const ValueId upper =
+      Id::makeFromVocabIndex(context->_qec.getIndex().getVocab().upper_bound(
+          s.toStringRepresentation(), level));
   return {lower, upper};
 }
 
@@ -127,10 +130,11 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // consecutive range of IDs. For its usage see below.
 template <typename S>
 concept StoresStringOrId =
-    ad_utility::SimilarToAny<S, ValueId, std::string, IdOrString,
-                             std::pair<Id, Id>>;
-// Convert a string or `IdOrString` value into the (possibly empty) range of
-// corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
+    ad_utility::SimilarToAny<S, ValueId,
+                             ad_utility::triple_component::LiteralOrIri,
+                             IdOrLiteralOrIri, std::pair<Id, Id>>;
+// Convert a string or `IdOrLiteralOrIri` value into the (possibly empty) range
+// of corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
 // and `pair<ValuedId, ValueId>` which are simply returned unchanged. This makes
 // the usage of this function easier.
@@ -140,7 +144,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, std::pair<Id, Id>>) {
     return value;
-  } else if constexpr (ad_utility::isSimilar<S, IdOrString>) {
+  } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
@@ -152,10 +156,11 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
         return res;
       }
     };
-    return value.visit(visitor);
+    return std::visit(visitor, value);
 
   } else {
-    static_assert(ad_utility::isSimilar<S, std::string>);
+    static_assert(
+        ad_utility::isSimilar<S, ad_utility::triple_component::LiteralOrIri>);
     return getRangeFromVocab(value, context);
   }
 };
@@ -171,11 +176,13 @@ inline const auto compareIdsOrStrings =
     []<StoresStringOrId T, StoresStringOrId U>(
         const T& a, const U& b,
         const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
-  if constexpr (ad_utility::isSimilar<std::string, T> &&
-                ad_utility::isSimilar<std::string, U>) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  if constexpr (ad_utility::isSimilar<LiteralOrIri, T> &&
+                ad_utility::isSimilar<LiteralOrIri, U>) {
     // TODO<joka921> integrate comparison via ICU and proper handling for
     // IRIs/ Literals/etc.
-    return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
+    return valueIdComparators::fromBool(applyComparison<Comp>(
+        a.toStringRepresentation(), b.toStringRepresentation()));
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);

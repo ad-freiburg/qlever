@@ -7,9 +7,7 @@
 #pragma once
 
 #include <iomanip>
-#include <iostream>
 #include <memory>
-#include <utility>
 
 #include "engine/QueryExecutionContext.h"
 #include "engine/ResultTable.h"
@@ -19,9 +17,6 @@
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
-#include "util/Exception.h"
-#include "util/Log.h"
-#include "util/TypeTraits.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -116,6 +111,14 @@ class Operation {
       const final;
   virtual void setSelectedVariablesForSubquery(
       const std::vector<Variable>& selectedVariables) final;
+
+  /// Return true if this object is an instance of `IndexScan` and has the
+  /// specified number of variables. For this to work this function needs to
+  /// be overridden by `IndexScan` to do the right thing.
+  virtual bool isIndexScanWithNumVariables(
+      [[maybe_unused]] size_t target) const {
+    return false;
+  }
 
   RuntimeInformation& runtimeInfo() const { return *_runtimeInfo; }
 

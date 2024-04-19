@@ -355,9 +355,9 @@ class QueryPlanner {
       const SubtreePlan& plan,
       const vector<ColumnIndex>& orderedOnColumns) const;
 
+  template <bool replaceInsteadOfAddPlans>
   void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
-                              const std::vector<SparqlFilter>& filters,
-                              bool replaceInsteadOfAddPlans) const;
+                              const std::vector<SparqlFilter>& filters) const;
 
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates
