@@ -1578,10 +1578,10 @@ auto QueryPlanner::createJoinWithTransitivePath(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
-  auto aTransPath =
-      std::dynamic_pointer_cast<const TransitivePathBase>(a._qet->getRootOperation());
-  auto bTransPath =
-      std::dynamic_pointer_cast<const TransitivePathBase>(b._qet->getRootOperation());
+  auto aTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
+      a._qet->getRootOperation());
+  auto bTransPath = std::dynamic_pointer_cast<const TransitivePathBase>(
+      b._qet->getRootOperation());
 
   if (!(aTransPath || bTransPath)) {
     return std::nullopt;
