@@ -313,3 +313,11 @@ TEST(StringUtilsTest, insertThousandSeparator) {
   forbiddenSymbolTest
       .template operator()<'0', '1', '2', '3', '4', '5', '6', '7', '8', '9'>();
 }
+
+TEST(StringUtilsTest, findLiteralEnd) {
+  using namespace ad_utility;
+  EXPECT_EQ(findLiteralEnd("nothing", "\""), std::string_view::npos);
+  EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
+  EXPECT_EQ(findLiteralEnd("no\\\"thi\"ng", "\""), 7u);
+  EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
+}

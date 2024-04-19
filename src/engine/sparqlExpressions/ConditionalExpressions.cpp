@@ -14,8 +14,8 @@ using namespace sparqlExpression::detail;
 [[maybe_unused]] auto ifImpl =
     []<SingleExpressionResult T, SingleExpressionResult U>(
         EffectiveBooleanValueGetter::Result condition, T&& i,
-        U&& e) -> IdOrString requires std::is_rvalue_reference_v<T&&> &&
-                                      std::is_rvalue_reference_v<U&&> {
+        U&& e) -> IdOrLiteralOrIri requires std::is_rvalue_reference_v<T&&> &&
+                                            std::is_rvalue_reference_v<U&&> {
   if (condition == EffectiveBooleanValueGetter::Result::True) {
     return AD_FWD(i);
   } else {
@@ -50,16 +50,16 @@ class CoalesceExpression : public VariadicExpression {
         0, ctx->size(),
         [&unboundIndices](size_t i) { unboundIndices.push_back(i); },
         [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
-    VectorWithMemoryLimit<IdOrString> result{ctx->_allocator};
+    VectorWithMemoryLimit<IdOrLiteralOrIri> result{ctx->_allocator};
     std::fill_n(std::back_inserter(result), ctx->size(),
-                IdOrString{Id::makeUndefined()});
+                IdOrLiteralOrIri{Id::makeUndefined()});
     if (result.empty()) {
       return result;
     }
 
     ctx->cancellationHandle_->throwIfCancelled();
 
-    auto isUnbound = [](const IdOrString& x) {
+    auto isUnbound = [](const IdOrLiteralOrIri& x) {
       return (std::holds_alternative<Id>(x) &&
               std::get<Id>(x) == Id::makeUndefined());
     };
@@ -68,7 +68,7 @@ class CoalesceExpression : public VariadicExpression {
         [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
          ctx ]<SingleExpressionResult T>(T && childResult)
             requires isConstantResult<T> {
-      IdOrString constantResult{AD_FWD(childResult)};
+      IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
       if (isUnbound(constantResult)) {
         nextUnboundIndices = std::move(unboundIndices);
         return;
@@ -109,7 +109,7 @@ class CoalesceExpression : public VariadicExpression {
             // Skip all the indices where the result is already bound from a
             // previous child.
             if (i == *unboundIdxIt) {
-              if (IdOrString val{std::move(*generatorIterator)};
+              if (IdOrLiteralOrIri val{std::move(*generatorIterator)};
                   isUnbound(val)) {
                 nextUnboundIndices.push_back(i);
               } else {

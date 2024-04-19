@@ -8,10 +8,11 @@
 
 #include <variant>
 
-#include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
 #include "global/Constants.h"
 #include "parser/SparqlParser.h"
+#include "util/Conversions.h"
+#include "util/TripleComponentTestHelpers.h"
 
 namespace m = matchers;
 namespace p = parsedQuery;

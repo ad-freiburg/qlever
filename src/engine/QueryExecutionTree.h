@@ -6,64 +6,27 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <unordered_map>
-#include <unordered_set>
+#include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
 #include "parser/ParsedQuery.h"
-#include "parser/data/ConstructQueryExportContext.h"
 #include "parser/data/Types.h"
-#include "util/Conversions.h"
-#include "util/Generator.h"
-#include "util/HashSet.h"
 #include "util/stream_generator.h"
-
-using std::shared_ptr;
-using std::string;
 
 // A query execution tree. Processed bottom up, which gives an ordering to the
 // operations needed to solve a query.
 class QueryExecutionTree {
  public:
-  explicit QueryExecutionTree(QueryExecutionContext* const qec);
-  template <typename Op>
-  QueryExecutionTree(QueryExecutionContext* const qec,
-                     std::shared_ptr<Op> operation)
+  explicit QueryExecutionTree(QueryExecutionContext* qec);
+  QueryExecutionTree(QueryExecutionContext* qec,
+                     std::shared_ptr<Operation> operation)
       : QueryExecutionTree(qec) {
-    setOperation(std::move(operation));
+    rootOperation_ = std::move(operation);
+    readFromCache();
   }
 
-  enum OperationType {
-    UNDEFINED,
-    SCAN,
-    JOIN,
-    SORT,
-    ORDER_BY,
-    FILTER,
-    DISTINCT,
-    TEXT_INDEX_SCAN_FOR_WORD,
-    TEXT_INDEX_SCAN_FOR_ENTITY,
-    OPTIONAL_JOIN,
-    COUNT_AVAILABLE_PREDICATES,
-    GROUP_BY,
-    HAS_PREDICATE_SCAN,
-    UNION,
-    MULTICOLUMN_JOIN,
-    TRANSITIVE_PATH,
-    VALUES,
-    SERVICE,
-    BIND,
-    MINUS,
-    NEUTRAL_ELEMENT,
-    DUMMY,
-    CARTESIAN_PRODUCT_JOIN
-  };
-
-  template <typename Op>
-  void setOperation(std::shared_ptr<Op>);
-
-  string getCacheKey() const;
+  std::string getCacheKey() const;
 
   const QueryExecutionContext* getQec() const { return qec_; }
 
@@ -82,17 +45,13 @@ class QueryExecutionTree {
 
   std::shared_ptr<Operation> getRootOperation() const { return rootOperation_; }
 
-  const OperationType& getType() const { return type_; }
-
-  bool isEmpty() const {
-    return type_ == OperationType::UNDEFINED || !rootOperation_;
-  }
+  bool isEmpty() const { return !rootOperation_; }
 
   size_t getVariableColumn(const Variable& variable) const;
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
-  shared_ptr<const ResultTable> getResult() const {
+  std::shared_ptr<const ResultTable> getResult() const {
     return rootOperation_->getResult(isRoot());
   }
 
@@ -103,7 +62,8 @@ class QueryExecutionTree {
     size_t columnIndex_;
   };
 
-  using ColumnIndicesAndTypes = vector<std::optional<VariableAndColumnIndex>>;
+  using ColumnIndicesAndTypes =
+      std::vector<std::optional<VariableAndColumnIndex>>;
 
   // Returns a vector where the i-th element contains the column index and
   // `ResultType` of the i-th `selectVariable` in the `resultTable`
@@ -144,7 +104,7 @@ class QueryExecutionTree {
   void readFromCache();
 
   // recursively get all warnings from descendant operations
-  vector<string> collectWarnings() const {
+  std::vector<std::string> collectWarnings() const {
     return rootOperation_->collectWarnings();
   }
 
@@ -181,17 +141,17 @@ class QueryExecutionTree {
   // sorted accordingly, it is simply returned.
   static std::shared_ptr<QueryExecutionTree> createSortedTree(
       std::shared_ptr<QueryExecutionTree> qet,
-      const vector<ColumnIndex>& sortColumns);
+      const std::vector<ColumnIndex>& sortColumns);
 
   // Similar to `createSortedTree` (see directly above), but create the sorted
   // trees for two different trees, the sort columns of which are specified as
   // a vector of two-dimensional arrays. This format often appears in
   // `QueryPlanner.cpp`.
   static std::pair<std::shared_ptr<QueryExecutionTree>,
-                   shared_ptr<QueryExecutionTree>>
+                   std::shared_ptr<QueryExecutionTree>>
   createSortedTrees(std::shared_ptr<QueryExecutionTree> qetA,
                     std::shared_ptr<QueryExecutionTree> qetB,
-                    const vector<std::array<ColumnIndex, 2>>& sortColumns);
+                    const std::vector<std::array<ColumnIndex, 2>>& sortColumns);
 
   // The return type of the `getSortedTreesAndJoinColumns` function below. It is
   // deliberately stored as a tuple vs. a struct with named members, so that we
@@ -233,7 +193,6 @@ class QueryExecutionTree {
   QueryExecutionContext* qec_;  // No ownership
   std::shared_ptr<Operation> rootOperation_ =
       nullptr;  // Owned child. Will be deleted at deconstruction.
-  OperationType type_ = OperationType::UNDEFINED;
   std::optional<size_t> sizeEstimate_ = std::nullopt;
   bool isRoot_ = false;  // used to distinguish the root from child
                          // operations/subtrees when pinning only the result.

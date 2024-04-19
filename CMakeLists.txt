@@ -7,10 +7,10 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
     # will not take effect without FORCE
     set(CMAKE_INSTALL_PREFIX ${CMAKE_BINARY_DIR} CACHE PATH "Install top-level directory" FORCE)
-endif()
+endif ()
 
 # Boost::ASIO currently seems to have a bug when multiple coroutine streams are
 # concurrently in flight because there were multiple calls to `co_spawn`.
@@ -24,20 +24,20 @@ add_definitions("-DBOOST_ASIO_DISABLE_AWAITABLE_FRAME_RECYCLING")
 
 # Coroutines require an additional compiler flag that is called differently
 # on clang and g++
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
-      MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
-  else()
-      add_compile_options(-fcoroutines)
-  endif()
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "11.0.0")
+        MESSAGE(FATAL_ERROR "G++ versions older than 11.0 are not supported by QLever")
+    else ()
+        add_compile_options(-fcoroutines)
+    endif ()
 
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-    if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
+elseif (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_LESS "16.0.0")
         MESSAGE(FATAL_ERROR "Clang++ versions older than 16.0 are not supported by QLever")
-    endif()
-else()
+    endif ()
+else ()
     MESSAGE(FATAL_ERROR "QLever currently only supports the G++ or LLVM-Clang++ compilers. Found ${CMAKE_CXX_COMPILER_ID}")
-endif()
+endif ()
 
 ## Build targets for address sanitizer
 # AddressSanitize
@@ -70,7 +70,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG        f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
+        GIT_TAG f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
 )
 
 ################################
@@ -87,7 +87,7 @@ FetchContent_GetProperties(nlohmann-json)
 if (NOT nlohmann-json_POPULATED)
     FetchContent_Populate(nlohmann-json)
     include_directories(SYSTEM ${nlohmann-json_SOURCE_DIR}/single_include)
-endif()
+endif ()
 
 
 ###############################
@@ -96,7 +96,7 @@ endif()
 FetchContent_Declare(
         antlr
         GIT_REPOSITORY https://github.com/antlr/antlr4.git
-        GIT_TAG        9239e6ff444420516b44b7621e8dc7691fcf0e16
+        GIT_TAG 9239e6ff444420516b44b7621e8dc7691fcf0e16
 )
 
 # From ANTLR we actually don't want the toplevel directory (which doesn't
@@ -108,10 +108,10 @@ FetchContent_GetProperties(antlr)
 if (NOT antlr_POPULATED)
     FetchContent_Populate(antlr)
     set(ANTLR_BUILD_CPP_TESTS OFF CACHE BOOL "don't try to build googletest twice")
-    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL )
+    add_subdirectory(${antlr_SOURCE_DIR}/runtime/Cpp EXCLUDE_FROM_ALL)
     target_compile_options(antlr4_static PRIVATE -Wno-all -Wno-extra -Wno-unqualified-std-cast-call -Wno-error -Wno-deprecated-declarations)
-    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src )
-endif()
+    include_directories(SYSTEM ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src)
+endif ()
 
 ################################
 # Threading
@@ -129,38 +129,37 @@ find_package(ICU 60 REQUIRED COMPONENTS uc i18n)
 
 find_package(jemalloc QUIET)
 if (TARGET jemalloc::jemalloc)
-  MESSAGE(STATUS "Use jemalloc that was installed via conan")
-  link_libraries(jemalloc::jemalloc)
+    MESSAGE(STATUS "Use jemalloc that was installed via conan")
+    link_libraries(jemalloc::jemalloc)
 
 elseif (${JEMALLOC_MANUALLY_INSTALLED})
-  link_libraries(jemalloc)
-else()
-  find_package(PkgConfig)
-  pkg_check_modules (JEMALLOC jemalloc)
+    link_libraries(jemalloc)
+else ()
+    find_package(PkgConfig)
+    pkg_check_modules(JEMALLOC jemalloc)
 
-  pkg_search_module(JEMALLOC jemalloc)
-  if (${JEMALLOC_FOUND})
-    include_directories(${JEMALLOC_INCLUDE_DIRS})
-    link_libraries(${JEMALLOC_LIBRARIES})
-  else ()
-    message(WARNING "Jemalloc could not be found via
+    pkg_search_module(JEMALLOC jemalloc)
+    if (${JEMALLOC_FOUND})
+        include_directories(${JEMALLOC_INCLUDE_DIRS})
+        link_libraries(${JEMALLOC_LIBRARIES})
+    else ()
+        message(WARNING "Jemalloc could not be found via
     pkg-config. If you are sure that you have installed jemalloc on your system
     (e.g. via `apt install libjemalloc-dev` on Ubuntu), you might try rerunning
     cmake with `-DJEMALLOC_MANUALLY_INSTALLED=True`. This is currently necessary
     on Ubuntu 18.04, where pkg-config does not find jemalloc. Continuing without jemalloc,
     this will impact the performance, most notably of the IndexBuilder")
-  endif()
-endif()
+    endif ()
+endif ()
 
 ### ZSTD
 find_package(ZSTD QUIET)
 if (TARGET zstd::libzstd_static)
     MESSAGE(STATUS "Use zstd that was installed via conan")
     link_libraries(zstd::libzstd_static)
-else()
-link_libraries(zstd)
-endif()
-
+else ()
+    link_libraries(zstd)
+endif ()
 
 
 ######################################
@@ -182,15 +181,15 @@ find_package(OpenSSL REQUIRED)
 # function `qlever_target_link_libraries` for all libraries and executables. It
 # is a drop-in replacement for `target_link_libraries` that additionally links
 # against the common libraries.
-function (qlever_target_link_libraries target)
+function(qlever_target_link_libraries target)
     target_link_libraries(${target} ${ARGN} absl::flat_hash_map
-        absl::flat_hash_set absl::strings absl::str_format ICU::uc
-        ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
+            absl::flat_hash_set absl::strings absl::str_format ICU::uc
+            ICU::i18n OpenSSL::SSL OpenSSL::Crypto GTest::gtest GTest::gmock stxxl fsst)
 
     # memorySize is a utility library for defining memory sizes.
     if (NOT ${target} STREQUAL "memorySize")
         target_link_libraries(${target} memorySize)
-    endif()
+    endif ()
 endfunction()
 
 
@@ -205,7 +204,6 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${ADDITIONAL_COMPILER_FLAGS}")
 # Enable the specification of additional linker flags manually from the commandline
 set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
 set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${ADDITIONAL_LINKER_FLAGS}")
-
 
 
 if (${PERFTOOLS_PROFILER})
@@ -229,9 +227,9 @@ set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG}")
 # CTRE, Compile-Time-Regular-Expressions
 ################################
 FetchContent_Declare(
-    ctre
-    GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
-    GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
+        ctre
+        GIT_REPOSITORY https://github.com/hanickadot/compile-time-regular-expressions.git
+        GIT_TAG b3d7788b559e34d985c8530c3e0e7260b67505a6 # v3.8.1
 )
 
 ################################
@@ -254,29 +252,34 @@ if (USE_PARALLEL)
         set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${OpenMP_EXE_LINKER_FLAGS}")
         add_definitions("-D_PARALLEL_SORT")
     endif ()
-endif()
+endif ()
+
+OPTION(_NO_TIMING_TESTS "Disable timing tests on platforms where `sleep` is unreliable" OFF)
+if (_NO_TIMING_TESTS)
+    add_definitions("-D_QLEVER_NO_TIMING_TESTS")
+endif ()
 
 if (USE_TREE_BASED_CACHE)
     add_definitions("-D_QLEVER_USE_TREE_BASED_CACHE")
-endif()
+endif ()
 
 if (RUN_EXPENSIVE_TESTS)
     message(STATUS "Running expensive unit tests. This is only recommended in release builds")
     add_definitions("-DQLEVER_RUN_EXPENSIVE_TESTS")
-endif()
+endif ()
 
 if (ENABLE_EXPENSIVE_CHECKS)
     message(STATUS "Enabling checks that potentially have a significant runtime overhead")
     add_definitions("-DAD_ENABLE_EXPENSIVE_CHECKS")
-endif()
+endif ()
 
 set(QUERY_CANCELLATION_MODE "ENABLED" CACHE STRING "Option to allow disabling cancellation checks partially or completely to reduce the overhead of this mechanism during query computation.")
 # Hint for cmake gui, but not actually enforced
 set_property(CACHE QUERY_CANCELLATION_MODE PROPERTY STRINGS "ENABLED" "NO_WATCH_DOG" "DISABLED")
 # So enforce this ourselves
-if(QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
+if (QUERY_CANCELLATION_MODE AND NOT QUERY_CANCELLATION_MODE MATCHES "ENABLED|NO_WATCH_DOG|DISABLED")
     message(FATAL_ERROR "Invalid value for QUERY_CANCELLATION_MODE '${QUERY_CANCELLATION_MODE}'. Please remove the option entirely or change it to ENABLED, NO_WATCH_DOG or DISABLED.")
-endif()
+endif ()
 add_definitions("-DQUERY_CANCELLATION_MODE=${QUERY_CANCELLATION_MODE}")
 
 ################################
@@ -322,9 +325,9 @@ FetchContent_MakeAvailable(googletest ctre abseil re2 stxxl fsst)
 # Disable some warnings in RE2, STXXL, and GTEST
 target_compile_options(re2 PRIVATE -Wno-unused-parameter)
 target_compile_options(stxxl PRIVATE -Wno-deprecated-declarations)
-if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
-endif()
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(gtest PRIVATE -Wno-maybe-uninitialized)
+endif ()
 include_directories(${ctre_SOURCE_DIR}/single-header)
 target_compile_options(fsst PRIVATE -Wno-extra -Wno-all -Wno-error)
 target_compile_options(fsst12 PRIVATE -Wno-extra -Wno-all -Wno-error)
@@ -353,13 +356,13 @@ if (NOT DONT_UPDATE_COMPILATION_INFO)
     # The first output which is never created is necessary s.t. the command is never cached and
     # always rerun.
     add_custom_command(OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/FileThatNeverExists.cpp"
-                              "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
-                       COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
-else()
+            "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
+            COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
+else ()
     add_custom_command(OUTPUT
             "${CMAKE_CURRENT_BINARY_DIR}/CompilationInfo.cpp"
             COMMAND cmake -P ${CMAKE_CURRENT_SOURCE_DIR}/CompilationInfo.cmake)
-endif()
+endif ()
 
 set(LOG_LEVEL_FATAL FATAL)
 set(LOG_LEVEL_ERROR ERROR)
@@ -370,11 +373,11 @@ set(LOG_LEVEL_TIMING TIMING)
 set(LOG_LEVEL_TRACE TRACE)
 
 
-if(CMAKE_BUILD_TYPE MATCHES DEBUG)
-  set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
-else()
-  set(LOGLEVEL INFO CACHE STRING "The loglevel")
-endif()
+if (CMAKE_BUILD_TYPE MATCHES DEBUG)
+    set(LOGLEVEL DEBUG CACHE STRING "The loglevel")
+else ()
+    set(LOGLEVEL INFO CACHE STRING "The loglevel")
+endif ()
 set_property(CACHE LOGLEVEL PROPERTY STRINGS FATAL ERROR WARN INFO DEBUG TIMING TRACE)
 add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 
@@ -382,9 +385,9 @@ add_definitions(-DLOGLEVEL=${LOG_LEVEL_${LOGLEVEL}})
 ##################################################
 # Warnings about incorrect combination of CMake variables
 
-if(LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
+if (LOGLEVEL MATCHES "FATAL|ERROR" AND QUERY_CANCELLATION_MODE EQUAL "ENABLED")
     message(WARNING "Log level is not printing logs with level WARN, which is necessary when QUERY_CANCELLATION_MODE=ENABLED for it to work properly")
-endif()
+endif ()
 
 ##################################################
 # Precompiled headers
@@ -411,7 +414,7 @@ add_executable(IndexBuilderMain src/index/IndexBuilderMain.cpp)
 qlever_target_link_libraries(IndexBuilderMain index ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 
 add_executable(ServerMain src/ServerMain.cpp)
-qlever_target_link_libraries (ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
+qlever_target_link_libraries(ServerMain engine ${CMAKE_THREAD_LIBS_INIT} Boost::program_options)
 target_precompile_headers(ServerMain REUSE_FROM engine)
 
 add_executable(VocabularyMergerMain src/VocabularyMergerMain.cpp)

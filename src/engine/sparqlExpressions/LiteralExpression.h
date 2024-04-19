@@ -21,7 +21,7 @@ class LiteralExpression : public SparqlExpression {
   // make the `const` evaluate function threadsafe and lock-free.
   // TODO<joka921> Make this unnecessary by completing multiple small groups at
   // once during the GROUP BY.
-  mutable std::atomic<IdOrString*> cachedResult_ = nullptr;
+  mutable std::atomic<IdOrLiteralOrIri*> cachedResult_ = nullptr;
 
  public:
   // _________________________________________________________________________
@@ -49,10 +49,11 @@ class LiteralExpression : public SparqlExpression {
         return *ptr;
       }
       auto id = context->_qec.getIndex().getId(s);
-      IdOrString result =
-          id.has_value() ? IdOrString{id.value()}
-                         : IdOrString{std::string{s.toStringRepresentation()}};
-      auto ptrForCache = std::make_unique<IdOrString>(result);
+      IdOrLiteralOrIri result =
+          id.has_value()
+              ? IdOrLiteralOrIri{id.value()}
+              : IdOrLiteralOrIri{ad_utility::triple_component::LiteralOrIri{s}};
+      auto ptrForCache = std::make_unique<IdOrLiteralOrIri>(result);
       ptrForCache.reset(std::atomic_exchange_explicit(
           &cachedResult_, ptrForCache.release(), std::memory_order_relaxed));
       context->cancellationHandle_->throwIfCancelled();

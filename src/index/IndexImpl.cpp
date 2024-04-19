@@ -208,6 +208,11 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // S P O PatternOfS PatternOfO, sorted by OPS.
   auto blockGenerator =
       [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+    // If an exception occurs in the block that is consuming the blocks yielded
+    // from this generator, we have to explicitly finish the `queue`, otherwise
+    // there will be a deadlock because the threads involved in the queue can
+    // never join.
+    absl::Cleanup cl{[&queue]() { queue.finish(); }};
     while (auto block = queue.pop()) {
       co_yield fixBlockAfterPatternJoin(std::move(block));
     }
