@@ -3,10 +3,16 @@
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
 #include <boost/graph/adjacency_list.hpp>
+#include <boost/graph/graph_selectors.hpp>
 #include <memory>
+#include <span>
 #include <vector>
 
-#include "engine/QueryExecutionContext.h"
+#include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
+#include "global/Id.h"
+
+typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS> Graph;
 
 struct Edge {};
 
@@ -16,11 +22,14 @@ struct Path {
 
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
-  boost::adjacency_list<> graph_;
+  size_t resultWidth_;
+  VariableToColumnMap variableColumns_;
+
+  Graph graph_;
 
  public:
   PathSearch(QueryExecutionContext* qec,
-             std::shared_ptr<QueryExecutionTree> child);
+             std::shared_ptr<QueryExecutionTree> subtree);
 
   std::vector<QueryExecutionTree*> getChildren() override;
 
@@ -41,5 +50,6 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  std::vector<Path> findPaths();
+  void buildGraph(std::span<Id> startNodes, std::span<Id> endNodes);
+  std::vector<Path> findPaths() const;
 };
