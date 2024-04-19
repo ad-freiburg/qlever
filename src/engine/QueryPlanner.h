@@ -431,29 +431,40 @@ class QueryPlanner {
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
 
+  // An internal helper class that capsules the functionality to optimize
+  // A single `GraphPattern`. It tightly interacts with the outer `QueryPlanner`
+  // for example when optimizing a Subquery.
   struct Optimizer {
+   private:
+    // References to the outer planner and the graph pattern that is being
+    // optimized.
     QueryPlanner& planner_;
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
 
+   public:
+    // ________________________________________________________________________
     Optimizer(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
         : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
-    // here we collect a set of possible plans for each of our children.
-    // always only holds plans for children that can be joined in an
-    // arbitrary order
+
+    // Used to store the set of candidate plans for the already processed parts
+    // of the graph pattern. Each row stores different plans for the same graph
+    // pattern, and plans from different rows can be joined in an arbitrary
+    // order.
     std::vector<std::vector<SubtreePlan>> candidatePlans_{};
-    // triples from BasicGraphPatterns that can be joined arbirarily
-    // with each other and the contents of  candidatePlans_
+    // Triples from BasicGraphPatterns that can be joined arbitrarily
+    // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
-    // all Variables that have been bound be the children we have dealt with
-    // so far. TODO<joka921> verify that we get no false positives with plans
-    // that create no single binding for a variable "by accident".
+    // The variables that have been bound be the children of the `rootPattern_`
+    // hat we have dealt with so far.
+    // TODO<joka921> verify that we get no false positives with plans that
+    // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // the callback that is called after dealing with a child pattern.
     // Can either be passed a BasicGraphPattern directly or a set
     // of possible candidate plans for a single child pattern
-    void joinCandidates(std::vector<SubtreePlan>&& v);
+    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& v);
 
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
@@ -469,18 +480,6 @@ class QueryPlanner {
     // Returns the last row of the DP table (a set of possible plans with
     // possibly different costs and different orderings.
     void graphPatternOperationVisitor(auto&& arg);
-
-    auto optimizeCommutativ(const auto& triples, const auto& plans,
-                            const auto& filters) {
-      auto tg = planner_.createTripleGraph(&triples);
-      // always apply all filters to be safe.
-      // TODO<joka921> it could be possible, to allow the DpTab to leave
-      // results unfiltered and add the filters later, but this has to be
-      // carefully checked and I currently see no benefit.
-      // TODO<joka921> In fact, for the case of REGEX filters, it could be
-      // beneficial to postpone them if possible
-      return planner_.fillDpTab(tg, filters, plans).back();
-    };
 
     void optimizeCommutatively();
     // find a single best candidate for a given graph pattern

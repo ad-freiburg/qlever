@@ -1742,7 +1742,7 @@ void QueryPlanner::checkCancellation(
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::joinCandidates(std::vector<SubtreePlan>&& v) {
+void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& v) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!v.empty());
 
@@ -1821,7 +1821,7 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
         c.type = SubtreePlan::OPTIONAL;
       }
     }
-    joinCandidates(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates));
   } else if constexpr (std::is_same_v<T, p::Union>) {
     visitUnion(arg);
   } else if constexpr (std::is_same_v<T, p::Subquery>) {
@@ -1830,10 +1830,10 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
     return visitTransitivePath(arg);
   } else if constexpr (std::is_same_v<T, p::Values>) {
     SubtreePlan valuesPlan = makeSubtreePlan<Values>(qec_, arg._inlineValues);
-    joinCandidates(std::vector{std::move(valuesPlan)});
+    visitGroupOptionalOrMinus(std::vector{std::move(valuesPlan)});
   } else if constexpr (std::is_same_v<T, p::Service>) {
     SubtreePlan servicePlan = makeSubtreePlan<Service>(qec_, arg);
-    joinCandidates(std::vector{std::move(servicePlan)});
+    visitGroupOptionalOrMinus(std::vector{std::move(servicePlan)});
   } else if constexpr (std::is_same_v<T, p::Bind>) {
     visitBind(arg);
   } else if constexpr (std::is_same_v<T, p::Minus>) {
@@ -1841,7 +1841,7 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
     for (auto& c : candidates) {
       c.type = SubtreePlan::MINUS;
     }
-    joinCandidates(std::move(candidates));
+    visitGroupOptionalOrMinus(std::move(candidates));
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -1891,11 +1891,10 @@ void QueryPlanner::Optimizer::visitBind(const parsedQuery::Bind& v) {
   boundVariables_.insert(v._target);
 
   // Assumption for now: BIND does not commute. This is always safe.
-  auto lastRow = optimizeCommutativ(candidateTriples_, candidatePlans_,
-                                    rootPattern_->_filters);
-  candidateTriples_._triples.clear();
-  candidatePlans_.clear();
-  candidatePlans_.emplace_back();
+  optimizeCommutatively();
+  AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
+  auto lastRow = std::move(candidatePlans_.at(0));
+  candidatePlans_.at(0).clear();
   for (const auto& a : lastRow) {
     // create a copy of the Bind prototype and add the corresponding subtree
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
@@ -1944,7 +1943,7 @@ void QueryPlanner::Optimizer::visitTransitivePath(parsedQuery::TransPath& arg) {
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
     candidatesOut.push_back(std::move(plan));
   }
-  joinCandidates(std::move(candidatesOut));
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
 }
 
 // _______________________________________________________________
@@ -1958,7 +1957,7 @@ void QueryPlanner::Optimizer::visitUnion(parsedQuery::Union& arg) {
   // create a new subtree plan
   SubtreePlan candidate =
       makeSubtreePlan<Union>(planner_._qec, left._qet, right._qet);
-  joinCandidates(std::vector{std::move(candidate)});
+  visitGroupOptionalOrMinus(std::vector{std::move(candidate)});
 }
 
 // _______________________________________________________________
@@ -1983,7 +1982,7 @@ void QueryPlanner::Optimizer::visitSubquery(parsedQuery::Subquery& arg) {
   std::ranges::for_each(candidatesForSubquery, [&](SubtreePlan& plan) {
     plan._qet->getRootOperation()->setLimit(arg.get()._limitOffset);
   });
-  joinCandidates(std::move(candidatesForSubquery));
+  visitGroupOptionalOrMinus(std::move(candidatesForSubquery));
 }
 // _______________________________________________________________
 
