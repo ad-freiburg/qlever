@@ -74,4 +74,14 @@ class TransitivePathBinSearch : public TransitivePathImpl<BinSearchMap> {
   BinSearchMap setupEdgesMap(
       const IdTable& dynSub, const TransitivePathSide& startSide,
       const TransitivePathSide& targetSide) const override;
+
+  // We store the subtree in two different orderings such that the appropriate
+  // ordering is available when the right side of the transitive path operation
+  // is bound. When the left side is bound, we already have the correct
+  // ordering.
+  std::shared_ptr<QueryExecutionTree> alternativelySortedSubtree_;
+  std::span<const std::shared_ptr<QueryExecutionTree>> alternativeSubtrees()
+      const override {
+    return {&alternativelySortedSubtree_, 1};
+  }
 };

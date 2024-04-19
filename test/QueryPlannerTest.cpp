@@ -756,8 +756,8 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
 
 TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
@@ -765,9 +765,10 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
-          // TODO<joka921> Get rid of this sort operation
-          h::Sort(scan("?_qlever_internal_variable_query_planner_0", "<p>",
-                       "?_qlever_internal_variable_query_planner_1"))));
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1",
+               {Permutation::POS})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
 // __________________________________________________________________________
