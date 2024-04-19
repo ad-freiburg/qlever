@@ -4,8 +4,9 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/LocalVocab.h"
 #include "engine/Result.h"
+
+#include "engine/LocalVocab.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
@@ -67,18 +68,19 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
+  auto& idTable = std::get<0>(_idTable);
   std::ranges::for_each(
-      _idTable.getColumns(),
-      [offset = limitOffset.actualOffset(_idTable.numRows()),
+      idTable.getColumns(),
+      [offset = limitOffset.actualOffset(idTable.numRows()),
        upperBound =
-           limitOffset.upperBound(_idTable.numRows())](std::span<Id> column) {
+           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
         std::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
-  size_t targetSize = limitOffset.actualSize(_idTable.numRows());
-  AD_CORRECTNESS_CHECK(targetSize <= _idTable.numRows());
-  _idTable.resize(targetSize);
-  _idTable.shrinkToFit();
+  size_t targetSize = limitOffset.actualSize(idTable.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
+  idTable.resize(targetSize);
+  idTable.shrinkToFit();
 }
 
 // _____________________________________________________________________________
@@ -87,10 +89,11 @@ auto Result::getOrComputeDatatypeCountsPerColumn()
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
+  auto& idTable = std::get<0>(_idTable);
   auto& types = datatypeCountsPerColumn_.emplace();
-  types.resize(_idTable.numColumns());
-  for (size_t i = 0; i < _idTable.numColumns(); ++i) {
-    const auto& col = _idTable.getColumn(i);
+  types.resize(idTable.numColumns());
+  for (size_t i = 0; i < idTable.numColumns(); ++i) {
+    const auto& col = idTable.getColumn(i);
     auto& datatypes = types.at(i);
     for (Id id : col) {
       ++datatypes[static_cast<size_t>(id.getDatatype())];

@@ -7,6 +7,7 @@
 #pragma once
 
 #include <ranges>
+#include <variant>
 #include <vector>
 
 #include "engine/LocalVocab.h"
@@ -22,7 +23,7 @@
 class Result {
  private:
   // The actual entries.
-  IdTable _idTable;
+  std::variant<IdTable> _idTable;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
@@ -48,8 +49,7 @@ class Result {
     // `shared_ptr`. Other code can obtain a `SharedLocalVocabWrapper` from a
     // `Result` and pass this wrapper into another `Result`, but it
     // can never access the `shared_ptr` directly.
-    std::shared_ptr<const LocalVocab> localVocab_ =
-        std::make_shared<const LocalVocab>();
+    std::shared_ptr<const LocalVocab> localVocab_;
     explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
     friend class Result;
@@ -97,13 +97,13 @@ class Result {
   virtual ~Result() = default;
 
   // Get the number of rows of this result.
-  size_t size() const { return _idTable.size(); }
+  size_t size() const { return std::get<0>(_idTable).size(); }
 
   // Get the number of columns of this result.
-  size_t width() const { return _idTable.numColumns(); }
+  size_t width() const { return std::get<0>(_idTable).numColumns(); }
 
   // Const access to the underlying `IdTable`.
-  const IdTable& idTable() const { return _idTable; }
+  const IdTable& idTable() const { return std::get<0>(_idTable); }
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
