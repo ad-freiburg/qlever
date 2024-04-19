@@ -431,31 +431,34 @@ class QueryPlanner {
   [[nodiscard]] SubtreePlan getTextLeafPlan(
       const TripleGraph::Node& node) const;
 
-  // An internal helper class that capsules the functionality to optimize
-  // A single `GraphPattern`. It tightly interacts with the outer `QueryPlanner`
+  // An internal helper class that encapsulates the functionality to optimize
+  // a single graph pattern. It tightly interacts with the outer `QueryPlanner`
   // for example when optimizing a Subquery.
-  struct Optimizer {
+  struct GraphPatternPlanner {
     // References to the outer planner and the graph pattern that is being
     // optimized.
     QueryPlanner& planner_;
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
+
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph
     // pattern, and plans from different rows can be joined in an arbitrary
     // order.
     std::vector<std::vector<SubtreePlan>> candidatePlans_{};
+
     // Triples from BasicGraphPatterns that can be joined arbitrarily
     // with each other and with the contents of  `candidatePlans_`
     parsedQuery::BasicGraphPattern candidateTriples_{};
-    // The variables that have been bound be the children of the `rootPattern_`
-    // hat we have dealt with so far.
+
+    // The variables that have been bound by the children of the `rootPattern_`
+    // which we have dealt with so far.
     // TODO<joka921> verify that we get no false positives with plans that
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
     // ________________________________________________________________________
-    Optimizer(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
+    GraphPatternPlanner(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
         : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
 
     // This function is called for each of the graph patterns that are contained
@@ -490,7 +493,7 @@ class QueryPlanner {
     // function, and then combine the result with the OPTIONAL etc. clause.
     void optimizeCommutatively();
 
-    // find a single best candidate for a given graph pattern
+    // Find a single best candidate for a given graph pattern.
     SubtreePlan optimizeSingle(const auto& pattern) {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);

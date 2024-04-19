@@ -185,7 +185,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   if (rootPattern->_graphPatterns.empty()) {
     return {makeSubtreePlan<NeutralElementOperation>(_qec)};
   }
-  QueryPlanner::Optimizer optimizer{*this, rootPattern};
+  QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
@@ -1742,7 +1742,7 @@ void QueryPlanner::checkCancellation(
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(
+void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
     std::vector<SubtreePlan>&& candidates) {
   // Empty group graph patterns should have been handled previously.
   AD_CORRECTNESS_CHECK(!candidates.empty());
@@ -1750,11 +1750,20 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(
   // optionals that occur before any of their variables have been bound
   // actually behave like ordinary (Group)GraphPatterns
   auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
-  if (candidates[0].type == SubtreePlan::OPTIONAL &&
+
+  using enum SubtreePlan::Type;
+  if (auto type = candidates[0].type; (type == OPTIONAL || type == MINUS) &&
       std::ranges::all_of(variables, [this](const Variable& var) {
         return !boundVariables_.contains(var);
       })) {
-    // all variables in the optional are unbound so far, so this optional
+
+    // A MINUS clause that doesn't share any variable with the preceding patterns
+    // behaves as if it isn't there.
+    if (type == MINUS) {
+      return;
+    }
+
+    // All variables in the optional are unbound so far, so this optional
     // actually is not an optional.
     for (auto& vec : candidates) {
       vec.type = SubtreePlan::BASIC;
@@ -1810,7 +1819,7 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(
 
 // ____________________________________________________________
 template <typename Arg>
-void QueryPlanner::Optimizer::graphPatternOperationVisitor(Arg& arg) {
+void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using T = std::decay_t<Arg>;
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
@@ -1849,7 +1858,7 @@ void QueryPlanner::Optimizer::graphPatternOperationVisitor(Arg& arg) {
 };
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitBasicGraphPattern(
+void QueryPlanner::GraphPatternPlanner::visitBasicGraphPattern(
     const parsedQuery::BasicGraphPattern& v) {
   // we only consist of triples, store them and all the bound variables.
   for (const SparqlTriple& t : v._triples) {
@@ -1880,7 +1889,7 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitBind(const parsedQuery::Bind& v) {
+void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   if (boundVariables_.contains(v._target)) {
     AD_THROW(
         "The target variable of a BIND must not be used before the "
@@ -1909,7 +1918,7 @@ void QueryPlanner::Optimizer::visitBind(const parsedQuery::Bind& v) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitTransitivePath(parsedQuery::TransPath& arg) {
+void QueryPlanner::GraphPatternPlanner::visitTransitivePath(parsedQuery::TransPath& arg) {
   auto candidatesIn = planner_.optimize(&arg._childGraphPattern);
   std::vector<SubtreePlan> candidatesOut;
 
@@ -1945,7 +1954,7 @@ void QueryPlanner::Optimizer::visitTransitivePath(parsedQuery::TransPath& arg) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitUnion(parsedQuery::Union& arg) {
+void QueryPlanner::GraphPatternPlanner::visitUnion(parsedQuery::Union& arg) {
   // TODO<joka921> here we could keep all the candidates, and create a
   // "sorted union" by merging as additional candidates if the inputs
   // are presorted.
@@ -1959,7 +1968,7 @@ void QueryPlanner::Optimizer::visitUnion(parsedQuery::Union& arg) {
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitSubquery(parsedQuery::Subquery& arg) {
+void QueryPlanner::GraphPatternPlanner::visitSubquery(parsedQuery::Subquery& arg) {
   ParsedQuery& subquery = arg.get();
   // TODO<joka921> We currently do not optimize across subquery borders
   // but abuse them as "optimization hints". In theory, one could even
@@ -1985,7 +1994,7 @@ void QueryPlanner::Optimizer::visitSubquery(parsedQuery::Subquery& arg) {
 // _______________________________________________________________
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::optimizeCommutatively() {
+void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto tg = planner_.createTripleGraph(&candidateTriples_);
   auto lastRow =
       planner_.fillDpTab(tg, rootPattern_->_filters, candidatePlans_).back();
