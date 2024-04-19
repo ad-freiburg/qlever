@@ -1763,8 +1763,6 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
       return;
     }
 
-    // All variables in the optional are unbound so far, so this optional
-    // actually is not an optional.
     // All variables in the OPTIONAL are unbound so far, so this OPTIONAL
     // actually is not an OPTIONAL.
     for (auto& vec : candidates) {
