@@ -355,9 +355,9 @@ class QueryPlanner {
       const SubtreePlan& plan,
       const vector<ColumnIndex>& orderedOnColumns) const;
 
-  [[nodiscard]] void applyFiltersIfPossible(
-      std::vector<SubtreePlan>& row, const std::vector<SparqlFilter>& filters,
-      bool replaceInsteadOfAddPlans) const;
+  void applyFiltersIfPossible(std::vector<SubtreePlan>& row,
+                              const std::vector<SparqlFilter>& filters,
+                              bool replaceInsteadOfAddPlans) const;
 
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates
@@ -461,26 +461,36 @@ class QueryPlanner {
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
 
-    // the callback that is called after dealing with a child pattern.
-    // Can either be passed a BasicGraphPattern directly or a set
-    // of possible candidate plans for a single child pattern
-    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& v);
+    // This function is called for each of the graph patterns that are contained
+    // in the `rootPattern_`. It dispatches to the various `visit...`functions
+    // below depending on the type of the pattern.
+    template <typename T>
+    void graphPatternOperationVisitor(T& arg);
 
+    // The following functions all handle a single type of graph pattern.
+    // Typically, they create a set of candidate plans for the individual
+    // patterns and then add them to the `candidatePlans_` s.t. they can be
+    // commutatively joined with other plans.
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 
-    // lambda that optimizes a set of triples, other execution plans and filters
-    // under the assumption that they are commutative and can be joined in an
-    // arbitrary order. When a NON-permuting plan is encountered, then
-    // we first  call this function to optimize the preceding permuting plans,
-    // and subsequently join in the correct order with the non-permuting plan.
-    // Returns the last row of the DP table (a set of possible plans with
-    // possibly different costs and different orderings.
-    void graphPatternOperationVisitor(auto&& arg);
+    // This function is called for groups, optional, or minus clauses.
+    // The `candidates` are the result of planning the pattern inside the
+    // braces. This leads to all of those clauses currently being an
+    // optimization border (The braces are planned individually).
+    // The distinction between "normal" groups, OPTIONALs and MINUS clauses
+    // is made via the type member of the `SubtreePlan`s.
+    void visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& candidates);
 
+    // This function finds a set of candidates that unite all the different
+    // `candidatePlans_` and `candidateTriples_`. It then replaces the contents
+    // of `candidatePlans_` with those plans and clears the `candidateTriples_`.
+    // It is called when a non-commuting pattern (like OPTIONAL or BIND) is
+    // encountered. We then first optimize the previous candidates using this
+    // function, and then combine the result with the OPTIONAL etc. clause.
     void optimizeCommutatively();
     // find a single best candidate for a given graph pattern
     SubtreePlan optimizeSingle(const auto pattern) {

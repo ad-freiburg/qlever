@@ -187,8 +187,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   }
   QueryPlanner::Optimizer optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
-    child.visit([&optimizer](auto&& arg) {
-      return optimizer.graphPatternOperationVisitor(AD_FWD(arg));
+    child.visit([&optimizer](auto& arg) {
+      return optimizer.graphPatternOperationVisitor(arg);
     });
     checkCancellation();
   }
@@ -1588,8 +1588,8 @@ auto QueryPlanner::createJoinWithTransitivePath(
   }
   std::shared_ptr<QueryExecutionTree> otherTree =
       aIsTransPath ? b._qet : a._qet;
-  auto& transPathTree = aIsTransPath ? a._qet : b._qet;
-  auto transPathOperation = std::dynamic_pointer_cast<TransitivePathBase>(
+  const auto& transPathTree = aIsTransPath ? a._qet : b._qet;
+  auto transPathOperation = std::dynamic_pointer_cast<const TransitivePathBase>(
       transPathTree->getRootOperation());
 
   // TODO: Handle the case of two or more common variables
@@ -1742,21 +1742,22 @@ void QueryPlanner::checkCancellation(
 }
 
 // _______________________________________________________________
-void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(std::vector<SubtreePlan>&& v) {
+void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(
+    std::vector<SubtreePlan>&& candidates) {
   // Empty group graph patterns should have been handled previously.
-  AD_CORRECTNESS_CHECK(!v.empty());
+  AD_CORRECTNESS_CHECK(!candidates.empty());
 
   // optionals that occur before any of their variables have been bound
   // actually behave like ordinary (Group)GraphPatterns
 
-  auto variables = v[0]._qet->getVariableColumns() | std::views::keys;
-  if (v[0].type == SubtreePlan::OPTIONAL) {
+  auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
+  if (candidates[0].type == SubtreePlan::OPTIONAL) {
     if (std::ranges::all_of(variables, [this](const Variable& var) {
           return !boundVariables_.contains(var);
         })) {
       // all variables in the optional are unbound so far, so this optional
       // actually is not an optional.
-      for (auto& vec : v) {
+      for (auto& vec : candidates) {
         vec.type = SubtreePlan::BASIC;
       }
     }
@@ -1771,12 +1772,12 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(std::vector<SubtreePlan>
   // if our input is not optional and not a minus this means we still can
   // arbitrarily optimize among our candidates and just append our new
   // candidates.
-  if (v[0].type == SubtreePlan::BASIC) {
-    candidatePlans_.push_back(std::move(v));
+  if (candidates[0].type == SubtreePlan::BASIC) {
+    candidatePlans_.push_back(std::move(candidates));
     return;
   }
 
-  // v is an optional or minus join, optimization across is forbidden.
+  // candidates is an optional or minus join, optimization across is forbidden.
   // optimize all previously collected candidates, and then perform
   // an optional join.
   optimizeCommutatively();
@@ -1786,7 +1787,7 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(std::vector<SubtreePlan>
   // new plan with an optional join. Note that createJoinCandidates will
   // know that b is from an OPTIONAL.
   for (const auto& a : candidatePlans_.at(0)) {
-    for (const auto& b : v) {
+    for (const auto& b : candidates) {
       auto vec = planner_.createJoinCandidates(a, b, std::nullopt);
       nextCandidates.insert(nextCandidates.end(),
                             std::make_move_iterator(vec.begin()),
@@ -1810,8 +1811,9 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(std::vector<SubtreePlan>
 }
 
 // ____________________________________________________________
-void QueryPlanner::Optimizer::graphPatternOperationVisitor(auto&& arg) {
-  using T = std::decay_t<decltype(arg)>;
+template <typename Arg>
+void QueryPlanner::Optimizer::graphPatternOperationVisitor(Arg& arg) {
+  using T = std::decay_t<Arg>;
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
@@ -1871,11 +1873,9 @@ void QueryPlanner::Optimizer::visitBasicGraphPattern(
       auto children =
           planner_.seedFromPropertyPath(triple.s_, triple.p_, triple.o_);
       for (auto& child : children->_graphPatterns) {
-        std::visit(
-            [self = this](auto&& arg) {
-              self->graphPatternOperationVisitor(AD_FWD(arg));
-            },
-            std::move(child));
+        std::visit([self = this](
+                       auto& arg) { self->graphPatternOperationVisitor(arg); },
+                   child);
       }
     }
   }
@@ -1988,13 +1988,11 @@ void QueryPlanner::Optimizer::visitSubquery(parsedQuery::Subquery& arg) {
 
 // _______________________________________________________________
 void QueryPlanner::Optimizer::optimizeCommutatively() {
-  if (candidatePlans_.size() > 1 || !candidateTriples_._triples.empty()) {
-    auto tg = planner_.createTripleGraph(&candidateTriples_);
-    auto lastRow =
-        planner_.fillDpTab(tg, rootPattern_->_filters, candidatePlans_).back();
-    candidateTriples_._triples.clear();
-    candidatePlans_.clear();
-    candidatePlans_.push_back(std::move(lastRow));
-    planner_.checkCancellation();
-  }
+  auto tg = planner_.createTripleGraph(&candidateTriples_);
+  auto lastRow =
+      planner_.fillDpTab(tg, rootPattern_->_filters, candidatePlans_).back();
+  candidateTriples_._triples.clear();
+  candidatePlans_.clear();
+  candidatePlans_.push_back(std::move(lastRow));
+  planner_.checkCancellation();
 }
