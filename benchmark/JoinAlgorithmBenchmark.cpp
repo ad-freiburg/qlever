@@ -14,7 +14,9 @@
 #include <cstdio>
 #include <ctime>
 #include <functional>
+#include <iterator>
 #include <limits>
+#include <numeric>
 #include <optional>
 #include <span>
 #include <stdexcept>
@@ -22,6 +24,7 @@
 #include <string_view>
 #include <tuple>
 #include <type_traits>
+#include <utility>
 #include <valarray>
 
 #include "../benchmark/infrastructure/Benchmark.h"
@@ -60,6 +63,7 @@ namespace ad_benchmark {
 `Target`
 */
 template <typename Target, typename Source>
+requires std::convertible_to<Source, Target>
 static constexpr bool isValuePreservingCast(const Source& source) {
   return static_cast<Source>(static_cast<Target>(source)) == source;
 }
@@ -386,59 +390,99 @@ concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
 /*
-@brief Calculates the smalles whole exponent, so that $base^n$ is equal, or
+@brief Calculates the smalles whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
-template <typename T>
-static size_t calculateNextWholeExponent(const T& base,
+template <std::convertible_to<double> T>
+static double calculateNextWholeExponent(const T& base,
                                          const T& startingPoint) {
   // This is a rather simple calculation: We calculate
   // $log_(base)(startingPoint)$ and round up.
-  return static_cast<size_t>(
-      std::ceil(std::log(startingPoint) / std::log(base)));
+  AD_CONTRACT_CHECK(isValuePreservingCast<double>(startingPoint));
+  AD_CONTRACT_CHECK(isValuePreservingCast<double>(base));
+  return std::ceil(std::log(static_cast<double>(startingPoint)) /
+                   std::log(static_cast<double>(base)));
 }
 
 /*
-@brief Returns a vector of exponents $base^x$, with $x$ being a natural
-number and $base^x$ being all possible numbers of this type in a given
-range.
-
-@tparam ReturnValueType The value type in the `std::vector`, that will be
-returned.
-
-@param base The base of the exponents.
-@param startingPoint What the smalles exponent must at minimum be.
-@param stoppingPoint What the biggest exponent is allowed to be.
-
-@return `{base^i, base^(i+1), ...., base^(i+n)}` with `base^(i-1) <
-startingPoint`, `startingPoint <= base^i`, `base^(i+n) <= stoppingPoint`and
-`stoppingPoint < base^(i+n+1)`.
+@brief Generate a sorted, inclusive interval of exponents $base^x$, with $x$
+always a natural number.
 */
-template <typename ReturnValueType = size_t>
-static std::vector<ReturnValueType> createExponentVectorUntilSize(
-    const ReturnValueType& base, const ReturnValueType startingPoint,
-    const ReturnValueType stoppingPoint) {
-  // Quick check, if the given arguments make sense.
-  AD_CONTRACT_CHECK(startingPoint <= stoppingPoint);
-
-  std::vector<ReturnValueType> exponentVector{};
+template <ad_utility::Arithmetic T>
+requires std::convertible_to<T, double>
+static std::vector<T> generateExponentInterval(T base, T inclusiveLowerBound,
+                                               T inclusiveUpperBound) {
+  std::vector<T> elements{};
 
   /*
-  We can calculate our first exponent by using the logarithm.
-  A short explanation: We calculate $log_(base)(startingPoint)$ and
-  round up. This should give us the $x$ of the first $base^x$ bigger
-  than `startingPoint`.
+  A short explanation: We calculate $log_(base_)(inclusiveLowerBound_)$ and
+  round up. This should give us the $x$ of the first $base_^x$ equal, or
+  bigger, than `inclusiveLowerBound_`.
   */
-  auto currentExponent = static_cast<ReturnValueType>(
-      std::pow(base, calculateNextWholeExponent(base, startingPoint)));
+  AD_CONTRACT_CHECK(isValuePreservingCast<double>(base));
+  AD_CONTRACT_CHECK(isValuePreservingCast<T>(
+      std::pow(static_cast<double>(base),
+               calculateNextWholeExponent(base, inclusiveLowerBound))));
+  auto currentExponent = static_cast<T>(
+      std::pow(static_cast<double>(base),
+               calculateNextWholeExponent(base, inclusiveLowerBound)));
 
-  // The rest of the exponents.
-  while (currentExponent <= stoppingPoint) {
-    exponentVector.push_back(currentExponent);
+  // The rest of the elements.
+  while (currentExponent <= inclusiveUpperBound &&
+         currentExponent <= std::numeric_limits<T>::max() / base) {
+    elements.push_back(currentExponent);
     currentExponent *= base;
   }
+  return elements;
+}
 
-  return exponentVector;
+/*
+@brief Generate a sorted,inclusive interval of all natural numbers inside
+`[inclusiveLowerBound, inclusiveUpperBound]`.
+*/
+template <ad_utility::Arithmetic T>
+static std::vector<T> generateNaturalNumberSequenceInterval(
+    T inclusiveLowerBound, T inclusiveUpperBound) {
+  if constexpr (std::floating_point<T>) {
+    inclusiveLowerBound = std::ceil(inclusiveLowerBound);
+    inclusiveUpperBound = std::floor(inclusiveUpperBound);
+  }
+  std::vector<T> elements(
+      inclusiveUpperBound < inclusiveLowerBound
+          ? 0UL
+          : static_cast<size_t>(inclusiveUpperBound - inclusiveLowerBound + 1),
+      inclusiveLowerBound);
+  std::iota(elements.begin(), elements.end(), inclusiveLowerBound);
+
+  return elements;
+}
+
+// Merge multiple sorted vectors into one sorted vector, where every element is
+// unique.
+template <ad_utility::Arithmetic T>
+static std::vector<T> mergeSortedVectors(
+    const std::vector<std::vector<T>>& intervals) {
+  std::vector<T> mergedVector{};
+
+  // Merge.
+  std::ranges::for_each(intervals, [&mergedVector](std::vector<T> elements) {
+    if (mergedVector.empty() || elements.empty()) {
+      std::ranges::copy(elements, std::back_inserter(mergedVector));
+      return;
+    }
+    const size_t idxOldLastElem = mergedVector.size() - 1;
+    std::ranges::copy(elements, std::back_inserter(mergedVector));
+    if (mergedVector.at(idxOldLastElem) > mergedVector.at(idxOldLastElem + 1)) {
+      std::ranges::inplace_merge(
+          mergedVector,
+          std::ranges::next(mergedVector.begin(), idxOldLastElem + 1));
+    }
+  });
+
+  // Delete duplicates.
+  const auto ret = std::ranges::unique(mergedVector);
+  mergedVector.erase(ret.begin(), ret.end());
+  return mergedVector;
 }
 
 /*
@@ -665,7 +709,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         "Also used for the calculation of the number of rows in the smaller "
         "table in 'Benchmarktables, where only the sample size ratio "
         "changes.'.",
-        &configVariables_.minRatioRows_, 10.f);
+        &configVariables_.minRatioRows_, 1.f);
     decltype(auto) maxRatioRows = config.addOption(
         "max-ratio-rows",
         "The maximum row ratio between the smaller and the bigger 'IdTable' "
@@ -948,11 +992,17 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         generateBiggerEqualLambdaDesc(maxTimeSingleMeasurement, 0.f, true),
         maxTimeSingleMeasurement);
 
-    // Is the ratio of rows at least 10?
-    config.addValidator(generateBiggerEqualLambda(10.f, true),
-                        generateBiggerEqualLambdaDesc(minRatioRows, 10.f, true),
-                        generateBiggerEqualLambdaDesc(minRatioRows, 10.f, true),
-                        minRatioRows);
+    // Is the min ratio of rows bigger than the default?
+    config.addValidator(
+        generateBiggerEqualLambda(
+            minRatioRows.getConfigOption().getDefaultValue<float>(), true),
+        generateBiggerEqualLambdaDesc(
+            minRatioRows,
+            minRatioRows.getConfigOption().getDefaultValue<float>(), true),
+        generateBiggerEqualLambdaDesc(
+            minRatioRows,
+            minRatioRows.getConfigOption().getDefaultValue<float>(), true),
+        minRatioRows);
 
     // Is `min-ratio-rows` smaller than `max-ratio-rows`?
     config.addValidator(std::less_equal<float>{},
@@ -989,8 +1039,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
         minTableRowNumPossibleDesc, minTableRowNumPossibleDesc,
         minSmallerTableRows, minBiggerTableRows, minRatioRows, maxRatioRows);
 
-    // Can the options be cast to double, while keeping their values?
-    // (Needed for calculations later.)
+    // Can the options be cast to double, while keeping their values? (Needed
+    // for calculations later.)
     const auto addCastableValidator =
         [&config](ad_utility::ConstConfigOptionProxy<size_t> option) {
           /*
@@ -1006,7 +1056,8 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
               },
               descriptor, descriptor, option);
         };
-    std::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows},
+    std::ranges::for_each(std::vector{minBiggerTableRows, maxBiggerTableRows,
+                                      minSmallerTableRows},
                           addCastableValidator);
   }
 
@@ -1563,18 +1614,38 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
 };
 
 /*
-@brief Returns a lambda function, which calculates and returns
-$base^(x+rowIdx)$. With $rowIdx$ being the single `size_t` argument of the
-function and $x$ being $log_base(startingPoint)$ rounded up.
+@brief Return a lambda function, which returns `prefixValues.at(rowIdx)` until
+the vector is exhausted. After that, the lambda function calculates and returns
+$base^(x+rowIdx-prefixValues.size())$. With $rowIdx$ being the single `size_t`
+argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
+
 
 @tparam ReturnType The return type of the created lambda function.
 */
-template <typename ReturnType = size_t>
-auto createDefaultGrowthLambda(const size_t& base,
-                               const size_t& startingPoint) {
-  return [base, startingExponent{calculateNextWholeExponent(
-                    base, startingPoint)}](const size_t& rowIdx) {
-    return static_cast<ReturnType>(std::pow(base, startingExponent + rowIdx));
+template <typename ReturnType>
+requires std::convertible_to<ReturnType, double> &&
+         std::convertible_to<double, ReturnType>
+auto createDefaultGrowthLambda(
+    const ReturnType& base, const ReturnType& startingPoint,
+    const std::vector<ReturnType> prefixValues = {}) {
+  return [base, prefixValues = std::move(prefixValues),
+          startingExponent{calculateNextWholeExponent(base, startingPoint)}](
+             const size_t& rowIdx) {
+    if (rowIdx < prefixValues.size()) {
+      return prefixValues.at(rowIdx);
+    } else {
+      AD_CONTRACT_CHECK(isValuePreservingCast<double>(base));
+      AD_CONTRACT_CHECK(
+          isValuePreservingCast<double>(rowIdx - prefixValues.size()));
+      AD_CONTRACT_CHECK(isValuePreservingCast<ReturnType>(
+          std::pow(static_cast<double>(base),
+                   startingExponent +
+                       static_cast<double>(rowIdx - prefixValues.size()))));
+      return static_cast<ReturnType>(
+          std::pow(static_cast<double>(base),
+                   startingExponent +
+                       static_cast<double>(rowIdx - prefixValues.size())));
+    }
   };
 }
 
@@ -1599,7 +1670,7 @@ class BmOnlyBiggerTableSizeChanges final
     */
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        for (const size_t smallerTableNumRows : createExponentVectorUntilSize(
+        for (const size_t smallerTableNumRows : generateExponentInterval(
                  10UL, getConfigVariables().minSmallerTableRows_,
                  static_cast<size_t>(
                      static_cast<double>(
@@ -1608,9 +1679,12 @@ class BmOnlyBiggerTableSizeChanges final
           const std::string& tableName =
               absl::StrCat("Smaller table stays at ", smallerTableNumRows,
                            " rows, ratio to rows of bigger table grows.");
+          const float minRatio{static_cast<float>(std::ceil(
+              static_cast<double>(getConfigVariables().minBiggerTableRows_) /
+              static_cast<double>(smallerTableNumRows)))};
           auto growthFunction = createDefaultGrowthLambda<float>(
-              10,
-              getConfigVariables().minBiggerTableRows_ / smallerTableNumRows);
+              10.f, std::ranges::max(minRatio, 10.f),
+              generateNaturalNumberSequenceInterval(minRatio, 9.f));
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Row ratio", alwaysFalse,
               getConfigVariables().overlapChance_, std::nullopt,
@@ -1664,9 +1738,14 @@ class BmOnlySmallerTableSizeChanges final
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
         // We also make multiple tables for different row ratios.
-        for (const float ratioRows : createExponentVectorUntilSize<float>(
-                 10, getConfigVariables().minRatioRows_,
-                 getConfigVariables().maxRatioRows_)) {
+        for (const float ratioRows : mergeSortedVectors<float>(
+                 {generateNaturalNumberSequenceInterval(
+                      getConfigVariables().minRatioRows_,
+                      std::ranges::min(getConfigVariables().maxRatioRows_,
+                                       10.f)),
+                  generateExponentInterval(
+                      10.f, getConfigVariables().minRatioRows_,
+                      getConfigVariables().maxRatioRows_)})) {
           const std::string tableName = absl::StrCat(
               "The amount of rows in the smaller table grows and the ratio, to "
               "the amount of rows in the bigger table, stays at ",
@@ -1675,12 +1754,12 @@ class BmOnlySmallerTableSizeChanges final
           // Returns the amount of rows in the smaller `IdTable`, used for the
           // measurements in a given row.
           auto growthFunction = createDefaultGrowthLambda(
-              10, std::ranges::max(
-                      static_cast<size_t>(
-                          static_cast<double>(
-                              getConfigVariables().minBiggerTableRows_) /
-                          ratioRows),
-                      getConfigVariables().minSmallerTableRows_));
+              10UL, std::ranges::max(
+                        static_cast<size_t>(
+                            static_cast<double>(
+                                getConfigVariables().minBiggerTableRows_) /
+                            ratioRows),
+                        getConfigVariables().minSmallerTableRows_));
 
           ResultTable& table = makeGrowingBenchmarkTable(
               &results, tableName, "Amount of rows in the smaller table",
@@ -1735,8 +1814,8 @@ class BmSameSizeRowGrowth final : public GeneralInterfaceImplementation {
 
     // Returns the amount of rows in the smaller `IdTable`, used for the
     // measurements in a given row.
-    auto growthFunction =
-        createDefaultGrowthLambda(10, getConfigVariables().minBiggerTableRows_);
+    auto growthFunction = createDefaultGrowthLambda(
+        10UL, getConfigVariables().minBiggerTableRows_);
 
     // Making a benchmark table for all combination of IdTables being sorted.
     for (const bool smallerTableSorted : {false, true}) {
@@ -1996,19 +2075,41 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
 
   BenchmarkResults runAllBenchmarks() override {
     BenchmarkResults results{};
-    // Start with the smallest possible smaller table.
-    auto growthFunction = createDefaultGrowthLambda(
-        10, getConfigVariables().minSmallerTableRows_);
-
     // Making a benchmark table for all combination of IdTables being sorted and
     // all possibles sizes for the bigger table.
     for (const bool smallerTableSorted : {false, true}) {
       for (const bool biggerTableSorted : {false, true}) {
-        for (const size_t biggerTableNumRows : createExponentVectorUntilSize(
+        for (const size_t biggerTableNumRows : generateExponentInterval(
                  10UL, getConfigVariables().minBiggerTableRows_,
                  approximateNumIdTableRows(
                      getConfigVariables().maxMemoryBiggerTable(),
                      getConfigVariables().biggerTableNumColumns_))) {
+          /*
+          Calculate the wanted row ratios, transform them into the fitting
+          number of smaller table rows, and then create a growth function out
+          of that. The growth function works because, in this special case, the
+          table generation stops when the smaller table is bigger than the
+          bigger table.
+          */
+          const float biggestRowRatio{static_cast<float>(
+              static_cast<double>(biggerTableNumRows) /
+              static_cast<double>(getConfigVariables().minSmallerTableRows_))};
+          std::vector<size_t> smallerTableRows;
+          std::ranges::transform(
+              mergeSortedVectors<float>(
+                  {generateNaturalNumberSequenceInterval(
+                       1.f, std::ranges::min(10.f, biggestRowRatio)),
+                   generateExponentInterval(10.f, 10.f, biggestRowRatio)}),
+              std::back_inserter(smallerTableRows),
+              [&biggerTableNumRows](const float ratio) {
+                return static_cast<size_t>(
+                    static_cast<double>(biggerTableNumRows) / ratio);
+              });
+          std::ranges::reverse(smallerTableRows);
+          auto growthFunction = createDefaultGrowthLambda(
+              10UL, smallerTableRows.back() + 1UL, std::move(smallerTableRows));
+
+          // Build the table.
           const std::string tableName = absl::StrCat(
               "Table, where the smaller table grows and the bigger always has ",
               biggerTableNumRows, " rows.");
