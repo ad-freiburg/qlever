@@ -1749,17 +1749,15 @@ void QueryPlanner::Optimizer::visitGroupOptionalOrMinus(
 
   // optionals that occur before any of their variables have been bound
   // actually behave like ordinary (Group)GraphPatterns
-
   auto variables = candidates[0]._qet->getVariableColumns() | std::views::keys;
-  if (candidates[0].type == SubtreePlan::OPTIONAL) {
-    if (std::ranges::all_of(variables, [this](const Variable& var) {
-          return !boundVariables_.contains(var);
-        })) {
-      // all variables in the optional are unbound so far, so this optional
-      // actually is not an optional.
-      for (auto& vec : candidates) {
-        vec.type = SubtreePlan::BASIC;
-      }
+  if (candidates[0].type == SubtreePlan::OPTIONAL &&
+      std::ranges::all_of(variables, [this](const Variable& var) {
+        return !boundVariables_.contains(var);
+      })) {
+    // all variables in the optional are unbound so far, so this optional
+    // actually is not an optional.
+    for (auto& vec : candidates) {
+      vec.type = SubtreePlan::BASIC;
     }
   }
 

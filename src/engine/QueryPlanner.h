@@ -435,18 +435,11 @@ class QueryPlanner {
   // A single `GraphPattern`. It tightly interacts with the outer `QueryPlanner`
   // for example when optimizing a Subquery.
   struct Optimizer {
-   private:
     // References to the outer planner and the graph pattern that is being
     // optimized.
     QueryPlanner& planner_;
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
-
-   public:
-    // ________________________________________________________________________
-    Optimizer(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
-
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph
     // pattern, and plans from different rows can be joined in an arbitrary
@@ -460,6 +453,10 @@ class QueryPlanner {
     // TODO<joka921> verify that we get no false positives with plans that
     // create no single binding for a variable "by accident".
     ad_utility::HashSet<Variable> boundVariables_{};
+
+    // ________________________________________________________________________
+    Optimizer(QueryPlanner& planner, ParsedQuery::GraphPattern* rootPattern)
+        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions
@@ -492,8 +489,9 @@ class QueryPlanner {
     // encountered. We then first optimize the previous candidates using this
     // function, and then combine the result with the OPTIONAL etc. clause.
     void optimizeCommutatively();
+
     // find a single best candidate for a given graph pattern
-    SubtreePlan optimizeSingle(const auto pattern) {
+    SubtreePlan optimizeSingle(const auto& pattern) {
       auto v = planner_.optimize(pattern);
       auto idx = planner_.findCheapestExecutionTree(v);
       return std::move(v[idx]);
