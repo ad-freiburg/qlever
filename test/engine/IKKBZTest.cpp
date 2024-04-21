@@ -3,10 +3,9 @@
 // Author:
 // Mahmoud Khalaf (2024-, khalaf@cs.uni-freiburg.de)
 
-#include "engine/IKKBZ.hpp"
-
 #include <gtest/gtest.h>
 
+#include "engine/IKKBZ.hpp"
 
 TEST(IKKBZ_SANITY, EX1_R1toR7) {
   /*
