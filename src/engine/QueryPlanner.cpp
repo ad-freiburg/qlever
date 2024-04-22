@@ -181,10 +181,6 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 // _____________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     ParsedQuery::GraphPattern* rootPattern) {
-  // Handle the empty pattern
-  if (rootPattern->_graphPatterns.empty()) {
-    return {makeSubtreePlan<NeutralElementOperation>(_qec)};
-  }
   QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
@@ -211,6 +207,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
     // pattern trick
     return std::vector<SubtreePlan>{};
   } else {
+    if (candidatePlans.at(0).empty()) {
+      // This happens if either graph pattern is an empty group,
+      // or it only consists of a MINUS clause (which then has no effect).
+      return {makeSubtreePlan<NeutralElementOperation>(_qec)};
+    }
     return candidatePlans[0];
   }
 }
