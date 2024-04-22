@@ -1625,9 +1625,9 @@ argument of the function and $x$ being $log_base(startingPoint)$ rounded up.
 template <typename ReturnType>
 requires std::convertible_to<ReturnType, double> &&
          std::convertible_to<double, ReturnType>
-auto createDefaultGrowthLambda(
-    const ReturnType& base, const ReturnType& startingPoint,
-    const std::vector<ReturnType> prefixValues = {}) {
+auto createDefaultGrowthLambda(const ReturnType& base,
+                               const ReturnType& startingPoint,
+                               std::vector<ReturnType> prefixValues = {}) {
   return [base, prefixValues = std::move(prefixValues),
           startingExponent{calculateNextWholeExponent(base, startingPoint)}](
              const size_t& rowIdx) {
@@ -2106,8 +2106,9 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
                     static_cast<double>(biggerTableNumRows) / ratio);
               });
           std::ranges::reverse(smallerTableRows);
+          const size_t lastSmallerTableRow{smallerTableRows.back()};
           auto growthFunction = createDefaultGrowthLambda(
-              10UL, smallerTableRows.back() + 1UL, std::move(smallerTableRows));
+              10UL, lastSmallerTableRow + 1UL, std::move(smallerTableRows));
 
           // Build the table.
           const std::string tableName = absl::StrCat(
