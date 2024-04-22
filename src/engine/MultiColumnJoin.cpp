@@ -6,6 +6,7 @@
 
 #include "engine/AddCombinedRowToTable.h"
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "util/JoinAlgorithms/JoinAlgorithms.h"
 
 using std::endl;

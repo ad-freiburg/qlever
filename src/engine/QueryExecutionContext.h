@@ -9,25 +9,16 @@
 #include <memory>
 #include <shared_mutex>
 #include <string>
-#include <vector>
 
-#include "engine/Engine.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
-#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Log.h"
 #include "util/Synchronized.h"
-#include "util/http/websocket/QueryId.h"
-
-using std::shared_ptr;
-using std::string;
-using std::vector;
 
 class CacheValue {
  private:
@@ -39,12 +30,15 @@ class CacheValue {
       : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const shared_ptr<const Result>& resultTable() const { return _resultTable; }
+  const std::shared_ptr<const Result>& resultTable() const {
+    return _resultTable;
+  }
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
+    // TODO<RobinTF> Ensure this is only called for fully materialized results
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
         return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
@@ -61,7 +55,7 @@ class CacheValue {
 // checks on insertion, if the result is currently being computed
 // by another query.
 using ConcurrentLruCache = ad_utility::ConcurrentCache<
-    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
+    ad_utility::LRUCache<std::string, CacheValue, CacheValue::SizeGetter>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
@@ -123,7 +117,7 @@ class QueryExecutionContext {
     return _sortPerformanceEstimator;
   }
 
-  [[nodiscard]] double getCostFactor(const string& key) const {
+  [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
   };
 

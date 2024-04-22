@@ -170,8 +170,6 @@ class ConcurrentCache {
   /**
    * @brief Obtain the result of an expensive computation. Do not recompute the
    * result if it is cached or currently being computed by another thread.
-   * @tparam ComputeFunction A callable whose operator() takes no argument and
-   * produces the computation result.
    * @param key  A key that can uniquely identify a computation. For equal keys,
    * the associated computeFunctions must yield the same results.
    * @param computeFunction The actual computation. If the result has to be
@@ -182,19 +180,18 @@ class ConcurrentCache {
    * @return A shared_ptr to the computation result.
    *
    */
-  template <class ComputeFunction>
+  template <bool isCacheValueType = false>
   ResultAndCacheStatus computeOnce(const Key& key,
-                                   ComputeFunction computeFunction,
+                                   std::invocable auto computeFunction,
                                    bool onlyReadFromCache = false) {
-    return computeOnceImpl(false, key, std::move(computeFunction),
-                           onlyReadFromCache);
+    return computeOnceImpl<isCacheValueType>(
+        false, key, std::move(computeFunction), onlyReadFromCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
-  template <class ComputeFunction>
   ResultAndCacheStatus computeOncePinned(const Key& key,
-                                         ComputeFunction computeFunction,
+                                         std::invocable auto computeFunction,
                                          bool onlyReadFromCache = false) {
     return computeOnceImpl(true, key, std::move(computeFunction),
                            onlyReadFromCache);
@@ -311,9 +308,10 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
-  template <class ComputeFunction>
+  // TODO<RobinTF> fix ugly hack of isCacheValueType
+  template <bool isCacheValueType = false>
   ResultAndCacheStatus computeOnceImpl(bool pinned, const Key& key,
-                                       ComputeFunction computeFunction,
+                                       std::invocable auto computeFunction,
                                        bool onlyReadFromCache) {
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
@@ -356,6 +354,14 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
+        // TODO<RobinTF> support storing generator in cache somehow
+        if constexpr (isCacheValueType) {
+          if (!result->resultTable()->isDataEvaluated()) {
+            // TODO<RobinTF> use dedicated mechanism for this
+            resultInProgress->abort();
+            return {std::move(result), CacheStatus::computed};
+          }
+        }
         moveFromInProgressToCache(key, result);
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);

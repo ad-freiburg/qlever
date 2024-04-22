@@ -2,8 +2,6 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <cstdlib>
-
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
@@ -111,7 +109,7 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      shared_ptr<const Result> resultTable,
+      std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
   /**
@@ -140,8 +138,7 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> res,
-      CancellationHandle cancellationHandle);
+      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
 
   // Generate an RDF graph for a CONSTRUCT query.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
@@ -156,7 +153,7 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      shared_ptr<const Result> resultTable,
+      std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________

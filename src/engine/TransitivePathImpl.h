@@ -150,7 +150,7 @@ class TransitivePathImpl : public TransitivePathBase {
           "not supported");
     }
     auto [startSide, targetSide] = decideDirection();
-    shared_ptr<const Result> subRes = subtree_->getResult();
+    std::shared_ptr<const Result> subRes = subtree_->getResult();
 
     IdTable idTable{allocator()};
 
@@ -159,7 +159,7 @@ class TransitivePathImpl : public TransitivePathBase {
     size_t subWidth = subRes->idTable().numColumns();
 
     if (startSide.isBoundVariable()) {
-      shared_ptr<const Result> sideRes =
+      std::shared_ptr<const Result> sideRes =
           startSide.treeAndCol_.value().first->getResult();
       size_t sideWidth = sideRes->idTable().numColumns();
 

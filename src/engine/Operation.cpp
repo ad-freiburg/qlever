@@ -70,9 +70,10 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // ________________________________________________________________________
-shared_ptr<const Result> Operation::getResult(bool isRoot,
-                                              bool onlyReadFromCache,
-                                              bool requestLazyness) {
+std::shared_ptr<const Result> Operation::getResult(bool isRoot,
+                                                   bool onlyReadFromCache,
+                                                   bool requestLazyness) {
+  AD_CONTRACT_CHECK(!onlyReadFromCache || !requestLazyness);
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -172,11 +173,14 @@ shared_ptr<const Result> Operation::getResult(bool isRoot,
     }
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->idTable().size();
-    auto resultNumCols =
-        result._resultPointer->resultTable()->idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
+    if (result._resultPointer->resultTable()->isDataEvaluated()) {
+      auto resultNumRows =
+          result._resultPointer->resultTable()->idTable().size();
+      auto resultNumCols =
+          result._resultPointer->resultTable()->idTable().numColumns();
+      LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+                 << resultNumCols << std::endl;
+    }
     return result._resultPointer->resultTable();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());

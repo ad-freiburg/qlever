@@ -153,7 +153,7 @@ Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
     }
   }
 
-  shared_ptr<const Result> leftRes =
+  std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
   if (leftRes->idTable().size() == 0) {
@@ -181,7 +181,7 @@ Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const Result> rightRes =
+  std::shared_ptr<const Result> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
   checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,

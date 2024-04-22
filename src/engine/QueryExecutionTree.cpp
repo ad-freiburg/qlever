@@ -158,7 +158,8 @@ std::vector<std::array<ColumnIndex, 2>> QueryExecutionTree::getJoinColumns(
 }
 
 // ____________________________________________________________________________
-std::pair<std::shared_ptr<QueryExecutionTree>, shared_ptr<QueryExecutionTree>>
+std::pair<std::shared_ptr<QueryExecutionTree>,
+          std::shared_ptr<QueryExecutionTree>>
 QueryExecutionTree::createSortedTrees(
     std::shared_ptr<QueryExecutionTree> qetA,
     std::shared_ptr<QueryExecutionTree> qetB,

@@ -146,9 +146,9 @@ class Operation {
    * @return A shared pointer to the result. May only be `nullptr` if
    * `onlyReadFromCache` is true.
    */
-  shared_ptr<const Result> getResult(bool isRoot = false,
-                                     bool onlyReadFromCache = false,
-                                     bool requestLazyness = false);
+  std::shared_ptr<const Result> getResult(bool isRoot = false,
+                                          bool onlyReadFromCache = false,
+                                          bool requestLazyness = false);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole

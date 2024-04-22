@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -65,7 +66,7 @@ std::string OrderBy::getDescriptor() const {
 Result OrderBy::computeResult([[maybe_unused]] bool requestLazyness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
-  shared_ptr<const Result> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
   auto sortEstimateCancellationFactor =

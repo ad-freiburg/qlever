@@ -68,6 +68,8 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
+  // TODO<RobinTF> handle generator case properly
+  AD_CONTRACT_CHECK(isDataEvaluated());
   auto& idTable = std::get<0>(_idTable);
   std::ranges::for_each(
       idTable.getColumns(),
@@ -89,6 +91,8 @@ auto Result::getOrComputeDatatypeCountsPerColumn()
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
+  // TODO<RobinTF> handle generator case properly
+  AD_CONTRACT_CHECK(isDataEvaluated());
   auto& idTable = std::get<0>(_idTable);
   auto& types = datatypeCountsPerColumn_.emplace();
   types.resize(idTable.numColumns());
@@ -122,6 +126,8 @@ const IdTable& Result::idTable() const {
 
 // _____________________________________________________________________________
 cppcoro::generator<IdTable>& Result::idTables() {
+  // TODO<RobinTF> Find out if scenarios exist where it makes
+  // sense to return a generator with a single element here.
   AD_CONTRACT_CHECK(!isDataEvaluated());
   return std::get<cppcoro::generator<IdTable>>(_idTable);
 }
