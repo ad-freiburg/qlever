@@ -137,7 +137,10 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
       // individual results, but that requires changes in each individual
       // operation, therefore we currently only perform this expensive
       // change in the DEBUG builds.
+      // This check doesn't make sense when the result has not been evaluated
+      // yet, so it should be moved into the operations eventually.
       AD_EXPENSIVE_CHECK(
+          result.isDataEvaluated() ||
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
@@ -155,7 +158,7 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
         runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else {
+      } else if (result.isDataEvaluated()) {
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
       }
@@ -231,7 +234,9 @@ void Operation::updateRuntimeInformationOnSuccess(
     const Result& resultTable, ad_utility::CacheStatus cacheStatus,
     Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.idTable().size();
+  // TODO<RobinTF> replace 0 size with estimation or something
+  _runtimeInfo->numRows_ =
+      resultTable.isDataEvaluated() ? resultTable.idTable().size() : 0;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;

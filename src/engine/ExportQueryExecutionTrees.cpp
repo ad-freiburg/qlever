@@ -31,6 +31,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
     CancellationHandle cancellationHandle) {
+  // TODO<RobinTF> handle export of generators correctly
   for (size_t i : getRowIndices(limitAndOffset, res->idTable())) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
@@ -112,6 +113,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     std::shared_ptr<const Result> resultTable,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
+  // TODO<RobinTF> handle export of generators correctly
   const IdTable& data = resultTable->idTable();
   nlohmann::json json = nlohmann::json::array();
 
@@ -282,6 +284,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
+  // TODO<RobinTF> handle export of generators correctly
   const IdTable& idTable = resultTable->idTable();
 
   json result;
@@ -424,6 +427,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
+  // TODO<RobinTF> handle export of generators correctly
   const auto& idTable = resultTable->idTable();
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
@@ -575,6 +579,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_yield "\n<results>";
 
   resultTable->logResultSize();
+  // TODO<RobinTF> handle export of generators correctly
   const auto& idTable = resultTable->idTable();
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
@@ -640,7 +645,10 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
   resultTable->logResultSize();
   auto timeResultComputation = requestTimer.msecs();
 
-  size_t resultSize = resultTable->idTable().size();
+  std::optional<size_t> resultSize =
+      query.hasSelectClause() && resultTable->isDataEvaluated()
+          ? std::optional{resultTable->idTable().size()}
+          : std::nullopt;
 
   nlohmann::json j;
 
@@ -676,7 +684,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
                       qet, query.constructClause().triples_, limitAndOffset,
                       std::move(resultTable), std::move(cancellationHandle));
   }
-  j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
+  j["resultsize"] = resultSize.value_or(j["res"].size());
   j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
   j["time"]["computeResult"] =
       std::to_string(timeResultComputation.count()) + "ms";

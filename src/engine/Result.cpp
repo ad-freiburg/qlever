@@ -64,13 +64,7 @@ Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
              SharedLocalVocabWrapper{std::move(localVocab)}) {}
 
 // _____________________________________________________________________________
-void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
-  // Apply the OFFSET clause. If the offset is `0` or the offset is larger
-  // than the size of the `IdTable`, then this has no effect and runtime
-  // `O(1)` (see the docs for `std::shift_left`).
-  // TODO<RobinTF> handle generator case properly
-  AD_CONTRACT_CHECK(isDataEvaluated());
-  auto& idTable = std::get<0>(_idTable);
+void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   std::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
@@ -86,14 +80,50 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
 }
 
 // _____________________________________________________________________________
+void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+  // Apply the OFFSET clause. If the offset is `0` or the offset is larger
+  // than the size of the `IdTable`, then this has no effect and runtime
+  // `O(1)` (see the docs for `std::shift_left`).
+  // TODO<RobinTF> make limit its own dedicated operation to avoid this
+  // modification here
+  AD_CONTRACT_CHECK(isDataEvaluated());
+  using Gen = cppcoro::generator<IdTable>;
+  if (std::holds_alternative<IdTable>(_idTable)) {
+    modifyIdTable(std::get<IdTable>(_idTable), limitOffset);
+  } else if (std::holds_alternative<Gen>(_idTable)) {
+    auto generator = [](Gen original, LimitOffsetClause limitOffset) -> Gen {
+      if (limitOffset._limit.value_or(1) == 0) {
+        co_return;
+      }
+      for (auto&& idTable : original) {
+        modifyIdTable(idTable, limitOffset);
+        uint64_t offsetDelta = limitOffset.actualOffset(idTable.numRows());
+        limitOffset._offset -= offsetDelta;
+        if (limitOffset._limit.has_value()) {
+          limitOffset._limit.value() -=
+              limitOffset.actualSize(idTable.numRows() - offsetDelta);
+        }
+        if (limitOffset._offset == 0) {
+          co_yield std::move(idTable);
+        }
+        if (limitOffset._limit.value_or(1) == 0) {
+          break;
+        }
+      }
+    }(std::move(std::get<Gen>(_idTable)), limitOffset);
+    _idTable = std::move(generator);
+  } else {
+    AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
 auto Result::getOrComputeDatatypeCountsPerColumn()
     -> const DatatypeCountsPerColumn& {
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
-  // TODO<RobinTF> handle generator case properly
-  AD_CONTRACT_CHECK(isDataEvaluated());
-  auto& idTable = std::get<0>(_idTable);
+  auto& idTable = std::get<IdTable>(_idTable);
   auto& types = datatypeCountsPerColumn_.emplace();
   types.resize(idTable.numColumns());
   for (size_t i = 0; i < idTable.numColumns(); ++i) {
@@ -108,6 +138,7 @@ auto Result::getOrComputeDatatypeCountsPerColumn()
 
 // _____________________________________________________________
 bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
+  AD_CONTRACT_CHECK(isDataEvaluated());
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
     const auto& [columnIndex, mightContainUndef] = varAndCol.second;

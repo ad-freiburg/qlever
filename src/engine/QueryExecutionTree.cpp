@@ -83,7 +83,7 @@ size_t QueryExecutionTree::getCostEstimate() {
 // _____________________________________________________________________________
 size_t QueryExecutionTree::getSizeEstimate() {
   if (!sizeEstimate_.has_value()) {
-    if (cachedResult_) {
+    if (cachedResult_ && cachedResult_->isDataEvaluated()) {
       sizeEstimate_ = cachedResult_->idTable().size();
     } else {
       // if we are in a unit test setting and there is no QueryExecutionContest
@@ -97,7 +97,7 @@ size_t QueryExecutionTree::getSizeEstimate() {
 
 // _____________________________________________________________________________
 bool QueryExecutionTree::knownEmptyResult() {
-  if (cachedResult_) {
+  if (cachedResult_ && cachedResult_->isDataEvaluated()) {
     return cachedResult_->idTable().size() == 0;
   }
   return rootOperation_->knownEmptyResult();
