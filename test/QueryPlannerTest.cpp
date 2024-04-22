@@ -776,7 +776,7 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
-      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
+      h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
 // __________________________________________________________________________
@@ -938,6 +938,14 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   // TODO<joka921> Add a test for the case with subtrees with and without
   // rewriting of triples.
+}
+
+// Check that a MINUS operation that only refers to unbound variables is deleted
+// by the query planner.
+TEST(QueryPlanner, UnboundMinusIgnored) {
+  h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
+            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
 }
 
 // ___________________________________________________________________________

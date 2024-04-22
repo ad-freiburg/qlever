@@ -144,11 +144,6 @@ inline auto Bind = [](const QetMatcher& childMatcher,
       AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher)))));
 };
 
-inline auto NeutralElementOperation = []() {
-  return RootOperation<::NeutralElementOperation>(
-      An<const ::NeutralElementOperation&>());
-};
-
 // Matcher for a `CountAvailablePredicates` operation. The case of 0 children
 // means that it's a full scan.
 inline auto CountAvailablePredicates =
