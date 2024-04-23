@@ -49,8 +49,7 @@ class TextLimit : public Operation {
   uint64_t getSizeEstimateBeforeLimit() override;
 
   float getMultiplicity(size_t col) override {
-    (void)col;
-    return 1;
+    return child_->getMultiplicity(col);
   }
 
   bool knownEmptyResult() override {
