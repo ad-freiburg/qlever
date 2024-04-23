@@ -38,9 +38,11 @@ class CacheValue {
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
-    // TODO<RobinTF> Ensure this is only called for fully materialized results
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+      // TODO<RobinTF> find good solution how to calculate storage requirements
+      // for generator data
+      if (const auto& tablePtr = cacheValue._resultTable;
+          tablePtr && tablePtr->isDataEvaluated()) {
         return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
                                              tablePtr->idTable().numColumns() *
                                              sizeof(Id));

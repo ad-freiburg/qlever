@@ -180,11 +180,10 @@ class ConcurrentCache {
    * @return A shared_ptr to the computation result.
    *
    */
-  template <bool isCacheValueType = false>
   ResultAndCacheStatus computeOnce(const Key& key,
                                    std::invocable auto computeFunction,
                                    bool onlyReadFromCache = false) {
-    return computeOnceImpl<isCacheValueType>(
+    return computeOnceImpl(
         false, key, std::move(computeFunction), onlyReadFromCache);
   }
 
@@ -308,8 +307,6 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
-  // TODO<RobinTF> fix ugly hack of isCacheValueType
-  template <bool isCacheValueType = false>
   ResultAndCacheStatus computeOnceImpl(bool pinned, const Key& key,
                                        std::invocable auto computeFunction,
                                        bool onlyReadFromCache) {
@@ -354,14 +351,6 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
-        // TODO<RobinTF> support storing generator in cache somehow
-        if constexpr (isCacheValueType) {
-          if (!result->resultTable()->isDataEvaluated()) {
-            // TODO<RobinTF> use dedicated mechanism for this
-            resultInProgress->abort();
-            return {std::move(result), CacheStatus::computed};
-          }
-        }
         moveFromInProgressToCache(key, result);
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);

@@ -159,8 +159,6 @@ const IdTable& Result::idTable() const {
 
 // _____________________________________________________________________________
 Result::GeneratorType& Result::idTables() {
-  // TODO<RobinTF> Find out if scenarios exist where it makes
-  // sense to return a generator with a single element here.
   AD_CONTRACT_CHECK(!isDataEvaluated());
   return std::get<GeneratorType>(_idTable);
 }
