@@ -41,9 +41,11 @@ Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
       _sortedBy{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
-    return numCols < this->idTable().numColumns();
-  }));
+  // TODO<RobinTF> move checks into generators if possible
+  AD_CONTRACT_CHECK(!isDataEvaluated() ||
+                    std::ranges::all_of(_sortedBy, [this](size_t numCols) {
+                      return numCols < this->idTable().numColumns();
+                    }));
 
   [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1,
                                                           const auto& row2) {
@@ -55,6 +57,7 @@ Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
     return false;
   };
   AD_EXPENSIVE_CHECK(
+      !isDataEvaluated() ||
       std::ranges::is_sorted(this->idTable(), compareRowsByJoinColumns));
 }
 
