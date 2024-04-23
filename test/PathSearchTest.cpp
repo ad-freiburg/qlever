@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include "engine/PathSearch.h"
+#include "gmock/gmock.h"
+#include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
@@ -17,9 +19,19 @@ using Vars = std::vector<std::optional<Variable>>;
 
 TEST(PathSearchTest, constructor) {
   auto qec = getQec();
-  PathSearch p = PathSearch(qec, nullptr);
+  PathSearchConfiguration config{ALL_PATHS, V(0), V(1), 0, 1, 2, 3};
+  PathSearch p = PathSearch(qec, nullptr, config);
 }
 
-TEST(PathSearchTest, findPaths) {}
+TEST(PathSearchTest, singlePath) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
+  auto expected = makeIdTableFromVector({});
 
-TEST(PathSearchTest, buildGraph) {}
+  auto qec = getQec();
+  PathSearchConfiguration config{ALL_PATHS, V(0), V(4), 0, 1, 2, 3};
+  PathSearch p = PathSearch(qec, nullptr, config);
+
+  auto resultTable = p.computeResult();
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
