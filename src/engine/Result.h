@@ -15,7 +15,6 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Log.h"
 #include "util/ReusableGenerator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
@@ -102,8 +101,8 @@ class Result {
   // Const access to the underlying `IdTable`.
   const IdTable& idTable() const;
 
-  // Access to the underlying `IdTable`.
-  GeneratorType& idTables();
+  // Access to the underlying `IdTable`s.
+  const GeneratorType& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }

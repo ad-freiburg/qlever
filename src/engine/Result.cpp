@@ -8,6 +8,7 @@
 
 #include "engine/LocalVocab.h"
 #include "util/Exception.h"
+#include "util/Log.h"
 
 // _____________________________________________________________________________
 string Result::asDebugString() const {
@@ -158,7 +159,7 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-Result::GeneratorType& Result::idTables() {
+const Result::GeneratorType& Result::idTables() const {
   AD_CONTRACT_CHECK(!isDataEvaluated());
   return std::get<GeneratorType>(_idTable);
 }

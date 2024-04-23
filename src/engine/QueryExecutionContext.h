@@ -40,7 +40,8 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       // TODO<RobinTF> find good solution how to calculate storage requirements
-      // for generator data
+      // for generator data, maybe allow later re-calculation current size by
+      // returning lambda?
       if (const auto& tablePtr = cacheValue._resultTable;
           tablePtr && tablePtr->isDataEvaluated()) {
         return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *

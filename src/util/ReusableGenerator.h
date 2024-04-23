@@ -17,8 +17,8 @@ namespace ad_utility {
 template <typename T>
 class ReusableGenerator {
   using GenIterator = typename cppcoro::generator<T>::iterator;
-  using Reference = typename GenIterator::reference;
-  using Pointer = typename GenIterator::pointer;
+  using Reference = const T&;
+  using Pointer = const T*;
 
   class ComputationStorage {
     friend ReusableGenerator;
@@ -52,7 +52,9 @@ class ReusableGenerator {
       }
     }
 
-    Reference getCachedValue(size_t index) { return cachedValues_.at(index); }
+    Reference getCachedValue(size_t index) const {
+      return cachedValues_.at(index);
+    }
 
     bool isDone(size_t index) const noexcept {
       return index == cachedValues_.size() && generatorIterator_.has_value() &&
@@ -114,7 +116,7 @@ class ReusableGenerator {
     Pointer operator->() const noexcept { return std::addressof(operator*()); }
   };
 
-  Iterator begin() noexcept { return Iterator{}; }
+  Iterator begin() const noexcept { return Iterator{computationStorage_}; }
 
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 

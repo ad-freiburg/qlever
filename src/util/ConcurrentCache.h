@@ -183,8 +183,8 @@ class ConcurrentCache {
   ResultAndCacheStatus computeOnce(const Key& key,
                                    std::invocable auto computeFunction,
                                    bool onlyReadFromCache = false) {
-    return computeOnceImpl(
-        false, key, std::move(computeFunction), onlyReadFromCache);
+    return computeOnceImpl(false, key, std::move(computeFunction),
+                           onlyReadFromCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
@@ -328,6 +328,7 @@ class ConcurrentCache {
       } else if (onlyReadFromCache) {
         return {nullptr, CacheStatus::notInCacheAndNotComputed};
       } else if (lockPtr->_inProgress.contains(key)) {
+        // TODO<RobinTF> serialize into single IdTable if partially computed
         // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
         // this call blocks and we currently hold a lock.
