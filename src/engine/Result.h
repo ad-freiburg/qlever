@@ -15,8 +15,8 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Generator.h"
 #include "util/Log.h"
+#include "util/ReusableGenerator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -24,7 +24,8 @@
 class Result {
  private:
   // The actual entries.
-  using TableType = std::variant<IdTable, cppcoro::generator<IdTable>>;
+  using GeneratorType = ad_utility::ReusableGenerator<IdTable>;
+  using TableType = std::variant<IdTable, GeneratorType>;
   TableType _idTable;
 
   // The column indices by which the result is sorted (primary sort key first).
@@ -102,7 +103,7 @@ class Result {
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`.
-  cppcoro::generator<IdTable>& idTables();
+  GeneratorType& idTables();
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }

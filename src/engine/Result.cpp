@@ -87,11 +87,13 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // TODO<RobinTF> make limit its own dedicated operation to avoid this
   // modification here
   AD_CONTRACT_CHECK(isDataEvaluated());
-  using Gen = cppcoro::generator<IdTable>;
+  using Gen = GeneratorType;
   if (std::holds_alternative<IdTable>(_idTable)) {
     modifyIdTable(std::get<IdTable>(_idTable), limitOffset);
   } else if (std::holds_alternative<Gen>(_idTable)) {
-    auto generator = [](Gen original, LimitOffsetClause limitOffset) -> Gen {
+    auto generator =
+        [](cppcoro::generator<IdTable> original,
+           LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
@@ -110,8 +112,8 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
           break;
         }
       }
-    }(std::move(std::get<Gen>(_idTable)), limitOffset);
-    _idTable = std::move(generator);
+    }(std::move(std::get<Gen>(_idTable)).extractGenerator(), limitOffset);
+    _idTable.emplace<Gen>(std::move(generator));
   } else {
     AD_FAIL();
   }
@@ -156,11 +158,11 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable>& Result::idTables() {
+Result::GeneratorType& Result::idTables() {
   // TODO<RobinTF> Find out if scenarios exist where it makes
   // sense to return a generator with a single element here.
   AD_CONTRACT_CHECK(!isDataEvaluated());
-  return std::get<cppcoro::generator<IdTable>>(_idTable);
+  return std::get<GeneratorType>(_idTable);
 }
 
 // _____________________________________________________________________________
