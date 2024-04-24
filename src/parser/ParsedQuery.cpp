@@ -220,16 +220,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   }
 }
 
-void ParsedQuery::merge(const ParsedQuery& p) {
-  auto& children = _rootGraphPattern._graphPatterns;
-  auto& otherChildren = p._rootGraphPattern._graphPatterns;
-  children.insert(children.end(), otherChildren.begin(), otherChildren.end());
-
-  // update the ids
-  _numGraphPatterns = 0;
-  _rootGraphPattern.recomputeIds(&_numGraphPatterns);
-}
-
 // _____________________________________________________________________________
 const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
   return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
@@ -251,47 +241,6 @@ void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
     }
   };
   std::visit(addVariable, _clause);
-}
-
-// _____________________________________________________________________________
-void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
-  bool allocatedIdCounter = false;
-  if (id_count == nullptr) {
-    id_count = new size_t(0);
-    allocatedIdCounter = true;
-  }
-  _id = *id_count;
-  (*id_count)++;
-  for (auto& op : _graphPatterns) {
-    op.visit([&id_count](auto&& arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, parsedQuery::Union>) {
-        arg._child1.recomputeIds(id_count);
-        arg._child2.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::Optional> ||
-                           std::is_same_v<T, parsedQuery::GroupGraphPattern> ||
-                           std::is_same_v<T, parsedQuery::Minus>) {
-        arg._child.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
-        // arg._childGraphPattern.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
-        arg._id = (*id_count)++;
-      } else {
-        static_assert(std::is_same_v<T, parsedQuery::Subquery> ||
-                      std::is_same_v<T, parsedQuery::Service> ||
-                      std::is_same_v<T, parsedQuery::BasicGraphPattern> ||
-                      std::is_same_v<T, parsedQuery::Bind>);
-        // subquery children have their own id space
-        // TODO:joka921 look at the optimizer if it is ok, that
-        // BasicGraphPatterns and Values have no ids at all. at the same time
-        // assert that the above else-if is exhaustive.
-      }
-    });
-  }
-
-  if (allocatedIdCounter) {
-    delete id_count;
-  }
 }
 
 // __________________________________________________________________________

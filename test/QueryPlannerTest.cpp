@@ -756,8 +756,8 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
 
 TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
@@ -765,9 +765,10 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
-          // TODO<joka921> Get rid of this sort operation
-          h::Sort(scan("?_qlever_internal_variable_query_planner_0", "<p>",
-                       "?_qlever_internal_variable_query_planner_1"))));
+          scan("?_qlever_internal_variable_query_planner_0", "<p>",
+               "?_qlever_internal_variable_query_planner_1",
+               {Permutation::POS})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
 // __________________________________________________________________________
@@ -775,7 +776,7 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
-      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
+      h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
 // __________________________________________________________________________
@@ -1037,6 +1038,14 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   // TODO<joka921> Add a test for the case with subtrees with and without
   // rewriting of triples.
+}
+
+// Check that a MINUS operation that only refers to unbound variables is deleted
+// by the query planner.
+TEST(QueryPlanner, UnboundMinusIgnored) {
+  h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
+            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
 }
 
 // ___________________________________________________________________________

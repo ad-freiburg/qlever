@@ -100,8 +100,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     auto lock =
         getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
-          child->getResultWidth() == 1) {
+      if (child->getRootOperation()->isIndexScanWithNumVariables(1)) {
         (*lock)[child->getRootOperation()->getCacheKey()] =
             child->getSizeEstimate();
       }
