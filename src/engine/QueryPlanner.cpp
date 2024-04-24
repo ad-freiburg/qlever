@@ -1269,15 +1269,29 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
   std::vector<std::vector<SubtreePlan>> result;
   result.emplace_back();
   std::vector<std::shared_ptr<QueryExecutionTree>> subtrees;
-  std::ranges::move(
+  // We need to manually inform the cartesian produce about
+  // its included nodes and filters and text limits to make the
+  // `applyTextLimitsIfPossible` call below work correctly.
+  uint64_t nodes = 0;
+  uint64_t filterIds = 0;
+  uint64_t textLimitIds = 0;
+  std::ranges::for_each(
       lastDpRowFromComponents |
           std::views::transform([this](auto& vec) -> decltype(auto) {
             return vec.at(findCheapestExecutionTree(vec));
-          }) |
-          std::views::transform(&SubtreePlan::_qet),
-      std::back_inserter(subtrees));
+          }),
+      [&](SubtreePlan& plan) {
+        nodes |= plan._idsOfIncludedNodes;
+        filterIds |= plan._idsOfIncludedFilters;
+        textLimitIds |= plan.idsOfIncludedTextLimits_;
+        subtrees.push_back(std::move(plan._qet));
+      });
   result.at(0).push_back(
       makeSubtreePlan<CartesianProductJoin>(_qec, std::move(subtrees)));
+  auto& plan = result.at(0).back();
+  plan._idsOfIncludedNodes = nodes;
+  plan._idsOfIncludedFilters = filterIds;
+  plan.idsOfIncludedTextLimits_ = textLimitIds;
   applyFiltersIfPossible<true>(result.at(0), filters);
   applyTextLimitsIfPossible(result.at(0), textLimits, true);
   return result;
