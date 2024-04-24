@@ -2005,6 +2005,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
     // Add the query plan for the BIND.
     SubtreePlan plan = makeSubtreePlan<Bind>(qec_, a._qet, v);
     plan._idsOfIncludedFilters = a._idsOfIncludedFilters;
+    plan.idsOfIncludedTextLimits_ = a.idsOfIncludedTextLimits_;
     candidatePlans_.back().push_back(std::move(plan));
   }
   // Handle the case where the BIND clause is the first clause (which is
@@ -2097,8 +2098,10 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 // _______________________________________________________________
 void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
   auto tg = planner_.createTripleGraph(&candidateTriples_);
-  auto lastRow =
-      planner_.fillDpTab(tg, rootPattern_->_filters, candidatePlans_).back();
+  auto lastRow = planner_
+                     .fillDpTab(tg, rootPattern_->_filters,
+                                rootPattern_->textLimits_, candidatePlans_)
+                     .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   candidatePlans_.push_back(std::move(lastRow));

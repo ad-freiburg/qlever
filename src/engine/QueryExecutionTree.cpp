@@ -13,12 +13,6 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "engine/TextIndexScanForEntity.h"
-#include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePathBase.h"
-#include "engine/Union.h"
-#include "engine/Values.h"
-#include "engine/ValuesForTesting.h"
 #include "parser/RdfEscaping.h"
 
 using std::string;
