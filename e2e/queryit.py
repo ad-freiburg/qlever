@@ -421,7 +421,6 @@ def main() -> None:
                 set_error()
                 continue
 
-            print("Trying Sparql_json_export")
             result = exec_query(endpoint_url, query_sparql, action="sparql_json_export")
             if not result:
                 # A print was already done in exec_query()
