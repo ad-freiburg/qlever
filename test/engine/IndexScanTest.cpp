@@ -118,6 +118,30 @@ void testLazyScanForJoinWithColumn(
   auto lazyScan = IndexScan::lazyScanForJoinOfColumnWithScan(column, scan);
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
+
+// Test the same scenario as the previous function, but assumes that the
+// setting up of the lazy scan fails with an exception.
+void testLazyScanWithColumnThrows(
+    const std::string& kg, const SparqlTriple& scanTriple,
+    const std::vector<TripleComponent>& columnEntries,
+    source_location l = source_location::current()) {
+  auto t = generateLocationTrace(l);
+  auto qec = getQec(kg);
+  IndexScan s1{qec, Permutation::PSO, scanTriple};
+  std::vector<Id> column;
+  for (const auto& entry : columnEntries) {
+    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
+  }
+
+  // We need this to suppress the warning about a [[nodiscard]] return value
+  // being unused.
+  auto makeScan = [&column, &s1]() {
+    [[maybe_unused]] auto scan =
+        IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
+  };
+  EXPECT_ANY_THROW(makeScan());
+}
+
 }  // namespace
 
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
