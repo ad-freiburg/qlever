@@ -399,6 +399,25 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+// TO_INT
+auto InvalidArg = std::errc::invalid_argument;
+auto OutOfRange = std::errc::result_out_of_range;
+
+[[maybe_used]] auto strToIntImpl = [] (std::optional<std::string> input) {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    int res{};
+    auto str = boost::lexical_cast<std::string>(*input);
+    auto conv = std::from_chars(str.data(), str.data() + str.size(), res);
+    if (conv.ec == InvalidArg || conv.ec == OutOfRange) {
+      return Id::makeUndefined();
+    }
+    return Id::makeFromInt(res);
+  }
+};
+using MakeStrToInt = StringExpressionImpl<1, decltype(strToIntImpl)>;
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -450,6 +469,10 @@ Expr makeConcatExpression(std::vector<Expr> children) {
 
 Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
+}
+
+Expr makeStrToIntExpression(Expr child) {
+  return make<MakeStrToInt>(child);
 }
 
 }  // namespace sparqlExpression
