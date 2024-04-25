@@ -370,9 +370,9 @@ class QueryPlanner {
   // A text limit can be applied to a plan if:
   // 1) There is no text operation for the text record column left.
   // 2) The text limit has not already been applied to the plan.
-  [[nodiscard]] void applyTextLimitsIfPossible(
-      std::vector<SubtreePlan>& row, const TextLimitMap& textLimits,
-      bool replaceInsteadOfAddPlans) const;
+  void applyTextLimitsIfPossible(std::vector<SubtreePlan>& row,
+                                 const TextLimitMap& textLimits,
+                                 bool replaceInsteadOfAddPlans) const;
 
   /**
    * @brief Optimize a set of triples, filters and precomputed candidates

@@ -33,10 +33,11 @@ ResultTable TextLimit::computeResult() {
   auto compareScores = [this](const auto& lhs, const auto& rhs) {
     size_t lhsScore = 0;
     size_t rhsScore = 0;
-    for (size_t i = 0; i < scoreColumns_.size(); ++i) {
-      lhsScore += lhs[scoreColumns_[i]].getInt();
-      rhsScore += rhs[scoreColumns_[i]].getInt();
-    }
+    std::ranges::for_each(scoreColumns_,
+                          [&lhs, &rhs, &lhsScore, &rhsScore](const auto& col) {
+                            lhsScore += lhs[col].getInt();
+                            rhsScore += rhs[col].getInt();
+                          });
     if (lhsScore > rhsScore) {
       return 1;
     } else if (lhsScore < rhsScore) {
@@ -46,13 +47,13 @@ ResultTable TextLimit::computeResult() {
   };
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
-    for (size_t i = 0; i < entityColumns_.size(); ++i) {
-      if (lhs[entityColumns_[i]] < rhs[entityColumns_[i]]) {
+    std::ranges::for_each(entityColumns_, [&lhs, &rhs](const auto& col) {
+      if (lhs[col] < rhs[col]) {
         return 1;
-      } else if (lhs[entityColumns_[i]] > rhs[entityColumns_[i]]) {
+      } else if (lhs[col] > rhs[col]) {
         return -1;
       }
-    }
+    });
     return 0;
   };
 
@@ -172,7 +173,7 @@ string TextLimit::getCacheKeyImpl() const {
   for (const auto& column : entityColumns_) {
     os << column << ", ";
   }
-  os.seekp(-2, os.cur);
+  os.seekp(-2, std::ostringstream::cur);
   os << "}, {";
   for (const auto& column : scoreColumns_) {
     os << column << ", ";

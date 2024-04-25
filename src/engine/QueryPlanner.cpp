@@ -718,9 +718,9 @@ auto QueryPlanner::seedWithScansAndText(
   // If there is no score variable, there is no ql:contains-entity for this text
   // variable, so we don't need a text limit and we can delete the object
   vector<Variable> toDelete;
-  for (auto limit : textLimits) {
-    if (limit.second.scoreVars_.empty()) {
-      toDelete.push_back(limit.first);
+  for (const auto& [textVar, textLimitMetaObject] : textLimits) {
+    if (textLimitMetaObject.scoreVars_.empty()) {
+      toDelete.push_back(textVar);
     }
   }
   for (const auto& var : toDelete) {
@@ -887,7 +887,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   SubtreePlan plan(_qec);
   const auto& cvar = node.cvar_.value();
   if (!textLimits.contains(cvar)) {
-    textLimits[cvar] = parsedQuery::TextLimitMetaObject({}, {}, 0);
+    textLimits[cvar] = parsedQuery::TextLimitMetaObject{{}, {}, 0};
   }
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {

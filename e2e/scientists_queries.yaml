@@ -152,7 +152,7 @@ queries:
       TEXTLIMIT 2
     checks:
       - num_cols: 7
-      - num_rows: 18 # TODO: what is going on here?
+      - num_rows: 18
 
   - query: algor-star-female-born-before-1940
     type: text
