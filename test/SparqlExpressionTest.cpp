@@ -806,6 +806,19 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testToNumericExpression) {
+  auto checkGetInt = testUnaryExpression<&makeStrToIntExpression>;
+  auto checkGetDouble = testUnaryExpression<&makeStrToDoubleExpression>;
+  
+  checkGetInt(idOrLitOrStringVec(
+    {U, "5.97", "-78.97", "-57BoB36", "11111111111111", "FreBurg1", ""}),
+    Ids{U, I(5), I(-78), I(-57), U, U, U});
+  checkGetDouble(idOrLitOrStringVec(
+    {U, "-122.2", "19,96", "-125878930300334.345","UniFr2", "-ab", "144.86375"}),
+    Ids{U, D(-122.2), D(19), D(-125878930300334.345), U, U, D(144.86375)});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;

@@ -399,7 +399,7 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
-// TO_INT
+// TO_NUMERIC (int or double)
 auto InvalidArg = std::errc::invalid_argument;
 auto OutOfRange = std::errc::result_out_of_range;
 

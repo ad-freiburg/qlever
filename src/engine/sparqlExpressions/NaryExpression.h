@@ -83,7 +83,7 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child3);
 
 SparqlExpression::Ptr makeStrToIntExpression(SparqlExpression::Ptr child);
-// SparqlExpression::Ptr makeStrToDoubleExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeStrToDoubleExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
