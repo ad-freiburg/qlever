@@ -47,17 +47,20 @@ ResultTable TextLimit::computeResult() {
   };
 
   auto compareEntities = [this](const auto& lhs, const auto& rhs) {
-    int res = 0;
-    std::ranges::for_each(entityColumns_, [&lhs, &rhs, &res](const auto& col) {
-      if (lhs[col] < rhs[col]) {
-        res = 1;
-        return;
-      } else if (lhs[col] > rhs[col]) {
-        res = -1;
-        return;
+    auto it =
+        std::ranges::find_if(entityColumns_, [&lhs, &rhs](const auto& col) {
+          return lhs[col] < rhs[col] || lhs[col] > rhs[col];
+        });
+
+    if (it != entityColumns_.end()) {
+      if (lhs[*it] < rhs[*it]) {
+        return 1;
+      } else {
+        return -1;
       }
-    });
-    return res;
+    }
+
+    return 0;
   };
 
   std::ranges::sort(idTable, [this, compareScores, compareEntities](
