@@ -403,20 +403,23 @@ using EncodeForUriExpression =
 auto InvalidArg = std::errc::invalid_argument;
 auto OutOfRange = std::errc::result_out_of_range;
 
-[[maybe_used]] auto strToIntImpl = [] (std::optional<std::string> input) {
+template <typename T>
+[[maybe_used]] auto toNumeric = [] (std::optional<std::string> input) {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    int res{};
+    T res{};
     auto str = boost::lexical_cast<std::string>(*input);
     auto conv = std::from_chars(str.data(), str.data() + str.size(), res);
     if (conv.ec == InvalidArg || conv.ec == OutOfRange) {
       return Id::makeUndefined();
     }
-    return Id::makeFromInt(res);
+    if (std::is_same_v<T, double>) { return Id::makeFromDouble(res); }
+    else { return Id::makeFromInt(res); }
   }
 };
-using MakeStrToInt = StringExpressionImpl<1, decltype(strToIntImpl)>;
+using MakeStrToInt = StringExpressionImpl<1, decltype(toNumeric<int>)>;
+using MakeDoubleToInt = StringExpressionImpl<1, decltype(toNumeric<double>)>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
@@ -471,8 +474,12 @@ Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
 
-Expr makeStrToIntExpression(Expr child) {
-  return make<MakeStrToInt>(child);
+Expr makeStrToIntExpression(Expr child) { 
+  return make<MakeStrToInt>(child); 
+}
+
+Expr makeStrToDoubleExpression(Expr child) {
+  return make<MakeDoubleToInt>(child);
 }
 
 }  // namespace sparqlExpression
