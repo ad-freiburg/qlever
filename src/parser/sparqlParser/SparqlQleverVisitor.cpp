@@ -129,7 +129,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::toDoubleExpression(std::move(argList[0]));
     }
-  } 
+  }
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
 }

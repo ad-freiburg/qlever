@@ -809,13 +809,14 @@ TEST(SparqlExpression, isSomethingFunctions) {
 TEST(SparqlExpression, testToNumericExpression) {
   auto checkGetInt = testUnaryExpression<&toIntExpression>;
   auto checkGetDouble = testUnaryExpression<&toDoubleExpression>;
-  
-  checkGetInt(idOrLitOrStringVec(
-    {U, "5.97", "-78.97", "-5BoB6", "FreBurg1", "", " .", " 42\n", " 0.01 "}),
-    Ids{U, I(5), I(-78), U, U, U, U, I(42), I(0)});
-  checkGetDouble(idOrLitOrStringVec(
-    {U, "-122.2", "19,96", " 128789334.345 ", "-0.f" , "  0.007 "," -14.75 "}),
-    Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75)});
+
+  checkGetInt(idOrLitOrStringVec({U, "5.97", "-78.97", "-5BoB6", "FreBurg1", "",
+                                  " .", " 42\n", " 0.01 "}),
+              Ids{U, I(5), I(-78), U, U, U, U, I(42), I(0)});
+  checkGetDouble(
+      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
+                          "  0.007 ", " -14.75 "}),
+      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75)});
 }
 
 // ____________________________________________________________________________

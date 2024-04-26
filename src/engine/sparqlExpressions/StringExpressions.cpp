@@ -401,7 +401,7 @@ using EncodeForUriExpression =
 
 // Expressions that convert a string to a number (int or double).
 template <typename T>
-[[maybe_used]] auto toNumeric = [] (std::optional<std::string> input) {
+[[maybe_used]] auto toNumeric = [](std::optional<std::string> input) {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
@@ -411,11 +411,12 @@ template <typename T>
     if (conv.ec != std::error_code{} || conv.ptr != str.data() + str.size()) {
       return Id::makeUndefined();
     }
-    if constexpr (std::is_same_v<T, int64_t>) { 
+    if constexpr (std::is_same_v<T, int64_t>) {
       auto resT = static_cast<T>(resD);
       return Id::makeFromInt(resT);
+    } else {
+      return Id::makeFromDouble(resD);
     }
-    else { return Id::makeFromDouble(resD); }
   }
 };
 using ToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
@@ -474,12 +475,8 @@ Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
 
-Expr toIntExpression(Expr child) { 
-  return make<ToInt>(child); 
-}
+Expr toIntExpression(Expr child) { return make<ToInt>(child); }
 
-Expr toDoubleExpression(Expr child) {
-  return make<ToDouble>(child);
-}
+Expr toDoubleExpression(Expr child) { return make<ToDouble>(child); }
 
 }  // namespace sparqlExpression
