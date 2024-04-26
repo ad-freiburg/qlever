@@ -127,9 +127,12 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // Create an input result table with a local vocabulary.
   auto localVocab = std::make_shared<LocalVocab>();
-  localVocab->getIndexAndAddIfNotContained("<local1>");
-  localVocab->getIndexAndAddIfNotContained("<local2>");
-  localVocab->getIndexAndAddIfNotContained("<local3>");
+  constexpr auto iriref = [](const std::string& s) {
+    return ad_utility::triple_component::LiteralOrIri::iriref(s);
+  };
+  localVocab->getIndexAndAddIfNotContained(iriref("<local1>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local2>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local3>"));
 
   IdTable inputData(6, makeAllocator());
   // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.
@@ -1231,7 +1234,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
 
   auto getId = makeGetId(qec->getIndex());
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto value = result->localVocab().getIndexOrNullopt(word);
+    auto lit =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
+    auto value = result->localVocab().getIndexOrNullopt(lit);
     if (value.has_value())
       return ValueId::makeFromLocalVocabIndex(value.value());
     else
@@ -1278,7 +1283,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto value = result->localVocab().getIndexOrNullopt(word);
+    auto lit =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
+    auto value = result->localVocab().getIndexOrNullopt(lit);
     if (value.has_value())
       return ValueId::makeFromLocalVocabIndex(value.value());
     else

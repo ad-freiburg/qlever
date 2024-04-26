@@ -225,8 +225,9 @@ class TripleComponent {
         if (isLiteral()) {
           return LoI{std::move(getLiteral())};
         } else {
-          return LoI { std::move(getIri())};
-        }}();
+          return LoI{std::move(getIri())};
+        }
+      }();
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
       // Otherwise, `newWord` would be copied here despite the `std::move`.
       id = Id::makeFromLocalVocabIndex(

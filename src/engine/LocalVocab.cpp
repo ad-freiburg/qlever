@@ -8,7 +8,6 @@
 #include "global/Id.h"
 #include "global/ValueId.h"
 
-
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
   LocalVocab localVocabClone;
@@ -44,8 +43,7 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
 }
 
 // _____________________________________________________________________________
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
-    const Entry& word) {
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(const Entry& word) {
   return getIndexAndAddIfNotContainedImpl(word);
 }
 
@@ -68,10 +66,10 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
 }
 
 // _____________________________________________________________________________
-const LocalVocab::Entry& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
+const LocalVocab::Entry& LocalVocab::getWord(
+    LocalVocabIndex localVocabIndex) const {
   return *localVocabIndex;
 }
-
 
 // _____________________________________________________________________________
 std::vector<LocalVocab::Entry> LocalVocab::getAllWordsForTesting() const {

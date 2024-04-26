@@ -66,8 +66,7 @@ class LocalVocab {
 
   // Get the index of a word in the local vocabulary, or std::nullopt if it is
   // not contained. This is useful for testing.
-  std::optional<LocalVocabIndex> getIndexOrNullopt(
-      const Entry& word) const;
+  std::optional<LocalVocabIndex> getIndexOrNullopt(const Entry& word) const;
 
   // The number of words in the vocabulary.
   // Note: This is not constant time, but linear in the number of word sets.
