@@ -411,7 +411,7 @@ template <typename T>
     T res{};
     const auto& str = input.value();
     auto conv = std::from_chars(str.data(), str.data() + str.size(), res);
-    if (conv.ec == InvalidArg || conv.ec == OutOfRange) {
+    if (conv.ec != std::error_code{} || conv.ptr != str.data() + str.size()) {
       return Id::makeUndefined();
     }
     if (std::is_same_v<T, double>) { return Id::makeFromDouble(res); }
