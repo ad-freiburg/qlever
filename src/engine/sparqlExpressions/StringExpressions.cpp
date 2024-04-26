@@ -409,7 +409,7 @@ template <typename T>
     return Id::makeUndefined();
   } else {
     T res{};
-    auto str = boost::lexical_cast<std::string>(*input);
+    const auto& str = input.value();
     auto conv = std::from_chars(str.data(), str.data() + str.size(), res);
     if (conv.ec == InvalidArg || conv.ec == OutOfRange) {
       return Id::makeUndefined();
