@@ -124,14 +124,10 @@ ExpressionPtr Visitor::processIriFunctionCall(
   } else if (checkPrefix(SCHEMA_TYPE)) {
     if (functionName == "integer") {
       checkNumArgs(1);
-      return sparqlExpression::makeStrToIntExpression(
-        std::move(argList[0])
-      );
+      return sparqlExpression::toIntExpression(std::move(argList[0]));
     } else if (functionName == "double") {
       checkNumArgs(1);
-      return sparqlExpression::makeStrToDoubleExpression(
-        std::move(argList[0])
-      );
+      return sparqlExpression::toDoubleExpression(std::move(argList[0]));
     }
   } 
   reportNotSupported(ctx,

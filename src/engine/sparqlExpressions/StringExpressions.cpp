@@ -411,15 +411,15 @@ template <typename T>
     if (conv.ec != std::error_code{} || conv.ptr != str.data() + str.size()) {
       return Id::makeUndefined();
     }
-    if (std::is_same_v<T, int64_t>) { 
+    if constexpr (std::is_same_v<T, int64_t>) { 
       auto resT = static_cast<T>(resD);
       return Id::makeFromInt(resT);
     }
     else { return Id::makeFromDouble(resD); }
   }
 };
-using MakeStrToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
-using MakeDoubleToInt = StringExpressionImpl<1, decltype(toNumeric<double>)>;
+using ToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
+using ToDouble = StringExpressionImpl<1, decltype(toNumeric<double>)>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
@@ -474,12 +474,12 @@ Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
 
-Expr makeStrToIntExpression(Expr child) { 
-  return make<MakeStrToInt>(child); 
+Expr toIntExpression(Expr child) { 
+  return make<ToInt>(child); 
 }
 
-Expr makeStrToDoubleExpression(Expr child) {
-  return make<MakeDoubleToInt>(child);
+Expr toDoubleExpression(Expr child) {
+  return make<ToDouble>(child);
 }
 
 }  // namespace sparqlExpression
