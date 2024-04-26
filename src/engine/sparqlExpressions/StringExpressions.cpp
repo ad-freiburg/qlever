@@ -400,22 +400,22 @@ using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
 // Expressions that convert a string to a number (int or double).
-auto InvalidArg = std::errc::invalid_argument;
-auto OutOfRange = std::errc::result_out_of_range;
-
 template <typename T>
 [[maybe_used]] auto toNumeric = [] (std::optional<std::string> input) {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    T res{};
-    const auto& str = input.value();
-    auto conv = std::from_chars(str.data(), str.data() + str.size(), res);
+    auto str = absl::StripAsciiWhitespace(input.value());
+    double resD{};
+    auto conv = absl::from_chars(str.data(), str.data() + str.size(), resD);
     if (conv.ec != std::error_code{} || conv.ptr != str.data() + str.size()) {
       return Id::makeUndefined();
     }
-    if (std::is_same_v<T, double>) { return Id::makeFromDouble(res); }
-    else { return Id::makeFromInt(res); }
+    if (std::is_same_v<T, int64_t>) { 
+      auto resT = static_cast<T>(resD);
+      return Id::makeFromInt(resT);
+    }
+    else { return Id::makeFromDouble(resD); }
   }
 };
 using MakeStrToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
