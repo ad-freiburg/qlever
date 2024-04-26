@@ -418,7 +418,7 @@ template <typename T>
     else { return Id::makeFromInt(res); }
   }
 };
-using MakeStrToInt = StringExpressionImpl<1, decltype(toNumeric<int>)>;
+using MakeStrToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
 using MakeDoubleToInt = StringExpressionImpl<1, decltype(toNumeric<double>)>;
 
 }  // namespace detail::string_expressions
