@@ -9,11 +9,22 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/Id.h"
+
+// We deliberately use the `std::` variants of a hash set and hash map because
+// `absl`s types are not exception safe.
+struct HashId {
+  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
+};
+
+using Map = std::unordered_map<
+    Id, size_t, HashId, std::equal_to<Id>,
+    ad_utility::AllocatorWithLimit<std::pair<const Id, size_t>>>;
 
 struct Edge {
   uint64_t start_;
@@ -54,9 +65,15 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
   Path& currentPath_;
   std::vector<Path>& allPaths_;
 
+  const std::vector<Id>& indexToId_;
+
  public:
-  AllPathsVisitor(VertexDescriptor target, Path& path, std::vector<Path>& paths)
-      : target_(target), currentPath_(path), allPaths_(paths) {}
+  AllPathsVisitor(VertexDescriptor target, Path& path, std::vector<Path>& paths,
+                  const std::vector<Id>& indexToId)
+      : target_(target),
+        currentPath_(path),
+        allPaths_(paths),
+        indexToId_(indexToId) {}
 
   void discover_vertex(VertexDescriptor vertex, const Graph& graph) {
     (void)graph;
@@ -64,7 +81,7 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
   }
 
   void tree_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
-    const Edge& edge = boost::get(boost::edge_bundle, graph)[edgeDesc];
+    const Edge& edge = graph[edgeDesc];
     currentPath_.edges_.push_back(edge);
   }
 
@@ -74,7 +91,7 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
       allPaths_.push_back(currentPath_);
     }
     if (!currentPath_.empty()) {
-      if (currentPath_.lastNode() == vertex) {
+      if (Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
         currentPath_.edges_.pop_back();
       }
     }
@@ -88,7 +105,7 @@ enum PathSearchAlgorithm {
 struct PathSearchConfiguration {
   PathSearchAlgorithm algorithm_;
   Id source_;
-  Id destination_;
+  Id target_;
   size_t startColumn_;
   size_t endColumn_;
   size_t pathIndexColumn_;
@@ -97,11 +114,14 @@ struct PathSearchConfiguration {
 
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
-  size_t resultWidth_;
+  size_t resultWidth_ = 4;
   VariableToColumnMap variableColumns_;
 
   Graph graph_;
   PathSearchConfiguration config_;
+
+  std::vector<Id> indexToId_;
+  Map idToIndex_;
 
  public:
   PathSearch(QueryExecutionContext* qec,
@@ -128,8 +148,10 @@ class PathSearch : public Operation {
 
  private:
   void buildGraph(std::span<const Id> startNodes, std::span<const Id> endNodes);
+  void buildMapping(std::span<const Id> startNodes,
+                    std::span<const Id> endNodes);
   std::vector<Path> findPaths() const;
   std::vector<Path> allPaths() const;
   template <size_t WIDTH>
-  void normalizePaths(IdTable& tableDyn, std::vector<Path> paths) const;
+  void normalizePaths(IdTable& tableDyn, std::vector<Path>& paths) const;
 };
