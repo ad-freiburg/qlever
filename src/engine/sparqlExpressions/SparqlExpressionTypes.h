@@ -196,7 +196,7 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
                             R, ad_utility::triple_component::LiteralOrIri>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(
-                    AD_FWD(el).toStringRepresentation()));
+                    AD_FWD(el)));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

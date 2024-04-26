@@ -224,9 +224,9 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case LocalVocabIndex: {
-      std::string word = localVocab.getWord(id.getLocalVocabIndex());
+      auto word = localVocab.getWord(id.getLocalVocabIndex());
       if constexpr (onlyReturnLiterals) {
-        if (!word.starts_with('"')) {
+        if (!word.isLiteral()) {
           return std::nullopt;
         }
       }

@@ -219,18 +219,14 @@ class TripleComponent {
     if (!id) {
       // If `toValueId` could not convert to `Id`, we have a string, which we
       // look up in (and potentially add to) our local vocabulary.
-      AD_CORRECTNESS_CHECK(isString() || isLiteral() || isIri());
-      std::string& newWord = [&]() -> std::string& {
-        if (isString()) {
-          return getString();
+      AD_CORRECTNESS_CHECK(isLiteral() || isIri());
+      using LoI = ad_utility::triple_component::LiteralOrIri;
+      LoI newWord = [&]() -> LoI {
+        if (isLiteral()) {
+          return LoI{std::move(getLiteral())};
         } else {
-          if (isLiteral()) {
-            return getLiteral().toStringRepresentation();
-          } else {
-            return getIri().toStringRepresentation();
-          }
-        }
-      }();
+          return LoI { std::move(getIri())};
+        }}();
       // NOTE: There is a `&&` version of `getIndexAndAddIfNotContained`.
       // Otherwise, `newWord` would be copied here despite the `std::move`.
       id = Id::makeFromLocalVocabIndex(

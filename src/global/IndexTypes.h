@@ -6,6 +6,7 @@
 #define QLEVER_INDEXTYPES_H
 
 #include "./TypedIndex.h"
+#include "parser/LiteralOrIri.h"
 
 // Typedefs for several kinds of typed indices that are used across QLever.
 
@@ -14,13 +15,7 @@
 // requests.
 using VocabIndex = ad_utility::TypedIndex<uint64_t, "VocabIndex">;
 
-// A `std::string` that is aligned to 16 bytes s.t. pointers always end with 4
-// bits that are zero and that are reused for payloads in the `ValueId` class.
-struct alignas(16) StringAligned16 : public std::string {
-  using std::string::basic_string;
-  explicit StringAligned16(std::string s) : std::string{std::move(s)} {}
-};
-using LocalVocabIndex = const StringAligned16*;
+using LocalVocabIndex = const ad_utility::triple_component::LiteralOrIri*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, "BlankNodeIndex">;

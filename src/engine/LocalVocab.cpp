@@ -8,6 +8,7 @@
 #include "global/Id.h"
 #include "global/ValueId.h"
 
+
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
   LocalVocab localVocabClone;
@@ -44,19 +45,19 @@ LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
 
 // _____________________________________________________________________________
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
-    const std::string& word) {
+    const Entry& word) {
   return getIndexAndAddIfNotContainedImpl(word);
 }
 
 // _____________________________________________________________________________
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(std::string&& word) {
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(Entry&& word) {
   return getIndexAndAddIfNotContainedImpl(std::move(word));
 }
 
 // _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    const std::string& word) const {
-  auto localVocabIndex = primaryWordSet().find(StringAligned16{word});
+    const Entry& word) const {
+  auto localVocabIndex = primaryWordSet().find(word);
   if (localVocabIndex != primaryWordSet().end()) {
     // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
     // the MacOS build.
@@ -67,13 +68,14 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
 }
 
 // _____________________________________________________________________________
-const std::string& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
+const LocalVocab::Entry& LocalVocab::getWord(LocalVocabIndex localVocabIndex) const {
   return *localVocabIndex;
 }
 
+
 // _____________________________________________________________________________
-std::vector<std::string> LocalVocab::getAllWordsForTesting() const {
-  std::vector<std::string> result;
+std::vector<LocalVocab::Entry> LocalVocab::getAllWordsForTesting() const {
+  std::vector<Entry> result;
   std::ranges::copy(primaryWordSet(), std::back_inserter(result));
   for (const auto& previous : otherWordSets_) {
     std::ranges::copy(*previous, std::back_inserter(result));

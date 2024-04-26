@@ -295,7 +295,7 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeFromBool(false), "Bool:false");
   test(ValueId::makeFromBool(true), "Bool:true");
   test(makeVocabId(15), "VocabIndex:15");
-  StringAligned16 str{"SomeValue"};
+  auto str = ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("SomeValue");
   test(ValueId::makeFromLocalVocabIndex(&str), "LocalVocabIndex:SomeValue");
   test(makeTextRecordId(37), "TextRecordIndex:37");
   test(makeWordVocabId(42), "WordVocabIndex:42");

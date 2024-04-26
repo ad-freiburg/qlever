@@ -15,9 +15,8 @@
 static constexpr auto valueAdder = []() {
   auto numericValueAdder =
       []<typename T>(T value, double& sum, [[maybe_unused]] const bool& error)
-          requires std::is_arithmetic_v<T> {
-    sum += static_cast<double>(value);
-  };
+          requires std::is_arithmetic_v<T>
+  { sum += static_cast<double>(value); };
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };
@@ -90,8 +89,7 @@ struct ExtremumAggregationData {
     auto valueIdResultGetter = [](ValueId id) { return id; };
     auto stringResultGetter =
         [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-              str.toStringRepresentation());
+          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
           return ValueId::makeFromLocalVocabIndex(localVocabIndex);
         };
     return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
@@ -163,8 +161,11 @@ struct GroupConcatAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    auto localVocabIndex =
-        localVocab->getIndexAndAddIfNotContained(currentValue_);
+    using namespace ad_utility::triple_component;
+    using Lit = ad_utility::triple_component::Literal;
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
+        LiteralOrIri{Lit::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(currentValue_))});
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   }
 
