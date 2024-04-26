@@ -865,6 +865,105 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
           "always also needs corresponding ql:contains-word statement."));
 }
 
+TEST(QueryPlanner, TextLimit) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
+      "<a> <p> \"testing and picking\"",
+      true, true, true, 16_B, true);
+
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
+
+  // Only contains word
+  h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" } TEXTLIMIT 10",
+            wordScan(Var{"?text"}, "test*"), qec);
+
+  // Contains fixed entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-word \"test*\" . ?text "
+      "ql:contains-entity <testEntity> } TEXTLIMIT 10",
+      h::TextLimit(
+          10,
+          h::Join(wordScan(Var{"?text"}, "test*"),
+                  entityScan(Var{"?text"}, "<testEntity>", "test*")),
+          Var{"?text"}, vector<Variable>{},
+          vector<Variable>{Var{"?text"}.getScoreVariable("<testEntity>")}),
+      qec);
+
+  // Contains entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" } TEXTLIMIT 10",
+      h::TextLimit(
+          10,
+          h::Join(wordScan(Var{"?text"}, "test*"),
+                  entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"})}),
+      qec);
+
+  // Contains entity and fixed entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" . ?text ql:contains-entity <testEntity>} "
+      "TEXTLIMIT 5",
+      h::TextLimit(
+          5,
+          h::UnorderedJoins(
+              wordScan(Var{"?text"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+              entityScan(Var{"?text"}, "<testEntity>", "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
+                           Var{"?text"}.getScoreVariable("<testEntity>")}),
+      qec);
+
+  // Contains two entities
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" . ?text ql:contains-entity ?scientist2} "
+      "TEXTLIMIT 5",
+      h::TextLimit(
+          5,
+          h::UnorderedJoins(
+              wordScan(Var{"?text"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
+                           Var{"?text"}.getScoreVariable(Var{"?scientist2"})}),
+      qec);
+
+  // Contains two text variables. Also checks if the textlimit at an efficient
+  // place in the query
+  h::expect(
+      "SELECT * WHERE { ?text1 ql:contains-entity ?scientist1 . ?text1 "
+      "ql:contains-word \"test*\" . ?text2 ql:contains-word \"test*\" . ?text2 "
+      "ql:contains-entity ?author1 . ?text2 ql:contains-entity ?author2 } "
+      "TEXTLIMIT 5",
+      h::CartesianProductJoin(
+          h::TextLimit(
+              5,
+              h::Join(wordScan(Var{"?text1"}, "test*"),
+                      entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
+              Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
+              vector<Variable>{
+                  Var{"?text1"}.getScoreVariable(Var{"?scientist1"})}),
+          h::TextLimit(5,
+                       h::UnorderedJoins(
+                           wordScan(Var{"?text2"}, "test*"),
+                           entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
+                           entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
+                       Var{"?text2"},
+                       vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+                       vector<Variable>{
+                           Var{"?text2"}.getScoreVariable(Var{"?author1"}),
+                           Var{"?text2"}.getScoreVariable(Var{"?author2"})})),
+      qec);
+}
+
 TEST(QueryPlanner, NonDistinctVariablesInTriple) {
   auto internalVar = [](int i) {
     return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
@@ -931,7 +1030,8 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           0, Var{"?p"}, Var{"?cnt"},
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   h::expect(
-      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate ?p} "
+      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate "
+      "?p} "
       "GROUP BY ?p",
       h::CountAvailablePredicates(
           0, Var{"?p"}, Var{"?cnt"},

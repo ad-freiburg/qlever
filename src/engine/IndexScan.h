@@ -49,10 +49,6 @@ class IndexScan : public Operation {
 
   size_t numVariables() const { return numVariables_; }
 
-  void setTextLimit(size_t) override {
-    // Do nothing.
-  }
-
   // Return the exact result size of the index scan. This is always known as it
   // can be read from the Metadata.
   size_t getExactSize() const { return sizeEstimate_; }
