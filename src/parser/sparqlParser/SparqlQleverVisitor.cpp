@@ -121,7 +121,19 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
-  }
+  } else if (checkPrefix(SCHEMA_TYPE)) {
+    if (functionName == "integer") {
+      checkNumArgs(1);
+      return sparqlExpression::makeStrToIntExpression(
+        std::move(argList[0])
+      );
+    } else if (functionName == "double") {
+      checkNumArgs(1);
+      return sparqlExpression::makeStrToDoubleExpression(
+        std::move(argList[0])
+      );
+    }
+  } 
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
 }
@@ -1801,10 +1813,6 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsLiteralExpression);
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
-  } else if (functionName == "INT()") { 
-    return createUnary(&makeStrToIntExpression);
-  } else if (functionName == "DOUBLE()") { 
-    return createUnary(&makeStrToDoubleExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
