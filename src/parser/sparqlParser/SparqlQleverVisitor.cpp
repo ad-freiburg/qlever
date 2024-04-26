@@ -550,7 +550,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
   LimitOffsetClause clause{};
   visitIf(&clause._limit, ctx->limitClause());
   visitIf(&clause._offset, ctx->offsetClause());
-  visitIf(&clause._textLimit, ctx->textLimitClause());
+  visitIf(&clause.textLimit_, ctx->textLimitClause());
   return clause;
 }
 

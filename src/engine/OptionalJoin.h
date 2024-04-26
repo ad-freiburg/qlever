@@ -44,11 +44,6 @@ class OptionalJoin : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
-
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override;

@@ -8,13 +8,12 @@
 #include <limits>
 #include <optional>
 
-#include "global/Constants.h"
 #include "util/Exception.h"
 
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
   std::optional<uint64_t> _limit;
-  uint64_t _textLimit = TEXT_LIMIT_DEFAULT;
+  std::optional<uint64_t> textLimit_ = std::nullopt;
   uint64_t _offset = 0;
 
   // If a limit is specified, return the limit, else return the maximal

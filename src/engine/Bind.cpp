@@ -76,9 +76,6 @@ VariableToColumnMap Bind::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-void Bind::setTextLimit(size_t limit) { _subtree->setTextLimit(limit); }
-
-// _____________________________________________________________________________
 std::vector<QueryExecutionTree*> Bind::getChildren() {
   return {_subtree.get()};
 }

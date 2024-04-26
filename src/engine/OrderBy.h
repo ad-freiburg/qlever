@@ -43,8 +43,6 @@ class OrderBy : public Operation {
   // computes.
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
-  void setTextLimit(size_t limit) override { subtree_->setTextLimit(limit); }
-
   // Expose the variables on which this OrderBy is performed. Currently mostly
   // used for testing.
   enum class AscOrDesc { Asc, Desc };
