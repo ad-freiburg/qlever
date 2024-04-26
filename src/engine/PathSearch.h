@@ -61,7 +61,6 @@ typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
 
 class AllPathsVisitor : public boost::default_dfs_visitor {
   VertexDescriptor target_;
-  VertexDescriptor lastVertex_;
   Path& currentPath_;
   std::vector<Path>& allPaths_;
 
@@ -74,11 +73,6 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
         currentPath_(path),
         allPaths_(paths),
         indexToId_(indexToId) {}
-
-  void discover_vertex(VertexDescriptor vertex, const Graph& graph) {
-    (void)graph;
-    lastVertex_ = vertex;
-  }
 
   void tree_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
