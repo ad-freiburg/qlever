@@ -1,0 +1,2 @@
+add_library(joinOrdering QueryGraph.cpp IKKBZ.cpp RelationBasic.cpp)
+qlever_target_link_libraries(joinOrdering)

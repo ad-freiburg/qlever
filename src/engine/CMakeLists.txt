@@ -1,6 +1,8 @@
 add_subdirectory(sparqlExpressions)
+add_subdirectory(joinOrdering)
 add_library(SortPerformanceEstimator SortPerformanceEstimator.cpp)
 qlever_target_link_libraries(SortPerformanceEstimator)
+
 add_library(engine
         Engine.cpp QueryExecutionTree.cpp Operation.cpp ResultTable.cpp LocalVocab.cpp
         IndexScan.cpp Join.cpp Sort.cpp
@@ -13,4 +15,6 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp 
         idTable/CompressedExternalIdTable.h)
-qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
+qlever_target_link_libraries(engine util index parser sparqlExpressions joinOrdering http SortPerformanceEstimator Boost::iostreams)
+
+
