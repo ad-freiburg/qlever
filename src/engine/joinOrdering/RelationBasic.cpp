@@ -10,10 +10,10 @@
 namespace JoinOrdering {
 
 RelationBasic::RelationBasic() = default;
-RelationBasic::RelationBasic(const RelationBasic& r) {
-  this->label = r.label;
-  this->cardinality = r.cardinality;
-}
+// RelationBasic::RelationBasic(const RelationBasic& r) {
+//   this->label = r.label;
+//   this->cardinality = r.cardinality;
+// }
 
 RelationBasic::RelationBasic(std::string label, int cardinality)
     : cardinality(cardinality), label(std::move(label)) {}

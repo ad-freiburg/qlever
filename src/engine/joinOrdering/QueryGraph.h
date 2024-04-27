@@ -75,7 +75,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation with a cardinality property (getCardinality)
    * @return the same relation back (TODO: used to make sense, now it doesn't)
    */
-  [[nodiscard]] auto add_relation(const N& n) -> N;
+  auto add_relation(const N& n) -> N;
 
   /**
    * Check whether a give relation has been added to the query graph or not.
@@ -83,7 +83,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation to check
    * @return True if it has been added before with QueryGraph::add_relation
    */
-  [[nodiscard]] bool has_relation(const N& n) const;
+  bool has_relation(const N& n) const;
 
   /**
    *

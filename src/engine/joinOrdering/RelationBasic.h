@@ -15,7 +15,7 @@ namespace JoinOrdering {
 class RelationBasic {
  public:
   RelationBasic();
-  RelationBasic(const RelationBasic& r);
+//  RelationBasic(const RelationBasic& r);
   RelationBasic(std::string label, int cardinality);
 
   auto operator<=>(const RelationBasic& other) const;
