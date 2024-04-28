@@ -151,7 +151,13 @@ std::vector<Path> PathSearch::allPaths() const {
   std::vector<Path> paths;
   Path path;
   auto startIndex = idToIndex_.at(config_.source_);
-  AllPathsVisitor vis(config_.target_, path, paths, indexToId_);
+
+  std::unordered_set<uint64_t> targets;
+  for (auto target : config_.targets_) {
+    targets.insert(target.getBits());
+  }
+
+  AllPathsVisitor vis(targets, path, paths, indexToId_);
   boost::depth_first_search(graph_,
                             boost::visitor(vis).root_vertex(startIndex));
   return paths;

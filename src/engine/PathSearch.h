@@ -62,23 +62,23 @@ typedef boost::graph_traits<Graph>::vertex_descriptor VertexDescriptor;
 typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
 
 class AllPathsVisitor : public boost::default_dfs_visitor {
-  uint64_t target_;
+  std::unordered_set<uint64_t> targets_;
   Path& currentPath_;
   std::vector<Path>& allPaths_;
 
   const std::vector<Id>& indexToId_;
 
  public:
-  AllPathsVisitor(Id target, Path& path, std::vector<Path>& paths,
-                  const std::vector<Id>& indexToId)
-      : target_(target.getBits()),
+  AllPathsVisitor(std::unordered_set<uint64_t> targets, Path& path,
+                  std::vector<Path>& paths, const std::vector<Id>& indexToId)
+      : targets_(std::move(targets)),
         currentPath_(path),
         allPaths_(paths),
         indexToId_(indexToId) {}
 
   void examine_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
-    if (edge.end_ == target_) {
+    if (targets_.empty() || targets_.find(edge.end_) != targets_.end()) {
       auto pathCopy = currentPath_;
       pathCopy.push_back(edge);
       allPaths_.push_back(pathCopy);
@@ -107,7 +107,7 @@ enum PathSearchAlgorithm {
 struct PathSearchConfiguration {
   PathSearchAlgorithm algorithm_;
   Id source_;
-  Id target_;
+  std::vector<Id> targets_;
   size_t startColumn_;
   size_t endColumn_;
   size_t pathIndexColumn_;
