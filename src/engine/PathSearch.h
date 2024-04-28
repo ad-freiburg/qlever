@@ -42,6 +42,8 @@ struct Path {
 
   size_t size() const { return edges_.size(); }
 
+  void push_back(Edge edge) { edges_.push_back(edge); }
+
   std::optional<uint64_t> firstNode() const {
     return !empty() ? std::optional<uint64_t>{edges_.front().start_}
                     : std::nullopt;
@@ -60,19 +62,28 @@ typedef boost::graph_traits<Graph>::vertex_descriptor VertexDescriptor;
 typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
 
 class AllPathsVisitor : public boost::default_dfs_visitor {
-  VertexDescriptor target_;
+  uint64_t target_;
   Path& currentPath_;
   std::vector<Path>& allPaths_;
 
   const std::vector<Id>& indexToId_;
 
  public:
-  AllPathsVisitor(VertexDescriptor target, Path& path, std::vector<Path>& paths,
+  AllPathsVisitor(Id target, Path& path, std::vector<Path>& paths,
                   const std::vector<Id>& indexToId)
-      : target_(target),
+      : target_(target.getBits()),
         currentPath_(path),
         allPaths_(paths),
         indexToId_(indexToId) {}
+
+  void examine_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
+    const Edge& edge = graph[edgeDesc];
+    if (edge.end_ == target_) {
+      auto pathCopy = currentPath_;
+      pathCopy.push_back(edge);
+      allPaths_.push_back(pathCopy);
+    }
+  }
 
   void tree_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
@@ -81,9 +92,6 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
 
   void finish_vertex(VertexDescriptor vertex, const Graph& graph) {
     (void)graph;
-    if (vertex == target_) {
-      allPaths_.push_back(currentPath_);
-    }
     if (!currentPath_.empty()) {
       if (Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
         currentPath_.edges_.pop_back();
