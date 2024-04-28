@@ -60,7 +60,7 @@ string MultiColumnJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLazyness) {
+Result MultiColumnJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "MultiColumnJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};

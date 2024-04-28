@@ -72,8 +72,8 @@ void Operation::recursivelySetTimeConstraint(
 // ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(bool isRoot,
                                                    bool onlyReadFromCache,
-                                                   bool requestLazyness) {
-  AD_CONTRACT_CHECK(!onlyReadFromCache || !requestLazyness);
+                                                   bool requestLaziness) {
+  AD_CONTRACT_CHECK(!onlyReadFromCache || !requestLaziness);
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -122,12 +122,12 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer, requestLazyness] {
+    auto computeLambda = [this, &timer, requestLaziness] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult(requestLazyness);
-      AD_CONTRACT_CHECK(requestLazyness || result.isDataEvaluated());
+      Result result = computeResult(requestLaziness);
+      AD_CONTRACT_CHECK(requestLaziness || result.isDataEvaluated());
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.

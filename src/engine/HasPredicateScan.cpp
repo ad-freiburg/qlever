@@ -254,7 +254,7 @@ size_t HasPredicateScan::getCostEstimate() {
 }
 
 // ___________________________________________________________________________
-Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLazyness) {
+Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 

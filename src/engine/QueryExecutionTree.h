@@ -51,8 +51,8 @@ class QueryExecutionTree {
 
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
-  std::shared_ptr<const Result> getResult(bool requestLazyness = false) const {
-    return rootOperation_->getResult(isRoot(), false, requestLazyness);
+  std::shared_ptr<const Result> getResult(bool requestLaziness = false) const {
+    return rootOperation_->getResult(isRoot(), false, requestLaziness);
   }
 
   // A variable, its column index in the Id space result, and the `ResultType`
