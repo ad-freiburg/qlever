@@ -14,6 +14,17 @@
 
 namespace ad_utility {
 
+// TODO<RobinTF> Plans for this class: Rename this class to cache-aware
+// generator or something. Introduce the concept of an "owner" of a generator
+// which bounds generation to a maximum storage size, throwing exceptions
+// if a non-owning iterator is consuming too slow, and blocking if non-owning
+// iterators are too fast. Ownership can expire if the "owning iterator" is
+// destroyed. It clears cached values after itself. It needs to be able to hold
+// a callback to be called whenever the stored size changes. Also when the
+// generator is completely consumed and when the maximum cache size would be
+// exceeded if no elements were deleted at the front of the cache to make sure
+// this entry is evicted from the cache.
+
 template <typename T>
 class ReusableGenerator {
   using GenIterator = typename cppcoro::generator<T>::iterator;

@@ -249,6 +249,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
+  // TODO<RobinTF> turn bool into enum maybe?
   virtual Result computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after

@@ -132,7 +132,8 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   }
 }
 // ____________________________________________________________________________
-Result CartesianProductJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+Result CartesianProductJoin::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   IdTable result{getExecutionContext()->getAllocator()};
   result.setNumColumns(getResultWidth());
   std::vector<std::shared_ptr<const Result>> subResults;

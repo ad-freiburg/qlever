@@ -307,6 +307,15 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
+  // TODO<RobinTF> Accept cache extractor function (Result, computeFunction,
+  // isInitiator) -> Result/Value, in the case of a generator for the idtables,
+  // this extractor would wrap the generator inside another generator that
+  // catches exceptions indicating too slow consumption and calls
+  // computeFunction to make up for the "lost" data. On completion, if the whole
+  // thing fits in the cache replace with a non-generator variant. In case a
+  // non-lazy idtable was requested and a lazy idtable is in cache, iterate over
+  // it to aggregate the values. On exception (because you might not have
+  // ownership), invoke computeFunction and put the result into cache again.
   ResultAndCacheStatus computeOnceImpl(bool pinned, const Key& key,
                                        std::invocable auto computeFunction,
                                        bool onlyReadFromCache) {
