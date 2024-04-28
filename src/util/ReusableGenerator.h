@@ -48,7 +48,7 @@ class ReusableGenerator {
         generatorIterator_ = generator_.begin();
       }
       if (generatorIterator_.value() != generator_.end()) {
-        cachedValues_.emplace_back(std::move(*generatorIterator_));
+        cachedValues_.emplace_back(std::move(*generatorIterator_.value()));
       }
     }
 
@@ -56,7 +56,7 @@ class ReusableGenerator {
       return cachedValues_.at(index);
     }
 
-    bool isDone(size_t index) const noexcept {
+    bool isDone(size_t index) noexcept {
       return index == cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
@@ -79,13 +79,14 @@ class ReusableGenerator {
     size_t currentIndex_ = 0;
     std::weak_ptr<Synchronized<ComputationStorage>> storage_;
 
+   public:
     explicit Iterator(std::weak_ptr<Synchronized<ComputationStorage>> storage)
         : storage_{storage} {
-      storage_->advanceTo(currentIndex_);
+      storage_.lock()->wlock()->advanceTo(currentIndex_);
     }
 
     friend bool operator==(const Iterator& it, IteratorSentinel) noexcept {
-      return !it.storage_.lock()->isDone(it.currentIndex_);
+      return !it.storage_.lock()->wlock()->isDone(it.currentIndex_);
     }
 
     friend bool operator!=(const Iterator& it, IteratorSentinel s) noexcept {
@@ -99,10 +100,9 @@ class ReusableGenerator {
     friend bool operator!=(IteratorSentinel s, const Iterator& it) noexcept {
       return it != s;
     }
-
     Iterator& operator++() {
       ++currentIndex_;
-      storage_.lock()->advanceTo(currentIndex_);
+      storage_.lock()->wlock()->advanceTo(currentIndex_);
       return *this;
     }
 
@@ -110,7 +110,7 @@ class ReusableGenerator {
     void operator++(int) { (void)operator++(); }
 
     Reference operator*() const noexcept {
-      return storage_.lock()->getCachedValue(currentIndex_);
+      return storage_.lock()->rlock()->getCachedValue(currentIndex_);
     }
 
     Pointer operator->() const noexcept { return std::addressof(operator*()); }
