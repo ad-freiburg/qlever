@@ -29,15 +29,14 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
   // Call stack. Most notably the check which columns belongs to this variable
   // should be much further up in the call stack.
   size_t row = context._row;
-  const Result& res = context._res;
   const auto& variableColumns = context._variableColumns;
   const Index& qecIndex = context._qecIndex;
-  const auto& idTable = res.idTable();
+  const auto& idTable = context.idTable_;
   if (variableColumns.contains(*this)) {
     size_t index = variableColumns.at(*this).columnIndex_;
     auto id = idTable(row, index);
     auto optionalStringAndType = ExportQueryExecutionTrees::idToStringAndType(
-        qecIndex, id, res.localVocab());
+        qecIndex, id, context.localVocab_);
     if (!optionalStringAndType.has_value()) {
       return std::nullopt;
     }

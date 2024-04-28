@@ -153,9 +153,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit()) {
-      plan._qet->getRootOperation()->setLimit(pq._limitOffset);
-    }
+    plan._qet->getRootOperation()->setLimit(pq._limitOffset);
   }
 
   AD_CONTRACT_CHECK(!lastRow.empty());

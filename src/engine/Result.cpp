@@ -83,6 +83,7 @@ void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   idTable.shrinkToFit();
 }
 
+// TODO<RobinTF> add unit tests for this
 // _____________________________________________________________________________
 void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger

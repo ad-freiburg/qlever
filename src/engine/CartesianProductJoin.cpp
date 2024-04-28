@@ -149,7 +149,7 @@ Result CartesianProductJoin::computeResult([[maybe_unused]] bool requestLazyness
 
   // Get all child results (possibly with limit, see above).
   for (auto& child : childView()) {
-    if (limitIfPresent.has_value() && child.supportsLimit()) {
+    if (limitIfPresent.has_value()) {
       child.setLimit(limitIfPresent.value());
     }
     subResults.push_back(child.getResult());
