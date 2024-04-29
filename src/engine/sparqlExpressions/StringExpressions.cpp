@@ -407,17 +407,20 @@ template <typename T>
   } else {
     auto str = absl::StripAsciiWhitespace(input.value());
     auto strEnd = str.data() + str.size();
-    double resD{};
-    auto conv = absl::from_chars(str.data(), strEnd, resD);
-    if (conv.ec != std::error_code{} || conv.ptr != strEnd) {
-      return Id::makeUndefined();
-    }
+    auto strStart = str.data();
+    T resD{};
     if constexpr (std::is_same_v<T, int64_t>) {
-      auto resT = static_cast<T>(resD);
-      return Id::makeFromInt(resT);
+      auto conv = std::from_chars(strStart, strEnd, resD);
+      if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+        return Id::makeFromInt(resD);
+      }
     } else {
-      return Id::makeFromDouble(resD);
+      auto conv = absl::from_chars(strStart, strEnd, resD);
+      if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+        return Id::makeFromDouble(resD);
+      }
     }
+    return Id::makeUndefined();
   }
 };
 using ToIntExpression = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;

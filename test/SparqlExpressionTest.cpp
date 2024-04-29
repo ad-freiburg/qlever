@@ -810,9 +810,9 @@ TEST(SparqlExpression, testToNumericExpression) {
   auto checkGetInt = testUnaryExpression<&makeIntExpression>;
   auto checkGetDouble = testUnaryExpression<&makeDoubleExpression>;
 
-  checkGetInt(idOrLitOrStringVec({U, "5.97", "-78.97", "-5BoB6", "FreBurg1", "",
-                                  " .", " 42\n", " 0.01 "}),
-              Ids{U, I(5), I(-78), U, U, U, U, I(42), I(0)});
+  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
+                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", ""}),
+              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U});
   checkGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
                           "  0.007 ", " -14.75 "}),
