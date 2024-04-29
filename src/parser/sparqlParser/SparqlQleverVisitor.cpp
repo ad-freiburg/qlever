@@ -122,7 +122,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
   } else if (checkPrefix(SCHEMA_TYPE)) {
-    if (functionName == "integer") {
+    if (functionName == "integer" || functionName == "int") {
       checkNumArgs(1);
       return sparqlExpression::toIntExpression(std::move(argList[0]));
     } else if (functionName == "double" || functionName == "decimal") {
