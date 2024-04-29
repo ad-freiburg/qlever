@@ -807,8 +807,8 @@ TEST(SparqlExpression, isSomethingFunctions) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testToNumericExpression) {
-  auto checkGetInt = testUnaryExpression<&toIntExpression>;
-  auto checkGetDouble = testUnaryExpression<&toDoubleExpression>;
+  auto checkGetInt = testUnaryExpression<&makeIntExpression>;
+  auto checkGetDouble = testUnaryExpression<&makeDoubleExpression>;
 
   checkGetInt(idOrLitOrStringVec({U, "5.97", "-78.97", "-5BoB6", "FreBurg1", "",
                                   " .", " 42\n", " 0.01 "}),

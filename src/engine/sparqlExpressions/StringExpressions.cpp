@@ -406,9 +406,10 @@ template <typename T>
     return Id::makeUndefined();
   } else {
     auto str = absl::StripAsciiWhitespace(input.value());
+    auto strEnd = str.data() + str.size();
     double resD{};
-    auto conv = absl::from_chars(str.data(), str.data() + str.size(), resD);
-    if (conv.ec != std::error_code{} || conv.ptr != str.data() + str.size()) {
+    auto conv = absl::from_chars(str.data(), strEnd, resD);
+    if (conv.ec != std::error_code{} || conv.ptr != strEnd) {
       return Id::makeUndefined();
     }
     if constexpr (std::is_same_v<T, int64_t>) {
@@ -475,8 +476,8 @@ Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
 
-Expr toIntExpression(Expr child) { return make<ToInt>(child); }
+Expr makeIntExpression(Expr child) { return make<ToInt>(child); }
 
-Expr toDoubleExpression(Expr child) { return make<ToDouble>(child); }
+Expr makeDoubleExpression(Expr child) { return make<ToDouble>(child); }
 
 }  // namespace sparqlExpression
