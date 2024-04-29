@@ -125,7 +125,7 @@ ExpressionPtr Visitor::processIriFunctionCall(
     if (functionName == "integer") {
       checkNumArgs(1);
       return sparqlExpression::toIntExpression(std::move(argList[0]));
-    } else if (functionName == "double") {
+    } else if (functionName == "double" || functionName == "decimal") {
       checkNumArgs(1);
       return sparqlExpression::toDoubleExpression(std::move(argList[0]));
     }
