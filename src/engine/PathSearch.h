@@ -29,6 +29,7 @@ using Map = std::unordered_map<
 struct Edge {
   uint64_t start_;
   uint64_t end_;
+  std::vector<Id> edgeProperties_;
 
   std::pair<Id, Id> toIds() const {
     return {Id::fromBits(start_), Id::fromBits(end_)};
@@ -112,11 +113,12 @@ struct PathSearchConfiguration {
   size_t endColumn_;
   size_t pathIndexColumn_;
   size_t edgeIndexColumn_;
+  std::vector<size_t> edgePropertyIndices_;
 };
 
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
-  size_t resultWidth_ = 4;
+  size_t resultWidth_;
   VariableToColumnMap variableColumns_;
 
   Graph graph_;
@@ -149,11 +151,12 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  void buildGraph(std::span<const Id> startNodes, std::span<const Id> endNodes);
+  void buildGraph(std::span<const Id> startNodes, std::span<const Id> endNodes,
+                  std::span<std::span<const Id>> edgePropertyLists);
   void buildMapping(std::span<const Id> startNodes,
                     std::span<const Id> endNodes);
   std::vector<Path> findPaths() const;
   std::vector<Path> allPaths() const;
   template <size_t WIDTH>
-  void normalizePaths(IdTable& tableDyn, std::vector<Path>& paths) const;
+  void pathsToResultTable(IdTable& tableDyn, std::vector<Path>& paths) const;
 };

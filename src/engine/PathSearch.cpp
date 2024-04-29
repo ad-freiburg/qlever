@@ -22,6 +22,7 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
       indexToId_(),
       idToIndex_(allocator()) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
+  resultWidth_ = 4 + config_.edgePropertyIndices_.size();
 }
 
 // _____________________________________________________________________________
@@ -87,12 +88,18 @@ ResultTable PathSearch::computeResult() {
   idTable.setNumColumns(getResultWidth());
 
   const IdTable& dynSub = subRes->idTable();
+
+  std::vector<std::span<const Id>> edgePropertyLists;
+  for (auto edgePropertyIndex : config_.edgePropertyIndices_) {
+    edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
+  }
+
   buildGraph(dynSub.getColumn(config_.startColumn_),
-             dynSub.getColumn(config_.endColumn_));
+             dynSub.getColumn(config_.endColumn_), edgePropertyLists);
 
   auto paths = findPaths();
 
-  CALL_FIXED_SIZE(std::array{getResultWidth()}, &PathSearch::normalizePaths,
+  CALL_FIXED_SIZE(std::array{getResultWidth()}, &PathSearch::pathsToResultTable,
                   this, idTable, paths);
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
@@ -120,7 +127,8 @@ void PathSearch::buildMapping(std::span<const Id> startNodes,
 
 // _____________________________________________________________________________
 void PathSearch::buildGraph(std::span<const Id> startNodes,
-                            std::span<const Id> endNodes) {
+                            std::span<const Id> endNodes,
+                            std::span<std::span<const Id>> edgePropertyLists) {
   AD_CORRECTNESS_CHECK(startNodes.size() == endNodes.size());
   buildMapping(startNodes, endNodes);
 
@@ -131,7 +139,13 @@ void PathSearch::buildGraph(std::span<const Id> startNodes,
   for (size_t i = 0; i < startNodes.size(); i++) {
     auto startIndex = idToIndex_[startNodes[i]];
     auto endIndex = idToIndex_[endNodes[i]];
-    Edge edge{startNodes[i].getBits(), endNodes[i].getBits()};
+
+    std::vector<Id> edgeProperties;
+    for (size_t j = 0; j < edgePropertyLists.size(); j++) {
+      edgeProperties.push_back(edgePropertyLists[j][i]);
+    }
+
+    Edge edge{startNodes[i].getBits(), endNodes[i].getBits(), edgeProperties};
     boost::add_edge(startIndex, endIndex, edge, graph_);
   }
 }
@@ -165,8 +179,8 @@ std::vector<Path> PathSearch::allPaths() const {
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void PathSearch::normalizePaths(IdTable& tableDyn,
-                                std::vector<Path>& paths) const {
+void PathSearch::pathsToResultTable(IdTable& tableDyn,
+                                    std::vector<Path>& paths) const {
   IdTableStatic<WIDTH> table = std::move(tableDyn).toStatic<WIDTH>();
 
   size_t rowIndex = 0;
@@ -180,6 +194,13 @@ void PathSearch::normalizePaths(IdTable& tableDyn,
       table(rowIndex, config_.endColumn_) = end;
       table(rowIndex, config_.pathIndexColumn_) = Id::makeFromInt(pathIndex);
       table(rowIndex, config_.edgeIndexColumn_) = Id::makeFromInt(edgeIndex);
+
+      for (size_t edgePropertyIndex = 0;
+           edgePropertyIndex < edge.edgeProperties_.size();
+           edgePropertyIndex++) {
+        table(rowIndex, 4 + edgePropertyIndex) =
+            edge.edgeProperties_[edgePropertyIndex];
+      }
 
       rowIndex++;
     }

@@ -33,10 +33,14 @@ ResultTable performPathSearch(PathSearchConfiguration config, IdTable input,
 
 TEST(PathSearchTest, constructor) {
   auto qec = getQec();
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(1)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(1)}, 0, 1, 2, 3, {}};
   PathSearch p = PathSearch(qec, nullptr, config);
 }
 
+/**
+ * Graph:
+ * 0 -> 1 -> 2 -> 3 -> 4
+ */
 TEST(PathSearchTest, singlePath) {
   auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {2, 3}, {3, 4}});
   auto expected = makeIdTableFromVector({
@@ -47,7 +51,25 @@ TEST(PathSearchTest, singlePath) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(4)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(4)}, 0, 1, 2, 3, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, singlePathWithProperties) {
+  auto sub =
+      makeIdTableFromVector({{0, 1, 10}, {1, 2, 20}, {2, 3, 30}, {3, 4, 40}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(10)},
+      {V(1), V(2), I(0), I(1), V(20)},
+      {V(2), V(3), I(0), I(2), V(30)},
+      {V(3), V(4), I(0), I(3), V(40)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(4)}, 0, 1, 2, 3, {2}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -72,7 +94,7 @@ TEST(PathSearchTest, twoPathsOneTarget) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(2)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(2)}, 0, 1, 2, 3, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -97,7 +119,7 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(2), V(4)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(2), V(4)}, 0, 1, 2, 3, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -121,7 +143,7 @@ TEST(PathSearchTest, cycle) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(0)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(0)}, 0, 1, 2, 3, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -148,7 +170,7 @@ TEST(PathSearchTest, twoCycle) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {V(0)}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {V(0)}, 0, 1, 2, 3, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -178,7 +200,33 @@ TEST(PathSearchTest, allPaths) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS, V(0), {}, 0, 1, 2, 3};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {}, 0, 1, 2, 3, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
+  auto sub = makeIdTableFromVector({{0, 1, 10, 11},
+                                    {1, 3, 20, 21},
+                                    {0, 2, 30, 31},
+                                    {2, 3, 40, 41},
+                                    {2, 4, 50, 51}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0), V(11), V(10)},
+      {V(0), V(1), I(1), I(0), V(11), V(10)},
+      {V(1), V(3), I(1), I(1), V(21), V(20)},
+      {V(0), V(2), I(2), I(0), V(31), V(30)},
+      {V(0), V(2), I(3), I(0), V(31), V(30)},
+      {V(2), V(3), I(3), I(1), V(41), V(40)},
+      {V(0), V(2), I(4), I(0), V(31), V(30)},
+      {V(2), V(4), I(4), I(1), V(51), V(50)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty1"},
+               Variable{"?edgeProperty2"}};
+  PathSearchConfiguration config{ALL_PATHS, V(0), {}, 0, 1, 2, 3, {3, 2}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
