@@ -420,8 +420,8 @@ template <typename T>
     }
   }
 };
-using ToInt = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
-using ToDouble = StringExpressionImpl<1, decltype(toNumeric<double>)>;
+using ToIntExpression = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
+using ToDoubleExpression = StringExpressionImpl<1, decltype(toNumeric<double>)>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
@@ -476,8 +476,10 @@ Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
 
-Expr makeIntExpression(Expr child) { return make<ToInt>(child); }
+Expr makeIntExpression(Expr child) { return make<ToIntExpression>(child); }
 
-Expr makeDoubleExpression(Expr child) { return make<ToDouble>(child); }
+Expr makeDoubleExpression(Expr child) {
+  return make<ToDoubleExpression>(child);
+}
 
 }  // namespace sparqlExpression
