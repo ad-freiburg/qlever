@@ -485,6 +485,7 @@ class IndexImpl {
                             std::array<size_t, 3> permutation,
                             auto&&... perTripleCallbacks);
 
+  // _______________________________________________________________________
   // Create a pair of permutations. Only works for valid pairs (PSO-POS,
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
   // multiplicities and also writes the MetaData to disk. So we end up with
@@ -545,13 +546,12 @@ class IndexImpl {
       MakeFromUint64t makeFromUint = MakeFromUint64t{}) const;
 
   // Get the metadata for the block from the text index that contains the
-  // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR`
-  // like "astro*". Returns `nullopt` if no suitable block was found because
-  // no matching word is contained in the text index. Some additional
-  // information is also returned that is often required by the calling
-  // functions: `hasToBeFiltered_` is true iff `word` is NOT the only word in
-  // the text block, and additional filtering is thus required. `idRange_` is
-  // the range
+  // `word`. Also works for prefixes that are terminated with `PREFIX_CHAR` like
+  // "astro*". Returns `nullopt` if no suitable block was found because no
+  // matching word is contained in the text index. Some additional information
+  // is also returned that is often required by the calling functions:
+  // `hasToBeFiltered_` is true iff `word` is NOT the only word in the text
+  // block, and additional filtering is thus required. `idRange_` is the range
   // `[first, last]` of the `WordVocabIndex`es that correspond to the word
   // (which might also be a prefix, thus it is a range).
   struct TextBlockMetadataAndWordInfo {
@@ -613,8 +613,8 @@ class IndexImpl {
 
  private:
   /**
-   * @brief Throws an exception if no patterns are loaded. Should be called
-   * from whithin any index method that returns data requiring the patterns
+   * @brief Throws an exception if no patterns are loaded. Should be called from
+   *        whithin any index method that returns data requiring the patterns
    *        file.
    */
   void throwExceptionIfNoPatterns() const;
@@ -633,26 +633,25 @@ class IndexImpl {
 
  public:
   // Count the number of "QLever-internal" triples (predicate ql:langtag or
-  // predicate starts with @) and all other triples (that were actually part
-  // of the input).
+  // predicate starts with @) and all other triples (that were actually part of
+  // the input).
   NumNormalAndInternal numTriples() const;
 
   // The index contains several triples that are not part of the "actual"
-  // knowledge graph, but are added by QLever for internal reasons (e.g. for
-  // an efficient implementation of language filters). For a given
+  // knowledge graph, but are added by QLever for internal reasons (e.g. for an
+  // efficient implementation of language filters). For a given
   // `Permutation::Enum`, returns the following `std::pair`:
   //
   // first:  A `vector<pair<Id, Id>>` that denotes ranges in the first column
   //         of the permutation that imply that a triple is added. For example
-  //         in the `SPO` and `SOP` permutation a literal subject means that
-  //         the triple was added (literals are not legal subjects in RDF), so
-  //         the pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be
-  //         contained in the vector.
+  //         in the `SPO` and `SOP` permutation a literal subject means that the
+  //         triple was added (literals are not legal subjects in RDF), so the
+  //         pair `(idOfFirstLiteral, idOfLastLiteral + 1)` will be contained
+  //         in the vector.
   // second: A lambda that checks for a triple *that is not already excluded
   //         by the ignored ranges from the first argument* whether it still
-  //         is an added triple. For example in the `Sxx` and `Oxx`
-  //         permutation a triple where the predicate starts with '@' (instead
-  //         of the usual
+  //         is an added triple. For example in the `Sxx` and `Oxx` permutation
+  //         a triple where the predicate starts with '@' (instead of the usual
   //         '<' is an added triple from the language filter implementation.
   //
   // Note: A triple from a given permutation is an added triple if and only if
@@ -703,13 +702,13 @@ class IndexImpl {
     auto isTripleIgnored = [permutation,
                             isInternalPredicateId](const auto& triple) {
       // TODO<joka921, everybody in the future>:
-      // A lot of code (especially for statistical queries in `GroupBy.cpp`
-      // and the pattern trick) relies on this function being a noop for the
-      // `PSO` and `POS` permutations, meaning that it suffices to check the
-      // `ignoredRanges` for them. Should this ever change (which means that
-      // we add internal triples that use predicates that are actually
-      // contained in the knowledge graph), then all the code that uses this
-      // function has to be thoroughly reviewed.
+      // A lot of code (especially for statistical queries in `GroupBy.cpp` and
+      // the pattern trick) relies on this function being a noop for the `PSO`
+      // and `POS` permutations, meaning that it suffices to check the
+      // `ignoredRanges` for them. Should this ever change (which means that we
+      // add internal triples that use predicates that are actually contained in
+      // the knowledge graph), then all the code that uses this function has to
+      // be thoroughly reviewed.
       if (permutation == SPO || permutation == OPS) {
         // Predicates are always entities from the vocabulary.
         return isInternalPredicateId(triple[1]);
@@ -723,13 +722,12 @@ class IndexImpl {
   }
   using BlocksOfTriples = cppcoro::generator<IdTableStatic<0>>;
 
-  // Functions to create the pairs of permutations during the index build.
-  // Each of them takes the following arguments:
+  // Functions to create the pairs of permutations during the index build. Each
+  // of them takes the following arguments:
   // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
-  //    the corresponding IRI was internally added by QLever and not part of
-  //    the knowledge graph.
-  // * `sortedInput`  The input, must be sorted by the first permutation in
-  // the
+  //    the corresponding IRI was internally added by QLever and not part of the
+  //    knowledge graph.
+  // * `sortedInput`  The input, must be sorted by the first permutation in the
   //    function name.
   // * `nextSorter` A callback that is invoked for each row in each of the
   //    blocks in the input. Typically used to set up the sorting for the
@@ -752,8 +750,8 @@ class IndexImpl {
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
-  // distinct predicates and the number of actual triples and write them to
-  // the metadata.
+  // distinct predicates and the number of actual triples and write them to the
+  // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   void createPSOAndPOS(size_t numColumns, auto& isInternalId,
@@ -761,8 +759,8 @@ class IndexImpl {
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
-  // The `permutationName` is used to determine the filename and must be
-  // unique for each call during one index build.
+  // The `permutationName` is used to determine the filename and must be unique
+  // for each call during one index build.
   template <typename Comparator, size_t N = NumColumnsIndexBuilding>
   ExternalSorter<Comparator, N> makeSorter(
       std::string_view permutationName) const;
@@ -779,10 +777,10 @@ class IndexImpl {
   // function names are consistent with the aliases for the sorters, i.e. that
   // `createFirstPermutationPair` corresponds to the `FirstPermutation`.
 
-  // The `createFirstPermutationPair` has a special implementation for the
-  // case of only two permutations (where we have to build the Pxx
-  // permutations). In all other cases the Sxx permutations are built first
-  // because we need the patterns.
+  // The `createFirstPermutationPair` has a special implementation for the case
+  // of only two permutations (where we have to build the Pxx permutations). In
+  // all other cases the Sxx permutations are built first because we need the
+  // patterns.
   std::optional<PatternCreator::TripleSorter> createFirstPermutationPair(
       auto&&... args) {
     static_assert(std::is_same_v<FirstPermutation, SortBySPO>);
@@ -805,12 +803,12 @@ class IndexImpl {
     return createPSOAndPOS(AD_FWD(args)...);
   }
 
-  // Build the OSP and OPS permutations from the output of the
-  // `PatternCreator`. The permutations will have two additional columns: The
-  // subject pattern of the subject (which is already created by the
-  // `PatternCreator`) and the subject pattern of the object (which is created
-  // by this function). Return these five columns sorted by PSO, to be used as
-  // an input for building the PSO and POS permutations.
+  // Build the OSP and OPS permutations from the output of the `PatternCreator`.
+  // The permutations will have two additional columns: The subject pattern of
+  // the subject (which is already created by the `PatternCreator`) and the
+  // subject pattern of the object (which is created by this function). Return
+  // these five columns sorted by PSO, to be used as an input for building the
+  // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
       PatternCreator::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
