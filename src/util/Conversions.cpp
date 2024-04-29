@@ -22,14 +22,21 @@
 namespace ad_utility {
 
 // _________________________________________________________
-string convertLangtagToEntityUri(const string& tag) {
-  return makeInternalIri("@", tag);
+triple_component::Iri convertLangtagToEntityUri(const string& tag) {
+  return triple_component::Iri::fromIriref(makeInternalIri("@", tag));
 }
 
 // _________________________________________________________
 std::string convertToLanguageTaggedPredicate(const string& pred,
                                              const string& langtag) {
-  return '@' + langtag + '@' + pred;
+  return absl::StrCat("@", langtag, "@", pred);
+}
+
+// _________________________________________________________
+triple_component::Iri convertToLanguageTaggedPredicate(
+    const triple_component::Iri& pred, const std::string& langtag) {
+  return triple_component::Iri::fromIriref(absl::StrCat(
+      "@", langtag, "@<", asStringViewUnsafe(pred.getContent()), ">"));
 }
 
 }  // namespace ad_utility

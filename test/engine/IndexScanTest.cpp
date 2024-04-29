@@ -4,9 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "../IndexTestHelpers.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
+#include "../util/IndexTestHelpers.h"
+#include "../util/TripleComponentTestHelpers.h"
 #include "engine/IndexScan.h"
 #include "parser/ParsedQuery.h"
 
@@ -103,7 +104,7 @@ void testLazyScanThrows(const std::string& kg, const SparqlTriple& tripleLeft,
 // yields only the subsets specified by the `expectedRows`.
 void testLazyScanForJoinWithColumn(
     const std::string& kg, const SparqlTriple& scanTriple,
-    std::vector<std::string> columnEntries,
+    std::vector<TripleComponent> columnEntries,
     const std::vector<IndexPair>& expectedRows,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
@@ -111,8 +112,7 @@ void testLazyScanForJoinWithColumn(
   IndexScan scan{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        TripleComponent{entry}.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
   }
 
   auto lazyScan = IndexScan::lazyScanForJoinOfColumnWithScan(column, scan);
@@ -123,15 +123,14 @@ void testLazyScanForJoinWithColumn(
 // setting up of the lazy scan fails with an exception.
 void testLazyScanWithColumnThrows(
     const std::string& kg, const SparqlTriple& scanTriple,
-    const std::vector<std::string>& columnEntries,
+    const std::vector<TripleComponent>& columnEntries,
     source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
   auto qec = getQec(kg);
   IndexScan s1{qec, Permutation::PSO, scanTriple};
   std::vector<Id> column;
   for (const auto& entry : columnEntries) {
-    column.push_back(
-        TripleComponent{entry}.toValueId(qec->getIndex().getVocab()).value());
+    column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
   }
 
   // We need this to suppress the warning about a [[nodiscard]] return value
@@ -142,6 +141,7 @@ void testLazyScanWithColumnThrows(
   };
   EXPECT_ANY_THROW(makeScan());
 }
+
 }  // namespace
 
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {
@@ -180,7 +180,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<b> <x2> <x>. <b> <x2> <xb2> .";
     testLazyScanForJoinOfTwoScans(kg, xpy, xqz, {}, {});
   }
-  SparqlTriple bpx{Tc{"<b>"}, "<p>", Tc{Var{"?x"}}};
+  SparqlTriple bpx{Tc{iri("<b>")}, "<p>", Tc{Var{"?x"}}};
   {
     std::string kg =
         "<a> <p> <a1>. <a> <p> <a2>. "
@@ -214,7 +214,7 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that appears in the kg but not as the subject of
     // the <p> predicate.
-    SparqlTriple xb2px{Tc{"<xb2>"}, "<p>", Tc{Var{"?x"}}};
+    SparqlTriple xb2px{Tc{iri("<xb2>")}, "<p>", Tc{Var{"?x"}}};
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
   {
@@ -225,15 +225,15 @@ TEST(IndexScan, lazyScanForJoinOfTwoScans) {
         "<x5> <q> <xb>. <x9> <q> <xb2> ."
         "<x91> <q> <xb>. <x93> <q> <xb2> .";
     // Scan for a fixed subject that is not even in the knowledge graph.
-    SparqlTriple xb2px{Tc{"<notInKg>"}, "<p>", Tc{Var{"?x"}}};
+    SparqlTriple xb2px{Tc{iri("<notInKg>")}, "<p>", Tc{Var{"?x"}}};
     testLazyScanForJoinOfTwoScans(kg, bpx, xqz, {}, {});
   }
 
   // Corner cases
   {
     std::string kg = "<a> <b> <c> .";
-    // Triples with three variables are not supported.
     SparqlTriple xyz{Tc{Var{"?x"}}, "?y", Tc{Var{"?z"}}};
+    testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xqz);
     testLazyScanThrows(kg, xyz, xyz);
     testLazyScanThrows(kg, xqz, xyz);
@@ -259,24 +259,25 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
       "<b> <p> <B2> ."
       "<b> <q> <xb>. <b> <q> <xb2> .";
   {
-    std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
+    std::vector<TripleComponent> column{iri("<a>"), iri("<b>"), iri("<q>"),
+                                        iri("<xb>")};
     // We need to scan all the blocks that contain the `<p>` predicate.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{0, 5}});
   }
   {
-    std::vector<std::string> column{"<b>", "<q>", "<xb>"};
+    std::vector<TripleComponent> column{iri("<b>"), iri("<q>"), iri("<xb>")};
     // The first block only contains <a> which doesn't appear in the first
     // block.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{2, 5}});
   }
   {
-    std::vector<std::string> column{"<a>", "<q>", "<xb>"};
+    std::vector<TripleComponent> column{iri("<a>"), iri("<q>"), iri("<xb>")};
     // The first block only contains <a> which only appears in the first two
     // blocks.
     testLazyScanForJoinWithColumn(kg, xpy, column, {{0, 4}});
   }
   {
-    std::vector<std::string> column{"<a>", "<q>", "<xb>"};
+    std::vector<TripleComponent> column{iri("<a>"), iri("<q>"), iri("<xb>")};
     // <f> does not appear as a predicate, so the result is empty.
     SparqlTriple efg{Tc{Var{"?e"}}, "<f>", Tc{Var{"?g"}}};
     testLazyScanForJoinWithColumn(kg, efg, column, {});
@@ -284,7 +285,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanTwoVariables) {
 }
 
 TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
-  SparqlTriple bpy{Tc{"<b>"}, "<p>", Tc{Var{"?x"}}};
+  SparqlTriple bpy{Tc{iri("<b>")}, "<p>", Tc{Var{"?x"}}};
   std::string kg =
       "<a> <p> <s0>. <a> <p> <s7>. "
       "<a> <p> <s99> . <b> <p> <s0>. "
@@ -294,7 +295,7 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanOneVariable) {
   {
     // The subject (<b>) and predicate (<b>) are fixed, so the object is the
     // join column
-    std::vector<std::string> column{"<s0>", "<s7>", "<s99>"};
+    std::vector<TripleComponent> column{iri("<s0>"), iri("<s7>"), iri("<s99>")};
     // We don't need to scan the middle block that only has <s2> and <s3>
     testLazyScanForJoinWithColumn(kg, bpy, column, {{0, 1}, {3, 5}});
   }
@@ -308,13 +309,17 @@ TEST(IndexScan, lazyScanForJoinOfColumnWithScanCornerCases) {
       "<b> <p> <B2> ."
       "<b> <q> <xb>. <b> <q> <xb2> .";
 
-  // Full index scans (three variables) are not supported.
-  std::vector<std::string> column{"<a>", "<b>", "<q>", "<xb>"};
-  testLazyScanWithColumnThrows(kg, threeVars, column);
+  // Full index scan (three variables).
+  std::vector<TripleComponent> column{iri("<a>"), iri("<b>"), iri("<q>"),
+                                      iri("<xb>")};
+  // only `<q>` matches (we join on the predicate), so we only get the last
+  // block.
+  testLazyScanForJoinWithColumn(kg, threeVars, column, {{5, 7}});
 
   // The join column must be sorted.
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
-    std::vector<std::string> unsortedColumn{"<a>", "<b>", "<a>"};
+    std::vector<TripleComponent> unsortedColumn{iri("<a>"), iri("<b>"),
+                                                iri("<a>")};
     SparqlTriple xpy{Tc{Var{"?x"}}, "<p>", Tc{Var{"?y"}}};
     testLazyScanWithColumnThrows(kg, xpy, unsortedColumn);
   }
@@ -324,9 +329,9 @@ TEST(IndexScan, additionalColumn) {
   auto qec = getQec("<x> <y> <z>.");
   using V = Variable;
   SparqlTriple triple{V{"?x"}, "<y>", V{"?z"}};
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN, V{"?xpattern"});
-  triple._additionalScanColumns.emplace_back(
+  triple.additionalScanColumns_.emplace_back(
       ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN, V{"?ypattern"});
   auto scan = IndexScan{qec, Permutation::PSO, triple};
   ASSERT_EQ(scan.getResultWidth(), 4);
@@ -338,7 +343,7 @@ TEST(IndexScan, additionalColumn) {
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
-              ::testing::ContainsRegex("Additional Columns: 2 3"));
+              ::testing::ContainsRegex("Additional Columns: 3 4"));
   auto res = scan.computeResultOnlyForTesting();
   auto getId = makeGetId(qec->getIndex());
   auto I = IntId;

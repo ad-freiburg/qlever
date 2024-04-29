@@ -2,21 +2,36 @@
 // Chair of Algorithms and Data Structures.
 // Author: Hannah Bast (bast@cs.uni-freiburg.de)
 
+#include <absl/strings/str_cat.h>
 #include <gtest/gtest.h>
 
 #include <thread>
 
-#include "./HttpTestHelpers.h"
-#include "absl/strings/str_cat.h"
+#include "HttpTestHelpers.h"
 #include "util/http/HttpClient.h"
 #include "util/http/HttpServer.h"
 #include "util/http/HttpUtils.h"
+#include "util/http/beast.h"
 #include "util/jthread.h"
 
 using namespace ad_utility::httpUtils;
 using namespace boost::beast::http;
 
+namespace {
+
+/// Join all of the bytes into a big string.
+std::string toString(cppcoro::generator<std::span<std::byte>> generator) {
+  std::string result;
+  for (std::byte byte : generator | std::ranges::views::join) {
+    result.push_back(static_cast<char>(byte));
+  }
+  return result;
+}
+}  // namespace
+
 TEST(HttpServer, HttpTest) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
   // This test used to spuriously crash because of something that we (joka92,
   // RobinTF) currently consider to be a bug in Boost::ASIO. (See
   // `util/http/beast.h` for details). Repeat this test several times to make
@@ -54,18 +69,16 @@ TEST(HttpServer, HttpTest) {
       std::vector<ad_utility::JThread> threads;
       for (size_t i = 0; i < 2; ++i) {
         threads.emplace_back([&]() {
-          for (size_t j = 0; j < 5; ++j) {
+          for (size_t j = 0; j < 20; ++j) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
+              ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
+                                                        "target1", handle)),
+                        "GET\ntarget1\n");
               ASSERT_EQ(
-                  httpClient.sendRequest(verb::get, "localhost", "target1")
-                      .str(),
-                  "GET\ntarget1\n");
-              ASSERT_EQ(
-                  httpClient
-                      .sendRequest(verb::post, "localhost", "target1", "body1")
-                      .str(),
+                  toString(httpClient.sendRequest(verb::post, "localhost",
+                                                  "target1", handle, "body1")),
                   "POST\ntarget1\nbody1");
             }
           }
@@ -77,21 +90,24 @@ TEST(HttpServer, HttpTest) {
     // fine with the server after we have communicated with it for one session).
     {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(httpClient.sendRequest(verb::get, "localhost", "target2").str(),
+      ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
+                                                "target2", handle)),
                 "GET\ntarget2\n");
-      ASSERT_EQ(
-          httpClient.sendRequest(verb::post, "localhost", "target2", "body2")
-              .str(),
-          "POST\ntarget2\nbody2");
+      ASSERT_EQ(toString(httpClient.sendRequest(verb::post, "localhost",
+                                                "target2", handle, "body2")),
+                "POST\ntarget2\nbody2");
     }
 
     // Test if websocket is correctly opened and closed
-    {
-      HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      auto response = httpClient.sendWebSocketHandshake(verb::get, "localhost",
-                                                        "/watch/some-id");
-      // verify request is upgraded
-      ASSERT_EQ(response.base().result(), http::status::switching_protocols);
+    for (size_t i = 0; i < 20; ++i) {
+      {
+        HttpClient httpClient("localhost",
+                              std::to_string(httpServer.getPort()));
+        auto response = httpClient.sendWebSocketHandshake(
+            verb::get, "localhost", "/watch/some-id");
+        // verify request is upgraded
+        ASSERT_EQ(response.base().result(), http::status::switching_protocols);
+      }
     }
 
     // Test if websocket is denied on wrong paths
@@ -108,9 +124,11 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::get).str(), "GET\n/target\n");
-      ASSERT_EQ(sendHttpOrHttpsRequest(url, verb::post, "body").str(),
-                "POST\n/target\nbody");
+      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get)),
+                "GET\n/target\n");
+      ASSERT_EQ(
+          toString(sendHttpOrHttpsRequest(url, handle, verb::post, "body")),
+          "POST\n/target\nbody");
     }
 
     // Check that after shutting down, no more new connections are accepted.

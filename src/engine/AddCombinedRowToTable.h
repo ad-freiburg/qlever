@@ -10,6 +10,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "util/CancellationHandle.h"
 #include "util/Exception.h"
 #include "util/TransparentFunctors.h"
 
@@ -64,19 +65,25 @@ class AddCombinedRowToIdTable {
   using BlockwiseCallback = std::function<void(IdTable&)>;
   [[no_unique_address]] BlockwiseCallback blockwiseCallback_{ad_utility::noop};
 
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
+  CancellationHandle cancellationHandle_;
+
  public:
   // Construct from the number of join columns, the two inputs, and the output.
   // The `bufferSize` can be configured for testing.
   explicit AddCombinedRowToIdTable(
       size_t numJoinColumns, IdTableView<0> input1, IdTableView<0> input2,
-      IdTable output, size_t bufferSize = 100'000,
+      IdTable output, CancellationHandle cancellationHandle,
+      size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::array{input1, input2}},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
-        blockwiseCallback_{std::move(blockwiseCallback)} {
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
     checkNumColumns();
     indexBuffer_.reserve(bufferSize);
   }
@@ -85,14 +92,17 @@ class AddCombinedRowToIdTable {
   // call to `setInput` before adding rows. This is used for the lazy join
   // operations (see Join.cpp) where the input changes over time.
   explicit AddCombinedRowToIdTable(
-      size_t numJoinColumns, IdTable output, size_t bufferSize = 100'000,
+      size_t numJoinColumns, IdTable output,
+      CancellationHandle cancellationHandle, size_t bufferSize = 100'000,
       BlockwiseCallback blockwiseCallback = ad_utility::noop)
       : numUndefinedPerColumn_(output.numColumns()),
         numJoinColumns_{numJoinColumns},
         inputLeftAndRight_{std::nullopt},
         resultTable_{std::move(output)},
         bufferSize_{bufferSize},
-        blockwiseCallback_{std::move(blockwiseCallback)} {
+        blockwiseCallback_{std::move(blockwiseCallback)},
+        cancellationHandle_{std::move(cancellationHandle)} {
+    AD_CONTRACT_CHECK(cancellationHandle_);
     indexBuffer_.reserve(bufferSize);
   }
 
@@ -191,6 +201,7 @@ class AddCombinedRowToIdTable {
   // have to call it manually after adding the last row, else the destructor
   // will throw an exception.
   void flush() {
+    cancellationHandle_->throwIfCancelled();
     auto& result = resultTable_;
     size_t oldSize = result.size();
     AD_CORRECTNESS_CHECK(nextIndex_ ==
@@ -207,21 +218,23 @@ class AddCombinedRowToIdTable {
     AD_CORRECTNESS_CHECK(inputLeftAndRight_.has_value());
     result.resize(oldSize + nextIndex_);
 
-    // Sometimes columns are combined where one value is UNDEF and the other one
-    // is not. This function very efficiently returns the not-UNDEF value in
-    // this case.
-    // TODO<joka921> If we keep track of the information that one of the
-    // involved columns contains no UNDEF values at all, we can omit this step
-    // and simply copy the values from this column without looking at the other
-    // input.
-    auto mergeWithUndefined = [](const ValueId a, const ValueId b) {
-      static_assert(ValueId::makeUndefined().getBits() == 0u);
-      return ValueId::fromBits(a.getBits() | b.getBits());
+    // Precondition: `a` and `b` compare equal or at least one of them is UNDEF
+    // If exactly one of them is UNDEF, return the other one, else return any of
+    // them (they are equal anyway).
+    auto getJoinValue = [](const ValueId a, const ValueId b) {
+      // NOTE: For localVocabIndices we might have different pointers that
+      // compare equal because they point to the same word. Therefore we cannot
+      // use a simple bitwise operation to handle the "one of them is UNDEF"
+      // case as we previously did.
+      if (a.isUndefined()) {
+        return b;
+      }
+      return a;
     };
 
     // A lambda that writes the join column with the given `colIdx` to the
     // `nextResultColIdx`-th column of the result.
-    auto writeJoinColumn = [&result, &mergeWithUndefined, oldSize, this](
+    auto writeJoinColumn = [&result, &getJoinValue, oldSize, this](
                                size_t colIdx, size_t resultColIdx) {
       const auto& colLeft = inputLeft().getColumn(colIdx);
       const auto& colRight = inputRight().getColumn(colIdx);
@@ -231,8 +244,8 @@ class AddCombinedRowToIdTable {
 
       // Write the matching rows.
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
-        auto resultId = mergeWithUndefined(colLeft[sourceIndices[0]],
-                                           colRight[sourceIndices[1]]);
+        auto resultId =
+            getJoinValue(colLeft[sourceIndices[0]], colRight[sourceIndices[1]]);
         numUndef += static_cast<size_t>(resultId.isUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }

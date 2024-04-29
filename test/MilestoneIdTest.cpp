@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/global/Id.h"
-#include "../src/util/Log.h"
+#include "global/Id.h"
+#include "util/Log.h"
 
 template <uint64_t distance>
 void testMilestoneIds() {

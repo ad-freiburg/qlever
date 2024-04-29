@@ -271,9 +271,9 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                               ._triples;
     ASSERT_EQ(triples.size(), 1u);
     const auto& triple = triples[0];
-    EXPECT_EQ(triple._s.getVariable().name(), "?x");
-    EXPECT_EQ(triple._p.asString(), HAS_PATTERN_PREDICATE);
-    EXPECT_EQ(triple._o.getVariable().name(), "?p");
+    EXPECT_EQ(triple.s_.getVariable().name(), "?x");
+    EXPECT_EQ(triple.p_.asString(), HAS_PATTERN_PREDICATE);
+    EXPECT_EQ(triple.o_.getVariable().name(), "?p");
   }
 
   {
@@ -289,10 +289,10 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                               ._triples;
     ASSERT_EQ(triples.size(), 1u);
     const auto& triple = triples[0];
-    EXPECT_EQ(triple._s.getVariable().name(), "?x");
-    EXPECT_EQ(triple._p.asString(), "<is-a>");
-    EXPECT_EQ(triple._o.getVariable().name(), "?y");
-    EXPECT_THAT(triple._additionalScanColumns,
+    EXPECT_EQ(triple.s_.getVariable().name(), "?x");
+    EXPECT_EQ(triple.p_.asString(), "<is-a>");
+    EXPECT_EQ(triple.o_.getVariable().name(), "?y");
+    EXPECT_THAT(triple.additionalScanColumns_,
                 ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN,
                                       Variable{"?p"}}));
   }
@@ -310,10 +310,10 @@ TEST(CheckUsePatternTrick, tripleIsCorrectlyRemoved) {
                               ._triples;
     ASSERT_EQ(triples.size(), 1u);
     const auto& triple = triples[0];
-    EXPECT_EQ(triple._s.getVariable().name(), "?y");
-    EXPECT_EQ(triple._p.asString(), "<is-a>");
-    EXPECT_EQ(triple._o.getVariable().name(), "?x");
-    EXPECT_THAT(triple._additionalScanColumns,
+    EXPECT_EQ(triple.s_.getVariable().name(), "?y");
+    EXPECT_EQ(triple.p_.asString(), "<is-a>");
+    EXPECT_EQ(triple.o_.getVariable().name(), "?x");
+    EXPECT_THAT(triple.additionalScanColumns_,
                 ElementsAre(std::pair{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN,
                                       Variable{"?p"}}));
   }

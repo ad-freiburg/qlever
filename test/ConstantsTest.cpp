@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 
 #include "global/Constants.h"
+#include "global/RuntimeParameters.h"
 #include "util/GTestHelpers.h"
 
 using namespace ad_utility;

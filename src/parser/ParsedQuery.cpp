@@ -4,88 +4,22 @@
 
 #include "ParsedQuery.h"
 
+#include <absl/strings/str_join.h>
+#include <absl/strings/str_split.h>
+
 #include <optional>
 #include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/RdfEscaping.h"
 #include "util/Conversions.h"
+#include "util/TransparentFunctors.h"
 
 using std::string;
 using std::vector;
-
-// _____________________________________________________________________________
-string ParsedQuery::asString() const {
-  std::ostringstream os;
-
-  bool usesSelect = hasSelectClause();
-  bool usesAsterisk = usesSelect && selectClause().isAsterisk();
-
-  if (usesSelect) {
-    const auto& selectClause = this->selectClause();
-    // SELECT
-    os << "\nSELECT: {\n\t";
-    // TODO<joka921> is this needed?
-    /*
-    os <<
-    absl::StrJoin(selectClause.varsAndAliasesOrAsterisk_.getSelectedVariables(),
-                        ", ");
-                        */
-    os << "\n}";
-
-    // ALIASES
-    os << "\nALIASES: {\n\t";
-    if (!usesAsterisk) {
-      for (const auto& alias : selectClause.getAliases()) {
-        os << alias._expression.getDescriptor() << "\n\t";
-      }
-      os << "{";
-    }
-  } else if (hasConstructClause()) {
-    const auto& constructClause = this->constructClause().triples_;
-    os << "\n CONSTRUCT {\n\t";
-    for (const auto& triple : constructClause) {
-      os << triple[0].toSparql();
-      os << ' ';
-      os << triple[1].toSparql();
-      os << ' ';
-      os << triple[2].toSparql();
-      os << " .\n";
-    }
-    os << "}";
-  }
-
-  // WHERE
-  os << "\nWHERE: \n";
-  _rootGraphPattern.toString(os, 1);
-
-  os << "\nLIMIT: " << (_limitOffset.limitOrDefault());
-  os << "\nTEXTLIMIT: " << (_limitOffset._textLimit);
-  os << "\nOFFSET: " << (_limitOffset._offset);
-  if (usesSelect) {
-    const auto& selectClause = this->selectClause();
-    os << "\nDISTINCT modifier is " << (selectClause.distinct_ ? "" : "not ")
-       << "present.";
-    os << "\nREDUCED modifier is " << (selectClause.reduced_ ? "" : "not ")
-       << "present.";
-  }
-  os << "\nORDER BY: ";
-  if (_orderBy.empty()) {
-    os << "not specified";
-  } else {
-    for (auto& key : _orderBy) {
-      os << key.variable_.name() << (key.isDescending_ ? " (DESC)" : " (ASC)")
-         << "\t";
-    }
-  }
-  os << "\n";
-  return std::move(os).str();
-}
 
 // _____________________________________________________________________________
 string SparqlPrefix::asString() const {
@@ -97,7 +31,7 @@ string SparqlPrefix::asString() const {
 // _____________________________________________________________________________
 string SparqlTriple::asString() const {
   std::ostringstream os;
-  os << "{s: " << _s << ", p: " << _p << ", o: " << _o << "}";
+  os << "{s: " << s_ << ", p: " << p_ << ", o: " << o_ << "}";
   return std::move(os).str();
 }
 
@@ -286,16 +220,6 @@ void ParsedQuery::addSolutionModifiers(SolutionModifiers modifiers) {
   }
 }
 
-void ParsedQuery::merge(const ParsedQuery& p) {
-  auto& children = _rootGraphPattern._graphPatterns;
-  auto& otherChildren = p._rootGraphPattern._graphPatterns;
-  children.insert(children.end(), otherChildren.begin(), otherChildren.end());
-
-  // update the ids
-  _numGraphPatterns = 0;
-  _rootGraphPattern.recomputeIds(&_numGraphPatterns);
-}
-
 // _____________________________________________________________________________
 const std::vector<Variable>& ParsedQuery::getVisibleVariables() const {
   return std::visit(&parsedQuery::ClauseBase::getVisibleVariables, _clause);
@@ -312,83 +236,19 @@ void ParsedQuery::registerVariablesVisibleInQueryBody(
 // _____________________________________________________________________________
 void ParsedQuery::registerVariableVisibleInQueryBody(const Variable& variable) {
   auto addVariable = [&variable](auto& clause) {
-    clause.addVisibleVariable(variable);
+    if (!variable.name().starts_with(INTERNAL_VARIABLE_PREFIX)) {
+      clause.addVisibleVariable(variable);
+    }
   };
   std::visit(addVariable, _clause);
-}
-
-// _____________________________________________________________________________
-void ParsedQuery::GraphPattern::toString(std::ostringstream& os,
-                                         int indentation) const {
-  for (int j = 1; j < indentation; ++j) os << "  ";
-  os << "{";
-  for (size_t i = 0; i + 1 < _filters.size(); ++i) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _filters[i].asString() << ',';
-  }
-  if (!_filters.empty()) {
-    os << "\n";
-    for (int j = 0; j < indentation; ++j) os << "  ";
-    os << _filters.back().asString();
-  }
-  for (const GraphPatternOperation& child : _graphPatterns) {
-    os << "\n";
-    child.toString(os, indentation + 1);
-  }
-  os << "\n";
-  for (int j = 1; j < indentation; ++j) os << "  ";
-  os << "}";
-}
-
-// _____________________________________________________________________________
-void ParsedQuery::GraphPattern::recomputeIds(size_t* id_count) {
-  bool allocatedIdCounter = false;
-  if (id_count == nullptr) {
-    id_count = new size_t(0);
-    allocatedIdCounter = true;
-  }
-  _id = *id_count;
-  (*id_count)++;
-  for (auto& op : _graphPatterns) {
-    op.visit([&id_count](auto&& arg) {
-      using T = std::decay_t<decltype(arg)>;
-      if constexpr (std::is_same_v<T, parsedQuery::Union>) {
-        arg._child1.recomputeIds(id_count);
-        arg._child2.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::Optional> ||
-                           std::is_same_v<T, parsedQuery::GroupGraphPattern> ||
-                           std::is_same_v<T, parsedQuery::Minus>) {
-        arg._child.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::TransPath>) {
-        // arg._childGraphPattern.recomputeIds(id_count);
-      } else if constexpr (std::is_same_v<T, parsedQuery::Values>) {
-        arg._id = (*id_count)++;
-      } else {
-        static_assert(std::is_same_v<T, parsedQuery::Subquery> ||
-                      std::is_same_v<T, parsedQuery::Service> ||
-                      std::is_same_v<T, parsedQuery::BasicGraphPattern> ||
-                      std::is_same_v<T, parsedQuery::Bind>);
-        // subquery children have their own id space
-        // TODO:joka921 look at the optimizer if it is ok, that
-        // BasicGraphPatterns and Values have no ids at all. at the same time
-        // assert that the above else-if is exhaustive.
-      }
-    });
-  }
-
-  if (allocatedIdCounter) {
-    delete id_count;
-  }
 }
 
 // __________________________________________________________________________
 ParsedQuery::GraphPattern::GraphPattern() : _optional(false) {}
 
 // __________________________________________________________________________
-void ParsedQuery::GraphPattern::addLanguageFilter(
-    const Variable& variable, const std::string& languageInQuotes) {
-  auto langTag = languageInQuotes.substr(1, languageInQuotes.size() - 2);
+void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
+                                                  const std::string& langTag) {
   // Find all triples where the object is the `variable` and the predicate is
   // a simple `IRIREF` (neither a variable nor a complex property path).
   // Search in all the basic graph patterns, as filters have the complete
@@ -405,10 +265,10 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
        _graphPatterns | stdv::transform(ad::getIf<BasicPattern>) |
            stdv::filter(ad::toBool)) {
     for (auto& triple : basicPattern->_triples) {
-      if (triple._o == variable &&
-          (triple._p._operation == PropertyPath::Operation::IRI &&
-           !isVariable(triple._p)) &&
-          !triple._p._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
+      if (triple.o_ == variable &&
+          (triple.p_._operation == PropertyPath::Operation::IRI &&
+           !isVariable(triple.p_)) &&
+          !triple.p_._iri.starts_with(INTERNAL_ENTITIES_URI_PREFIX)) {
         matchingTriples.push_back(&triple);
       }
     }
@@ -416,7 +276,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(
 
   // Replace all the matching triples.
   for (auto* triplePtr : matchingTriples) {
-    triplePtr->_p._iri = '@' + langTag + '@' + triplePtr->_p._iri;
+    triplePtr->p_._iri = ad_utility::convertToLanguageTaggedPredicate(
+        triplePtr->p_._iri, langTag);
   }
 
   // Handle the case, that no suitable triple (see above) was found. In this
@@ -455,21 +316,6 @@ const std::vector<Alias>& ParsedQuery::getAliases() const {
     static const std::vector<Alias> dummyForConstructClause;
     return dummyForConstructClause;
   }
-}
-
-// ____________________________________________________________________________
-cppcoro::generator<const Variable>
-ParsedQuery::getConstructedOrSelectedVariables() const {
-  if (hasSelectClause()) {
-    for (const auto& variable : selectClause().getSelectedVariables()) {
-      co_yield variable;
-    }
-  } else {
-    for (const auto& variable : constructClause().containedVariables()) {
-      co_yield variable;
-    }
-  }
-  // Nothing to yield in the CONSTRUCT case.
 }
 
 // ____________________________________________________________________________
@@ -632,4 +478,10 @@ Variable ParsedQuery::getNewInternalVariable() {
       Variable{absl::StrCat(INTERNAL_VARIABLE_PREFIX, numInternalVariables_)};
   numInternalVariables_++;
   return variable;
+}
+
+Variable ParsedQuery::blankNodeToInternalVariable(std::string_view blankNode) {
+  AD_CONTRACT_CHECK(blankNode.starts_with("_:"));
+  return Variable{
+      absl::StrCat(INTERNAL_BLANKNODE_VARIABLE_PREFIX, blankNode.substr(2))};
 }

@@ -6,16 +6,16 @@
 #ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
 #define QLEVER_SPARQLEXPRESSIONTYPES_H
 
+#include <vector>
+
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
 #include "engine/sparqlExpressions/SetOfIntervals.h"
 #include "global/Id.h"
+#include "parser/LiteralOrIri.h"
 #include "parser/TripleComponent.h"
 #include "parser/data/Variable.h"
 #include "util/AllocatorWithLimit.h"
-#include "util/ConstexprSmallString.h"
-#include "util/Generator.h"
-#include "util/HashMap.h"
+#include "util/HashSet.h"
 #include "util/TypeTraits.h"
 #include "util/VisitMixin.h"
 
@@ -53,32 +53,11 @@ class VectorWithMemoryLimit
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
-// that can only yield strings. It is currently implemented as a thin wrapper
-// around a `variant`, but a more sophisticated implementation could be done in
-// the future.
-using IdOrStringBase = std::variant<ValueId, std::string>;
-class IdOrString : public IdOrStringBase,
-                   public VisitMixin<IdOrString, IdOrStringBase> {
- public:
-  using IdOrStringBase::IdOrStringBase;
-  explicit IdOrString(std::optional<std::string> s) {
-    if (s.has_value()) {
-      emplace<std::string>(std::move(s.value()));
-    } else {
-      emplace<Id>(Id::makeUndefined());
-    }
-  }
-};
-
-// Print an `IdOrString` for googletest.
-inline void PrintTo(const IdOrString& var, std::ostream* os) {
-  std::visit(
-      [&os](const auto& s) {
-        auto& stream = *os;
-        stream << s;
-      },
-      var);
-}
+// that can only yield strings.
+using IdOrLiteralOrIri =
+    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
+// Printing for GTest.
+void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 
 /// The result of an expression can either be a vector of bool/double/int/string
 /// a variable (e.g. in BIND (?x as ?y)) or a "Set" of indices, which identifies
@@ -87,7 +66,7 @@ inline void PrintTo(const IdOrString& var, std::ostream* os) {
 namespace detail {
 // For each type T in this tuple, T as well as VectorWithMemoryLimit<T> are
 // possible expression result types.
-using ConstantTypes = std::tuple<IdOrString, ValueId>;
+using ConstantTypes = std::tuple<IdOrLiteralOrIri, ValueId>;
 using ConstantTypesAsVector =
     ad_utility::LiftedTuple<ConstantTypes, VectorWithMemoryLimit>;
 
@@ -188,53 +167,19 @@ struct EvaluationContext {
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle)
-      : _qec{qec},
-        _variableToColumnMap{variableToColumnMap},
-        _inputTable{inputTable},
-        _allocator{allocator},
-        _localVocab{localVocab},
-        cancellationHandle_{std::move(cancellationHandle)} {
-    AD_CONTRACT_CHECK(cancellationHandle_);
-  }
+                    ad_utility::SharedCancellationHandle cancellationHandle);
 
-  bool isResultSortedBy(const Variable& variable) {
-    if (_columnsByWhichResultIsSorted.empty()) {
-      return false;
-    }
-    if (!_variableToColumnMap.contains(variable)) {
-      return false;
-    }
-
-    return getColumnIndexForVariable(variable) ==
-           _columnsByWhichResultIsSorted[0];
-  }
+  bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
-  [[nodiscard]] size_t size() const { return _endIndex - _beginIndex; }
+  [[nodiscard]] size_t size() const;
 
   // ____________________________________________________________________________
   [[nodiscard]] ColumnIndex getColumnIndexForVariable(
-      const Variable& var) const {
-    const auto& map = _variableToColumnMap;
-    if (!map.contains(var)) {
-      throw std::runtime_error(absl::StrCat(
-          "Variable ", var.name(), " was not found in input to expression."));
-    }
-    return map.at(var).columnIndex_;
-  }
+      const Variable& var) const;
 
   // _____________________________________________________________________________
   std::optional<ExpressionResult> getResultFromPreviousAggregate(
-      const Variable& var) const {
-    const auto& map = _variableToColumnMapPreviousResults;
-    if (!map.contains(var)) {
-      return std::nullopt;
-    }
-    ColumnIndex idx = map.at(var).columnIndex_;
-    AD_CONTRACT_CHECK(idx < _previousResultsFromSameGroup.size());
-
-    return copyExpressionResult(_previousResultsFromSameGroup.at(idx));
-  }
+      const Variable& var) const;
 };
 
 namespace detail {
@@ -244,12 +189,14 @@ requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
-  } else if constexpr (ad_utility::isSimilar<T, IdOrString>) {
+  } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
         [&localVocab]<typename R>(R&& el) mutable {
-          if constexpr (ad_utility::isSimilar<R, string>) {
+          if constexpr (ad_utility::isSimilar<
+                            R, ad_utility::triple_component::LiteralOrIri>) {
             return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(std::forward<R>(el)));
+                localVocab.getIndexAndAddIfNotContained(
+                    AD_FWD(el).toStringRepresentation()));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;
@@ -260,11 +207,6 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
     static_assert(ad_utility::alwaysFalse<T>);
   }
 }
-
-/// A Tag type that has to be used as the `CalculationWithSetOfIntervals`
-/// template parameter in `NaryExpression.h` and `AggregateExpression.h` when
-/// no such calculation is possible
-struct NoCalculationWithSetOfIntervals {};
 
 /// A `Function` and one or more `ValueGetters`, that are applied to the
 /// operands of the function before passing them. The number of `ValueGetters`

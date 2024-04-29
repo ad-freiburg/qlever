@@ -6,20 +6,15 @@
 
 #include <absl/container/flat_hash_map.h>
 #include <absl/strings/str_cat.h>
-#include <absl/strings/str_replace.h>
-#include <gtest/gtest.h>
+#include <gtest/gtest_prod.h>
 
-#include <any>
 #include <concepts>
 #include <functional>
 #include <memory>
 #include <optional>
-#include <sstream>
 #include <string>
 #include <string_view>
 #include <type_traits>
-#include <typeinfo>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -29,10 +24,7 @@
 #include "util/ConfigManager/ConfigUtil.h"
 #include "util/ConfigManager/Validator.h"
 #include "util/ConfigManager/generated/ConfigShorthandLexer.h"
-#include "util/Exception.h"
-#include "util/Forward.h"
 #include "util/HashMap.h"
-#include "util/StringUtils.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
 

@@ -9,9 +9,26 @@
 
 namespace sparqlExpression {
 namespace detail::string_expressions {
+
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
+// Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
+// Note: This currently requires a copy of a string since the `Literal` class
+// has to add the quotation marks.
+constexpr auto toLiteral = [](std::string_view normalizedContent) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(normalizedContent))};
+};
+
 // String functions.
-[[maybe_unused]] auto strImpl = [](std::optional<std::string> s) {
-  return IdOrString{std::move(s)};
+[[maybe_unused]] auto strImpl =
+    [](std::optional<std::string> s) -> IdOrLiteralOrIri {
+  if (s.has_value()) {
+    return IdOrLiteralOrIri{toLiteral(s.value())};
+  } else {
+    return Id::makeUndefined();
+  }
 };
 NARY_EXPRESSION(StrExpressionImpl, 1, FV<decltype(strImpl), StringValueGetter>);
 
@@ -70,10 +87,11 @@ class StringExpressionImpl : public SparqlExpression {
 
 // Lift a `Function` that takes one or multiple `std::string`s (possibly via
 // references) and returns an `Id` or `std::string` to a function that takes the
-// same number of `std::optional<std::string>` and returns `Id` or `IdOrString`.
-// If any of the optionals is `std::nullopt`, then UNDEF is returned, else the
-// result of the `Function` with the values of the optionals. This is a useful
-// helper function for implementing expressions that work on strings.
+// same number of `std::optional<std::string>` and returns `Id` or
+// `IdOrLiteralOrIri`. If any of the optionals is `std::nullopt`, then UNDEF is
+// returned, else the result of the `Function` with the values of the optionals.
+// This is a useful helper function for implementing expressions that work on
+// strings.
 template <typename Function>
 struct LiftStringFunction {
   template <std::same_as<std::optional<std::string>>... Arguments>
@@ -81,12 +99,12 @@ struct LiftStringFunction {
     using ResultOfFunction =
         decltype(std::invoke(Function{}, std::move(arguments.value())...));
     static_assert(std::same_as<ResultOfFunction, Id> ||
-                      std::same_as<ResultOfFunction, std::string>,
+                      std::same_as<ResultOfFunction, LiteralOrIri>,
                   "Template argument of `LiftStringFunction` must return `Id` "
                   "or `std::string`");
     using Result =
         std::conditional_t<ad_utility::isSimilar<ResultOfFunction, Id>, Id,
-                           IdOrString>;
+                           IdOrLiteralOrIri>;
     if ((... || !arguments.has_value())) {
       return Result{Id::makeUndefined()};
     }
@@ -104,22 +122,22 @@ using StrlenExpression =
 
 // LCASE
 [[maybe_unused]] auto lowercaseImpl =
-    [](std::optional<std::string> input) -> IdOrString {
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::utf8ToLower(input.value());
+    return toLiteral(ad_utility::utf8ToLower(input.value()));
   }
 };
 using LowercaseExpression = StringExpressionImpl<1, decltype(lowercaseImpl)>;
 
 // UCASE
 [[maybe_unused]] auto uppercaseImpl =
-    [](std::optional<std::string> input) -> IdOrString {
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return ad_utility::utf8ToUpper(input.value());
+    return toLiteral(ad_utility::utf8ToUpper(input.value()));
   }
 };
 using UppercaseExpression = StringExpressionImpl<1, decltype(uppercaseImpl)>;
@@ -149,15 +167,15 @@ class SubstrImpl {
   };
 
  public:
-  IdOrString operator()(std::optional<std::string> s, NumericValue start,
-                        NumericValue length) const {
+  IdOrLiteralOrIri operator()(std::optional<std::string> s, NumericValue start,
+                              NumericValue length) const {
     if (!s.has_value() || std::holds_alternative<NotNumeric>(start) ||
         std::holds_alternative<NotNumeric>(length)) {
       return Id::makeUndefined();
     }
 
     if (isNan(start) || isNan(length)) {
-      return std::string{};
+      return toLiteral("");
     }
 
     // In SPARQL indices are 1-based, but the implementation we use is 0 based,
@@ -185,8 +203,8 @@ class SubstrImpl {
       return static_cast<size_t>(n);
     };
 
-    return std::string{
-        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt))};
+    return toLiteral(
+        ad_utility::getUTF8Substring(str, clamp(startInt), clamp(lengthInt)));
   }
 };
 
@@ -226,22 +244,22 @@ using ContainsExpression =
 // STRAFTER / STRBEFORE
 template <bool isStrAfter>
 [[maybe_unused]] auto strAfterOrBeforeImpl =
-    [](std::string text, std::string_view pattern) -> std::string {
-  // Required by the SPARQL standard.
-  if (pattern.empty()) {
-    return text;
-  }
-  auto pos = text.find(pattern);
-  if (pos >= text.size()) {
-    return "";
-  }
-  if constexpr (isStrAfter) {
-    return text.substr(pos + pattern.size());
-  } else {
-    // STRBEFORE
-    return text.substr(0, pos);
-  }
-};
+    [](std::string_view text, std::string_view pattern) {
+      // Required by the SPARQL standard.
+      if (pattern.empty()) {
+        return toLiteral(text);
+      }
+      auto pos = text.find(pattern);
+      if (pos >= text.size()) {
+        return toLiteral("");
+      }
+      if constexpr (isStrAfter) {
+        return toLiteral(text.substr(pos + pattern.size()));
+      } else {
+        // STRBEFORE
+        return toLiteral(text.substr(0, pos));
+      }
+    };
 
 auto strAfter = strAfterOrBeforeImpl<true>;
 
@@ -257,7 +275,7 @@ using StrBeforeExpression =
 [[maybe_unused]] auto replaceImpl =
     [](std::optional<std::string> input,
        const std::unique_ptr<re2::RE2>& pattern,
-       const std::optional<std::string>& replacement) -> IdOrString {
+       const std::optional<std::string>& replacement) -> IdOrLiteralOrIri {
   if (!input.has_value() || !pattern || !replacement.has_value()) {
     return Id::makeUndefined();
   }
@@ -269,7 +287,7 @@ using StrBeforeExpression =
   }
   const auto& repl = replacement.value();
   re2::RE2::GlobalReplace(&in, pat, repl);
-  return std::move(in);
+  return toLiteral(in);
 };
 
 using ReplaceExpression =
@@ -352,15 +370,16 @@ class ConcatExpression : public detail::VariadicExpression {
           std::visit(visitSingleExpressionResult, child->evaluate(ctx));
         });
 
-    // Lift the result from `string` to `IdOrString` which is needed for the
-    // expression module.
+    // Lift the result from `string` to `IdOrLiteralOrIri` which is needed for
+    // the expression module.
     if (std::holds_alternative<std::string>(result)) {
-      return IdOrString{std::move(std::get<std::string>(result))};
+      return IdOrLiteralOrIri{toLiteral(std::get<std::string>(result))};
     } else {
       auto& stringVec = std::get<StringVec>(result);
-      VectorWithMemoryLimit<IdOrString> resultAsVec{
-          std::make_move_iterator(stringVec.begin()),
-          std::make_move_iterator(stringVec.end()), ctx->_allocator};
+      VectorWithMemoryLimit<IdOrLiteralOrIri> resultAsVec(ctx->_allocator);
+      resultAsVec.reserve(stringVec.size());
+      std::ranges::copy(stringVec | std::views::transform(toLiteral),
+                        std::back_inserter(resultAsVec));
       return resultAsVec;
     }
   }
@@ -368,20 +387,13 @@ class ConcatExpression : public detail::VariadicExpression {
 
 // ENCODE_FOR_URI
 [[maybe_unused]] auto encodeForUriImpl =
-    [](std::optional<std::string> input) -> IdOrString {
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
     std::string_view value{input.value()};
 
-    if (value.starts_with("\"")) {
-      auto contentEnd = ad_utility::findLiteralEnd(value, "\"");
-      if (contentEnd != 0) {
-        std::string_view content = value.substr(1, contentEnd - 1);
-        return boost::urls::encode(content, boost::urls::unreserved_chars);
-      }
-    }
-    return boost::urls::encode(value, boost::urls::unreserved_chars);
+    return toLiteral(boost::urls::encode(value, boost::urls::unreserved_chars));
   }
 };
 using EncodeForUriExpression =

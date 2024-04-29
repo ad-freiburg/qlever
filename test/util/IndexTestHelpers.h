@@ -4,10 +4,10 @@
 
 #pragma once
 
+#include <absl/cleanup/cleanup.h>
 #include <gtest/gtest.h>
 
-#include "./util/AllocatorTestHelpers.h"
-#include "absl/cleanup/cleanup.h"
+#include "AllocatorTestHelpers.h"
 #include "engine/QueryExecutionContext.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "index/ConstantsIndexBuilding.h"

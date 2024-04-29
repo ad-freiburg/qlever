@@ -6,6 +6,7 @@
 
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
@@ -24,6 +25,7 @@
 class ExportQueryExecutionTrees {
  public:
   using MediaType = ad_utility::MediaType;
+  using CancellationHandle = ad_utility::SharedCancellationHandle;
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -33,11 +35,11 @@ class ExportQueryExecutionTrees {
   // TSV, Turtle, Binary. Note that the Binary format can only be used with
   // SELECT queries and the Turtle format can only be used with CONSTRUCT
   // queries. Invalid `mediaType`s and invalid combinations of `mediaType` and
-  // the query type will throw. The result is returned as a `stream_generator`
-  // that lazily computes the serialized result in large chunks of bytes.
-  static ad_utility::streams::stream_generator computeResultAsStream(
+  // the query type will throw. The result is returned as a `generator` that
+  // lazily computes the serialized result in large chunks of bytes.
+  static cppcoro::generator<std::string> computeResultAsStream(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      MediaType mediaType);
+      MediaType mediaType, CancellationHandle cancellationHandle);
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -50,12 +52,11 @@ class ExportQueryExecutionTrees {
   // The `requestTimer` is used to report timing statistics on the query. It
   // must have already run during the query planning to produce the expected
   // results. If `maxSend` is smaller than the size of the query result, then
-  // only the first `maxSend` rows are// returned.
-  static nlohmann::json computeResultAsJSON(const ParsedQuery& parsedQuery,
-                                            const QueryExecutionTree& qet,
-                                            ad_utility::Timer& requestTimer,
-                                            uint64_t maxSend,
-                                            MediaType mediaType);
+  // only the first `maxSend` rows are returned.
+  static nlohmann::json computeResultAsJSON(
+      const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
+      const ad_utility::Timer& requestTimer, uint64_t maxSend,
+      MediaType mediaType, CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -98,18 +99,20 @@ class ExportQueryExecutionTrees {
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
   static nlohmann::json computeQueryResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, uint64_t maxSend);
+      const ad_utility::Timer& requestTimer, uint64_t maxSend,
+      CancellationHandle cancellationHandle);
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
   static nlohmann::json computeSelectQueryResultAsSparqlJSON(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      ad_utility::Timer& requestTimer, uint64_t maxSend);
+      const ParsedQuery& query, const QueryExecutionTree& qet, uint64_t maxSend,
+      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      shared_ptr<const ResultTable> resultTable);
+      shared_ptr<const ResultTable> resultTable,
+      CancellationHandle cancellationHandle);
 
   /**
    * @brief Convert an `IdTable` (typically from a query result) to a JSON array
@@ -129,28 +132,32 @@ class ExportQueryExecutionTrees {
   static nlohmann::json idTableToQLeverJSONArray(
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-      std::shared_ptr<const ResultTable> resultTable = nullptr);
+      std::shared_ptr<const ResultTable> resultTable,
+      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   static nlohmann::json constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const ResultTable> res);
+      std::shared_ptr<const ResultTable> res,
+      CancellationHandle cancellationHandle);
 
   // Generate an RDF graph for a CONSTRUCT query.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
   constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res);
+      LimitOffsetClause limitAndOffset, std::shared_ptr<const ResultTable> res,
+      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      shared_ptr<const ResultTable> resultTable);
+      shared_ptr<const ResultTable> resultTable,
+      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   template <MediaType format>
@@ -158,12 +165,13 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset,
-      std::shared_ptr<const ResultTable> resultTable);
+      std::shared_ptr<const ResultTable> resultTable,
+      CancellationHandle cancellationHandle);
 
   // _____________________________________________________________________________
   template <MediaType format>
   static ad_utility::streams::stream_generator selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset);
+      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
 };

@@ -31,10 +31,6 @@ class Distinct : public Operation {
     return _subtree->resultSortedOn();
   }
 
-  virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
-  }
-
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return _subtree->getSizeEstimate();

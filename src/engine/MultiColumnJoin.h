@@ -35,11 +35,6 @@ class MultiColumnJoin : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
-
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
@@ -62,7 +57,7 @@ class MultiColumnJoin : public Operation {
    *width resultWidth (or be left vector that should have resultWidth entries).
    *This method is made public here for unit testing purposes.
    **/
-  static void computeMultiColumnJoin(
+  void computeMultiColumnJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* resultMightBeUnsorted);

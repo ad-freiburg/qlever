@@ -5,46 +5,40 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <engine/ResultTable.h>
-#include <global/Pattern.h>
-#include <global/SpecialIds.h>
-#include <index/CompressedRelation.h>
-#include <index/ConstantsIndexBuilding.h>
-#include <index/DocsDB.h>
-#include <index/Index.h>
-#include <index/IndexBuilderTypes.h>
-#include <index/IndexMetaData.h>
-#include <index/PatternCreator.h>
-#include <index/Permutation.h>
-#include <index/StxxlSortFunctors.h>
-#include <index/TextMetaData.h>
-#include <index/Vocabulary.h>
-#include <index/VocabularyMerger.h>
-#include <parser/ContextFileParser.h>
-#include <parser/TripleComponent.h>
-#include <parser/TurtleParser.h>
-#include <util/BackgroundStxxlSorter.h>
-#include <util/BufferedVector.h>
-#include <util/CompressionUsingZstd/ZstdWrapper.h>
-#include <util/File.h>
-#include <util/Forward.h>
-#include <util/HashMap.h>
-#include <util/MmapVector.h>
-#include <util/json.h>
-
 #include <array>
-#include <fstream>
 #include <memory>
 #include <optional>
 #include <string>
-#include <stxxl/sorter>
-#include <stxxl/stream>
 #include <stxxl/vector>
 #include <vector>
 
+#include "engine/ResultTable.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "global/Pattern.h"
+#include "global/SpecialIds.h"
+#include "index/CompressedRelation.h"
+#include "index/ConstantsIndexBuilding.h"
+#include "index/DocsDB.h"
+#include "index/Index.h"
+#include "index/IndexBuilderTypes.h"
+#include "index/IndexMetaData.h"
+#include "index/PatternCreator.h"
+#include "index/Permutation.h"
+#include "index/StxxlSortFunctors.h"
+#include "index/TextMetaData.h"
+#include "index/Vocabulary.h"
+#include "index/VocabularyMerger.h"
+#include "parser/ContextFileParser.h"
+#include "parser/TripleComponent.h"
+#include "parser/TurtleParser.h"
+#include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
+#include "util/File.h"
+#include "util/Forward.h"
+#include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/MmapVector.h"
+#include "util/json.h"
 
 using ad_utility::BufferedVector;
 using ad_utility::MmapVector;
@@ -72,8 +66,6 @@ using ThirdPermutation = SortByPSO;
 // index builder.
 struct IndexBuilderDataBase {
   ad_utility::vocabulary_merger::VocabularyMetaData vocabularyMetaData_;
-  // The prefixes that are used for the prefix compression.
-  std::vector<std::string> prefixes_;
 };
 
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
@@ -131,7 +123,6 @@ class IndexImpl {
   json configurationJson_;
   Index::Vocab vocab_;
   size_t totalVocabularySize_ = 0;
-  bool vocabPrefixCompressed_ = true;
   Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
@@ -152,12 +143,10 @@ class IndexImpl {
   size_t parserBatchSize_ = PARSER_BATCH_SIZE;
   size_t numTriplesPerBatch_ = NUM_TRIPLES_PER_PARTIAL_VOCAB;
 
-  // These statistics all do *not* include the triples that are added by
-  // QLever for more efficient query processing.
-  size_t numSubjectsNormal_ = 0;
-  size_t numPredicatesNormal_ = 0;
-  size_t numObjectsNormal_ = 0;
-  size_t numTriplesNormal_ = 0;
+  NumNormalAndInternal numSubjects_;
+  NumNormalAndInternal numPredicates_;
+  NumNormalAndInternal numObjects_;
+  NumNormalAndInternal numTriples_;
   string indexId_;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
@@ -265,8 +254,18 @@ class IndexImpl {
 
   std::optional<string> idToOptionalString(WordVocabIndex id) const;
 
+ private:
   // ___________________________________________________________________________
-  bool getId(const string& element, Id* id) const;
+  std::optional<Id> getIdImpl(const auto& element) const;
+
+ public:
+  // ___________________________________________________________________________
+  std::optional<Id> getId(
+      const ad_utility::triple_component::LiteralOrIri& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Literal& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Iri& element) const;
 
   // ___________________________________________________________________________
   Index::Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
@@ -372,15 +371,13 @@ class IndexImpl {
 
   void setSettingsFile(const std::string& filename);
 
-  void setPrefixCompression(bool compressed);
-
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch) {
     numTriplesPerBatch_ = numTriplesPerBatch;
   }
 
   const string& getTextName() const { return textMeta_.getName(); }
 
-  const string& getKbName() const { return pso_.metaData().getName(); }
+  const string& getKbName() const { return pso_.getKbName(); }
 
   const string& getIndexId() const { return indexId_; }
 
@@ -390,7 +387,7 @@ class IndexImpl {
     return textMeta_.getNofEntityPostings();
   }
 
-  bool hasAllPermutations() const { return SPO().isLoaded_; }
+  bool hasAllPermutations() const { return SPO().isLoaded(); }
 
   // _____________________________________________________________________________
   vector<float> getMultiplicities(const TripleComponent& key,
@@ -405,12 +402,13 @@ class IndexImpl {
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       const Permutation::Enum& permutation,
       Permutation::ColumnIndicesRef additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndicesRef additionalColumns,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,
@@ -451,11 +449,6 @@ class IndexImpl {
       std::unique_ptr<ItemMapArray> items, auto localIds,
       ad_utility::Synchronized<std::unique_ptr<TripleVec>>* globalWritePtr);
 
-  //  Apply the prefix compression to the internal vocabulary. Is called by
-  //  `createFromFile` after the vocabularies have been created and merged.
-  void compressInternalVocabularyIfSpecified(
-      const std::vector<std::string>& prefixes);
-
   // Return a Turtle parser that parses the given file. The parser will be
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
@@ -485,8 +478,8 @@ class IndexImpl {
 
   // TODO<joka921> Get rid of the `numColumns` by including them into the
   // `sortedTriples` argument.
-  std::pair<IndexMetaDataMmapDispatcher::WriteType,
-            IndexMetaDataMmapDispatcher::WriteType>
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
+             IndexMetaDataMmapDispatcher::WriteType>
   createPermutationPairImpl(size_t numColumns, const string& fileName1,
                             const string& fileName2, auto&& sortedTriples,
                             std::array<size_t, 3> permutation,
@@ -504,15 +497,14 @@ class IndexImpl {
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
+
  public:
   template <typename SortedTriplesType, typename... CallbackTypes>
-  void createPermutationPair(size_t numColumns,
-                             SortedTriplesType&& sortedTriples,
-                             const Permutation& p1, const Permutation& p2,
-                             CallbackTypes&&... perTripleCallbacks);
-  // void createPermutationPair(size_t numColumns, auto&& sortedTriples,
-  //                            const Permutation& p1, const Permutation& p2,
-  //                            auto&&... perTripleCallbacks);
+  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
+                                             SortedTriplesType&& sortedTriples,
+                                             const Permutation& p1,
+                                             const Permutation& p2,
+                                             CallbackTypes&&... perTripleCallbacks);
 
  private:
   // wrapper for createPermutation that saves a lot of code duplications
@@ -521,11 +513,11 @@ class IndexImpl {
   // done for first permutation that is created using vec).
   // Will sort vec.
   // returns the MetaData (MmapBased or HmapBased) for this relation.
-  // Careful: only multiplicities for first column is valid after call, need
-  // to call exchangeMultiplicities as done by createPermutationPair the
-  // optional is std::nullopt if vec and thus the index is empty
-  std::pair<IndexMetaDataMmapDispatcher::WriteType,
-            IndexMetaDataMmapDispatcher::WriteType>
+  // Careful: only multiplicities for first column is valid after call, need to
+  // call exchangeMultiplicities as done by createPermutationPair
+  // the optional is std::nullopt if vec and thus the index is empty
+  std::tuple<size_t, IndexMetaDataMmapDispatcher::WriteType,
+             IndexMetaDataMmapDispatcher::WriteType>
   createPermutations(size_t numColumns, auto&& sortedTriples,
                      const Permutation& p1, const Permutation& p2,
                      auto&&... perTripleCallbacks);
@@ -673,10 +665,13 @@ class IndexImpl {
     std::vector<std::pair<Id, Id>> ignoredRanges;
     ignoredRanges.emplace_back(qlever::getBoundsForSpecialIds());
 
-    auto literalRanges = getVocab().prefixRanges("\"");
-    auto taggedPredicatesRanges = getVocab().prefixRanges("@");
-    auto internalEntitiesRanges =
-        getVocab().prefixRanges(INTERNAL_ENTITIES_URI_PREFIX);
+    auto literalRanges =
+        getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
+    auto taggedPredicatesRanges =
+        getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
+    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    internal[0] = ad_utility::triple_component::iriPrefixChar;
+    auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 
     auto pushIgnoredRange = [&ignoredRanges](const auto& ranges) {
       for (const auto& range : ranges.ranges()) {

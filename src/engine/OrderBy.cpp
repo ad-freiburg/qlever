@@ -9,10 +9,9 @@
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
+#include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
-
-using std::endl;
-using std::string;
+#include "util/TransparentFunctors.h"
 
 // _____________________________________________________________________________
 size_t OrderBy::getResultWidth() const { return subtree_->getResultWidth(); }
@@ -32,7 +31,7 @@ OrderBy::OrderBy(QueryExecutionContext* qec,
 }
 
 // _____________________________________________________________________________
-string OrderBy::getCacheKeyImpl() const {
+std::string OrderBy::getCacheKeyImpl() const {
   std::ostringstream os;
   os << "ORDER BY on columns:";
 
@@ -47,7 +46,7 @@ string OrderBy::getCacheKeyImpl() const {
 }
 
 // _____________________________________________________________________________
-string OrderBy::getDescriptor() const {
+std::string OrderBy::getDescriptor() const {
   std::string orderByVars;
   const auto& varCols = subtree_->getVariableColumns();
   for (auto [sortIndex, isDescending] : sortIndices_) {
@@ -64,6 +63,7 @@ string OrderBy::getDescriptor() const {
 
 // _____________________________________________________________________________
 ResultTable OrderBy::computeResult() {
+  using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
   shared_ptr<const ResultTable> subRes = subtree_->getResult();
 
@@ -134,4 +134,15 @@ ResultTable OrderBy::computeResult() {
   checkCancellation();
   LOG(DEBUG) << "OrderBy result computation done." << endl;
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+}
+
+// ___________________________________________________________________
+OrderBy::SortedVariables OrderBy::getSortedVariables() const {
+  SortedVariables result;
+  for (const auto& [colIdx, isDescending] : sortIndices_) {
+    using enum AscOrDesc;
+    result.emplace_back(subtree_->getVariableAndInfoByColumnIndex(colIdx).first,
+                        isDescending ? Desc : Asc);
+  }
+  return result;
 }

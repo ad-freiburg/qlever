@@ -439,8 +439,8 @@ void gallopingJoin(
 void specialOptionalJoin(
     const IdTableView<0>& left, const IdTableView<0>& right,
     const BinaryIteratorFunction<IdTableView<0>> auto& compatibleRowAction,
-    const UnaryIteratorFunction<IdTableView<0>> auto&
-        elFromFirstNotFoundAction) {
+    const UnaryIteratorFunction<IdTableView<0>> auto& elFromFirstNotFoundAction,
+    const std::invocable<> auto& checkCancellation) {
   auto it1 = std::begin(left);
   auto end1 = std::end(left);
   auto it2 = std::begin(right);
@@ -478,6 +478,7 @@ void specialOptionalJoin(
   std::span<const Id> lastColumnRight = right.getColumn(right.numColumns() - 1);
 
   while (it1 < end1 && it2 < end2) {
+    checkCancellation();
     // Skip over rows in `right` where the first columns don't match.
     it2 = std::find_if_not(it2, end2, [&](const auto& row) {
       return compareAllButLast(row, *it1);
@@ -497,6 +498,8 @@ void specialOptionalJoin(
     }
     it1 = next1;
 
+    checkCancellation();
+
     // Find the rows where the left and the right input match on the first
     // columns.
     auto endSame1 = std::find_if_not(it1, end1, [&](const auto& row) {
@@ -508,6 +511,8 @@ void specialOptionalJoin(
     if (endSame1 == it1) {
       continue;
     }
+
+    checkCancellation();
 
     // For the rows where the first columns match we will perform a one-column
     // join on the last column. This can be done efficiently, because the UNDEF
@@ -551,7 +556,7 @@ void specialOptionalJoin(
     // Perform the join on the last column.
     size_t numOutOfOrder = ad_utility::zipperJoinWithUndef(
         leftSub, rightSub, std::less<>{}, compAction, findSmallerUndefRangeLeft,
-        noop, notFoundAction);
+        noop, notFoundAction, checkCancellation);
     AD_CORRECTNESS_CHECK(numOutOfOrder == 0);
     it1 = endSame1;
     it2 = endSame2;
@@ -559,6 +564,8 @@ void specialOptionalJoin(
   for (auto it = it1; it != end1; ++it) {
     elFromFirstNotFoundAction(it);
   }
+
+  checkCancellation();
 }
 
 namespace detail {

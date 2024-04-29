@@ -19,7 +19,6 @@
 #include "parser/TripleComponent.h"
 #include "parser/data/Iri.h"
 #include "parser/data/OrderKey.h"
-#include "parser/data/VarOrTerm.h"
 #include "parser/data/Variable.h"
 #include "util/GTestHelpers.h"
 #include "util/SourceLocation.h"
@@ -37,6 +36,8 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
               << ", label: " << object.label();
         } else if constexpr (ad_utility::isSimilar<T, Iri>) {
           out << "Iri " << object.iri();
+        } else if constexpr (ad_utility::isSimilar<T, Variable>) {
+          out << "Variable " << object.name();
         } else {
           static_assert(ad_utility::alwaysFalse<T>, "unknown type");
         }
@@ -46,24 +47,6 @@ inline std::ostream& operator<<(std::ostream& out, const GraphTerm& graphTerm) {
 }
 
 // _____________________________________________________________________________
-
-inline std::ostream& operator<<(std::ostream& out, const VarOrTerm& varOrTerm) {
-  std::visit(
-      [&]<typename T>(const T& object) {
-        if constexpr (ad_utility::isSimilar<T, GraphTerm>) {
-          out << object;
-        } else if constexpr (ad_utility::isSimilar<T, Variable>) {
-          out << "Variable " << object.name();
-        } else {
-          static_assert(ad_utility::alwaysFalse<T>, "unknown type");
-        }
-      },
-      static_cast<const VarOrTermBase&>(varOrTerm));
-  return out;
-}
-
-// _____________________________________________________________________________
-
 namespace parsedQuery {
 inline std::ostream& operator<<(std::ostream& out,
                                 const parsedQuery::Bind& bind) {
@@ -86,12 +69,6 @@ inline void PrintTo(const parsedQuery::GraphPattern& pattern,
   s << ::testing::PrintToString(pattern._graphPatterns);
 }
 
-inline void PrintTo(const parsedQuery::GraphPatternOperation& op,
-                    std::ostream* os) {
-  std::ostringstream str;
-  op.toString(str);
-  (*os) << str.str();
-}
 }  // namespace parsedQuery
 
 inline void PrintTo(const Alias& alias, std::ostream* os) {
@@ -218,9 +195,9 @@ namespace variant_matcher {
 // Implements a matcher that checks the value of arbitrarily deeply nested
 // variants that contain a value with the last Type of the Ts. The variant may
 // also be an suffix of the Ts so to speak. E.g.
-// `MultiVariantMatcher<VarOrTerm, GraphTerm, Iri>` can match on a `Iri`,
+// `MultiVariantMatcher<GraphTerm, GraphTerm, Iri>` can match on a `Iri`,
 // `GraphTerm=std::variant<Literal, BlankNode, Iri>` and
-// `VarOrTerm=std::variant<Variable, GraphTerm>`.
+// `GraphTerm=std::variant<Variable, GraphTerm>`.
 template <typename... Ts>
 class MultiVariantMatcher {
  public:
@@ -278,19 +255,38 @@ MultiVariantWith(const Matcher<const ad_utility::Last<Ts...>&>& matcher) {
       variant_matcher::MultiVariantMatcher<Ts...>(matcher));
 }
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Iri`.
+// Returns a matcher that accepts a `GraphTerm` or `Iri`.
 inline auto Iri = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::Iri>(
+  return MultiVariantWith<GraphTerm, ::Iri>(
       AD_PROPERTY(::Iri, iri, testing::Eq(value)));
+};
+
+// Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
+inline auto Predicate = [](const std::string& value) {
+  return MultiVariantWith<ad_utility::sparql_types::VarOrPath, ::PropertyPath>(
+      AD_PROPERTY(::PropertyPath, getIri, testing::Eq(value)));
+};
+
+// Returns a matcher that accepts a `VarOrPath` or `PropertyPath`.
+inline auto PropertyPath = [](const ::PropertyPath& value) {
+  return MultiVariantWith<ad_utility::sparql_types::VarOrPath, ::PropertyPath>(
+      ::testing::Eq(value));
 };
 
 // _____________________________________________________________________________
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `BlankNode`.
+// Returns a matcher that accepts a `GraphTerm` or `BlankNode`.
 inline auto BlankNode = [](bool generated, const std::string& label) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::BlankNode>(testing::AllOf(
+  return MultiVariantWith<GraphTerm, ::BlankNode>(testing::AllOf(
       AD_PROPERTY(::BlankNode, isGenerated, testing::Eq(generated)),
       AD_PROPERTY(::BlankNode, label, testing::Eq(label))));
+};
+
+inline auto InternalVariable = [](const std::string& label) {
+  return MultiVariantWith<GraphTerm, ::Variable>(
+      testing::AllOf(AD_PROPERTY(::Variable, name,
+                                 testing::StartsWith(INTERNAL_VARIABLE_PREFIX)),
+                     AD_PROPERTY(::Variable, name, testing::EndsWith(label))));
 };
 
 // _____________________________________________________________________________
@@ -308,16 +304,16 @@ inline auto VariableVariant = [](const std::string& value) {
 
 // _____________________________________________________________________________
 
-// Returns a matcher that accepts a `VarOrTerm`, `GraphTerm` or `Literal`.
+// Returns a matcher that accepts a `GraphTerm` or `Literal`.
 inline auto Literal = [](const std::string& value) {
-  return MultiVariantWith<VarOrTerm, GraphTerm, ::Literal>(
+  return MultiVariantWith<GraphTerm, ::Literal>(
       AD_PROPERTY(::Literal, literal, testing::Eq(value)));
 };
 
 // _____________________________________________________________________________
 
 inline auto ConstructClause =
-    [](const std::vector<std::array<VarOrTerm, 3>>& elems)
+    [](const std::vector<std::array<GraphTerm, 3>>& elems)
     -> Matcher<const std::optional<parsedQuery::ConstructClause>&> {
   return testing::Optional(
       AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems)));
@@ -330,7 +326,7 @@ inline auto Expression = [](const std::string& descriptor)
   return AD_PROPERTY(sparqlExpression::SparqlExpressionPimpl, getDescriptor,
                      testing::Eq(descriptor));
 };
-}
+}  // namespace detail
 
 // A matcher that tests whether a `SparqlExpression::Ptr` (a `unique_ptr`)
 // actually (via dynamic cast) stores an element of type `ExpressionT`.
@@ -348,7 +344,7 @@ auto GraphPatternOperation =
     [](auto subMatcher) -> Matcher<const p::GraphPatternOperation&> {
   return testing::VariantWith<T>(subMatcher);
 };
-}
+}  // namespace detail
 
 inline auto BindExpression =
     [](const string& expression) -> Matcher<const p::Bind&> {
@@ -364,11 +360,11 @@ inline auto Bind =
 };
 
 inline auto LimitOffset =
-    [](std::optional<uint64_t> limit, uint64_t textLimit,
+    [](std::optional<uint64_t> limit, std::optional<uint64_t> textLimit,
        uint64_t offset) -> Matcher<const LimitOffsetClause&> {
   return testing::AllOf(
       AD_FIELD(LimitOffsetClause, _limit, testing::Eq(limit)),
-      AD_FIELD(LimitOffsetClause, _textLimit, testing::Eq(textLimit)),
+      AD_FIELD(LimitOffsetClause, textLimit_, testing::Eq(textLimit)),
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
@@ -522,7 +518,7 @@ inline auto SelectBase =
       AD_FIELD(p::SelectClause, reduced_, testing::Eq(reduced)),
       AD_PROPERTY(p::SelectClause, getAliases, testing::IsEmpty()));
 };
-}
+}  // namespace detail
 
 inline auto AsteriskSelect = [](bool distinct = false,
                                 bool reduced =
@@ -671,7 +667,7 @@ inline auto Optional =
   return detail::GraphPatternOperation<p::Optional>(
       AD_FIELD(p::Optional, _child, subMatcher));
 };
-}
+}  // namespace detail
 
 inline auto Group =
     [](auto&& subMatcher) -> Matcher<const p::GraphPatternOperation&> {
@@ -736,7 +732,7 @@ inline auto GraphPattern =
       AD_FIELD(ParsedQuery::GraphPattern, _graphPatterns,
                testing::ElementsAre(childMatchers...)));
 };
-}
+}  // namespace detail
 
 inline auto GraphPattern =
     MatcherWithDefaultFiltersAndOptional<detail::GraphPattern>{};
@@ -748,7 +744,7 @@ inline auto OptionalGraphPattern = [](vector<std::string>&& filters,
   return detail::Optional(
       detail::GraphPattern(true, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto OptionalGraphPattern =
     MatcherWithDefaultFilters<detail::OptionalGraphPattern>{};
@@ -759,7 +755,7 @@ inline auto GroupGraphPattern = [](vector<std::string>&& filters,
     -> Matcher<const p::GraphPatternOperation&> {
   return Group(detail::GraphPattern(false, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto GroupGraphPattern =
     MatcherWithDefaultFilters<detail::GroupGraphPattern>{};
@@ -770,7 +766,7 @@ inline auto MinusGraphPattern = [](vector<std::string>&& filters,
     -> Matcher<const p::GraphPatternOperation&> {
   return Minus(detail::GraphPattern(false, filters, childMatchers...));
 };
-}
+}  // namespace detail
 
 inline auto MinusGraphPattern =
     MatcherWithDefaultFilters<detail::MinusGraphPattern>{};
@@ -823,7 +819,7 @@ inline auto GroupKeys = GroupByVariables;
 }  // namespace pq
 
 // _____________________________________________________________________________
-inline auto ConstructQuery(const std::vector<std::array<VarOrTerm, 3>>& elems,
+inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
                            const Matcher<const p::GraphPattern&>& m)
     -> Matcher<const ParsedQuery&> {
   return testing::AllOf(

@@ -12,6 +12,7 @@
 
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
+#include "global/RuntimeParameters.h"
 #include "util/AsioHelpers.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
@@ -23,6 +24,7 @@ using namespace std::string_literals;
 
 template <typename T>
 using Awaitable = Server::Awaitable<T>;
+using ad_utility::MediaType;
 
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
@@ -109,7 +111,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
       LOG(INFO) << "Request received via " << request.method()
                 << ", allowing everything" << std::endl;
       co_return co_await sendWithAccessControlHeaders(
-          createOkResponse("", request, ad_utility::MediaType::textPlain));
+          createOkResponse("", request, MediaType::textPlain));
     }
     // Process the request using the `process` method and if it throws an
     // exception, log the error message and send a HTTP/1.1 400 Bad Request
@@ -316,8 +318,8 @@ Awaitable<void> Server::process(
     response = createJsonResponse(RuntimeParameters().toMap(), request);
   } else if (auto cmd = checkParameter("cmd", "get-index-id")) {
     logCommand(cmd, "get index ID");
-    response = createOkResponse(index_.getIndexId(), request,
-                                ad_utility::MediaType::textPlain);
+    response =
+        createOkResponse(index_.getIndexId(), request, MediaType::textPlain);
   } else if (auto cmd =
                  checkParameter("cmd", "dump-active-queries", accessTokenOk)) {
     logCommand(cmd, "dump active queries");
@@ -337,7 +339,7 @@ Awaitable<void> Server::process(
       LOG(INFO) << "Alive check without message" << std::endl;
     }
     response = createOkResponse("This QLever server is up and running\n",
-                                request, ad_utility::MediaType::textPlain);
+                                request, MediaType::textPlain);
   }
 
   // Set description of KB index.
@@ -443,18 +445,18 @@ json Server::composeStatsJson() const {
   json result;
   result["name-index"] = index_.getKbName();
   result["num-permutations"] = (index_.hasAllPermutations() ? 6 : 2);
-  result["num-predicates-normal"] = index_.numDistinctPredicates().normal_;
-  result["num-predicates-internal"] = index_.numDistinctPredicates().internal_;
+  result["num-predicates-normal"] = index_.numDistinctPredicates().normal;
+  result["num-predicates-internal"] = index_.numDistinctPredicates().internal;
   if (index_.hasAllPermutations()) {
-    result["num-subjects-normal"] = index_.numDistinctSubjects().normal_;
-    result["num-subjects-internal"] = index_.numDistinctSubjects().internal_;
-    result["num-objects-normal"] = index_.numDistinctObjects().normal_;
-    result["num-objects-internal"] = index_.numDistinctObjects().internal_;
+    result["num-subjects-normal"] = index_.numDistinctSubjects().normal;
+    result["num-subjects-internal"] = index_.numDistinctSubjects().internal;
+    result["num-objects-normal"] = index_.numDistinctObjects().normal;
+    result["num-objects-internal"] = index_.numDistinctObjects().internal;
   }
 
   auto numTriples = index_.numTriples();
-  result["num-triples-normal"] = numTriples.normal_;
-  result["num-triples-internal"] = numTriples.internal_;
+  result["num-triples-normal"] = numTriples.normal;
+  result["num-triples-internal"] = numTriples.internal;
   result["name-text-index"] = index_.getTextName();
   result["num-text-records"] = index_.getNofTextRecords();
   result["num-word-occurrences"] = index_.getNofWordPostings();
@@ -539,6 +541,47 @@ auto Server::setupCancellationHandle(
       std::move(cancellationHandle), std::move(cancelCancellationHandle)};
 }
 
+// _____________________________________________________________________________
+Awaitable<void> Server::sendStreamableResponse(
+    const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
+    MediaType mediaType, const PlannedQuery& plannedQuery,
+    const QueryExecutionTree& qet,
+    SharedCancellationHandle cancellationHandle) const {
+  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      plannedQuery.parsedQuery_, qet, mediaType, std::move(cancellationHandle));
+
+  auto response = ad_utility::httpUtils::createOkResponse(
+      std::move(responseGenerator), request, mediaType);
+  try {
+    co_await send(std::move(response));
+  } catch (const boost::system::system_error& e) {
+    // "Broken Pipe" errors are thrown and reported by `streamable_body`,
+    // so we can safely ignore these kind of exceptions. In practice this
+    // should only ever "commonly" happen with `CancellationException`s.
+    if (e.code().value() == EPIPE) {
+      co_return;
+    }
+    LOG(ERROR) << "Unexpected error while sending response: " << e.what()
+               << std::endl;
+  } catch (const std::exception& e) {
+    // Even if an exception is thrown here for some unknown reason, don't
+    // propagate it, and log it directly, so the code doesn't try to send
+    // an HTTP response containing the error message onto a HTTP stream
+    // that is already partially written. The only way to pass metadata
+    // after the beginning is by using the trailer mechanism as decribed
+    // here:
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
+    // This won't be treated as an error by any regular HTTP client, so
+    // while it might be worth implementing to have some sort of validation
+    // check, it isn't even shown by curl by default let alone in the
+    // browser. Currently though it looks like boost.beast does simply not
+    // properly terminate the connection if an error occurs which does
+    // provide a somewhat cryptic error message when using curl, but is
+    // better than silently failing.
+    LOG(ERROR) << e.what() << std::endl;
+  }
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -586,7 +629,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // result. The media type is either determined by the "Accept:" header of
     // the request or by the URL parameter "action=..." (for TSV and CSV export,
     // for QLever-historical reasons).
-    using ad_utility::MediaType;
 
     std::optional<MediaType> mediaType = std::nullopt;
 
@@ -626,8 +668,8 @@ boost::asio::awaitable<void> Server::processQuery(
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
-    auto messageSender = co_await ad_utility::websocket::MessageSender::create(
-        getQueryId(request, query), *queryHub);
+    ad_utility::websocket::MessageSender messageSender{
+        getQueryId(request, query), *queryHub};
     // Do the query planning. This creates a `QueryExecutionTree`, which will
     // then be used to process the query.
     //
@@ -643,6 +685,7 @@ boost::asio::awaitable<void> Server::processQuery(
 
     plannedQuery =
         co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
     auto timeForQueryPlanning = requestTimer.msecs();
@@ -653,36 +696,6 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-    // Common code for sending responses for the streamable media types
-    // (tsv, csv, octet-stream, turtle).
-    auto sendStreamableResponse = [&](MediaType mediaType) -> Awaitable<void> {
-      auto responseGenerator = co_await computeInNewThread(
-          [&plannedQuery, &qet, mediaType] {
-            return ExportQueryExecutionTrees::computeResultAsStream(
-                plannedQuery.value().parsedQuery_, qet, mediaType);
-          },
-          cancellationHandle);
-
-      // The `streamable_body` that is used internally turns all exceptions that
-      // occur while generating the results into "broken pipe". We store the
-      // actual exceptions and manually rethrow them to propagate the correct
-      // error messages to the user.
-      // TODO<joka921> What happens, when part of the TSV export has already
-      // been sent and an exception occurs after that?
-      std::exception_ptr exceptionPtr;
-      responseGenerator.assignExceptionToThisPointer(&exceptionPtr);
-      try {
-        auto response =
-            createOkResponse(std::move(responseGenerator), request, mediaType);
-        co_await send(std::move(response));
-      } catch (...) {
-        if (exceptionPtr) {
-          std::rethrow_exception(exceptionPtr);
-        }
-        throw;
-      }
-    };
-
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
@@ -691,17 +704,20 @@ boost::asio::awaitable<void> Server::processQuery(
       case tsv:
       case octetStream:
       case sparqlXml:
-      case turtle: {
-        co_await sendStreamableResponse(mediaType.value());
-      } break;
+      case turtle:
+        co_await sendStreamableResponse(request, send, mediaType.value(),
+                                        plannedQuery.value(), qet,
+                                        cancellationHandle);
+        break;
       case qleverJson:
       case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType] {
+            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
+             &cancellationHandle] {
               return ExportQueryExecutionTrees::computeResultAsJSON(
                   plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
-                  mediaType.value());
+                  mediaType.value(), cancellationHandle);
             },
             cancellationHandle);
         co_await sendJson(std::move(responseString), responseStatus);
@@ -739,9 +755,6 @@ boost::asio::awaitable<void> Server::processQuery(
     // or the query was cancelled because of some other reason.
     responseStatus = http::status::too_many_requests;
     exceptionErrorMsg = e.what();
-    if (!e.operation_.empty()) {
-      *exceptionErrorMsg += " Last operation: " + e.operation_;
-    }
   } catch (const std::exception& e) {
     responseStatus = http::status::internal_server_error;
     exceptionErrorMsg = e.what();
@@ -778,31 +791,47 @@ boost::asio::awaitable<void> Server::processQuery(
 }
 
 // _____________________________________________________________________________
-template <typename Function, typename T>
+template <std::invocable Function, typename T>
 Awaitable<T> Server::computeInNewThread(Function function,
                                         SharedCancellationHandle handle) {
-  auto runOnExecutor =
-      [](auto executor, Function func,
-         SharedCancellationHandle handle) -> net::awaitable<T> {
-    co_await net::post(net::bind_executor(executor, net::use_awaitable));
-    // It might take some time until the thread pool is ready,
-    // so reset the state here. Ideally waiting for the thread pool
-    // would periodically check the cancellation state
-    handle->resetWatchDogState();
-    co_return std::invoke(func);
+  // `interruptible` will set the shared state of this promise
+  // with a function that can be used to cancel the timer.
+  std::promise<std::function<void()>> cancelTimerPromise{};
+  auto cancelTimerFuture = cancelTimerPromise.get_future();
+
+  auto inner = [function = std::move(function),
+                cancelTimerFuture =
+                    std::move(cancelTimerFuture)]() mutable -> T {
+    // Ensure future is ready by the time this is called.
+    AD_CORRECTNESS_CHECK(cancelTimerFuture.wait_for(std::chrono::milliseconds{
+                             0}) == std::future_status::ready);
+    cancelTimerFuture.get()();
+    return std::invoke(std::move(function));
   };
-  return ad_utility::resumeOnOriginalExecutor(runOnExecutor(
-      threadPool_.get_executor(), std::move(function), std::move(handle)));
+  // interruptible doesn't make the awaitable return faster when cancelled,
+  // this might still block. However it will make the code check the
+  // cancellation handle while waiting for a thread in the pool to become ready.
+  return ad_utility::interruptible(
+      ad_utility::runFunctionOnExecutor(threadPool_.get_executor(),
+                                        std::move(inner), net::use_awaitable),
+      std::move(handle), std::move(cancelTimerPromise));
 }
 
 // _____________________________________________________________________________
-net::awaitable<Server::PlannedQuery> Server::parseAndPlan(
+net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
+
+  // The usage of an `optional` here is required because of a limitation in
+  // Boost::Asio which forces us to use default-constructible result types with
+  // `computeInNewThread`. We also can't unwrap the optional directly in this
+  // function, because then the conan build fails in a very strange way,
+  // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit]() mutable {
+       handle = std::move(handle),
+       timeLimit]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);

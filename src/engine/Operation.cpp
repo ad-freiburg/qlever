@@ -100,8 +100,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     auto lock =
         getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
     forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getType() == QueryExecutionTree::OperationType::SCAN &&
-          child->getResultWidth() == 1) {
+      if (child->getRootOperation()->isIndexScanWithNumVariables(1)) {
         (*lock)[child->getRootOperation()->getCacheKey()] =
             child->getSizeEstimate();
       }
@@ -177,9 +176,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
                << resultNumCols << std::endl;
     return result._resultPointer->resultTable();
   } catch (ad_utility::CancellationException& e) {
-    if (e.operation_.empty()) {
-      e.operation_ = getDescriptor();
-    }
+    e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
     throw;
   } catch (const ad_utility::AbortException& e) {
@@ -424,13 +421,6 @@ const vector<ColumnIndex>& Operation::getResultSortedOn() const {
     _resultSortedColumns = resultSortedOn();
   }
   return _resultSortedColumns.value();
-}
-
-// ___________________________________________________________________________
-void Operation::setTextLimit(size_t limit) {
-  std::ranges::for_each(getChildren(), [limit](auto* child) {
-    child->getRootOperation()->setTextLimit(limit);
-  });
 }
 
 // _____________________________________________________________________________

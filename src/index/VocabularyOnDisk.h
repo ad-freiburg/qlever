@@ -9,6 +9,7 @@
 
 #include "global/Id.h"
 #include "index/vocabulary/VocabularyTypes.h"
+#include "util/Algorithm.h"
 #include "util/File.h"
 #include "util/Iterators.h"
 #include "util/MmapVector.h"
@@ -18,24 +19,13 @@
 // then binary search for a string can be performed.
 class VocabularyOnDisk {
  private:
-  // An ID and the offset of the corresponding word in the underlying file.
-  struct IndexAndOffset {
-    uint64_t idx_;
-    uint64_t offset_;
-    // Compare only by the IDs.
-    auto operator<=>(const IndexAndOffset& rhs) const {
-      return idx_ <=> rhs.idx_;
-    }
-    // Equality comparison is currently unused, but it must be declared to be
-    // able to use `std::ranges::lower_bound` etc.
-    bool operator==(const IndexAndOffset& rhs) const;
-  };
-
+  // The offset of a word in the underlying file.
+  using Offset = uint64_t;
   // The file in which the words are stored.
   mutable ad_utility::File file_;
 
   // The IDs and offsets of the words.
-  ad_utility::MmapVectorView<IndexAndOffset> idsAndOffsets_;
+  ad_utility::MmapVectorView<Offset> offsets_;
 
   // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
   // this will be Id(-1), s.t. highestIdx_ + 1 will overflow to 0.
@@ -47,7 +37,7 @@ class VocabularyOnDisk {
 
   // This suffix is appended to the filename of the main file, in order to get
   // the name for the file in which IDs and offsets are stored.
-  static constexpr std::string_view offsetSuffix_ = ".idsAndOffsets.mmap";
+  static constexpr std::string_view offsetSuffix_ = ".offsets";
 
  public:
   // A helper class that is used to build a vocabulary word by word.
@@ -58,10 +48,8 @@ class VocabularyOnDisk {
   class WordWriter {
    private:
     ad_utility::File file_;
-    ad_utility::MmapVector<IndexAndOffset> idsAndOffsets_;
+    ad_utility::MmapVector<Offset> offsets_;
     uint64_t currentOffset_ = 0;
-    std::optional<uint64_t> previousId_ = std::nullopt;
-    uint64_t currentIndex_ = 0;
     bool isFinished_ = false;
     ad_utility::ThrowInDestructorIfSafe throwInDestructorIfSafe_;
 
@@ -86,9 +74,9 @@ class VocabularyOnDisk {
   /// this file, for example via `buildFromVector` or `buildFromTextFile`.
   void open(const std::string& filename);
 
-  /// If an entry with this `idx` exists, return the corresponding string, else
-  /// `std::nullopt`
-  std::optional<std::string> operator[](uint64_t idx) const;
+  // Return the word that is stored at the index. Throw an exception if `idx >=
+  // size`.
+  std::string operator[](uint64_t idx) const;
 
   /// Get the number of words in the vocabulary.
   size_t size() const { return size_; }
@@ -118,6 +106,18 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  // Same as `lower_bound`, but the `comparator` compares an `iterator` (first
+  // argument) and a `WordAndIndex` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
+  template <typename Comparator>
+  WordAndIndex lower_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
+    auto it = ad_utility::lower_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
@@ -129,32 +129,28 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
-  // The offset of a word in `file_`, its size in number of bytes and its ID
-  struct OffsetSizeId {
-    uint64_t _offset;
-    uint64_t _size;
-    uint64_t _id;
-  };
+  // Same as `upper_bound`, but the `comparator` compares a `WordAndIndex`
+  // (first argument) and an `Iterator` (second argument). This is used for
+  // compressed vocabularies in which the decompression depends on the position
+  // of a word in the vocabulary
+  template <typename Comparator>
+  WordAndIndex upper_bound_iterator(const auto& word,
+                                    Comparator comparator) const {
+    auto it = ad_utility::upper_bound_iterator(begin(), end(), word,
+                                               transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
 
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
     uint64_t _size;
-    OffsetAndSize(OffsetSizeId osi) : _offset{osi._offset}, _size{osi._size} {}
-    OffsetAndSize() = default;
   };
-
- private:
-  // Return the `i`-th element from this vocabulary. Note that this is (in
-  // general) NOT the element with the ID `i`, because the ID space is not
-  // contiguous.
-  WordAndIndex getIthElement(size_t n) const;
 
   // Helper function for implementing a random access iterator.
   using Accessor = decltype([](const auto& vocabulary, uint64_t index) {
-    return vocabulary.getIthElement(index);
+    return vocabulary[index];
   });
-
   // Const random access iterators, implemented via the
   // `IteratorForAccessOperator` template.
   using const_iterator =
@@ -162,14 +158,15 @@ class VocabularyOnDisk {
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
+ private:
   // Takes a lambda that compares two string-like objects and returns a lambda
   // that compares two objects, either of which can be string-like or
   // `WordAndIndex`.
   auto transformComparator(auto comparator) const {
     // For a `WordAndIndex`, return the word, else (for string types) just
     // return the input.
-    auto getString = [&](const auto& input) {
-      if constexpr (ad_utility::isSimilar<decltype(input), WordAndIndex>) {
+    auto getString = [&]<typename T>(const T& input) -> decltype(auto) {
+      if constexpr (ad_utility::isSimilar<T, WordAndIndex>) {
         AD_CONTRACT_CHECK(input._word.has_value());
         return input._word.value();
       } else {
@@ -188,23 +185,13 @@ class VocabularyOnDisk {
     if (it == end()) {
       return {std::nullopt, getHighestId() + 1};
     } else {
-      return *it;
+      return {*it, static_cast<uint64_t>(it - begin())};
     }
   }
 
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
-  std::optional<OffsetAndSize> getOffsetAndSize(uint64_t idx) const;
-
-  // Return the `OffsetSizeId` for the element with the i-th smallest ID.
-  // Requires that i < size().
-  OffsetSizeId getOffsetSizeIdForIthElement(uint64_t i) const;
-
-  // Return the `OffsetAndSize` for the element with the i-th smallest ID.
-  // Requires that i < size().
-  OffsetAndSize getOffsetAndSizeForIthElement(uint64_t i) const {
-    return getOffsetSizeIdForIthElement(i);
-  }
+  OffsetAndSize getOffsetAndSize(uint64_t idx) const;
 
   // Build a vocabulary from any type that is forward-iterable and yields
   // pairs of (string-like, ID). Used as the common implementation for

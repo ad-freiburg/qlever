@@ -93,7 +93,6 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
     // https://www.boost.org/doc/libs/1_81_0/doc/html/boost_asio/overview/composition/cpp20_coroutines.html
     // for more information
     co_await (waitForServerEvents() && handleClientCommands());
-
   } catch (boost::system::system_error& error) {
     if (cancelOnClose_) {
       tryToCancelQuery();
@@ -111,28 +110,33 @@ net::awaitable<void> WebSocketSession::acceptAndWait(
 }
 
 // _____________________________________________________________________________
-
 net::awaitable<void> WebSocketSession::handleSession(
     QueryHub& queryHub, const QueryRegistry& queryRegistry,
     const http::request<http::string_body>& request, tcp::socket socket) {
-  // Make sure access to new websocket is on a strand and therefore thread safe
-  auto executor = co_await net::this_coro::executor;
-  auto strandExecutor =
-      executor.target<net::strand<net::io_context::executor_type>>();
-  AD_CONTRACT_CHECK(strandExecutor);
-  AD_CONTRACT_CHECK(strandExecutor->running_in_this_thread());
-  AD_CONTRACT_CHECK(socket.get_executor() == *strandExecutor);
-
   auto queryIdString = extractQueryId(request.target());
   AD_CORRECTNESS_CHECK(!queryIdString.empty());
   auto queryId = QueryId::idFromString(queryIdString);
   UpdateFetcher fetcher{queryHub, queryId};
+  auto strand = fetcher.strand();
   WebSocketSession webSocketSession{std::move(fetcher), std::move(socket),
                                     queryRegistry, std::move(queryId)};
-  co_await webSocketSession.acceptAndWait(request);
+  // There is currently no safe way of which we know that allows us to respawn
+  // the coroutine onto another thread AND make it safely cancellable at the
+  // same time. Therfore we just assert that the cancellation slot is not
+  // connected.
+  auto slot = (co_await net::this_coro::cancellation_state).slot();
+  AD_CORRECTNESS_CHECK(!slot.is_connected());
+  // We have to spawn this call to the `UpdateFetcher's` strand, because
+  // `acceptAndWait` will await asynchronous methods of this class that require
+  // running on this strand. For the performance this is not an issue, as all
+  // code that is not asynchronously handled by Boost::ASIO is non-blocking and
+  // trivial, so it is not possible, that a slow websocket connection is
+  // starving other connections that listen to the same query. See
+  // `UpdateFetcher.h` and `QueryToSocketDistributor.h` for details.
+  co_await net::co_spawn(strand, webSocketSession.acceptAndWait(request),
+                         net::deferred);
 }
 // _____________________________________________________________________________
-
 // TODO<C++23> use std::expected<void, ErrorResponse>
 std::optional<http::response<http::string_body>>
 WebSocketSession::getErrorResponseIfPathIsInvalid(

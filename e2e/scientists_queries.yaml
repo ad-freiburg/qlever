@@ -98,7 +98,61 @@ queries:
       - selected: [ "?x", "?ql_score_t_var_x" ]
       - contains_row: [ "<Grete_Hermann>", null ]
       - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_x"}
-
+  
+  - query: algo-star-female-scientists-textlimit
+    type: text
+    sparql: |
+      SELECT ?x ?ql_score_t_var_x WHERE {
+          ?x <is-a> <Scientist> .
+          ?x <Gender> <Female> .
+          ?t ql:contains-entity ?x .
+          ?t ql:contains-word "algo*"
+      }
+      ORDER BY DESC(?ql_score_t_var_x)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 2
+      - num_rows: 16
+      - selected: [ "?x", "?ql_score_t_var_x" ]
+      - contains_row: [ "<Grete_Hermann>", null ]
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_x"}
+  
+  - query: algo-star-female-scientists-textlimit-mult-entities
+    type: text
+    sparql: |
+      SELECT ?s ?ql_score_t_var_s WHERE {
+          ?s <is-a> <Scientist> .
+          ?f <Gender> <Female> .
+          ?t ql:contains-entity ?s .
+          ?t ql:contains-entity ?f .
+          ?t ql:contains-word "algo*"
+      }
+      ORDER BY DESC(?ql_score_t_var_s)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 2
+      - num_rows: 19
+      - selected: [ "?s", "?ql_score_t_var_s" ]
+      - contains_row: [ "<Grete_Hermann>", null ]
+      - order_numeric: {"dir": "DESC", "var" : "?ql_score_t_var_s"}
+  
+  - query: textlimit-mult-entities-mult-textVars
+    type: text
+    sparql: |
+      SELECT * WHERE {
+          ?s <is-a> <Scientist> .
+          ?f <Gender> <Female> .
+          ?f <Country_of_nationality> <United_Kingdom> .
+          ?t1 ql:contains-entity ?s .
+          ?t1 ql:contains-entity <Ada_Lovelace> .
+          ?t2 ql:contains-entity ?f .
+          ?t1 ql:contains-word "algorithm" .
+          ?t2 ql:contains-word "mathematician"
+      }
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 7
+      - num_rows: 18
 
   - query: algor-star-female-born-before-1940
     type: text
@@ -151,6 +205,33 @@ queries:
         - "relationship"
       - order_numeric: {"dir": "DESC", 
       "var" : "?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_"}
+
+  - query: algor-star-female-fixedEntity-ada-ordered-textlimit
+    type: text
+    sparql: |
+      SELECT * WHERE {
+        ?scientist <is-a> <Scientist> .
+        ?scientist <Gender> <Female> .
+        ?text ql:contains-entity ?scientist .
+        ?text ql:contains-entity <Ada_Lovelace> .
+        ?text ql:contains-word "rela*" .
+      }
+      ORDER BY DESC(?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_)
+      TEXTLIMIT 2
+    checks:
+      - num_cols: 5
+      - num_rows: 3
+      - contains_row:
+        - "<Ada_Lovelace>"
+        - null
+        - "As a teenager, her mathematical talents led her to an ongoing
+        working relationship and friendship with fellow British mathematician
+        Charles Babbage, also known as' the father of computers', and in
+        particular, Babbage's work on the Analytical Engine."
+        - null
+        - "relationship"
+      - order_numeric: {"dir": "DESC", 
+      "var" : "?ql_score_text_fixedEntity__60_Ada_95_Lovelace_62_"}
     
   - query: algor-star-female-fixedEntity-ada-fixed-Entity-mary
     type: text
@@ -163,6 +244,7 @@ queries:
         ?text ql:contains-entity <Mary_Somerville> .
         ?text ql:contains-word "rela*" .
       }
+      TEXTLIMIT 1
     checks:
       - num_cols: 6
       - num_rows: 2

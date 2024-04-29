@@ -7,6 +7,7 @@
 
 #include <future>
 #include <ranges>
+#include <span>
 
 #include "util/Generator.h"
 #include "util/Log.h"
@@ -75,9 +76,9 @@ cppcoro::generator<ValueType> uniqueView(SortedView view) {
       co_yield previousValueCopy;
     }
   }
-  LOG(INFO) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique outputs of `uniqueView`: " << numUnique
-            << std::endl;
+  LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
+  LOG(DEBUG) << "Number of unique outputs of `uniqueView`: " << numUnique
+             << std::endl;
 }
 
 // Takes a view of blocks and yields the elements of the same view, but removes
@@ -109,7 +110,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
     co_yield block;
   }
   LOG(DEBUG) << "Number of inputs to `uniqueView`: " << numInputs << '\n';
-  LOG(INFO) << "Number of unique elements: " << numUnique << std::endl;
+  LOG(DEBUG) << "Number of unique elements: " << numUnique << std::endl;
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in
@@ -197,6 +198,27 @@ template <std::ranges::input_range Range,
 auto inPlaceTransformView(Range&& range, Transformation transformation) {
   return detail::inPlaceTransformViewImpl(std::views::all(AD_FWD(range)),
                                           std::move(transformation));
+}
+
+/// Create a generator the consumes the input generator until it finds the given
+/// separator and the yields spans of the chunks of data received inbetween.
+template <std::ranges::input_range Range, typename ElementType>
+inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
+    Range generator, ElementType separator) {
+  std::vector<ElementType> buffer;
+  for (std::ranges::input_range auto chunk : generator) {
+    for (ElementType c : chunk) {
+      if (c == separator) {
+        co_yield std::span{buffer.data(), buffer.size()};
+        buffer.clear();
+      } else {
+        buffer.push_back(c);
+      }
+    }
+  }
+  if (!buffer.empty()) {
+    co_yield std::span{buffer.data(), buffer.size()};
+  }
 }
 
 }  // namespace ad_utility

@@ -7,9 +7,11 @@ add_library(engine
         Distinct.cpp OrderBy.cpp Filter.cpp
         Server.cpp QueryPlanner.cpp QueryPlanningCostFactors.cpp
         OptionalJoin.cpp CountAvailablePredicates.cpp GroupBy.cpp HasPredicateScan.cpp
-        Union.cpp MultiColumnJoin.cpp TransitivePath.cpp Service.cpp
+        Union.cpp MultiColumnJoin.cpp TransitivePathBase.cpp
+        TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
-        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp 
+        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
+        TextLimit.cpp
         idTable/CompressedExternalIdTable.h)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)

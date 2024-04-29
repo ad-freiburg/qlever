@@ -19,6 +19,8 @@ using ::testing::HasSubstr;
 
 using namespace std::chrono_literals;
 
+ad_utility::source_location location = ad_utility::source_location::current();
+
 template <typename CancellationHandle>
 struct CancellationHandleFixture : public ::testing::Test {
   CancellationHandle handle_;
@@ -30,7 +32,7 @@ TYPED_TEST_SUITE(CancellationHandleFixture, WithAndWithoutWatchDog);
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, verifyConstructorMessageIsPassed) {
+TEST(CancellationException, verifyConstructorMessageIsPassed) {
   auto message = "Message";
   CancellationException exception{message};
   EXPECT_STREQ(message, exception.what());
@@ -38,9 +40,41 @@ TEST(CancellationHandle, verifyConstructorMessageIsPassed) {
 
 // _____________________________________________________________________________
 
-TEST(CancellationHandle, verifyConstructorDoesNotAcceptNoReason) {
+TEST(CancellationException, verifyConstructorDoesNotAcceptNoReason) {
   EXPECT_THROW(CancellationException exception(NOT_CANCELLED),
                ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+
+TEST(CancellationException, verifySetOperationModifiedTheMessageAsExpected) {
+  auto message = "Message";
+  auto operation = "Operation";
+  auto otherThing = "Other Thing";
+  {
+    CancellationException exception{message};
+
+    exception.setOperation(operation);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(message), HasSubstr(operation)));
+
+    // Verify double call does not overwrite initial operation.
+    exception.setOperation(otherThing);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(message), HasSubstr(operation),
+                      Not(HasSubstr(otherThing))));
+  }
+  {
+    CancellationException exception{MANUAL};
+
+    exception.setOperation(operation);
+    EXPECT_THAT(exception.what(), HasSubstr(operation));
+
+    // Verify double call does not overwrite initial operation.
+    exception.setOperation(otherThing);
+    EXPECT_THAT(exception.what(),
+                AllOf(HasSubstr(operation), Not(HasSubstr(otherThing))));
+  }
 }
 
 // _____________________________________________________________________________
@@ -61,7 +95,6 @@ TYPED_TEST(CancellationHandleFixture, verifyCancelWithWrongReasonThrows) {
 }
 
 // _____________________________________________________________________________
-ad_utility::source_location location = ad_utility::source_location::current();
 
 TYPED_TEST(CancellationHandleFixture, verifyTimeoutCancellationWorks) {
   auto& handle = this->handle_;
@@ -120,8 +153,8 @@ TEST(CancellationHandle, ensureObjectLifetimeIsValidWithoutWatchDogStarted) {
 namespace ad_utility {
 
 TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
-#ifdef __APPLE__
-  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   CancellationHandle<ENABLED> handle;
 
@@ -139,8 +172,8 @@ TEST(CancellationHandle, verifyWatchDogDoesChangeState) {
 // _____________________________________________________________________________
 
 TEST(CancellationHandle, verifyWatchDogDoesNotChangeStateAfterCancel) {
-#ifdef __APPLE__
-  GTEST_SKIP_("sleep_for is unreliable for macos builds");
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
   CancellationHandle<ENABLED> handle;
   handle.startWatchDog();
@@ -272,7 +305,7 @@ TEST(CancellationHandle, verifyCheckAfterDeadlineMissDoesReportProperly) {
 
   EXPECT_THAT(
       std::move(testStream).str(),
-      AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
+      AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
             HasSubstr(ParseableDuration{DESIRED_CANCELLATION_CHECK_INTERVAL}
                           .toString()),
             // Check for small miss window
@@ -303,7 +336,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              HasSubstr("CancellationHandleTest.cpp:64"));
+              HasSubstr("CancellationHandleTest.cpp:22"));
 
   testStream.str("");
 
@@ -313,7 +346,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:64")));
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
   testStream.str("");
@@ -323,7 +356,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:64")));
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
 
@@ -333,7 +366,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
+              AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
                     HasSubstr(printSomething())));
 
   testStream.str("");
@@ -343,7 +376,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
                         HasSubstr(printSomething()))));
 
   handle.cancellationState_ = CHECK_WINDOW_MISSED;
@@ -354,7 +387,7 @@ TEST(CancellationHandle, verifyPleaseWatchDogReportsOnlyWhenNecessary) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:64"),
+              Not(AllOf(HasSubstr("CancellationHandleTest.cpp:22"),
                         HasSubstr(printSomething()))));
 }
 
@@ -392,7 +425,7 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              HasSubstr("CancellationHandleTest.cpp:64"));
+              HasSubstr("CancellationHandleTest.cpp:22"));
 
   handle.cancellationState_ = WAITING_FOR_CHECK;
   testStream.str("");
@@ -401,7 +434,25 @@ TEST(CancellationHandle, verifyIsCancelledDoesPleaseWatchDog) {
 
   EXPECT_EQ(handle.cancellationState_, NOT_CANCELLED);
   EXPECT_THAT(std::move(testStream).str(),
-              Not(HasSubstr("CancellationHandleTest.cpp:64")));
+              Not(HasSubstr("CancellationHandleTest.cpp:22")));
+}
+
+// _____________________________________________________________________________
+
+TEST(CancellationHandle, verifyWatchDogEndsEarlyIfCancelled) {
+  CancellationHandle<ENABLED> handle;
+  handle.cancel(MANUAL);
+
+  handle.startWatchDog();
+  // Wait for Watchdog to start
+  std::this_thread::sleep_for(1ms);
+
+  handle.cancellationState_ = WAITING_FOR_CHECK;
+
+  // Wait for one watchdog cycle + tolerance
+  std::this_thread::sleep_for(DESIRED_CANCELLATION_CHECK_INTERVAL + 1ms);
+  // If the watchdog were running it would've set this to CHECK_WINDOW_MISSED
+  EXPECT_EQ(handle.cancellationState_, WAITING_FOR_CHECK);
 }
 
 // _____________________________________________________________________________

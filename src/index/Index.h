@@ -5,7 +5,6 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 #pragma once
 
-#include <array>
 #include <optional>
 #include <string>
 #include <vector>
@@ -17,6 +16,7 @@
 #include "index/Vocabulary.h"
 #include "parser/TripleComponent.h"
 #include "util/CancellationHandle.h"
+#include "util/json.h"
 
 // Forward declarations.
 class IdTable;
@@ -34,10 +34,16 @@ class Index {
   // statistics (number of triples, distinct number of subjects, etc.) for which
   // the value differs when you also consider the added triples.
   struct NumNormalAndInternal {
-    size_t normal_{};
-    size_t internal_{};
-    size_t normalAndInternal_() const { return normal_ + internal_; }
+    size_t normal{};
+    size_t internal{};
+    size_t normalAndInternal_() const { return normal + internal; }
     bool operator==(const NumNormalAndInternal&) const = default;
+    static NumNormalAndInternal fromNormalAndTotal(size_t normal,
+                                                   size_t total) {
+      AD_CONTRACT_CHECK(total >= normal);
+      return {normal, total - normal};
+    }
+    NLOHMANN_DEFINE_TYPE_INTRUSIVE(NumNormalAndInternal, normal, internal);
   };
 
   // Store all information about possible search results from the text index in
@@ -117,7 +123,12 @@ class Index {
   [[nodiscard]] std::optional<std::string> idToOptionalString(
       WordVocabIndex id) const;
 
-  bool getId(const std::string& element, Id* id) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::LiteralOrIri& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Literal& element) const;
+  std::optional<Id> getId(
+      const ad_utility::triple_component::Iri& element) const;
 
   [[nodiscard]] Vocab::PrefixRanges prefixRanges(std::string_view prefix) const;
 
@@ -185,8 +196,6 @@ class Index {
 
   void setSettingsFile(const std::string& filename);
 
-  void setPrefixCompression(bool compressed);
-
   void setNumTriplesPerBatch(uint64_t numTriplesPerBatch);
 
   const std::string& getTextName() const;
@@ -233,12 +242,13 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      ad_utility::SharedCancellationHandle cancellationHandle) const;
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-               Permutation::ColumnIndicesRef additionalColumns,
-               ad_utility::SharedCancellationHandle cancellationHandle) const;
+  IdTable scan(
+      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+      Permutation::ColumnIndicesRef additionalColumns,
+      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

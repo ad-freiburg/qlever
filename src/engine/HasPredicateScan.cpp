@@ -58,17 +58,17 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
 // `ScanType`.
 static HasPredicateScan::ScanType getScanType(const SparqlTriple& triple) {
   using enum HasPredicateScan::ScanType;
-  AD_CONTRACT_CHECK(triple._p._iri == HAS_PREDICATE_PREDICATE);
-  if (isVariable(triple._s) && (isVariable(triple._o))) {
-    if (triple._s == triple._o) {
+  AD_CONTRACT_CHECK(triple.p_._iri == HAS_PREDICATE_PREDICATE);
+  if (isVariable(triple.s_) && (isVariable(triple.o_))) {
+    if (triple.s_ == triple.o_) {
       throw std::runtime_error{
           "ql:has-predicate with same variable for subject and object not "
           "supported."};
     }
     return FULL_SCAN;
-  } else if (isVariable(triple._s)) {
+  } else if (isVariable(triple.s_)) {
     return FREE_S;
-  } else if (isVariable(triple._o)) {
+  } else if (isVariable(triple.o_)) {
     return FREE_O;
   } else {
     AD_FAIL();
@@ -80,8 +80,8 @@ HasPredicateScan::HasPredicateScan(QueryExecutionContext* qec,
                                    SparqlTriple triple)
     : Operation{qec},
       type_{getScanType(triple)},
-      subject_{triple._s},
-      object_{triple._o} {}
+      subject_{triple.s_},
+      object_{triple.o_} {}
 
 // ___________________________________________________________________________
 string HasPredicateScan::getCacheKeyImpl() const {
@@ -176,13 +176,6 @@ VariableToColumnMap HasPredicateScan::computeVariableToColumnMap() const {
 }
 
 // ___________________________________________________________________________
-void HasPredicateScan::setTextLimit(size_t limit) {
-  if (type_ == ScanType::SUBQUERY_S) {
-    subtree().setTextLimit(limit);
-  }
-}
-
-// ___________________________________________________________________________
 bool HasPredicateScan::knownEmptyResult() {
   if (type_ == ScanType::SUBQUERY_S) {
     return subtree().knownEmptyResult();
@@ -266,13 +259,13 @@ ResultTable HasPredicateScan::computeResult() {
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  auto hasPattern =
-      getExecutionContext()
-          ->getIndex()
-          .getImpl()
-          .getPermutation(Permutation::Enum::PSO)
-          .lazyScan(qlever::specialIds.at(HAS_PATTERN_PREDICATE), std::nullopt,
-                    std::nullopt, {}, cancellationHandle_);
+  auto hasPattern = getExecutionContext()
+                        ->getIndex()
+                        .getImpl()
+                        .getPermutation(Permutation::Enum::PSO)
+                        .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                                   std::nullopt, std::nullopt},
+                                  std::nullopt, {}, cancellationHandle_);
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -340,8 +333,9 @@ void HasPredicateScan::computeFreeO(
                         ->getIndex()
                         .getImpl()
                         .getPermutation(Permutation::Enum::PSO)
-                        .scan(qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                              subjectAsId, {}, cancellationHandle_);
+                        .scan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                               subjectAsId, std::nullopt},
+                              {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

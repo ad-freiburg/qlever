@@ -2,11 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "../IndexTestHelpers.h"
+#include "IndexTestHelpers.h"
 
 #include "./GTestHelpers.h"
+#include "./TripleComponentTestHelpers.h"
 #include "global/SpecialIds.h"
 #include "index/IndexImpl.h"
+#include "util/ProgressBar.h"
 
 namespace ad_utility::testing {
 
@@ -15,10 +17,11 @@ Index makeIndexWithTestSettings() {
   Index index{ad_utility::makeUnlimitedAllocator<Id>()};
   index.setNumTriplesPerBatch(2);
   EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = true;
-  // Decrease some default batch sizes s.t. the very small indices from the test
-  // cases also consist of multiple batches which improves the test coverage.
+  // Decrease various default batch sizes such that there are multiple batches
+  // also for the very small test indices (important for test coverage).
   BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10;
   BATCH_SIZE_VOCABULARY_MERGE = 2;
+  DEFAULT_PROGRESS_BAR_BATCH_SIZE = 2;
   index.memoryLimitIndexBuilding() = 50_MB;
   return index;
 }
@@ -43,7 +46,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets.mmap"};
+          indexBasename + ".vocabulary.external.offsets"};
 }
 
 namespace {
@@ -83,12 +86,12 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
           auto patternIdx =
-              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN].getInt();
+              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN - 1].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
           auto patternIdxObject =
-              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN].getInt();
+              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN - 1].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };
@@ -103,13 +106,18 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     checkConsistencyForCol0IdAndPermutation(objectId, OPS, 1, col0IdTag);
     checkConsistencyForCol0IdAndPermutation(objectId, OSP, 0, col0IdTag);
   };
-  const auto& predicates = index.getImpl().PSO().metaData().data();
-  for (const auto& predicate : predicates) {
-    checkConsistencyForPredicate(predicate.col0Id_);
+
+  auto cancellationHandle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  auto predicates =
+      index.getImpl().PSO().getDistinctCol0IdsAndCounts(cancellationHandle);
+  for (const auto& predicate : predicates.getColumn(0)) {
+    checkConsistencyForPredicate(predicate);
   }
-  const auto& objects = index.getImpl().OSP().metaData().data();
-  for (const auto& object : objects) {
-    checkConsistencyForObject(object.col0Id_);
+  auto objects =
+      index.getImpl().OSP().getDistinctCol0IdsAndCounts(cancellationHandle);
+  for (const auto& object : objects.getColumn(0)) {
+    checkConsistencyForObject(object);
   }
   // NOTE: The SPO and SOP permutations currently don't have patterns stored.
   // with them.
@@ -120,7 +128,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
 Index makeTestIndex(const std::string& indexBasename,
                     std::optional<std::string> turtleInput,
                     bool loadAllPermutations, bool usePatterns,
-                    bool usePrefixCompression,
+                    [[maybe_unused]] bool usePrefixCompression,
                     ad_utility::MemorySize blocksizePermutations,
                     bool createTextIndex) {
   // Ignore the (irrelevant) log output of the index building and loading during
@@ -151,7 +159,6 @@ Index makeTestIndex(const std::string& indexBasename,
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = usePatterns;
-    index.setPrefixCompression(usePrefixCompression);
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {
@@ -257,10 +264,17 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
 // ___________________________________________________________
 std::function<Id(const std::string&)> makeGetId(const Index& index) {
   return [&index](const std::string& el) {
-    Id id;
-    bool success = index.getId(el, &id);
-    AD_CONTRACT_CHECK(success);
-    return id;
+    auto literalOrIri = [&el]() {
+      if (el.starts_with('<') || el.starts_with('@')) {
+        return triple_component::LiteralOrIri::iriref(el);
+      } else {
+        AD_CONTRACT_CHECK(el.starts_with('\"'));
+        return triple_component::LiteralOrIri::fromStringRepresentation(el);
+      }
+    }();
+    auto id = index.getId(literalOrIri);
+    AD_CONTRACT_CHECK(id.has_value());
+    return id.value();
   };
 }
 }  // namespace ad_utility::testing

@@ -5,7 +5,9 @@
 #include <gmock/gmock.h>
 
 #include "./util/AllocatorTestHelpers.h"
-#include "parser/data/VarOrTerm.h"
+#include "index/Index.h"
+#include "parser/data/ConstructQueryExportContext.h"
+#include "parser/data/Types.h"
 
 using namespace std::string_literals;
 using ::testing::Optional;
@@ -76,8 +78,7 @@ TEST(SparqlDataTypesTest, BlankNodeEvaluateIsPropagatedCorrectly) {
 
   EXPECT_THAT(blankNode.evaluate(context, SUBJECT), expectedLabel);
   EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
-  EXPECT_THAT(VarOrTerm{GraphTerm{blankNode}}.evaluate(context, SUBJECT),
-              expectedLabel);
+  EXPECT_THAT(GraphTerm{blankNode}.evaluate(context, SUBJECT), expectedLabel);
 }
 
 TEST(SparqlDataTypesTest, IriInvalidSyntaxThrowsException) {
@@ -132,8 +133,7 @@ TEST(SparqlDataTypesTest, IriEvaluateIsPropagatedCorrectly) {
 
   EXPECT_THAT(iri.evaluate(context, SUBJECT), expectedString);
   EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
-  EXPECT_THAT(VarOrTerm{GraphTerm{iri}}.evaluate(context, SUBJECT),
-              expectedString);
+  EXPECT_THAT(GraphTerm{iri}.evaluate(context, SUBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, LiteralBooleanIsCorrectlyFormatted) {
@@ -179,15 +179,13 @@ TEST(SparqlDataTypesTest, LiteralEvaluateIsPropagatedCorrectly) {
 
   EXPECT_EQ(literal.evaluate(context, SUBJECT), std::nullopt);
   EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
-  EXPECT_EQ(VarOrTerm{GraphTerm{literal}}.evaluate(context, SUBJECT),
-            std::nullopt);
+  EXPECT_EQ(GraphTerm{literal}.evaluate(context, SUBJECT), std::nullopt);
 
   auto expectedString = Optional("some literal"s);
 
   EXPECT_THAT(literal.evaluate(context, OBJECT), expectedString);
   EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
-  EXPECT_THAT(VarOrTerm{GraphTerm{literal}}.evaluate(context, OBJECT),
-              expectedString);
+  EXPECT_THAT(GraphTerm{literal}.evaluate(context, OBJECT), expectedString);
 }
 
 TEST(SparqlDataTypesTest, VariableNormalizesDollarSign) {
@@ -264,12 +262,12 @@ TEST(SparqlDataTypesTest, VariableEvaluateIsPropagatedCorrectly) {
   ConstructQueryExportContext context = wrapper.createContextForRow(0);
 
   EXPECT_THAT(variableKnown.evaluate(context, SUBJECT), Optional("69"s));
-  EXPECT_THAT(VarOrTerm{variableKnown}.evaluate(context, SUBJECT),
+  EXPECT_THAT(GraphTerm{variableKnown}.evaluate(context, SUBJECT),
               Optional("69"s));
 
   Variable variableUnknown{"?unknownVar"};
 
   EXPECT_EQ(variableUnknown.evaluate(context, SUBJECT), std::nullopt);
-  EXPECT_EQ(VarOrTerm{variableUnknown}.evaluate(context, SUBJECT),
+  EXPECT_EQ(GraphTerm{variableUnknown}.evaluate(context, SUBJECT),
             std::nullopt);
 }

@@ -7,9 +7,9 @@
 
 #include <algorithm>
 
-#include "../test/IndexTestHelpers.h"
 #include "../test/util/IdTableHelpers.h"
 #include "AllocatorTestHelpers.h"
+#include "IndexTestHelpers.h"
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/Join.h"

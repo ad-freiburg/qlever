@@ -118,6 +118,8 @@ addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
 
+addLinkAndDiscoverTest(TextLimitOperationTest engine)
+
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 
 addLinkAndDiscoverTest(HashMapTest)
@@ -374,6 +376,8 @@ addLinkAndDiscoverTest(MessageSenderTest http)
 
 addLinkAndDiscoverTest(CancellationHandleTest util)
 
+addLinkAndDiscoverTest(ProgressBarTest util)
+
 addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
 addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
@@ -384,6 +388,6 @@ addLinkAndDiscoverTest(ConstantsTest)
 
 addLinkAndDiscoverTest(JThreadTest)
 
-addLinkAndDiscoverTest(PointerGuardTest)
-
 addLinkAndDiscoverTest(ChunkedForLoopTest)
+
+addLinkAndDiscoverTest(FsstCompressorTest fsst)

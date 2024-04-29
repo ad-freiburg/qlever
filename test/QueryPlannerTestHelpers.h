@@ -4,7 +4,6 @@
 
 #pragma once
 
-#include "./IndexTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -13,15 +12,19 @@
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
-#include "engine/TransitivePath.h"
+#include "engine/TextLimit.h"
+#include "engine/TransitivePathBase.h"
+#include "engine/Union.h"
 #include "gmock/gmock-matchers.h"
 #include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
+#include "util/IndexTestHelpers.h"
 
 using ad_utility::source_location;
 
@@ -70,7 +73,7 @@ inline auto MatchTypeAndOrderedChildren =
 /// single `IndexScan` with the given `subject`, `predicate`, and `object`, and
 /// that the `ScanType` of this `IndexScan` is any of the given
 /// `allowedPermutations`.
-inline auto IndexScan =
+constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
        const std::vector<Permutation::Enum>& allowedPermutations = {})
@@ -89,13 +92,33 @@ inline auto IndexScan =
             AD_PROPERTY(IndexScan, getObject, Eq(object))));
 };
 
-inline auto TextIndexScanForWord = [](Variable textRecordVar,
-                                      string word) -> QetMatcher {
+// Match the `NeutralElementOperation`.
+constexpr auto NeutralElement = []() -> QetMatcher {
+  return MatchTypeAndOrderedChildren<::NeutralElementOperation>();
+};
+
+constexpr auto TextIndexScanForWord = [](Variable textRecordVar,
+                                         string word) -> QetMatcher {
   return RootOperation<::TextIndexScanForWord>(AllOf(
       AD_PROPERTY(::TextIndexScanForWord, getResultWidth,
                   Eq(1 + word.ends_with('*'))),
       AD_PROPERTY(::TextIndexScanForWord, textRecordVar, Eq(textRecordVar)),
       AD_PROPERTY(::TextIndexScanForWord, word, word)));
+};
+
+// Matcher for the `TextLimit` Operation.
+constexpr auto TextLimit = [](const size_t n, const QetMatcher& childMatcher,
+                              const Variable& textRecVar,
+                              const vector<Variable>& entityVars,
+                              const vector<Variable>& scoreVars) -> QetMatcher {
+  return RootOperation<::TextLimit>(AllOf(
+      AD_PROPERTY(::TextLimit, getTextLimit, Eq(n)),
+      AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher))),
+      AD_PROPERTY(::TextLimit, getTextRecordVariable, Eq(textRecVar)),
+      AD_PROPERTY(::TextLimit, getEntityVariables,
+                  UnorderedElementsAreArray(entityVars)),
+      AD_PROPERTY(::TextLimit, getScoreVariables,
+                  UnorderedElementsAreArray(scoreVars))));
 };
 
 inline auto TextIndexScanForEntity =
@@ -137,11 +160,6 @@ inline auto Bind = [](const QetMatcher& childMatcher,
       AD_PROPERTY(Operation, getChildren, ElementsAre(Pointee(childMatcher)))));
 };
 
-inline auto NeutralElementOperation = []() {
-  return RootOperation<::NeutralElementOperation>(
-      An<const ::NeutralElementOperation&>());
-};
-
 // Matcher for a `CountAvailablePredicates` operation. The case of 0 children
 // means that it's a full scan.
 inline auto CountAvailablePredicates =
@@ -170,6 +188,8 @@ inline auto IndexScanFromStrings =
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
+    } else if (s.starts_with('<')) {
+      return TripleComponent::Iri::fromIriref(s);
     }
     return s;
   };
@@ -225,15 +245,43 @@ inline auto TransitivePathSideMatcher = [](TransitivePathSide side) {
 inline auto TransitivePath =
     [](TransitivePathSide left, TransitivePathSide right, size_t minDist,
        size_t maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::TransitivePath>(AllOf(
-          Property("getChildren", &Operation::getChildren,
-                   ElementsAre(Pointee(childMatchers)...)),
-          AD_PROPERTY(TransitivePath, getMinDist, Eq(minDist)),
-          AD_PROPERTY(TransitivePath, getMaxDist, Eq(maxDist)),
-          AD_PROPERTY(TransitivePath, getLeft, TransitivePathSideMatcher(left)),
-          AD_PROPERTY(TransitivePath, getRight,
-                      TransitivePathSideMatcher(right))));
+      return RootOperation<::TransitivePathBase>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...)),
+                AD_PROPERTY(TransitivePathBase, getMinDist, Eq(minDist)),
+                AD_PROPERTY(TransitivePathBase, getMaxDist, Eq(maxDist)),
+                AD_PROPERTY(TransitivePathBase, getLeft,
+                            TransitivePathSideMatcher(left)),
+                AD_PROPERTY(TransitivePathBase, getRight,
+                            TransitivePathSideMatcher(right))));
     };
+
+// Match a sort operation. Currently, this is only required by the binary search
+// version of the transitive path operation. This matcher checks only the
+// children of the sort operation.
+inline auto Sort = MatchTypeAndUnorderedChildren<::Sort>;
+
+// Match a `Filter` operation. The matching of the expression is currently only
+// done via the descriptor.
+constexpr auto Filter = [](std::string_view descriptor,
+                           const QetMatcher& childMatcher) {
+  return RootOperation<::Filter>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::Operation, getDescriptor, HasSubstr(descriptor))));
+};
+
+// Match an `OrderBy` operation
+constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
+                            const QetMatcher& childMatcher) {
+  return RootOperation<::OrderBy>(
+      AllOf(Property("getChildren", &Operation::getChildren,
+                     ElementsAre(Pointee(childMatcher))),
+            AD_PROPERTY(::OrderBy, getSortedVariables, Eq(sortedVariables))));
+};
+
+// Match a `UNION` operation.
+constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

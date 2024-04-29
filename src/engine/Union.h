@@ -39,8 +39,6 @@ class Union : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override;
-
   virtual bool knownEmptyResult() override;
 
   virtual float getMultiplicity(size_t col) override;

@@ -56,13 +56,13 @@ bool isVariableContainedInGraphPatternOperation(
             if (&triple == tripleToIgnore) {
               return false;
             }
-            return (triple._s == variable ||
+            return (triple.s_ == variable ||
                     // Complex property paths are not allowed to contain
                     // variables in SPARQL, so this check is sufficient.
                     // TODO<joka921> Still make the interface of the
                     // `PropertyPath` class typesafe.
-                    triple._p.asString() == variable.name() ||
-                    triple._o == variable);
+                    triple.p_.asString() == variable.name() ||
+                    triple.o_ == variable);
           });
     } else if constexpr (std::is_same_v<T, p::Values>) {
       return ad_utility::contains(arg._inlineValues._variables, variable);
@@ -99,21 +99,21 @@ static void rewriteTriplesForPatternTrick(const PatternTrickTuple& subAndPred,
     auto matchingTriple = std::ranges::find_if(
         triples, [&subAndPred, triplePosition](const SparqlTriple& t) {
           return std::invoke(triplePosition, t) == subAndPred.subject_ &&
-                 t._p.isIri() && !isVariable(t._p);
+                 t.p_.isIri() && !isVariable(t.p_);
         });
     if (matchingTriple == triples.end()) {
       return false;
     }
-    matchingTriple->_additionalScanColumns.emplace_back(additionalScanColumn,
+    matchingTriple->additionalScanColumns_.emplace_back(additionalScanColumn,
                                                         subAndPred.predicate_);
     return true;
   };
 
-  if (findAndRewriteMatchingTriple(&SparqlTriple::_s,
+  if (findAndRewriteMatchingTriple(&SparqlTriple::s_,
                                    ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN)) {
     return;
   } else if (findAndRewriteMatchingTriple(
-                 &SparqlTriple::_o, ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN)) {
+                 &SparqlTriple::o_, ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN)) {
     return;
   } else {
     // We could not find a suitable triple to append the additional column, we
@@ -212,28 +212,28 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
 
   const auto patternTrickDataIfTripleIsPossible =
       [&]() -> std::optional<PatternTrickData> {
-    if ((triple._p._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple._s) &&
-        isVariable(triple._o) && triple._s != triple._o) {
-      Variable predicateVariable{triple._o.getVariable()};
+    if ((triple.p_._iri == HAS_PREDICATE_PREDICATE) && isVariable(triple.s_) &&
+        isVariable(triple.o_) && triple.s_ != triple.o_) {
+      Variable predicateVariable{triple.o_.getVariable()};
       return PatternTrickData{predicateVariable,
-                              triple._s.getVariable(),
+                              triple.s_.getVariable(),
                               {predicateVariable},
                               true};
-    } else if (isVariable(triple._s) && isVariable(triple._p) &&
-               isVariable(triple._o)) {
+    } else if (isVariable(triple.s_) && isVariable(triple.p_) &&
+               isVariable(triple.o_)) {
       // Check that the three variables are pairwise distinct.
-      std::vector<string> variables{triple._s.getVariable().name(),
-                                    triple._o.getVariable().name(),
-                                    triple._p.asString()};
+      std::vector<string> variables{triple.s_.getVariable().name(),
+                                    triple.o_.getVariable().name(),
+                                    triple.p_.asString()};
       std::ranges::sort(variables);
       if (std::unique(variables.begin(), variables.end()) != variables.end()) {
         return std::nullopt;
       }
 
-      Variable predicateVariable{triple._p.getIri()};
+      Variable predicateVariable{triple.p_.getIri()};
       return PatternTrickData{predicateVariable,
-                              triple._s.getVariable(),
-                              {predicateVariable, triple._o.getVariable()},
+                              triple.s_.getVariable(),
+                              {predicateVariable, triple.o_.getVariable()},
                               true};
     } else {
       return std::nullopt;
@@ -273,7 +273,7 @@ std::optional<PatternTrickTuple> isTripleSuitableForPatternTrick(
     return std::nullopt;
   }
 
-  PatternTrickTuple patternTrickTuple{triple._s.getVariable(),
+  PatternTrickTuple patternTrickTuple{triple.s_.getVariable(),
                                       patternTrickData.predicateVariable_};
   return patternTrickTuple;
 }

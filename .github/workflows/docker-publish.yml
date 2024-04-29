@@ -78,6 +78,14 @@ jobs:
           load: false
           push: false
 
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        env:
+          # We build multiplatform images which have an image index above the
+          # image manifests. Attach the annotations directly to the image index.
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: "index"
+
       - name: Build and push
         if: github.event_name != 'pull_request'
         uses: docker/build-push-action@v5
@@ -96,4 +104,9 @@ jobs:
             adfreiburg/qlever:latest,
             adfreiburg/qlever:${{ github.ref_name == 'master' && format('pr-{0}', steps.pr.outputs.pr_num) || github.ref_name }},
             adfreiburg/qlever:commit-${{ steps.sha.outputs.sha_short }},
+
+          # Set Annotations and Labels that conform to the OpenContainers
+          # Annotations Spec
+          annotations: ${{ steps.meta.outputs.annotations }}
+          labels: ${{ steps.meta.outputs.labels }}
 

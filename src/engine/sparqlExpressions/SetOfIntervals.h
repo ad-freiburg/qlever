@@ -8,8 +8,7 @@
 #include <utility>
 #include <vector>
 
-#include "../../util/Exception.h"
-#include "../../util/TypeTraits.h"
+#include "util/Exception.h"
 
 namespace ad_utility {
 

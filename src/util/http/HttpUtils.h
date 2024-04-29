@@ -6,10 +6,11 @@
 #ifndef QLEVER_HTTPUTILS_H
 #define QLEVER_HTTPUTILS_H
 
+#include <absl/strings/str_cat.h>
+
 #include <string>
 #include <string_view>
 
-#include "absl/strings/str_cat.h"
 #include "util/AsyncStream.h"
 #include "util/CompressorStream.h"
 #include "util/StringUtils.h"
@@ -19,7 +20,6 @@
 #include "util/http/beast.h"
 #include "util/http/streamable_body.h"
 #include "util/json.h"
-#include "util/stream_generator.h"
 
 /// Several utilities for using/customizing the HttpServer template from
 /// HttpServer.h
@@ -118,7 +118,7 @@ static auto createOkResponse(std::string text, const HttpRequest auto& request,
 /// body and the corresponding response headers are set.
 static void setBody(http::response<streamable_body>& response,
                     const HttpRequest auto& request,
-                    streams::stream_generator&& generator) {
+                    cppcoro::generator<std::string>&& generator) {
   using ad_utility::content_encoding::CompressionMethod;
 
   CompressionMethod method =
@@ -134,8 +134,8 @@ static void setBody(http::response<streamable_body>& response,
   }
 }
 
-/// Create a HttpResponse from a stream_generator with status 200 OK.
-static auto createOkResponse(ad_utility::streams::stream_generator&& generator,
+/// Create a HttpResponse from a generator with status 200 OK.
+static auto createOkResponse(cppcoro::generator<std::string>&& generator,
                              const HttpRequest auto& request,
                              MediaType mediaType) {
   http::response<streamable_body> response{http::status::ok, request.version()};

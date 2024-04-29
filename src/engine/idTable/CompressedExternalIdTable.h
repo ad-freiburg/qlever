@@ -5,12 +5,12 @@
 #ifndef QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 #define QLEVER_COMPRESSEDEXTERNALIDTABLE_H
 
+#include <absl/strings/str_cat.h>
+
 #include <algorithm>
 #include <future>
-#include <queue>
 #include <ranges>
 
-#include "absl/strings/str_cat.h"
 #include "engine/CallFixedSize.h"
 #include "engine/idTable/IdTable.h"
 #include "util/AsyncStream.h"
@@ -19,7 +19,6 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/TransparentFunctors.h"
 #include "util/Views.h"
-#include "util/http/beast.h"
 
 namespace ad_utility {
 
@@ -668,6 +667,9 @@ class CompressedExternalIdTableSorter
       // requested for the output, and the single block is larger than this
       // blocksize, we manually have to split it into chunks.
       auto& block = this->currentBlock_;
+      if (block.empty()) {
+        co_return;
+      }
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         if (this->moveResultOnMerge_) {
@@ -736,7 +738,9 @@ class CompressedExternalIdTableSorter
       }
     }
     numPopped += result.numRows();
-    co_yield std::move(result).template toStatic<N>();
+    if (!result.empty()) {
+      co_yield std::move(result).template toStatic<N>();
+    }
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 

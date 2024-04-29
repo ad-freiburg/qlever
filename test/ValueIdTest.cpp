@@ -9,6 +9,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "global/ValueId.h"
+#include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
@@ -108,18 +109,24 @@ TEST(ValueId, Indices) {
     testSingle(0);
     testSingle(ValueId::maxIndex);
 
-    for (size_t idx = 0; idx < 10'000; ++idx) {
-      auto value = invalidIndexGenerator();
-      ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
-      AD_EXPECT_THROW_WITH_MESSAGE(makeId(value),
-                                   ::testing::ContainsRegex("is bigger than"));
+    if (type != Datatype::LocalVocabIndex) {
+      for (size_t idx = 0; idx < 10'000; ++idx) {
+        auto value = invalidIndexGenerator();
+        ASSERT_THROW(makeId(value), ValueId::IndexTooLargeException);
+        AD_EXPECT_THROW_WITH_MESSAGE(
+            makeId(value), ::testing::ContainsRegex("is bigger than"));
+      }
     }
   };
 
   testRandomIds(&makeTextRecordId, &getTextRecordIndex,
                 Datatype::TextRecordIndex);
   testRandomIds(&makeVocabId, &getVocabIndex, Datatype::VocabIndex);
-  testRandomIds(&makeLocalVocabId, &getLocalVocabIndex,
+
+  auto localVocabWordToInt = [](const auto& input) {
+    return std::atoll(getLocalVocabIndex(input).c_str());
+  };
+  testRandomIds(&makeLocalVocabId, localVocabWordToInt,
                 Datatype::LocalVocabIndex);
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
@@ -288,9 +295,11 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
   test(makeVocabId(15), "V:15");
-  test(makeLocalVocabId(25), "L:25");
+  StringAligned16 str{"SomeValue"};
+  test(ValueId::makeFromLocalVocabIndex(&str), "L:SomeValue");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
+  test(makeBlankNodeId(27), "B:27");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
        "D:123456");

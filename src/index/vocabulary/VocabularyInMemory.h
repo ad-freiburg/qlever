@@ -75,6 +75,21 @@ class VocabularyInMemory {
     return result;
   }
 
+  // Same as `lower_bound`, but compares an `iterator` and a `value` instead of
+  // two values. Required by the `CompressedVocabulary`.
+  template <typename InternalStringType, typename Comparator>
+  WordAndIndex lower_bound_iterator(const InternalStringType& word,
+                                    Comparator comparator) const {
+    WordAndIndex result;
+    result._index = ad_utility::lower_bound_iterator(
+                        _words.begin(), _words.end(), word, comparator) -
+                    _words.begin();
+    result._word = result._index < _words.size()
+                       ? std::optional{_words[result._index]}
+                       : std::nullopt;
+    return result;
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is greater
   /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
   /// are sorted according to the comparator (exactly like in
@@ -92,21 +107,56 @@ class VocabularyInMemory {
     return result;
   }
 
+  // Same as `upper_bound`, but compares a `value` and an `iterator` instead of
+  // two values. Required by the `CompressedVocabulary`.
+  template <typename InternalStringType, typename Comparator>
+  WordAndIndex upper_bound_iterator(const InternalStringType& word,
+                                    Comparator comparator) const {
+    WordAndIndex result;
+    result._index = ad_utility::upper_bound_iterator(
+                        _words.begin(), _words.end(), word, comparator) -
+                    _words.begin();
+    result._word = result._index < _words.size()
+                       ? std::optional{_words[result._index]}
+                       : std::nullopt;
+    return result;
+  }
+
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the
   /// documentation of `CompactVectorOfStrings` for details.
-  using WordWriter = typename Words::Writer;
+  struct WordWriter {
+    typename Words::Writer writer_;
+    explicit WordWriter(const std::string& filename) : writer_{filename} {}
+    void operator()(std::string_view str) {
+      writer_.push(str.data(), str.size());
+    }
 
-  /// Create an iterable generator that yields the `VocabularyInMemory` from the
-  /// file, without materializing the whole vocabulary in RAM. See the
-  /// documentaion of `CompactVectorOfStrings` for details.
-  static auto makeWordDiskIterator(const string& filename) {
-    return Words::diskIterator(filename);
+    void finish() { writer_.finish(); }
+  };
+
+  // Return a `WordWriter` that directly writes the words to the given
+  // `filename`. The words are not materialized in RAM, but the vocabulary later
+  // has to be explicitly initizlied via `open(filename)`.
+  WordWriter makeDiskWriter(const std::string& filename) const {
+    return WordWriter{filename};
   }
 
   /// Clear the vocabulary.
   void close() { _words.clear(); }
 
   /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words) { _words.build(words); }
+  void build(const std::vector<std::string>& words,
+             const std::string& filename) {
+    WordWriter writer = makeDiskWriter(filename);
+    for (const auto& word : words) {
+      writer(word);
+    }
+    writer.finish();
+    open(filename);
+  }
+
+  // Const access to the underlying words.
+  auto begin() const { return _words.begin(); }
+  auto end() const { return _words.end(); }
 };

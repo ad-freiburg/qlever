@@ -7,12 +7,12 @@
 #include <array>
 #include <vector>
 
-#include "./IndexTestHelpers.h"
 #include "./engine/ValuesForTesting.h"
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "engine/Union.h"
 #include "global/Id.h"
+#include "util/IndexTestHelpers.h"
 
 namespace {
 auto V = ad_utility::testing::VocabId;

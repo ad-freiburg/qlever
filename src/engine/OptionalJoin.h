@@ -44,11 +44,6 @@ class OptionalJoin : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
-
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override;
@@ -71,7 +66,7 @@ class OptionalJoin : public Operation {
    * @param joinColumns
    * @param result
    */
-  static void optionalJoin(
+  void optionalJoin(
       const IdTable& left, const IdTable& right,
       const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
       IdTable* dynResult,

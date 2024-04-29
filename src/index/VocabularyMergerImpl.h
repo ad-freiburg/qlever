@@ -22,6 +22,7 @@
 #include "util/HashMap.h"
 #include "util/Log.h"
 #include "util/ParallelMultiwayMerge.h"
+#include "util/ProgressBar.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeString.h"
@@ -33,12 +34,8 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
                                    WordCallback auto& externalWordCallback,
-                                   ad_utility::MemorySize memoryToUse,
-                                   WithIdMaps withIdMaps) {
+                                   ad_utility::MemorySize memoryToUse) {
   VocabularyMerger merger;
-  if (withIdMaps == WithIdMaps::False) {
-    merger.noIdMapsAndIgnoreExternalVocab_ = true;
-  }
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
                                 internalWordCallback, externalWordCallback,
                                 memoryToUse);
@@ -85,9 +82,7 @@ auto VocabularyMerger::mergeVocabulary(
   generators.reserve(numFiles);
   for (size_t i = 0; i < numFiles; i++) {
     generators.push_back(makeGenerator(i));
-    if (!noIdMapsAndIgnoreExternalVocab_) {
-      idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
-    }
+    idVecs_.emplace_back(0, absl::StrCat(basename, PARTIAL_MMAP_IDS, i));
   }
 
   std::vector<QueueWord> sortedBuffer;
@@ -103,16 +98,10 @@ auto VocabularyMerger::mergeVocabulary(
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
           0.8 * memoryToUse, generators, lessThanForQueue);
+  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal_,
+                                      "Words merged: "};
   for (QueueWord& currentWord : std::views::join(mergedWords)) {
-    // for the prefix compression vocabulary, we don't need the external
-    // vocabulary
-    // TODO<joka921> Don't include external literals at all in this
-    // vocabulary.
-    if (noIdMapsAndIgnoreExternalVocab_ && currentWord.isExternal()) {
-      break;
-    }
-
-    // accumulated the globally ordered queue words in a buffer.
+    // Accumulate the globally ordered queue words in a buffer.
     sortedBuffer.push_back(std::move(currentWord));
 
     if (sortedBuffer.size() >= bufferSize_) {
@@ -120,9 +109,10 @@ auto VocabularyMerger::mergeVocabulary(
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer),
                         &internalVocabularyAction, &externalVocabularyAction,
-                        &lessThan]() {
+                        &lessThan, &progressBar]() {
         this->writeQueueWordsToIdVec(buffer, internalVocabularyAction,
-                                     externalVocabularyAction, lessThan);
+                                     externalVocabularyAction, lessThan,
+                                     progressBar);
       };
       sortedBuffer.clear();
       sortedBuffer.reserve(bufferSize_);
@@ -147,8 +137,9 @@ auto VocabularyMerger::mergeVocabulary(
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
     writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction,
-                           externalVocabularyAction, lessThan);
+                           externalVocabularyAction, lessThan, progressBar);
   }
+  LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
   auto metaData = std::move(metaData_);
   // completely reset all the inner state
@@ -162,15 +153,17 @@ void VocabularyMerger::writeQueueWordsToIdVec(
     WordCallback auto& internalVocabularyAction,
     WordCallback auto& externalVocabularyAction,
     std::predicate<TripleComponentWithIndex,
-                   TripleComponentWithIndex> auto const& lessThan) {
+                   TripleComponentWithIndex> auto const& lessThan,
+    ad_utility::ProgressBar& progressBar) {
   LOG(TIMING) << "Start writing a batch of merged words\n";
 
-  // smaller grained buffer for the actual inner write
+  // Smaller grained buffer for the actual inner write.
   auto bufSize = bufferSize_ / 5;
   std::future<void> writeFut;
-  std::vector<std::pair<size_t, std::pair<size_t, size_t>>> writeBuffer;
+  std::vector<std::pair<size_t, std::pair<size_t, Id>>> writeBuffer;
   writeBuffer.reserve(bufSize);
-  // avoid duplicates
+
+  // Iterate (avoid duplicates).
   for (auto& top : buffer) {
     if (!lastTripleComponent_.has_value() ||
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
@@ -191,25 +184,33 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // Write the new word to the vocabulary.
       const auto& nextWord = lastTripleComponent_.value();
-      if (!nextWord.isExternal()) {
-        internalVocabularyAction(nextWord.iriOrLiteral());
+      if (nextWord.isBlankNode()) {
+        lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
+        ++metaData_.numBlankNodesTotal_;
       } else {
-        externalVocabularyAction(nextWord.iriOrLiteral());
-      }
+        if (!nextWord.isExternal()) {
+          internalVocabularyAction(nextWord.iriOrLiteral());
+        } else {
+          externalVocabularyAction(nextWord.iriOrLiteral());
+        }
 
-      metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
-                                                   nextWord.index_);
-      metaData_.langTaggedPredicates_.addIfWordMatches(top.iriOrLiteral(),
-                                                       nextWord.index_);
-      metaData_.numWordsTotal_++;
-      if (metaData_.numWordsTotal_ % 100'000'000 == 0) {
-        LOG(INFO) << "Words merged: " << metaData_.numWordsTotal_ << std::endl;
+        metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
+                                                     nextWord.index_);
+        metaData_.langTaggedPredicates_.addIfWordMatches(top.iriOrLiteral(),
+                                                         nextWord.index_);
+        metaData_.numWordsTotal_++;
+      }
+      if (progressBar.update()) {
+        LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
     }
+    const auto& word = lastTripleComponent_.value();
+    Id targetId =
+        word.isBlankNode()
+            ? Id::makeFromBlankNodeIndex(BlankNodeIndex::make(word.index_))
+            : Id::makeFromVocabIndex(VocabIndex::make(word.index_));
     // Write pair of local and global ID to buffer.
-    writeBuffer.emplace_back(
-        top.partialFileId_,
-        std::pair{top.id(), lastTripleComponent_.value().index_});
+    writeBuffer.emplace_back(top.partialFileId_, std::pair{top.id(), targetId});
 
     if (writeBuffer.size() >= bufSize) {
       auto task = [this, buffer = std::move(writeBuffer)]() {
@@ -231,20 +232,14 @@ void VocabularyMerger::writeQueueWordsToIdVec(
   if (!writeBuffer.empty()) {
     doActualWrite(writeBuffer);
   }
-
-  LOG(DEBUG) << "Finished writing batch of merged words" << std::endl;
 }
 
-// ____________________________________________________________________________________________________________
+// ____________________________________________________________________________
 inline void VocabularyMerger::doActualWrite(
-    const std::vector<std::pair<size_t, std::pair<size_t, size_t>>>& buffer) {
-  if (noIdMapsAndIgnoreExternalVocab_) {
-    return;
-  }
+    const std::vector<std::pair<size_t, std::pair<size_t, Id>>>& buffer) {
   for (const auto& [id, value] : buffer) {
     idVecs_[id].push_back(
-        {Id::makeFromVocabIndex(VocabIndex::make(value.first)),
-         Id::makeFromVocabIndex(VocabIndex::make(value.second))});
+        {Id::makeFromVocabIndex(VocabIndex::make(value.first)), value.second});
   }
 }
 
