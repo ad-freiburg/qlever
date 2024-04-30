@@ -52,13 +52,6 @@ string PathSearch::getDescriptor() const {
 size_t PathSearch::getResultWidth() const { return resultWidth_; };
 
 // _____________________________________________________________________________
-void PathSearch::setTextLimit(size_t limit) {
-  for (auto child : getChildren()) {
-    child->setTextLimit(limit);
-  }
-};
-
-// _____________________________________________________________________________
 size_t PathSearch::getCostEstimate() {
   // TODO: Figure out a smart way to estimate cost
   return 1000;

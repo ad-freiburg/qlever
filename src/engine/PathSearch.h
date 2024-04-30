@@ -188,7 +188,6 @@ class PathSearch : public Operation {
   string getCacheKeyImpl() const override;
   string getDescriptor() const override;
   size_t getResultWidth() const override;
-  void setTextLimit(size_t limit) override;
 
   size_t getCostEstimate() override;
 
