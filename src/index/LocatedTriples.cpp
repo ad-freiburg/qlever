@@ -79,86 +79,29 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
     return locatedTriple;
   }
 
-  const auto& it = meta.data().lower_bound(id1);
-  // Metadata is only written for "large" relations.
-  // `it == meta.data().end()` if
-  // -  the triple is after all the relations for which metadata was written
-  // `it.getId() != id1` if
-  // - there is no metadata for the relation of the triple but for a larger relation
-  // - the triple is in a relation that does not exist in the index
-  // This complicates some optimizations as we cannot assume
-  // - that a relation does not exist because we found no metadata for that relation
-  // - that the metadata we found is for the next relation (and not e.g. 2 relations on)
-  // The search space could still be limited by searching for some relation that
-  // is before/after the triple.
-  if (it == meta.data().end() || it.getId() != id1) {
-    // Read and decompress the block. We lack the metadata to limit the search
-    // to only the correct relation. We therefore need all the columns.
-    std::array<ColumnIndex, 3> columnIndices{0u, 1u, 2u};
-    DecompressedBlock blockTuples =
-        reader.readAndDecompressBlock(*matchingBlock, columnIndices);
+  // Read and decompress the block. We could omit `col0Id` if the block consists
+  // of only one relation, but the performance impact would be little.
+  std::array<ColumnIndex, 3> columnIndices{0u, 1u, 2u};
+  DecompressedBlock blockTuples =
+      reader.readAndDecompressBlock(*matchingBlock, columnIndices);
 
-    size_t offsetBegin = 0;
-    size_t offsetEnd = blockTuples.size();
-
-    if(matchingBlock->firstTriple_.col0Id_ <= id1) {
-      // The triple is actually inside this block.
-      locatedTriple.rowIndexInBlock =
-          std::lower_bound(
-              blockTuples.begin() + offsetBegin,
-              blockTuples.begin() + offsetEnd, std::array<Id, 3>{id1, id2, id3},
-              [](const auto& a, const auto& b) {
-                return a[0] < b[0] || (a[0] == b[0] && (a[1] < b[1] || (a[1] == b[1] && a[2] < b[2])));
-              }) -
-          blockTuples.begin();
-      // Check if the triple at the found position is equal to `id1 id2 id3` to
-      // determine whether it exists in the index. If it already exists we
-      // have to set `existsInIndex` to `true` (the default is `false`).
-      const size_t& i = locatedTriple.rowIndexInBlock;
-      AD_CORRECTNESS_CHECK(i < blockTuples.size());
-      if (i < offsetEnd && blockTuples(i, 0) == id1 &&
-          blockTuples(i, 1) == id2 && blockTuples(i, 2) == id3) {
-        locatedTriple.existsInIndex = true;
-      }
-    }
-  } else {
-    // Metadata exists for the relation of the triple. This allows us to limit
-    // the search to only this relation.
-
-    // Read and decompress the block. We only need `col1Id` and `col2Id` columns,
-    // because we limit the search to only the relation using the metadata.
-    std::array<ColumnIndex, 2> columnIndices{1u, 2u};
-    DecompressedBlock blockTuples =
-        reader.readAndDecompressBlock(*matchingBlock, columnIndices);
-
-    const auto& relationMetadata = meta.getMetaData(it.getId());
-    size_t offsetBegin = relationMetadata.offsetInBlock_;
-    size_t offsetEnd = offsetBegin + relationMetadata.numRows_;
-    // This is the case if the relation spans multiple blocks. The block then
-    // only contains triples from that relation. We are in the right block,
-    // but have to search it completely.
-    if (offsetBegin == std::numeric_limits<uint64_t>::max()) {
-      offsetBegin = 0;
-      offsetEnd = blockTuples.size();
-    }
-    AD_CORRECTNESS_CHECK(offsetBegin <= blockTuples.size());
-    AD_CORRECTNESS_CHECK(offsetEnd <= blockTuples.size());
-
+  if(matchingBlock->firstTriple_.col0Id_ <= id1) {
+    // The triple is actually inside this block.
     locatedTriple.rowIndexInBlock =
         std::lower_bound(
-            blockTuples.begin() + offsetBegin,
-            blockTuples.begin() + offsetEnd, std::array<Id, 2>{id2, id3},
+            blockTuples.begin(),
+            blockTuples.end(), std::array<Id, 3>{id1, id2, id3},
             [](const auto& a, const auto& b) {
-              return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]);
+              return a[0] < b[0] || (a[0] == b[0] && (a[1] < b[1] || (a[1] == b[1] && a[2] < b[2])));
             }) -
         blockTuples.begin();
-    // Check if the triple at the found position is equal to `id2 id3` to
+    // Check if the triple at the found position is equal to `id1 id2 id3` to
     // determine whether it exists in the index. If it already exists we
     // have to set `existsInIndex` to `true` (the default is `false`).
     const size_t& i = locatedTriple.rowIndexInBlock;
     AD_CORRECTNESS_CHECK(i < blockTuples.size());
-    if (i < offsetEnd && blockTuples(i, 0) == id2 &&
-        blockTuples(i, 1) == id3) {
+    if (i < blockTuples.size() && blockTuples(i, 0) == id1 &&
+        blockTuples(i, 1) == id2 && blockTuples(i, 2) == id3) {
       locatedTriple.existsInIndex = true;
     }
   }
