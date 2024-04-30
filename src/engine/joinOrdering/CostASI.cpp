@@ -8,57 +8,39 @@
 namespace JoinOrdering::ASI {
 
 template <typename N>
-requires RelationAble<N> auto rank(QueryGraph<N>& g, N n) -> float {
-  // TODO: unpack hist here?
-  std::vector<N> seq{n};
-
+requires RelationAble<N> auto rank(QueryGraph<N>& g, const N& n) -> float {
+  auto r = (T(g, n) - 1) / C(g, n);
   // assert rank [0, 1]
-  return (T(g, seq) - 1) / C(g, seq);
-}
-
-// TODO: std::span
-template <typename N>
-requires RelationAble<N>
-auto T(QueryGraph<N>& g, const std::vector<N>& seq) -> float {
-  return std::transform_reduce(
-      seq.begin(), seq.end(), 1.0f, std::multiplies{}, [&](const N& n) {
-        return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
-      });
+  AD_CONTRACT_CHECK(r >= 0 && r <= 1);
+  return r;
 }
 
 template <typename N>
-requires RelationAble<N>
-auto C(QueryGraph<N>& g, const std::vector<N>& seq) -> float {
-  std::vector<N> v{};
+requires RelationAble<N> auto T(QueryGraph<N>& g, const N& n) -> float {
+  return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
+}
 
-  for (auto const& x : seq)
-    //    if (hist.contains(x) && hist.at(x).empty())
-    if (g.hist[x].empty())
-      v.push_back(x);
-    else
-      for (auto const& h : g.hist.at(x)) v.push_back(h);
+template <typename N>
+requires RelationAble<N> auto C(QueryGraph<N>& g, const N& n) -> float {
+  auto hxs = g.hist[n];
   // return 0 if Ri is root 113/637
-  //    if (v.size() == 1 && v.front() == root) return 0;
+  if (g.root == n) return 0;
 
-  if (v.empty()) return 0;
-  if (v.size() == 1)
-    return g.selectivity.at(v.front()) *
-           static_cast<float>(v.front().getCardinality());  // T(v)
+  // i.e: regular relation
+  if (hxs.empty()) return T(g, n);
 
-  //    auto s1 = seq | std::views::take(1);
-  //    auto s2 = seq | std::views::drop(1);
-
-  auto s1 = std::vector<N>{v.front()};
-  auto s2 = std::vector<N>(v.begin() + 1, v.end());
-
-  // std::span(v.begin()+1, v.end())
-  return C(g, s1) + T(g, s1) * C(g, s2);
+  // otherwise compound relation
+  return C(g, hxs);
 }
 
 template <typename N>
-requires RelationAble<N>
-auto C(QueryGraph<N>& g, const std::set<N>& seq) -> float {
-  std::vector<N> t(seq.begin(), seq.end());
-  return C(g, t);
+requires RelationAble<N> auto C(QueryGraph<N>& g, const std::vector<N>& seq)
+    -> float {  // TODO: std::span
+  if (seq.empty()) return 0.0f;
+  auto s1 = seq.front();
+  //  template instantiation depth exceeds maximum of 900
+  //  auto s2 = seq | std::views::drop(1);
+  auto s2 = std::vector(seq.begin() + 1, seq.end());
+  return C(g, s1) + T(g, s1) * C(g, s2);
 }
 }  // namespace JoinOrdering::ASI

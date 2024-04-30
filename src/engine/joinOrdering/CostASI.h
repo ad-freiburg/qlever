@@ -22,19 +22,16 @@ namespace JoinOrdering::ASI {
  * @return
  */
 template <typename N>
-requires RelationAble<N> auto rank(QueryGraph<N>& g, N n) -> float;
+requires RelationAble<N> auto rank(QueryGraph<N>& g, const N& n) -> float;
 
 template <typename N>
-requires RelationAble<N>
-auto T(QueryGraph<N>& g, const std::vector<N>& seq) -> float;
+requires RelationAble<N> auto T(QueryGraph<N>& g, const N& n) -> float;
 
 template <typename N>
 requires RelationAble<N>
 auto C(QueryGraph<N>& g, const std::vector<N>& seq) -> float;
 
 template <typename N>
-requires RelationAble<N>
-auto C(QueryGraph<N>& g, const std::set<N>& seq) -> float;
-//  auto C(N n) -> float;
+requires RelationAble<N> auto C(QueryGraph<N>& g, const N& n) -> float;
 
 }  // namespace JoinOrdering::ASI

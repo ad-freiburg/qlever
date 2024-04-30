@@ -116,7 +116,7 @@ N QueryGraph<N>::combine(const N& a,
   // to be able to apply the inverse operation (QueryGraph::uncombine)
   // we keep track of the combined relation in the `hist` map
   if (hist[a].empty()) hist[n].push_back(a);
-  // it's already a compound relation, so we graph it's original relations
+  // it's already a compound relation, so we grab it's original relations
   else
     for (auto const& x : hist[a]) hist[n].push_back(x);
 
@@ -153,8 +153,8 @@ N QueryGraph<N>::combine(const N& a,
   auto cb = get_children(b);
   children.insert(ca.begin(), ca.end());
   children.insert(cb.begin(), cb.end());
-  children.erase(a);  // redundant
-  children.erase(b);  // redundant
+  //  children.erase(a);  // redundant
+  //  children.erase(b);  // redundant
 
   // equiv. to add_rjoin(n, c, s, Direction::PARENT);
   for (auto const& c : children) add_rjoin(c, n, s, Direction::CHILD);
@@ -284,6 +284,8 @@ auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
       std::ranges::find_if(dxs, [&](const N& x) { return is_subtree(x); });
 
   if (it != dxs.end()) return *it;
+
+  //  AD_CONTRACT_CHECK(false);
   throw std::runtime_error("how did we get here?");
 }
 
