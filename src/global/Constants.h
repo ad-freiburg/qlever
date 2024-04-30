@@ -30,7 +30,6 @@ static const char PREFIX_CHAR = '*';
 static const size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
-static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 
 static const size_t GALLOP_THRESHOLD = 1000;
 

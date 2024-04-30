@@ -25,7 +25,6 @@ class NeutralElementOperation : public Operation {
     return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
-  void setTextLimit(size_t) override{};
   size_t getCostEstimate() override { return 0; }
 
  private:

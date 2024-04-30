@@ -360,11 +360,11 @@ inline auto Bind =
 };
 
 inline auto LimitOffset =
-    [](std::optional<uint64_t> limit, uint64_t textLimit,
+    [](std::optional<uint64_t> limit, std::optional<uint64_t> textLimit,
        uint64_t offset) -> Matcher<const LimitOffsetClause&> {
   return testing::AllOf(
       AD_FIELD(LimitOffsetClause, _limit, testing::Eq(limit)),
-      AD_FIELD(LimitOffsetClause, _textLimit, testing::Eq(textLimit)),
+      AD_FIELD(LimitOffsetClause, textLimit_, testing::Eq(textLimit)),
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
