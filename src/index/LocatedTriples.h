@@ -47,6 +47,8 @@ struct LocatedTriple {
   // NOTE: It is important that `NO_ROW_INDEX + 1 > NO_ROW_INDEX`, hence it is
   // defined as `max() - 1` and not as the seemingly more natural `max()`.
   static const size_t NO_ROW_INDEX = std::numeric_limits<size_t>::max() - 1;
+
+  auto operator<=>(const LocatedTriple&) const = default;
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
