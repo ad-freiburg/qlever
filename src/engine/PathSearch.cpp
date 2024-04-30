@@ -5,6 +5,7 @@
 #include "PathSearch.h"
 
 #include <boost/graph/detail/adjacency_list.hpp>
+#include <functional>
 #include <memory>
 #include <sstream>
 
@@ -155,6 +156,8 @@ std::vector<Path> PathSearch::findPaths() const {
   switch (config_.algorithm_) {
     case ALL_PATHS:
       return allPaths();
+    case SHORTEST_PATHS:
+      return shortestPaths();
     default:
       AD_FAIL();
   }
@@ -174,6 +177,35 @@ std::vector<Path> PathSearch::allPaths() const {
   AllPathsVisitor vis(targets, path, paths, indexToId_);
   boost::depth_first_search(graph_,
                             boost::visitor(vis).root_vertex(startIndex));
+  return paths;
+}
+
+// _____________________________________________________________________________
+std::vector<Path> PathSearch::shortestPaths() const {
+  std::vector<Path> paths;
+  Path path;
+  auto startIndex = idToIndex_.at(config_.source_);
+
+  std::unordered_set<uint64_t> targets;
+  for (auto target : config_.targets_) {
+    targets.insert(target.getBits());
+  }
+  std::vector<VertexDescriptor> predecessors(indexToId_.size());
+  std::vector<double> distances(indexToId_.size(),
+                                std::numeric_limits<double>::max());
+
+  DijkstraAllPathsVisitor vis(startIndex, targets, path, paths, predecessors,
+                              distances);
+
+  auto weight_map = get(&Edge::weight_, graph_);
+
+  boost::dijkstra_shortest_paths(
+      graph_, startIndex,
+      boost::visitor(vis)
+          .weight_map(weight_map)
+          .predecessor_map(predecessors.data())
+          .distance_map(distances.data())
+          .distance_compare(std::less_equal<double>()));
   return paths;
 }
 

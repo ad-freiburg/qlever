@@ -2,8 +2,10 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/depth_first_search.hpp>
+#include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/graph/graph_selectors.hpp>
 #include <boost/graph/graph_traits.hpp>
 #include <memory>
@@ -30,6 +32,7 @@ struct Edge {
   uint64_t start_;
   uint64_t end_;
   std::vector<Id> edgeProperties_;
+  double weight_ = 1;
 
   std::pair<Id, Id> toIds() const {
     return {Id::fromBits(start_), Id::fromBits(end_)};
@@ -44,6 +47,8 @@ struct Path {
   size_t size() const { return edges_.size(); }
 
   void push_back(Edge edge) { edges_.push_back(edge); }
+
+  void reverse() { std::reverse(edges_.begin(), edges_.end()); }
 
   std::optional<uint64_t> firstNode() const {
     return !empty() ? std::optional<uint64_t>{edges_.front().start_}
@@ -101,9 +106,55 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
   }
 };
 
-enum PathSearchAlgorithm {
-  ALL_PATHS,
+class DijkstraAllPathsVisitor : public boost::default_dijkstra_visitor {
+  VertexDescriptor source_;
+  std::unordered_set<uint64_t> targets_;
+  Path& currentPath_;
+  std::vector<Path>& allPaths_;
+  std::vector<VertexDescriptor>& predecessors_;
+  std::vector<double>& distances_;
+
+ public:
+  DijkstraAllPathsVisitor(VertexDescriptor source,
+                          std::unordered_set<uint64_t> targets, Path& path,
+                          std::vector<Path>& paths,
+                          std::vector<VertexDescriptor>& predecessors,
+                          std::vector<double>& distances)
+      : source_(source),
+        targets_(std::move(targets)),
+        currentPath_(path),
+        allPaths_(paths),
+        predecessors_(predecessors),
+        distances_(distances) {}
+
+  const std::vector<VertexDescriptor>& getPredecessors() const {
+    return predecessors_;
+  }
+  const std::vector<double>& getDistances() const { return distances_; }
+
+  void edge_relaxed(EdgeDescriptor edgeDesc, const Graph& graph) {
+    const Edge& edge = graph[edgeDesc];
+    if (targets_.empty() || targets_.find(edge.end_) != targets_.end()) {
+      rebuild_path(target(edgeDesc, graph), graph);
+    }
+  }
+
+  void rebuild_path(VertexDescriptor vertex, const Graph& graph) {
+    currentPath_.edges_.clear();
+    for (VertexDescriptor v = vertex; v != source_; v = predecessors_[v]) {
+      EdgeDescriptor e;
+      bool exists;
+      boost::tie(e, exists) = edge(predecessors_[v], v, graph);
+      if (exists) {
+        currentPath_.push_back(graph[e]);
+      }
+    }
+    currentPath_.reverse();
+    allPaths_.push_back(currentPath_);
+  }
 };
+
+enum PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
 
 struct PathSearchConfiguration {
   PathSearchAlgorithm algorithm_;
@@ -157,6 +208,7 @@ class PathSearch : public Operation {
                     std::span<const Id> endNodes);
   std::vector<Path> findPaths() const;
   std::vector<Path> allPaths() const;
+  std::vector<Path> shortestPaths() const;
   template <size_t WIDTH>
   void pathsToResultTable(IdTable& tableDyn, std::vector<Path>& paths) const;
 };
