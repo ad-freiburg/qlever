@@ -18,7 +18,8 @@ requires RelationAble<N> auto rank(QueryGraph<N>& g, N n) -> float {
 
 // TODO: std::span
 template <typename N>
-requires RelationAble<N> auto T(QueryGraph<N>& g, std::vector<N> seq) -> float {
+requires RelationAble<N>
+auto T(QueryGraph<N>& g, const std::vector<N>& seq) -> float {
   return std::transform_reduce(
       seq.begin(), seq.end(), 1.0f, std::multiplies{}, [&](const N& n) {
         return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
@@ -27,7 +28,7 @@ requires RelationAble<N> auto T(QueryGraph<N>& g, std::vector<N> seq) -> float {
 
 template <typename N>
 requires RelationAble<N>
-auto C(QueryGraph<N>& g, std::vector<N>& seq) -> float {
+auto C(QueryGraph<N>& g, const std::vector<N>& seq) -> float {
   std::vector<N> v{};
 
   for (auto const& x : seq)
@@ -55,7 +56,8 @@ auto C(QueryGraph<N>& g, std::vector<N>& seq) -> float {
 }
 
 template <typename N>
-requires RelationAble<N> auto C(QueryGraph<N>& g, std::set<N>& seq) -> float {
+requires RelationAble<N>
+auto C(QueryGraph<N>& g, const std::set<N>& seq) -> float {
   std::vector<N> t(seq.begin(), seq.end());
   return C(g, t);
 }

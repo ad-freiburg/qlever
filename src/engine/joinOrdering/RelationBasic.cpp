@@ -22,4 +22,10 @@ bool RelationBasic::operator==(const RelationBasic& other) const {
 }
 int RelationBasic::getCardinality() const { return cardinality; }
 std::string RelationBasic::getLabel() const { return label; }
+
+// ref: https://abseil.io/docs/cpp/guides/hash
+template <typename H>
+H AbslHashValue(H h, const RelationBasic& r) {
+  return H::combine(std::move(h), r.label, r.cardinality);
+}
 }  // namespace JoinOrdering
