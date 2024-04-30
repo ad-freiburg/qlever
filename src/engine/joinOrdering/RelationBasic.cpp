@@ -5,8 +5,6 @@
 
 #include "RelationBasic.h"
 
-#include <utility>
-
 namespace JoinOrdering {
 
 RelationBasic::RelationBasic() = default;

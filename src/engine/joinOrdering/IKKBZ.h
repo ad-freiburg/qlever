@@ -25,6 +25,7 @@ namespace JoinOrdering {
  * @return optimal left-deep tree
  */
 template <typename N>
+requires RelationAble<N>
 auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
 
 /**
@@ -76,11 +77,12 @@ auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
  * @return new query graph (precedence tree)
  */
 template <typename N>
+requires RelationAble<N>
 [[nodiscard]] auto toPrecedenceGraph(QueryGraph<N>& g, const N& root)
     -> QueryGraph<N>;
 
 template <typename N>
-void IKKBZ_Sub(QueryGraph<N>& g);
+requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g);
 
 /**
  * continued process of building compound relations until
@@ -95,11 +97,29 @@ void IKKBZ_Sub(QueryGraph<N>& g);
  * @param subtree_root subtree of g
  * @return false as long as there the subtree is not normalized
  * @see QueryGraph::combine
- * @see QueryGraph::merge
+ * @see IKKBZ_merge
  */
 template <typename N>
+requires RelationAble<N>
 [[nodiscard("check pre-merge")]] bool IKKBZ_Normalized(QueryGraph<N>& g,
                                                        const N& subtree_root);
+
+/**
+ * Merge the chains under relation n according the rank function.
+ *
+ * post IKKBZ_Normalized,
+ * if rank(b) < rank(cd) and a -> b, a -> cd
+ * then we merge them into a single chain where a is
+ * the subtree_root
+ *
+ * ref: 121,126/637
+ * @param g precedence tree with subchains ready to merge
+ * @param subtree_root subtree of g
+ * @see IKKBZ_Normalized
+ */
+template <typename N>
+requires RelationAble<N>
+void IKKBZ_merge(QueryGraph<N>& g, const N& subtree_root);
 
 /**
  * the opposite step of JoinOrdering::IKKBZ_Normalized.
@@ -114,6 +134,6 @@ template <typename N>
  * @see QueryGraph::uncombine
  */
 template <typename N>
-void IKKBZ_denormalize(QueryGraph<N>& g);
+requires RelationAble<N> void IKKBZ_denormalize(QueryGraph<N>& g);
 
 }  // namespace JoinOrdering

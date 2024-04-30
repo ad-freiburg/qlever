@@ -174,17 +174,17 @@ TEST(IKKBZ_SANITY, PrecedenceGraph1) {
   auto pg = toPrecedenceGraph(g, R1);
 
   ASSERT_TRUE(pg.has_rjoin(R1, R3));
-  ASSERT_EQ(pg.r[R1][R3].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R1][R3].direction, Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R2, R3));
-  ASSERT_EQ(pg.r[R3][R2].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R3][R2].direction, Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R3, R4));
-  ASSERT_EQ(pg.r[R3][R4].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R3][R4].direction, Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R4, R5));
-  ASSERT_EQ(pg.r[R4][R5].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R4][R5].direction, Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R4, R6));
-  ASSERT_EQ(pg.r[R4][R6].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R4][R6].direction, Direction::PARENT);
 }

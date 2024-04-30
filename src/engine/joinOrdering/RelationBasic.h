@@ -23,6 +23,12 @@ class RelationBasic {
   [[nodiscard]] int getCardinality() const;
   [[nodiscard]] std::string getLabel() const;
 
+  // ref: https://abseil.io/docs/cpp/guides/hash
+  template <typename H>
+  friend H AbslHashValue(H h, const RelationBasic& r) {
+    return H::combine(std::move(h), r.label, r.cardinality);
+  }
+
  private:
   int cardinality{-1};
   std::string label{"R?"};

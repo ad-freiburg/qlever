@@ -8,34 +8,17 @@
 #include <algorithm>
 #include <concepts>
 #include <iostream>
-#include <map>
-#include <numeric>
 #include <queue>
 #include <ranges>
 #include <set>
-#include <span>
 #include <string>
 #include <vector>
 
+#include "EdgeInfo.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+
 namespace JoinOrdering {
-
-enum class Direction {
-  UNDIRECTED,
-  PARENT,
-  CHILD,
-
-};
-
-class RJoin {  // predicate?
- public:
-  Direction direction{Direction::UNDIRECTED};
-  bool hidden{false};  // instead of erasing
-  RJoin() = default;
-
-  // read from left to right
-  // Ra is a dir of Rb
-  explicit RJoin(Direction dir) : direction(dir) {}
-};
 
 template <typename N>
 concept RelationAble = requires(N n) {
@@ -51,24 +34,22 @@ concept RelationAble = requires(N n) {
   //  { std::constructible_from<N, std::string, std::integral> };
 };
 
-// FIXME: circular dependency from ICostFn.h
-// template <typename N>
-// requires RelationAble<N> class ICostFn;
-
 template <typename N>
 requires RelationAble<N> class QueryGraph {
  public:
   QueryGraph() = default;
 
-  std::map<N, std::map<N, RJoin>> r;
-  std::map<N, std::vector<N>> hist;
-  std::map<N, int> cardinality;
-  std::map<N, float> selectivity;
+  //  ad_utility::HashMap<N, std::pair<N, EdgeInfo>> edges_;
+  ad_utility::HashMap<N, ad_utility::HashMap<N, EdgeInfo>> edges_;
+  ad_utility::HashMap<N, std::vector<N>> hist;
+  //  ad_utility::HashMap<N, int> cardinality; // @deprecated
+  ad_utility::HashMap<N, float> selectivity;
   N root;
 
   /**
    * Add a relation to the query graph and and append it's cardinality
-   * to the graph's cardinality lookup table (std::map<N, int> cardinality)
+   * to the graph's cardinality lookup table
+   * (std::unordered_map<N, int> cardinality)
    *
    * ref: 77/637
    * TODO: 91/637 do not add single relations, but subchains
@@ -90,9 +71,6 @@ requires RelationAble<N> class QueryGraph {
    * Disable any edge between a relation and all of it's neighbours
    * (parent and children) effectively removing it.
    *
-   * the hidden property is used to filter out these relation in
-   * JoinOrdering::get_parent and JoinOrdering::get_children
-   *
    * @param n Relation to set as unreachable.
    */
   void rm_relation(const N& n);
@@ -107,10 +85,10 @@ requires RelationAble<N> class QueryGraph {
    * ref: 76/637
    * @param a Relation A
    * @param b Relation B
-   * @param s Join selectivity
+   * @param join_selectivity selectivity of the join with Relation B
    * @param dir Relation A is a (dir) to Relation B
    */
-  void add_rjoin(const N& a, const N& b, float s,
+  void add_rjoin(const N& a, const N& b, float join_selectivity,
                  Direction dir = Direction::UNDIRECTED);
 
   /**
@@ -192,14 +170,6 @@ requires RelationAble<N> class QueryGraph {
   void uncombine(const N& n);
 
   /**
-   * Merge the chains under relation n according the rank function
-   *
-   * ref: 121/637
-   * @param n Relation
-   */
-  void merge(const N& n);
-
-  /**
    * Remove all connections between a relation and it's neighbours
    *
    * @param n non-root Relation
@@ -238,21 +208,6 @@ requires RelationAble<N> class QueryGraph {
    */
   auto get_chained_subtree(const N& n) -> N;
 
-  /// START Cost function with ASI Property
-  /**
-   * if rank(R2) < rank(R3) then joining
-   * (R1 x R2) x R3 is cheaper than
-   * (R1 x R3) x R2
-   * @param n Relation
-   * @return
-   */
-  auto rank(N n) -> float;
-  auto T(std::span<N> seq) -> float;
-  auto C(std::vector<N>& seq) -> float;
-  auto C(std::set<N>& seq) -> float;
-  //  auto C(N n) -> float;
-  /// END Cost function with ASI Property
-
   // TODO: std::iterator or std::iterator_traits
   void iter(const N& n);
 
@@ -263,7 +218,7 @@ requires RelationAble<N> class QueryGraph {
   void get_descendents(const N&, std::set<N>&);
   void iter(const N&, std::set<N>&);
 
-  static Direction inv(Direction);
+  constexpr static Direction inv(Direction);
 };
 
 }  // namespace JoinOrdering
