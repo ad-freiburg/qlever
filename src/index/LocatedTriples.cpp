@@ -92,8 +92,8 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   // The search space could still be limited by searching for some relation that
   // is before/after the triple.
   if (it == meta.data().end() || it.getId() != id1) {
-    // Read and decompress the block. We need all the columns because we cannot
-    // limit the search space to only this relation.
+    // Read and decompress the block. We lack the metadata to limit the search
+    // to only the correct relation. We therefore need all the columns.
     std::array<ColumnIndex, 3> columnIndices{0u, 1u, 2u};
     DecompressedBlock blockTuples =
         reader.readAndDecompressBlock(*matchingBlock, columnIndices);
@@ -111,8 +111,9 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
                 return a[0] < b[0] || (a[0] == b[0] && (a[1] < b[1] || (a[1] == b[1] && a[2] < b[2])));
               }) -
           blockTuples.begin();
-      // Check if the triple at the found position is equal to `id1 id2 id3`.
-      // Note that our default for `existsInIndex` was set to `false` above.
+      // Check if the triple at the found position is equal to `id1 id2 id3` to
+      // determine whether it exists in the index. If it already exists we
+      // have to set `existsInIndex` to `true` (the default is `false`).
       const size_t& i = locatedTriple.rowIndexInBlock;
       AD_CORRECTNESS_CHECK(i < blockTuples.size());
       if (i < offsetEnd && blockTuples(i, 0) == id1 &&
@@ -121,19 +122,21 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
       }
     }
   } else {
-    // Read and decompress the block (we want the `col1Id` and `col2Id` columns).
-    // col0Id and col1Id were retrieved here before
+    // Metadata exists for the relation of the triple. This allows us to limit
+    // the search to only this relation.
+
+    // Read and decompress the block. We only need `col1Id` and `col2Id` columns,
+    // because we limit the search to only the relation using the metadata.
     std::array<ColumnIndex, 2> columnIndices{1u, 2u};
     DecompressedBlock blockTuples =
         reader.readAndDecompressBlock(*matchingBlock, columnIndices);
 
-    // Metadata exists for the relation of the triple.
-    Id id = it.getId();
-    const auto& relationMetadata = meta.getMetaData(id);
+    const auto& relationMetadata = meta.getMetaData(it.getId());
     size_t offsetBegin = relationMetadata.offsetInBlock_;
     size_t offsetEnd = offsetBegin + relationMetadata.numRows_;
-    // Note: If the relation spans multiple blocks, we know that the block we
-    // found above contains only triples from that relation.
+    // This is the case if the relation spans multiple blocks. The block then
+    // only contains triples from that relation. We are in the right block,
+    // but have to search it completely.
     if (offsetBegin == std::numeric_limits<uint64_t>::max()) {
       offsetBegin = 0;
       offsetEnd = blockTuples.size();
@@ -149,8 +152,9 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
               return a[0] < b[0] || (a[0] == b[0] && a[1] < b[1]);
             }) -
         blockTuples.begin();
-    // Check if the triple at the found position is equal to `id1 id2 id3`.
-    // Note that our default for `existsInIndex` was set to `false` above.
+    // Check if the triple at the found position is equal to `id2 id3` to
+    // determine whether it exists in the index. If it already exists we
+    // have to set `existsInIndex` to `true` (the default is `false`).
     const size_t& i = locatedTriple.rowIndexInBlock;
     AD_CORRECTNESS_CHECK(i < blockTuples.size());
     if (i < offsetEnd && blockTuples(i, 0) == id2 &&
