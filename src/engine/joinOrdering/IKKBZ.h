@@ -9,23 +9,33 @@
 
 namespace JoinOrdering {
 
-template <typename N>
-requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N>;
-
 /**
  *
  * Polynomial algorithm for join ordering
  *
  * produces optimal left-deep trees without cross products
  * requires acyclic join graphs
+ * cost function must have ASI property
  *
  * Can be used as heuristic if the requirements are violated
  *
  * ref: 103,120/637
  *
  * @param g acyclic query graph
- * @param n relation used as root for the JoinOrdering::toPrecedenceGraph
+ * @tparam N type that satisfies IKKBZ::RelationAble concept
  * @return optimal left-deep tree
+ */
+template <typename N>
+requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N>;
+
+/**
+ *
+ * Generate a precedence graph out of an undirected graph and trigger
+ * the main subroutine.
+ *
+ * @param g acyclic query graph
+ * @param n relation used as root for the JoinOrdering::toPrecedenceGraph
+ * @return left-deep tree rooted at n
  */
 template <typename N>
 requires RelationAble<N>

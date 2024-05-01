@@ -11,6 +11,8 @@ namespace JoinOrdering {
 
 template <typename N>
 requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
+  // execute the IKKBZ routine for EVERY relation on the graph
+  // then take return the permutation with the minimum cost.
   std::vector<N> rxs(g.relations_);
   typedef std::pair<std::vector<N>, float> vf;
 
