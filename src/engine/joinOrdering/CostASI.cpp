@@ -8,7 +8,8 @@
 namespace JoinOrdering::ASI {
 
 template <typename N>
-requires RelationAble<N> auto rank(QueryGraph<N>& g, const N& n) -> float {
+requires RelationAble<N>
+auto rank(const QueryGraph<N>& g, const N& n) -> float {
   auto c = C(g, n);
   auto t = T(g, n);
 
@@ -21,27 +22,26 @@ requires RelationAble<N> auto rank(QueryGraph<N>& g, const N& n) -> float {
 }
 
 template <typename N>
-requires RelationAble<N> auto T(QueryGraph<N>& g, const N& n) -> float {
+requires RelationAble<N> auto T(const QueryGraph<N>& g, const N& n) -> float {
   // return 0 if Ri is root 113/637
   if (g.root == n) return 1;
   return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
 }
 
 template <typename N>
-requires RelationAble<N> auto C(QueryGraph<N>& g, const N& n) -> float {
+requires RelationAble<N> auto C(const QueryGraph<N>& g, const N& n) -> float {
   // return 0 if Ri is root 113/637
   if (g.root == n) return 0;
 
-  auto hxs = g.hist[n];
   // i.e: regular relation
-  if (hxs.empty()) return T(g, n);
+  if (!g.is_compound_relation(n)) return T(g, n);
 
-  // otherwise compound relation
-  return C(g, hxs);
+  return C(g, g.hist.at(n));
 }
 
 template <typename N>
-requires RelationAble<N> auto C(QueryGraph<N>& g, const std::vector<N>& seq)
+requires RelationAble<N>
+auto C(const QueryGraph<N>& g, const std::vector<N>& seq)
     -> float {  // TODO: std::span
   if (seq.empty()) return 0.0f;
   auto s1 = seq.front();

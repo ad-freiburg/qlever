@@ -77,6 +77,18 @@ requires RelationAble<N> class QueryGraph {
 
   /**
    *
+   * Checks whether a give relation is regular or compound.
+   *
+   * regular relations are ones added during construction of the QueryGraph
+   * compound relation are the result of the QueryGraph::combine
+   *
+   * @param n Relation
+   * @return True if Relation n is a compound relation
+   */
+  bool is_compound_relation(const N& n) const;
+
+  /**
+   *
    * Connect 2 relations and assign the selectivity for the path.
    *
    * JoinOrdering::toPrecedenceTree will mutated the dir
@@ -98,7 +110,7 @@ requires RelationAble<N> class QueryGraph {
    * @param b Relation
    * @return True if a connection has been created with QueryGraph::add_rjoin
    */
-  [[nodiscard]] bool has_rjoin(const N& a, const N& b);
+  [[nodiscard]] bool has_rjoin(const N& a, const N& b) const;
 
   /**
    * Remove connection between 2 given relations by setting `hidden` attribute
@@ -117,7 +129,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation
    * @return A view to the children of Relation n
    */
-  auto get_children(const N& n);
+  auto get_children(const N& n) const;
 
   /**
    * Gets the direct parent of a given relation where relation n is set as a
@@ -129,7 +141,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n
    * @return
    */
-  auto get_parent(const N& n);
+  auto get_parent(const N& n) const;
 
   /**
    * Gets ALL relations where given relation n is an ancestor
@@ -183,7 +195,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation
    * @return True if Relation n is part of a subchain
    */
-  bool is_chain(const N& n);
+  bool is_chain(const N& n) const;
 
   /**
    *
@@ -197,7 +209,7 @@ requires RelationAble<N> class QueryGraph {
    * @param n Relation
    * @return True if n is NOT a chain a chain and all children ARE chains.
    */
-  bool is_subtree(const N& n);
+  bool is_subtree(const N& n) const;
 
   /**
    *
@@ -209,14 +221,14 @@ requires RelationAble<N> class QueryGraph {
   auto get_chained_subtree(const N& n) -> N;
 
   // TODO: std::iterator or std::iterator_traits
-  void iter(const N& n);
+  void iter(const N& n) const;
 
   // TODO: std::iterator or std::iterator_traits
   auto iter() -> std::vector<N>;
 
  private:
   void get_descendents(const N&, std::set<N>&);
-  void iter(const N&, std::set<N>&);
+  void iter(const N&, std::set<N>&) const;
 
   constexpr static Direction inv(Direction);
 };

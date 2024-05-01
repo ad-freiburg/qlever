@@ -93,7 +93,7 @@ auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
  */
 template <typename N>
 requires RelationAble<N>
-[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N> g, const N& root)
+[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N> &g, const N& root)
     -> QueryGraph<N>;
 
 template <typename N>

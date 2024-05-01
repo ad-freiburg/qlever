@@ -39,6 +39,12 @@ requires RelationAble<N> void QueryGraph<N>::rm_relation(const N& n) {
 
 template <typename N>
 requires RelationAble<N>
+bool QueryGraph<N>::is_compound_relation(const N& n) const {
+  return hist.contains(n) && !hist.at(n).empty();
+}
+
+template <typename N>
+requires RelationAble<N>
 void QueryGraph<N>::add_rjoin(const N& a, const N& b, float join_selectivity,
                               Direction dir) {
   // TODO: assert single parent here?
@@ -66,7 +72,8 @@ void QueryGraph<N>::add_rjoin(const N& a, const N& b, float join_selectivity,
 }
 
 template <typename N>
-requires RelationAble<N> bool QueryGraph<N>::has_rjoin(const N& a, const N& b) {
+requires RelationAble<N>
+bool QueryGraph<N>::has_rjoin(const N& a, const N& b) const {
   // does relation a exists
   // does relation b exists
   // is there a connection between a and b
@@ -74,7 +81,7 @@ requires RelationAble<N> bool QueryGraph<N>::has_rjoin(const N& a, const N& b) {
   // is the connection between a and is NOT hidden
   return (edges_.contains(a) && edges_.contains(b) &&
           edges_.at(a).contains(b) && edges_.at(b).contains(a) &&
-          !edges_[a][b].hidden);
+          !edges_.at(a).at(b).hidden);  // !edges_[a][b].hidden;
 }
 
 template <typename N>
@@ -114,21 +121,21 @@ N QueryGraph<N>::combine(const N& a,
   // cardinality map of the query graph.
   auto n = this->add_relation(N(a.getLabel() + "," + b.getLabel(), w));
 
-  //    hist[n].push_back(a);
-  //    hist[n].push_back(b);
-
   // to be able to apply the inverse operation (QueryGraph::uncombine)
   // we keep track of the combined relation in the `hist` map
-  if (hist[a].empty()) hist[n].push_back(a);
-  // it's already a compound relation, so we grab it's original relations
-  else
+
+  // a compound relation, so we grab the
+  // regular relations it consists of
+  if (is_compound_relation(a))
     for (auto const& x : hist[a]) hist[n].push_back(x);
+  else  // regular relation
+    hist[n].push_back(a);
 
   // do the same of the relation b
-  if (hist[b].empty())
-    hist[n].push_back(b);
-  else
+  if (is_compound_relation(b))
     for (auto const& x : hist[b]) hist[n].push_back(x);
+  else  // regular relation
+    hist[n].push_back(b);
 
   std::set<N> parents;
   for (auto const& x : get_parent(a)) parents.insert(x);
@@ -172,8 +179,8 @@ N QueryGraph<N>::combine(const N& a,
 template <typename N>
 requires RelationAble<N> void QueryGraph<N>::uncombine(const N& n) {
   // ref: 121/637
-  // don't attempt to uncombine what has never been combined before
-  if (hist[n].empty()) return;
+  // don't attempt to uncombine regular relation
+  if (!is_compound_relation(n)) return;
 
   auto pn = get_parent(n);
   auto cn = get_children(n);
@@ -212,7 +219,8 @@ requires RelationAble<N> void QueryGraph<N>::unlink(const N& n) {
 }
 
 template <typename N>
-requires RelationAble<N> bool QueryGraph<N>::is_chain(const N& n) {  // NOLINT
+requires RelationAble<N>
+bool QueryGraph<N>::is_chain(const N& n) const {  // NOLINT
   auto cv = get_children(n);
   auto len = std::ranges::distance(cv);
 
@@ -224,15 +232,15 @@ requires RelationAble<N> bool QueryGraph<N>::is_chain(const N& n) {  // NOLINT
 }
 
 template <typename N>
-requires RelationAble<N> bool QueryGraph<N>::is_subtree(const N& n) {
+requires RelationAble<N> bool QueryGraph<N>::is_subtree(const N& n) const {
   return !is_chain(n) and std::ranges::all_of(get_children(n), [&](const N& x) {
     return is_chain(x);
   });
 }
 
 template <typename N>
-requires RelationAble<N> auto QueryGraph<N>::get_parent(const N& n) {
-  return std::views::filter(edges_[n],
+requires RelationAble<N> auto QueryGraph<N>::get_parent(const N& n) const {
+  return std::views::filter(edges_.at(n),  // edges_[n],
                             [](std::pair<const N&, const EdgeInfo&> t) {
                               auto const& [x, e] = t;
                               return e.direction == Direction::CHILD &&
@@ -243,8 +251,8 @@ requires RelationAble<N> auto QueryGraph<N>::get_parent(const N& n) {
 }
 
 template <typename N>
-requires RelationAble<N> auto QueryGraph<N>::get_children(const N& n) {
-  return std::views::filter(edges_[n],
+requires RelationAble<N> auto QueryGraph<N>::get_children(const N& n) const {
+  return std::views::filter(edges_.at(n),  // edges_[n]
                             [](std::pair<const N&, const EdgeInfo&> t) {
                               // TODO: structural binding in args
                               auto const& [x, e] = t;
@@ -325,21 +333,21 @@ requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
 }
 
 template <typename N>
-requires RelationAble<N> void QueryGraph<N>::iter(const N& n) {
+requires RelationAble<N> void QueryGraph<N>::iter(const N& n) const {
   std::set<N> visited{};
   iter(n, visited);
 }
 
 template <typename N>
 requires RelationAble<N>
-void QueryGraph<N>::iter(const N& n, std::set<N>& visited) {
+void QueryGraph<N>::iter(const N& n, std::set<N>& visited) const {
   if (visited.contains(n)) return;
 
-  for (auto const& [x, e] : edges_[n]) {
+  for (auto const& [x, e] : edges_.at(n)) {  // edges_[n]
     if (e.hidden) continue;
-    std::cout << n.getLabel() << " " << x.getLabel() << " "
-              << static_cast<int>(e.direction) << " "
-              << static_cast<int>(e.hidden) << "\n";
+    //    std::cout << n.getLabel() << " " << x.getLabel() << " "
+    //              << static_cast<int>(e.direction) << " "
+    //              << static_cast<int>(e.hidden) << "\n";
     visited.insert(n);
 
     iter(x, visited);
