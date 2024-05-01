@@ -5,6 +5,8 @@
 
 #pragma once
 
+#include <execution>
+
 #include "QueryGraph.h"
 
 namespace JoinOrdering {

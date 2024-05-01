@@ -13,29 +13,25 @@ template <typename N>
 requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
   // execute the IKKBZ routine for EVERY relation on the graph
   // then take return the permutation with the minimum cost.
-  std::vector<N> rxs(g.relations_);
+  auto rxs(g.relations_);
+  AD_CONTRACT_CHECK(!rxs.empty());
+
   typedef std::pair<std::vector<N>, float> vf;
+  auto [ldtree_opt, cost] = std::transform_reduce(
+      std::execution::par_unseq,  // (3) in parallel if hw allows it
+      rxs.begin(), rxs.end(),     // (1) for every relation in query
+      vf({}, std::numeric_limits<float>::max()),
+      [&](const vf& l, const vf& r) {  // (4) return the tree with min cost
+        return std::ranges::min(
+            l, r, [](const vf& a, const vf& b) { return a.second < b.second; });
+      },
+      [&](const N& n) {  // (2) run IKKBZ routine
+        auto ldtree = IKKBZ(g, n);
+        auto seq = ldtree.iter();
+        return vf(seq, ASI::C(ldtree, seq));
+      });
 
-  // TODO: execution::par_unseq
-  auto qcxs = std::views::transform(rxs, [&](const N& n) {
-    //    std::cout << "ROOTED AT " << n.getLabel() << "\n";
-    auto pg_ikbbz = IKKBZ(g, n);
-    auto q = pg_ikbbz.iter();
-    auto qn = std::pair(q, ASI::C(pg_ikbbz, q));
-    //        std::cout << n.getLabel() << " " << qn.second << "\n";
-    return qn;
-  });
-
-  std::vector<N> erg;
-  float min_cost = std::numeric_limits<float>::max();
-  // TODO: std::transform_reduce, std::min_element or whatever
-  for (const vf& x : qcxs)
-    if (min_cost > x.second) {
-      erg = x.first;
-      min_cost = x.second;
-    }
-
-  return erg;
+  return ldtree_opt;
 }
 
 template <typename N>
