@@ -122,11 +122,13 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer, requestLaziness] {
+    bool actuallyComputed = false;
+    auto computeLambda = [this, &timer, requestLaziness, &actuallyComputed] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
       Result result = computeResult(requestLaziness);
+      actuallyComputed = true;
       AD_CONTRACT_CHECK(requestLaziness || result.isDataEvaluated());
 
       checkCancellation();
@@ -162,13 +164,22 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
         AD_CONTRACT_CHECK(result.idTable().numRows() ==
                           _limit.actualSize(result.idTable().numRows()));
       }
+      return result;
+    };
+
+    auto cacheSetup = [this, &computeLambda]() {
+      auto result = computeLambda();
+      if (!result.isDataEvaluated()) {
+        // TODO<RobinTF> register listeners that make sure cache size is
+        // properly updated
+      }
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                        onlyReadFromCache)
-                              : cache.computeOnce(cacheKey, computeLambda,
-                                                  onlyReadFromCache);
+    auto result =
+        pinResult
+            ? cache.computeOncePinned(cacheKey, cacheSetup, onlyReadFromCache)
+            : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache);
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
@@ -184,7 +195,14 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
       LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                  << resultNumCols << std::endl;
     }
-    return result._resultPointer->resultTable();
+
+    if (result._resultPointer->resultTable()->isDataEvaluated() ||
+        actuallyComputed) {
+      return result._resultPointer->resultTable();
+    } else {
+      // TODO<RobinTF> create result copy with fallback iterator here
+      AD_FAIL();
+    }
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;

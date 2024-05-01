@@ -18,7 +18,6 @@
 
 namespace ad_utility {
 
-using std::make_shared;
 using std::shared_ptr;
 
 /** This exception is thrown if we are waiting for a computation result,
@@ -38,6 +37,8 @@ class WaitedForResultWhichThenFailedException : public std::exception {
 enum struct CacheStatus {
   cachedNotPinned,
   cachedPinned,
+  // TODO<RobinTF> Rename to notCached, the name is just confusing. Can
+  // potentially be merged with notInCacheAndNotComputed.
   computed,
   notInCacheAndNotComputed
 };
@@ -180,20 +181,20 @@ class ConcurrentCache {
    * @return A shared_ptr to the computation result.
    *
    */
-  ResultAndCacheStatus computeOnce(const Key& key,
-                                   std::invocable auto computeFunction,
-                                   bool onlyReadFromCache = false) {
-    return computeOnceImpl(false, key, std::move(computeFunction),
-                           onlyReadFromCache);
+  ResultAndCacheStatus computeOnce(
+      const Key& key,
+      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
+      bool onlyReadFromCache = false) {
+    return computeOnceImpl(false, key, computeFunction, onlyReadFromCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
   /// completes, the result will be pinned in the underlying cache.
-  ResultAndCacheStatus computeOncePinned(const Key& key,
-                                         std::invocable auto computeFunction,
-                                         bool onlyReadFromCache = false) {
-    return computeOnceImpl(true, key, std::move(computeFunction),
-                           onlyReadFromCache);
+  ResultAndCacheStatus computeOncePinned(
+      const Key& key,
+      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
+      bool onlyReadFromCache = false) {
+    return computeOnceImpl(true, key, computeFunction, onlyReadFromCache);
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -307,18 +308,11 @@ class ConcurrentCache {
 
  private:
   // implementation for computeOnce (pinned and normal variant).
-  // TODO<RobinTF> Accept cache extractor function (Result, computeFunction,
-  // isInitiator) -> Result/Value, in the case of a generator for the idtables,
-  // this extractor would wrap the generator inside another generator that
-  // catches exceptions indicating too slow consumption and calls
-  // computeFunction to make up for the "lost" data. On completion, if the whole
-  // thing fits in the cache replace with a non-generator variant. In case a
-  // non-lazy idtable was requested and a lazy idtable is in cache, iterate over
-  // it to aggregate the values. On exception (because you might not have
-  // ownership), invoke computeFunction and put the result into cache again.
-  ResultAndCacheStatus computeOnceImpl(bool pinned, const Key& key,
-                                       std::invocable auto computeFunction,
-                                       bool onlyReadFromCache) {
+  ResultAndCacheStatus computeOnceImpl(
+      bool pinned, const Key& key,
+      const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
+      bool onlyReadFromCache) {
+    using std::make_shared;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
     // first determine whether we have to compute the result,
