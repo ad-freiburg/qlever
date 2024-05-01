@@ -9,7 +9,12 @@ namespace JoinOrdering::ASI {
 
 template <typename N>
 requires RelationAble<N> auto rank(QueryGraph<N>& g, const N& n) -> float {
-  auto r = (T(g, n) - 1) / C(g, n);
+  auto c = C(g, n);
+  auto t = T(g, n);
+
+  // TODO: what's the rank of root?
+  if (c == 0) return 0;
+  auto r = (t - 1) / c;
   // assert rank [0, 1]
   AD_CONTRACT_CHECK(r >= 0 && r <= 1);
   return r;

@@ -5,9 +5,9 @@
 
 #include <gtest/gtest.h>
 
-#include "engine/joinOrdering/IKKBZ.cpp"
-#include "engine/joinOrdering/QueryGraph.cpp"
-#include "engine/joinOrdering/RelationBasic.cpp"
+#include "engine/joinOrdering/IKKBZ.h"
+#include "engine/joinOrdering/QueryGraph.h"
+#include "engine/joinOrdering/RelationBasic.h"
 
 using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic,
     JoinOrdering::toPrecedenceGraph, JoinOrdering::Direction;
