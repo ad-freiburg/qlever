@@ -6,9 +6,9 @@
 #include <gtest/gtest.h>
 
 #include "engine/joinOrdering/CostASI.h"
-#include "engine/joinOrdering/IKKBZ.h"
-#include "engine/joinOrdering/QueryGraph.h"
-#include "engine/joinOrdering/RelationBasic.h"
+#include "engine/joinOrdering/IKKBZ.cpp"
+#include "engine/joinOrdering/QueryGraph.cpp"
+#include "engine/joinOrdering/RelationBasic.cpp"
 
 #define eps 0.001
 

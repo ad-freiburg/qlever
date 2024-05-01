@@ -12,13 +12,17 @@ requires RelationAble<N> auto QueryGraph<N>::add_relation(const N& n) -> N {
   // extract the cardinality and add to the cardinality map to make
   // the lookup process easy when using cost function
   //  cardinality[n] = n.getCardinality();
+
+  // TODO: unordered_set?
+  if (!has_relation(n)) relations_.push_back(n);
   return n;
 }
 
 template <typename N>
 requires RelationAble<N> bool QueryGraph<N>::has_relation(const N& n) const {
   // TODO: doesn't work if the relation has no connection?
-  return edges_.contains(n);
+  //  return edges_.contains(n);
+  return std::find(relations_.begin(), relations_.end(), n) != relations_.end();
 }
 
 template <typename N>

@@ -5,9 +5,9 @@
 
 #include <gtest/gtest.h>
 
-#include "engine/joinOrdering/IKKBZ.h"
-#include "engine/joinOrdering/QueryGraph.h"
-#include "engine/joinOrdering/RelationBasic.h"
+#include "engine/joinOrdering/IKKBZ.cpp"
+#include "engine/joinOrdering/QueryGraph.cpp"
+#include "engine/joinOrdering/RelationBasic.cpp"
 
 using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic,
     JoinOrdering::toPrecedenceGraph, JoinOrdering::Direction;
@@ -187,4 +187,49 @@ TEST(IKKBZ_SANITY, PrecedenceGraph1) {
 
   ASSERT_TRUE(pg.has_rjoin(R4, R6));
   ASSERT_EQ(pg.edges_[R4][R6].direction, Direction::PARENT);
+}
+
+TEST(IKKBZ_SANITY, IKKBZ_ARGMIN_EX1) {
+  auto g = QueryGraph<RelationBasic>();
+  auto R1 = g.add_relation(RelationBasic("R1", 10));
+  auto R2 = g.add_relation(RelationBasic("R2", 100));
+  auto R3 = g.add_relation(RelationBasic("R3", 100));
+  auto R4 = g.add_relation(RelationBasic("R4", 100));
+  auto R5 = g.add_relation(RelationBasic("R5", 18));
+  auto R6 = g.add_relation(RelationBasic("R6", 10));
+  auto R7 = g.add_relation(RelationBasic("R7", 20));
+
+  g.add_rjoin(R1, R2, 1.0 / 2);
+  g.add_rjoin(R1, R3, 1.0 / 4);
+  g.add_rjoin(R1, R4, 1.0 / 5);
+  g.add_rjoin(R4, R5, 1.0 / 3);
+  g.add_rjoin(R4, R6, 1.0 / 2);
+  g.add_rjoin(R6, R7, 1.0 / 10);
+
+  ASSERT_EQ(IKKBZ(g), (std::vector{R2, R1, R4, R6, R7, R5, R3}));
+}
+
+TEST(IKKBZ_SANITY, IKKBZ_ARGMIN_EX2) {
+  auto g = QueryGraph<RelationBasic>();
+
+  auto R1 = g.add_relation(RelationBasic("R1", 30));
+  auto R2 = g.add_relation(RelationBasic("R2", 100));
+  auto R3 = g.add_relation(RelationBasic("R3", 30));
+  auto R4 = g.add_relation(RelationBasic("R4", 20));
+  auto R5 = g.add_relation(RelationBasic("R5", 10));
+  auto R6 = g.add_relation(RelationBasic("R6", 20));
+  auto R7 = g.add_relation(RelationBasic("R7", 70));
+  auto R8 = g.add_relation(RelationBasic("R8", 100));
+  auto R9 = g.add_relation(RelationBasic("R9", 100));
+
+  g.add_rjoin(R1, R3, 1.0 / 6);
+  g.add_rjoin(R2, R3, 1.0 / 10);
+  g.add_rjoin(R3, R4, 1.0 / 20);
+  g.add_rjoin(R4, R5, 3.0 / 4);
+  g.add_rjoin(R5, R6, 1.0 / 2);
+  g.add_rjoin(R6, R7, 1.0 / 14);
+  g.add_rjoin(R5, R8, 1.0 / 5);
+  g.add_rjoin(R8, R9, 1.0 / 25);
+
+  ASSERT_EQ(IKKBZ(g), (std::vector({R8, R5, R4, R9, R1, R3, R6, R7, R2})));
 }

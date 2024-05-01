@@ -10,9 +10,35 @@
 namespace JoinOrdering {
 
 template <typename N>
+requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
+  std::vector<N> rxs(g.relations_);
+  typedef std::pair<std::vector<N>, float> vf;
+
+  // TODO: execution::par_unseq
+  auto qcxs = std::views::transform(rxs, [&](const N& n) {
+    //    std::cout << "ROOTED AT " << n.getLabel() << "\n";
+    auto pg_ikbbz = IKKBZ(g, n);
+    auto q = pg_ikbbz.iter();
+    auto qn = std::pair(q, ASI::C(pg_ikbbz, q));
+    //        std::cout << n.getLabel() << " " << qn.second << "\n";
+    return qn;
+  });
+
+  std::vector<N> erg;
+  float min_cost = std::numeric_limits<float>::max();
+  // TODO: std::transform_reduce, std::min_element or whatever
+  for (const vf& x : qcxs)
+    if (min_cost > x.second) {
+      erg = x.first;
+      min_cost = x.second;
+    }
+
+  return erg;
+}
+
+template <typename N>
 requires RelationAble<N>
 auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N> {
-  // TODO: argmin over all rooted relations
   auto new_g = toPrecedenceGraph(g, n);
   IKKBZ_Sub(new_g);
   return new_g;
@@ -20,7 +46,7 @@ auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N> {
 
 template <typename N>
 requires RelationAble<N>
-[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N>& g, const N& root)
+[[nodiscard]] auto toPrecedenceGraph(QueryGraph<N> g, const N& root)
     -> QueryGraph<N> {
   // bfs-ing over g and assign direction to visited relation
   auto pg = QueryGraph<N>();

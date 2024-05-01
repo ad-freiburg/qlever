@@ -40,6 +40,7 @@ requires RelationAble<N> class QueryGraph {
   QueryGraph() = default;
 
   //  ad_utility::HashMap<N, std::pair<N, EdgeInfo>> edges_;
+  std::vector<N> relations_;
   ad_utility::HashMap<N, ad_utility::HashMap<N, EdgeInfo>> edges_;
   ad_utility::HashMap<N, std::vector<N>> hist;
   ad_utility::HashMap<N, float> selectivity;
