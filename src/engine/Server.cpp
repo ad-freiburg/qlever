@@ -840,8 +840,9 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
        handle = std::move(handle), timeLimit,
        maxSend]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
-        if (maxSend.has_value() && !pq._limitOffset._limit.has_value()) {
-          pq._limitOffset._limit = maxSend.value();
+        if (maxSend.has_value()) {
+          pq._limitOffset._limit =
+              std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
         }
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
