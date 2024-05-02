@@ -71,7 +71,7 @@ class PatternCreator {
  public:
   using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
   using OSPSorter4Cols =
-      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 5>;
 
   // Combine all the triples that this pattern creator creates.
   struct TripleSorter {
@@ -105,7 +105,7 @@ class PatternCreator {
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
   struct TripleAndIsInternal {
-    std::array<Id, 3> triple_;
+    std::array<Id, 4> triple_;
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
@@ -142,7 +142,7 @@ class PatternCreator {
   // This function has to be called for all the triples in the SPO permutation
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
-  void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
+  void processTriple(std::array<Id, 4> triple, bool ignoreForPatterns);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note

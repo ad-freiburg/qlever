@@ -51,7 +51,7 @@ using std::vector;
 
 using json = nlohmann::json;
 
-static constexpr size_t NumColumnsIndexBuilding = 3;
+static constexpr size_t NumColumnsIndexBuilding = 4;
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -71,7 +71,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -93,7 +93,7 @@ struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
 
 class IndexImpl {
  public:
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
@@ -803,7 +803,7 @@ class IndexImpl {
   // subject pattern of the object (which is created by this function). Return
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
-  std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
+  std::unique_ptr<ExternalSorter<SortByPSO, 6>> buildOspWithPatterns(
       PatternCreator::TripleSorter sortersFromPatternCreator,
       auto isQLeverInternalId);
 };

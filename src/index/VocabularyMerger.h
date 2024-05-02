@@ -19,7 +19,7 @@
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 
-using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+using TripleVec = ad_utility::CompressedExternalIdTable<4>;
 
 namespace ad_utility::vocabulary_merger {
 // Concept for a callback that can be called with a single `string_view`

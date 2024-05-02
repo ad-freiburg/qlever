@@ -55,9 +55,9 @@ struct TripleComponentWithIndex {
 };
 
 using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
-// A triple that also knows for each entry, whether this entry should be
+// A triple + GraphId that also knows for each entry, whether this entry should be
 // part of the external vocabulary.
-using Triple = std::array<TripleComponentOrId, 3>;
+using Triple = std::array<TripleComponentOrId, 4>;
 
 // Convert a triple of `std::string` to a triple of `TripleComponents`. All
 // three entries will have `isExternal()==false` and an uninitialized ID.
@@ -177,8 +177,8 @@ struct alignas(256) ItemMapManager {
   }
 
   /// call getId for each of the Triple elements.
-  std::array<Id, 3> getId(const Triple& t) {
-    return {getId(t[0]), getId(t[1]), getId(t[2])};
+  std::array<Id, 4> getId(const Triple& t) {
+    return {getId(t[0]), getId(t[1]), getId(t[2]), getId(t[3])};
   }
   ItemMapAndBuffer map_;
   uint64_t minId_ = 0;
@@ -242,7 +242,7 @@ auto getIdMapLambdas(
     itemArray[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds = std::array<std::optional<std::array<Id, 4>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -274,14 +274,14 @@ auto getIdMapLambdas(
         //  then the emplace calls don't need the explicit type.
         // extra triple <subject> @language@<predicate> <object>
         res[1].emplace(
-            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+            std::array<Id, 4>{spoIds[0], langTaggedPredId, spoIds[2], spoIds[3]});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(std::array<Id, 3>{
+        res[2].emplace(std::array<Id, 4>{
             spoIds[2],
             map.getId(
                 TripleComponent{ad_utility::triple_component::Iri::fromIriref(
                     LANGUAGE_PREDICATE)}),
-            langTagId});
+            langTagId, spoIds[3]});
       }
       return res;
     };

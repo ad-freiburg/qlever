@@ -112,9 +112,9 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     return projectionForComparator(l) < projectionForComparator(r);
   };
 
-  // There are 5 columns in the result (3 from the triple, as well as subject
+  // There are 6 columns in the result (4 from the triple + graph ID, as well as subject
   // patterns of the subject and object).
-  IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+  IdTable outputTable{6, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
       1, std::move(outputTable),
@@ -134,7 +134,7 @@ auto fixBlockAfterPatternJoin(auto block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
-  block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
+  block.value().setColumnSubset(std::array<ColumnIndex, 6>{2, 1, 0, 3, 4, 5});
   std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
     id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
   });
@@ -143,7 +143,7 @@ auto fixBlockAfterPatternJoin(auto block) {
 }  // namespace
 
 // ____________________________________________________________________________
-std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
+std::unique_ptr<ExternalSorter<SortByPSO, 6>> IndexImpl::buildOspWithPatterns(
     PatternCreator::TripleSorter sortersFromPatternCreator,
     auto isQleverInternalId) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
@@ -163,7 +163,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
   // function.
   auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
-      secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
+      secondSorter, std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
 
   // Run the actual join between the OSP permutation and the `has-pattern`
   // predicate on a background thread. The result will be pushed to the `queue`
@@ -172,7 +172,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       [&queue, &ospAsBlocksTransformed, &lazyPatternScan] {
         // Setup the callback for the join that will buffer the results and push
         // them to the queue.
-        IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+        IdTable outputBufferTable{6, ad_utility::makeUnlimitedAllocator<Id>()};
         auto pushToQueue =
             [&, bufferSize =
                     BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](IdTable& table) {
@@ -231,11 +231,11 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
                "the internal `ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
-  static_assert(NumColumnsIndexBuilding == 3);
+  static_assert(NumColumnsIndexBuilding == 4);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
-    // The repetition of the pattern index (`row[2]`) for the fourth column is
+    // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
-    thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
+    thirdSorter->push(std::array{row[0], row[1], row[2], row[3], row[2], noPattern});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -343,7 +343,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, 3>> localWriter;
+    std::vector<std::array<Id, 4>> localWriter;
 
     std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
@@ -488,7 +488,7 @@ IndexImpl::convertPartialToGlobalIds(
   auto& result = *resultPtr;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
-  using Buffer = IdTableStatic<3>;
+  using Buffer = IdTableStatic<4>;
   using Map = ad_utility::HashMap<Id, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
@@ -1487,7 +1487,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
       bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
-      auto tripleArr = std::array{triple[0], triple[1], triple[2]};
+      auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
     numSubjectsTotal = createPermutationPair(
