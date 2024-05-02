@@ -166,28 +166,6 @@ TEST(COSTASI_SANITY, SESSION04_EX2) {
 }
 
 TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
-  /**
-
-                 R1
-                (100)
-      1/100     |    |      1
-  +-------------+    +--------------+
-  |                                 |
-
-  R2                                  R3
- (1000000)                          (1000)
-
-                          1/30      |    |   1
-                     +--------------+    +----------+
-                     |                              |
-
-                     R4                            R5
-                  (150000)                        (50)
-
-
-                        133
-
-   */
   auto g = QueryGraph<RelationBasic>();
 
   auto R1 = g.add_relation(RelationBasic("R1", 100));

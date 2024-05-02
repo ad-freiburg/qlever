@@ -108,22 +108,19 @@ bool IKKBZ_Normalized(QueryGraph<N>& g, const N& subtree_root) {
 template <typename N>
 requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, const N& n) {
   // we get here after we are already sure that descendents are in a chain
-  auto dv = g.iter(n);
-  // iter includes n, exclude n from sorting
-  // n is always at the beginning
-  dv.erase(dv.begin());
+  auto dv = g.iter(n);  // iter includes "n" back.
 
-  if (dv.empty()) return;
-
-  std::ranges::sort(dv, [&](const N& a, const N& b) {
-    return ASI::rank(g, a) < ASI::rank(g, b);
-  });
+  // exclude n from sorting. subchain root not considered during sorting.
+  // n is always at the beginning of dv
+  std::ranges::partial_sort(dv.begin() + 1, dv.end(), dv.end(),
+                            [&](const N& a, const N& b) {
+                              return ASI::rank(g, a) < ASI::rank(g, b);
+                            });
 
   // given a sequence post sort dv (a, b, c, d, ...)
-  // we remove all connections they have and conform to the order
-  // we got post the sorting process (a -> b -> c -> d)
-  g.unlink(dv[0]);
-  g.add_rjoin(n, dv[0], g.selectivity[dv[0]], Direction::PARENT);
+  // include subchain root at the beginning (n, a, b, c, d, ...)
+  // we remove all connections they have (except n) and conform to the order
+  // we get post the sorting process (n -> a -> b -> c -> d)
 
   for (size_t i = 1; i < dv.size(); i++) {
     g.unlink(dv[i]);
