@@ -121,11 +121,11 @@ requires RelationAble<N> class QueryGraph {
   void rm_rjoin(const N& a, const N& b);
 
   /**
-   * Gets all the direct neighbours of a given relation where relation n is set
-   * as a Direction::PARENT to the neighbour relation.
+   * Gets all **direct** neighbours (1-level) of a given relation where
+   * relation n is set as a Direction::PARENT to the neighbour relation.
    *
    * Ignores any connections where hidden is set to true.
-   * @see QueryGraph::get_descendents
+   * @see QueryGraph::iter
    * @param n Relation
    * @return A view to the children of Relation n
    */
@@ -138,24 +138,10 @@ requires RelationAble<N> class QueryGraph {
    * Ignores any connections where hidden is set to true.
    *
    * Similar to QueryGraph::get_children
-   * @param n
-   * @return
+   * @param n Relation
+   * @return A view to the parent of Relation n
    */
   auto get_parent(const N& n) const;
-
-  /**
-   * Gets ALL relations where given relation n is an ancestor
-   * (parent, grandparent, ...).
-   *
-   * Relation n itself is ALSO include in the
-   * resultant set (for convenience).
-   *
-   *
-   * @see QueryGraph::get_children
-   * @param n Relation
-   * @return set of lineage relations to give Relation N including n itself
-   */
-  auto get_descendents(const N& n) -> std::set<N>;
 
   /**
    * Given 2 Relations (already exist on the QueryGraph),
@@ -221,14 +207,25 @@ requires RelationAble<N> class QueryGraph {
   auto get_chained_subtree(const N& n) -> N;
 
   // TODO: std::iterator or std::iterator_traits
-  void iter(const N& n) const;
 
-  // TODO: std::iterator or std::iterator_traits
+  /**
+   * Get all relations in a query graph starting from it's root
+   *
+   * @return vector of all relation in the QueryGraph
+   */
   auto iter() -> std::vector<N>;
 
- private:
-  void get_descendents(const N&, std::set<N>&);
-  void iter(const N&, std::set<N>&) const;
+  /**
+   * Gets ALL relations where given relation n is an ancestor
+   * (parent, grandparent, ...).
+   *
+   * Relation n itself is ALSO include in the resultant set (for convenience).
+   *
+   * @see QueryGraph::get_children
+   * @param n Relation
+   * @return vector of lineage relations to give Relation N including n itself
+   */
+  auto iter(const N& n) -> std::vector<N>;
 
   constexpr static Direction inv(Direction);
 };

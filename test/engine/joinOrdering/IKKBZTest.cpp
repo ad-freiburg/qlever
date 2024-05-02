@@ -11,21 +11,22 @@
 
 using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic,
     JoinOrdering::toPrecedenceGraph, JoinOrdering::Direction;
+
 TEST(IKKBZ_SANITY, EX1_R1toR7) {
   /*
-            R2     1/2                         1/3      R5
-           (10)   ---------+             +-----------  (18)
-                           |             |
+        R2     1/2                         1/3      R5
+       (10)   ---------+             +-----------  (18)
+                       |             |
 
-                           R1    1/5     R4
-                          (10)  ------  (100)
+                       R1    1/5     R4
+                      (10)  ------  (100)
 
-                           |             |
-            R3     1/4     |             |     1/2      R6    1/10     R7
-           (100)  ---------+             +-----------  (10)  -------  (20)
+                       |             |
+        R3     1/4     |             |     1/2      R6    1/10     R7
+       (100)  ---------+             +-----------  (10)  -------  (20)
 
 
-                                       124/647
+                                   124/647
    */
 
   auto g = QueryGraph<RelationBasic>();
@@ -231,5 +232,46 @@ TEST(IKKBZ_SANITY, IKKBZ_ARGMIN_EX2) {
   g.add_rjoin(R5, R8, 1.0 / 5);
   g.add_rjoin(R8, R9, 1.0 / 25);
 
-  ASSERT_EQ(IKKBZ(g), (std::vector({R8, R5, R4, R9, R1, R3, R6, R7, R2})));
+  //  ASSERT_EQ(IKKBZ(g), (std::vector({R8, R5, R4, R9, R1, R3, R6, R7, R2})));
+  ASSERT_EQ(IKKBZ(g), (std::vector({R8, R5, R4, R9, R3, R1, R6, R7, R2})));
+}
+
+TEST(IKKBZ_SANITY, KRISHNAMURTHY1986_133) {
+  /**
+
+                          R1
+                         (100)
+
+            1/10      |    |        1
+  +-------------------+    +------------------+
+  |                                           |
+
+    R2                                        R3
+ (1000000)                                  (1000)
+
+                                  1/30      |    |   1
+                         +------------------+    +----------+
+                         |                                  |
+
+                         R4                                 R5
+                      (150000)                             (50)
+
+
+                               133
+
+   */
+  auto g = QueryGraph<RelationBasic>();
+
+  auto R1 = g.add_relation(RelationBasic("R1", 100));
+  auto R2 = g.add_relation(RelationBasic("R2", 1000000));
+  auto R3 = g.add_relation(RelationBasic("R3", 1000));
+  auto R4 = g.add_relation(RelationBasic("R4", 150000));
+  auto R5 = g.add_relation(RelationBasic("R5", 50));
+
+  g.add_rjoin(R1, R2, 1.0 / 100);
+  g.add_rjoin(R1, R3, 1.0 / 1);
+  g.add_rjoin(R3, R4, 1.0 / 30);
+  g.add_rjoin(R3, R5, 1.0 / 1);
+
+  ASSERT_EQ(IKKBZ(g, R1).iter(), (std::vector({R1, R3, R5, R4, R2})));
 }

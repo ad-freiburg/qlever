@@ -12,9 +12,7 @@
 
 #define eps 0.001
 
-using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic,
-    JoinOrdering::Direction, JoinOrdering::IKKBZ_merge,
-    JoinOrdering::toPrecedenceGraph;
+using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic;
 
 TEST(COSTASI_SANITY, SESSION04_EX1) {
   /**
@@ -63,19 +61,19 @@ TEST(COSTASI_SANITY, SESSION04_EX1) {
   g.add_rjoin(R3, R4, 1.0 / 10);
   g.add_rjoin(R3, R5, 1.0);
 
-  auto pg = toPrecedenceGraph(g, R1);
+  auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R2), 3.0 / 4, eps);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R3), 9.0 / 10, eps);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R4), 4.0 / 5, eps);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5), 1.0 / 2, eps);
 
-  IKKBZ_merge(pg, R3);
+  JoinOrdering::IKKBZ_merge(pg, R3);
   auto R3R5 = pg.combine(R3, R5);
   ASSERT_EQ(R3R5.getCardinality(), 60);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R3R5), 19.0 / 30, 0.001);
 }
 
-TEST(IKKBZ_SANITY, SESSION04_EX2) {
+TEST(COSTASI_SANITY, SESSION04_EX2) {
   /*
 
  R1    1/6
@@ -161,8 +159,49 @@ TEST(IKKBZ_SANITY, SESSION04_EX2) {
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R6R7), 49.0 / 60, eps);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R8R9), 79.0 / 100, eps);
 
-  IKKBZ_merge(pg, R5);
+  JoinOrdering::IKKBZ_merge(pg, R5);
 
   auto R5R8R9 = pg.combine(R5, R8R9);
   EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5R8R9), 1198.0 / 1515, eps);
+}
+
+TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
+  /**
+
+                 R1
+                (100)
+      1/100     |    |      1
+  +-------------+    +--------------+
+  |                                 |
+
+  R2                                  R3
+ (1000000)                          (1000)
+
+                          1/30      |    |   1
+                     +--------------+    +----------+
+                     |                              |
+
+                     R4                            R5
+                  (150000)                        (50)
+
+
+                        133
+
+   */
+  auto g = QueryGraph<RelationBasic>();
+
+  auto R1 = g.add_relation(RelationBasic("R1", 100));
+  auto R2 = g.add_relation(RelationBasic("R2", 1000000));
+  auto R3 = g.add_relation(RelationBasic("R3", 1000));
+  auto R4 = g.add_relation(RelationBasic("R4", 150000));
+  auto R5 = g.add_relation(RelationBasic("R5", 50));
+
+  g.add_rjoin(R1, R2, 1.0 / 100);
+  g.add_rjoin(R1, R3, 1.0 / 1);
+  g.add_rjoin(R3, R4, 1.0 / 30);
+  g.add_rjoin(R3, R5, 1.0 / 1);
+
+  auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
+
+  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5), 0.98, eps);
 }

@@ -76,7 +76,6 @@ template <typename N>
 requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g) {
   while (!g.is_chain(g.root)) {
     auto subtree = g.get_chained_subtree(g.root);
-
     while (!IKKBZ_Normalized(g, subtree))
       ;
     IKKBZ_merge(g, subtree);
@@ -87,16 +86,13 @@ requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g) {
 template <typename N>
 requires RelationAble<N>
 bool IKKBZ_Normalized(QueryGraph<N>& g, const N& subtree_root) {
-  for (auto const& d : g.get_descendents(subtree_root)) {
+  for (auto const& d : g.iter(subtree_root)) {
     auto pv = g.get_parent(d);
     if (pv.empty()) continue;
     auto p = pv.front();
-
-    if (p == g.root) continue;  // TODO: check skip norm root
     if (d == subtree_root || p == subtree_root) continue;
 
-    auto cxs = g.get_children(p);
-    for (auto const& c : cxs)
+    for (auto const& c : g.get_children(p))
       // "precedence graph demands A -> B but rank(A) > rank(B),
       // we speak of contradictory sequences."
       // 118/637
@@ -112,11 +108,11 @@ bool IKKBZ_Normalized(QueryGraph<N>& g, const N& subtree_root) {
 template <typename N>
 requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, const N& n) {
   // we get here after we are already sure that descendents are in a chain
-  auto dxs = g.get_descendents(n);
+  auto dv = g.iter(n);
+  // iter includes n, exclude n from sorting
+  // n is always at the beginning
+  dv.erase(dv.begin());
 
-  // get_descendents includes n, exclude from sorting
-  dxs.erase(n);
-  std::vector<N> dv(dxs.begin(), dxs.end());
   if (dv.empty()) return;
 
   std::ranges::sort(dv, [&](const N& a, const N& b) {
@@ -137,10 +133,13 @@ requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, const N& n) {
 
 template <typename N>
 requires RelationAble<N> void IKKBZ_denormalize(QueryGraph<N>& g) {
-  while (!std::ranges::all_of(g.get_descendents(g.root), [g](const N& n) {
-    if (g.hist.contains(n)) return g.hist.at(n).empty();
-    return true;
-  }))
-    for (auto const& x : g.get_descendents(g.root)) g.uncombine(x);
+  auto is_compound = [&](const N& n) { return g.is_compound_relation(n); };
+  auto uncombine = [&](const N& n) { g.uncombine(n); };
+
+  // R1 -> R4R6R7 -> R5 -> R3 -> R2
+  auto fv = std::views::filter(g.iter(), is_compound);  // R4R6R7
+
+  // R1 -> R4 -> R6 -> R7 -> R5 -> R3 -> R2
+  std::for_each(fv.begin(), fv.end(), uncombine);
 }
 }  // namespace JoinOrdering

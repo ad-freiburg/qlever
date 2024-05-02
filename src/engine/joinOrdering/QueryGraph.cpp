@@ -119,7 +119,7 @@ N QueryGraph<N>::combine(const N& a,
 
   // add the newly computed cardinality to the
   // cardinality map of the query graph.
-  auto n = this->add_relation(N(a.getLabel() + "," + b.getLabel(), w));
+  auto n = add_relation(N(a.getLabel() + "," + b.getLabel(), w));
 
   // to be able to apply the inverse operation (QueryGraph::uncombine)
   // we keep track of the combined relation in the `hist` map
@@ -265,32 +265,8 @@ requires RelationAble<N> auto QueryGraph<N>::get_children(const N& n) const {
 
 template <typename N>
 requires RelationAble<N>
-void QueryGraph<N>::get_descendents(const N& n, std::set<N>& acc) {
-  if (acc.contains(n)) return;
-  for (auto const& x : get_children(n)) {
-    get_descendents(x, acc);
-    acc.insert(x);
-  }
-}
-
-template <typename N>
-requires RelationAble<N>
-auto QueryGraph<N>::get_descendents(const N& n) -> std::set<N> {
-  // TODO: join views?
-  std::set<N> acc{};
-  get_descendents(n, acc);
-  acc.insert(n);  // including frequently used self
-  return acc;
-}
-
-template <typename N>
-requires RelationAble<N>
 auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
-  //    for (auto const& x : get_descendents(n)) {
-  //      if (is_subtree(x)) return x;
-  //    }
-
-  auto dxs = get_descendents(n);
+  auto dxs = iter(n);
 
   auto it =
       std::ranges::find_if(dxs, [&](const N& x) { return is_subtree(x); });
@@ -303,19 +279,21 @@ auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
 
 template <typename N>
 requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
+  // QueryGraph(Relation)?
+  AD_CONTRACT_CHECK(&root != NULL);
+  return iter(root);
+}
+
+template <typename N>
+requires RelationAble<N>
+auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
   auto erg = std::vector<N>();
   auto q = std::queue<N>();
   auto v = std::set<N>();
 
-  // TODO: switch to get_descendents(root); with unordered_set
-
-  // TODO: ensure query graph has a root assigned with a constructor
-  // QueryGraph(Relation)?
-  AD_CONTRACT_CHECK(&root != NULL);
-  auto n = root;
-  v.insert(root);
-  q.push(root);
-  erg.push_back(root);
+  v.insert(n);
+  q.push(n);
+  erg.push_back(n);
 
   while (!q.empty()) {
     auto f = q.front();
@@ -330,28 +308,6 @@ requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
   }
 
   return erg;
-}
-
-template <typename N>
-requires RelationAble<N> void QueryGraph<N>::iter(const N& n) const {
-  std::set<N> visited{};
-  iter(n, visited);
-}
-
-template <typename N>
-requires RelationAble<N>
-void QueryGraph<N>::iter(const N& n, std::set<N>& visited) const {
-  if (visited.contains(n)) return;
-
-  for (auto const& [x, e] : edges_.at(n)) {  // edges_[n]
-    if (e.hidden) continue;
-    //    std::cout << n.getLabel() << " " << x.getLabel() << " "
-    //              << static_cast<int>(e.direction) << " "
-    //              << static_cast<int>(e.hidden) << "\n";
-    visited.insert(n);
-
-    iter(x, visited);
-  }
 }
 
 template <typename N>
