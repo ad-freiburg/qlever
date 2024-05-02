@@ -31,30 +31,26 @@ LocalVocab LocalVocab::merge(std::span<const LocalVocab*> vocabs) {
 // _____________________________________________________________________________
 template <typename WordT>
 LocalVocabIndex LocalVocab::getIndexAndAddIfNotContainedImpl(WordT&& word) {
-  // TODO<joka921> As soon as we store `IdOrString` in the local vocab, we
-  // should definitely use `insert` instead of `emplace` here for some
-  // transparency optimizations. We currently need `emplace` because of the
-  // explicit conversion from `string` to `AlignedString16`.
-  auto [wordIterator, isNewWord] =
-      primaryWordSet().emplace(std::forward<WordT>(word));
+  auto [wordIterator, isNewWord] = primaryWordSet().insert(AD_FWD(word));
   // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
   // the MacOS build.
   return &(*wordIterator);
 }
 
 // _____________________________________________________________________________
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(const Entry& word) {
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(
+    const LiteralOrIri& word) {
   return getIndexAndAddIfNotContainedImpl(word);
 }
 
 // _____________________________________________________________________________
-LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(Entry&& word) {
+LocalVocabIndex LocalVocab::getIndexAndAddIfNotContained(LiteralOrIri&& word) {
   return getIndexAndAddIfNotContainedImpl(std::move(word));
 }
 
 // _____________________________________________________________________________
 std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
-    const Entry& word) const {
+    const LiteralOrIri& word) const {
   auto localVocabIndex = primaryWordSet().find(word);
   if (localVocabIndex != primaryWordSet().end()) {
     // TODO<Libc++18> Use std::to_address (more idiomatic, but currently breaks
@@ -66,14 +62,15 @@ std::optional<LocalVocabIndex> LocalVocab::getIndexOrNullopt(
 }
 
 // _____________________________________________________________________________
-const LocalVocab::Entry& LocalVocab::getWord(
+const LocalVocab::LiteralOrIri& LocalVocab::getWord(
     LocalVocabIndex localVocabIndex) const {
   return *localVocabIndex;
 }
 
 // _____________________________________________________________________________
-std::vector<LocalVocab::Entry> LocalVocab::getAllWordsForTesting() const {
-  std::vector<Entry> result;
+std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
+    const {
+  std::vector<LiteralOrIri> result;
   std::ranges::copy(primaryWordSet(), std::back_inserter(result));
   for (const auto& previous : otherWordSets_) {
     std::ranges::copy(*previous, std::back_inserter(result));
