@@ -121,6 +121,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
+  } else if (checkPrefix(XSD_PREFIX)) {
+    if (functionName == "integer" || functionName == "int") {
+      checkNumArgs(1);
+      return sparqlExpression::makeIntExpression(std::move(argList[0]));
+    } else if (functionName == "double" || functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeDoubleExpression(std::move(argList[0]));
+    }
   }
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
