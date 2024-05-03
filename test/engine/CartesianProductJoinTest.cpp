@@ -138,14 +138,18 @@ TEST(CartesianProductJoin, computeResult) {
   std::vector<VectorTable> tables;
   VectorTable largeTable;
   largeTable.emplace_back();
-  for (size_t i = 0; i < 10000; ++i) {
+  for (size_t i = 0; i < 10; ++i) {
     largeTable.back().push_back(0);
   }
-  for (size_t i = 0; i < 10000; ++i) {
+  for (size_t i = 0; i < 10; ++i) {
     tables.push_back(largeTable);
   }
   auto largeJoin = makeJoin(tables);
-  AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(), ::testing::HasSubstr("cross-product"));
+  auto allocator = largeJoin.getExecutionContext()->getAllocator();
+  allocator.allocate((allocator.amountMemoryLeft().getBytes() / sizeof(Id)) -
+                     100);
+  AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
+                               ::testing::HasSubstr("cross-product"));
 }
 
 // ______________________________________________________________
