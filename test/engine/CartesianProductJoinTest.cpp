@@ -146,8 +146,7 @@ TEST(CartesianProductJoin, computeResult) {
   }
   auto largeJoin = makeJoin(tables);
   auto allocator = largeJoin.getExecutionContext()->getAllocator();
-  allocator.allocate((allocator.amountMemoryLeft().getBytes() / sizeof(Id)) -
-                     100);
+  allocator.allocate((allocator.amountMemoryLeft().getBytes() / sizeof(Id)));
   AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
                                ::testing::HasSubstr("cross-product"));
 }
