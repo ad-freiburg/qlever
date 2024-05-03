@@ -57,6 +57,7 @@ static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
 static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
 static const std::string DEFAULT_GRAPH_IRI = makeInternalIri("default-graph");
+static const std::string INTERNAL_GRAPH_IRI = makeInternalIri("internal-graph");
 
 static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
@@ -173,6 +174,10 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 // Interval in which an enabled watchdog would check if
 // `CancellationHandle::throwIfCancelled` is called regularly.
 constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
+
+// In all permutations, the graph ID of the triple is stored as the fourth
+// entry.
+constexpr size_t ADDITIONAL_COLUMN_GRAPH_ID = 3;
 
 // In the PSO and PSO permutations the patterns of the subject and object are
 // stored at the following indices. Note that the col0 (the P) is not part of

@@ -9,8 +9,8 @@
 static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 
 // _________________________________________________________________________
-void PatternCreator::processTriple(std::array<Id, 4> triple,
-                                   bool ignoreForPatterns) {
+void PatternCreator::processTriple(
+    std::array<Id, NumColumnsIndexBuilding> triple, bool ignoreForPatterns) {
   if (ignoreForPatterns) {
     tripleBuffer_.emplace_back(triple, ignoreForPatterns);
     return;
@@ -60,6 +60,9 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   auto curSubject = currentSubject_.value();
   std::ranges::for_each(tripleBuffer_, [this, patternId,
                                         &curSubject](const auto& t) {
+    static_assert(NumColumnsIndexBuilding == 4,
+                  "The following lines have to be changed when additional "
+                  "payload columns are added");
     const auto& [s, p, o, g] = t.triple_;
     // It might happen that the `tripleBuffer_` contains different subjects
     // which are purely internal and therefore have no pattern.

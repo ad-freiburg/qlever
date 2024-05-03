@@ -57,7 +57,7 @@ TEST(PatternStatistics, Serialization) {
 
 // Create patterns from a small SPO-sorted sequence of triples.
 auto createExamplePatterns(PatternCreator& creator) {
-  using A = std::array<Id, 5>;
+  using A = std::array<Id, NumColumnsIndexBuilding + 1>;
   std::vector<A> expected;
 
   // push the `triple` with the `isIgnored` information to the pattern creator,
@@ -69,6 +69,9 @@ auto createExamplePatterns(PatternCreator& creator) {
                                                   size_t patternIdx) {
     const auto& [s, p, o] = triple;
     auto withGraph = std::array{s, p, o, graphPayload};
+    static_assert(NumColumnsIndexBuilding == 4,
+                  "The following lines have to be changed once addditional "
+                  "payload columns are added");
     creator.processTriple(withGraph, isIgnoredTriple);
     expected.push_back(
         A{triple[0], triple[1], triple[2], graphPayload, I(patternIdx)});
@@ -100,10 +103,11 @@ auto createExamplePatterns(PatternCreator& creator) {
   std::ranges::sort(expected, SortByOSP{});
   auto tripleOutputs = std::move(creator).getTripleSorter();
   auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
-  std::vector<std::array<Id, 5>> actual;
-  for (auto& block : triples.getSortedBlocks<5>()) {
+  static constexpr size_t numCols = NumColumnsIndexBuilding + 1;
+  std::vector<std::array<Id, numCols>> actual;
+  for (auto& block : triples.getSortedBlocks<numCols>()) {
     for (const auto& row : block) {
-      actual.push_back(static_cast<std::array<Id, 5>>(row));
+      actual.push_back(static_cast<std::array<Id, numCols>>(row));
     }
   }
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));

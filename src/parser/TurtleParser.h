@@ -43,8 +43,6 @@ struct TurtleTriple {
   TripleComponent::Iri predicate_;
   TripleComponent object_;
   TripleComponent graphIri_ = qlever::specialIds.at(DEFAULT_GRAPH_IRI);
-  // TripleComponent graphIri_ =
-  // TripleComponent::Iri::fromIriref("<defaultGraphBla>");
 
   bool operator==(const TurtleTriple&) const = default;
 };

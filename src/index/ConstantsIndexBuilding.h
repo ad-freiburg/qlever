@@ -98,3 +98,5 @@ inline size_t BUFFER_SIZE_PARTIAL_TO_GLOBAL_ID_MAPPINGS = 10'000;
 // infeasible. 250K seems to be a reasonable tradeoff here.
 constexpr ad_utility::MemorySize
     UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN = 250_kB;
+
+static constexpr size_t NumColumnsIndexBuilding = 4;
