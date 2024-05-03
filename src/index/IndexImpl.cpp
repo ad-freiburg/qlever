@@ -112,8 +112,8 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     return projectionForComparator(l) < projectionForComparator(r);
   };
 
-  // There are 6 columns in the result (4 from the triple + graph ID, as well as subject
-  // patterns of the subject and object).
+  // There are 6 columns in the result (4 from the triple + graph ID, as well as
+  // subject patterns of the subject and object).
   IdTable outputTable{6, ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
@@ -135,7 +135,10 @@ auto fixBlockAfterPatternJoin(auto block) {
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
   block.value().setColumnSubset(std::array<ColumnIndex, 6>{2, 1, 0, 3, 4, 5});
-  std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
+  for (const auto& r : block.value()) {
+    std::cerr << r[0] << r[1] << r[2] << r[3] << r[4] << r[5] << std::endl;
+  }
+  std::ranges::for_each(block.value().getColumn(5), [](Id& id) {
     id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
   });
   return std::move(block.value()).template toStatic<0>();
@@ -232,10 +235,12 @@ std::unique_ptr<ExternalSorter<SortByPSO, 6>> IndexImpl::buildOspWithPatterns(
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
   static_assert(NumColumnsIndexBuilding == 4);
+  Id defaultGraph = qlever::specialIds.at(DEFAULT_GRAPH_IRI);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
-    thirdSorter->push(std::array{row[0], row[1], row[2], row[3], row[2], noPattern});
+    thirdSorter->push(
+        std::array{row[0], row[1], row[2], defaultGraph, row[2], noPattern});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -369,8 +374,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
           if (innerOpt) {
             actualCurrentPartialSize++;
             localWriter.push_back(innerOpt.value());
+            const auto& bim = innerOpt.value();
+            std::cerr << bim[0] << bim[1] << bim[2] << bim[3] << std::endl;
           }
         }
+        std::cerr << "end of block" << std::endl;
         numTriplesProcessed++;
         if (progressBar.update()) {
           LOG(INFO) << progressBar.getProgressString() << std::flush;
@@ -523,6 +531,10 @@ IndexImpl::convertPartialToGlobalIds(
     return [&result, &numTriplesConverted, &progressBar,
             triples = std::make_shared<IdTableStatic<0>>(
                 std::move(triples).toDynamic())] {
+      for (const auto& r : *triples) {
+        std::cerr << r[0] << r[1] << r[2] << r[3] << std::endl;
+      }
+      std::cerr << "end of conversion block" << std::endl;
       result.pushBlock(*triples);
       numTriplesConverted += triples->size();
       if (progressBar.update()) {
@@ -954,20 +966,28 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     }
   }
 
-  // If the object of the triple can be directly folded into an ID, do so. Note
-  // that the actual folding is done by the `TripleComponent`.
-  std::optional<Id> idIfNotString = triple.object_.toValueIdIfNotString();
+  auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
+    // If the object of the triple can be directly folded into an ID, do so.
+    // Note that the actual folding is done by the `TripleComponent`.
+    auto& el = std::invoke(getter, triple);
+    std::optional<Id> idIfNotString = el.toValueIdIfNotString();
 
-  // TODO<joka921> The following statement could be simplified by a helper
-  // function "optionalCast";
-  if (idIfNotString.has_value()) {
-    resultTriple[2] = idIfNotString.value();
-  } else {
-    // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple.object_);
-  }
+    // TODO<joka921> The following statement could be simplified by a helper
+    // function "optionalCast";
+    if (idIfNotString.has_value()) {
+      resultTriple[index] = idIfNotString.value();
+    } else {
+      // `toRdfLiteral` handles literals as well as IRIs correctly.
+      resultTriple[index] = std::move(el);
+    }
+  };
+  handleStringOrId(&TurtleTriple::object_, 2);
+  handleStringOrId(&TurtleTriple::graphIri_, 3);
+  // If we ever add additional elements to the triples then we have to change
+  // this position.
+  static_assert(std::tuple_size_v<Triple> == 4);
 
-  for (size_t i = 0; i < 3; ++i) {
+  for (size_t i = 0; i < resultTriple.size(); ++i) {
     auto& el = resultTriple[i];
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
@@ -1427,7 +1447,8 @@ auto makeNumDistinctIdsCounter =
               isInternalId =
                   std::move(isQleverInternalId)](const auto& triple) mutable {
         const auto& id = triple[idx];
-        if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
+        if (id != lastId &&
+            !std::ranges::any_of(triple | std::views::take(3), isInternalId)) {
           numDistinctIds++;
           lastId = id;
         }
@@ -1448,7 +1469,8 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
                              &isInternalId](const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += std::ranges::none_of(triple, isInternalId);
+    numTriplesNormal +=
+        std::ranges::none_of(triple | std::views::take(3), isInternalId);
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter =
@@ -1486,7 +1508,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalId](const auto& triple) {
-      bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
+      bool ignoreForPatterns =
+          std::ranges::any_of(triple | std::views::take(3), isInternalId);
       auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };

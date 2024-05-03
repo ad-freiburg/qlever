@@ -47,6 +47,8 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);
+    } else if constexpr (std::is_same_v<T, Id>) {
+      return value;
     } else if constexpr (std::is_same_v<T, double>) {
       return Id::makeFromDouble(value);
     } else if constexpr (std::is_same_v<T, bool>) {
