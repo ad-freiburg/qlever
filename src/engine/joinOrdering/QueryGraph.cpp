@@ -309,7 +309,7 @@ auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
     }
   }
 
-  return erg;
+  return erg;  // std::move?
 }
 
 template <typename N>

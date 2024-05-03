@@ -134,8 +134,9 @@ requires RelationAble<N> void IKKBZ_denormalize(QueryGraph<N>& g) {
   auto is_compound = [&](const N& n) { return g.is_compound_relation(n); };
   auto uncombine = [&](const N& n) { g.uncombine(n); };
 
+  auto rxs = g.iter();
   // R1 -> R4R6R7 -> R5 -> R3 -> R2
-  auto fv = std::views::filter(g.iter(), is_compound);  // R4R6R7
+  auto fv = std::views::filter(rxs, is_compound);  // R4R6R7
 
   // R1 -> R4 -> R6 -> R7 -> R5 -> R3 -> R2
   std::for_each(fv.begin(), fv.end(), uncombine);
