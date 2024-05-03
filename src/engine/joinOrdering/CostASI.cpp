@@ -36,18 +36,18 @@ requires RelationAble<N> auto C(const QueryGraph<N>& g, const N& n) -> float {
   // i.e: regular relation
   if (!g.is_compound_relation(n)) return T(g, n);
 
-  return C(g, g.hist.at(n));
+  auto seq = g.hist.at(n);
+  return C(g, std::span<N>(seq));
 }
 
 template <typename N>
 requires RelationAble<N>
-auto C(const QueryGraph<N>& g, const std::vector<N>& seq)
-    -> float {  // TODO: std::span
+auto C(const QueryGraph<N>& g, std::span<N> seq) -> float {
   if (seq.empty()) return 0.0f;
   auto s1 = seq.front();
-  //  template instantiation depth exceeds maximum of 900
   //  auto s2 = seq | std::views::drop(1);
-  auto s2 = std::vector(seq.begin() + 1, seq.end());
+  auto s2 = seq.subspan(1);
   return C(g, s1) + T(g, s1) * C(g, s2);  // TODO: might overflow
 }
+
 }  // namespace JoinOrdering::ASI

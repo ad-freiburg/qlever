@@ -3,7 +3,6 @@
 // Author:
 // Mahmoud Khalaf (2024-, khalaf@cs.uni-freiburg.de)
 
-#include <numeric>
 #include <span>
 
 #include "QueryGraph.h"
@@ -66,7 +65,7 @@ requires RelationAble<N> auto T(const QueryGraph<N>& g, const N& n) -> float;
  */
 template <typename N>
 requires RelationAble<N>
-auto C(const QueryGraph<N>& g, const std::vector<N>& seq) -> float;
+auto C(const QueryGraph<N>& g, std::span<N> seq) -> float;
 
 /**
  *

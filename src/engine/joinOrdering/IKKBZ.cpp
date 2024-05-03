@@ -5,7 +5,7 @@
 
 #include "IKKBZ.h"
 
-#include "CostASI.cpp"
+#include "CostASI.h"
 
 namespace JoinOrdering {
 
@@ -28,7 +28,8 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
       [&](const N& n) {  // (2) run IKKBZ routine
         auto ldtree = IKKBZ(g, n);
         auto seq = ldtree.iter();
-        return vf(seq, ASI::C(ldtree, seq));
+        auto seqv = std::span<N>(seq);
+        return vf(seq, ASI::C(ldtree, seqv));
       });
 
   return ldtree_opt;

@@ -6,6 +6,7 @@
 #pragma once
 
 #include <execution>
+#include <numeric>
 
 #include "QueryGraph.h"
 

@@ -5,12 +5,12 @@
 
 #include <gtest/gtest.h>
 
+#include "engine/joinOrdering/CostASI.cpp"
 #include "engine/joinOrdering/IKKBZ.cpp"
 #include "engine/joinOrdering/QueryGraph.cpp"
 #include "engine/joinOrdering/RelationBasic.cpp"
 
-using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic,
-    JoinOrdering::toPrecedenceGraph, JoinOrdering::Direction;
+using JoinOrdering::QueryGraph, JoinOrdering::RelationBasic;
 
 TEST(IKKBZ_SANITY, EX1_R1toR7) {
   /*
@@ -172,22 +172,22 @@ TEST(IKKBZ_SANITY, PrecedenceGraph1) {
   g.add_rjoin(R4, R5, 1);
   g.add_rjoin(R4, R6, 1);
 
-  auto pg = toPrecedenceGraph(g, R1);
+  auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
 
   ASSERT_TRUE(pg.has_rjoin(R1, R3));
-  ASSERT_EQ(pg.edges_[R1][R3].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R1][R3].direction, JoinOrdering::Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R2, R3));
-  ASSERT_EQ(pg.edges_[R3][R2].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R3][R2].direction, JoinOrdering::Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R3, R4));
-  ASSERT_EQ(pg.edges_[R3][R4].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R3][R4].direction, JoinOrdering::Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R4, R5));
-  ASSERT_EQ(pg.edges_[R4][R5].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R4][R5].direction, JoinOrdering::Direction::PARENT);
 
   ASSERT_TRUE(pg.has_rjoin(R4, R6));
-  ASSERT_EQ(pg.edges_[R4][R6].direction, Direction::PARENT);
+  ASSERT_EQ(pg.edges_[R4][R6].direction, JoinOrdering::Direction::PARENT);
 }
 
 TEST(IKKBZ_SANITY, IKKBZ_ARGMIN_EX1) {

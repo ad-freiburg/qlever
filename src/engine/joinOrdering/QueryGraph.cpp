@@ -127,13 +127,15 @@ N QueryGraph<N>::combine(const N& a,
   // a compound relation, so we grab the
   // regular relations it consists of
   if (is_compound_relation(a))
-    for (auto const& x : hist[a]) hist[n].push_back(x);
+    //    for (auto const& x : hist[a]) hist[n].push_back(x);
+    std::ranges::move(hist[a], std::back_inserter(hist[n]));
   else  // regular relation
     hist[n].push_back(a);
 
   // do the same of the relation b
   if (is_compound_relation(b))
-    for (auto const& x : hist[b]) hist[n].push_back(x);
+    //    for (auto const& x : hist[b]) hist[n].push_back(x);
+    std::ranges::move(hist[b], std::back_inserter(hist[n]));
   else  // regular relation
     hist[n].push_back(b);
 
