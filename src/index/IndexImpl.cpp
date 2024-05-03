@@ -131,7 +131,7 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
 
 // Return the array {2, 1, 0, 3, 4, 5, ..., numColumns - 1};
 template <size_t numColumns>
-auto makePermutationFirstThirdSwitched = []() {
+constexpr auto makePermutationFirstThirdSwitched = []() {
   static_assert(numColumns >= 3);
   std::array<ColumnIndex, numColumns> permutation{};
   std::ranges::generate(permutation,
@@ -1443,7 +1443,7 @@ namespace {
 // ID). This is used to count the number of distinct subjects, objects, and
 // predicates during the index building.
 template <size_t idx>
-auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
+constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
   return [lastId = std::optional<Id>{}, &numDistinctIds,
           internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
              const auto& triple) mutable {
@@ -1471,7 +1471,7 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
                                  qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
                                 const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph;
+    numTriplesNormal += static_cast<size_t>(triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
