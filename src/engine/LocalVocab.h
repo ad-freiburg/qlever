@@ -12,21 +12,20 @@
 
 #include "absl/container/node_hash_set.h"
 #include "global/Id.h"
+#include "parser/LiteralOrIri.h"
 
 // A class for maintaing a local vocabulary with contiguous (local) IDs. This is
 // meant for words that are not part of the normal vocabulary (constructed from
 // the input data at indexing time).
 //
-// TODO: This is a first version of this class with basic functionality. Note
-// that the local vocabulary used to be a simple `std::vector<std::string>`
-// defined inside of the `ResultTable` class. You gotta start somewhere.
 class LocalVocab {
  private:
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
-  // `std::string`) to remain stable over their lifetime in the hash map because
-  // we hand out pointers to them.
-  using Set = absl::node_hash_set<StringAligned16>;
+  // `LiteralOrIri`) to remain stable over their lifetime in the hash map
+  // because we hand out pointers to them.
+  using Set = absl::node_hash_set<LiteralOrIri>;
   std::shared_ptr<Set> primaryWordSet_ = std::make_shared<Set>();
 
   // Local vocabularies from child operations that were merged into this
@@ -58,13 +57,13 @@ class LocalVocab {
   // Get the index of a word in the local vocabulary. If the word was already
   // contained, return the already existing index. If the word was not yet
   // contained, add it, and return the new index.
-  LocalVocabIndex getIndexAndAddIfNotContained(const std::string& word);
-  LocalVocabIndex getIndexAndAddIfNotContained(std::string&& word);
+  LocalVocabIndex getIndexAndAddIfNotContained(const LiteralOrIri& word);
+  LocalVocabIndex getIndexAndAddIfNotContained(LiteralOrIri&& word);
 
   // Get the index of a word in the local vocabulary, or std::nullopt if it is
   // not contained. This is useful for testing.
   std::optional<LocalVocabIndex> getIndexOrNullopt(
-      const std::string& word) const;
+      const LiteralOrIri& word) const;
 
   // The number of words in the vocabulary.
   // Note: This is not constant time, but linear in the number of word sets.
@@ -80,14 +79,14 @@ class LocalVocab {
   bool empty() const { return size() == 0; }
 
   // Return a const reference to the word.
-  const std::string& getWord(LocalVocabIndex localVocabIndex) const;
+  const LiteralOrIri& getWord(LocalVocabIndex localVocabIndex) const;
 
   // Create a local vocab that contains and keeps alive all the words from each
   // of the `vocabs`. The primary word set of the newly created vocab is empty.
   static LocalVocab merge(std::span<const LocalVocab*> vocabs);
 
   // Return all the words from all the word sets as a vector.
-  std::vector<std::string> getAllWordsForTesting() const;
+  std::vector<LiteralOrIri> getAllWordsForTesting() const;
 
  private:
   // Common implementation for the two variants of

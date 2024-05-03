@@ -18,7 +18,7 @@ static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
 static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // A wrapper class that can contain either an Iri or a Literal object.
-class LiteralOrIri {
+class alignas(16) LiteralOrIri {
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
@@ -60,6 +60,11 @@ class LiteralOrIri {
     return H::combine(std::move(h), literalOrIri.data_);
   }
   bool operator==(const LiteralOrIri&) const = default;
+
+  auto operator<=>(const LiteralOrIri& rhs) const {
+    // TODO<joka921> Use something unicode-based for this.
+    return toStringRepresentation() <=> rhs.toStringRepresentation();
+  }
 
   // Return true if object contains an Iri object
   bool isIri() const;
