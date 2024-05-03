@@ -1869,3 +1869,17 @@ queries:
       - contains_row: [ "<Zelda_Rubinstein>", "Z-da_Rubinst-n", "Zelda_ubinstein" ]
       - contains_row: [ "<Zhang_Peili>", "Zhang_P-li", "Zhang_Peili"]
       - contains_row: [ "<Zlata_Bartl>", "Zlata_Bartl", "Zlata_Batl"]
+
+  - query: pattern-trick-empty-subquery
+    type: no-text
+    sparql: |
+      PREFIX foo: <https://example.org/foo#>
+      SELECT ?p  {
+        ?s foo:bar foo:Baz .
+        ?s ?p ?o
+      }
+      GROUP BY ?p
+    checks:
+      - num_cols: 1
+      - selected: [ "?p" ]
+      - num_rows: 0

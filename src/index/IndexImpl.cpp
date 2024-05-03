@@ -1377,7 +1377,7 @@ IdTable IndexImpl::scan(
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns, allocator_};
+    return IdTable{numColumns + additionalColumns.size(), allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,
               cancellationHandle);
