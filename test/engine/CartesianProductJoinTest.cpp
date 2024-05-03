@@ -1,4 +1,4 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -134,7 +134,6 @@ TEST(CartesianProductJoin, computeResult) {
        {10, 0},
        {11, 0}},
       {{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}}, {{0}}});
-
 }
 
 // Test the throwing of the custom out of memory exception inside the
