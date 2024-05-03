@@ -134,6 +134,18 @@ TEST(CartesianProductJoin, computeResult) {
        {10, 0},
        {11, 0}},
       {{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}}, {{0}}});
+
+  std::vector<VectorTable> tables;
+  VectorTable largeTable;
+  largeTable.emplace_back();
+  for (size_t i = 0; i < 10000; ++i) {
+    largeTable.back().push_back(0);
+  }
+  for (size_t i = 0; i < 10000; ++i) {
+    tables.push_back(largeTable);
+  }
+  auto largeJoin = makeJoin(tables);
+  AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(), ::testing::HasSubstr("cross-product"));
 }
 
 // ______________________________________________________________
