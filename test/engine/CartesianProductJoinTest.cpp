@@ -135,6 +135,11 @@ TEST(CartesianProductJoin, computeResult) {
        {11, 0}},
       {{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}}, {{0}}});
 
+}
+
+// Test the throwing of the custom out of memory exception inside the
+// cartesian product join.
+TEST(CartesianProductJoin, outOfMemoryException) {
   std::vector<VectorTable> tables;
   VectorTable largeTable;
   largeTable.emplace_back();

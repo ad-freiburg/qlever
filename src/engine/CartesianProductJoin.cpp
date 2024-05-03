@@ -179,11 +179,10 @@ ResultTable CartesianProductJoin::computeResult() {
     result.resize(totalSizeIncludingLimit);
   } catch (
       const ad_utility::detail::AllocationExceedsLimitException& exception) {
-    throw std::runtime_error{absl::StrCat(
-        "The memory limit was violated during the computation of a "
+    throw std::runtime_error{
+        "The memory limit was exceeded during the computation of a "
         "cross-product. Check if this cross-product is intentional or if you "
-        "have mistyped a variable name. The original error message was: ",
-        exception.what())};
+        "have mistyped a variable name."};
   }
 
   if (totalSizeIncludingLimit != 0) {
