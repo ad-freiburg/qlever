@@ -46,12 +46,11 @@ class alignas(16) LiteralOrIri {
 
   static LiteralOrIri fromStringRepresentation(std::string internal) {
     char tag = internal.front();
-    if (tag == iriPrefixChar) {
-      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
-    } else {
-      AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
+    if (tag == literalPrefixChar) {
       return LiteralOrIri{
           Literal::fromStringRepresentation(std::move(internal))};
+    } else {
+      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
   template <typename H>
