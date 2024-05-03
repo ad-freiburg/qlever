@@ -197,6 +197,23 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::nullopt;
     }
   }
+
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  auto handleIriOrLiteral = [&escapeFunction](const LiteralOrIri& word)
+      -> std::optional<std::pair<std::string, const char*>> {
+    if constexpr (onlyReturnLiterals) {
+      if (!word.isLiteral()) {
+        return std::nullopt;
+      }
+    }
+    if constexpr (removeQuotesAndAngleBrackets) {
+      // TODO<joka921> Can we get rid of the string copying here?
+      return std::pair{
+          escapeFunction(std::string{asStringViewUnsafe(word.getContent())}),
+          nullptr};
+    }
+    return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
+  };
   switch (id.getDatatype()) {
     case Datatype::WordVocabIndex: {
       std::optional<string> entity =
@@ -212,28 +229,10 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       auto litOrIri =
           ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
               entity.value());
-      if constexpr (onlyReturnLiterals) {
-        if (!litOrIri.isLiteral()) {
-          return std::nullopt;
-        }
-      }
-      if constexpr (removeQuotesAndAngleBrackets) {
-        entity = asStringViewUnsafe(litOrIri.getContent());
-      }
-      // TODO<joka921> handle the exporting of literals more correctly.
-      return std::pair{escapeFunction(std::move(entity.value())), nullptr};
+      return handleIriOrLiteral(litOrIri);
     }
     case LocalVocabIndex: {
-      std::string word = localVocab.getWord(id.getLocalVocabIndex());
-      if constexpr (onlyReturnLiterals) {
-        if (!word.starts_with('"')) {
-          return std::nullopt;
-        }
-      }
-      if constexpr (removeQuotesAndAngleBrackets) {
-        word = RdfEscaping::normalizedContentFromLiteralOrIri(std::move(word));
-      }
-      return std::pair{escapeFunction(std::move(word)), nullptr};
+      return handleIriOrLiteral(localVocab.getWord(id.getLocalVocabIndex()));
     }
     case TextRecordIndex:
       return std::pair{

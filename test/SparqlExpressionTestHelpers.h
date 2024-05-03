@@ -3,6 +3,7 @@
 //  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./util/IdTestHelpers.h"
+#include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
@@ -82,16 +83,24 @@ struct TestContext {
     zz = getId("\"zz\"@en");
     blank = Id::makeFromBlankNodeIndex(BlankNodeIndex::make(0));
 
+    constexpr auto lit = [](std::string_view s) {
+      return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          s);
+    };
+    constexpr auto iri = [](const std::string& s) {
+      return ad_utility::triple_component::LiteralOrIri::iriref(s);
+    };
+
     notInVocabA = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained("\"notInVocabA\""));
+        localVocab.getIndexAndAddIfNotContained(lit("notInVocabA")));
     notInVocabB = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained("\"notInVocabB\""));
+        localVocab.getIndexAndAddIfNotContained(lit("notInVocabB")));
     notInVocabC = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained("<notInVocabC>"));
+        localVocab.getIndexAndAddIfNotContained(iri("<notInVocabC>")));
     notInVocabD = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained("<notInVocabD>"));
+        localVocab.getIndexAndAddIfNotContained(iri("<notInVocabD>")));
     notInVocabAelpha = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained("\"notInVocabÄlpha\""));
+        localVocab.getIndexAndAddIfNotContained(lit("notInVocabÄlpha")));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only
