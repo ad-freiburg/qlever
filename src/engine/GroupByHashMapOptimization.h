@@ -90,8 +90,7 @@ struct ExtremumAggregationData {
     auto valueIdResultGetter = [](ValueId id) { return id; };
     auto stringResultGetter =
         [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-              str.toStringRepresentation());
+          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
           return ValueId::makeFromLocalVocabIndex(localVocabIndex);
         };
     return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
@@ -163,8 +162,11 @@ struct GroupConcatAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    auto localVocabIndex =
-        localVocab->getIndexAndAddIfNotContained(currentValue_);
+    using namespace ad_utility::triple_component;
+    using Lit = ad_utility::triple_component::Literal;
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
+        LiteralOrIri{Lit::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(currentValue_))});
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   }
 
