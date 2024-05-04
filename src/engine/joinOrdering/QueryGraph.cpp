@@ -8,20 +8,15 @@
 namespace JoinOrdering {
 
 template <typename N>
-requires RelationAble<N> auto QueryGraph<N>::add_relation(const N& n) -> N {
+requires RelationAble<N> void QueryGraph<N>::add_relation(const N& n) {
   // extract the cardinality and add to the cardinality map to make
   // the lookup process easy when using cost function
-  //  cardinality[n] = n.getCardinality();
-
-  // TODO: unordered_set?
+  cardinality[n] = n.getCardinality();
   if (!has_relation(n)) relations_.push_back(n);
-  return n;
 }
 
 template <typename N>
 requires RelationAble<N> bool QueryGraph<N>::has_relation(const N& n) const {
-  // TODO: doesn't work if the relation has no connection?
-  //  return edges_.contains(n);
   return std::find(relations_.begin(), relations_.end(), n) != relations_.end();
 }
 
@@ -119,7 +114,8 @@ N QueryGraph<N>::combine(const N& a,
 
   // add the newly computed cardinality to the
   // cardinality map of the query graph.
-  auto n = add_relation(N(a.getLabel() + "," + b.getLabel(), w));
+  auto n = N(a.getLabel() + "," + b.getLabel(), w);
+  add_relation(n);
 
   // to be able to apply the inverse operation (QueryGraph::uncombine)
   // we keep track of the combined relation in the `hist` map

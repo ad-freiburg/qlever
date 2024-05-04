@@ -42,6 +42,7 @@ requires RelationAble<N> class QueryGraph {
   std::vector<N> relations_;
   ad_utility::HashMap<N, ad_utility::HashMap<N, EdgeInfo>> edges_;
   ad_utility::HashMap<N, std::vector<N>> hist;
+  ad_utility::HashMap<N, int> cardinality;
   ad_utility::HashMap<N, float> selectivity;
   N root;
 
@@ -53,9 +54,8 @@ requires RelationAble<N> class QueryGraph {
    * ref: 77/637
    * TODO: 91/637 do not add single relations, but subchains
    * @param n Relation with a cardinality property (getCardinality)
-   * @return the same relation back (TODO: used to make sense, now it doesn't)
    */
-  auto add_relation(const N& n) -> N;
+  void add_relation(const N& n);
 
   /**
    * Check whether a give relation has been added to the query graph or not.

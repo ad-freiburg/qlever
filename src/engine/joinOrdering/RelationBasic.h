@@ -4,6 +4,7 @@
 // Mahmoud Khalaf (2024-, khalaf@cs.uni-freiburg.de)
 
 #pragma once
+
 #include <string>
 
 namespace JoinOrdering {
