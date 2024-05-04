@@ -18,8 +18,9 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
 
   typedef std::pair<std::vector<N>, float> vf;
   auto [ldtree_opt, cost] = std::transform_reduce(
-      std::execution::par_unseq,  // (3) in parallel if hw allows it
-      rxs.begin(), rxs.end(),     // (1) for every relation in query
+      // TODO: macos doesn't like it
+      //      std::execution::par_unseq,  // (3) in parallel if hw allows it
+      rxs.begin(), rxs.end(),  // (1) for every relation in query
       vf({}, std::numeric_limits<float>::max()),
       [&](const vf& l, const vf& r) {  // (4) return the tree with min cost
         return std::ranges::min(
