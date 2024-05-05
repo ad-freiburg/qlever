@@ -1023,14 +1023,6 @@ TEST(SpatialJoin, computeResultSmallDatasetLargeChildren) {
     true, expectedMaxDist10000000_rows, columnNames);
   buildAndTestSmallTestSetLargeChildren("<max-distance-in-meters:10000000>",
     false, expectedMaxDist10000000_rows, columnNames);
-
-  // also build the queryexecutiontree with the spatialjoin beeing at different
-  // positions in the tree, e.g. one time basically at a leaf and the other time
-  // at the root of the tree
-
-  // also test the other available functions, even though their main tests are
-  // done in other functions in this file
-  // TODO ====================================================================
 }
 
 TEST(SpatialJoin, computeResultSmallDatasetSmallChildren) {
@@ -1572,7 +1564,75 @@ TEST(SpatialJoin, knownEmpyResult) {
   testKnownEmptyResult(false, false, false);
 }
 
+} // namespace knownEmptyResult
+
+namespace stringRepresentation {
+
+TEST(SpatialJoin, getDescriptor) {
+  auto qec = getQec();
+  TripleComponent subject{Variable{"?subject"}};
+  TripleComponent object{Variable{"?object"}};
+  SparqlTriple triple{subject, "<max-distance-in-meters:1000>", object};
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+      ad_utility::makeExecutionTree<SpatialJoin>(qec, triple,
+      std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+
+  auto description = spatialJoin->getDescriptor();
+  ASSERT_TRUE(description.find(std::to_string(spatialJoin->getMaxDist()))
+                                        != std::string::npos);
+  ASSERT_TRUE(description.find("?subject") != std::string::npos);
+  ASSERT_TRUE(description.find("?object") != std::string::npos);
 }
+
+TEST(SpatialJoin, getCacheKeyImpl) {
+  std::string kg = createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  // ====================== build inputs ===================================
+  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
+                      "<max-distance-in-meters:1000>",
+                      TripleComponent{Variable{"?point2"}}};
+  TripleComponent obj1{Variable{"?obj1"}};
+  TripleComponent obj2{Variable{"?obj2"}};
+  TripleComponent point1{Variable{"?point1"}};
+  TripleComponent point2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+                                qec, obj1, std::string{"<asWKT>"}, point1);
+  auto rightChild = computeResultTest::buildIndexScan(
+                                qec, obj2, std::string{"<asWKT>"}, point2);
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
+        std::nullopt, std::nullopt);
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  
+  ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
+  
+  spatialJoin->addChild(leftChild, spatialJoinTriple._s.getVariable());
+
+  ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
+
+  spatialJoin->addChild(rightChild, spatialJoinTriple._o.getVariable());
+
+  auto cacheKeyString = spatialJoin->getCacheKeyImpl();
+  auto leftCacheKeyString =
+          spatialJoin->onlyForTestingGetLeftChild()->getCacheKey();
+  auto rightCacheKeyString =
+          spatialJoin->onlyForTestingGetRightChild()->getCacheKey();
+  
+  ASSERT_TRUE(cacheKeyString.find(std::to_string(spatialJoin->getMaxDist()))
+                                        != std::string::npos);
+  ASSERT_TRUE(cacheKeyString.find(leftCacheKeyString) != std::string::npos);
+  ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
+}
+
+} // namespace stringRepresentation
 
 // test the compute result method on the large dataset from above
 // TODO

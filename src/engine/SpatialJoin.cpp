@@ -94,6 +94,7 @@ string SpatialJoin::getCacheKeyImpl() const {
     std::ostringstream os;
     os << "SpatialJoin\nChild1:\n" << childLeft_->getCacheKey() << "\n";
     os << "Child2:\n" << childRight_->getCacheKey() << "\n";
+    os << "maxDist: " << maxDist << "\n";
     return std::move(os).str();
   } else {
     return "incomplete SpatialJoin class";
@@ -102,7 +103,10 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  return "Descriptor of SpatialJoin";
+  //return "Descriptor of SpatialJoin";
+  return "SpatialJoin: " + triple_.value()._s.getVariable().name() +
+        " max distance of " + std::to_string(maxDist) + " to " +
+        triple_.value()._o.getVariable().name();
 }
 
 // ____________________________________________________________________________
