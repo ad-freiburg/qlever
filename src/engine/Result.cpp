@@ -91,8 +91,9 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // `O(1)` (see the docs for `std::shift_left`).
   // TODO<RobinTF> make limit its own dedicated operation to avoid this
   // modification here
-  AD_CONTRACT_CHECK(isDataEvaluated());
-  using Gen = GeneratorType;
+  AD_CONTRACT_CHECK(
+      !std::holds_alternative<cppcoro::generator<const IdTable>>(_idTable));
+  using Gen = ad_utility::ReusableGenerator<IdTable>;
   if (std::holds_alternative<IdTable>(_idTable)) {
     modifyIdTable(std::get<IdTable>(_idTable), limitOffset);
   } else if (std::holds_alternative<Gen>(_idTable)) {
@@ -163,9 +164,20 @@ const IdTable& Result::idTable() const {
 }
 
 // _____________________________________________________________________________
-const Result::GeneratorType& Result::idTables() const {
+cppcoro::generator<const IdTable> Result::idTables() const {
   AD_CONTRACT_CHECK(!isDataEvaluated());
-  return std::get<GeneratorType>(_idTable);
+  return std::visit(
+      [](auto& generator) -> cppcoro::generator<const IdTable> {
+        if constexpr (!std::is_same_v<decltype(generator), IdTable&>) {
+          for (auto&& idTable : generator) {
+            co_yield idTable;
+          }
+        } else {
+          // Type of variant here should never be `IdTable`
+          AD_FAIL();
+        }
+      },
+      _idTable);
 }
 
 // _____________________________________________________________________________
@@ -181,4 +193,41 @@ void Result::logResultSize() const {
   } else {
     LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
   }
+}
+
+// _____________________________________________________________________________
+Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
+                                        std::function<Result()> fallback) {
+  AD_CONTRACT_CHECK(!original->isDataEvaluated());
+  auto generator = [](std::shared_ptr<const Result> sharedResult,
+                      std::function<Result()> fallback)
+      -> cppcoro::generator<const IdTable> {
+    size_t index = 0;
+    try {
+      for (auto&& idTable : sharedResult->idTables()) {
+        co_yield idTable;
+        index++;
+      }
+      co_return;
+    } catch (const ad_utility::IteratorExpired&) {
+      // co_yield is not allowed here, so simply ignore this and allow control
+      // flow to take over
+    } catch (...) {
+      throw;
+    }
+    Result freshResult = fallback();
+    // If data is evaluated this means that this process is not deterministic
+    // or that there's a wrong callback used here.
+    AD_CORRECTNESS_CHECK(!freshResult.isDataEvaluated());
+    for (auto&& idTable : freshResult.idTables()) {
+      if (index > 0) {
+        index--;
+        continue;
+      }
+      co_yield idTable;
+    }
+  };
+  return Result{generator(std::move(original), std::move(fallback)),
+                original->_sortedBy,
+                SharedLocalVocabWrapper{original->localVocab_}};
 }

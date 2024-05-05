@@ -172,6 +172,8 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
       if (!result.isDataEvaluated()) {
         // TODO<RobinTF> register listeners that make sure cache size is
         // properly updated
+        // TODO<RobinTF> serialize into single IdTable if partially computed
+        // all chunks fit into memory and generator is exhausted.
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
@@ -199,10 +201,9 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
     if (result._resultPointer->resultTable()->isDataEvaluated() ||
         actuallyComputed) {
       return result._resultPointer->resultTable();
-    } else {
-      // TODO<RobinTF> create result copy with fallback iterator here
-      AD_FAIL();
     }
+    return std::make_shared<const Result>(Result::createResultWithFallback(
+        result._resultPointer->resultTable(), std::move(computeLambda)));
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
@@ -252,7 +253,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     const Result& resultTable, ad_utility::CacheStatus cacheStatus,
     Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  // TODO<RobinTF> replace 0 size with estimation or something
+  // TODO<RobinTF> find a better representation for "unknown" than 0.
   _runtimeInfo->numRows_ =
       resultTable.isDataEvaluated() ? resultTable.idTable().size() : 0;
   _runtimeInfo->cacheStatus_ = cacheStatus;

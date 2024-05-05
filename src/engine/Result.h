@@ -22,10 +22,12 @@
 // is always a table and contained in the member `idTable()`.
 class Result {
  private:
-  // The actual entries.
-  using GeneratorType = ad_utility::ReusableGenerator<IdTable>;
-  using TableType = std::variant<IdTable, GeneratorType>;
-  TableType _idTable;
+  using TableType =
+      std::variant<IdTable, ad_utility::ReusableGenerator<IdTable>,
+                   cppcoro::generator<const IdTable>>;
+  // The actual entries. Since generators need to be modified
+  // in order to be consumed, this needs to be mutable.
+  mutable TableType _idTable;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
@@ -102,7 +104,7 @@ class Result {
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s.
-  const GeneratorType& idTables() const;
+  cppcoro::generator<const IdTable> idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
@@ -174,4 +176,7 @@ class Result {
   // undefined values in the `_idTable` of this result. Return `true` iff the
   // check is succesful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
+
+  static Result createResultWithFallback(std::shared_ptr<const Result> original,
+                                         std::function<Result()> fallback);
 };
