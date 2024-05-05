@@ -8,6 +8,7 @@
 
 #include "engine/LocalVocab.h"
 #include "util/Exception.h"
+#include "util/IteratorWrapper.h"
 #include "util/Log.h"
 
 // _____________________________________________________________________________
@@ -229,5 +230,20 @@ Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
   };
   return Result{generator(std::move(original), std::move(fallback)),
                 original->_sortedBy,
+                SharedLocalVocabWrapper{original->localVocab_}};
+}
+
+Result Result::createResultAsMasterConsumer(
+    std::shared_ptr<const Result> original) {
+  using Gen = ad_utility::ReusableGenerator<IdTable>;
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(original->_idTable));
+  auto generator = [](auto original) -> cppcoro::generator<const IdTable> {
+    using ad_utility::IteratorWrapper;
+    auto& generator = std::get<Gen>(original->_idTable);
+    for (const IdTable& idTable : IteratorWrapper{generator, true}) {
+      co_yield idTable;
+    }
+  };
+  return Result{generator(std::move(original)), original->_sortedBy,
                 SharedLocalVocabWrapper{original->localVocab_}};
 }

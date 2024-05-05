@@ -39,6 +39,8 @@ class ReusableGenerator {
     cppcoro::generator<T> generator_;
     std::optional<GenIterator> generatorIterator_{};
     std::vector<std::optional<T>> cachedValues_{};
+    // TODO<RobinTF> make sure we error out when a non-master iterator is
+    // consumed before the initial master iterator
     bool masterExists_ = true;
     std::function<bool()> onSizeChanged_{};
     std::function<void(bool)> onGeneratorFinished_{};

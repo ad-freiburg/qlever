@@ -179,4 +179,6 @@ class Result {
 
   static Result createResultWithFallback(std::shared_ptr<const Result> original,
                                          std::function<Result()> fallback);
+
+  static Result createResultAsMasterConsumer(std::shared_ptr<const Result> original);
 };

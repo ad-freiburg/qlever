@@ -198,9 +198,12 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
                  << resultNumCols << std::endl;
     }
 
-    if (result._resultPointer->resultTable()->isDataEvaluated() ||
-        actuallyComputed) {
+    if (result._resultPointer->resultTable()->isDataEvaluated()) {
       return result._resultPointer->resultTable();
+    } else if (actuallyComputed) {
+      return std::make_shared<const Result>(
+          Result::createResultAsMasterConsumer(
+              result._resultPointer->resultTable()));
     }
     return std::make_shared<const Result>(Result::createResultWithFallback(
         result._resultPointer->resultTable(), std::move(computeLambda)));
