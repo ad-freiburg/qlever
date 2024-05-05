@@ -69,9 +69,6 @@ class Service : public Operation {
   size_t getCostEstimate() override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  // Not relevant for SERVICE.
-  void setTextLimit([[maybe_unused]] size_t limit) override {}
-
   // We know nothing about the result at query planning time.
   bool knownEmptyResult() override { return false; }
 

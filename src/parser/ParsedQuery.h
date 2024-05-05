@@ -136,7 +136,6 @@ class ParsedQuery {
 
   GraphPattern _rootGraphPattern;
   vector<SparqlFilter> _havingClauses;
-  size_t _numGraphPatterns = 1;
   // The number of additional internal variables that were added by the
   // implementation of ORDER BY as BIND+ORDER BY.
   int64_t numInternalVariables_ = 0;
@@ -267,12 +266,6 @@ class ParsedQuery {
   // query before it is used, or if it uses a variable that is not properly
   // grouped or aggregated in the presence of a GROUP BY clause.
   void addSolutionModifiers(SolutionModifiers modifiers);
-
-  /**
-   * @brief Adds all elements from p's rootGraphPattern to this parsed query's
-   * root graph pattern. This changes the graph patterns ids.
-   */
-  void merge(const ParsedQuery& p);
 
   // If this is a SELECT query, return all the selected aliases. Return an empty
   // vector for construct clauses.

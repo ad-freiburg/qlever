@@ -75,11 +75,6 @@ class QueryExecutionTree {
     return rootOperation_->getResultSortedOn();
   }
 
-  void setTextLimit(size_t limit) {
-    rootOperation_->setTextLimit(limit);
-    sizeEstimate_ = std::nullopt;
-  }
-
   size_t getCostEstimate();
 
   size_t getSizeEstimate();

@@ -85,7 +85,6 @@ class Operation {
   // this Operation.  This string is used in the RuntimeInformation
   virtual string getDescriptor() const = 0;
   virtual size_t getResultWidth() const = 0;
-  virtual void setTextLimit(size_t limit);
 
   virtual size_t getCostEstimate() = 0;
 

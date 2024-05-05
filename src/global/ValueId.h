@@ -339,7 +339,7 @@ class ValueId {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
-        ostr << *value;
+        ostr << value->toStringRepresentation();
       } else {
         // T is `VocabIndex | TextRecordIndex`
         ostr << std::to_string(value.get());

@@ -121,6 +121,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
+  } else if (checkPrefix(XSD_PREFIX)) {
+    if (functionName == "integer" || functionName == "int") {
+      checkNumArgs(1);
+      return sparqlExpression::makeIntExpression(std::move(argList[0]));
+    } else if (functionName == "double" || functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeDoubleExpression(std::move(argList[0]));
+    }
   }
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
@@ -323,7 +331,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
                                      visibleVariablesSoFar.begin(),
                                      visibleVariablesSoFar.end());
           });
-  pattern._id = numGraphPatterns_++;
   if (ctx->subSelect()) {
     auto parsedQuerySoFar = std::exchange(parsedQuery_, ParsedQuery{});
     auto [subquery, valuesOpt] = visit(ctx->subSelect());
@@ -551,7 +558,7 @@ LimitOffsetClause Visitor::visit(Parser::LimitOffsetClausesContext* ctx) {
   LimitOffsetClause clause{};
   visitIf(&clause._limit, ctx->limitClause());
   visitIf(&clause._offset, ctx->offsetClause());
-  visitIf(&clause._textLimit, ctx->textLimitClause());
+  visitIf(&clause.textLimit_, ctx->textLimitClause());
   return clause;
 }
 
@@ -706,7 +713,6 @@ Visitor::SubQueryAndMaybeValues Visitor::visit(Parser::SubSelectContext* ctx) {
   for (const auto& variable : query.selectClause().getSelectedVariables()) {
     addVisibleVariable(variable);
   }
-  query._numGraphPatterns = numGraphPatterns_++;
   return {parsedQuery::Subquery{std::move(query)}, std::move(values)};
 }
 

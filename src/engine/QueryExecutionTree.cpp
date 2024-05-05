@@ -13,6 +13,9 @@
 #include <vector>
 
 #include "engine/Sort.h"
+#include "parser/RdfEscaping.h"
+
+using std::string;
 
 using parsedQuery::SelectClause;
 

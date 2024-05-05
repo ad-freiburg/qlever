@@ -62,10 +62,6 @@ class GroupBy : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
-  }
-
   virtual bool knownEmptyResult() override {
     return _subtree->knownEmptyResult();
   }

@@ -32,12 +32,14 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto makeTestScanWidthOne = [](const IndexImpl& index) {
   return [&index](const TripleComponent& c0, const TripleComponent& c1,
                   Permutation::Enum permutation, const VectorTable& expected,
+                  Permutation::ColumnIndices additionalColumns = {},
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable result = index.scan(
-        c0, std::cref(c1), permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+    IdTable result =
+        index.scan(c0, std::cref(c1), permutation, additionalColumns,
+                   std::make_shared<ad_utility::CancellationHandle<>>());
+    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
@@ -132,6 +134,10 @@ TEST(IndexTest, createFromTurtleTest) {
         // subject that appears with <b2>.
         auto testOne = makeTestScanWidthOne(index);
         testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
+        // An empty scan result must still have the correct number of columns.
+        testOne(iri("<notExisting>"), iri("<alsoNotExisting>"),
+                Permutation::PSO, {},
+                {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN});
       }
     }
     {
