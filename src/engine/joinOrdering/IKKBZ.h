@@ -8,6 +8,7 @@
 #include <execution>
 #include <numeric>
 
+#include "ICostASI.h"
 #include "QueryGraph.h"
 
 namespace JoinOrdering {
@@ -43,6 +44,20 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N>;
 template <typename N>
 requires RelationAble<N>
 auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N>;
+
+/**
+ *
+ * Generate a precedence graph out of an undirected graph and trigger
+ * the main subroutine.
+ *
+ * @param g acyclic query graph
+ * @param Ch cost function that has ASI property
+ * @param n relation used as root for the JoinOrdering::toPrecedenceGraph
+ * @return left-deep tree rooted at n
+ */
+template <typename N>
+requires RelationAble<N>
+auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N>;
 
 /**
  * The precedence graph describes the (partial) ordering of joins
@@ -111,14 +126,15 @@ requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g);
  * ref: 119,122/637
  * @param g precedence tree
  * @param subtree_root subtree of g
- * @return false as long as there the subtree is not normalized
- * @see QueryGraph::combine
+ * @param Ch cost function that has ASI property
+ * @return normalized relations under given subtree
+ * @see IKKBZ_combine
  * @see IKKBZ_merge
  */
 template <typename N>
 requires RelationAble<N>
-[[nodiscard("check pre-merge")]] bool IKKBZ_Normalized(QueryGraph<N>& g,
-                                                       const N& subtree_root);
+std::vector<N> IKKBZ_Normalized(QueryGraph<N>& g, ICostASI<N>& Ch,
+                                const N& subtree_root);
 
 /**
  * Merge the chains under relation n according the rank function.
@@ -130,12 +146,43 @@ requires RelationAble<N>
  *
  * ref: 121,126/637
  * @param g precedence tree with subchains ready to merge
- * @param subtree_root subtree of g
+ * @param Ch cost function that has ASI property
+ * @param normalized_subtree normalized subtree of relations
  * @see IKKBZ_Normalized
  */
 template <typename N>
+requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, ICostASI<N>& Ch,
+                                          std::vector<N>& normalized_subtree);
+
+/**
+ * Given 2 Relations (already exist on the QueryGraph),
+ * combine there 2 relation into a new compound relation.
+ *
+ * All descendents of Relation a and Relation b become descendents of the newly
+ * created relation ab. Relation a and Relation b are expected to be neighbours.
+ *
+ * Does NOT work with undirected graph, in such case use GOO_combine instead.
+ *
+ * @param g precedence tree
+ * @param a Relation a
+ * @param b Relation b
+ * @return Relation ab
+ * @see IKKBZ_uncombine
+ */
+template <typename N>
 requires RelationAble<N>
-void IKKBZ_merge(QueryGraph<N>& g, const N& subtree_root);
+[[maybe_unused]] N IKKBZ_combine(QueryGraph<N>& g, const N& a, const N& b);
+
+/**
+ * Inverse operation of IKKBZ_combine.
+ *
+ * Spread a compound relation back into it's direct components.
+ * @param n Compound Relation
+ * @see QueryGraph::unpack
+ * @see IKKBZ_denormalize
+ */
+template <typename N>
+requires RelationAble<N> void IKKBZ_uncombine(QueryGraph<N>& g, const N& n);
 
 /**
  * the opposite step of JoinOrdering::IKKBZ_Normalized.
@@ -147,9 +194,9 @@ void IKKBZ_merge(QueryGraph<N>& g, const N& subtree_root);
  *
  * ref: 119,121/637
  * @param g precedence tree
- * @see QueryGraph::uncombine
+ * @see IKKBZ_uncombine
  */
 template <typename N>
-requires RelationAble<N> void IKKBZ_denormalize(QueryGraph<N>& g);
+requires RelationAble<N> void IKKBZ_Denormalize(QueryGraph<N>& g);
 
 }  // namespace JoinOrdering

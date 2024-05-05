@@ -20,9 +20,11 @@ class EdgeInfo {
   // Ra is a dir of Rb
   Direction direction{Direction::UNDIRECTED};
   bool hidden{false};  // instead of erasing
+  float weight{-1};
 
   EdgeInfo();
   explicit EdgeInfo(Direction dir);
+  EdgeInfo(Direction dir, float weight);
 };
 
 }  // namespace JoinOrdering

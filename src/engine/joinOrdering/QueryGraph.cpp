@@ -17,6 +17,8 @@ requires RelationAble<N> void QueryGraph<N>::add_relation(const N& n) {
 
 template <typename N>
 requires RelationAble<N> bool QueryGraph<N>::has_relation(const N& n) const {
+  // TODO: it's faster to lookup the edges_ map...
+  //  return edges_.contains(n);
   return std::find(relations_.begin(), relations_.end(), n) != relations_.end();
 }
 
@@ -40,15 +42,20 @@ bool QueryGraph<N>::is_compound_relation(const N& n) const {
 
 template <typename N>
 requires RelationAble<N>
+bool QueryGraph<N>::is_common_neighbour(const N& a, const N& b,
+                                        const N& n) const {
+  return has_rjoin(a, n) && has_rjoin(b, n);
+}
+
+template <typename N>
+requires RelationAble<N>
 void QueryGraph<N>::add_rjoin(const N& a, const N& b, float join_selectivity,
                               Direction dir) {
-  // TODO: assert single parent here?
-
   // add connection between a -> b
-  edges_[a][b] = EdgeInfo(dir);
+  edges_[a][b] = EdgeInfo(dir, join_selectivity);
 
   // add connection between b -> a
-  edges_[b][a] = EdgeInfo(inv(dir));
+  edges_[b][a] = EdgeInfo(inv(dir), join_selectivity);
 
   // TODO: avoid overwriting selectivity
   // selectivity is a relation property
@@ -93,111 +100,11 @@ requires RelationAble<N> void QueryGraph<N>::rm_rjoin(const N& a, const N& b) {
 
 template <typename N>
 requires RelationAble<N>
-N QueryGraph<N>::combine(const N& a,
-                         const N& b) {  // -> Compound Relation (hist)
-
-  // 104/637
-  // if the ordering violates the query constraints, it constructs compounds
-  // TODO: assert chain
-  //    std::cout << "COMBINE " << a.label << "  " << b.label << "\n";
-
-  // 118/637
-
-  // "its cardinality is computed by multiplying the cardinalities of
-  // all relations in A and B"
-  //  auto w = cardinality[a] * cardinality[b];
-  auto w = a.getCardinality() * b.getCardinality();
-
-  // "its selectivity is the product of all selectivities (s_i) of relations
-  // R_i contained in A and B"
-  auto s = selectivity[a] * selectivity[b];
-
-  // add the newly computed cardinality to the
-  // cardinality map of the query graph.
-  auto n = N(a.getLabel() + "," + b.getLabel(), w);
-  add_relation(n);
-
-  // to be able to apply the inverse operation (QueryGraph::uncombine)
-  // we keep track of the combined relation in the `hist` map
-
-  // a compound relation, so we grab the
-  // regular relations it consists of
-  if (is_compound_relation(a))
-    //    for (auto const& x : hist[a]) hist[n].push_back(x);
-    std::ranges::move(hist[a], std::back_inserter(hist[n]));
-  else  // regular relation
-    hist[n].push_back(a);
-
-  // do the same of the relation b
-  if (is_compound_relation(b))
-    //    for (auto const& x : hist[b]) hist[n].push_back(x);
-    std::ranges::move(hist[b], std::back_inserter(hist[n]));
-  else  // regular relation
-    hist[n].push_back(b);
-
-  std::set<N> parents;
-  for (auto const& x : get_parent(a)) parents.insert(x);
-  for (auto const& x : get_parent(b)) parents.insert(x);
-
-  // IN CASE merging bc
-  // a -> b -> c
-  // we don't want b to be the parent of bc
-  parents.erase(a);
-  parents.erase(b);
-
-  //  for (auto const& x : parents) add_rjoin(x, n, s, Direction::PARENT);
-  AD_CONTRACT_CHECK(parents.size() == 1);
-  add_rjoin(*parents.begin(), n, s, Direction::PARENT);
-
-  // filters out duplicate relation if the 2 relation have common descendants.
-  // yes. it should never happen.
-  // rationale behind using a std::set here
-  std::set<N> children{};
-
-  // collect all children of relation a
-  // collect all children of relation b
-  // connect relation n to each child of a and b
-
-  auto ca = get_children(a);
-  auto cb = get_children(b);
-  children.insert(ca.begin(), ca.end());
-  children.insert(cb.begin(), cb.end());
-  //  children.erase(a);  // redundant
-  //  children.erase(b);  // redundant
-
-  // equiv. to add_rjoin(n, c, s, Direction::PARENT);
-  for (auto const& c : children) add_rjoin(c, n, s, Direction::CHILD);
-
-  // make these relations unreachable
-  rm_relation(a);
-  rm_relation(b);
-
-  return n;
-}
-template <typename N>
-requires RelationAble<N> void QueryGraph<N>::uncombine(const N& n) {
-  // ref: 121/637
-  // don't attempt to uncombine regular relation
-  if (!is_compound_relation(n)) return;
-
-  auto pn = get_parent(n);
-  auto cn = get_children(n);
-  auto rxs = hist[n];
-
-  std::vector<N> v{pn.begin(), pn.end()};
-  // assert single parent to the compound relation
-  AD_CONTRACT_CHECK(v.size() == 1);
-
-  v.insert(v.end(), rxs.begin(), rxs.end());
-  v.insert(v.end(), cn.begin(), cn.end());
-
-  // also removes all incoming and outgoing connections
-  rm_relation(n);
-
-  // given {a, b, c, ...}, connect them such that
-  // a -> b -> c -> ...
-  for (size_t i = 1; i < v.size(); i++)
-    add_rjoin(v[i - 1], v[i], selectivity[v[i]], Direction::PARENT);
+void QueryGraph<N>::unpack(const N& n, std::vector<N>& acc) {  // NOLINT
+  if (is_compound_relation(n))
+    for (auto const& x : hist[n]) unpack(x, acc);
+  else
+    acc.push_back(n);
 }
 
 template <typename N>
@@ -265,14 +172,17 @@ template <typename N>
 requires RelationAble<N>
 auto QueryGraph<N>::get_chained_subtree(const N& n) -> N {
   auto dxs = iter(n);
-
+  // lookup the first subtree
   auto it =
       std::ranges::find_if(dxs, [&](const N& x) { return is_subtree(x); });
 
-  if (it != dxs.end()) return *it;
+  // since this is called from IKKBZ_Normalize
+  // we have already checked the existence of a subtree
+  //  if (it != dxs.end())
+  return *it;
 
   //  AD_CONTRACT_CHECK(false);
-  throw std::runtime_error("how did we get here?");
+  //  throw std::runtime_error("how did we get here?");
 }
 
 template <typename N>
@@ -285,6 +195,8 @@ requires RelationAble<N> auto QueryGraph<N>::iter() -> std::vector<N> {
 template <typename N>
 requires RelationAble<N>
 auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
+  // bfs-ing over all relations starting from n
+
   auto erg = std::vector<N>();
   auto q = std::queue<N>();
   auto v = std::set<N>();
@@ -309,6 +221,41 @@ auto QueryGraph<N>::iter(const N& n) -> std::vector<N> {
 }
 
 template <typename N>
+requires RelationAble<N>
+auto QueryGraph<N>::iter_pairs() -> std::vector<std::pair<N, N>> {
+  auto v = std::set<std::pair<N, N>>();
+
+  for (auto const& [a, be] : edges_)
+    for (auto const& [b, e] : be) {
+      auto p = std::pair(b, a);
+      // skip implicitly removed relation (with hidden edges)
+      // skip already visited pairs
+      // skip duplicates. (R1, R2) is the same as (R2, R1)
+      if (e.hidden || v.contains(p) || v.contains(std::pair(a, b))) continue;
+      v.insert(p);
+    }
+
+  return std::vector(v.begin(), v.end());
+}
+
+template <typename N>
+requires RelationAble<N>
+auto QueryGraph<N>::iter_pairs(const N& n) -> std::vector<std::pair<N, N>> {
+  auto v = std::set<std::pair<N, N>>();
+
+  for (auto const& [b, e] : edges_[n]) {
+    auto p = std::pair(b, n);
+    // skip implicitly removed relation (with hidden edges)
+    // skip already visited pairs
+    // skip duplicates. (R1, R2) is the same as (R2, R1)
+    if (e.hidden || v.contains(p) || v.contains(std::pair(n, b))) continue;
+    v.insert(p);
+  }
+
+  return std::vector(v.begin(), v.end());
+}
+
+template <typename N>
 requires RelationAble<N> constexpr Direction QueryGraph<N>::inv(Direction dir) {
   //  const ad_utility::HashMap<Direction, Direction> m{
   //      {Direction::UNDIRECTED, Direction::UNDIRECTED},
@@ -323,10 +270,10 @@ requires RelationAble<N> constexpr Direction QueryGraph<N>::inv(Direction dir) {
       return Direction::CHILD;
     case Direction::CHILD:
       return Direction::PARENT;
+    default:
+      // suppress compiler warning
+      return Direction::UNDIRECTED;
   }
-
-  // warning: control reaches end of non-void function
-  return Direction::UNDIRECTED;
 }
 
 }  // namespace JoinOrdering

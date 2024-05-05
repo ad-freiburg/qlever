@@ -5,7 +5,8 @@
 
 #include <gtest/gtest.h>
 
-#include "engine/joinOrdering/CostASI.cpp"
+#include "engine/joinOrdering/CostIKKBZ.cpp"
+#include "engine/joinOrdering/GOO.cpp"
 #include "engine/joinOrdering/IKKBZ.cpp"
 #include "engine/joinOrdering/QueryGraph.cpp"
 #include "engine/joinOrdering/RelationBasic.cpp"
@@ -373,15 +374,18 @@ TEST(COSTASI_SANITY, SESSION04_EX1) {
   g.add_rjoin(R3, R5, 1.0);
 
   auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R2), 3.0 / 4, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R3), 9.0 / 10, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R4), 4.0 / 5, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5), 1.0 / 2, eps);
+  auto Ch = JoinOrdering::CostIKKBZ<RelationBasic>();
 
-  JoinOrdering::IKKBZ_merge(pg, R3);
-  auto R3R5 = pg.combine(R3, R5);
+  EXPECT_NEAR(Ch.rank(pg, R2), 3.0 / 4, eps);
+  EXPECT_NEAR(Ch.rank(pg, R3), 9.0 / 10, eps);
+  EXPECT_NEAR(Ch.rank(pg, R4), 4.0 / 5, eps);
+  EXPECT_NEAR(Ch.rank(pg, R5), 1.0 / 2, eps);
+
+  auto subtree_R3 = pg.iter(R3);
+  JoinOrdering::IKKBZ_merge(pg, Ch, subtree_R3);
+  auto R3R5 = JoinOrdering::IKKBZ_combine(pg, R3, R5);
   ASSERT_EQ(R3R5.getCardinality(), 60);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R3R5), 19.0 / 30, 0.001);
+  EXPECT_NEAR(Ch.rank(pg, R3R5), 19.0 / 30, 0.001);
 }
 
 TEST(COSTASI_SANITY, SESSION04_EX2) {
@@ -443,6 +447,7 @@ TEST(COSTASI_SANITY, SESSION04_EX2) {
   auto R9 = RelationBasic("R9", 100);
 
   auto g = JoinOrdering::QueryGraph<RelationBasic>();
+  auto Ch = JoinOrdering::CostIKKBZ<RelationBasic>();
 
   g.add_relation(R1);
   g.add_relation(R2);
@@ -465,25 +470,26 @@ TEST(COSTASI_SANITY, SESSION04_EX2) {
 
   auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
 
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R2), 9.0 / 10, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R3), 4.0 / 5, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R4), 0, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5), 13.0 / 15, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R6), 9.0 / 10, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R7), 4.0 / 5, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R8), 19.0 / 20, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R9), 3.0 / 4, eps);
+  EXPECT_NEAR(Ch.rank(pg, R2), 9.0 / 10, eps);
+  EXPECT_NEAR(Ch.rank(pg, R3), 4.0 / 5, eps);
+  EXPECT_NEAR(Ch.rank(pg, R4), 0, eps);
+  EXPECT_NEAR(Ch.rank(pg, R5), 13.0 / 15, eps);
+  EXPECT_NEAR(Ch.rank(pg, R6), 9.0 / 10, eps);
+  EXPECT_NEAR(Ch.rank(pg, R7), 4.0 / 5, eps);
+  EXPECT_NEAR(Ch.rank(pg, R8), 19.0 / 20, eps);
+  EXPECT_NEAR(Ch.rank(pg, R9), 3.0 / 4, eps);
 
-  auto R6R7 = pg.combine(R6, R7);
-  auto R8R9 = pg.combine(R8, R9);
+  auto R6R7 = JoinOrdering::IKKBZ_combine(pg, R6, R7);
+  auto R8R9 = JoinOrdering::IKKBZ_combine(pg, R8, R9);
 
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R6R7), 49.0 / 60, eps);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R8R9), 79.0 / 100, eps);
+  EXPECT_NEAR(Ch.rank(pg, R6R7), 49.0 / 60, eps);
+  EXPECT_NEAR(Ch.rank(pg, R8R9), 79.0 / 100, eps);
 
-  JoinOrdering::IKKBZ_merge(pg, R5);
+  auto subtree_R5 = pg.iter(R5);
+  JoinOrdering::IKKBZ_merge(pg, Ch, subtree_R5);
 
-  auto R5R8R9 = pg.combine(R5, R8R9);
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5R8R9), 1198.0 / 1515, eps);
+  auto R5R8R9 = JoinOrdering::IKKBZ_combine(pg, R5, R8R9);
+  EXPECT_NEAR(Ch.rank(pg, R5R8R9), 1198.0 / 1515, eps);
 }
 
 TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
@@ -507,6 +513,71 @@ TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
   g.add_rjoin(R3, R5, 1.0 / 1);
 
   auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
+  auto Ch = JoinOrdering::CostIKKBZ<RelationBasic>();
+  EXPECT_NEAR(Ch.rank(pg, R5), 0.98, eps);
+}
 
-  EXPECT_NEAR(JoinOrdering::ASI::rank(pg, R5), 0.98, eps);
+TEST(GOO_SANITY, SESSION04_EX) {
+  /**
+
+     R1     0.8     R2    0.5        R3        0.3     R4
+    (10)   ------  (10)  ------     (10)      ------  (10)
+
+    |                             |    |
+    | 0.6                         |    |
+    |                             |    |
+                                  |    |
+     R9     0.3     R6    0.6     |    |
+    (10)   ------  (10)  ---------+    |
+                                       |
+    |               |    0.2           |
+    | 0.6           +-------------+    | 0.9
+    |                             |    |
+                                  |
+     R8     0.3     R7            |     R5
+    (10)   ------  (10)           +-   (10)
+
+
+                            8/39
+
+  */
+
+  auto R1 = RelationBasic("R1", 10);
+  auto R2 = RelationBasic("R2", 10);
+  auto R3 = RelationBasic("R3", 10);
+  auto R4 = RelationBasic("R4", 10);
+  auto R5 = RelationBasic("R5", 10);
+  auto R6 = RelationBasic("R6", 10);
+  auto R7 = RelationBasic("R7", 10);
+  auto R8 = RelationBasic("R8", 10);
+  auto R9 = RelationBasic("R9", 10);
+
+  auto g = JoinOrdering::QueryGraph<RelationBasic>();
+
+  g.add_relation(R1);
+  g.add_relation(R2);
+  g.add_relation(R3);
+  g.add_relation(R4);
+  g.add_relation(R5);
+  g.add_relation(R6);
+  g.add_relation(R7);
+  g.add_relation(R8);
+  g.add_relation(R9);
+
+  g.add_rjoin(R1, R2, 0.8);
+  g.add_rjoin(R1, R9, 0.6);
+  g.add_rjoin(R2, R3, 0.5);
+  g.add_rjoin(R2, R6, 0.7);
+  g.add_rjoin(R3, R6, 0.6);
+  g.add_rjoin(R3, R4, 0.3);
+  g.add_rjoin(R3, R5, 0.9);
+  g.add_rjoin(R5, R6, 0.2);
+  g.add_rjoin(R6, R9, 0.3);
+  g.add_rjoin(R9, R8, 0.6);
+  g.add_rjoin(R8, R7, 0.3);
+
+  // TODO: undeterministic
+  EXPECT_NO_THROW(JoinOrdering::GOO(g));
+  //  auto erg = JoinOrdering::GOO(g);
+  //  for (auto const& x : g.hist[erg]) std::cout << x.getLabel() << "\n";
 }

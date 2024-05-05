@@ -11,6 +11,7 @@
 #include <ranges>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "EdgeInfo.h"
@@ -88,6 +89,23 @@ requires RelationAble<N> class QueryGraph {
 
   /**
    *
+   * Checks whether Relation n is a common neighbour between
+   * Relation a and Relation b.
+   *
+   * Relation n is a common neighbour of Relation a and Relation b if
+   * there exists a connection between Relation n and Relation a
+   * AND
+   * there exists a connection between Relation n and Relation b
+   *
+   * @param a Relation a
+   * @param b Relation b
+   * @param n Relation n
+   * @return True if Relation n is a common neighbour between a and b.
+   */
+  bool is_common_neighbour(const N& a, const N& b, const N& n) const;
+
+  /**
+   *
    * Connect 2 relations and assign the selectivity for the path.
    *
    * JoinOrdering::toPrecedenceTree will mutated the dir
@@ -143,29 +161,14 @@ requires RelationAble<N> class QueryGraph {
   auto get_parent(const N& n) const;
 
   /**
-   * Given 2 Relations (already exist on the QueryGraph),
-   * combine there 2 relation into a new compound relation.
+   * Recursively breaks down a compound relation till into basic relations.\
    *
-   * All descendents of Relation a and Relation b
-   * become descendents of the newly created relation ab.
-   *
-   * Relation a and Relation b are expected to be neighbours.
-   *
-   *
-   * @param a Relation a
-   * @param b Relation b
-   * @return Relation ab
-   */
-  N combine(const N& a, const N& b);
-
-  /**
-   * Inverse operation of QueryGraph::combine.
-   *
-   * Spread a compound relation back into it's original components.
    * @param n Compound Relation
+   * @param erg Vector of n's basic relations
+   * @see JoinOrdering::IKKBZ_combine
+   * @see JoinOrdering::IKKBZ_uncombine
    */
-  void uncombine(const N& n);
-
+  void unpack(const N& n, std::vector<N>& erg);
   /**
    * Remove all connections between a relation and it's neighbours
    *
@@ -202,6 +205,7 @@ requires RelationAble<N> class QueryGraph {
    *
    * @param n Relation
    * @return the root of the subtree whose subtrees are chains
+   * @see IKKBZ_Normalized
    */
   auto get_chained_subtree(const N& n) -> N;
 
@@ -226,6 +230,34 @@ requires RelationAble<N> class QueryGraph {
    */
   auto iter(const N& n) -> std::vector<N>;
 
+  /**
+   * Gets ALL relations pairs on a the QueryGraph.
+   *
+   * @return set of pairs of connected relations
+   */
+  auto iter_pairs() -> std::vector<std::pair<N, N>>;
+
+  /**
+   * Gets relation pairs that involve a particular relation.
+   * i.e the direct connected neighbours of give relation n.
+   *
+   * @param n Relation n
+   * @return set of pairs of connected relations that involve n
+   * @see iter_pairs()
+   */
+  auto iter_pairs(const N& n) -> std::vector<std::pair<N, N>>;
+
+  /**
+   *
+   * used to assign bidirectional connections when populating the QueryGraph
+   *
+   *
+   * inverse of a DIRECTION::PARENT is DIRECTION::CHILD
+   * inverse of a DIRECTION::CHILD is DIRECTION::PARENT
+   * inverse of a DIRECTION::UNDIRECTED is DIRECTION::UNDIRECTED
+   *
+   * @see QueryGraph::add_rjoin
+   */
   constexpr static Direction inv(Direction);
 };
 

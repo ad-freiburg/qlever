@@ -5,7 +5,7 @@
 
 #include "IKKBZ.h"
 
-#include "CostASI.h"
+#include "CostIKKBZ.h"
 
 namespace JoinOrdering {
 
@@ -27,10 +27,11 @@ requires RelationAble<N> auto IKKBZ(QueryGraph<N> g) -> std::vector<N> {
             l, r, [](const vf& a, const vf& b) { return a.second < b.second; });
       },
       [&](const N& n) {  // (2) run IKKBZ routine
-        auto ldtree = IKKBZ(g, n);
+        auto Ch = CostIKKBZ<N>();
+        auto ldtree = IKKBZ(g, Ch, n);
         auto seq = ldtree.iter();
         auto seqv = std::span<N>(seq);
-        return vf(seq, ASI::C(ldtree, seqv));
+        return vf(seq, Ch.C(ldtree, seqv));
       });
 
   return ldtree_opt;
@@ -40,7 +41,16 @@ template <typename N>
 requires RelationAble<N>
 auto IKKBZ(QueryGraph<N> g, const N& n) -> QueryGraph<N> {
   auto new_g = toPrecedenceGraph(g, n);
-  IKKBZ_Sub(new_g);
+  auto Ch = CostIKKBZ<N>();
+  IKKBZ_Sub(new_g, Ch);
+  return new_g;
+}
+
+template <typename N>
+requires RelationAble<N>
+auto IKKBZ(QueryGraph<N> g, ICostASI<N>& Ch, const N& n) -> QueryGraph<N> {
+  auto new_g = toPrecedenceGraph(g, n);
+  IKKBZ_Sub(new_g, Ch);
   return new_g;
 }
 
@@ -75,49 +85,53 @@ requires RelationAble<N>
 }
 
 template <typename N>
-requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g) {
+requires RelationAble<N> void IKKBZ_Sub(QueryGraph<N>& g, ICostASI<N>& Ch) {
   while (!g.is_chain(g.root)) {
-    auto subtree = g.get_chained_subtree(g.root);
-    while (!IKKBZ_Normalized(g, subtree))
-      ;
-    IKKBZ_merge(g, subtree);
+    auto subtree_root = g.get_chained_subtree(g.root);
+    auto normalized_subtree = IKKBZ_Normalized(g, Ch, subtree_root);
+    IKKBZ_merge(g, Ch, normalized_subtree);
   }
-  IKKBZ_denormalize(g);
+  IKKBZ_Denormalize(g);
 }
 
 template <typename N>
 requires RelationAble<N>
-bool IKKBZ_Normalized(QueryGraph<N>& g, const N& subtree_root) {
-  for (auto const& d : g.iter(subtree_root)) {
-    auto pv = g.get_parent(d);
-    if (pv.empty()) continue;
-    auto p = pv.front();
-    if (d == subtree_root || p == subtree_root) continue;
+std::vector<N> IKKBZ_Normalized(QueryGraph<N>& g, ICostASI<N>& Ch,
+                                const N& subtree_root) {
+  for (bool normalized;; normalized = true) {
+    auto subtree = g.iter(subtree_root);
 
-    for (auto const& c : g.get_children(p))
-      // "precedence graph demands A -> B but rank(A) > rank(B),
-      // we speak of contradictory sequences."
-      // 118/637
-      if (ASI::rank(g, p) > ASI::rank(g, c)) {
-        // a new node representing compound relation
-        g.combine(p, c);
-        return false;
-      }
+    for (auto const& d : subtree) {
+      auto pv = g.get_parent(d);
+      if (pv.empty()) continue;
+      auto p = pv.front();
+      if (d == subtree_root || p == subtree_root) continue;
+
+      for (auto const& c : g.get_children(p))
+        // "precedence graph demands A -> B but rank(A) > rank(B),
+        // we speak of contradictory sequences."
+        // 118/637
+        //        if (ASI::rank(g, p) > ASI::rank(g, c)) {
+        if (Ch.rank(g, p) > Ch.rank(g, c)) {
+          // a new node representing compound relation
+          IKKBZ_combine(g, p, c);
+          normalized = false;
+        }
+    }
+    if (normalized) return subtree;
   }
-  return true;  // ready to merge
 }
 
 template <typename N>
-requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, const N& n) {
+requires RelationAble<N>
+void IKKBZ_merge(QueryGraph<N>& g, ICostASI<N>& Ch, std::vector<N>& dv) {
   // we get here after we are already sure that descendents are in a chain
-  auto dv = g.iter(n);  // iter includes "n" back.
 
   // exclude n from sorting. subchain root not considered during sorting.
   // n is always at the beginning of dv
-  std::ranges::partial_sort(dv.begin() + 1, dv.end(), dv.end(),
-                            [&](const N& a, const N& b) {
-                              return ASI::rank(g, a) < ASI::rank(g, b);
-                            });
+  std::ranges::partial_sort(
+      dv.begin() + 1, dv.end(), dv.end(),
+      [&](const N& a, const N& b) { return Ch.rank(g, a) < Ch.rank(g, b); });
 
   // given a sequence post sort dv (a, b, c, d, ...)
   // include subchain root at the beginning (n, a, b, c, d, ...)
@@ -131,9 +145,111 @@ requires RelationAble<N> void IKKBZ_merge(QueryGraph<N>& g, const N& n) {
 }
 
 template <typename N>
-requires RelationAble<N> void IKKBZ_denormalize(QueryGraph<N>& g) {
+requires RelationAble<N>
+[[maybe_unused]] N IKKBZ_combine(QueryGraph<N>& g, const N& a, const N& b) {
+  // 104/637
+  // if the ordering violates the query constraints, it constructs compounds
+  // TODO: assert chain
+  //    std::cout << "COMBINE " << a.label << "  " << b.label << "\n";
+
+  // 118/637
+
+  // "its cardinality is computed by multiplying the cardinalities of
+  // all relations in A and B"
+  //  auto w = cardinality[a] * cardinality[b];
+  auto w = a.getCardinality() * b.getCardinality();
+
+  // "its selectivity is the product of all selectivities (s_i) of relations
+  // R_i contained in A and B"
+  auto s = g.selectivity[a] * g.selectivity[b];
+
+  // add the newly computed cardinality to the
+  // cardinality map of the query graph.
+  auto n = N(a.getLabel() + "," + b.getLabel(), w);
+  g.add_relation(n);
+
+  // to be able to apply the inverse operation (IKKBZ_uncombine)
+  // we keep track of the combined relation in the `hist` map
+
+  g.hist[n].push_back(a);
+  g.hist[n].push_back(b);
+
+  // TODO: use common neighbor?
+  std::set<N> parents;
+  for (auto const& x : g.get_parent(a)) parents.insert(x);
+  for (auto const& x : g.get_parent(b)) parents.insert(x);
+
+  // IN CASE merging bc
+  // a -> b -> c
+  // we don't want b to be the parent of bc
+  parents.erase(a);
+  parents.erase(b);
+
+  //  for (auto const& x : parents) add_rjoin(x, n, s, Direction::PARENT);
+  AD_CONTRACT_CHECK(parents.size() == 1);
+  g.add_rjoin(*parents.begin(), n, s, Direction::PARENT);
+
+  // filters out duplicate relation if the 2 relation have common descendants.
+  // yes. it should never happen.
+  // rationale behind using a std::set here
+  std::set<N> children{};
+
+  // collect all children of relation a
+  // collect all children of relation b
+  // connect relation n to each child of a and b
+
+  auto ca = g.get_children(a);
+  auto cb = g.get_children(b);
+  children.insert(ca.begin(), ca.end());
+  children.insert(cb.begin(), cb.end());
+
+  // equiv. to add_rjoin(n, c, s, Direction::PARENT);
+  for (auto const& c : children) g.add_rjoin(c, n, s, Direction::CHILD);
+
+  // make these relations unreachable
+  g.rm_relation(a);
+  g.rm_relation(b);
+  return n;
+}
+
+template <typename N>
+requires RelationAble<N> void IKKBZ_uncombine(QueryGraph<N>& g, const N& n) {
+  // ref: 121/637
+  // don't attempt to uncombine regular relation
+  if (!g.is_compound_relation(n)) return;
+
+  auto pn = g.get_parent(n);
+  auto cn = g.get_children(n);
+
+  std::vector<N> rxs{};
+
+  // breaks down a given compound relation (n)
+  // to its basic components (r1, r2, ....)
+  g.unpack(n, rxs);
+
+  // put the parent of relation first (1)
+  std::vector<N> v{pn.begin(), pn.end()};
+  // assert single parent to the compound relation
+  AD_CONTRACT_CHECK(v.size() == 1);
+
+  // then the basic relation (r1, r2, ...) (2)
+  v.insert(v.end(), rxs.begin(), rxs.end());
+  // then the children of (n) (3)
+  v.insert(v.end(), cn.begin(), cn.end());
+
+  // also removes all incoming and outgoing connections
+  g.rm_relation(n);
+
+  // given {p, r1, r2, ..., c1, c2, ...}, connect them such that
+  // p -> r1 -> r2 -> ... -> c1 -> c2 -> ...
+  for (size_t i = 1; i < v.size(); i++)
+    g.add_rjoin(v[i - 1], v[i], g.selectivity[v[i]], Direction::PARENT);
+}
+
+template <typename N>
+requires RelationAble<N> void IKKBZ_Denormalize(QueryGraph<N>& g) {
   auto is_compound = [&](const N& n) { return g.is_compound_relation(n); };
-  auto uncombine = [&](const N& n) { g.uncombine(n); };
+  auto uncombine = [&](const N& n) { IKKBZ_uncombine(g, n); };
 
   auto rxs = g.iter();
   // R1 -> R4R6R7 -> R5 -> R3 -> R2
