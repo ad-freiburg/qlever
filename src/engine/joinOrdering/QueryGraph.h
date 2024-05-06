@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <map>
 #include <queue>
 #include <ranges>
 #include <set>
@@ -39,18 +40,22 @@ requires RelationAble<N> class QueryGraph {
  public:
   QueryGraph() = default;
 
-  //  ad_utility::HashMap<N, std::pair<N, EdgeInfo>> edges_;
   std::vector<N> relations_;
-  ad_utility::HashMap<N, ad_utility::HashMap<N, EdgeInfo>> edges_;
-  ad_utility::HashMap<N, std::vector<N>> hist;
-  ad_utility::HashMap<N, int> cardinality;
-  ad_utility::HashMap<N, float> selectivity;
+  //  ad_utility::HashMap<N, ad_utility::HashMap<N, EdgeInfo>> edges_;
+  //  ad_utility::HashMap<N, std::vector<N>> hist;
+  //  ad_utility::HashMap<N, int> cardinality;
+  //  ad_utility::HashMap<N, float> selectivity;
+
+  std::map<N, std::map<N, EdgeInfo>> edges_;
+  std::map<N, std::vector<N>> hist;
+  std::map<N, int> cardinality;
+  std::map<N, float> selectivity;
+
   N root;
 
   /**
    * Add a relation to the query graph and and append it's cardinality
    * to the graph's cardinality lookup table
-   * (std::unordered_map<N, int> cardinality)
    *
    * ref: 77/637
    * TODO: 91/637 do not add single relations, but subchains
