@@ -340,6 +340,36 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   return {sizeEstimate, costEstimate};
 }
 
+ExpressionResult InExpression::evaluate(sparqlExpression::EvaluationContext* context) const {
+  auto lhs = children_.at(0)->evaluate(context);
+  VectorWithMemoryLimit<Id> result(context->size(), Id::makeFromBool(false), context->_allocator);
+  for (const auto& child : children_ | std::views::drop(1)) {
+    auto rhs = child->evaluate(context);
+    // `resA` and `resB` are variants, so we need `std::visit`.
+    auto visitor = [context](const auto& a, auto b) -> ExpressionResult {
+      return evaluateRelationalExpression<Comparison::EQ>(a, std::move(b),
+                                                context);
+    };
+    auto subRes = std::visit(visitor, lhs, rhs);
+    if (std::holds_alternative<Id>(subRes)) {
+      auto res = std::get<Id>(subRes);
+      // TODO<joka921> Verify that this in fact works.
+      std::ranges::for_each(result, [res](Id& id) {
+        id = Id::fromBits(id.getBits() | res.getBits());
+      });
+    } else {
+      AD_CORRECTNESS_CHECK(std::holds_alternative<VectorWithMemoryLimit<Id>>(subRes));
+        const auto& res = std::get<VectorWithMemoryLimit<Id>>(subRes);
+        AD_CORRECTNESS_CHECK(result.size() == res.size());
+        for (size_t i = 0; i < result.size(); ++i) {
+          result[i] = Id::fromBits(result[i].getBits() | res[i].getBits());
+        }
+      }
+
+  }
+
+}
+
 // Explicit instantiations
 template class RelationalExpression<Comparison::LT>;
 template class RelationalExpression<Comparison::LE>;
