@@ -1,4 +1,4 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
