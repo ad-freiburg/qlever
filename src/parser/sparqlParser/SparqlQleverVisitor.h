@@ -166,7 +166,7 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static void visit(Parser::NamedGraphClauseContext* ctx);
 
-  [[noreturn]] static void visit(Parser::SourceSelectorContext* ctx);
+  TripleComponent::Iri visit(Parser::SourceSelectorContext* ctx);
 
   [[nodiscard]] PatternAndVisibleVariables visit(
       Parser::WhereClauseContext* ctx);

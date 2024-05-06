@@ -249,17 +249,13 @@ void Visitor::visit(Parser::DefaultGraphClauseContext*) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::NamedGraphClauseContext*) {
-  // This rule is only used by the `DatasetClause` rule which also is not
-  // supported and should already have thrown an exception.
-  AD_FAIL();
+void Visitor::visit(Parser::NamedGraphClauseContext* ctx) {
+  reportNotSupported(ctx, "FROM NAMED clauses are");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SourceSelectorContext*) {
-  // This rule is only indirectly used by the `DatasetClause` rule which also is
-  // not supported and should already have thrown an exception.
-  AD_FAIL();
+TripleComponent::Iri Visitor::visit(Parser::SourceSelectorContext* ctx) {
+  return visit(ctx->iri());
 }
 
 // ____________________________________________________________________________________

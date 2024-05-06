@@ -123,6 +123,10 @@ namespace parsedQuery {
 struct GraphPatternOperation;
 }
 
+struct DatasetClause {
+  ad_utility::HashSet<TripleComponent::Iri> defaultSets_;
+};
+
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {
  public:
