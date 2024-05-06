@@ -370,7 +370,9 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
+ protected:
   bool statement();
+ private:
   bool nQuadSubject();
   bool nQuadPredicate();
   bool nQuadObject();

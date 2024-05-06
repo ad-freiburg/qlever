@@ -374,7 +374,7 @@ bool NQuadParser<T>::statement() {
   if (!nQuadGraphLabel()) {
     activeGraphLabel_ = defautlGraphIri_;
   }
-  check(this->template skip<TurtleTokenId::Dot>());
+  this->check(this->template skip<TurtleTokenId::Dot>());
   if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
     this->triples_.emplace_back(
         std::move(this->activeSubject_), std::move(this->activePredicate_),
@@ -394,7 +394,7 @@ template <typename T>
 bool NQuadParser<T>::getLine(TurtleTriple* triple) {
   if (statement()) {
     // TODO<joka921> For NQuads it would suffice to only store a simple triple.
-    triple = std::move(this->triples_.back());
+    *triple = std::move(this->triples_.back());
     this->triples_.clear();
     return true;
   } else {
@@ -414,7 +414,7 @@ bool NQuadParser<T>::nQuadSubject() {
 template <typename T>
 bool NQuadParser<T>::nQuadPredicate() {
   if (Base::iriref()) {
-    this->activePredicate_ = std::move(this->lastParseResult_);
+    this->activePredicate_ = std::move(this->lastParseResult_.getIri());
     return true;
   }
   return false;
@@ -431,15 +431,9 @@ bool NQuadParser<T>::nQuadObject() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadGraphLabel() {
-  if (Base::iriref()) {
+  if (Base::iriref() || Base::blankNodeLabel()) {
     activeGraphLabel_ = std::move(this->lastParseResult_);
     return true;
-  } else if (Base::blankNodeLabel()) {
-    // TODO<joka921> Support this. We would have to integrate those blank nodes
-    // also into the merging.
-    this->raise(
-        "blank node labels as Graph IRIs are currently not supported in NQuad "
-        "files");
   }
   return false;
 }
@@ -651,8 +645,8 @@ bool TurtleParser<T>::blankNodeLabel() {
   if (res) {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
-    // removes the leading `_:` which will be added againg by the `BlankNode`
-    // constructor
+    // removes the leading `_:` which will be added again by the `BlankNode`
+    // constructor.
     lastParseResult_ =
         BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
   }
@@ -1065,3 +1059,7 @@ template class TurtleStreamParser<TurtleParser<Tokenizer>>;
 template class TurtleStreamParser<TurtleParser<TokenizerCtre>>;
 template class TurtleParallelParser<TurtleParser<Tokenizer>>;
 template class TurtleParallelParser<TurtleParser<TokenizerCtre>>;
+template class TurtleStreamParser<NQuadParser<Tokenizer>>;
+template class TurtleStreamParser<NQuadParser<TokenizerCtre>>;
+template class TurtleParallelParser<NQuadParser<Tokenizer>>;
+template class TurtleParallelParser<NQuadParser<TokenizerCtre>>;

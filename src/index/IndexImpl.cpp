@@ -62,25 +62,49 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   return {indexBuilderData, std::move(firstSorter)};
 }
 
+// _____________________________________________________________________________
 std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
-    const std::string& filename) {
-  auto setTokenizer = [this,
-                       &filename]<template <typename> typename ParserTemplate>()
-      -> std::unique_ptr<TurtleParserBase> {
+    const std::string& filename, Index::Filetype type) {
+  using Res = std::unique_ptr<TurtleParserBase>;
+
+  auto tokenize = [this](auto f) -> Res {
     if (onlyAsciiTurtlePrefixes_) {
-      return std::make_unique<ParserTemplate<TurtleParser<TokenizerCtre>>>(
-          filename);
+      return f.template operator()<TokenizerCtre>();
     } else {
-      return std::make_unique<ParserTemplate<TurtleParser<Tokenizer>>>(
-          filename);
+      return f.template operator()<Tokenizer>();
     }
   };
+  auto typeDispatch = [type](auto f) {
+    return [type, f]<typename TokenizerT>() -> Res {
+      if (type == Index::Filetype::Turtle) {
+        return f.template operator()<TurtleParser, TokenizerT>();
+      } else {
+        return f.template operator()<NQuadParser, TokenizerT>();
+      }
+    };
+  };
 
-  if (useParallelParser_) {
-    return setTokenizer.template operator()<TurtleParallelParser>();
-  } else {
-    return setTokenizer.template operator()<TurtleStreamParser>();
-  }
+  auto chooseParallel = [this](auto f) {
+    return [this,
+            f]<template <typename> typename ParserImpl, typename TokenizerT>()
+               -> Res {
+      if (useParallelParser_) {
+        return f.template
+        operator()<TurtleParallelParser, ParserImpl, TokenizerT>();
+      } else {
+        return f
+            .template operator()<TurtleStreamParser, ParserImpl, TokenizerT>();
+      }
+    };
+  };
+
+  auto make = [&filename]<template <typename> typename ParserTemplate,
+                          template <typename> typename ParserImpl,
+                          typename TokenizerT>() -> Res {
+    return std::make_unique<ParserTemplate<ParserImpl<TokenizerT>>>(filename);
+  };
+
+  return tokenize(typeDispatch(chooseParallel(make)));
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -263,7 +287,7 @@ IndexImpl::buildOspWithPatterns(
   return thirdSorter;
 }
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename) {
+void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -274,7 +298,7 @@ void IndexImpl::createFromFile(const string& filename) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeTurtleParser(filename));
+      createIdTriplesAndVocab(makeTurtleParser(filename, type));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.

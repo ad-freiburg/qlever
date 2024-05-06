@@ -198,7 +198,7 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFile(const string& filename);
+  void createFromFile(const string& filename, Index::Filetype type);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -454,7 +454,7 @@ class IndexImpl {
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<TurtleParserBase> makeTurtleParser(
-      const std::string& filename);
+      const std::string& filename, Index::Filetype type);
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
