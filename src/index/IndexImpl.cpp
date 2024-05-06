@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <future>
+#include <numeric>
 #include <optional>
 #include <unordered_map>
 
@@ -112,9 +113,10 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     return projectionForComparator(l) < projectionForComparator(r);
   };
 
-  // There are 5 columns in the result (3 from the triple, as well as subject
-  // patterns of the subject and object).
-  IdTable outputTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+  // There are 6 columns in the result (4 from the triple + graph ID, as well as
+  // subject patterns of the subject and object).
+  IdTable outputTable{NumColumnsIndexBuilding + 2,
+                      ad_utility::makeUnlimitedAllocator<Id>()};
   // The first argument is the number of join columns.
   auto rowAdder = ad_utility::AddCombinedRowToIdTable{
       1, std::move(outputTable),
@@ -127,6 +129,16 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
   rowAdder.flush();
 }
 
+// Return the array {2, 1, 0, 3, 4, 5, ..., numColumns - 1};
+template <size_t numColumns>
+constexpr auto makePermutationFirstThirdSwitched = []() {
+  static_assert(numColumns >= 3);
+  std::array<ColumnIndex, numColumns> permutation{};
+  std::ranges::generate(permutation,
+                        [x = ColumnIndex{0}]() mutable { return x++; });
+  std::swap(permutation[0], permutation[2]);
+  return permutation;
+};
 // In the pattern column replace UNDEF (which is created by the optional join)
 // by the special `NO_PATTERN` ID and undo the permutation of the columns that
 // was only needed for the join algorithm.
@@ -134,18 +146,20 @@ auto fixBlockAfterPatternJoin(auto block) {
   // The permutation must be the inverse of the original permutation, which just
   // switches the third column (the object) into the first column (where the
   // join column is expected by the algorithms).
-  block.value().setColumnSubset(std::array<ColumnIndex, 5>{2, 1, 0, 3, 4});
-  std::ranges::for_each(block.value().getColumn(4), [](Id& id) {
-    id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id;
-  });
+  static constexpr auto permutation =
+      makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 2>();
+  block.value().setColumnSubset(permutation);
+  std::ranges::for_each(
+      block.value().getColumn(ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN),
+      [](Id& id) { id = id.isUndefined() ? Id::makeFromInt(NO_PATTERN) : id; });
   return std::move(block.value()).template toStatic<0>();
 }
 }  // namespace
 
 // ____________________________________________________________________________
-std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
-    PatternCreator::TripleSorter sortersFromPatternCreator,
-    auto isQleverInternalId) {
+std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
+IndexImpl::buildOspWithPatterns(
+    PatternCreator::TripleSorter sortersFromPatternCreator) {
   auto&& [hasPatternPredicateSortedByPSO, secondSorter] =
       sortersFromPatternCreator;
   // We need the patterns twice: once for the additional column, and once for
@@ -163,7 +177,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // This permutation is reverted as part of the `fixBlockAfterPatternJoin`
   // function.
   auto ospAsBlocksTransformed = lazyScanWithPermutedColumns(
-      secondSorter, std::array<ColumnIndex, 4>{2, 1, 0, 3});
+      secondSorter,
+      makePermutationFirstThirdSwitched<NumColumnsIndexBuilding + 1>());
 
   // Run the actual join between the OSP permutation and the `has-pattern`
   // predicate on a background thread. The result will be pushed to the `queue`
@@ -172,7 +187,8 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
       [&queue, &ospAsBlocksTransformed, &lazyPatternScan] {
         // Setup the callback for the join that will buffer the results and push
         // them to the queue.
-        IdTable outputBufferTable{5, ad_utility::makeUnlimitedAllocator<Id>()};
+        IdTable outputBufferTable{NumColumnsIndexBuilding + 2,
+                                  ad_utility::makeUnlimitedAllocator<Id>()};
         auto pushToQueue =
             [&, bufferSize =
                     BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP.load()](IdTable& table) {
@@ -221,7 +237,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // Actually create the permutations.
   auto thirdSorter =
       makeSorterPtr<ThirdPermutation, NumColumnsIndexBuilding + 2>("third");
-  createSecondPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+  createSecondPermutationPair(NumColumnsIndexBuilding + 2,
                               std::move(blockGenerator), *thirdSorter);
   secondSorter->clear();
   // Add the `ql:has-pattern` predicate to the sorter such that it will become
@@ -231,11 +247,15 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
                "the internal `ql:has-pattern` ..."
             << std::endl;
   auto noPattern = Id::makeFromInt(NO_PATTERN);
-  static_assert(NumColumnsIndexBuilding == 3);
+  static_assert(NumColumnsIndexBuilding == 4,
+                "When adding additional payload columns, the following code "
+                "has to be changed");
+  Id internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
-    // The repetition of the pattern index (`row[2]`) for the fourth column is
+    // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
-    thirdSorter->push(std::array{row[0], row[1], row[2], row[2], noPattern});
+    thirdSorter->push(
+        std::array{row[0], row[1], row[2], internalGraph, row[2], noPattern});
   }
   hasPatternPredicateSortedByPSO->clear();
   return thirdSorter;
@@ -258,13 +278,6 @@ void IndexImpl::createFromFile(const string& filename) {
   // case any of the permutations fail.
   writeConfiguration();
 
-  auto isQleverInternalId = [&indexBuilderData](const auto& id) {
-    // The special internal IDs like `ql:has-pattern` (see `SpecialIds.h`)
-    // have the datatype `UNDEFINED`.
-    return indexBuilderData.vocabularyMetaData_.isQleverInternalId(id) ||
-           id.getDatatype() == Datatype::Undefined;
-  };
-
   auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
@@ -273,35 +286,34 @@ void IndexImpl::createFromFile(const string& filename) {
   if (!loadAllPermutations_) {
     // Only two permutations, no patterns, in this case the `firstSorter` is a
     // PSO sorter, and `createPermutationPair` creates PSO/POS permutations.
-    createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
+    createFirstPermutationPair(NumColumnsIndexBuilding,
                                std::move(firstSorterWithUnique));
     configurationJson_["has-all-permutations"] = false;
   } else if (loadAllPermutations_ && !usePatterns_) {
     // Without patterns we explicitly have to pass in the next sorters to all
     // permutation creating functions.
     auto secondSorter = makeSorter<SecondPermutation>("second");
-    createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
+    createFirstPermutationPair(NumColumnsIndexBuilding,
                                std::move(firstSorterWithUnique), secondSorter);
     firstSorter.clearUnderlying();
 
     auto thirdSorter = makeSorter<ThirdPermutation>("third");
-    createSecondPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
+    createSecondPermutationPair(NumColumnsIndexBuilding,
                                 secondSorter.getSortedBlocks<0>(), thirdSorter);
     secondSorter.clear();
-    createThirdPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
+    createThirdPermutationPair(NumColumnsIndexBuilding,
                                thirdSorter.getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   } else {
     // Load all permutations and also load the patterns. In this case the
     // `createFirstPermutationPair` function returns the next sorter, already
     // enriched with the patterns of the subjects in the triple.
-    auto patternOutput =
-        createFirstPermutationPair(NumColumnsIndexBuilding, isQleverInternalId,
-                                   std::move(firstSorterWithUnique));
+    auto patternOutput = createFirstPermutationPair(
+        NumColumnsIndexBuilding, std::move(firstSorterWithUnique));
     firstSorter.clearUnderlying();
-    auto thirdSorterPtr = buildOspWithPatterns(std::move(patternOutput.value()),
-                                               isQleverInternalId);
-    createThirdPermutationPair(NumColumnsIndexBuilding + 2, isQleverInternalId,
+    auto thirdSorterPtr =
+        buildOspWithPatterns(std::move(patternOutput.value()));
+    createThirdPermutationPair(NumColumnsIndexBuilding + 2,
                                thirdSorterPtr->template getSortedBlocks<0>());
     configurationJson_["has-all-permutations"] = true;
   }
@@ -343,7 +355,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   while (!parserExhausted) {
     size_t actualCurrentPartialSize = 0;
 
-    std::vector<std::array<Id, 3>> localWriter;
+    std::vector<std::array<Id, NumColumnsIndexBuilding>> localWriter;
 
     std::array<std::optional<ItemMapManager>, NUM_PARALLEL_ITEM_MAPS> itemArray;
 
@@ -488,7 +500,7 @@ IndexImpl::convertPartialToGlobalIds(
   auto& result = *resultPtr;
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
-  using Buffer = IdTableStatic<3>;
+  using Buffer = IdTableStatic<NumColumnsIndexBuilding>;
   using Map = ad_utility::HashMap<Id, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
@@ -954,21 +966,33 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
     }
   }
 
-  // If the object of the triple can be directly folded into an ID, do so. Note
-  // that the actual folding is done by the `TripleComponent`.
-  std::optional<Id> idIfNotString = triple.object_.toValueIdIfNotString();
+  // The following lambda deals with triple elements that might be strings
+  // (literals or IRIs) as well as values that can be decoded into the IRI
+  // directly. These currently are the object and the graph ID of the triple.
+  auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
+    // If the object of the triple can be directly folded into an ID, do so.
+    // Note that the actual folding is done by the `TripleComponent`.
+    auto& el = std::invoke(getter, triple);
+    std::optional<Id> idIfNotString = el.toValueIdIfNotString();
 
-  // TODO<joka921> The following statement could be simplified by a helper
-  // function "optionalCast";
-  if (idIfNotString.has_value()) {
-    resultTriple[2] = idIfNotString.value();
-  } else {
-    // `toRdfLiteral` handles literals as well as IRIs correctly.
-    resultTriple[2] = std::move(triple.object_);
-  }
+    // TODO<joka921> The following statement could be simplified by a helper
+    // function "optionalCast";
+    if (idIfNotString.has_value()) {
+      resultTriple[index] = idIfNotString.value();
+    } else {
+      // `toRdfLiteral` handles literals as well as IRIs correctly.
+      resultTriple[index] = std::move(el);
+    }
+  };
+  handleStringOrId(&TurtleTriple::object_, 2);
+  handleStringOrId(&TurtleTriple::graphIri_, 3);
+  // If we ever add additional elements to the triples then we have to change
+  // this position.
+  static_assert(NumColumnsIndexBuilding == 4,
+                "This place probably has to be changed when additional payload "
+                "columns are added to the index");
 
-  for (size_t i = 0; i < 3; ++i) {
-    auto& el = resultTriple[i];
+  for (auto& el : resultTriple) {
     if (!std::holds_alternative<PossiblyExternalizedIriOrLiteral>(el)) {
       // If we already have an ID, we can just continue;
       continue;
@@ -1415,30 +1439,27 @@ namespace {
 
 // Return a lambda that is called repeatedly with triples that are sorted by the
 // `idx`-th column and counts the number of distinct entities that occur in a
-// triple where none of the elements fulfills the `isQleverInternalId`
-// predicate. This is used to cound the number of distinct subjects, objects,
-// and predicates during the index building.
+// triple where the triple is not internal (which is determined by the Graph
+// ID). This is used to count the number of distinct subjects, objects, and
+// predicates during the index building.
 template <size_t idx>
-auto makeNumDistinctIdsCounter =
-    [](size_t& numDistinctIds,
-       ad_utility::InvocableWithExactReturnType<bool, Id> auto
-           isQleverInternalId) {
-      return [lastId = std::optional<Id>{}, &numDistinctIds,
-              isInternalId =
-                  std::move(isQleverInternalId)](const auto& triple) mutable {
-        const auto& id = triple[idx];
-        if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
-          numDistinctIds++;
-          lastId = id;
-        }
-      };
-    };
+constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
+  return [lastId = std::optional<Id>{}, &numDistinctIds,
+          internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
+             const auto& triple) mutable {
+    const auto& id = triple[idx];
+    if (id != lastId && triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph) {
+      numDistinctIds++;
+      lastId = id;
+    }
+  };
+};
 }  // namespace
 
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
+void IndexImpl::createPSOAndPOS(size_t numColumns,
                                 BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter)
 
@@ -1446,13 +1467,14 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
   size_t numTriplesNormal = 0;
   size_t numTriplesTotal = 0;
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
-                             &isInternalId](const auto& triple) mutable {
+                             internalGraph =
+                                 qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
+                                const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += std::ranges::none_of(triple, isInternalId);
+    numTriplesNormal += static_cast<size_t>(triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
   };
   size_t numPredicatesNormal = 0;
-  auto predicateCounter =
-      makeNumDistinctIdsCounter<1>(numPredicatesNormal, isInternalId);
+  auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);
   size_t numPredicatesTotal =
       createPermutationPair(numColumns, AD_FWD(sortedTriples), pso_, pos_,
                             nextSorter.makePushCallback()...,
@@ -1469,12 +1491,11 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalId,
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
 std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
-    size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+    size_t numColumns, BlocksOfTriples sortedTriples,
     NextSorter&&... nextSorter) {
   size_t numSubjectsNormal = 0;
   size_t numSubjectsTotal = 0;
-  auto numSubjectCounter =
-      makeNumDistinctIdsCounter<0>(numSubjectsNormal, isInternalId);
+  auto numSubjectCounter = makeNumDistinctIdsCounter<0>(numSubjectsNormal);
   std::optional<PatternCreator::TripleSorter> result;
   if (usePatterns_) {
     // We will return the next sorter.
@@ -1485,9 +1506,14 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         onDiskBase_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
-                                 &isInternalId](const auto& triple) {
-      bool ignoreForPatterns = std::ranges::any_of(triple, isInternalId);
-      auto tripleArr = std::array{triple[0], triple[1], triple[2]};
+                                 internalGraph = qlever::specialIds.at(
+                                     INTERNAL_GRAPH_IRI)](const auto& triple) {
+      bool ignoreForPatterns =
+          triple[ADDITIONAL_COLUMN_GRAPH_ID] == internalGraph;
+      static_assert(NumColumnsIndexBuilding == 4,
+                    "this place probably has to be changed when additional "
+                    "payload columns are added");
+      auto tripleArr = std::array{triple[0], triple[1], triple[2], triple[3]};
       patternCreator.processTriple(tripleArr, ignoreForPatterns);
     };
     numSubjectsTotal = createPermutationPair(
@@ -1518,14 +1544,13 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
 // _____________________________________________________________________________
 template <typename... NextSorter>
 requires(sizeof...(NextSorter) <= 1)
-void IndexImpl::createOSPAndOPS(size_t numColumns, auto& isInternalId,
+void IndexImpl::createOSPAndOPS(size_t numColumns,
                                 BlocksOfTriples sortedTriples,
                                 NextSorter&&... nextSorter) {
   // For the last pair of permutations we don't need a next sorter, so we
   // have no fourth argument.
   size_t numObjectsNormal = 0;
-  auto objectCounter =
-      makeNumDistinctIdsCounter<2>(numObjectsNormal, isInternalId);
+  auto objectCounter = makeNumDistinctIdsCounter<2>(numObjectsNormal);
   size_t numObjectsTotal = createPermutationPair(
       numColumns, AD_FWD(sortedTriples), osp_, ops_,
       nextSorter.makePushCallback()..., std::ref(objectCounter));

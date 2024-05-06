@@ -51,7 +51,6 @@ using std::vector;
 
 using json = nlohmann::json;
 
-static constexpr size_t NumColumnsIndexBuilding = 3;
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -71,7 +70,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -93,7 +92,8 @@ struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
 
 class IndexImpl {
  public:
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec =
+      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
@@ -733,14 +733,13 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+      size_t numColumns, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
@@ -748,8 +747,7 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, auto& isInternalId,
-                       BlocksOfTriples sortedTriples,
+  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
@@ -803,7 +801,6 @@ class IndexImpl {
   // subject pattern of the object (which is created by this function). Return
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
-  std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreator::TripleSorter sortersFromPatternCreator,
-      auto isQLeverInternalId);
+  std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
+  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator);
 };
