@@ -363,15 +363,33 @@ class TurtleParser : public TurtleParserBase {
   FRIEND_TEST(TurtleParserTest, collection);
 };
 
+template <class Tokenizer_T>
+class NQuadParser : public TurtleParser<Tokenizer_T> {
+  static inline const TripleComponent defautlGraphIri_ =
+      qlever::specialIds.at(DEFAULT_GRAPH_IRI);
+  TripleComponent activeObject_;
+  TripleComponent activeGraphLabel_;
+  using Base = TurtleParser<Tokenizer_T>;
+  bool statement();
+  bool nQuadSubject();
+  bool nQuadPredicate();
+  bool nQuadObject();
+  bool nQuadGraphLabel();
+  bool nQuadLiteral();
+
+ public:
+  bool getLine(TurtleTriple* triple) override;
+};
+
 /**
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-template <class Tokenizer_T>
-class TurtleStringParser : public TurtleParser<Tokenizer_T> {
+template <class Parser>
+class TurtleStringParser : public Parser {
  public:
-  using TurtleParser<Tokenizer_T>::prefixMap_;
-  using TurtleParser<Tokenizer_T>::getLine;
+  using Parser::getLine;
+  using Parser::prefixMap_;
   bool getLine(TurtleTriple* triple) override {
     (void)triple;
     throw std::runtime_error(
@@ -477,8 +495,8 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  * its input file is an uncompressed .ttl file that will be read in
  * chunks. Input file can also be a stream like stdin.
  */
-template <class Tokenizer_T>
-class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
+template <class Parser>
+class TurtleStreamParser : public Parser {
   // struct that can store the state of a parser
   // the previously extracted triples are not stored
   // but only the number of triples that were already present
@@ -499,9 +517,6 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
     initialize(filename);
   }
 
-  // inherit the wrapper overload
-  using TurtleParser<Tokenizer_T>::getLine;
-
   bool getLine(TurtleTriple* triple) override;
 
   void initialize(const string& filename);
@@ -511,9 +526,9 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   }
 
  private:
-  using TurtleParser<Tokenizer_T>::tok_;
-  using TurtleParser<Tokenizer_T>::triples_;
-  using TurtleParser<Tokenizer_T>::isParserExhausted_;
+  using Parser::isParserExhausted_;
+  using Parser::tok_;
+  using Parser::triples_;
   // Backup the current state of the turtle parser to a
   // TurtleparserBackupState object
   // This can be used e.g. when parsing from a compressed input
@@ -546,8 +561,8 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
  * its input file is an uncompressed .ttl file that will be read in
  * chunks. Input file can also be a stream like stdin.
  */
-template <class Tokenizer_T>
-class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
+template <class Parser>
+class TurtleParallelParser : public Parser {
  public:
   using Triple = std::array<string, 3>;
   // Default construction needed for tests
@@ -568,7 +583,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   }
 
   // inherit the wrapper overload
-  using TurtleParser<Tokenizer_T>::getLine;
+  using Parser::getLine;
 
   bool getLine(TurtleTriple* triple) override;
 
@@ -603,9 +618,9 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // from the initialization phase where the prefixes are parsed.
   void feedBatchesToParser(auto remainingBatchFromInitialization);
 
-  using TurtleParser<Tokenizer_T>::tok_;
-  using TurtleParser<Tokenizer_T>::triples_;
-  using TurtleParser<Tokenizer_T>::isParserExhausted_;
+  using Parser::isParserExhausted_;
+  using Parser::tok_;
+  using Parser::triples_;
 
   // this many characters will be buffered at once,
   // defaults to a global constant

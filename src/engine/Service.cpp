@@ -183,8 +183,9 @@ void Service::writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
     }
     idTable.emplace_back();
     for (size_t colIdx = 0; colIdx < valueStrings.size(); colIdx++) {
-      TripleComponent tc = TurtleStringParser<TokenizerCtre>::parseTripleObject(
-          valueStrings[colIdx]);
+      TripleComponent tc =
+          TurtleStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+              valueStrings[colIdx]);
       Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {

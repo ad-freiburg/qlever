@@ -406,8 +406,8 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
         return element;
       } else if constexpr (std::is_same_v<T, Literal> ||
                            std::is_same_v<T, Iri>) {
-        return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-            element.toSparql());
+        return TurtleStringParser<
+            TurtleParser<TokenizerCtre>>::parseTripleObject(element.toSparql());
       } else {
         return element.toSparql();
       }
@@ -814,7 +814,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+    return TurtleStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(
@@ -1673,8 +1673,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
-        visit(ctx->rdfLiteral()));
+    auto tripleComponent =
+        TurtleStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            visit(ctx->rdfLiteral()));
     AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {

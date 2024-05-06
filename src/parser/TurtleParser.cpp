@@ -365,6 +365,85 @@ bool TurtleParser<T>::doubleParse() {
   }
 }
 
+template <typename T>
+bool NQuadParser<T>::statement() {
+  if (!nQuadSubject()) {
+    return false;
+  }
+  this->check(nQuadPredicate() && nQuadObject());
+  if (!nQuadGraphLabel()) {
+    activeGraphLabel_ = defautlGraphIri_;
+  }
+  check(this->template skip<TurtleTokenId::Dot>());
+  if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
+    this->triples_.emplace_back(
+        std::move(this->activeSubject_), std::move(this->activePredicate_),
+        std::move(activeObject_), std::move(activeGraphLabel_));
+  }
+  this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
+  return true;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadLiteral() {
+  // TODO<joka921> Disallow multiline literals;
+  return Base::rdfLiteral();
+}
+
+template <typename T>
+bool NQuadParser<T>::getLine(TurtleTriple* triple) {
+  if (statement()) {
+    // TODO<joka921> For NQuads it would suffice to only store a simple triple.
+    triple = std::move(this->triples_.back());
+    this->triples_.clear();
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadSubject() {
+  if (Base::iriref() || Base::blankNodeLabel()) {
+    this->activeSubject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadPredicate() {
+  if (Base::iriref()) {
+    this->activePredicate_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadObject() {
+  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+    this->activeSubject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadGraphLabel() {
+  if (Base::iriref()) {
+    activeGraphLabel_ = std::move(this->lastParseResult_);
+    return true;
+  } else if (Base::blankNodeLabel()) {
+    // TODO<joka921> Support this. We would have to integrate those blank nodes
+    // also into the merging.
+    this->raise(
+        "blank node labels as Graph IRIs are currently not supported in NQuad "
+        "files");
+  }
+  return false;
+}
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::rdfLiteral() {
@@ -740,8 +819,8 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
       try {
         // variable parsedStatement will be true iff a statement can
         // successfully be parsed
-        parsedStatement = this->statement();
-      } catch (const typename TurtleParser<T>::ParseException& p) {
+        parsedStatement = T::statement();
+      } catch (const typename T::ParseException& p) {
         parsedStatement = false;
         ex = p;
       }
@@ -982,7 +1061,7 @@ TurtleParallelParser<T>::~TurtleParallelParser() {
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
-template class TurtleStreamParser<Tokenizer>;
-template class TurtleStreamParser<TokenizerCtre>;
-template class TurtleParallelParser<Tokenizer>;
-template class TurtleParallelParser<TokenizerCtre>;
+template class TurtleStreamParser<TurtleParser<Tokenizer>>;
+template class TurtleStreamParser<TurtleParser<TokenizerCtre>>;
+template class TurtleParallelParser<TurtleParser<Tokenizer>>;
+template class TurtleParallelParser<TurtleParser<TokenizerCtre>>;

@@ -68,9 +68,11 @@ std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
                        &filename]<template <typename> typename ParserTemplate>()
       -> std::unique_ptr<TurtleParserBase> {
     if (onlyAsciiTurtlePrefixes_) {
-      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
+      return std::make_unique<ParserTemplate<TurtleParser<TokenizerCtre>>>(
+          filename);
     } else {
-      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
+      return std::make_unique<ParserTemplate<TurtleParser<Tokenizer>>>(
+          filename);
     }
   };
 
@@ -1471,7 +1473,8 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
                                  qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
                                 const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += static_cast<size_t>(triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
+    numTriplesNormal += static_cast<size_t>(
+        triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);

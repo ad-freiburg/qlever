@@ -14,8 +14,8 @@
 
 using std::string;
 using namespace std::literals;
-using Re2Parser = TurtleStringParser<Tokenizer>;
-using CtreParser = TurtleStringParser<TokenizerCtre>;
+using Re2Parser = TurtleStringParser<TurtleParser<Tokenizer>>;
+using CtreParser = TurtleStringParser<TurtleParser<TokenizerCtre>>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -103,7 +103,7 @@ TEST(TurtleParserTest, prefixedName) {
                  typename std::decay_t<decltype(parser)>::ParseException);
   };
   {
-    TurtleStringParser<Tokenizer> p;
+    Re2Parser p;
     runCommonTests(p);
     p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
@@ -123,7 +123,7 @@ TEST(TurtleParserTest, prefixedName) {
   }
 
   {
-    TurtleStringParser<TokenizerCtre> p;
+    CtreParser p;
     runCommonTests(p);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
@@ -391,8 +391,7 @@ TEST(TurtleParserTest, numericLiteral) {
 TEST(TurtleParserTest, numericLiteralErrorBehavior) {
   auto assertParsingFails = [](auto& parser, std::string input) {
     parser.setInputStream(input);
-    ASSERT_THROW(parser.parseAndReturnAllTriples(),
-                 TurtleStringParser<Tokenizer>::ParseException);
+    ASSERT_THROW(parser.parseAndReturnAllTriples(), Re2Parser::ParseException);
   };
 
   auto parseAllTriples = [](auto& parser, std::string input) {
@@ -649,20 +648,24 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
 auto forAllParallelParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
-                                                                    args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
-                                                                    args...);
+  function.template operator()<TurtleParallelParser<TurtleParser<Tokenizer>>>(
+      true, args...);
+  function.template operator()<TurtleParallelParser<TurtleParser<Tokenizer>>>(
+      false, args...);
+  function.template
+  operator()<TurtleParallelParser<TurtleParser<TokenizerCtre>>>(true, args...);
+  function.template
+  operator()<TurtleParallelParser<TurtleParser<TokenizerCtre>>>(false, args...);
 }
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
-                                                                  args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
-                                                                  args...);
+  function.template operator()<TurtleStreamParser<TurtleParser<Tokenizer>>>(
+      true, args...);
+  function.template operator()<TurtleStreamParser<TurtleParser<Tokenizer>>>(
+      false, args...);
+  function.template operator()<TurtleStreamParser<TurtleParser<TokenizerCtre>>>(
+      true, args...);
+  function.template operator()<TurtleStreamParser<TurtleParser<TokenizerCtre>>>(
+      false, args...);
   forAllParallelParsers(function, args...);
 }
 
