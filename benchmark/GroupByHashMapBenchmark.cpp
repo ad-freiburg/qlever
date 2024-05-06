@@ -84,7 +84,9 @@ auto generateRandomLocalVocabAndIndicesVec = [](size_t n, size_t m) {
     for (size_t j = 0; j < m; j++) {
       str += alphanum.at(gen());
     }
-    indices.push_back(localVocab.getIndexAndAddIfNotContained(str));
+    using namespace ad_utility::triple_component;
+    indices.push_back(localVocab.getIndexAndAddIfNotContained(
+        LiteralOrIri::literalWithoutQuotes(str)));
   }
 
   return std::make_pair(std::move(localVocab), indices);

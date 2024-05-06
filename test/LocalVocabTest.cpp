@@ -33,10 +33,15 @@
 
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
-std::vector<std::string> getTestCollectionOfWords(size_t size) {
-  std::vector<std::string> testCollectionOfWords(size);
-  for (size_t i = 0; i < testCollectionOfWords.size(); ++i) {
-    testCollectionOfWords[i] = std::to_string(i * 7635475567ULL);
+
+using TestWords = std::vector<ad_utility::triple_component::LiteralOrIri>;
+
+TestWords getTestCollectionOfWords(size_t size) {
+  using namespace ad_utility::triple_component;
+  TestWords testCollectionOfWords;
+  for (size_t i = 0; i < size; ++i) {
+    testCollectionOfWords.push_back(
+        LiteralOrIri::literalWithoutQuotes(std::to_string(i * 7635475567ULL)));
   }
   return testCollectionOfWords;
 }
@@ -45,7 +50,7 @@ std::vector<std::string> getTestCollectionOfWords(size_t size) {
 // _____________________________________________________________________________
 TEST(LocalVocab, constructionAndAccess) {
   // Test collection of words.
-  std::vector<std::string> testWords = getTestCollectionOfWords(1000);
+  TestWords testWords = getTestCollectionOfWords(1000);
 
   // Create empty local vocabulary.
   LocalVocab localVocab;
@@ -80,7 +85,11 @@ TEST(LocalVocab, constructionAndAccess) {
   // not contained in the local vocab. This makes use of the fact that the words
   // in our test vocabulary only contain digits as letters, see above.
   for (size_t i = 0; i < testWords.size(); ++i) {
-    ASSERT_FALSE(localVocab.getIndexOrNullopt(testWords[i] + "A"));
+    std::string content{asStringViewUnsafe(testWords[i].getContent())};
+    auto illegalWord =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+            content + "A");
+    ASSERT_FALSE(localVocab.getIndexOrNullopt(illegalWord));
   }
 
   // Check that a move gives the expected result.
@@ -132,23 +141,27 @@ TEST(LocalVocab, merge) {
   std::vector<LocalVocabIndex> indices;
   LocalVocab vocA;
   LocalVocab vocB;
-  indices.push_back(vocA.getIndexAndAddIfNotContained("oneA"));
-  indices.push_back(vocA.getIndexAndAddIfNotContained("twoA"));
-  indices.push_back(vocA.getIndexAndAddIfNotContained("oneB"));
-  indices.push_back(vocA.getIndexAndAddIfNotContained("twoB"));
+  constexpr auto lit = [](std::string_view s) {
+    return ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(s);
+  };
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneA")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoA")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("oneB")));
+  indices.push_back(vocA.getIndexAndAddIfNotContained(lit("twoB")));
 
   // Clone it and test that the clone contains the same words.
   auto vocabs = std::vector{&std::as_const(vocA), &std::as_const(vocB)};
   LocalVocab localVocabMerged = LocalVocab::merge(vocabs);
   ASSERT_EQ(localVocabMerged.size(), 4u);
   ASSERT_THAT(localVocabMerged.getAllWordsForTesting(),
-              ::testing::UnorderedElementsAre("oneA", "twoA", "oneB", "twoB"));
+              ::testing::UnorderedElementsAre(lit("oneA"), lit("twoA"),
+                                              lit("oneB"), lit("twoB")));
   vocA = LocalVocab{};
   vocB = LocalVocab{};
-  EXPECT_EQ(*indices[0], "oneA");
-  EXPECT_EQ(*indices[1], "twoA");
-  EXPECT_EQ(*indices[2], "oneB");
-  EXPECT_EQ(*indices[3], "twoB");
+  EXPECT_EQ(*indices[0], lit("oneA"));
+  EXPECT_EQ(*indices[1], lit("twoA"));
+  EXPECT_EQ(*indices[2], lit("oneB"));
+  EXPECT_EQ(*indices[3], lit("twoB"));
 }
 
 // _____________________________________________________________________________
@@ -162,12 +175,24 @@ TEST(LocalVocab, propagation) {
   //
   // NOTE: This cannot be `const Operation&` because `Operation::getResult()` is
   // not `const`.
-  auto checkLocalVocab = [&](Operation& operation,
-                             std::vector<std::string> expectedWords) -> void {
+  auto checkLocalVocab =
+      [&](Operation& operation,
+          const std::vector<std::string>& expectedWordsAsStrings) -> void {
+    TestWords expectedWords;
+    auto toLitOrIri = [](const auto& word) {
+      using namespace ad_utility::triple_component;
+      if (word.starts_with('<')) {
+        return LiteralOrIri::iriref(word);
+      } else {
+        return LiteralOrIri::literalWithoutQuotes(word);
+      }
+    };
+    std::ranges::transform(expectedWordsAsStrings,
+                           std::back_inserter(expectedWords), toLitOrIri);
     std::shared_ptr<const ResultTable> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
-    std::vector<std::string> localVocabWords =
+    TestWords localVocabWords =
         resultTable->localVocab().getAllWordsForTesting();
     // We currently allow the local vocab to have multiple IDs for the same
     // word, so we have to deduplicate first.
@@ -278,8 +303,8 @@ TEST(LocalVocab, propagation) {
       testQec, {Variable{"?x"}},
       {Alias{groupConcatExpression("?y", "|"), Variable{"?concat"}}},
       qet(values1));
-  checkLocalVocab(groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>",
-                                                    "\"yN1|yN2\""});
+  checkLocalVocab(
+      groupBy, std::vector<std::string>{"<xN1>", "<yN1>", "<yN2>", "yN1|yN2"});
 
   // DISTINCT again, but after something has been added to the local vocabulary
   // (to check that the "y1|y2" added by the GROUP BY does not also appear here,
