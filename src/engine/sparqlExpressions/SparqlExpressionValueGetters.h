@@ -227,4 +227,21 @@ struct RegexValueGetter {
   }
 };
 
+// This ValueGetter is needed for the implementation of makeIntExpression and
+// makeDoubleExpression to be indifferent w.r.t. type of input.
+// If `ValueId` is provided, return `NumericValue` by using
+// `NumericValueGetter`. If `LiteralOrIri` is given, return value by using
+// `StringValueGetter`.
+struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
+  using Mixin<ToNumericValueGetter>::operator();
+  std::optional<std::string> operator()(const LiteralOrIri& s,
+                                        EvaluationContext* context) {
+    std::optional<std::string> str = StringValueGetter{}(s, context);
+    return str;
+  }
+  NumericValue operator()(ValueId id, EvaluationContext* context) {
+    NumericValue val = NumericValueGetter{}(id, context);
+    return val;
+  }
+};
 }  // namespace sparqlExpression::detail
