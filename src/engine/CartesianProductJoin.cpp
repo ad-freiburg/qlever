@@ -175,7 +175,15 @@ ResultTable CartesianProductJoin::computeResult() {
   size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
   size_t offset = getLimit().actualOffset(totalResultSize);
 
-  result.resize(totalSizeIncludingLimit);
+  try {
+    result.resize(totalSizeIncludingLimit);
+  } catch (
+      const ad_utility::detail::AllocationExceedsLimitException& exception) {
+    throw std::runtime_error{
+        "The memory limit was exceeded during the computation of a "
+        "cross-product. Check if this cross-product is intentional or if you "
+        "have mistyped a variable name."};
+  }
 
   if (totalSizeIncludingLimit != 0) {
     // A `groupSize` of N means that each row of the current result is copied N

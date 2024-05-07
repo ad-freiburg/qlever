@@ -20,7 +20,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
-#include "global/Constants.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -524,14 +523,13 @@ TEST(SparqlParser, Integer) {
 TEST(SparqlParser, LimitOffsetClause) {
   auto expectLimitOffset = ExpectCompleteParse<&Parser::limitOffsetClauses>{};
   auto expectLimitOffsetFails = ExpectParseFails<&Parser::limitOffsetClauses>();
-  expectLimitOffset("LIMIT 10", m::LimitOffset(10, TEXT_LIMIT_DEFAULT, 0));
+  expectLimitOffset("LIMIT 10", m::LimitOffset(10, std::nullopt, 0));
   expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
                     m::LimitOffset(12, 14, 31));
   expectLimitOffset("textlimit 999", m::LimitOffset(std::nullopt, 999, 0));
-  expectLimitOffset("LIMIT      999",
-                    m::LimitOffset(999, TEXT_LIMIT_DEFAULT, 0));
+  expectLimitOffset("LIMIT      999", m::LimitOffset(999, std::nullopt, 0));
   expectLimitOffset("OFFSET 43",
-                    m::LimitOffset(std::nullopt, TEXT_LIMIT_DEFAULT, 43));
+                    m::LimitOffset(std::nullopt, std::nullopt, 43));
   expectLimitOffset("TEXTLIMIT 43 LIMIT 19", m::LimitOffset(19, 43, 0));
   expectLimitOffsetFails("LIMIT20");
   expectIncompleteParse(parse<&Parser::limitOffsetClauses>(
@@ -1536,6 +1534,7 @@ TEST(SparqlParser, FunctionCall) {
   // manually add it when constructing parser inputs.
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
+  auto xsd = absl::StrCat("<", XSD_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
@@ -1557,6 +1556,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
+                     matchUnary(&makeIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
+                     matchUnary(&makeIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
+                     matchUnary(&makeDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeDoubleExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(

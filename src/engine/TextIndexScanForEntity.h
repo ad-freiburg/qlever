@@ -80,10 +80,6 @@ class TextIndexScanForEntity : public Operation {
 
   size_t getResultWidth() const override;
 
-  void setTextLimit(size_t) override {
-    // TODO: implement textLimit
-  }
-
   size_t getCostEstimate() override;
 
   uint64_t getSizeEstimateBeforeLimit() override;

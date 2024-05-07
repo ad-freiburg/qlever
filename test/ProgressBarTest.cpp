@@ -29,7 +29,7 @@ TEST(ProgressBar, typicalUsage) {
     // NOTE: For macOS, `std::this_thread::sleep_for` can take much longer
     // than indicated, resulting in a much lower speed than expected.
     std::string expectedSpeedRegex =
-#ifndef __APPLE__
+#ifndef _QLEVER_NO_TIMING_TESTS
         "\\[average speed [234]\\.[0-9] M/s, last batch [234]\\.[0-9] M/s"
         ", fastest [234]\\.[0-9] M/s, slowest [234]\\.[0-9] M/s\\] ";
 #else
@@ -67,7 +67,7 @@ TEST(ProgressBar, numberOfStepsLessThanBatchSize) {
   ProgressBar progressBar(numSteps, "Steps: ", 5'000);
   std::this_thread::sleep_for(std::chrono::milliseconds(1));
   std::string expectedUpdateRegex =
-#ifndef __APPLE__
+#ifndef _QLEVER_NO_TIMING_TESTS
       "Steps: 3,000 \\[average speed [234]\\.[0-9] M/s\\] \n";
 #else
       "Steps: 3,000 \\[average speed [0-9]\\.[0-9] M/s\\] \n";

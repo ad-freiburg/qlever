@@ -6,17 +6,18 @@
 
 namespace sparqlExpression {
 
-IdOrString::IdOrString(std::optional<std::string> s) {
-  if (s.has_value()) {
-    emplace<std::string>(std::move(s.value()));
-  } else {
-    emplace<Id>(Id::makeUndefined());
-  }
-}
-
 // _____________________________________________________________________________
-void PrintTo(const IdOrString& var, std::ostream* os) {
-  std::visit([&os](const auto& s) { *os << s; }, var);
+void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os) {
+  std::visit(
+      [&os]<typename T>(const T& s) {
+        auto& stream = *os;
+        if constexpr (std::same_as<T, ValueId>) {
+          stream << s;
+        } else {
+          stream << s.toStringRepresentation();
+        }
+      },
+      var);
 }
 
 // _____________________________________________________________________________

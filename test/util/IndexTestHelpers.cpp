@@ -46,7 +46,7 @@ std::vector<std::string> getAllIndexFilenames(
           indexBasename + ".prefixes",
           indexBasename + ".vocabulary.internal",
           indexBasename + ".vocabulary.external",
-          indexBasename + ".vocabulary.external.idsAndOffsets"};
+          indexBasename + ".vocabulary.external.offsets"};
 }
 
 namespace {
@@ -229,7 +229,8 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
     std::unique_ptr<QueryResultCache> cache_;
     std::unique_ptr<QueryExecutionContext> qec_ =
         std::make_unique<QueryExecutionContext>(
-            *index_, cache_.get(), makeAllocator(), SortPerformanceEstimator{});
+            *index_, cache_.get(), makeAllocator(MemorySize::megabytes(100)),
+            SortPerformanceEstimator{});
   };
 
   using Key = std::tuple<std::optional<string>, bool, bool, bool,

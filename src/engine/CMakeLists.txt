@@ -11,6 +11,7 @@ add_library(engine
         TransitivePathHashMap.cpp TransitivePathBinSearch.cpp Service.cpp
         Values.cpp Bind.cpp Minus.cpp RuntimeInformation.cpp CheckUsePatternTrick.cpp
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
-        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp 
+        CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
+        TextLimit.cpp
         idTable/CompressedExternalIdTable.h)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
