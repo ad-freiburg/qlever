@@ -490,6 +490,11 @@ TEST(COSTASI_SANITY, SESSION04_EX2) {
 
   auto R5R8R9 = JoinOrdering::IKKBZ_combine(pg, R5, R8R9);
   EXPECT_NEAR(Ch.rank(pg, R5R8R9), 1198.0 / 1515, eps);
+
+  // TODO: separate test
+  auto unpacked = std::vector<RelationBasic>{};
+  pg.unpack(R5R8R9, unpacked);
+  ASSERT_EQ(unpacked, std::vector({R5, R8, R9}));
 }
 
 TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
@@ -515,6 +520,36 @@ TEST(COSTASI_SANITY, KRISHNAMURTHY1986_133) {
   auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
   auto Ch = JoinOrdering::CostIKKBZ<RelationBasic>();
   EXPECT_NEAR(Ch.rank(pg, R5), 0.98, eps);
+}
+
+TEST(IKKBZ_SANITY, UNPACK_COMPOUND_1) {
+  auto R1 = RelationBasic("R1", 100);
+  auto R2 = RelationBasic("R2", 1000000);
+  auto R3 = RelationBasic("R3", 1000);
+  auto R4 = RelationBasic("R4", 150000);
+  auto R5 = RelationBasic("R5", 50);
+
+  auto g = JoinOrdering::QueryGraph<RelationBasic>();
+
+  g.add_relation(R1);
+  g.add_relation(R2);
+  g.add_relation(R3);
+  g.add_relation(R4);
+  g.add_relation(R5);
+
+  g.add_rjoin(R1, R2, 1.0 / 100);
+  g.add_rjoin(R1, R3, 1.0 / 1);
+  g.add_rjoin(R3, R4, 1.0 / 30);
+  g.add_rjoin(R3, R5, 1.0 / 1);
+
+  auto pg = JoinOrdering::toPrecedenceGraph(g, R1);
+  auto R3R5 = JoinOrdering::IKKBZ_combine(pg, R3, R5);
+
+  auto unpacked = std::vector<RelationBasic>{};
+  pg.unpack(R3R5, unpacked);
+
+  ASSERT_EQ(unpacked, std::vector({R3, R5}));
+  EXPECT_ANY_THROW(JoinOrdering::IKKBZ_combine(g, R1, R4));
 }
 
 TEST(GOO_SANITY, SESSION04_EX) {

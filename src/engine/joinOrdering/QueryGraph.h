@@ -47,7 +47,7 @@ requires RelationAble<N> class QueryGraph {
   //  ad_utility::HashMap<N, float> selectivity;
 
   std::map<N, std::map<N, EdgeInfo>> edges_;
-  std::map<N, std::vector<N>> hist;
+  std::map<N, std::optional<std::pair<N, N>>> hist;
   std::map<N, int> cardinality;
   std::map<N, float> selectivity;
 

@@ -98,23 +98,32 @@ template <typename N>
 requires RelationAble<N>
 std::vector<N> IKKBZ_Normalized(QueryGraph<N>& g, ICostASI<N>& Ch,
                                 const N& subtree_root) {
-  for (bool normalized;; normalized = true) {
+  for (bool normalized = true;; normalized = true) {
     auto subtree = g.iter(subtree_root);
 
     for (auto const& d : subtree) {
+      // iter includes subtree_root back
+      // skip subtree root
+      if (d == subtree_root) continue;
       auto pv = g.get_parent(d);
+
+      // absence of a parent means g.root
+      // skip query graph root
       if (pv.empty()) continue;
       auto p = pv.front();
-      if (d == subtree_root || p == subtree_root) continue;
+
+      // subtree_root is excluded from the ranking comparison
+      if (p == subtree_root) continue;
 
       for (auto const& c : g.get_children(p))
         // "precedence graph demands A -> B but rank(A) > rank(B),
         // we speak of contradictory sequences."
         // 118/637
-        //        if (ASI::rank(g, p) > ASI::rank(g, c)) {
         if (Ch.rank(g, p) > Ch.rank(g, c)) {
           // a new node representing compound relation
           IKKBZ_combine(g, p, c);
+          // mark as dirty
+          // subtree_root might (or might not) need more normalization
           normalized = false;
         }
     }
@@ -125,10 +134,12 @@ std::vector<N> IKKBZ_Normalized(QueryGraph<N>& g, ICostASI<N>& Ch,
 template <typename N>
 requires RelationAble<N>
 void IKKBZ_merge(QueryGraph<N>& g, ICostASI<N>& Ch, std::vector<N>& dv) {
-  // we get here after we are already sure that descendents are in a chain
+  // we get here after we are already sure that descendents
+  // are going to be in a SINGLE chain
 
-  // exclude n from sorting. subchain root not considered during sorting.
-  // n is always at the beginning of dv
+  // subchain root not considered during sorting
+  // subchain root is always at the beginning regardless of it's rank
+  // subchain is always at the beginning of dv
   std::ranges::partial_sort(
       dv.begin() + 1, dv.end(), dv.end(),
       [&](const N& a, const N& b) { return Ch.rank(g, a) < Ch.rank(g, b); });
@@ -148,12 +159,11 @@ template <typename N>
 requires RelationAble<N>
 [[maybe_unused]] N IKKBZ_combine(QueryGraph<N>& g, const N& a, const N& b) {
   // 104/637
-  // if the ordering violates the query constraints, it constructs compounds
-  // TODO: assert chain
-  //    std::cout << "COMBINE " << a.label << "  " << b.label << "\n";
+  // "if the ordering violates the query constraints, it constructs compounds"
+
+  AD_CONTRACT_CHECK(g.has_rjoin(a, b));
 
   // 118/637
-
   // "its cardinality is computed by multiplying the cardinalities of
   // all relations in A and B"
   //  auto w = cardinality[a] * cardinality[b];
@@ -171,8 +181,7 @@ requires RelationAble<N>
   // to be able to apply the inverse operation (IKKBZ_uncombine)
   // we keep track of the combined relation in the `hist` map
 
-  g.hist[n].push_back(a);
-  g.hist[n].push_back(b);
+  g.hist[n] = {a, b};
 
   // TODO: use common neighbor?
   std::set<N> parents;
@@ -190,7 +199,7 @@ requires RelationAble<N>
   g.add_rjoin(*parents.begin(), n, s, Direction::PARENT);
 
   // filters out duplicate relation if the 2 relation have common descendants.
-  // yes. it should never happen.
+  // yes. it should never happen in an acyclic graph.
   // rationale behind using a std::set here
   std::set<N> children{};
 

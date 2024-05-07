@@ -37,7 +37,7 @@ requires RelationAble<N> void QueryGraph<N>::rm_relation(const N& n) {
 template <typename N>
 requires RelationAble<N>
 bool QueryGraph<N>::is_compound_relation(const N& n) const {
-  return hist.contains(n) && !hist.at(n).empty();
+  return hist.contains(n) && hist.at(n).has_value();
 }
 
 template <typename N>
@@ -101,10 +101,19 @@ requires RelationAble<N> void QueryGraph<N>::rm_rjoin(const N& a, const N& b) {
 template <typename N>
 requires RelationAble<N>
 void QueryGraph<N>::unpack(const N& n, std::vector<N>& acc) {  // NOLINT
-  if (is_compound_relation(n))
-    for (auto const& x : hist[n]) unpack(x, acc);
-  else
+
+  // cannot be broken down into small parts anymore
+  // i.e. regular relation
+  if (!is_compound_relation(n)) {
     acc.push_back(n);
+    return;
+  }
+
+  // otherwise it consists of 2 relations s1 and s2
+  // they may or may not be compound too, so we call unpack again
+  auto const& [s1, s2] = hist[n].value();
+  unpack(s1, acc);
+  unpack(s2, acc);
 }
 
 template <typename N>

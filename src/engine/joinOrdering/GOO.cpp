@@ -41,8 +41,7 @@ requires RelationAble<N>
   g.add_relation(n);
 
   // we keep track of the combined relation in the `hist` map
-  g.hist[n].push_back(a);
-  g.hist[n].push_back(b);
+  g.hist[n] = {a, b};
 
   // TODO: STL chain iterators
   for (auto const& [x, e] : boost::join(g.edges_[a], g.edges_[b])) {

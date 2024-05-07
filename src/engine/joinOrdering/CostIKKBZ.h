@@ -16,6 +16,8 @@ template <typename N>
 requires RelationAble<N> class CostIKKBZ : public ICostASI<N> {
  public:
   ad_utility::HashMap<N, float> rank_m;
+  ad_utility::HashMap<N, float> C_m;
+  ad_utility::HashMap<N, float> T_m;
 
   auto rank(const QueryGraph<N>& g, const N& n) -> float;
 

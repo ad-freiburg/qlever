@@ -147,7 +147,7 @@ std::vector<N> IKKBZ_Normalized(QueryGraph<N>& g, ICostASI<N>& Ch,
  * ref: 121,126/637
  * @param g precedence tree with subchains ready to merge
  * @param Ch cost function that has ASI property
- * @param normalized_subtree normalized subtree of relations
+ * @param normalized_subtree vector of the relations in all the chains
  * @see IKKBZ_Normalized
  */
 template <typename N>

@@ -26,9 +26,10 @@ auto CostIKKBZ<N>::C(const QueryGraph<N>& g, const N& n) -> float {
   // i.e: regular relation
   if (!g.is_compound_relation(n)) return T(g, n);
 
-  auto seq = g.hist.at(n);
-  return C(g, std::span<N>(seq));
+  auto const& [s1, s2] = g.hist.at(n).value();
+  return C(g, s1) + T(g, s1) * C(g, s2);  // TODO: might overflow
 }
+
 template <typename N>
 requires RelationAble<N>
 auto CostIKKBZ<N>::T(const QueryGraph<N>& g, const N& n) -> float {
@@ -36,21 +37,23 @@ auto CostIKKBZ<N>::T(const QueryGraph<N>& g, const N& n) -> float {
   if (g.root == n) return 1;
   return g.selectivity.at(n) * static_cast<float>(n.getCardinality());
 }
+
 template <typename N>
 requires RelationAble<N>
 auto CostIKKBZ<N>::rank(const QueryGraph<N>& g, const N& n) -> float {
-  if (rank_m.contains(n)) return rank_m[n];
+  // memorize cost and rank
+  // avoid recomputing for long sequences
+  if (rank_m.contains(n)) return rank_m[n];     // important
+  auto c = C_m.contains(n) ? C_m[n] : C(g, n);  // important
+  auto t = T_m.contains(n) ? T_m[n] : T(g, n);  // maybe not important
 
-  auto c = C(g, n);
-  auto t = T(g, n);
-
-  // TODO: what's the rank of root?
   if (c == 0) return 0;
   auto r = (t - 1) / c;
-  // assert rank [0, 1]
   AD_CONTRACT_CHECK(r >= 0 && r <= 1);
 
   rank_m[n] = r;
+  C_m[n] = c;
+  T_m[n] = t;
   return r;
 }
 }  // namespace JoinOrdering
