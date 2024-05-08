@@ -49,7 +49,7 @@ class RelationalExpression : public SparqlExpression {
 };
 
 // Implementation of the `IN` expression
-class InExpression : public SparqlExpression  {
+class InExpression : public SparqlExpression {
  public:
   using Children = std::vector<SparqlExpression::Ptr>;
 
@@ -79,7 +79,6 @@ class InExpression : public SparqlExpression  {
  private:
   std::span<SparqlExpression::Ptr> childrenImpl() override;
 };
-
 
 }  // namespace sparqlExpression::relational
 

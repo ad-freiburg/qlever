@@ -29,8 +29,8 @@ using valueIdComparators::Comparison;
 // First the `idGenerator` for constants (string, int, double). It yields the
 // same ID `targetSize` many times.
 template <SingleExpressionResult S>
-requires isConstantResult<S>
-auto idGenerator(S value, size_t targetSize, const EvaluationContext* context)
+requires isConstantResult<S> auto idGenerator(const S& value, size_t targetSize,
+                                              const EvaluationContext* context)
     -> cppcoro::generator<const decltype(makeValueId(value, context))> {
   auto id = makeValueId(value, context);
   for (size_t i = 0; i < targetSize; ++i) {
@@ -42,8 +42,8 @@ auto idGenerator(S value, size_t targetSize, const EvaluationContext* context)
 // equal to `targetSize` and the yields the corresponding ID for each of the
 // elements in the vector.
 template <SingleExpressionResult S>
-requires isVectorResult<S>
-auto idGenerator(S values, size_t targetSize, const EvaluationContext* context)
+requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
+                                            const EvaluationContext* context)
     -> cppcoro::generator<decltype(makeValueId(values[0], context))> {
   AD_CONTRACT_CHECK(targetSize == values.size());
   for (const auto& el : values) {
@@ -59,6 +59,12 @@ auto idGenerator(Variable variable, size_t targetSize,
   return sparqlExpression::detail::makeGenerator(std::move(variable),
                                                  targetSize, context);
 }
+// Same for the `SetOfIntervals` class.
+auto idGenerator(ad_utility::SetOfIntervals variable, size_t targetSize,
+                 const EvaluationContext* context) {
+  return sparqlExpression::detail::makeGenerator(std::move(variable),
+                                                 targetSize, context);
+}
 
 // Return a pair of generators that generate the values from `value1` and
 // `value2`. The type of generators is chosen to meet the needs of comparing
@@ -67,16 +73,16 @@ auto idGenerator(Variable variable, size_t targetSize,
 // both inputs. Else the "plain" generators from `sparqlExpression::detail` are
 // returned. These simply yield the values unchanged.
 template <SingleExpressionResult S1, SingleExpressionResult S2>
-auto getGenerators(S1 value1, S2 value2, size_t targetSize,
+auto getGenerators(S1&& value1, S2&& value2, size_t targetSize,
                    const EvaluationContext* context) {
   if constexpr (StoresValueId<S1> || StoresValueId<S2>) {
-    return std::pair{idGenerator(std::move(value1), targetSize, context),
-                     idGenerator(std::move(value2), targetSize, context)};
+    return std::pair{idGenerator(AD_FWD(value1), targetSize, context),
+                     idGenerator(AD_FWD(value2), targetSize, context)};
   } else {
     return std::pair{sparqlExpression::detail::makeGenerator(
-                         std::move(value1), targetSize, context),
+                         AD_FWD(value1), targetSize, context),
                      sparqlExpression::detail::makeGenerator(
-                         std::move(value2), targetSize, context)};
+                         AD_FWD(value2), targetSize, context)};
   }
 }
 
@@ -128,7 +134,7 @@ ad_utility::SetOfIntervals evaluateWithBinarySearch(
 // supported and not always false.
 template <Comparison Comp, SingleExpressionResult S1, SingleExpressionResult S2>
 requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
-    S1 value1, S2 value2, const EvaluationContext* context) {
+    S1&& value1, S2&& value2, const EvaluationContext* context) {
   auto resultSize =
       sparqlExpression::detail::getResultSize(*context, value1, value2);
   constexpr static bool resultIsConstant =
@@ -171,7 +177,7 @@ requires AreComparable<S1, S2> ExpressionResult evaluateRelationalExpression(
   }
 
   auto [generatorA, generatorB] =
-      getGenerators(std::move(value1), std::move(value2), resultSize, context);
+      getGenerators(AD_FWD(value1), AD_FWD(value2), resultSize, context);
   auto itA = generatorA.begin();
   auto itB = generatorB.begin();
 
@@ -226,9 +232,9 @@ Id evaluateRelationalExpression(const A&, const B&, const EvaluationContext*) {
 template <Comparison Comp, SingleExpressionResult A, SingleExpressionResult B>
 requires(!AreComparable<A, B> && AreComparable<B, A>)
 ExpressionResult evaluateRelationalExpression(
-    A a, B b, const EvaluationContext* context) {
+    A&& a, B&& b, const EvaluationContext* context) {
   return evaluateRelationalExpression<getComparisonForSwappedArguments(Comp)>(
-      std::move(b), std::move(a), context);
+      AD_FWD(b), AD_FWD(a), context);
 }
 
 }  // namespace
@@ -340,17 +346,19 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   return {sizeEstimate, costEstimate};
 }
 
-ExpressionResult InExpression::evaluate(sparqlExpression::EvaluationContext* context) const {
+ExpressionResult InExpression::evaluate(
+    sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  VectorWithMemoryLimit<Id> result(context->size(), Id::makeFromBool(false), context->_allocator);
+  VectorWithMemoryLimit<Id> result(context->size(), Id::makeFromBool(false),
+                                   context->_allocator);
   for (const auto& child : children_ | std::views::drop(1)) {
     auto rhs = child->evaluate(context);
     // `resA` and `resB` are variants, so we need `std::visit`.
     auto visitor = [context](const auto& a, auto b) -> ExpressionResult {
       return evaluateRelationalExpression<Comparison::EQ>(a, std::move(b),
-                                                context);
+                                                          context);
     };
-    auto subRes = std::visit(visitor, lhs, rhs);
+    auto subRes = std::visit(visitor, lhs, std::move(rhs));
     if (std::holds_alternative<Id>(subRes)) {
       auto res = std::get<Id>(subRes);
       // TODO<joka921> Verify that this in fact works.
@@ -358,16 +366,35 @@ ExpressionResult InExpression::evaluate(sparqlExpression::EvaluationContext* con
         id = Id::fromBits(id.getBits() | res.getBits());
       });
     } else {
-      AD_CORRECTNESS_CHECK(std::holds_alternative<VectorWithMemoryLimit<Id>>(subRes));
-        const auto& res = std::get<VectorWithMemoryLimit<Id>>(subRes);
-        AD_CORRECTNESS_CHECK(result.size() == res.size());
-        for (size_t i = 0; i < result.size(); ++i) {
-          result[i] = Id::fromBits(result[i].getBits() | res[i].getBits());
-        }
+      AD_CORRECTNESS_CHECK(
+          std::holds_alternative<VectorWithMemoryLimit<Id>>(subRes));
+      const auto& res = std::get<VectorWithMemoryLimit<Id>>(subRes);
+      AD_CORRECTNESS_CHECK(result.size() == res.size());
+      for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = Id::fromBits(result[i].getBits() | res[i].getBits());
       }
-
+    }
   }
+  return result;
+}
 
+std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
+  return children_;
+}
+
+string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
+  // TODO<Joka921> proper cache key;
+  (void)varColMap;
+  return "InExpressionOfThisAndThat";
+}
+
+auto InExpression::getEstimatesForFilterExpression(
+    uint64_t inputSizeEstimate,
+    const std::optional<Variable>& firstSortedVariable) const -> Estimates {
+  (void)firstSortedVariable;
+  (void)inputSizeEstimate;
+  // TODO<joka921> We probably can identify some cheaper cases here.
+  return {};
 }
 
 // Explicit instantiations

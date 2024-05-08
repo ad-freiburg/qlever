@@ -54,13 +54,27 @@ cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> 
 }
 
 template <typename T, typename Transformation = std::identity>
-requires std::ranges::input_range<T>
+requires(std::ranges::input_range<T> && !ad_utility::SimilarTo<std::span<const ValueId>, T>)
+auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {})
+    -> cppcoro::generator<std::decay_t<
+        std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
+  AD_CONTRACT_CHECK(numItems == vector.size());
+  for (auto& element : vector) {
+    // TODO<joka921> Use perfect forwarding and possibly yield references.
+    auto cpy = transformation(element);
+    co_yield cpy;
+  }
+}
+
+template <ad_utility::SimilarTo<std::span<const ValueId>> T,
+          typename Transformation = std::identity>
 auto resultGenerator(T vector, size_t numItems, Transformation transformation = {})
     -> cppcoro::generator<std::decay_t<
         std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
   AD_CONTRACT_CHECK(numItems == vector.size());
   for (auto& element : vector) {
-    auto cpy = transformation(std::move(element));
+    // TODO<joka921> Use perfect forwarding and possibly yield references.
+    auto cpy = transformation(element);
     co_yield cpy;
   }
 }
@@ -95,7 +109,8 @@ auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* cont
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
     std::span<const ValueId> inputWithVariableResolved{
         getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(inputWithVariableResolved, numItems, transformation);
+    return resultGenerator(std::span<const ValueId>{inputWithVariableResolved}, numItems,
+                           transformation);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems, transformation);
   }
