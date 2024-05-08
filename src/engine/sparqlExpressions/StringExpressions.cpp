@@ -399,7 +399,59 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+
+// Class that converts a string to a number (int or double).
+template<typename T>
+class ToNumericImpl {
+  public:
+    Id operator()(std::optional<std::string> input) const {
+      if (!input.has_value()) {
+        return Id::makeUndefined();
+      } else {
+        auto str = absl::StripAsciiWhitespace(input.value());
+        auto strEnd = str.data() + str.size();
+        auto strStart = str.data();
+        T resD{};
+        if constexpr (std::is_same_v<T, int64_t>) {
+          auto conv = std::from_chars(strStart, strEnd, resD);
+          if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+            return Id::makeFromInt(resD);
+          }
+        } else {
+          auto conv = absl::from_chars(strStart, strEnd, resD);
+          if (conv.ec == std::error_code{} && conv.ptr == strEnd) {
+            return Id::makeFromDouble(resD);
+          }
+        }
+        return Id::makeUndefined();
+      }
+    }
+
+    Id operator()(double value) {
+        auto res = static_cast<T>(value);
+        if constexpr (std::is_same_v<T, int64_t>) {
+            return Id::makeFromInt(res);
+        } else if constexpr (std::is_same_v<T, double>) {
+            return Id::makeFromDouble(res);
+        } else {
+            return Id::makeUndefined();
+        }
+    }
+
+    Id operator()(int value) {
+        auto res = static_cast<T>(value);
+        if constexpr (std::is_same_v<T, int64_t>) {
+            return Id::makeFromInt(res);
+        } else if constexpr (std::is_same_v<T, double>) {
+            return Id::makeFromDouble(res);
+        } else {
+            return Id::makeUndefined();
+        }
+    }
+};
+
 // Expressions that convert a string to a number (int or double).
+/*
 template <typename T>
 [[maybe_used]] auto toNumeric = [](std::optional<std::string> input) {
   if (!input.has_value()) {
@@ -423,8 +475,9 @@ template <typename T>
     return Id::makeUndefined();
   }
 };
-using ToIntExpression = StringExpressionImpl<1, decltype(toNumeric<int64_t>)>;
-using ToDoubleExpression = StringExpressionImpl<1, decltype(toNumeric<double>)>;
+*/
+using ToIntExpression = StringExpressionImpl<1, ToNumericImpl<int64_t>>;
+using ToDoubleExpression = StringExpressionImpl<1, ToNumericImpl<double>>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
