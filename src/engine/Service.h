@@ -58,7 +58,7 @@ class Service : public Operation {
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
           GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest,
-		  std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
+          std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;

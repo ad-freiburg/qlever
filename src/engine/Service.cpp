@@ -23,11 +23,11 @@
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
                  GetTsvFunction getTsvFunction,
-								 std::shared_ptr<QueryExecutionTree> siblingTree)
+                 std::shared_ptr<QueryExecutionTree> siblingTree)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
       getTsvFunction_{std::move(getTsvFunction)},
-			siblingTree_{std::move(siblingTree)}{}
+      siblingTree_{std::move(siblingTree)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -95,41 +95,42 @@ ResultTable Service::computeResult() {
   serviceIriString.remove_suffix(1);
   ad_utility::httpUtils::Url serviceUrl{serviceIriString};
 
-  if(siblingTree_ != nullptr){
-		// Get the result of the siblingTree, to (potentially)
-		// reduce complexity of the SERVICE query.
-		auto siblingResult = siblingTree_->getResult();
+  if (siblingTree_ != nullptr) {
+    // Get the result of the siblingTree, to (potentially)
+    // reduce complexity of the SERVICE query.
+    auto siblingResult = siblingTree_->getResult();
 
-		const size_t rowLimit = 100;
-		if(siblingResult->size() < rowLimit){
-			auto siblingVariables = siblingTree_->getVariableColumns();
+    const size_t rowLimit = 100;
+    if (siblingResult->size() < rowLimit) {
+      auto siblingVariables = siblingTree_->getVariableColumns();
 
-			// Build value clause for each common variable.
-			std::string valueClauses = "{ ";
-			for(const auto& lVar : parsedServiceClause_.visibleVariables_){
-				auto it = siblingVariables.find(lVar);
-				if (it == siblingVariables.end()){
-					continue;
-				}
-				const auto& sVar = *it;
+      // Build value clause for each common variable.
+      std::string valueClauses = "{ ";
+      for (const auto& lVar : parsedServiceClause_.visibleVariables_) {
+        auto it = siblingVariables.find(lVar);
+        if (it == siblingVariables.end()) {
+          continue;
+        }
+        const auto& sVar = *it;
 
-				valueClauses += "VALUES " + sVar.first.name() + " { ";
-				for(size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex){
-					const auto& optionalString =
-						ExportQueryExecutionTrees::idToStringAndType(
-								siblingTree_->getRootOperation()->getIndex(),
-								siblingResult->idTable()(rowIndex, sVar.second.columnIndex_),
-								siblingResult->localVocab());
-					if(optionalString.has_value()){
-						valueClauses += optionalString.value().first + " ";
-					}
-				}
-				valueClauses += "} . ";
-			}
+        valueClauses += "VALUES " + sVar.first.name() + " { ";
+        for (size_t rowIndex = 0; rowIndex < siblingResult->size();
+             ++rowIndex) {
+          const auto& optionalString =
+              ExportQueryExecutionTrees::idToStringAndType(
+                  siblingTree_->getRootOperation()->getIndex(),
+                  siblingResult->idTable()(rowIndex, sVar.second.columnIndex_),
+                  siblingResult->localVocab());
+          if (optionalString.has_value()) {
+            valueClauses += optionalString.value().first + " ";
+          }
+        }
+        valueClauses += "} . ";
+      }
 
-			parsedServiceClause_.graphPatternAsString_ = valueClauses
-				+ parsedServiceClause_.graphPatternAsString_.substr(2);
-		}
+      parsedServiceClause_.graphPatternAsString_ =
+          valueClauses + parsedServiceClause_.graphPatternAsString_.substr(2);
+    }
   }
 
   // Construct the query to be sent to the SPARQL endpoint.
