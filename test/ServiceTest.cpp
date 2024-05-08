@@ -11,6 +11,7 @@
 #include "parser/GraphPatternOperation.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -192,4 +193,31 @@ TEST_F(ServiceTest, computeResult) {
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
   EXPECT_EQ(result->idTable(), expectedIdTable);
+
+  // Check 5: When a siblingTree with variables common to the Service Clause is
+  // passed, the Service Operation shall use the siblings result to reduce
+  // its Query complexity by injecting them as Value Clause
+	auto iri = ad_utility::testing::iri;
+	using TC = TripleComponent;
+	auto siblingTree = std::make_shared<QueryExecutionTree>(testQec,
+      std::make_shared<Values>(testQec,
+        (parsedQuery::SparqlValues){
+				{Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+					{{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+					{TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+
+	auto parsedServiceClause5 = parsedServiceClause;
+	parsedServiceClause5.graphPatternAsString_ = "{ ?x <ble> ?y . }";
+
+  std::string_view expectedSparqlQuery5 =
+		"PREFIX doof: <http://doof.org> SELECT ?x ?y "
+		"WHERE { VALUES ?x { <x> <blu> } . VALUES ?y { <y> <bla> } . "
+		"?x <ble> ?y . }";
+
+  Service serviceOperation5{testQec, parsedServiceClause5,
+    getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
+    "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"),
+    siblingTree
+    };
+  EXPECT_NO_THROW(serviceOperation5.getResult());
 }

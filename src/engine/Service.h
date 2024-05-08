@@ -46,6 +46,9 @@ class Service : public Operation {
   // The function used to obtain the result from the remote endpoint.
   GetTsvFunction getTsvFunction_;
 
+  // The siblingTree, used for SERVICE clause optimization.
+  std::shared_ptr<QueryExecutionTree> siblingTree_;
+
  public:
   // Construct from parsed Service clause.
   //
@@ -54,7 +57,8 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest);
+          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest,
+		  std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
