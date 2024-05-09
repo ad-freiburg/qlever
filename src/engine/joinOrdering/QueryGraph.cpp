@@ -273,8 +273,8 @@ requires RelationAble<N> constexpr Direction QueryGraph<N>::inv(Direction dir) {
   //  };
 
   switch (dir) {
-    case Direction::UNDIRECTED:
-      return Direction::UNDIRECTED;
+      //    case Direction::UNDIRECTED:
+      //      return Direction::UNDIRECTED;
     case Direction::PARENT:
       return Direction::CHILD;
     case Direction::CHILD:
