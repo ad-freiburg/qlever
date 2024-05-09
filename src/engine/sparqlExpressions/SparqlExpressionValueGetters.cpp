@@ -136,3 +136,23 @@ bool IsValidValueGetter::operator()(
   // implement it in a further version.
   return id != ValueId::makeUndefined();
 }
+
+// ____________________________________________________________________________
+IntDoubleStr ToNumericValueGetter::operator()(
+    ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
+  switch (id.getDatatype()) {
+    case Datatype::Int:
+      return id.getInt();
+    case Datatype::Double:
+      return id.getDouble();
+    default:
+      return std::monostate{};
+  }
+}
+
+// ____________________________________________________________________________
+IntDoubleStr ToNumericValueGetter::operator()(
+    const LiteralOrIri& s,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  return std::string(asStringViewUnsafe(s.getContent()));
+}

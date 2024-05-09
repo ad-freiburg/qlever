@@ -29,6 +29,10 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
+// Used in `ConvertToNumericExrpession.cpp` to allow for conversion of more
+// general args to a numeric value (-> `int64_t or double`).
+using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
+
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
 // values will become `Id::makeUndefined()`.
@@ -227,21 +231,12 @@ struct RegexValueGetter {
   }
 };
 
-// This ValueGetter is needed for the implementation of makeIntExpression and
-// makeDoubleExpression to be indifferent w.r.t. type of input.
-// If `ValueId` is provided, return `NumericValue` by using
-// `NumericValueGetter`. If `LiteralOrIri` is given, return value by using
-// `StringValueGetter`.
+// `ToNumericValueGetter` returns `IntDoubleStr` a `std::variant` object which
+// can contain: `int64_t`, `double`, `std::string` or `std::monostate`(empty).
 struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
   using Mixin<ToNumericValueGetter>::operator();
-  std::optional<std::string> operator()(const LiteralOrIri& s,
-                                        EvaluationContext* context) {
-    std::optional<std::string> str = StringValueGetter{}(s, context);
-    return str;
-  }
-  NumericValue operator()(ValueId id, EvaluationContext* context) {
-    NumericValue val = NumericValueGetter{}(id, context);
-    return val;
-  }
+  IntDoubleStr operator()(ValueId id, const EvaluationContext*) const;
+  IntDoubleStr operator()(const LiteralOrIri& s,
+                          const EvaluationContext*) const;
 };
 }  // namespace sparqlExpression::detail

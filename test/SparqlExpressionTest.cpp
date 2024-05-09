@@ -807,16 +807,26 @@ TEST(SparqlExpression, isSomethingFunctions) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testToNumericExpression) {
-  auto checkGetInt = testUnaryExpression<&makeIntExpression>;
-  auto checkGetDouble = testUnaryExpression<&makeDoubleExpression>;
+  auto checkStrGetInt = testUnaryExpression<&makeIntExpression>;
+  auto checkStrGetDouble = testUnaryExpression<&makeDoubleExpression>;
+  auto checkNumGetInt = testUnaryExpression<&makeIntExpression>;
+  auto checkNumGetDouble = testUnaryExpression<&makeDoubleExpression>;
 
-  checkGetInt(idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6",
-                                  "FreBurg1", "", " .", " 42\n", " 0.01 ", ""}),
-              Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U});
-  checkGetDouble(
+  checkStrGetInt(
+      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
+                          "", " .", " 42\n", " 0.01 ", ""}),
+      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U});
+  checkStrGetDouble(
       idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
                           "  0.007 ", " -14.75 "}),
       Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75)});
+  checkNumGetInt(idOrLitOrStringVec({U, I(-12475), I(42), I(0), D(-14.57),
+                                     D(33.0), D(0.00001)}),
+                 Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
+  checkNumGetDouble(
+      idOrLitOrStringVec(
+          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
 }
 
 // ____________________________________________________________________________
