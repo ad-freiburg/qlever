@@ -399,32 +399,6 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
-// HASH
-template <class ClassHash>
-[[maybe_unused]] auto hash =
-    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    ClassHash obj;
-    std::vector<unsigned char> hashed = obj.hash(input.value());
-    std::ostringstream oss;
-    for (const unsigned char& hexHash : hashed) {
-      oss << std::hex << std::setw(2) << std::setfill('0')
-          << static_cast<int>(hexHash);
-    }
-    return toLiteral(std::string_view(oss.str()));
-  }
-};
-using MD5Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashMD5>)>;
-using SHA1Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA1>)>;
-using SHA256Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA256>)>;
-using SHA512Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA512>)>;
-
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -477,13 +451,4 @@ Expr makeConcatExpression(std::vector<Expr> children) {
 Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
-
-Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
-
-Expr makeSHA1Expression(Expr child) { return make<SHA1Expression>(child); }
-
-Expr makeSHA256Expression(Expr child) { return make<SHA256Expression>(child); }
-
-Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
-
 }  // namespace sparqlExpression
