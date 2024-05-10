@@ -22,6 +22,17 @@ using ad_utility::getUTF8Substring;
 using ad_utility::utf8ToLower;
 using ad_utility::utf8ToUpper;
 
+// helper function to convert from hex char to std::string
+[[maybe_unused]] auto toString =
+    [](std::vector<unsigned char> input) -> std::string {
+  std::stringstream str;
+  for (const unsigned char& hex : input) {
+    str << std::hex << std::setw(2) << std::setfill('0')
+        << static_cast<int>(hex);
+  }
+  return str.str();
+};
+
 TEST(StringUtilsTest, utf8ToLower) {
   EXPECT_EQ("schindler's list", utf8ToLower("Schindler's List"));
   EXPECT_EQ("#+-_foo__bar++", utf8ToLower("#+-_foo__Bar++"));
@@ -320,4 +331,37 @@ TEST(StringUtilsTest, findLiteralEnd) {
   EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
   EXPECT_EQ(findLiteralEnd("no\\\"thi\"ng", "\""), 7u);
   EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
+}
+
+// TEST Hash Class
+TEST(StringUtilsTest, testStrHashMD5) {
+  using namespace ad_utility;
+  std::string testStr1 = "";
+  std::string testStr2 = "Friburg23o";
+  HashMD5 hashMD5;
+  auto res1 = toString(hashMD5.hash(testStr1));
+  auto res2 = toString(hashMD5.hash(testStr2));
+  EXPECT_EQ(res1, "d41d8cd98f00b204e9800998ecf8427e");
+  EXPECT_EQ(res2, "9d9a73f67e20835e516029541595c381");
+  HashSHA1 hashSHA1;
+  res1 = toString(hashSHA1.hash(testStr1));
+  res2 = toString(hashSHA1.hash(testStr2));
+  EXPECT_EQ(res1, "da39a3ee5e6b4b0d3255bfef95601890afd80709");
+  EXPECT_EQ(res2, "c3a77a6104fa091f590f594b3e2dba2668196d3c");
+  HashSHA256 hashSHA256;
+  res1 = toString(hashSHA256.hash(testStr1));
+  res2 = toString(hashSHA256.hash(testStr2));
+  EXPECT_EQ(res1,
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+  EXPECT_EQ(res2,
+            "af8d98f09845a700aea36b35e8cc3a35632e38d0f7be9c0ca508e53c578da900");
+  HashSHA512 hashSHA512;
+  res1 = toString(hashSHA512.hash(testStr1));
+  res2 = toString(hashSHA512.hash(testStr2));
+  EXPECT_EQ(res1,
+            "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47"
+            "d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e");
+  EXPECT_EQ(res2,
+            "be4422bfad59ee51e98dc51c540dc9d85333cb786333b152d13b2bebde1bdaa499"
+            "e9d4e1370a5bb2e831f4443b1358f2301fd5214ba80554ea0ff1d185c3b027");
 }

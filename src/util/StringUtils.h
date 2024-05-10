@@ -6,6 +6,9 @@
 
 #include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
+#include <openssl/evp.h>
+#include <openssl/md5.h>
+#include <openssl/sha.h>
 #include <unicode/bytestream.h>
 #include <unicode/casemap.h>
 
@@ -305,6 +308,62 @@ std::string insertThousandSeparator(const std::string_view str,
   ostream << std::string_view(std::move(parseIterator), std::end(str));
   return ostream.str();
 }
+
+// Hash represents the base class for all above specified hash classes.
+// `getHash` produces with `openssl/evp.h` the hash value to a given input
+// with the function specified in the inheriting class.
+class Hash {
+ protected:
+  virtual std::vector<unsigned char> hash(std::string& input) = 0;
+
+  std::vector<unsigned char> getHash(std::string& input, const EVP_MD* md,
+                                     size_t length) {
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    std::vector<unsigned char> hashed(length);
+    EVP_DigestInit_ex(ctx, md, NULL);
+    EVP_DigestUpdate(ctx, input.c_str(), input.length());
+    EVP_DigestFinal(ctx, hashed.data(), NULL);
+    EVP_MD_CTX_free(ctx);
+    return hashed;
+  }
+};
+
+// class `HashMD5` contains a method `hash` which takes `std::string`
+// and returns `std::vector<unsigned char>`, the resulting hash value
+class HashMD5 : protected Hash {
+ public:
+  std::vector<unsigned char> hash(std::string& input) override {
+    return Hash::getHash(input, EVP_md5(), MD5_DIGEST_LENGTH);
+  }
+};
+
+// class `HashSHA1` contains a method `hash` which takes `std::string&`
+// and returns `std::vector<unsigned char>`, the resulting hash value
+class HashSHA1 : protected Hash {
+ public:
+  std::vector<unsigned char> hash(std::string& input) override {
+    return Hash::getHash(input, EVP_sha1(), SHA_DIGEST_LENGTH);
+  }
+};
+
+// class `HashSHA256` contains a method `hash` which takes `std::string&`
+// and returns `std::vector<unsigned char>`, the resulting hash value
+class HashSHA256 : protected Hash {
+ public:
+  std::vector<unsigned char> hash(std::string& input) override {
+    return Hash::getHash(input, EVP_sha256(), SHA256_DIGEST_LENGTH);
+  }
+};
+
+// class `HashSHA512` contains a method `hash` which takes `std::string&`
+// and returns `std::vector<unsigned char>`, the resulting hash value
+class HashSHA512 : protected Hash {
+ public:
+  std::vector<unsigned char> hash(std::string& input) override {
+    return Hash::getHash(input, EVP_sha512(), SHA512_DIGEST_LENGTH);
+  }
+};
+
 }  // namespace ad_utility
 
 // these overloads are missing in the STL

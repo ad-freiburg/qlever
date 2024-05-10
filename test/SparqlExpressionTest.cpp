@@ -828,6 +828,36 @@ TEST(SparqlExpression, testToNumericExpression) {
           {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
       Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
 }
+// ____________________________________________________________________________
+TEST(SparqlExpression, testStrToHashExpressions) {
+  auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
+  auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
+  auto checkGetSHA256Expression = testUnaryExpression<&makeSHA256Expression>;
+  auto checkGetSHA512Expression = testUnaryExpression<&makeSHA512Expression>;
+  checkGetMD5Expression(
+      idOrLitOrStringVec({U, "", "FriburG23o"}),
+      idOrLitOrStringVec({U, "d41d8cd98f00b204e9800998ecf8427e",
+                          "32521b354b953d386e86ff013fae7fe9"}));
+  checkGetSHA1Expression(
+      idOrLitOrStringVec({U, "", "FriburG23o"}),
+      idOrLitOrStringVec({U, "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                          "a5a3144774c87ed39fe8cd1e9513fdd5624f2caa"}));
+  checkGetSHA256Expression(
+      idOrLitOrStringVec({U, "", "FriburG23o"}),
+      idOrLitOrStringVec(
+          {U,
+           "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+           "82ae72fda858128e6b26d1905e2ff53137bbafa0c1d7c7b8e978a6696bc5bdb"
+           "0"}));
+  checkGetSHA512Expression(
+      idOrLitOrStringVec({U, "", "FriburG23o"}),
+      idOrLitOrStringVec(
+          {U,
+           "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d"
+           "0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+           "4a1e28e116360f7692877a0bcb45a9566d5d4015fd7ed8821f77108e5e7547369f4"
+           "e56fa835df65459400623a6f6988b16aa54c07e34b5aea516adb3c13b7ce8"}));
+}
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
