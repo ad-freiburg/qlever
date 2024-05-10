@@ -36,7 +36,9 @@ class ReusableGenerator {
     std::optional<GenIterator> generatorIterator_{};
     std::vector<std::optional<T>> cachedValues_{};
     MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
-    std::function<bool()> onSizeChanged_{};
+    // Returns true if cache needs to shrink, accepts a parameter that tells the
+    // callback if we actually can shrink
+    std::function<bool(bool)> onSizeChanged_{};
     std::function<void(bool)> onGeneratorFinished_{};
 
    public:
@@ -83,15 +85,9 @@ class ReusableGenerator {
       }
       if (generatorIterator_.value() != generator_.end()) {
         cachedValues_.emplace_back(std::move(*generatorIterator_.value()));
-        // False on onSizeChange means the value got too big.
-        if (onSizeChanged_ && !onSizeChanged_()) {
-          for (size_t i = 0; i < cachedValues_.size() - 1; i++) {
-            if (cachedValues_.at(i).has_value()) {
-              cachedValues_.at(i).reset();
-              if (onSizeChanged_()) {
-                break;
-              }
-            }
+        if (onSizeChanged_) {
+          if (onSizeChanged_(true)) {
+            tryShrinkCache();
           }
         }
       } else if (onGeneratorFinished_) {
@@ -125,7 +121,7 @@ class ReusableGenerator {
       conditionVariable_.notify_all();
     }
 
-    void setOnSizeChanged(std::function<bool()> onSizeChanged) {
+    void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
       std::lock_guard lock{mutex_};
       onSizeChanged_ = std::move(onSizeChanged);
     }
@@ -141,6 +137,23 @@ class ReusableGenerator {
       for (const auto& optional : cachedValues_) {
         if (optional.has_value()) {
           function(optional.value());
+        }
+      }
+    }
+
+    void tryShrinkCache() {
+      size_t maxBound = cachedValues_.size() - 1;
+      for (size_t i = 0; i < maxBound; i++) {
+        if (cachedValues_.at(i).has_value()) {
+          cachedValues_.at(i).reset();
+          if (onSizeChanged_) {
+            bool isShrinkable = i < maxBound - 1;
+            if (onSizeChanged_(isShrinkable)) {
+              AD_CONTRACT_CHECK(!isShrinkable);
+            } else {
+              break;
+            }
+          }
         }
       }
     }
@@ -227,6 +240,14 @@ class ReusableGenerator {
     cppcoro::generator<T> result{std::move(computationStorage_->generator_)};
     computationStorage_.reset();
     return result;
+  }
+
+  void forEachCachedValue(const std::invocable<const T&> auto& function) const {
+    computationStorage_->forEachCachedValue(function);
+  }
+
+  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
+    computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
   }
 };
 };  // namespace ad_utility

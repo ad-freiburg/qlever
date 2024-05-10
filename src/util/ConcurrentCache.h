@@ -197,6 +197,11 @@ class ConcurrentCache {
     return computeOnceImpl(true, key, computeFunction, onlyReadFromCache);
   }
 
+  auto recomputeSize(const Key& key, bool removeIfEntryGrewTooBig) {
+    return _cacheAndInProgressMap.wlock()->_cache.recomputeSize(
+        key, removeIfEntryGrewTooBig);
+  }
+
   /// Clear the cache (but not the pinned entries)
   void clearUnpinnedOnly() {
     _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly();

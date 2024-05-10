@@ -30,6 +30,9 @@ class CacheValue {
       : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
+  // TODO<RobinTF> add destructor that clears listeners from result that might
+  // be messing with the cache.
+
   const std::shared_ptr<const Result>& resultTable() const {
     return _resultTable;
   }
@@ -39,14 +42,8 @@ class CacheValue {
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      // TODO<RobinTF> find good solution how to calculate storage requirements
-      // for generator data, maybe allow later re-calculation current size by
-      // returning lambda?
-      if (const auto& tablePtr = cacheValue._resultTable;
-          tablePtr && tablePtr->isDataEvaluated()) {
-        return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
-                                             tablePtr->idTable().numColumns() *
-                                             sizeof(Id));
+      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+        return tablePtr->getCurrentSize();
       } else {
         return 0_B;
       }

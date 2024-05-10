@@ -15,6 +15,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/MemorySize/MemorySize.h"
 #include "util/ReusableGenerator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
@@ -178,8 +179,13 @@ class Result {
   // check is succesful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
 
+  ad_utility::MemorySize getCurrentSize() const;
+
+  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged);
+
   static Result createResultWithFallback(std::shared_ptr<const Result> original,
                                          std::function<Result()> fallback);
 
-  static Result createResultAsMasterConsumer(std::shared_ptr<const Result> original);
+  static Result createResultAsMasterConsumer(
+      std::shared_ptr<const Result> original);
 };

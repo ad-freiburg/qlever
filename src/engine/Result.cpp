@@ -196,6 +196,36 @@ void Result::logResultSize() const {
   }
 }
 
+ad_utility::MemorySize Result::getCurrentSize() const {
+  auto calculateSize = [](const IdTable& idTable) {
+    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
+                                         sizeof(Id));
+  };
+  if (isDataEvaluated()) {
+    return calculateSize(idTable());
+  } else {
+    using Gen = ad_utility::ReusableGenerator<IdTable>;
+    // This should only ever get called on the "wrapped" generator stored in the
+    // cache.
+    AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+    ad_utility::MemorySize totalMemory = 0_B;
+    std::get<Gen>(_idTable).forEachCachedValue(
+        [&totalMemory, &calculateSize](const IdTable& idTable) {
+          totalMemory += calculateSize(idTable);
+        });
+    return totalMemory;
+  }
+}
+
+// _____________________________________________________________________________
+void Result::setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
+  using Gen = ad_utility::ReusableGenerator<IdTable>;
+  // This should only ever get called on the "wrapped" generator stored in the
+  // cache.
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+  std::get<Gen>(_idTable).setOnSizeChanged(std::move(onSizeChanged));
+}
+
 // _____________________________________________________________________________
 Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
                                         std::function<Result()> fallback) {
@@ -233,6 +263,7 @@ Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
                 SharedLocalVocabWrapper{original->localVocab_}};
 }
 
+// _____________________________________________________________________________
 Result Result::createResultAsMasterConsumer(
     std::shared_ptr<const Result> original) {
   using Gen = ad_utility::ReusableGenerator<IdTable>;

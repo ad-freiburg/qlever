@@ -167,11 +167,18 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
       return result;
     };
 
-    auto cacheSetup = [this, &computeLambda]() {
+    auto cacheSetup = [this, &computeLambda, &cache, &cacheKey]() {
       auto result = computeLambda();
       if (!result.isDataEvaluated()) {
-        // TODO<RobinTF> register listeners that make sure cache size is
-        // properly updated
+        result.setOnSizeChanged([&cache, cacheKey](bool isShrinkable) {
+          // TODO<RobinTF> find out how to handle pinned entries properly.
+          auto sizeChange = cache.recomputeSize(cacheKey, !isShrinkable);
+          if (sizeChange ==
+              ad_utility::ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE) {
+            return isShrinkable;
+          }
+          return false;
+        });
         // TODO<RobinTF> serialize into single IdTable if partially computed
         // all chunks fit into memory and generator is exhausted.
       }
