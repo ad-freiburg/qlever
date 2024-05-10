@@ -6,6 +6,7 @@
 #define REUSABLEGENERATOR_H
 
 #include <optional>
+#include <shared_mutex>
 #include <vector>
 
 #include "util/Exception.h"
@@ -17,16 +18,7 @@ namespace ad_utility {
 
 class IteratorExpired : std::exception {};
 
-// TODO<RobinTF> Plans for this class: Rename this class to cache-aware
-// generator or something. Introduce the concept of an "owner" of a generator
-// which bounds generation to a maximum storage size, throwing exceptions
-// if a non-owning iterator is consuming too slow, and blocking if non-owning
-// iterators are too fast. Ownership can expire if the "owning iterator" is
-// destroyed. It clears cached values after itself. It needs to be able to hold
-// a callback to be called whenever the stored size changes. Also when the
-// generator is completely consumed and when the maximum cache size would be
-// exceeded if no elements were deleted at the front of the cache to make sure
-// this entry is evicted from the cache.
+// TODO<RobinTF> Rename this class to cache-aware generator or something.
 
 template <typename T>
 class ReusableGenerator {
@@ -34,40 +26,53 @@ class ReusableGenerator {
   using Reference = const T&;
   using Pointer = const T*;
 
+  enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
+
   class ComputationStorage {
     friend ReusableGenerator;
+    mutable std::shared_mutex mutex_;
+    std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
     std::optional<GenIterator> generatorIterator_{};
     std::vector<std::optional<T>> cachedValues_{};
-    // TODO<RobinTF> make sure we error out when a non-master iterator is
-    // consumed before the initial master iterator
-    bool masterExists_ = true;
+    MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
     std::function<bool()> onSizeChanged_{};
     std::function<void(bool)> onGeneratorFinished_{};
 
+   public:
     explicit ComputationStorage(cppcoro::generator<T> generator)
         : generator_{std::move(generator)} {}
-
-   public:
-    ComputationStorage(ComputationStorage&& other) = default;
+    ComputationStorage(ComputationStorage&& other) = delete;
     ComputationStorage(const ComputationStorage& other) = delete;
-    ComputationStorage& operator=(ComputationStorage&& other) = default;
+    ComputationStorage& operator=(ComputationStorage&& other) = delete;
     ComputationStorage& operator=(const ComputationStorage& other) = delete;
 
    private:
     void advanceTo(size_t index, bool isMaster) {
+      std::unique_lock lock{mutex_};
       AD_CONTRACT_CHECK(index <= cachedValues_.size());
-      if (index != cachedValues_.size()) {
+      // Make sure master iterator does exist and we're not blocking
+      // indefinitely
+      if (isMaster) {
+        AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::MASTER_DONE);
+        masterState_ = MasterIteratorState::MASTER_STARTED;
+      } else {
+        AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::NOT_STARTED);
+      }
+      if (index < cachedValues_.size()) {
         if (!cachedValues_.at(index).has_value()) {
           throw IteratorExpired{};
         }
         return;
       }
-      if (masterExists_) {
-        if (isMaster) {
-          // TODO wake up condition variable
-        } else {
-          // TODO wait for condition variable
+      if (masterState_ == MasterIteratorState::MASTER_STARTED) {
+        if (!isMaster) {
+          conditionVariable_.wait(lock, [this, index]() {
+            return (generatorIterator_.has_value() &&
+                    generatorIterator_.value() == generator_.end()) ||
+                   index < cachedValues_.size();
+          });
+          return;
         }
       }
       if (generatorIterator_.has_value()) {
@@ -93,9 +98,13 @@ class ReusableGenerator {
         onGeneratorFinished_(cachedValues_.empty() ||
                              cachedValues_.at(0).has_value());
       }
+      if (isMaster) {
+        conditionVariable_.notify_all();
+      }
     }
 
     Reference getCachedValue(size_t index) const {
+      std::shared_lock lock{mutex_};
       if (!cachedValues_.at(index).has_value()) {
         throw IteratorExpired{};
       }
@@ -103,26 +112,32 @@ class ReusableGenerator {
     }
 
     bool isDone(size_t index) noexcept {
+      std::shared_lock lock{mutex_};
       return index == cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
 
     void clearMaster() {
-      AD_CORRECTNESS_CHECK(masterExists_);
-      masterExists_ = false;
-      // TODO wake up condition variable
+      std::unique_lock lock{mutex_};
+      AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::MASTER_DONE);
+      masterState_ = MasterIteratorState::MASTER_DONE;
+      lock.unlock();
+      conditionVariable_.notify_all();
     }
 
     void setOnSizeChanged(std::function<bool()> onSizeChanged) {
+      std::lock_guard lock{mutex_};
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
     void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
+      std::lock_guard lock{mutex_};
       onGeneratorFinished_ = std::move(onGeneratorFinished);
     }
 
     void forEachCachedValue(
         const std::invocable<const T&> auto& function) const {
+      std::shared_lock lock{mutex_};
       for (const auto& optional : cachedValues_) {
         if (optional.has_value()) {
           function(optional.value());
@@ -130,12 +145,12 @@ class ReusableGenerator {
       }
     }
   };
-  std::shared_ptr<Synchronized<ComputationStorage>> computationStorage_;
+  std::shared_ptr<ComputationStorage> computationStorage_;
 
  public:
   explicit ReusableGenerator(cppcoro::generator<T> generator)
-      : computationStorage_{std::make_shared<Synchronized<ComputationStorage>>(
-            ComputationStorage{std::move(generator)})} {}
+      : computationStorage_{
+            std::make_shared<ComputationStorage>(std::move(generator))} {}
 
   ReusableGenerator(ReusableGenerator&& other) = default;
   ReusableGenerator(const ReusableGenerator& other) = delete;
@@ -146,26 +161,31 @@ class ReusableGenerator {
 
   class Iterator {
     size_t currentIndex_ = 0;
-    unique_cleanup::UniqueCleanup<
-        std::weak_ptr<Synchronized<ComputationStorage>>>
-        storage_;
+    unique_cleanup::UniqueCleanup<std::weak_ptr<ComputationStorage>> storage_;
     bool isMaster_;
 
+    auto storage() const {
+      auto pointer = storage_->lock();
+      AD_CORRECTNESS_CHECK(pointer);
+      return pointer;
+    }
+
    public:
-    explicit Iterator(std::weak_ptr<Synchronized<ComputationStorage>> storage,
-                      bool isMaster)
+    explicit Iterator(std::weak_ptr<ComputationStorage> storage, bool isMaster)
         : storage_{storage,
                    [isMaster](auto&& storage) {
                      if (isMaster) {
-                       storage.lock()->wlock()->clearMaster();
+                       auto pointer = storage.lock();
+                       AD_CORRECTNESS_CHECK(pointer);
+                       pointer->clearMaster();
                      }
                    }},
           isMaster_{isMaster} {
-      storage_->lock()->wlock()->advanceTo(currentIndex_, isMaster);
+      this->storage()->advanceTo(currentIndex_, isMaster);
     }
 
     friend bool operator==(const Iterator& it, IteratorSentinel) noexcept {
-      return !it.storage_->lock()->wlock()->isDone(it.currentIndex_);
+      return !it.storage_->lock()->isDone(it.currentIndex_);
     }
 
     friend bool operator!=(const Iterator& it, IteratorSentinel s) noexcept {
@@ -182,7 +202,7 @@ class ReusableGenerator {
 
     Iterator& operator++() {
       ++currentIndex_;
-      storage_->lock()->wlock()->advanceTo(currentIndex_, isMaster_);
+      storage()->advanceTo(currentIndex_, isMaster_);
       return *this;
     }
 
@@ -190,7 +210,7 @@ class ReusableGenerator {
     void operator++(int) { (void)operator++(); }
 
     Reference operator*() const noexcept {
-      return storage_->lock()->rlock()->getCachedValue(currentIndex_);
+      return storage()->getCachedValue(currentIndex_);
     }
 
     Pointer operator->() const noexcept { return std::addressof(operator*()); }
@@ -203,8 +223,8 @@ class ReusableGenerator {
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
   cppcoro::generator<T> extractGenerator() && {
-    auto lock = computationStorage_->wlock();
-    cppcoro::generator<T> result{std::move(lock->generator_)};
+    std::unique_lock lock{computationStorage_->mutex_};
+    cppcoro::generator<T> result{std::move(computationStorage_->generator_)};
     computationStorage_.reset();
     return result;
   }

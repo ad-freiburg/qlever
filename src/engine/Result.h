@@ -88,6 +88,7 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  // TODO<RobinTF> add better overloads than using TableType
 
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
