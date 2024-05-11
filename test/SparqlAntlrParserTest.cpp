@@ -1557,13 +1557,13 @@ TEST(SparqlParser, FunctionCall) {
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
   expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
-                     matchUnary(&makeIntExpression));
+                     matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
-                     matchUnary(&makeIntExpression));
+                     matchUnary(&makeConvertToIntExpression));
   expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
-                     matchUnary(&makeDoubleExpression));
+                     matchUnary(&makeConvertToDoubleExpression));
   expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
-                     matchUnary(&makeDoubleExpression));
+                     matchUnary(&makeConvertToDoubleExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(
