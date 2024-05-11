@@ -35,11 +35,11 @@ requires std::integral<T> || std::floating_point<T> class ToNumericImpl {
   template <typename N>
   requires std::integral<N> || std::floating_point<N>
   Id getFromNumber(N number) const {
-    T ResNumber = static_cast<T>(number);
+    auto resNumber = static_cast<T>(number);
     if constexpr (std::is_same_v<T, int64_t>) {
-      return Id::makeFromInt(ResNumber);
+      return Id::makeFromInt(resNumber);
     } else {
-      return Id::makeFromDouble(ResNumber);
+      return Id::makeFromDouble(resNumber);
     }
   };
 
