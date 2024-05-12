@@ -15,8 +15,8 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/CacheableGenerator.h"
 #include "util/MemorySize/MemorySize.h"
-#include "util/ReusableGenerator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -24,7 +24,7 @@
 class Result {
  private:
   using TableType =
-      std::variant<IdTable, ad_utility::ReusableGenerator<IdTable>,
+      std::variant<IdTable, ad_utility::CacheableGenerator<IdTable>,
                    cppcoro::generator<const IdTable>>;
   // The actual entries. Since generators need to be modified
   // in order to be consumed, this needs to be mutable.

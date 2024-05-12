@@ -94,7 +94,7 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // modification here
   AD_CONTRACT_CHECK(
       !std::holds_alternative<cppcoro::generator<const IdTable>>(_idTable));
-  using Gen = ad_utility::ReusableGenerator<IdTable>;
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
   if (std::holds_alternative<IdTable>(_idTable)) {
     modifyIdTable(std::get<IdTable>(_idTable), limitOffset);
   } else if (std::holds_alternative<Gen>(_idTable)) {
@@ -204,7 +204,7 @@ ad_utility::MemorySize Result::getCurrentSize() const {
   if (isDataEvaluated()) {
     return calculateSize(idTable());
   } else {
-    using Gen = ad_utility::ReusableGenerator<IdTable>;
+    using Gen = ad_utility::CacheableGenerator<IdTable>;
     // This should only ever get called on the "wrapped" generator stored in the
     // cache.
     AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
@@ -219,7 +219,7 @@ ad_utility::MemorySize Result::getCurrentSize() const {
 
 // _____________________________________________________________________________
 void Result::setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
-  using Gen = ad_utility::ReusableGenerator<IdTable>;
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
   // This should only ever get called on the "wrapped" generator stored in the
   // cache.
   AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
@@ -266,7 +266,7 @@ Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
 // _____________________________________________________________________________
 Result Result::createResultAsMasterConsumer(
     std::shared_ptr<const Result> original) {
-  using Gen = ad_utility::ReusableGenerator<IdTable>;
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
   AD_CONTRACT_CHECK(std::holds_alternative<Gen>(original->_idTable));
   auto generator = [](auto original) -> cppcoro::generator<const IdTable> {
     using ad_utility::IteratorWrapper;

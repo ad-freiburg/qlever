@@ -30,14 +30,18 @@ class CacheValue {
       : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  // TODO<RobinTF> add destructor that clears listeners from result that might
-  // be messing with the cache.
-
   const std::shared_ptr<const Result>& resultTable() const {
     return _resultTable;
   }
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
+
+  ~CacheValue() {
+    if (!_resultTable->isDataEvaluated()) {
+      // Clear listeners
+      const_cast<Result&>(*_resultTable).setOnSizeChanged({});
+    }
+  }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {

@@ -70,10 +70,8 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // ________________________________________________________________________
-std::shared_ptr<const Result> Operation::getResult(bool isRoot,
-                                                   bool onlyReadFromCache,
-                                                   bool requestLaziness) {
-  AD_CONTRACT_CHECK(!onlyReadFromCache || !requestLaziness);
+std::shared_ptr<const Result> Operation::getResult(
+    bool isRoot, ComputationMode computationMode) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -123,13 +121,14 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
               }
             });
     bool actuallyComputed = false;
-    auto computeLambda = [this, &timer, requestLaziness, &actuallyComputed] {
+    auto computeLambda = [this, &timer, computationMode, &actuallyComputed] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult(requestLaziness);
+      Result result = computeResult(computationMode == ComputationMode::LAZY);
       actuallyComputed = true;
-      AD_CONTRACT_CHECK(requestLaziness || result.isDataEvaluated());
+      AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY ||
+                        result.isDataEvaluated());
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -184,6 +183,8 @@ std::shared_ptr<const Result> Operation::getResult(bool isRoot,
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
+
+    bool onlyReadFromCache = computationMode == ComputationMode::CACHE_ONLY;
 
     auto result =
         pinResult

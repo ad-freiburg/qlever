@@ -18,10 +18,8 @@ namespace ad_utility {
 
 class IteratorExpired : std::exception {};
 
-// TODO<RobinTF> Rename this class to cache-aware generator or something.
-
 template <typename T>
-class ReusableGenerator {
+class CacheableGenerator {
   using GenIterator = typename cppcoro::generator<T>::iterator;
   using Reference = const T&;
   using Pointer = const T*;
@@ -29,7 +27,7 @@ class ReusableGenerator {
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
   class ComputationStorage {
-    friend ReusableGenerator;
+    friend CacheableGenerator;
     mutable std::shared_mutex mutex_;
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
@@ -161,14 +159,14 @@ class ReusableGenerator {
   std::shared_ptr<ComputationStorage> computationStorage_;
 
  public:
-  explicit ReusableGenerator(cppcoro::generator<T> generator)
+  explicit CacheableGenerator(cppcoro::generator<T> generator)
       : computationStorage_{
             std::make_shared<ComputationStorage>(std::move(generator))} {}
 
-  ReusableGenerator(ReusableGenerator&& other) = default;
-  ReusableGenerator(const ReusableGenerator& other) = delete;
-  ReusableGenerator& operator=(ReusableGenerator&& other) = default;
-  ReusableGenerator& operator=(const ReusableGenerator& other) = delete;
+  CacheableGenerator(CacheableGenerator&& other) = default;
+  CacheableGenerator(const CacheableGenerator& other) = delete;
+  CacheableGenerator& operator=(CacheableGenerator&& other) = default;
+  CacheableGenerator& operator=(const CacheableGenerator& other) = delete;
 
   class IteratorSentinel {};
 
