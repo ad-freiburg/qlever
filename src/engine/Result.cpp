@@ -42,7 +42,8 @@ Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
       _sortedBy{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  // TODO<RobinTF> move checks into generators if possible
+  // TODO<RobinTF> move checks into generators if possible, check all usages of
+  // isDataEvaluated
   AD_CONTRACT_CHECK(!isDataEvaluated() ||
                     std::ranges::all_of(_sortedBy, [this](size_t numCols) {
                       return numCols < this->idTable().numColumns();
@@ -224,6 +225,43 @@ void Result::setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
   // cache.
   AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
   std::get<Gen>(_idTable).setOnSizeChanged(std::move(onSizeChanged));
+}
+
+// _____________________________________________________________________________
+void Result::setOnGeneratorFinished(
+    std::function<void(bool)> onGeneratorFinished) {
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
+  // This should only ever get called on the "wrapped" generator stored in the
+  // cache.
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+  std::get<Gen>(_idTable).setOnGeneratorFinished(
+      std::move(onGeneratorFinished));
+}
+
+Result Result::aggregateTable() const {
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+  size_t totalRows = 0;
+  size_t numCols = 0;
+  std::optional<IdTable::Allocator> allocator;
+  std::get<Gen>(_idTable).forEachCachedValue(
+      [&totalRows, &numCols, &allocator](const IdTable& table) {
+        totalRows += table.numRows();
+        if (numCols == 0) {
+          numCols = table.numColumns();
+        }
+        if (!allocator.has_value()) {
+          allocator = table.getAllocator();
+        }
+      });
+  IdTable idTable{
+      numCols, std::move(allocator).value_or(makeAllocatorWithLimit<Id>(0_B))};
+  idTable.reserve(totalRows);
+  std::get<Gen>(_idTable).forEachCachedValue([&idTable](const IdTable& table) {
+    idTable.insertAtEnd(table.begin(), table.end());
+  });
+  return Result{std::move(idTable), _sortedBy,
+                SharedLocalVocabWrapper{localVocab_}};
 }
 
 // _____________________________________________________________________________

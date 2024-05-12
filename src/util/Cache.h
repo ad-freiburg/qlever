@@ -278,6 +278,25 @@ class FlexibleCache {
     return result;
   }
 
+  void transformValue(
+      const Key& key,
+      const InvocableWithExactReturnType<Value, const Value&> auto&
+          transformer) {
+    bool pinned = false;
+    if (containsPinned(key)) {
+      pinned = true;
+    } else if (!containsNonPinned(key)) {
+      return;
+    }
+    auto transformedValue = transformer(*(*this)[key]);
+    erase(key);
+    if (pinned) {
+      insertPinned(key, std::move(transformedValue));
+    } else {
+      insert(key, std::move(transformedValue));
+    }
+  }
+
   //! Checks if there is an entry with the given key.
   bool contains(const Key& key) const {
     return containsPinned(key) || containsNonPinned(key);

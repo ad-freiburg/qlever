@@ -202,6 +202,14 @@ class ConcurrentCache {
         key, removeIfEntryGrewTooBig);
   }
 
+  void transformValue(
+      const Key& key,
+      const InvocableWithExactReturnType<Value, const Value&> auto&
+          transformer) {
+    return _cacheAndInProgressMap.wlock()->_cache.transformValue(key,
+                                                                 transformer);
+  }
+
   /// Clear the cache (but not the pinned entries)
   void clearUnpinnedOnly() {
     _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly();

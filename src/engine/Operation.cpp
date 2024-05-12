@@ -178,8 +178,15 @@ std::shared_ptr<const Result> Operation::getResult(
           }
           return false;
         });
-        // TODO<RobinTF> serialize into single IdTable if partially computed
-        // all chunks fit into memory and generator is exhausted.
+        result.setOnGeneratorFinished(
+            [&cache, cacheKey](bool isComplete) mutable {
+              if (isComplete) {
+                cache.transformValue(cacheKey, [](const CacheValue& oldValue) {
+                  return CacheValue{oldValue.resultTable()->aggregateTable(),
+                                    oldValue.runtimeInfo()};
+                });
+              }
+            });
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };

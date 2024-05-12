@@ -40,6 +40,7 @@ class CacheValue {
     if (!_resultTable->isDataEvaluated()) {
       // Clear listeners
       const_cast<Result&>(*_resultTable).setOnSizeChanged({});
+      const_cast<Result&>(*_resultTable).setOnGeneratorFinished({});
     }
   }
 

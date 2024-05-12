@@ -75,6 +75,7 @@ class CacheableGenerator {
           return;
         }
       }
+      // TODO<RobinTF> track processing time to update stats.
       if (generatorIterator_.has_value()) {
         AD_CONTRACT_CHECK(generatorIterator_.value() != generator_.end());
         ++generatorIterator_.value();
@@ -246,6 +247,10 @@ class CacheableGenerator {
 
   void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
     computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
+  }
+
+  void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
+    computationStorage_->setOnGeneratorFinished(std::move(onGeneratorFinished));
   }
 };
 };  // namespace ad_utility

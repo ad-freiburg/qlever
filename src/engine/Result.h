@@ -183,6 +183,10 @@ class Result {
 
   void setOnSizeChanged(std::function<bool(bool)> onSizeChanged);
 
+  void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished);
+
+  Result aggregateTable() const;
+
   static Result createResultWithFallback(std::shared_ptr<const Result> original,
                                          std::function<Result()> fallback);
 
