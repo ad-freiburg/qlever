@@ -85,6 +85,8 @@ class LocatedTriplesPerBlock {
   using ScanSpecification = CompressedRelationReader::ScanSpecification;
   // Get the number of located triples for the given block that match `id1` (if
   // provided) and `id2` (if provided). The return value is a pair of numbers:
+  // Get the number of located triples for the given block that match the
+  // ScanSpecification. The return value is a pair of numbers:
   // first, the number of existing triples ("to be deleted") and second, the
   // number of new triples ("to be inserted").
   std::pair<size_t, size_t> numTriples(size_t blockIndex, ScanSpecification scanSpec) const;
@@ -92,8 +94,8 @@ class LocatedTriplesPerBlock {
   // Merge located triples for `blockIndex` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Consider only
   // located triples in the range specified by `rowIndexInBlockBegin` and
-  // `rowIndexInBlockEnd`. Consider only triples that match `id1` (if provided)
-  // and `id2` (if provided). Return the number of rows written to `result`.
+  // `rowIndexInBlockEnd`. Consider only triples that match the
+  // ScanSpecification. Return the number of rows written to `result`.
   //
   // PRECONDITIONS:
   //
@@ -107,8 +109,8 @@ class LocatedTriplesPerBlock {
   // 3. If `block == std::nullopt`, we are adding to `result` the located
   // triples for block `blockIndex` where the `rowIndexInBlock` is
   // `NO_ROW_INDEX`. These actually belong to the previous block, but were
-  // larger than all triples there. This requires that `id1` or both `id1` and
-  // `id2` are specified.
+  // larger than all triples there. This requires that the ScanSpecification
+  // has `col0Id` and `col1Id` set.
   //
   size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
                       IdTable& result, size_t offsetInResult,
