@@ -111,9 +111,8 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
 }
 
 // ____________________________________________________________________________
-template <LocatedTriplesPerBlock::MatchMode matchMode>
-std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriplesImpl(
-    size_t blockIndex, Id id1, Id id2) const {
+std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
+    size_t blockIndex, ScanSpecification scanSpec) const {
   // If no located triples for `blockIndex` exist, there is no entry in `map_`.
   if (!map_.contains(blockIndex)) {
     return {0, 0};
@@ -124,23 +123,17 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriplesImpl(
   size_t countExists = 0;
   size_t countNew = 0;
   for (const LocatedTriple& locatedTriple : map_.at(blockIndex)) {
-    // Helper lambda for increasing the right counter.
-    auto increaseCountIf = [&](bool increase) {
-      if (increase) {
-        if (locatedTriple.existsInIndex) {
-          ++countExists;
-        } else {
-          ++countNew;
-        }
+    if (!scanSpec.col0Id() ||
+        (scanSpec.col0Id().value() == locatedTriple.id1 &&
+         (!scanSpec.col1Id() ||
+          (scanSpec.col1Id().value() == locatedTriple.id2 &&
+           (!scanSpec.col2Id() || scanSpec.col2Id().value() == locatedTriple.id3)))))
+    {
+      if (locatedTriple.existsInIndex) {
+        ++countExists;
+      } else {
+        ++countNew;
       }
-    };
-    // Increase depending on the mode.
-    if constexpr (matchMode == MatchMode::MatchAll) {
-      increaseCountIf(true);
-    } else if constexpr (matchMode == MatchMode::MatchId1) {
-      increaseCountIf(locatedTriple.id1 == id1);
-    } else if constexpr (matchMode == MatchMode::MatchId1AndId2) {
-      increaseCountIf(locatedTriple.id1 == id1 && locatedTriple.id2 == id2);
     }
   }
   return {countNew, countExists};

@@ -7,6 +7,7 @@
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
 #include "util/HashMap.h"
+#include "index/CompressedRelation.h"
 
 class Permutation;
 
@@ -81,13 +82,12 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
  public:
+  using ScanSpecification = CompressedRelationReader::ScanSpecification;
   // Get the number of located triples for the given block that match `id1` (if
   // provided) and `id2` (if provided). The return value is a pair of numbers:
   // first, the number of existing triples ("to be deleted") and second, the
   // number of new triples ("to be inserted").
-  std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
-  std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1) const;
-  std::pair<size_t, size_t> numTriples(size_t blockIndex, Id id1, Id id2) const;
+  std::pair<size_t, size_t> numTriples(size_t blockIndex, ScanSpecification scanSpec) const;
 
   // Merge located triples for `blockIndex` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Consider only
@@ -151,12 +151,6 @@ class LocatedTriplesPerBlock {
  private:
   // Match modes for `numTriplesInBlockImpl` and `mergeTriplesIntoBlockImpl`.
   enum struct MatchMode { MatchAll, MatchId1, MatchId1AndId2 };
-
-  // The Implementation behind the public method `numTriplesInBlock` above.
-  template <MatchMode matchMode>
-  std::pair<size_t, size_t> numTriplesImpl(size_t blockIndex,
-                                           Id id1 = Id::makeUndefined(),
-                                           Id id2 = Id::makeUndefined()) const;
 
   // The Implementation behind the public method `mergeTriplesIntoBlock` above.
   // The only reason that the arguments `id1` and `id2` come at the end here is

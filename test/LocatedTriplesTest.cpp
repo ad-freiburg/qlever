@@ -33,6 +33,8 @@ class LocatedTriplesTest : public ::testing::Test {
   }
 };
 
+using ScanSpec = CompressedRelationReader::ScanSpecification;
+
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   // Set up lists of located triples for three blocks.
@@ -51,28 +53,35 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto P = [](size_t n1, size_t n2) -> std::pair<size_t, size_t> {
     return {n1, n2};
   };
+  const ScanSpec matchAll = {std::nullopt, std::nullopt, std::nullopt};
+  auto matchId1 = [](Id id1) -> ScanSpec {
+    return {id1, std::nullopt, std::nullopt};
+  };
+  auto matchId2 = [](Id id1, Id id2) -> ScanSpec {
+    return {id1, id2, std::nullopt};
+  };
 
   // Check the total counts per block.
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1), P(1, 2));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2), P(2, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3), P(1, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchAll), P(1, 2));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchAll), P(2, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchAll), P(1, 1));
 
   // Check the counts per block for a given `id1`.
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, V(10)), P(0, 2));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, V(11)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, V(20)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, V(21)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, V(30)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, V(32)), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1(V(10))), P(0, 2));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1(V(11))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1(V(20))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1(V(21))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1(V(30))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1(V(32))), P(0, 1));
 
   // Check the counts per block for a given `id1` and `id2`.
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, V(10), V(1)), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, V(10), V(2)), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, V(11), V(3)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, V(20), V(4)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, V(21), V(5)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, V(30), V(6)), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, V(32), V(7)), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(10), V(1))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(10), V(2))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(11), V(3))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId2(V(20), V(4))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId2(V(21), V(5))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId2(V(30), V(6))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId2(V(32), V(7))), P(0, 1));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into a
