@@ -151,6 +151,12 @@ class ValueId {
     return _bits <=> other._bits;
   }
 
+  // Compare only the underlying bits. This typically only works as expected
+  // if there are no local vocab entries.
+  static constexpr bool lessByBits(const ValueId a, const ValueId b) {
+    return a._bits < b._bits;
+  }
+
   /// Get the underlying bit representation, e.g. for compression etc.
   [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
   /// Construct from the underlying bit representation. `bits` must have been

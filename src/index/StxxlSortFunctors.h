@@ -14,7 +14,8 @@ struct SortTriple {
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
     auto permute = [](const auto& x) { return std::tie(x[i0], x[i1], x[i2]); };
-    return permute(a) < permute(b);
+    return std::ranges::lexicographical_compare(permute(a), permute(b),
+                                                &Id::lessByBits);
   }
 
   // Value that is strictly smaller than any input element.
