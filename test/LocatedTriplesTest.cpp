@@ -38,7 +38,7 @@ const ScanSpec matchAll = {std::nullopt, std::nullopt, std::nullopt};
 auto matchId1 = [](Id id1) -> ScanSpec {
   return {id1, std::nullopt, std::nullopt};
 };
-auto matchId2 = [](Id id1, Id id2) -> ScanSpec {
+auto matchId1And2 = [](Id id1, Id id2) -> ScanSpec {
   return {id1, id2, std::nullopt};
 };
 
@@ -75,13 +75,13 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1(V(32))), P(0, 1));
 
   // Check the counts per block for a given `id1` and `id2`.
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(10), V(1))), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(10), V(2))), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId2(V(11), V(3))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId2(V(20), V(4))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId2(V(21), V(5))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId2(V(30), V(6))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId2(V(32), V(7))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(1))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(2))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(11), V(3))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(20), V(4))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(21), V(5))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(30), V(6))), P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(32), V(7))), P(0, 1));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into a
@@ -164,7 +164,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable result(1, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
     locatedTriplesPerBlock.mergeTriples(1, std::move(blockColumnId3), result, 0,
-                                        matchId2(V(2), V(30)), 4, 6);
+                                        matchId1And2(V(2), V(30)), 4, 6);
     ASSERT_EQ(result, resultExpected);
   }
 
