@@ -5,12 +5,14 @@
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
 #include "engine/CallFixedSize.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
+#include "global/RuntimeParameters.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "util/Exception.h"
@@ -95,42 +97,11 @@ ResultTable Service::computeResult() {
   serviceIriString.remove_suffix(1);
   ad_utility::httpUtils::Url serviceUrl{serviceIriString};
 
-  if (siblingTree_ != nullptr) {
-    // Get the result of the siblingTree, to (potentially)
-    // reduce complexity of the SERVICE query.
-    auto siblingResult = siblingTree_->getResult();
-
-    const size_t rowLimit = 100;
-    if (siblingResult->size() < rowLimit) {
-      auto siblingVariables = siblingTree_->getVariableColumns();
-
-      // Build value clause for each common variable.
-      std::string valueClauses = "{ ";
-      for (const auto& lVar : parsedServiceClause_.visibleVariables_) {
-        auto it = siblingVariables.find(lVar);
-        if (it == siblingVariables.end()) {
-          continue;
-        }
-        const auto& sVar = *it;
-
-        valueClauses += "VALUES " + sVar.first.name() + " { ";
-        for (size_t rowIndex = 0; rowIndex < siblingResult->size();
-             ++rowIndex) {
-          const auto& optionalString =
-              ExportQueryExecutionTrees::idToStringAndType(
-                  siblingTree_->getRootOperation()->getIndex(),
-                  siblingResult->idTable()(rowIndex, sVar.second.columnIndex_),
-                  siblingResult->localVocab());
-          if (optionalString.has_value()) {
-            valueClauses += optionalString.value().first + " ";
-          }
-        }
-        valueClauses += "} . ";
-      }
-
-      parsedServiceClause_.graphPatternAsString_ =
-          valueClauses + parsedServiceClause_.graphPatternAsString_.substr(2);
-    }
+  // Try to optimize the Service Clause using it's sibling Operation.
+  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    parsedServiceClause_.graphPatternAsString_ =
+        "{ " + valuesClause.value() +
+        parsedServiceClause_.graphPatternAsString_.substr(2);
   }
 
   // Construct the query to be sent to the SPARQL endpoint.
@@ -198,6 +169,57 @@ ResultTable Service::computeResult() {
                   std::move(tsvResult), &idTable, &localVocab);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+}
+
+std::optional<std::string> Service::getSiblingValuesClause() const {
+  if (siblingTree_ == nullptr) {
+    return std::nullopt;
+  }
+
+  auto siblingResult = siblingTree_->getResult();
+  if (siblingResult->size() >
+      RuntimeParameters().get<"service-max-value-rows">()) {
+    return std::nullopt;
+  }
+
+  std::vector<ColumnIndex> commonColumnIndices;
+  auto siblingVariables = siblingTree_->getVariableColumns();
+  std::string vars = "";
+  for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
+    auto it = siblingVariables.find(localVar);
+    if (it == siblingVariables.end()) {
+      continue;
+    }
+    vars += it->first.name() + " ";
+    commonColumnIndices.push_back(it->second.columnIndex_);
+  }
+  vars.pop_back();
+  if (commonColumnIndices.size() > 1) {
+    vars = "(" + vars + ")";
+  }
+
+  std::string valuesClause = " { ";
+  for (size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex) {
+    std::string row;
+    for (size_t i = 0; i < commonColumnIndices.size(); ++i) {
+      const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
+          siblingTree_->getRootOperation()->getIndex(),
+          siblingResult->idTable()(rowIndex, commonColumnIndices[i]),
+          siblingResult->localVocab());
+      if (optionalString.has_value()) {
+        row += optionalString.value().first;
+        if (i < commonColumnIndices.size() - 1) {
+          row += " ";
+        }
+      }
+    }
+    if (commonColumnIndices.size() > 1) {
+      row = "(" + row + ")";
+    }
+    valuesClause += row + " ";
+  }
+
+  return "VALUES " + vars + valuesClause + "} . ";
 }
 
 // ____________________________________________________________________________

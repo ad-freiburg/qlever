@@ -86,6 +86,8 @@ class Service : public Operation {
   // Compute the result using `getTsvFunction_`.
   ResultTable computeResult() override;
 
+  std::optional<std::string> getSiblingValuesClause() const;
+
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.
   //

@@ -213,8 +213,7 @@ TEST_F(ServiceTest, computeResult) {
 
   std::string_view expectedSparqlQuery5 =
       "PREFIX doof: <http://doof.org> SELECT ?x ?y "
-      "WHERE { VALUES ?x { <x> <blu> } . VALUES ?y { <y> <bla> } . "
-      "?x <ble> ?y . }";
+      "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y . }";
 
   Service serviceOperation5{
       testQec, parsedServiceClause5,
