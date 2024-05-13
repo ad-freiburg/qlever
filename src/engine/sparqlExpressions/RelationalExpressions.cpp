@@ -311,6 +311,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   }
 }
 
+// _____________________________________________________________________________
 template <Comparison comp>
 SparqlExpression::Estimates
 RelationalExpression<comp>::getEstimatesForFilterExpression(
@@ -346,10 +347,12 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   return {sizeEstimate, costEstimate};
 }
 
+// _____________________________________________________________________________
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  VectorWithMemoryLimit<Id> result(context->size(), Id::makeFromBool(false),
+  auto resultSize = context->_isPartOfGroupBy ? 1 : context->size();
+  VectorWithMemoryLimit<Id> result(resultSize, Id::makeFromBool(false),
                                    context->_allocator);
   for (const auto& child : children_ | std::views::drop(1)) {
     auto rhs = child->evaluate(context);
@@ -365,6 +368,12 @@ ExpressionResult InExpression::evaluate(
       std::ranges::for_each(result, [res](Id& id) {
         id = Id::fromBits(id.getBits() | res.getBits());
       });
+    } else if (std::holds_alternative<ad_utility::SetOfIntervals>(subRes)) {
+      auto bitVec = ad_utility::SetOfIntervals::toBitVector(
+          std::get<ad_utility::SetOfIntervals>(subRes), result.size());
+      for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = Id::fromBits(result[i].getBits() | bitVec[i]);
+      }
     } else {
       AD_CORRECTNESS_CHECK(
           std::holds_alternative<VectorWithMemoryLimit<Id>>(subRes));
@@ -385,16 +394,24 @@ ExpressionResult InExpression::evaluate(
   }
 }
 
+// _____________________________________________________________________________
 std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
   return children_;
 }
 
+// _____________________________________________________________________________
 string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
   // TODO<Joka921> proper cache key;
   (void)varColMap;
-  return "InExpressionOfThisAndThat";
+  std::stringstream result;
+  result << "IN Expresssion with";
+  for (const auto& child : children_) {
+    result << ' ' << child->getCacheKey(varColMap);
+  }
+  return std::move(result).str();
 }
 
+// _____________________________________________________________________________
 auto InExpression::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
