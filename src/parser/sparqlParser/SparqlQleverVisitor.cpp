@@ -1491,14 +1491,16 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    if (ctx->notToken) {
-      reportNotSupported(ctx, "NOT IN in an expression is ");
-    }
     auto lhs = visitVector(ctx->numericExpression());
     AD_CORRECTNESS_CHECK(lhs.size() == 1);
     auto expressions = visit(ctx->expressionList());
-    return std::make_unique<InExpression>(std::move(lhs.at(0)),
-                                          std::move(expressions));
+    auto inExpression = std::make_unique<InExpression>(std::move(lhs.at(0)),
+                                                       std::move(expressions));
+    if (ctx->notToken) {
+      return makeUnaryNegateExpression(std::move(inExpression));
+    } else {
+      return inExpression;
+    }
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
