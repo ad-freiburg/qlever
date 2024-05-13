@@ -111,14 +111,10 @@ class LocatedTriplesPerBlock {
   // `id2` are specified.
   //
   size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
-                      IdTable& result, size_t offsetInResult) const;
-  size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
-                      IdTable& result, size_t offsetInResult, Id id1,
-                      size_t rowIndexInBlockBegin = 0) const;
-  size_t mergeTriples(
-      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
-      size_t offsetInResult, Id id1, Id id2, size_t rowIndexInBlockBegin = 0,
-      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
+                      IdTable& result, size_t offsetInResult,
+                      ScanSpecification scanSpec,
+                      size_t rowIndexInBlockBegin = 0,
+                      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
   // Return a handle to where it was added (`LocatedTriples` is a sorted set,
@@ -147,20 +143,6 @@ class LocatedTriplesPerBlock {
     map_.clear();
     numTriples_ = 0;
   }
-
- private:
-  // Match modes for `numTriplesInBlockImpl` and `mergeTriplesIntoBlockImpl`.
-  enum struct MatchMode { MatchAll, MatchId1, MatchId1AndId2 };
-
-  // The Implementation behind the public method `mergeTriplesIntoBlock` above.
-  // The only reason that the arguments `id1` and `id2` come at the end here is
-  // so that we can give them default values.
-  template <MatchMode matchMode>
-  size_t mergeTriples(
-      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
-      size_t offsetInResult, Id id1 = Id::makeUndefined(),
-      Id id2 = Id::makeUndefined(), size_t rowIndexInBlockBegin = 0,
-      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 };
 
 // Human-readable representation of `LocatedTriple`, `LocatedTriples`, and

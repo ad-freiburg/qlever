@@ -34,6 +34,13 @@ class LocatedTriplesTest : public ::testing::Test {
 };
 
 using ScanSpec = CompressedRelationReader::ScanSpecification;
+const ScanSpec matchAll = {std::nullopt, std::nullopt, std::nullopt};
+auto matchId1 = [](Id id1) -> ScanSpec {
+  return {id1, std::nullopt, std::nullopt};
+};
+auto matchId2 = [](Id id1, Id id2) -> ScanSpec {
+  return {id1, id2, std::nullopt};
+};
 
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
@@ -52,13 +59,6 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   // Shorthand for creating a pair of counts.
   auto P = [](size_t n1, size_t n2) -> std::pair<size_t, size_t> {
     return {n1, n2};
-  };
-  const ScanSpec matchAll = {std::nullopt, std::nullopt, std::nullopt};
-  auto matchId1 = [](Id id1) -> ScanSpec {
-    return {id1, std::nullopt, std::nullopt};
-  };
-  auto matchId2 = [](Id id1, Id id2) -> ScanSpec {
-    return {id1, id2, std::nullopt};
   };
 
   // Check the total counts per block.
@@ -117,7 +117,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {30, 10}});  // Row 6
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0);
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchAll);
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -134,7 +134,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {30, 30}});  // Row 7
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, V(2));
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchId1(V(2)));
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -148,7 +148,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {30, 30}});  // Row 4
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, V(2), 2);
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchId1(V(2)), 2);
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -164,7 +164,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable result(1, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
     locatedTriplesPerBlock.mergeTriples(1, std::move(blockColumnId3), result, 0,
-                                        V(2), V(30), 4, 6);
+                                        matchId2(V(2), V(30)), 4, 6);
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -180,7 +180,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {40, 10}});  // Row 2
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0, V(1));
+    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0, matchId1(V(1)));
   }
 }
 

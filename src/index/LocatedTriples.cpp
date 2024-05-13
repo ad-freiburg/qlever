@@ -139,33 +139,16 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
   return {countNew, countExists};
 }
 
-// ____________________________________________________________________________
-std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
-    size_t blockIndex) const {
-  return numTriplesImpl<MatchMode::MatchAll>(blockIndex);
-}
-
-// ____________________________________________________________________________
-std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(size_t blockIndex,
-                                                             Id id1) const {
-  return numTriplesImpl<MatchMode::MatchId1>(blockIndex, id1);
-}
-
-// ____________________________________________________________________________
-std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(size_t blockIndex,
-                                                             Id id1,
-                                                             Id id2) const {
-  return numTriplesImpl<MatchMode::MatchId1AndId2>(blockIndex, id1, id2);
-}
-
-// ____________________________________________________________________________
-template <LocatedTriplesPerBlock::MatchMode matchMode>
 size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                             std::optional<IdTable> block,
                                             IdTable& result,
-                                            size_t offsetInResult, Id id1,
-                                            Id id2, size_t rowIndexInBlockBegin,
+                                            size_t offsetInResult,
+                                            ScanSpecification scanSpec,
+                                            size_t rowIndexInBlockBegin,
                                             size_t rowIndexInBlockEnd) const {
+  // TODO:
+  AD_CONTRACT_CHECK(!scanSpec.col2Id().has_value());
+
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
@@ -173,7 +156,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // The special case `block == std::nullopt` (write only located triples to
   // `result`) is only allowed, when the `matchMode` is `MatchId1` or
   // `MatchId1AndId2`, but not `MatchAll`.
-  AD_CONTRACT_CHECK(block.has_value() || matchMode != MatchMode::MatchAll);
+  AD_CONTRACT_CHECK(block.has_value() || !scanSpec.col2Id().has_value());
 
   // If `rowIndexInBlockEnd` has the default value (see `LocatedTriples.h`), the
   // intended semantics is that we read the whole block (note that we can't have
@@ -194,7 +177,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // If we restrict `id1` and `id2`, the index block and the result must have
   // one column (for the `id3`). Otherwise, they must have two columns (for the
   // `id2` and the `id3`).
-  if constexpr (matchMode == MatchMode::MatchId1AndId2) {
+  if (scanSpec.col1Id().has_value()) {
     AD_CONTRACT_CHECK(!block.has_value() || block.value().numColumns() == 1);
     AD_CONTRACT_CHECK(result.numColumns() == 1);
   } else {
@@ -209,13 +192,10 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // Helper lambda that checks whether the given located triple should be
   // considered, given the `matchMode`.
   auto locatedTripleMatches = [&]() {
-    if constexpr (matchMode == MatchMode::MatchAll) {
-      return true;
-    } else if constexpr (matchMode == MatchMode::MatchId1) {
-      return locatedTriple->id1 == id1;
-    } else if constexpr (matchMode == MatchMode::MatchId1AndId2) {
-      return locatedTriple->id1 == id1 && locatedTriple->id2 == id2;
-    }
+    return !scanSpec.col0Id().has_value() ||
+           (locatedTriple->id1 == scanSpec.col0Id().value() && (!scanSpec.col1Id().has_value() ||
+            (locatedTriple->id2 == scanSpec.col1Id().value() && (!scanSpec.col2Id().has_value() ||
+             locatedTriple->id3 == scanSpec.col2Id().value()))));
   };
 
   // Advance to the first located triple in the specified range.
@@ -241,7 +221,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
            locatedTriple->rowIndexInBlock == rowIndex &&
            locatedTriple->existsInIndex == false) {
       if (locatedTripleMatches()) {
-        if constexpr (matchMode == MatchMode::MatchId1AndId2) {
+        if (scanSpec.col1Id().has_value() && !scanSpec.col2Id().has_value()) {
           (*resultEntry)[0] = locatedTriple->id3;
         } else {
           (*resultEntry)[0] = locatedTriple->id2;
@@ -268,38 +248,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
   // Return the number of rows written to `result`.
   return resultEntry - (result.begin() + offsetInResult);
-}
-
-// ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                            std::optional<IdTable> block,
-                                            IdTable& result,
-                                            size_t offsetInResult) const {
-  return mergeTriples<MatchMode::MatchAll>(blockIndex, std::move(block), result,
-                                           offsetInResult);
-}
-
-// ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                            std::optional<IdTable> block,
-                                            IdTable& result,
-                                            size_t offsetInResult, Id id1,
-                                            size_t rowIndexInBlockBegin) const {
-  return mergeTriples<MatchMode::MatchId1>(
-      blockIndex, std::move(block), result, offsetInResult, id1,
-      Id::makeUndefined(), rowIndexInBlockBegin);
-}
-
-// ____________________________________________________________________________
-size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                            std::optional<IdTable> block,
-                                            IdTable& result,
-                                            size_t offsetInResult, Id id1,
-                                            Id id2, size_t rowIndexInBlockBegin,
-                                            size_t rowIndexInBlockEnd) const {
-  return mergeTriples<MatchMode::MatchId1AndId2>(
-      blockIndex, std::move(block), result, offsetInResult, id1, id2,
-      rowIndexInBlockBegin, rowIndexInBlockEnd);
 }
 
 // ____________________________________________________________________________
