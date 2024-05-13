@@ -375,7 +375,14 @@ ExpressionResult InExpression::evaluate(
       }
     }
   }
-  return result;
+
+  // A single result can be returned as a constant value, this is currently
+  // required by HAVING expressions etc.
+  if (result.size() == 1) {
+    return result.at(0);
+  } else {
+    return result;
+  }
 }
 
 std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
