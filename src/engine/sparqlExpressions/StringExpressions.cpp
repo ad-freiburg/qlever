@@ -412,7 +412,7 @@ template <auto HashFunc>
       oss << std::hex << std::setw(2) << std::setfill('0')
           << static_cast<int>(hexHash);
     }
-    return toLiteral(std::string_view(oss.str()));
+    return toLiteral(std::move(oss).str());
   }
 };
 
