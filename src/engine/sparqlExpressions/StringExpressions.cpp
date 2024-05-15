@@ -399,6 +399,7 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+<<<<<<< string_expr_hashing
 // HASH
 template <auto HashFunc>
 [[maybe_unused]] auto hash =
@@ -427,6 +428,8 @@ using SHA384Expression =
 using SHA512Expression =
     StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
 
+=======
+>>>>>>> master
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -479,6 +482,7 @@ Expr makeConcatExpression(std::vector<Expr> children) {
 Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
+<<<<<<< string_expr_hashing
 
 Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
 
@@ -490,4 +494,6 @@ Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
 
 Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
 
+=======
+>>>>>>> master
 }  // namespace sparqlExpression

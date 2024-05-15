@@ -29,7 +29,7 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
-// Used in `ConvertToNumericExrpession.cpp` to allow for conversion of more
+// Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
 // general args to a numeric value (-> `int64_t or double`).
 using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
 
