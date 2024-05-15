@@ -10,7 +10,8 @@ namespace detail::to_numeric {
 // class that converts an input `int64_t`, `double` or `std::string`
 // to a numeric value `int64_t` or `double`
 template <typename T>
-requires std::integral<T> || std::floating_point<T> class ToNumericImpl {
+requires std::same_as<int64_t, T> || std::same_as<double, T>
+class ToNumericImpl {
  private:
   Id getFromString(const std::string& input) const {
     auto str = absl::StripAsciiWhitespace(input);
