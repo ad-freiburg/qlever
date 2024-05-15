@@ -82,6 +82,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // If the pattern trick is used, the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise, the ql:has-predicate
   // triple will be handled using a `HasPredicateScan`.
+  auto datasetClauseBackup = std::exchange(activeDatasetClauses_, pq.datasetClauses_);
   using checkUsePatternTrick::PatternTrickTuple;
   const auto patternTrickTuple =
       _enablePatternTrick ? checkUsePatternTrick::checkUsePatternTrick(&pq)
@@ -165,6 +166,12 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   }
 
   checkCancellation();
+
+  if (!pq.datasetClauses_.namedGraphs_.empty()) {
+    throw std::runtime_error("FROM NAMED clauses are not yet supported by QLever");
+  }
+
+  activeDatasetClauses_ = std::move(datasetClauseBackup);
   return lastRow;
 }
 
@@ -696,16 +703,37 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
+    auto makeGraphFilter = [](const Variable& var, const ad_utility::HashSet<TripleComponent::Iri>& iris) {
+      std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
+      ptrs.push_back(std::make_unique<sparqlExpression::VariableExpression>(var));
+      for (auto& iri : iris) {
+        ptrs.push_back(std::make_unique<sparqlExpression::IriExpression>(iri));
+      }
+
+      auto expr = 
+
+
+    };
     auto addIndexScan = [this, pushPlan, node](
                             Permutation::Enum permutation,
                             std::optional<SparqlTripleSimple> triple =
                                 std::nullopt) {
       if (!triple.has_value()) {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
-                                            node.triple_.getSimple()));
+        triple = node.triple_.getSimple();
+      }
+
+      if (!activeDatasetClauses_.defaultGraphs_.empty()) {
+        triple->additionalScanColumns_.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?ql_internal_graph_id"});
+      }
+      auto scanPlan = [&]() {
+          return makeSubtreePlan<IndexScan>(_qec, permutation,
+                                              std::move(triple.value()));
+      };
+      if (activeDatasetClauses_.defaultGraphs_.empty()) {
+        pushPlan(scanPlan());
+        return;
       } else {
-        pushPlan(makeSubtreePlan<IndexScan>(_qec, permutation,
-                                            std::move(triple.value())));
+
       }
     };
 

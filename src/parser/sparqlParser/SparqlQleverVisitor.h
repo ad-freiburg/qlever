@@ -160,13 +160,18 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
 
-  [[noreturn]] static void visit(const Parser::DatasetClauseContext* ctx);
+  struct SingleDatasetClause {
+    TripleComponent::Iri dataset_;
+    bool isNamed_;
+  };
 
-  [[noreturn]] static void visit(Parser::DefaultGraphClauseContext* ctx);
+  SingleDatasetClause visit(Parser::DatasetClauseContext* ctx);
 
-  [[noreturn]] static void visit(Parser::NamedGraphClauseContext* ctx);
+  TripleComponent::Iri visit(Parser::DefaultGraphClauseContext* ctx);
 
-  [[noreturn]] static void visit(Parser::SourceSelectorContext* ctx);
+  TripleComponent::Iri visit(Parser::NamedGraphClauseContext* ctx);
+
+  TripleComponent::Iri visit(Parser::SourceSelectorContext* ctx);
 
   [[nodiscard]] PatternAndVisibleVariables visit(
       Parser::WhereClauseContext* ctx);

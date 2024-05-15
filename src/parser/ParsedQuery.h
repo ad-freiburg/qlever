@@ -35,6 +35,15 @@
 using std::string;
 using std::vector;
 
+
+namespace parsedQuery {
+// A struct for the FROM and FROM NAMED clauses;
+struct DatasetClauses {
+  ad_utility::HashSet<TripleComponent::Iri> defaultGraphs_{};
+  ad_utility::HashSet<TripleComponent::Iri> namedGraphs_{};
+};
+}
+
 // Data container for prefixes
 class SparqlPrefix {
  public:
@@ -132,6 +141,8 @@ class ParsedQuery {
 
   using ConstructClause = parsedQuery::ConstructClause;
 
+  using DatasetClauses = parsedQuery::DatasetClauses;
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
@@ -148,6 +159,9 @@ class ParsedQuery {
   // explicit default initialisation because the constructor
   // of SelectClause is private
   std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+
+  // The IRIs from the FROM and FROM NAMED clauses.
+  DatasetClauses  datasetClauses_;
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

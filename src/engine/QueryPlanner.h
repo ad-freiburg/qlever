@@ -23,6 +23,8 @@ class QueryPlanner {
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  ParsedQuery::DatasetClauses activeDatasetClauses_;
+
  public:
   explicit QueryPlanner(QueryExecutionContext* qec,
                         CancellationHandle cancellationHandle);
