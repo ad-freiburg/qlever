@@ -124,6 +124,9 @@ class SparqlQleverVisitor {
   }
 
   // ___________________________________________________________________________
+  ParsedQuery visit(Parser::UnitContext* ctx);
+
+  // ___________________________________________________________________________
   [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
@@ -195,6 +198,42 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] std::optional<parsedQuery::Values> visit(
       Parser::ValuesClauseContext* ctx);
+
+  void visit(Parser::UpdateContext* ctx);
+
+  void visit(Parser::Update1Context* ctx);
+
+  void visit(Parser::LoadContext* ctx);
+
+  void visit(Parser::ClearContext* ctx);
+
+  void visit(Parser::DropContext* ctx);
+
+  void visit(Parser::CreateContext* ctx);
+
+  void visit(Parser::AddContext* ctx);
+
+  void visit(Parser::MoveContext* ctx);
+
+  void visit(Parser::CopyContext* ctx);
+
+  void  visit(Parser::InsertDataContext* ctx);
+
+  void visit(Parser::DeleteDataContext* ctx);
+
+  void visit(Parser::DeleteWhereContext* ctx);
+
+  void visit(Parser::ModifyContext* ctx);
+
+  void visit(Parser::DeleteClauseContext* ctx);
+
+  void visit(Parser::InsertClauseContext* ctx);
+
+  void visit(Parser::QuadPatternContext* ctx);
+
+  void visit(Parser::QuadDataContext* ctx);
+
+  void visit(Parser::QuadsContext* ctx);
 
   [[nodiscard]] Triples visit(Parser::TriplesTemplateContext* ctx);
 
