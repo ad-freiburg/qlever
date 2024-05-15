@@ -806,30 +806,6 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
-TEST(SparqlExpression, testToNumericExpression) {
-<<<<<<< string_expr_hashing
-  auto checkStrGetInt = testUnaryExpression<&makeIntExpression>;
-  auto checkStrGetDouble = testUnaryExpression<&makeDoubleExpression>;
-  auto checkNumGetInt = testUnaryExpression<&makeIntExpression>;
-  auto checkNumGetDouble = testUnaryExpression<&makeDoubleExpression>;
-
-  checkStrGetInt(
-      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
-                          "", " .", " 42\n", " 0.01 ", ""}),
-      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U});
-  checkStrGetDouble(
-      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
-                          "  0.007 ", " -14.75 "}),
-      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75)});
-  checkNumGetInt(idOrLitOrStringVec({U, I(-12475), I(42), I(0), D(-14.57),
-                                     D(33.0), D(0.00001)}),
-                 Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
-  checkNumGetDouble(
-      idOrLitOrStringVec(
-          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
-      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
-}
-// ____________________________________________________________________________
 TEST(SparqlExpression, testStrToHashExpressions) {
   auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
   auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
@@ -876,7 +852,10 @@ TEST(SparqlExpression, testStrToHashExpressions) {
            "9d4e1370a5bb2e831f4443b1358f2301fd5214ba80554ea0ff1d185c3b027",
            "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a219"
            "2992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"}));
-=======
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testToNumericExpression) {
   Id T = Id::makeFromBool(true);
   Id F = Id::makeFromBool(false);
   auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
@@ -904,7 +883,6 @@ TEST(SparqlExpression, testStrToHashExpressions) {
   checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
                                   lit("1"), lit("-33")},
               Ids{U, U, I(1), I(0), U, I(1), I(-33)});
->>>>>>> master
 }
 
 // ____________________________________________________________________________
