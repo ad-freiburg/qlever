@@ -1035,7 +1035,11 @@ auto CompressedRelationWriter::createPermutationPair(
   IdTableStatic<0> relation{numColumns, alloc};
   size_t numBlocksCurrentRel = 0;
   auto compare = [](const auto& a, const auto& b) {
-    return std::tie(a[c1Idx], a[c2Idx]) < std::tie(b[c1Idx], b[c2Idx]);
+    // Does this make the sorting faster?
+    return std::ranges::lexicographical_compare(std::array{a[c1Idx], a[c2Idx]},
+                                                std::array{b[c1Idx], b[c2Idx]},
+                                                &ValueId::lessByBits);
+    // return std::tie(a[c1Idx], a[c2Idx]) < std::tie(b[c1Idx], b[c2Idx]);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
