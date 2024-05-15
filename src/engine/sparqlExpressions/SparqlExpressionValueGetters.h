@@ -29,6 +29,10 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
+// Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
+// general args to a numeric value (-> `int64_t or double`).
+using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
+
 // Convert a numeric value (either a plain number, or the `NumericValue` variant
 // from above) into an `ID`. When `NanToUndef` is `true` then floating point NaN
 // values will become `Id::makeUndefined()`.
@@ -227,4 +231,12 @@ struct RegexValueGetter {
   }
 };
 
+// `ToNumericValueGetter` returns `IntDoubleStr` a `std::variant` object which
+// can contain: `int64_t`, `double`, `std::string` or `std::monostate`(empty).
+struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
+  using Mixin<ToNumericValueGetter>::operator();
+  IntDoubleStr operator()(ValueId id, const EvaluationContext*) const;
+  IntDoubleStr operator()(const LiteralOrIri& s,
+                          const EvaluationContext*) const;
+};
 }  // namespace sparqlExpression::detail

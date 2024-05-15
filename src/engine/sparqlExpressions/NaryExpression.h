@@ -82,8 +82,10 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
 
-SparqlExpression::Ptr makeIntExpression(SparqlExpression::Ptr child);
-SparqlExpression::Ptr makeDoubleExpression(SparqlExpression::Ptr child);
+// Implemented in ConvertToNumeric.cpp
+SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDoubleExpression(
+    SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
