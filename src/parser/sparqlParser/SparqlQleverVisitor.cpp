@@ -326,77 +326,58 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::UpdateContext* ctx) {
-}
+void Visitor::visit(Parser::UpdateContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::Update1Context* ctx) {
-}
+void Visitor::visit(Parser::Update1Context* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::LoadContext* ctx) {
-}
+void Visitor::visit(Parser::LoadContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ClearContext* ctx) {
-}
+void Visitor::visit(Parser::ClearContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DropContext* ctx) {
-}
+void Visitor::visit(Parser::DropContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::CreateContext* ctx) {
-}
+void Visitor::visit(Parser::CreateContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::AddContext* ctx) {
-}
+void Visitor::visit(Parser::AddContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::MoveContext* ctx) {
-}
+void Visitor::visit(Parser::MoveContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::CopyContext* ctx) {
-}
+void Visitor::visit(Parser::CopyContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::InsertDataContext* ctx) {
-}
+void Visitor::visit(Parser::InsertDataContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DeleteDataContext* ctx) {
-}
-
+void Visitor::visit(Parser::DeleteDataContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DeleteWhereContext* ctx) {
-}
+void Visitor::visit(Parser::DeleteWhereContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ModifyContext* ctx) {
-}
+void Visitor::visit(Parser::ModifyContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DeleteClauseContext* ctx) {
-}
+void Visitor::visit(Parser::DeleteClauseContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::InsertClauseContext* ctx) {
-}
+void Visitor::visit(Parser::InsertClauseContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::QuadPatternContext* ctx) {
-}
+void Visitor::visit(Parser::QuadPatternContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::QuadDataContext* ctx) {
-}
+void Visitor::visit(Parser::QuadDataContext* ctx) {}
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::QuadsContext* ctx) {
-}
+void Visitor::visit(Parser::QuadsContext* ctx) {}
 
 // ____________________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {

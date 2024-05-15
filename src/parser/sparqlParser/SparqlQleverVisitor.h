@@ -217,7 +217,7 @@ class SparqlQleverVisitor {
 
   void visit(Parser::CopyContext* ctx);
 
-  void  visit(Parser::InsertDataContext* ctx);
+  void visit(Parser::InsertDataContext* ctx);
 
   void visit(Parser::DeleteDataContext* ctx);
 
