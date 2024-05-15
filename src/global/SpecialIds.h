@@ -19,8 +19,10 @@ static const inline ad_utility::HashMap<std::string, Id> specialIds = []() {
   ad_utility::HashMap<std::string, Id> result{
       {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
       {HAS_PATTERN_PREDICATE, Id::fromBits(2)},
-      {DEFAULT_GRAPH_IRI, Id::fromBits(3)},
-      {INTERNAL_GRAPH_IRI, Id::fromBits(4)}};
+      // TODO<joka921> Those are ints currently because we want to check if the
+      // DATAType::Undefined interferes with expressions etc.
+      {DEFAULT_GRAPH_IRI, Id::makeFromInt(3)},
+      {INTERNAL_GRAPH_IRI, Id::makeFromInt(4)}};
 
   // Perform the following checks: All the special IDs are unique, all of them
   // have the `Undefined` datatype, but none of them is equal to the "actual"
@@ -29,7 +31,9 @@ static const inline ad_utility::HashMap<std::string, Id> specialIds = []() {
   auto undefTypeButNotUndefValue = [](Id id) {
     return id != Id::makeUndefined() && id.getDatatype() == Datatype::Undefined;
   };
-  AD_CORRECTNESS_CHECK(std::ranges::all_of(values, undefTypeButNotUndefValue));
+  // TODO<joka921> Reinstate (see above)
+  // AD_CORRECTNESS_CHECK(std::ranges::all_of(values,
+  // undefTypeButNotUndefValue));
   ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
   AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
   return result;

@@ -32,6 +32,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 
@@ -82,7 +83,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   // If the pattern trick is used, the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise, the ql:has-predicate
   // triple will be handled using a `HasPredicateScan`.
-  auto datasetClauseBackup = std::exchange(activeDatasetClauses_, pq.datasetClauses_);
+  auto datasetClauseBackup =
+      std::exchange(activeDatasetClauses_, pq.datasetClauses_);
   using checkUsePatternTrick::PatternTrickTuple;
   const auto patternTrickTuple =
       _enablePatternTrick ? checkUsePatternTrick::checkUsePatternTrick(&pq)
@@ -168,7 +170,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   checkCancellation();
 
   if (!pq.datasetClauses_.namedGraphs_.empty()) {
-    throw std::runtime_error("FROM NAMED clauses are not yet supported by QLever");
+    throw std::runtime_error(
+        "FROM NAMED clauses are not yet supported by QLever");
   }
 
   activeDatasetClauses_ = std::move(datasetClauseBackup);
@@ -703,18 +706,23 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto makeGraphFilter = [](const Variable& var, const ad_utility::HashSet<TripleComponent::Iri>& iris) {
-      std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
-      ptrs.push_back(std::make_unique<sparqlExpression::VariableExpression>(var));
-      for (auto& iri : iris) {
-        ptrs.push_back(std::make_unique<sparqlExpression::IriExpression>(iri));
-      }
+    auto makeGraphFilter =
+        [](const Variable& var,
+           const ad_utility::HashSet<TripleComponent::Iri>& iris) {
+          std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
+          auto lhs =
+              std::make_unique<sparqlExpression::VariableExpression>(var);
+          for (auto& iri : iris) {
+            ptrs.push_back(
+                std::make_unique<sparqlExpression::IriExpression>(iri));
+          }
 
-      auto expr = 
-
-
-    };
-    auto addIndexScan = [this, pushPlan, node](
+          auto expr = std::make_unique<sparqlExpression::InExpression>(
+              std::move(lhs), std::move(ptrs));
+          return sparqlExpression::SparqlExpressionPimpl{std::move(expr),
+                                                         "FILTER BY GRAPH ID"};
+        };
+    auto addIndexScan = [this, pushPlan, node, &makeGraphFilter](
                             Permutation::Enum permutation,
                             std::optional<SparqlTripleSimple> triple =
                                 std::nullopt) {
@@ -722,18 +730,26 @@ auto QueryPlanner::seedWithScansAndText(
         triple = node.triple_.getSimple();
       }
 
+      std::optional<Variable> graphVariable;
       if (!activeDatasetClauses_.defaultGraphs_.empty()) {
-        triple->additionalScanColumns_.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID, Variable{"?ql_internal_graph_id"});
+        graphVariable = generateUniqueVarName();
+        triple->additionalScanColumns_.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
+                                                    graphVariable.value());
       }
       auto scanPlan = [&]() {
-          return makeSubtreePlan<IndexScan>(_qec, permutation,
-                                              std::move(triple.value()));
+        return makeSubtreePlan<IndexScan>(_qec, permutation,
+                                          std::move(triple.value()));
       };
       if (activeDatasetClauses_.defaultGraphs_.empty()) {
         pushPlan(scanPlan());
         return;
       } else {
-
+        auto plan = scanPlan();
+        plan = makeSubtreePlan<Filter>(
+            _qec, std::move(plan._qet),
+            makeGraphFilter(graphVariable.value(),
+                            activeDatasetClauses_.defaultGraphs_));
+        pushPlan(std::move(plan));
       }
     };
 

@@ -35,14 +35,13 @@
 using std::string;
 using std::vector;
 
-
 namespace parsedQuery {
 // A struct for the FROM and FROM NAMED clauses;
 struct DatasetClauses {
   ad_utility::HashSet<TripleComponent::Iri> defaultGraphs_{};
   ad_utility::HashSet<TripleComponent::Iri> namedGraphs_{};
 };
-}
+}  // namespace parsedQuery
 
 // Data container for prefixes
 class SparqlPrefix {
@@ -161,7 +160,7 @@ class ParsedQuery {
   std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
 
   // The IRIs from the FROM and FROM NAMED clauses.
-  DatasetClauses  datasetClauses_;
+  DatasetClauses datasetClauses_;
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);

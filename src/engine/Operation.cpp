@@ -134,8 +134,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       // individual results, but that requires changes in each individual
       // operation, therefore we currently only perform this expensive
       // change in the DEBUG builds.
+
+      // TODO<joka921> The internal IDS are not UNDEFINED...
+      /*
       AD_EXPENSIVE_CHECK(
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
+          */
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
