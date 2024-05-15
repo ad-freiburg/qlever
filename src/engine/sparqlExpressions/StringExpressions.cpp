@@ -400,14 +400,13 @@ using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
 // HASH
-template <class ClassHash>
+template <auto HashFunc>
 [[maybe_unused]] auto hash =
     [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    ClassHash obj;
-    std::vector<unsigned char> hashed = obj.hash(input.value());
+    std::vector<unsigned char> hashed = HashFunc(input.value());
     std::ostringstream oss;
     for (const unsigned char& hexHash : hashed) {
       oss << std::hex << std::setw(2) << std::setfill('0')
@@ -416,14 +415,17 @@ template <class ClassHash>
     return toLiteral(std::string_view(oss.str()));
   }
 };
+
 using MD5Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashMD5>)>;
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
 using SHA1Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA1>)>;
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha1>)>;
 using SHA256Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA256>)>;
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha256>)>;
+using SHA384Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha384>)>;
 using SHA512Expression =
-    StringExpressionImpl<1, decltype(hash<ad_utility::HashSHA512>)>;
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
 
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
@@ -483,6 +485,8 @@ Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
 Expr makeSHA1Expression(Expr child) { return make<SHA1Expression>(child); }
 
 Expr makeSHA256Expression(Expr child) { return make<SHA256Expression>(child); }
+
+Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
 
 Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
 
