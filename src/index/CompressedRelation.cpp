@@ -1039,7 +1039,6 @@ auto CompressedRelationWriter::createPermutationPair(
     return std::ranges::lexicographical_compare(std::array{a[c1Idx], a[c2Idx]},
                                                 std::array{b[c1Idx], b[c2Idx]},
                                                 &ValueId::lessByBits);
-    // return std::tie(a[c1Idx], a[c2Idx]) < std::tie(b[c1Idx], b[c2Idx]);
   };
   // TODO<joka921> Use `CALL_FIXED_SIZE`.
   ad_utility::CompressedExternalIdTableSorter<decltype(compare), 0>
