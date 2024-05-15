@@ -1534,6 +1534,7 @@ TEST(SparqlParser, FunctionCall) {
   // manually add it when constructing parser inputs.
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
+  auto xsd = absl::StrCat("<", XSD_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
@@ -1555,6 +1556,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
+                     matchUnary(&makeIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
+                     matchUnary(&makeIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
+                     matchUnary(&makeDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeDoubleExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(

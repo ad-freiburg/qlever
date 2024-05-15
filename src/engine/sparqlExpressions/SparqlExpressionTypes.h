@@ -185,7 +185,7 @@ struct EvaluationContext {
 namespace detail {
 /// Get Id of constant result of type T.
 template <SingleExpressionResult T, typename LocalVocabT>
-requires isConstantResult<T> && std::is_rvalue_reference_v<T&&>
+requires isConstantResult<T>
 Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   if constexpr (ad_utility::isSimilar<T, Id>) {
     return result;
@@ -195,8 +195,7 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
           if constexpr (ad_utility::isSimilar<
                             R, ad_utility::triple_component::LiteralOrIri>) {
             return Id::makeFromLocalVocabIndex(
-                localVocab.getIndexAndAddIfNotContained(
-                    AD_FWD(el).toStringRepresentation()));
+                localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
             static_assert(ad_utility::isSimilar<R, Id>);
             return el;

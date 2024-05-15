@@ -419,7 +419,7 @@ valueLogical
     ;
 
 relationalExpression
-    : numericExpression ( '=' numericExpression | '!=' numericExpression |  '<' numericExpression | '>' numericExpression | '<=' numericExpression | '>=' numericExpression | IN expressionList | NOT IN expressionList)?
+    : numericExpression ( '=' numericExpression | '!=' numericExpression |  '<' numericExpression | '>' numericExpression | '<=' numericExpression | '>=' numericExpression | IN expressionList | (notToken = NOT) IN expressionList)?
     ;
 
 numericExpression

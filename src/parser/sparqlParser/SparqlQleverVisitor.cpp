@@ -121,6 +121,14 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
+  } else if (checkPrefix(XSD_PREFIX)) {
+    if (functionName == "integer" || functionName == "int") {
+      checkNumArgs(1);
+      return sparqlExpression::makeIntExpression(std::move(argList[0]));
+    } else if (functionName == "double" || functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeDoubleExpression(std::move(argList[0]));
+    }
   }
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
@@ -1491,7 +1499,16 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportNotSupported(ctx, "IN or NOT IN in an expression is ");
+    auto lhs = visitVector(ctx->numericExpression());
+    AD_CORRECTNESS_CHECK(lhs.size() == 1);
+    auto expressions = visit(ctx->expressionList());
+    auto inExpression = std::make_unique<InExpression>(std::move(lhs.at(0)),
+                                                       std::move(expressions));
+    if (ctx->notToken) {
+      return makeUnaryNegateExpression(std::move(inExpression));
+    } else {
+      return inExpression;
+    }
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {

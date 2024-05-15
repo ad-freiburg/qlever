@@ -64,7 +64,9 @@ auto EffectiveBooleanValueGetter::operator()(
                  : True;
     }
     case Datatype::LocalVocabIndex: {
-      return (context->_localVocab.getWord(id.getLocalVocabIndex()).empty())
+      return (context->_localVocab.getWord(id.getLocalVocabIndex())
+                  .getContent()
+                  .empty())
                  ? False
                  : True;
     }
