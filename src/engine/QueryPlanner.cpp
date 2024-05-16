@@ -1669,6 +1669,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     candidates.push_back(std::move(opt.value()));
   }
 
+  if (auto opt = createJoinWithService(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   // Test if one of `a` or `b` is a transitive path to which we can bind the
   // other one.
   if (auto opt = createJoinWithTransitivePath(a, b, jcs)) {
@@ -1766,6 +1771,31 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+
+// _____________________________________________________________________
+auto QueryPlanner::createJoinWithService(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
+  auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
+
+  // Exactly one of the two Operations can be a service.
+  if (aRootOp == bRootOp) {
+    return std::nullopt;
+  }
+
+  auto service = aRootOp ? aRootOp : bRootOp;
+  auto sibling = bRootOp ? a : b;
+
+  service->setSiblingTree(sibling._qet);
+
+  SubtreePlan plan = makeSubtreePlan<Join>(
+      service->getExecutionContext(), a._qet, b._qet, jcs[0][0], jcs[0][1]);
+  mergeSubtreePlanIds(plan, a, b);
+
   return plan;
 }
 

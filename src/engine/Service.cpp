@@ -176,18 +176,18 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     return std::nullopt;
   }
 
-  auto siblingResult = siblingTree_->getResult();
+  const auto& siblingResult = siblingTree_->getResult();
   if (siblingResult->size() >
       RuntimeParameters().get<"service-max-value-rows">()) {
     return std::nullopt;
   }
 
   std::vector<ColumnIndex> commonColumnIndices;
-  auto siblingVariables = siblingTree_->getVariableColumns();
+  const auto& siblingVars = siblingTree_->getVariableColumns();
   std::string vars = "";
   for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
-    auto it = siblingVariables.find(localVar);
-    if (it == siblingVariables.end()) {
+    auto it = siblingVars.find(localVar);
+    if (it == siblingVars.end()) {
       continue;
     }
     vars += it->first.name() + " ";
@@ -198,7 +198,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     vars = "(" + vars + ")";
   }
 
-  std::string valuesClause = " { ";
+  std::string values = " { ";
   for (size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex) {
     std::string row;
     for (size_t i = 0; i < commonColumnIndices.size(); ++i) {
@@ -206,6 +206,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
           siblingTree_->getRootOperation()->getIndex(),
           siblingResult->idTable()(rowIndex, commonColumnIndices[i]),
           siblingResult->localVocab());
+
       if (optionalString.has_value()) {
         row += optionalString.value().first;
         if (i < commonColumnIndices.size() - 1) {
@@ -216,10 +217,10 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     if (commonColumnIndices.size() > 1) {
       row = "(" + row + ")";
     }
-    valuesClause += row + " ";
+    values += row + " ";
   }
 
-  return "VALUES " + vars + valuesClause + "} . ";
+  return "VALUES " + vars + values + "} . ";
 }
 
 // ____________________________________________________________________________

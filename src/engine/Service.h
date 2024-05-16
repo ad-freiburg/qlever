@@ -60,6 +60,10 @@ class Service : public Operation {
           GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest,
           std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
 
+  inline void setSiblingTree(std::shared_ptr<QueryExecutionTree> siblingTree) {
+    siblingTree_ = siblingTree;
+  }
+
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
