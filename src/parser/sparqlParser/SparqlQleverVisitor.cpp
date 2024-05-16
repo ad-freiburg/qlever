@@ -124,10 +124,12 @@ ExpressionPtr Visitor::processIriFunctionCall(
   } else if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
       checkNumArgs(1);
-      return sparqlExpression::makeIntExpression(std::move(argList[0]));
+      return sparqlExpression::makeConvertToIntExpression(
+          std::move(argList[0]));
     } else if (functionName == "double" || functionName == "decimal") {
       checkNumArgs(1);
-      return sparqlExpression::makeDoubleExpression(std::move(argList[0]));
+      return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
     }
   }
   reportNotSupported(ctx,
