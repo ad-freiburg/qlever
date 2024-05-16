@@ -1623,13 +1623,16 @@ TEST(SparqlParser, binaryStringExpressions) {
 TEST(SparqlParser, updateUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::unit>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported = contains("SPARQL 1.1 Update currently not supported by QLever.");
+  auto updateUnsupported =
+      contains("SPARQL 1.1 Update currently not supported by QLever.");
 
   // Test all the cases because some functionality will be enabled shortly.
   expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
   expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }", updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }", updateUnsupported);
+  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
   expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
   expectUpdateFails("LOAD <a>", updateUnsupported);
   expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
