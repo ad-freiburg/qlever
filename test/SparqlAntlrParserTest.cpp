@@ -1621,7 +1621,7 @@ TEST(SparqlParser, binaryStringExpressions) {
 }
 
 TEST(SparqlParser, updateUnsupported) {
-  auto expectUpdateFails = ExpectParseFails<&Parser::unit>{};
+  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto updateUnsupported =
       contains("SPARQL 1.1 Update currently not supported by QLever.");
