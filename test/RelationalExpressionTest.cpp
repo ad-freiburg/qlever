@@ -49,6 +49,16 @@ auto makeExpression(SingleExpressionResult auto leftValue,
       {std::move(leftChild), std::move(rightChild)});
 }
 
+auto makeInExpression(SingleExpressionResult auto leftValue,
+                    SingleExpressionResult auto... rightValues) {
+  auto leftChild = std::make_unique<DummyExpression>(std::move(leftValue));
+  std::vector<SparqlExpression::Ptr> rightChildren;
+  (... , (rightChildren.push_back(std::make_unique<DummyExpression>(std::move(rightValues)))));
+  return relational::InExpression{std::move(leftChild),
+                                  std::move(rightChildren)};
+}
+
+
 // Evaluate the given `expression` on a `TestContext` (see above).
 auto evaluateOnTestContext = [](const SparqlExpression& expression) {
   TestContext context{};
@@ -623,12 +633,17 @@ void testWithExplicitIdResult(auto leftValue, auto rightValue,
                               std::vector<Id> expected,
                               source_location l = source_location::current()) {
   static TestContext ctx;
-  auto expression = makeExpression<Comp>(liftToValueId(std::move(leftValue)),
-                                         liftToValueId(std::move(rightValue)));
+  auto expression = makeExpression<Comp>(liftToValueId(leftValue),
+                                         liftToValueId(rightValue));
   auto trace = generateLocationTrace(l, "test lambda was called here");
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  EXPECT_THAT(resultAsVariant, ::testing::VariantWith<VectorWithMemoryLimit<Id>>(::testing::ElementsAreArray(expected)));
+  if constexpr (Comp == EQ) {
+    auto expression =
+        makeInExpression(liftToValueId(leftValue), liftToValueId(std::move(rightValue)));
+    auto resultAsVariant = expression.evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<VectorWithMemoryLimit<Id>>(::testing::ElementsAreArray(expected)));
+  }
 }
 
 template <Comparison Comp>
@@ -743,10 +758,16 @@ void testSortedVariableAndConstant(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
   auto expression =
-      makeExpression<Comp>(leftValue, liftToValueId(std::move(rightValue)));
+      makeExpression<Comp>(leftValue, liftToValueId(rightValue));
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
-  ASSERT_EQ(result, expected);
+  EXPECT_THAT(resultAsVariant, ::testing::VariantWith<ad_utility::SetOfIntervals>(::testing::Eq(expected)));
+
+  if constexpr (Comp == EQ) {
+    auto expression =
+        makeInExpression(leftValue, liftToValueId(std::move(rightValue)));
+    auto resultAsVariant = expression.evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant, ::testing::VariantWith<ad_utility::SetOfIntervals>(::testing::Eq(expected)));
+  }
 }
 
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
@@ -796,6 +817,9 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
                                     {{{2, 3}}});
+}
+
+TEST(RelationalExpression, InExpression) {
 }
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,

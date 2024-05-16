@@ -8,6 +8,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "util/LambdaHelpers.h"
 #include "util/TypeTraits.h"
 
@@ -347,13 +348,30 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   return {sizeEstimate, costEstimate};
 }
 
+namespace {
+// TODO<joka921> Move this to a header
+struct DummyExpression : public SparqlExpression {
+  explicit DummyExpression(ExpressionResult result)
+      : _result{std::move(result)} {}
+  mutable ExpressionResult _result;
+  ExpressionResult evaluate(EvaluationContext*) const override {
+    return std::move(_result);
+  }
+  vector<Variable> getUnaggregatedVariables() override { return {}; }
+  string getCacheKey(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
+    return "DummyDummyDummDumm";
+  }
+
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+};
+}
 // _____________________________________________________________________________
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
   auto lhs = children_.at(0)->evaluate(context);
-  auto resultSize = context->_isPartOfGroupBy ? 1 : context->size();
-  VectorWithMemoryLimit<Id> result(resultSize, Id::makeFromBool(false),
-                                   context->_allocator);
+  ExpressionResult result {ad_utility::SetOfIntervals{}};
+  bool firstChild = true;
   for (const auto& child : children_ | std::views::drop(1)) {
     auto rhs = child->evaluate(context);
     // `resA` and `resB` are variants, so we need `std::visit`.
@@ -362,6 +380,20 @@ ExpressionResult InExpression::evaluate(
                                                           context);
     };
     auto subRes = std::visit(visitor, lhs, std::move(rhs));
+    if (firstChild) {
+      firstChild = false;
+      result = std::move(subRes);
+      continue;
+    }
+    auto dummyExpression1 = std::make_unique<DummyExpression>(std::move(subRes));
+    auto dummyExpression2 = std::make_unique<DummyExpression>(std::move(result));
+    result = makeOrExpression(std::move(dummyExpression1), std::move(dummyExpression2))->evaluate(context);
+
+    /*
+    if (children_.size() == 2) {
+      return subRes;
+      // TODO<joka921> We can also optimize the case of all the entries being SetOfIntervals.
+    }
     if (std::holds_alternative<Id>(subRes)) {
       auto res = std::get<Id>(subRes);
       // TODO<joka921> Verify that this in fact works.
@@ -383,15 +415,9 @@ ExpressionResult InExpression::evaluate(
         result[i] = Id::fromBits(result[i].getBits() | res[i].getBits());
       }
     }
+     */
   }
-
-  // A single result can be returned as a constant value, this is currently
-  // required by HAVING expressions etc.
-  if (result.size() == 1) {
-    return result.at(0);
-  } else {
-    return result;
-  }
+  return result;
 }
 
 // _____________________________________________________________________________
