@@ -8,18 +8,12 @@
 
 #include "util/CryptographicHashUtils.h"
 
-// Helper to convert the hex hash values to a hex digit string
-[[maybe_unused]] auto toHexString =
-    [](std::vector<unsigned char> input) -> std::string {
-  std::stringstream hexStr;
-  for (const unsigned char& hex : input) {
-    hexStr << std::hex << std::setw(2) << std::setfill('0')
-           << static_cast<int>(hex);
-  }
-  return hexStr.str();
-};
-
 using namespace ad_utility;
+
+// Helper to convert the hex hash values to a hex digit string
+inline auto toHexString(std::vector<unsigned char> hashed) -> std::string {
+  return absl::StrJoin(hashed, "", hexFormatter);
+};
 
 std::string testStr1 = "";
 std::string testStr2 = "Friburg23o";

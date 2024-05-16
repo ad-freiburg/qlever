@@ -407,12 +407,8 @@ template <auto HashFunc>
     return Id::makeUndefined();
   } else {
     std::vector<unsigned char> hashed = HashFunc(input.value());
-    std::ostringstream oss;
-    for (const unsigned char& hexHash : hashed) {
-      oss << std::hex << std::setw(2) << std::setfill('0')
-          << static_cast<int>(hexHash);
-    }
-    return toLiteral(std::move(oss).str());
+    auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
+    return toLiteral(std::move(hexStr));
   }
 };
 

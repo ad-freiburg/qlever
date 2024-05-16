@@ -1424,7 +1424,7 @@ TEST(SparqlParser, builtInCall) {
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA256(?x)", matchUnary(&makeSHA256Expression));
-  // expectBuiltInCall("SHA384(?x)", matchUnary(&makeSHA384Expression));
+  expectBuiltInCall("SHA384(?x)", matchUnary(&makeSHA384Expression));
   expectBuiltInCall("SHA512(?x)", matchUnary(&makeSHA512Expression));
 
   expectBuiltInCall("encode_for_uri(?x)",

@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <absl/strings/str_join.h>
 #include <openssl/evp.h>
 #include <openssl/md5.h>
 #include <openssl/sha.h>
@@ -26,6 +27,12 @@ inline constexpr auto hashImpl =
   EVP_DigestFinal(ctx, hexHash.data(), NULL);
   EVP_MD_CTX_free(ctx);
   return hexHash;
+};
+
+// lambda function which enables conversion of hash value to
+// hex hash string (`std::string`) with `absl` library.
+inline constexpr auto hexFormatter = [](std::string* out, char c) {
+  return absl::AlphaNumFormatter()(out, absl::Hex(c, absl::kZeroPad2));
 };
 
 // `HashMd5` takes an arguement of type `std::string_view` and provides
