@@ -692,7 +692,7 @@ UUID : U U I D;
 STRUUID : S T R U U I D;
 SHA1 : S H A '1';
 SHA256 : S H A '256';
-SHA384 : S H A '382';
+SHA384 : S H A '384';
 SHA512 : S H A '512';
 MD5 : M D '5';
 COALESCE : C O A L E S C E;
