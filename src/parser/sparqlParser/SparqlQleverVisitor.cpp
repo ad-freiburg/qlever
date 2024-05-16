@@ -178,7 +178,7 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::UnitContext* ctx) {
+ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update()) {
     reportNotSupported(ctx->update(), "SPARQL 1.1 Update");
   } else {

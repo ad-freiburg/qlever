@@ -124,7 +124,7 @@ class SparqlQleverVisitor {
   }
 
   // ___________________________________________________________________________
-  ParsedQuery visit(Parser::UnitContext* ctx);
+  ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
   [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);

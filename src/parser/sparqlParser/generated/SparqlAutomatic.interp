@@ -355,7 +355,7 @@ WS
 COMMENTS
 
 rule names:
-unit
+queryOrUpdate
 query
 prologue
 baseDecl

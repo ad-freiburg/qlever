@@ -38,7 +38,9 @@
 
 grammar SparqlAutomatic;
 
-unit: query | update EOF
+// query and update are disjoint in the grammar;
+// add a common parent for easier parsing
+queryOrUpdate: query | update EOF
     ;
 
 query
