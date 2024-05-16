@@ -131,7 +131,9 @@ void Values::writeValues(IdTable* idTablePtr, LocalVocab* localVocab) {
   for (auto& row : parsedValues_._values) {
     for (size_t colIdx = 0; colIdx < idTable.numColumns(); colIdx++) {
       TripleComponent& tc = row[colIdx];
-      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+      // TODO<joka921> We don't want to move, but also don't want to
+      // unconditionally copy.
+      Id id = TripleComponent{tc}.toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
