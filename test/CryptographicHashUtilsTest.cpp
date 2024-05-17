@@ -11,7 +11,7 @@
 using namespace ad_utility;
 
 // Helper to convert the hex hash values to a hex digit string
-inline auto toHexString(std::vector<unsigned char> hashed) -> std::string {
+inline auto toHexString(std::vector<unsigned char> hashed) {
   return absl::StrJoin(hashed, "", hexFormatter);
 };
 

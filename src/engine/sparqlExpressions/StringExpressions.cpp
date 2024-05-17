@@ -401,7 +401,7 @@ using EncodeForUriExpression =
 
 // HASH
 template <auto HashFunc>
-[[maybe_unused]] auto hash =
+[[maybe_unused]] inline constexpr auto hash =
     [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
