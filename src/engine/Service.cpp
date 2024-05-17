@@ -97,11 +97,12 @@ ResultTable Service::computeResult() {
   serviceIriString.remove_suffix(1);
   ad_utility::httpUtils::Url serviceUrl{serviceIriString};
 
-  // Try to optimize the Service Clause using it's sibling Operation.
+  // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
     parsedServiceClause_.graphPatternAsString_ =
-        "{ " + valuesClause.value() +
-        parsedServiceClause_.graphPatternAsString_.substr(2);
+        "{\n" + valuesClause.value() + '\n' +
+        parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
   }
 
   // Construct the query to be sent to the SPARQL endpoint.
@@ -171,6 +172,7 @@ ResultTable Service::computeResult() {
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
+// ____________________________________________________________________________
 std::optional<std::string> Service::getSiblingValuesClause() const {
   if (siblingTree_ == nullptr) {
     return std::nullopt;
@@ -184,7 +186,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
   std::vector<ColumnIndex> commonColumnIndices;
   const auto& siblingVars = siblingTree_->getVariableColumns();
-  std::string vars = "";
+  std::string vars = "(";
   for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
     auto it = siblingVars.find(localVar);
     if (it == siblingVars.end()) {
@@ -193,14 +195,13 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     vars += it->first.name() + " ";
     commonColumnIndices.push_back(it->second.columnIndex_);
   }
-  vars.pop_back();
-  if (commonColumnIndices.size() > 1) {
-    vars = "(" + vars + ")";
-  }
+  vars.back() = ')';
+
+  ad_utility::HashSet<std::string> rowSet;
 
   std::string values = " { ";
   for (size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex) {
-    std::string row;
+    std::string row = "(";
     for (size_t i = 0; i < commonColumnIndices.size(); ++i) {
       const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
           siblingTree_->getRootOperation()->getIndex(),
@@ -208,15 +209,16 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
           siblingResult->localVocab());
 
       if (optionalString.has_value()) {
-        row += optionalString.value().first;
-        if (i < commonColumnIndices.size() - 1) {
-          row += " ";
-        }
+        row += optionalString.value().first + ' ';
       }
     }
-    if (commonColumnIndices.size() > 1) {
-      row = "(" + row + ")";
+    row.back() = ')';
+
+    if (rowSet.contains(row)) {
+      continue;
     }
+
+    rowSet.insert(row);
     values += row + " ";
   }
 
