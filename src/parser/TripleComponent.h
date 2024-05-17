@@ -261,6 +261,7 @@ class TripleComponent {
       AD_CONTRACT_CHECK(!s.starts_with('?'));
       AD_CONTRACT_CHECK(!s.starts_with('"'));
       AD_CONTRACT_CHECK(!s.starts_with('\''));
+      // A dummy commit which was wrongly formatted
     }
   }
 };
