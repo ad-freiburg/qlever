@@ -136,3 +136,38 @@ bool IsValidValueGetter::operator()(
   // implement it in a further version.
   return id != ValueId::makeUndefined();
 }
+
+// ____________________________________________________________________________
+IntDoubleStr ToNumericValueGetter::operator()(
+    ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
+  switch (id.getDatatype()) {
+    case Datatype::Undefined:
+      return std::monostate{};
+    case Datatype::Int:
+      return id.getInt();
+    case Datatype::Double:
+      return id.getDouble();
+    case Datatype::Bool:
+      return static_cast<int>(id.getBool());
+    case Datatype::VocabIndex:
+    case Datatype::LocalVocabIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+    case Datatype::Date:
+    case Datatype::BlankNodeIndex:
+      auto optString = LiteralFromIdGetter{}(id, context);
+      if (optString.has_value()) {
+        return std::move(optString.value());
+      } else {
+        return std::monostate{};
+      }
+  }
+  AD_FAIL();
+}
+
+// ____________________________________________________________________________
+IntDoubleStr ToNumericValueGetter::operator()(
+    const LiteralOrIri& s,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  return std::string(asStringViewUnsafe(s.getContent()));
+}
