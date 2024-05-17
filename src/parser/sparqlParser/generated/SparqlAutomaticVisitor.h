@@ -15,6 +15,9 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
   /**
    * Visit parse trees produced by SparqlAutomaticParser.
    */
+  virtual std::any visitQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* context) = 0;
+
   virtual std::any visitQuery(SparqlAutomaticParser::QueryContext* context) = 0;
 
   virtual std::any visitPrologue(
@@ -102,6 +105,68 @@ class SparqlAutomaticVisitor : public antlr4::tree::AbstractParseTreeVisitor {
 
   virtual std::any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* context) = 0;
+
+  virtual std::any visitUpdate(
+      SparqlAutomaticParser::UpdateContext* context) = 0;
+
+  virtual std::any visitUpdate1(
+      SparqlAutomaticParser::Update1Context* context) = 0;
+
+  virtual std::any visitLoad(SparqlAutomaticParser::LoadContext* context) = 0;
+
+  virtual std::any visitClear(SparqlAutomaticParser::ClearContext* context) = 0;
+
+  virtual std::any visitDrop(SparqlAutomaticParser::DropContext* context) = 0;
+
+  virtual std::any visitCreate(
+      SparqlAutomaticParser::CreateContext* context) = 0;
+
+  virtual std::any visitAdd(SparqlAutomaticParser::AddContext* context) = 0;
+
+  virtual std::any visitMove(SparqlAutomaticParser::MoveContext* context) = 0;
+
+  virtual std::any visitCopy(SparqlAutomaticParser::CopyContext* context) = 0;
+
+  virtual std::any visitInsertData(
+      SparqlAutomaticParser::InsertDataContext* context) = 0;
+
+  virtual std::any visitDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* context) = 0;
+
+  virtual std::any visitDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* context) = 0;
+
+  virtual std::any visitModify(
+      SparqlAutomaticParser::ModifyContext* context) = 0;
+
+  virtual std::any visitDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* context) = 0;
+
+  virtual std::any visitInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* context) = 0;
+
+  virtual std::any visitUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* context) = 0;
+
+  virtual std::any visitGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* context) = 0;
+
+  virtual std::any visitGraphRef(
+      SparqlAutomaticParser::GraphRefContext* context) = 0;
+
+  virtual std::any visitGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* context) = 0;
+
+  virtual std::any visitQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* context) = 0;
+
+  virtual std::any visitQuadData(
+      SparqlAutomaticParser::QuadDataContext* context) = 0;
+
+  virtual std::any visitQuads(SparqlAutomaticParser::QuadsContext* context) = 0;
+
+  virtual std::any visitQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* context) = 0;
 
   virtual std::any visitTriplesTemplate(
       SparqlAutomaticParser::TriplesTemplateContext* context) = 0;

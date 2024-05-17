@@ -13,6 +13,11 @@
  */
 class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
  public:
+  virtual void enterQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* /*ctx*/) override {}
+  virtual void exitQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* /*ctx*/) override {}
+
   virtual void enterQuery(
       SparqlAutomaticParser::QueryContext* /*ctx*/) override {}
   virtual void exitQuery(
@@ -162,6 +167,115 @@ class SparqlAutomaticBaseListener : public SparqlAutomaticListener {
       SparqlAutomaticParser::ValuesClauseContext* /*ctx*/) override {}
   virtual void exitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* /*ctx*/) override {}
+
+  virtual void enterUpdate(
+      SparqlAutomaticParser::UpdateContext* /*ctx*/) override {}
+  virtual void exitUpdate(
+      SparqlAutomaticParser::UpdateContext* /*ctx*/) override {}
+
+  virtual void enterUpdate1(
+      SparqlAutomaticParser::Update1Context* /*ctx*/) override {}
+  virtual void exitUpdate1(
+      SparqlAutomaticParser::Update1Context* /*ctx*/) override {}
+
+  virtual void enterLoad(SparqlAutomaticParser::LoadContext* /*ctx*/) override {
+  }
+  virtual void exitLoad(SparqlAutomaticParser::LoadContext* /*ctx*/) override {}
+
+  virtual void enterClear(
+      SparqlAutomaticParser::ClearContext* /*ctx*/) override {}
+  virtual void exitClear(
+      SparqlAutomaticParser::ClearContext* /*ctx*/) override {}
+
+  virtual void enterDrop(SparqlAutomaticParser::DropContext* /*ctx*/) override {
+  }
+  virtual void exitDrop(SparqlAutomaticParser::DropContext* /*ctx*/) override {}
+
+  virtual void enterCreate(
+      SparqlAutomaticParser::CreateContext* /*ctx*/) override {}
+  virtual void exitCreate(
+      SparqlAutomaticParser::CreateContext* /*ctx*/) override {}
+
+  virtual void enterAdd(SparqlAutomaticParser::AddContext* /*ctx*/) override {}
+  virtual void exitAdd(SparqlAutomaticParser::AddContext* /*ctx*/) override {}
+
+  virtual void enterMove(SparqlAutomaticParser::MoveContext* /*ctx*/) override {
+  }
+  virtual void exitMove(SparqlAutomaticParser::MoveContext* /*ctx*/) override {}
+
+  virtual void enterCopy(SparqlAutomaticParser::CopyContext* /*ctx*/) override {
+  }
+  virtual void exitCopy(SparqlAutomaticParser::CopyContext* /*ctx*/) override {}
+
+  virtual void enterInsertData(
+      SparqlAutomaticParser::InsertDataContext* /*ctx*/) override {}
+  virtual void exitInsertData(
+      SparqlAutomaticParser::InsertDataContext* /*ctx*/) override {}
+
+  virtual void enterDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* /*ctx*/) override {}
+  virtual void exitDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* /*ctx*/) override {}
+
+  virtual void enterDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* /*ctx*/) override {}
+  virtual void exitDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* /*ctx*/) override {}
+
+  virtual void enterModify(
+      SparqlAutomaticParser::ModifyContext* /*ctx*/) override {}
+  virtual void exitModify(
+      SparqlAutomaticParser::ModifyContext* /*ctx*/) override {}
+
+  virtual void enterDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* /*ctx*/) override {}
+  virtual void exitDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* /*ctx*/) override {}
+
+  virtual void enterInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* /*ctx*/) override {}
+  virtual void exitInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* /*ctx*/) override {}
+
+  virtual void enterUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* /*ctx*/) override {}
+  virtual void exitUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* /*ctx*/) override {}
+
+  virtual void enterGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* /*ctx*/) override {}
+  virtual void exitGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* /*ctx*/) override {}
+
+  virtual void enterGraphRef(
+      SparqlAutomaticParser::GraphRefContext* /*ctx*/) override {}
+  virtual void exitGraphRef(
+      SparqlAutomaticParser::GraphRefContext* /*ctx*/) override {}
+
+  virtual void enterGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* /*ctx*/) override {}
+  virtual void exitGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* /*ctx*/) override {}
+
+  virtual void enterQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* /*ctx*/) override {}
+  virtual void exitQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* /*ctx*/) override {}
+
+  virtual void enterQuadData(
+      SparqlAutomaticParser::QuadDataContext* /*ctx*/) override {}
+  virtual void exitQuadData(
+      SparqlAutomaticParser::QuadDataContext* /*ctx*/) override {}
+
+  virtual void enterQuads(
+      SparqlAutomaticParser::QuadsContext* /*ctx*/) override {}
+  virtual void exitQuads(
+      SparqlAutomaticParser::QuadsContext* /*ctx*/) override {}
+
+  virtual void enterQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* /*ctx*/) override {}
+  virtual void exitQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* /*ctx*/) override {}
 
   virtual void enterTriplesTemplate(
       SparqlAutomaticParser::TriplesTemplateContext* /*ctx*/) override {}

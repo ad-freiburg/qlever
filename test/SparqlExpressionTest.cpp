@@ -806,6 +806,86 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testStrToHashExpressions) {
+  auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
+  auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
+  auto checkGetSHA256Expression = testUnaryExpression<&makeSHA256Expression>;
+  auto checkGetSHA384Expression = testUnaryExpression<&makeSHA384Expression>;
+  auto checkGetSHA512Expression = testUnaryExpression<&makeSHA512Expression>;
+  std::string testStr1 = "";
+  std::string testStr2 = "Friburg23o";
+  std::string testStr3 = "abc";
+  checkGetMD5Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "d41d8cd98f00b204e9800998ecf8427e",
+                          "9d9a73f67e20835e516029541595c381",
+                          "900150983cd24fb0d6963f7d28e17f72"}));
+  checkGetSHA1Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                          "c3a77a6104fa091f590f594b3e2dba2668196d3c",
+                          "a9993e364706816aba3e25717850c26c9cd0d89d"}));
+  checkGetSHA256Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+           "af8d98f09845a700aea36b35e8cc3a35632e38d0f7be9c0ca508e53c578da900",
+           "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015a"
+           "d"}));
+  checkGetSHA384Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U,
+                          "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0c"
+                          "c7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+                          "72810006e3b418ebd179812522cafa486cd6c2a988378fac148a"
+                          "f1a9a098a01ce3373734c23978f7df68bf7e98955c02",
+                          "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b"
+                          "605a43ff5bed8086072ba1e7cc2358baeca134c825a7"}));
+  checkGetSHA512Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d"
+           "0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+           "be4422bfad59ee51e98dc51c540dc9d85333cb786333b152d13b2bebde1bdaa499e"
+           "9d4e1370a5bb2e831f4443b1358f2301fd5214ba80554ea0ff1d185c3b027",
+           "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a219"
+           "2992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"}));
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testToNumericExpression) {
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
+  auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
+
+  checkGetInt(
+      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
+                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1"}),
+      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1)});
+  checkGetDouble(
+      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1"}),
+      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
+          D(1.00)});
+  checkGetInt(idOrLitOrStringVec(
+                  {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+              Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
+  checkGetDouble(
+      idOrLitOrStringVec(
+          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
+  checkGetDouble(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F,
+                                     lit("0.003"), lit("1")},
+                 Ids{U, D(-12.745), D(1.00), D(0.00), D(0.003), D(1.00)});
+  checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
+                                  lit("1"), lit("-33")},
+              Ids{U, U, I(1), I(0), U, I(1), I(-33)});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;

@@ -1421,7 +1421,12 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
   expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
-  expectFails("SHA512(?x)");
+
+  expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
+  expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
+  expectBuiltInCall("SHA256(?x)", matchUnary(&makeSHA256Expression));
+  expectBuiltInCall("SHA384(?x)", matchUnary(&makeSHA384Expression));
+  expectBuiltInCall("SHA512(?x)", matchUnary(&makeSHA512Expression));
 
   expectBuiltInCall("encode_for_uri(?x)",
                     matchUnary(&makeEncodeForUriExpression));
@@ -1534,6 +1539,7 @@ TEST(SparqlParser, FunctionCall) {
   // manually add it when constructing parser inputs.
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
+  auto xsd = absl::StrCat("<", XSD_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
@@ -1555,6 +1561,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
+                     matchUnary(&makeConvertToIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
+                     matchUnary(&makeConvertToIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
+                     matchUnary(&makeConvertToDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeConvertToDoubleExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(
@@ -1609,4 +1623,27 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
+}
+
+TEST(SparqlParser, updateUnsupported) {
+  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
+  auto updateUnsupported =
+      contains("SPARQL 1.1 Update currently not supported by QLever.");
+
+  // Test all the cases because some functionality will be enabled shortly.
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("LOAD <a>", updateUnsupported);
+  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
+  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
+  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
+  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
+  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
+  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
 }

@@ -22,8 +22,10 @@ inline auto VocabId = [](const auto& v) {
 
 inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
+  using namespace ad_utility::triple_component;
   return Id::makeFromLocalVocabIndex(
-      localVocab.wlock()->getIndexAndAddIfNotContained(std::to_string(v)));
+      localVocab.wlock()->getIndexAndAddIfNotContained(
+          LiteralOrIri::literalWithoutQuotes(std::to_string(v))));
 };
 
 inline auto TextRecordId = [](const auto& t) {
