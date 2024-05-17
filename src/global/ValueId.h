@@ -128,7 +128,8 @@ class ValueId {
   // GROUP BY and BIND operations (for performance reaons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
-    AD_FAIL();
+    throw std::system_error{};
+    // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() == *other.getLocalVocabIndex();
@@ -145,7 +146,8 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    AD_FAIL();
+    throw std::system_error{};
+    // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
@@ -186,7 +188,9 @@ class ValueId {
   /// single undefined value correctly, but it is very useful for generic code
   /// like the `visit` member function.
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
-  bool isUndefined() const noexcept { return equalByBits(*this,  makeUndefined()); }
+  bool isUndefined() const noexcept {
+    return equalByBits(*this, makeUndefined());
+  }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point
@@ -391,15 +395,14 @@ class ValueId {
   }
 };
 
-struct IdNoLocalVocab: public ValueId {
-
+struct IdNoLocalVocab : public ValueId {
   explicit(false) IdNoLocalVocab(ValueId id) : ValueId{id} {}
   IdNoLocalVocab() = default;
   bool operator==(const IdNoLocalVocab& other) const {
     return getBits() == other.getBits();
   }
   auto operator<=>(const IdNoLocalVocab& other) const {
-    return getBits()<=> other.getBits();
+    return getBits() <=> other.getBits();
   }
   /// Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
   /// and `ad_utility::HashMap`
