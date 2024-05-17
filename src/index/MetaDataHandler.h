@@ -87,9 +87,9 @@ class MetaDataWrapperDense {
   ConstOrderedIterator ordered_end() const { return end(); }
 
   // ____________________________________________________________
-  void set(Id id, const value_type& value) {
+  void set(IdNoLocalVocab id, const value_type& value) {
     // Assert that the ids are ascending.
-    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
+    AD_CONTRACT_CHECK(_vec.size() == 0 || IdNoLocalVocab(_vec.back().col0Id_) < id);
     _vec.push_back(value);
   }
 

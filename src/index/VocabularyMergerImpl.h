@@ -369,9 +369,9 @@ void sortVocabVector(ItemVec* vecPtr, StringSortComparator comp,
 }
 
 // _____________________________________________________________________
-inline ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+inline ad_utility::HashMap<IdNoLocalVocab, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename) {
-  ad_utility::HashMap<Id, Id> res;
+  ad_utility::HashMap<IdNoLocalVocab, Id> res;
   IdPairMMapVecView vec(mmapFilename);
   for (const auto& [partialId, globalId] : vec) {
     res[partialId] = globalId;

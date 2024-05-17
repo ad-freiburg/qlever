@@ -10,11 +10,11 @@
 
 template <int i0, int i1, int i2>
 struct SortTriple {
-  using T = std::array<Id, 3>;
+  using T = std::array<IdNoLocalVocab, 3>;
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
     auto permute = [](const auto& x) {
-      return std::array{x[i0], x[i1], x[i2]};
+      return T{x[i0], x[i1], x[i2]};
     };
     return std::ranges::lexicographical_compare(permute(a), permute(b),
                                                 &Id::lessByBits);
@@ -25,6 +25,13 @@ struct SortTriple {
 
   // Value that is strictly larger than any input element.
   static T max_value() { return {Id::max(), Id::max(), Id::max()}; }
+};
+
+struct EqualTriple {
+  bool operator()(const auto& a, const auto& b) const {
+    auto id = [](Id x){return IdNoLocalVocab{x};};
+    return std::ranges::equal(a, b, {}, id, id);
+  }
 };
 
 using SortByPSO = SortTriple<1, 0, 2>;

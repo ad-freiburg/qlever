@@ -101,7 +101,7 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) {
+  auto projectionForComparator = []<typename T>(const T& rowOrId) -> IdNoLocalVocab {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
@@ -268,7 +268,7 @@ void IndexImpl::createFromFile(const string& filename) {
   auto& firstSorter = *indexBuilderData.sorter_;
   // For the first permutation, perform a unique.
   auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(firstSorter.getSortedOutput());
+      ad_utility::uniqueBlockView(firstSorter.getSortedOutput(), EqualTriple{});
 
   if (!loadAllPermutations_) {
     // Only two permutations, no patterns, in this case the `firstSorter` is a
@@ -489,7 +489,7 @@ IndexImpl::convertPartialToGlobalIds(
   auto triplesGenerator = data.getRows();
   auto it = triplesGenerator.begin();
   using Buffer = IdTableStatic<3>;
-  using Map = ad_utility::HashMap<Id, Id>;
+  using Map = ad_utility::HashMap<IdNoLocalVocab, Id>;
 
   ad_utility::TaskQueue<true> lookupQueue(30, 10,
                                           "looking up local to global IDs");
@@ -1423,10 +1423,10 @@ auto makeNumDistinctIdsCounter =
     [](size_t& numDistinctIds,
        ad_utility::InvocableWithExactReturnType<bool, Id> auto
            isQleverInternalId) {
-      return [lastId = std::optional<Id>{}, &numDistinctIds,
+      return [lastId = std::optional<IdNoLocalVocab>{}, &numDistinctIds,
               isInternalId =
                   std::move(isQleverInternalId)](const auto& triple) mutable {
-        const auto& id = triple[idx];
+        const IdNoLocalVocab id = triple[idx];
         if (id != lastId && !std::ranges::any_of(triple, isInternalId)) {
           numDistinctIds++;
           lastId = id;

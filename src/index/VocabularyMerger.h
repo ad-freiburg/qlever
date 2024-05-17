@@ -56,15 +56,15 @@ struct VocabularyMetaData {
       end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
     }
 
-    Id begin() const { return begin_; }
-    Id end() const { return end_; }
+    IdNoLocalVocab begin() const { return begin_; }
+    IdNoLocalVocab end() const { return end_; }
 
     // Return true iff the `id` belongs to this range.
-    bool contains(Id id) const { return begin_ <= id && id < end_; }
+    bool contains(IdNoLocalVocab id) const { return begin_ <= id && id < end_; }
 
    private:
-    Id begin_ = ID_NO_VALUE;
-    Id end_ = ID_NO_VALUE;
+    IdNoLocalVocab begin_ = ID_NO_VALUE;
+    IdNoLocalVocab end_ = ID_NO_VALUE;
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
@@ -183,7 +183,7 @@ class VocabularyMerger {
 };
 
 // ____________________________________________________________________________
-ad_utility::HashMap<Id, Id> IdMapFromPartialIdMapFile(
+ad_utility::HashMap<IdNoLocalVocab, Id> IdMapFromPartialIdMapFile(
     const string& mmapFilename);
 
 /**

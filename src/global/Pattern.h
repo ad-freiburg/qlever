@@ -34,7 +34,7 @@ static const PatternID NO_PATTERN = std::numeric_limits<PatternID>::max();
  *        while writing a query).
  */
 struct Pattern {
-  using value_type = Id;
+  using value_type = IdNoLocalVocab;
   using ref = value_type&;
   using const_ref = const value_type&;
 

@@ -157,6 +157,12 @@ class ValueId {
     return a._bits < b._bits;
   }
 
+  // Compare only the underlying bits. This typically only works as expected
+  // if there are no local vocab entries.
+  static constexpr bool equalByBits(const ValueId a, const ValueId b) {
+    return a._bits == b._bits;
+  }
+
   /// Get the underlying bit representation, e.g. for compression etc.
   [[nodiscard]] constexpr T getBits() const noexcept { return _bits; }
   /// Construct from the underlying bit representation. `bits` must have been
@@ -178,7 +184,7 @@ class ValueId {
   /// single undefined value correctly, but it is very useful for generic code
   /// like the `visit` member function.
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
-  bool isUndefined() const noexcept { return *this == makeUndefined(); }
+  bool isUndefined() const noexcept { return equalByBits(*this,  makeUndefined()); }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point
@@ -380,6 +386,24 @@ class ValueId {
       throw IndexTooLargeException(id);
     }
     return addDatatypeBits(id, type);
+  }
+};
+
+struct IdNoLocalVocab: public ValueId {
+
+  explicit(false) IdNoLocalVocab(ValueId id) : ValueId{id} {}
+  IdNoLocalVocab() = default;
+  bool operator==(const IdNoLocalVocab& other) const {
+    return getBits() == other.getBits();
+  }
+  auto operator<=>(const IdNoLocalVocab& other) const {
+    return getBits()<=> other.getBits();
+  }
+  /// Enable hashing in abseil for `ValueId` (required by `ad_utility::HashSet`
+  /// and `ad_utility::HashMap`
+  template <typename H>
+  friend H AbslHashValue(H h, const IdNoLocalVocab& id) {
+    return H::combine(std::move(h), id.getBits());
   }
 };
 

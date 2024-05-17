@@ -87,7 +87,7 @@ template <typename SortedBlockView,
           typename ValueType = std::ranges::range_value_t<
               std::ranges::range_value_t<SortedBlockView>>>
 cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
-    SortedBlockView view) {
+    SortedBlockView view, auto comparator = std::ranges::equal_to{}) {
   size_t numInputs = 0;
   size_t numUnique = 0;
   std::optional<ValueType> lastValueFromPreviousBlock = std::nullopt;
@@ -103,7 +103,7 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
                                     const auto& el) { return el != p; })
                    : block.begin();
     lastValueFromPreviousBlock = *(block.end() - 1);
-    auto it = std::unique(beg, block.end());
+    auto it = std::unique(beg, block.end(), comparator);
     block.erase(it, block.end());
     block.erase(block.begin(), beg);
     numUnique += block.size();
