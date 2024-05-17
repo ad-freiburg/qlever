@@ -1,6 +1,10 @@
 # Usage:
 # - Install pre-commit: `pip install pre-commit` (once).ci:
 # - In the main directory of QLever run `pre-commit install`
+# - Each git commit will now automatically be formatted. Note that
+# - commits will fail if the hook reformats your files, so you
+# - have to run git commit twice in order to first format and then
+# - actually commit.
 # To use your local clang-format-16:
 # - comment out the hook from https://github.com/pre-commit/mirrors-clang-format
 # - comment in the local hook
