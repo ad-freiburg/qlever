@@ -128,7 +128,9 @@ class ValueId {
   // GROUP BY and BIND operations (for performance reaons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
-    throw std::system_error{};
+    if (!std::is_constant_evaluated()) {
+      throw std::system_error{};
+    }
     // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
@@ -146,7 +148,9 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    throw std::system_error{};
+    if (!std::is_constant_evaluated()) {
+      throw std::system_error{};
+    }
     // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
