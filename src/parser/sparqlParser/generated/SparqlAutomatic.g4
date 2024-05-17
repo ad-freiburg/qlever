@@ -38,11 +38,14 @@
 
 grammar SparqlAutomatic;
 
-query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
+// query and update are disjoint in the grammar;
+// add a common parent for easier parsing
+queryOrUpdate: query | update EOF
     ;
 
-//updateUnit : update;
+query
+    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause
+    ;
 
 prologue
     : (baseDecl | prefixDecl)*
@@ -146,7 +149,51 @@ textLimitClause
 
 valuesClause : ( VALUES dataBlock )?;
 
- // omitted rules 29 - 50 which are there for unsupported query types ( not select)
+update: prologue (update1 (';' update)? )? ;
+
+update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
+
+load: LOAD SILENT? iri (INTO graphRef)? ;
+
+clear: CLEAR SILENT? graphRefAll ;
+
+drop: DROP SILENT? graphRefAll ;
+
+create: CREATE SILENT? graphRef ;
+
+add: ADD SILENT? graphOrDefault TO graphOrDefault ;
+
+move: MOVE SILENT? graphOrDefault TO graphOrDefault ;
+
+copy: COPY SILENT? graphOrDefault TO graphOrDefault ;
+
+insertData: INSERT DATA quadData ;
+
+deleteData: DELETE DATA quadData ;
+
+deleteWhere: DELETE WHERE quadPattern ;
+
+modify: (WITH iri)? ( deleteClause insertClause? | insertClause ) usingClause* WHERE groupGraphPattern ;
+
+deleteClause: DELETE quadPattern ;
+
+insertClause: INSERT quadPattern ;
+
+usingClause: USING (IRI | NAMED iri) ;
+
+graphOrDefault: DEFAULT | GRAPH iri ;
+
+graphRef: GRAPH iri ;
+
+graphRefAll: graphRef | DEFAULT | NAMED | ALL ;
+
+quadPattern: '{' quads '}' ;
+
+quadData: '{' quads '}' ;
+
+quads: triplesTemplate? ( quadsNotTriples '.'? triplesTemplate? )* ;
+
+quadsNotTriples: GRAPH varOrIri '{' triplesTemplate? '}' ;
 
 triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
 
@@ -632,10 +679,12 @@ TEXTLIMIT: T E X T L I M I T;
 VALUES : V A L U E S;
 LOAD : L O A D;
 SILENT : S I L E N T;
+INTO: I N T O;
 CLEAR : C L E A R;
 DROP : D R O P;
 CREATE: C R E A T E;
 ADD: A D D;
+TO: T O;
 DATA: D A T A;
 MOVE: M O V E;
 COPY: C O P Y;

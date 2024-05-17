@@ -1619,3 +1619,26 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }
+
+TEST(SparqlParser, updateUnsupported) {
+  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
+  auto updateUnsupported =
+      contains("SPARQL 1.1 Update currently not supported by QLever.");
+
+  // Test all the cases because some functionality will be enabled shortly.
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("LOAD <a>", updateUnsupported);
+  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
+  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
+  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
+  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
+  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
+  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
+}

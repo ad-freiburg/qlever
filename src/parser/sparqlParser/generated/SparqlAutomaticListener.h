@@ -12,6 +12,11 @@
  */
 class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
  public:
+  virtual void enterQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
+  virtual void exitQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* ctx) = 0;
+
   virtual void enterQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
   virtual void exitQuery(SparqlAutomaticParser::QueryContext* ctx) = 0;
 
@@ -149,6 +154,95 @@ class SparqlAutomaticListener : public antlr4::tree::ParseTreeListener {
       SparqlAutomaticParser::ValuesClauseContext* ctx) = 0;
   virtual void exitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) = 0;
+
+  virtual void enterUpdate(SparqlAutomaticParser::UpdateContext* ctx) = 0;
+  virtual void exitUpdate(SparqlAutomaticParser::UpdateContext* ctx) = 0;
+
+  virtual void enterUpdate1(SparqlAutomaticParser::Update1Context* ctx) = 0;
+  virtual void exitUpdate1(SparqlAutomaticParser::Update1Context* ctx) = 0;
+
+  virtual void enterLoad(SparqlAutomaticParser::LoadContext* ctx) = 0;
+  virtual void exitLoad(SparqlAutomaticParser::LoadContext* ctx) = 0;
+
+  virtual void enterClear(SparqlAutomaticParser::ClearContext* ctx) = 0;
+  virtual void exitClear(SparqlAutomaticParser::ClearContext* ctx) = 0;
+
+  virtual void enterDrop(SparqlAutomaticParser::DropContext* ctx) = 0;
+  virtual void exitDrop(SparqlAutomaticParser::DropContext* ctx) = 0;
+
+  virtual void enterCreate(SparqlAutomaticParser::CreateContext* ctx) = 0;
+  virtual void exitCreate(SparqlAutomaticParser::CreateContext* ctx) = 0;
+
+  virtual void enterAdd(SparqlAutomaticParser::AddContext* ctx) = 0;
+  virtual void exitAdd(SparqlAutomaticParser::AddContext* ctx) = 0;
+
+  virtual void enterMove(SparqlAutomaticParser::MoveContext* ctx) = 0;
+  virtual void exitMove(SparqlAutomaticParser::MoveContext* ctx) = 0;
+
+  virtual void enterCopy(SparqlAutomaticParser::CopyContext* ctx) = 0;
+  virtual void exitCopy(SparqlAutomaticParser::CopyContext* ctx) = 0;
+
+  virtual void enterInsertData(
+      SparqlAutomaticParser::InsertDataContext* ctx) = 0;
+  virtual void exitInsertData(
+      SparqlAutomaticParser::InsertDataContext* ctx) = 0;
+
+  virtual void enterDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* ctx) = 0;
+  virtual void exitDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* ctx) = 0;
+
+  virtual void enterDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* ctx) = 0;
+  virtual void exitDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* ctx) = 0;
+
+  virtual void enterModify(SparqlAutomaticParser::ModifyContext* ctx) = 0;
+  virtual void exitModify(SparqlAutomaticParser::ModifyContext* ctx) = 0;
+
+  virtual void enterDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* ctx) = 0;
+  virtual void exitDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* ctx) = 0;
+
+  virtual void enterInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* ctx) = 0;
+  virtual void exitInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* ctx) = 0;
+
+  virtual void enterUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* ctx) = 0;
+  virtual void exitUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* ctx) = 0;
+
+  virtual void enterGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* ctx) = 0;
+  virtual void exitGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* ctx) = 0;
+
+  virtual void enterGraphRef(SparqlAutomaticParser::GraphRefContext* ctx) = 0;
+  virtual void exitGraphRef(SparqlAutomaticParser::GraphRefContext* ctx) = 0;
+
+  virtual void enterGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* ctx) = 0;
+  virtual void exitGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* ctx) = 0;
+
+  virtual void enterQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* ctx) = 0;
+  virtual void exitQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* ctx) = 0;
+
+  virtual void enterQuadData(SparqlAutomaticParser::QuadDataContext* ctx) = 0;
+  virtual void exitQuadData(SparqlAutomaticParser::QuadDataContext* ctx) = 0;
+
+  virtual void enterQuads(SparqlAutomaticParser::QuadsContext* ctx) = 0;
+  virtual void exitQuads(SparqlAutomaticParser::QuadsContext* ctx) = 0;
+
+  virtual void enterQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* ctx) = 0;
+  virtual void exitQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* ctx) = 0;
 
   virtual void enterTriplesTemplate(
       SparqlAutomaticParser::TriplesTemplateContext* ctx) = 0;
