@@ -78,6 +78,12 @@ SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 
+SparqlExpression::Ptr makeMD5Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA1Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA256Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA384Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA512Expression(SparqlExpression::Ptr child);
+
 SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
