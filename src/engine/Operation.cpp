@@ -159,9 +159,8 @@ std::shared_ptr<const Result> Operation::getResult(
         // runtime if neither a LIMIT nor an OFFSET were specified.
         result.applyLimitOffset(_limit);
         runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else if (result.isDataEvaluated()) {
-        AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                          _limit.actualSize(result.idTable().numRows()));
+      } else {
+        result.enforceLimitOffset(_limit);
       }
       return result;
     };

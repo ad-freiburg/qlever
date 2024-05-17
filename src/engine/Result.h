@@ -23,16 +23,15 @@
 // is always a table and contained in the member `idTable()`.
 class Result {
  private:
-  using TableType =
-      std::variant<IdTable, ad_utility::CacheableGenerator<IdTable>,
-                   cppcoro::generator<const IdTable>>;
+  using Data = std::variant<IdTable, ad_utility::CacheableGenerator<IdTable>,
+                            cppcoro::generator<const IdTable>>;
   // The actual entries. Since generators need to be modified
   // in order to be consumed, this needs to be mutable.
-  mutable TableType _idTable;
+  mutable Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  std::vector<ColumnIndex> _sortedBy;
+  std::vector<ColumnIndex> sortedBy_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
@@ -74,6 +73,10 @@ class Result {
   using DatatypeCountsPerColumn = std::vector<
       std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
   std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn_;
+  Result(cppcoro::generator<const IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
+
+  void validateIdTable(const IdTable& idTable) const;
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -85,11 +88,14 @@ class Result {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-  // TODO<RobinTF> add better overloads than using TableType
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
@@ -109,7 +115,7 @@ class Result {
   cppcoro::generator<const IdTable> idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
+  const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -168,6 +174,8 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(const LimitOffsetClause& limitOffset);
 
+  void enforceLimitOffset(const LimitOffsetClause& limitOffset);
+
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function
   // `O(num-entries-in-table)` and then cached for subsequent usages.
@@ -175,7 +183,7 @@ class Result {
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no
-  // undefined values in the `_idTable` of this result. Return `true` iff the
+  // undefined values in the `data_` of this result. Return `true` iff the
   // check is succesful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
 

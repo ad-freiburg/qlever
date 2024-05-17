@@ -36,38 +36,68 @@ auto Result::getMergedLocalVocab(const Result& resultTable1,
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
-               SharedLocalVocabWrapper localVocab)
-    : _idTable{std::move(idTable)},
-      _sortedBy{std::move(sortedBy)},
-      localVocab_{std::move(localVocab.localVocab_)} {
-  AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  // TODO<RobinTF> move checks into generators if possible, check all usages of
-  // isDataEvaluated
-  AD_CONTRACT_CHECK(!isDataEvaluated() ||
-                    std::ranges::all_of(_sortedBy, [this](size_t numCols) {
-                      return numCols < this->idTable().numColumns();
-                    }));
+void Result::validateIdTable(const IdTable& idTable) const {
+  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy_, [&idTable](size_t numCols) {
+    return numCols < idTable.numColumns();
+  }));
 
   [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1,
                                                           const auto& row2) {
-    for (size_t col : this->sortedBy()) {
+    for (size_t col : sortedBy_) {
       if (row1[col] != row2[col]) {
         return row1[col] < row2[col];
       }
     }
     return false;
   };
-  AD_EXPENSIVE_CHECK(
-      !isDataEvaluated() ||
-      std::ranges::is_sorted(this->idTable(), compareRowsByJoinColumns));
+  AD_EXPENSIVE_CHECK(std::ranges::is_sorted(idTable, compareRowsByJoinColumns));
 }
 
 // _____________________________________________________________________________
-Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : data_{std::move(idTable)},
+      sortedBy_{std::move(sortedBy)},
+      localVocab_{std::move(localVocab.localVocab_)} {
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
+  validateIdTable(std::get<IdTable>(data_));
+}
+
+// _____________________________________________________________________________
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
-    : Result(std::move(idTable), std::move(sortedBy),
-             SharedLocalVocabWrapper{std::move(localVocab)}) {}
+    : Result{std::move(idTable), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : data_{ad_utility::CacheableGenerator{
+          [this, idTables = std::move(
+                     idTables)]() mutable -> cppcoro::generator<IdTable> {
+            for (IdTable& idTable : idTables) {
+              validateIdTable(idTable);
+              co_yield std::move(idTable);
+            }
+          }()}},
+      sortedBy_{std::move(sortedBy)},
+      localVocab_{std::move(localVocab.localVocab_)} {
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
+}
+
+// _____________________________________________________________________________
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
+    : Result{std::move(idTables), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
+Result::Result(cppcoro::generator<const IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
+    : data_{std::move(idTables)},
+      sortedBy_{std::move(sortedBy)},
+      localVocab_{std::move(localVocab)} {}
 
 // _____________________________________________________________________________
 void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
@@ -85,20 +115,17 @@ void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   idTable.shrinkToFit();
 }
 
-// TODO<RobinTF> add unit tests for this
 // _____________________________________________________________________________
 void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
-  // TODO<RobinTF> make limit its own dedicated operation to avoid this
-  // modification here
   AD_CONTRACT_CHECK(
-      !std::holds_alternative<cppcoro::generator<const IdTable>>(_idTable));
+      !std::holds_alternative<cppcoro::generator<const IdTable>>(data_));
   using Gen = ad_utility::CacheableGenerator<IdTable>;
-  if (std::holds_alternative<IdTable>(_idTable)) {
-    modifyIdTable(std::get<IdTable>(_idTable), limitOffset);
-  } else if (std::holds_alternative<Gen>(_idTable)) {
+  if (std::holds_alternative<IdTable>(data_)) {
+    modifyIdTable(std::get<IdTable>(data_), limitOffset);
+  } else if (std::holds_alternative<Gen>(data_)) {
     auto generator =
         [](cppcoro::generator<IdTable> original,
            LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
@@ -120,8 +147,32 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
           break;
         }
       }
-    }(std::move(std::get<Gen>(_idTable)).extractGenerator(), limitOffset);
-    _idTable.emplace<Gen>(std::move(generator));
+    }(std::move(std::get<Gen>(data_)).extractGenerator(), limitOffset);
+    data_.emplace<Gen>(std::move(generator));
+  } else {
+    AD_FAIL();
+  }
+}
+
+// _____________________________________________________________________________
+void Result::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
+  AD_CONTRACT_CHECK(
+      !std::holds_alternative<cppcoro::generator<const IdTable>>(data_));
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
+  if (std::holds_alternative<IdTable>(data_)) {
+    AD_CONTRACT_CHECK(idTable().numRows() ==
+                      limitOffset.actualSize(idTable().numRows()));
+  } else if (std::holds_alternative<Gen>(data_)) {
+    auto generator =
+        [](cppcoro::generator<IdTable> original,
+           LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
+      for (auto&& idTable : original) {
+        AD_CONTRACT_CHECK(idTable.numRows() ==
+                          limitOffset.actualSize(idTable.numRows()));
+        co_yield std::move(idTable);
+      }
+    }(std::move(std::get<Gen>(data_)).extractGenerator(), limitOffset);
+    data_.emplace<Gen>(std::move(generator));
   } else {
     AD_FAIL();
   }
@@ -133,7 +184,7 @@ auto Result::getOrComputeDatatypeCountsPerColumn()
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
-  auto& idTable = std::get<IdTable>(_idTable);
+  auto& idTable = std::get<IdTable>(data_);
   auto& types = datatypeCountsPerColumn_.emplace();
   types.resize(idTable.numColumns());
   for (size_t i = 0; i < idTable.numColumns(); ++i) {
@@ -162,7 +213,7 @@ bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
   AD_CONTRACT_CHECK(isDataEvaluated());
-  return std::get<IdTable>(_idTable);
+  return std::get<IdTable>(data_);
 }
 
 // _____________________________________________________________________________
@@ -179,12 +230,12 @@ cppcoro::generator<const IdTable> Result::idTables() const {
           AD_FAIL();
         }
       },
-      _idTable);
+      data_);
 }
 
 // _____________________________________________________________________________
 bool Result::isDataEvaluated() const {
-  return std::holds_alternative<IdTable>(_idTable);
+  return std::holds_alternative<IdTable>(data_);
 }
 
 // _____________________________________________________________________________
@@ -208,9 +259,9 @@ ad_utility::MemorySize Result::getCurrentSize() const {
     using Gen = ad_utility::CacheableGenerator<IdTable>;
     // This should only ever get called on the "wrapped" generator stored in the
     // cache.
-    AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+    AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
     ad_utility::MemorySize totalMemory = 0_B;
-    std::get<Gen>(_idTable).forEachCachedValue(
+    std::get<Gen>(data_).forEachCachedValue(
         [&totalMemory, &calculateSize](const IdTable& idTable) {
           totalMemory += calculateSize(idTable);
         });
@@ -223,8 +274,8 @@ void Result::setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
   using Gen = ad_utility::CacheableGenerator<IdTable>;
   // This should only ever get called on the "wrapped" generator stored in the
   // cache.
-  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
-  std::get<Gen>(_idTable).setOnSizeChanged(std::move(onSizeChanged));
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
+  std::get<Gen>(data_).setOnSizeChanged(std::move(onSizeChanged));
 }
 
 // _____________________________________________________________________________
@@ -233,18 +284,17 @@ void Result::setOnGeneratorFinished(
   using Gen = ad_utility::CacheableGenerator<IdTable>;
   // This should only ever get called on the "wrapped" generator stored in the
   // cache.
-  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
-  std::get<Gen>(_idTable).setOnGeneratorFinished(
-      std::move(onGeneratorFinished));
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
+  std::get<Gen>(data_).setOnGeneratorFinished(std::move(onGeneratorFinished));
 }
 
 Result Result::aggregateTable() const {
   using Gen = ad_utility::CacheableGenerator<IdTable>;
-  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(_idTable));
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
   size_t totalRows = 0;
   size_t numCols = 0;
   std::optional<IdTable::Allocator> allocator;
-  std::get<Gen>(_idTable).forEachCachedValue(
+  std::get<Gen>(data_).forEachCachedValue(
       [&totalRows, &numCols, &allocator](const IdTable& table) {
         totalRows += table.numRows();
         if (numCols == 0) {
@@ -257,10 +307,10 @@ Result Result::aggregateTable() const {
   IdTable idTable{
       numCols, std::move(allocator).value_or(makeAllocatorWithLimit<Id>(0_B))};
   idTable.reserve(totalRows);
-  std::get<Gen>(_idTable).forEachCachedValue([&idTable](const IdTable& table) {
+  std::get<Gen>(data_).forEachCachedValue([&idTable](const IdTable& table) {
     idTable.insertAtEnd(table.begin(), table.end());
   });
-  return Result{std::move(idTable), _sortedBy,
+  return Result{std::move(idTable), sortedBy_,
                 SharedLocalVocabWrapper{localVocab_}};
 }
 
@@ -297,22 +347,21 @@ Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
     }
   };
   return Result{generator(std::move(original), std::move(fallback)),
-                original->_sortedBy,
-                SharedLocalVocabWrapper{original->localVocab_}};
+                original->sortedBy_, original->localVocab_};
 }
 
 // _____________________________________________________________________________
 Result Result::createResultAsMasterConsumer(
     std::shared_ptr<const Result> original) {
   using Gen = ad_utility::CacheableGenerator<IdTable>;
-  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(original->_idTable));
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(original->data_));
   auto generator = [](auto original) -> cppcoro::generator<const IdTable> {
     using ad_utility::IteratorWrapper;
-    auto& generator = std::get<Gen>(original->_idTable);
+    auto& generator = std::get<Gen>(original->data_);
     for (const IdTable& idTable : IteratorWrapper{generator, true}) {
       co_yield idTable;
     }
   };
-  return Result{generator(std::move(original)), original->_sortedBy,
-                SharedLocalVocabWrapper{original->localVocab_}};
+  return Result{generator(std::move(original)), original->sortedBy_,
+                original->localVocab_};
 }
