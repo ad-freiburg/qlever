@@ -399,9 +399,10 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+namespace {
 // HASH
 template <auto HashFunc>
-[[maybe_unused]] static constexpr auto hash =
+[[maybe_unused]] inline constexpr auto hash =
     [](std::optional<std::string> input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
@@ -411,6 +412,7 @@ template <auto HashFunc>
     return toLiteral(std::move(hexStr));
   }
 };
+}
 
 using MD5Expression =
     StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
