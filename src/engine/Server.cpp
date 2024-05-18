@@ -696,6 +696,11 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
+    if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
+      nlohmann::basic_json resp;
+      co_return co_await sendJson(std::move(resp), responseStatus);
+    }
+
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {

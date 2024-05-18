@@ -18,6 +18,7 @@
 #include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
 #include "parser/TripleComponent.h"
+#include "parser/UpdateClause.h"
 #include "parser/data/GroupKey.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/OrderKey.h"
@@ -65,6 +66,8 @@ class ParsedQuery {
 
   using ConstructClause = parsedQuery::ConstructClause;
 
+  using UpdateClause = parsedQuery::UpdateClause;
+
   ParsedQuery() = default;
 
   GraphPattern _rootGraphPattern;
@@ -80,7 +83,8 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+  std::variant<SelectClause, ConstructClause, UpdateClause> _clause{
+      SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -88,6 +92,10 @@ class ParsedQuery {
 
   [[nodiscard]] bool hasConstructClause() const {
     return std::holds_alternative<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] bool hasUpdateClause() const {
+    return std::holds_alternative<UpdateClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {
@@ -98,12 +106,20 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  [[nodiscard]] decltype(auto) updateClause() const {
+    return std::get<UpdateClause>(_clause);
+  }
+
   [[nodiscard]] decltype(auto) selectClause() {
     return std::get<SelectClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) constructClause() {
     return std::get<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) updateClause() {
+    return std::get<UpdateClause>(_clause);
   }
 
   // Add a variable, that was found in the query body.
