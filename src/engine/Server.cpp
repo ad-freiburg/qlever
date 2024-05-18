@@ -14,6 +14,7 @@
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
 #include "util/AsioHelpers.h"
+#include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
@@ -582,6 +583,124 @@ Awaitable<void> Server::sendStreamableResponse(
   }
 }
 
+// _____________________________________________________________________________
+// TODO: move somewhere else?
+void Server::executeUpdateQuery(const QueryExecutionTree& qet,
+                                parsedQuery::UpdateClause update,
+                                SharedCancellationHandle cancellationHandle) {
+  // TODO: replace calls with the usual `cancellationHandle->throwIfCancelled()`
+  // once this is properly optimised and we actually do stuff here
+  // For now an error should be shown even on timeout to indicate the Update
+  // is not support even though something seems to happen.
+  auto checkWatchdog = [&cancellationHandle]() {
+    if (cancellationHandle->isCancelled()) {
+      throw NotSupportedException{
+          "SPARQL 1.1 Update currently not supported by QLever."};
+    }
+  };
+
+  ad_utility::Timer total{ad_utility::Timer::Started};
+  ad_utility::Timer step{ad_utility::Timer::Started};
+  LOG(INFO) << "Executing UPDATE" << std::endl;
+
+  std::shared_ptr<const ResultTable> res = qet.getResult();
+  LOG(INFO) << "Executing query body took " << step.msecs() << std::endl;
+  step.start();
+
+  auto& vocab = qet.getQec()->getIndex().getVocab();
+  auto localVocab = LocalVocab();
+  using IdOrVariable = std::variant<Id, Variable>;
+
+  auto transformSparqlTripleComponent =
+      [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
+    if (component.isVariable()) {
+      return std::move(component.getVariable());
+    } else {
+      return std::move(component).toValueId(vocab, localVocab);
+    }
+  };
+  auto transformSparqlTripleSimple =
+      [&transformSparqlTripleComponent](
+          SparqlTripleSimple triple) -> std::array<IdOrVariable, 3> {
+    return {transformSparqlTripleComponent(std::move(triple.s_)),
+            transformSparqlTripleComponent(std::move(triple.p_)),
+            transformSparqlTripleComponent(std::move(triple.o_))};
+  };
+  std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
+      ad_utility::transform(std::move(update.toInsert_),
+                            transformSparqlTripleSimple);
+  std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
+      ad_utility::transform(std::move(update.toDelete_),
+                            transformSparqlTripleSimple);
+  LOG(INFO) << "Preparing template took " << step.msecs() << std::endl;
+  step.start();
+
+  auto resolveVariable = [](const ConstructQueryExportContext& context,
+                            IdOrVariable idOrVar) -> std::optional<Id> {
+    if (std::holds_alternative<Variable>(idOrVar)) {
+      auto var = std::get<Variable>(std::move(idOrVar));
+      if (!context._variableColumns.contains(var)) {
+        return std::nullopt;
+      } else {
+        return context._res.idTable().operator()(
+            context._row, context._variableColumns.at(var).columnIndex_);
+      }
+    } else if (std::holds_alternative<Id>(idOrVar)) {
+      return std::get<Id>(idOrVar);
+    } else {
+      AD_FAIL();
+    }
+  };
+
+  std::vector<std::array<Id, 3>> toInsert;
+  toInsert.reserve(res->size() * toInsertTemplates.size());
+  std::vector<std::array<Id, 3>> toDelete;
+  toDelete.reserve(res->size() * toDeleteTemplates.size());
+  // Result size is size(query result) x num template rows
+  // TODO: ideas only process template rows with variables here, do ones with
+  // only constants before
+  // TODO: use ExportQueryExecutionTrees::getRowIndices as iterator
+  for (size_t i : std::views::iota((size_t)0, res->idTable().size())) {
+    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
+                                        qet.getQec()->getIndex()};
+    for (const auto& [s, p, o] : toInsertTemplates) {
+      auto subject = resolveVariable(context, s);
+      auto predicate = resolveVariable(context, p);
+      auto object = resolveVariable(context, o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toInsert.push_back({subject.value(), predicate.value(), object.value()});
+      checkWatchdog();
+    }
+
+    for (const auto& [s, p, o] : toDeleteTemplates) {
+      auto subject = resolveVariable(context, s);
+      auto predicate = resolveVariable(context, p);
+      auto object = resolveVariable(context, o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toDelete.push_back({subject.value(), predicate.value(), object.value()});
+      checkWatchdog();
+    }
+  }
+
+  LOG(INFO) << "Inserting " << toInsert.size() << " triples." << std::endl;
+  LOG(INFO) << "Deleting " << toDelete.size() << " triples." << std::endl;
+  LOG(INFO) << "Calculating update query triples took " << step.msecs()
+            << std::endl;
+  step.start();
+  LOG(INFO) << "Locating triples took " << step.msecs() << std::endl;
+  LOG(INFO) << "Update finished in " << total.msecs() << std::endl;
+  throw NotSupportedException{
+      "SPARQL 1.1 Update currently not supported by QLever."};
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -697,6 +816,10 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
     if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
+      shared_ptr<const ResultTable> resultTable = qet.getResult();
+      Server::executeUpdateQuery(
+          qet, plannedQuery.value().parsedQuery_.updateClause(),
+          std::move(cancellationHandle));
       nlohmann::basic_json resp;
       co_return co_await sendJson(std::move(resp), responseStatus);
     }

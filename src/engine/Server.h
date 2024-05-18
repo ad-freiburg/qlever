@@ -233,4 +233,8 @@ class Server {
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
       const QueryExecutionTree& qet,
       SharedCancellationHandle cancellationHandle) const;
+
+  void executeUpdateQuery(const QueryExecutionTree& qet,
+                          parsedQuery::UpdateClause update,
+                          SharedCancellationHandle cancellationHandle);
 };
