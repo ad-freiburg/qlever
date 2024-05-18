@@ -27,13 +27,8 @@ class CacheableGenerator {
 
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
- public:
-  class Iterator;
-
- private:
   class ComputationStorage {
     friend CacheableGenerator;
-    friend Iterator;
     mutable std::shared_mutex mutex_;
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
@@ -119,12 +114,15 @@ class CacheableGenerator {
       return cachedValues_.at(index).value();
     }
 
+    // Needs to be public in order to compile with gcc 11 & 12
+   public:
     bool isDone(size_t index) noexcept {
       std::shared_lock lock{mutex_};
       return index == cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
 
+   private:
     void clearMaster() {
       std::unique_lock lock{mutex_};
       AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::MASTER_DONE);
