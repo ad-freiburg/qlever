@@ -27,8 +27,10 @@ class CacheableGenerator {
 
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
+ public:
   class Iterator;
 
+ private:
   class ComputationStorage {
     friend CacheableGenerator;
     friend Iterator;
