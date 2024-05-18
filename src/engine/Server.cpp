@@ -645,7 +645,7 @@ boost::asio::awaitable<void> Server::processQuery(
     } else if (containsParam("action", "binary_export")) {
       mediaType = MediaType::octetStream;
     }
-    std::optional<size_t> maxSend =
+    std::optional<uint64_t> maxSend =
         params.contains("send") ? std::optional{std::stoul(params.at("send"))}
                                 : std::nullopt;
     // Limit JSON requests by default
@@ -827,7 +827,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
     SharedCancellationHandle handle, TimeLimit timeLimit,
-    std::optional<size_t> maxSend) {
+    std::optional<uint64_t> maxSend) {
   auto handleCopy = handle;
 
   // The usage of an `optional` here is required because of a limitation in
