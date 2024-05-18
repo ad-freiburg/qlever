@@ -5,6 +5,7 @@
 #ifndef REUSABLEGENERATOR_H
 #define REUSABLEGENERATOR_H
 
+#include <chrono>
 #include <optional>
 #include <shared_mutex>
 #include <vector>
@@ -38,6 +39,7 @@ class CacheableGenerator {
     // callback if we actually can shrink
     std::function<bool(bool)> onSizeChanged_{};
     std::function<void(bool)> onGeneratorFinished_{};
+    std::function<void(std::chrono::milliseconds)> onNextChunkComputed_{};
 
    public:
     explicit ComputationStorage(cppcoro::generator<T> generator)
@@ -75,12 +77,18 @@ class CacheableGenerator {
           return;
         }
       }
-      // TODO<RobinTF> track processing time to update stats.
+      auto start = std::chrono::steady_clock::now();
       if (generatorIterator_.has_value()) {
         AD_CONTRACT_CHECK(generatorIterator_.value() != generator_.end());
         ++generatorIterator_.value();
       } else {
         generatorIterator_ = generator_.begin();
+      }
+      auto stop = std::chrono::steady_clock::now();
+      if (onNextChunkComputed_) {
+        onNextChunkComputed_(
+            std::chrono::duration_cast<std::chrono::milliseconds>(stop -
+                                                                  start));
       }
       if (generatorIterator_.value() != generator_.end()) {
         cachedValues_.emplace_back(std::move(*generatorIterator_.value()));
@@ -128,6 +136,12 @@ class CacheableGenerator {
     void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
       std::lock_guard lock{mutex_};
       onGeneratorFinished_ = std::move(onGeneratorFinished);
+    }
+
+    void setOnNextChunkComputed(
+        std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
+      std::lock_guard lock{mutex_};
+      onNextChunkComputed_ = std::move(onNextChunkComputed);
     }
 
     void forEachCachedValue(
@@ -251,6 +265,11 @@ class CacheableGenerator {
 
   void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
     computationStorage_->setOnGeneratorFinished(std::move(onGeneratorFinished));
+  }
+
+  void setOnNextChunkComputed(
+      std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
+    computationStorage_->setOnNextChunkComputed(std::move(onNextChunkComputed));
   }
 };
 };  // namespace ad_utility

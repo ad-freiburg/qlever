@@ -41,6 +41,7 @@ class CacheValue {
       // Clear listeners
       const_cast<Result&>(*_resultTable).setOnSizeChanged({});
       const_cast<Result&>(*_resultTable).setOnGeneratorFinished({});
+      const_cast<Result&>(*_resultTable).setOnNextChunkComputed({});
     }
   }
 

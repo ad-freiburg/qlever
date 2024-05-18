@@ -147,18 +147,26 @@ std::shared_ptr<const Result> Operation::getResult(
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
+      if (result.isDataEvaluated()) {
+        updateRuntimeInformationOnSuccess(result,
+                                          ad_utility::CacheStatus::computed,
+                                          timer.msecs(), std::nullopt);
+      } else {
+        // TODO<RobinTF> check if this is sufficient here or we need more of
+        // `updateRuntimeInformationOnSuccess` functionality here.
+        runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+      }
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
       if (!supportsLimit()) {
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        // Note: both of the following calls have no effect and negligible
-        // runtime if neither a LIMIT nor an OFFSET were specified.
-        result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+        runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0},
+                                        true);
+        result.applyLimitOffset(_limit,
+                                [runtimeInfo = getRuntimeInfoPointer()](
+                                    std::chrono::milliseconds limitTime) {
+                                  runtimeInfo->totalTime_ += limitTime;
+                                });
       } else {
         result.enforceLimitOffset(_limit);
       }
@@ -186,6 +194,10 @@ std::shared_ptr<const Result> Operation::getResult(
                 });
               }
             });
+        result.setOnNextChunkComputed([runtimeInfo = getRuntimeInfoPointer()](
+                                          std::chrono::milliseconds duration) {
+          runtimeInfo->totalTime_ += duration;
+        });
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
@@ -202,7 +214,10 @@ std::shared_ptr<const Result> Operation::getResult(
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
+    if (result._resultPointer->resultTable()->isDataEvaluated()) {
+      updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
+
     if (result._resultPointer->resultTable()->isDataEvaluated()) {
       auto resultNumRows =
           result._resultPointer->resultTable()->idTable().size();
@@ -217,10 +232,18 @@ std::shared_ptr<const Result> Operation::getResult(
     } else if (actuallyComputed) {
       return std::make_shared<const Result>(
           Result::createResultAsMasterConsumer(
-              result._resultPointer->resultTable()));
+              result._resultPointer->resultTable(),
+              isRoot ? std::function{[this]() { signalQueryUpdate(); }}
+                     : std::function<void()>{}));
     }
     return std::make_shared<const Result>(Result::createResultWithFallback(
-        result._resultPointer->resultTable(), std::move(computeLambda)));
+        result._resultPointer->resultTable(), std::move(computeLambda),
+        [this, isRoot](auto duration) {
+          runtimeInfo().totalTime_ += duration;
+          if (isRoot) {
+            signalQueryUpdate();
+          }
+        }));
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;

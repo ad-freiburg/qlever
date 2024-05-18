@@ -172,7 +172,9 @@ class Result {
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those are still correct after performing this operation.
-  void applyLimitOffset(const LimitOffsetClause& limitOffset);
+  void applyLimitOffset(
+      const LimitOffsetClause& limitOffset,
+      std::function<void(std::chrono::milliseconds)> limitTimeCallback);
 
   void enforceLimitOffset(const LimitOffsetClause& limitOffset);
 
@@ -193,11 +195,16 @@ class Result {
 
   void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished);
 
+  void setOnNextChunkComputed(
+      std::function<void(std::chrono::milliseconds)> onNextChunkComputed);
+
   Result aggregateTable() const;
 
-  static Result createResultWithFallback(std::shared_ptr<const Result> original,
-                                         std::function<Result()> fallback);
+  static Result createResultWithFallback(
+      std::shared_ptr<const Result> original, std::function<Result()> fallback,
+      std::function<void(std::chrono::milliseconds)> onIteration);
 
   static Result createResultAsMasterConsumer(
-      std::shared_ptr<const Result> original);
+      std::shared_ptr<const Result> original,
+      std::function<void()> onIteration);
 };

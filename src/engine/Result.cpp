@@ -10,6 +10,7 @@
 #include "util/Exception.h"
 #include "util/IteratorWrapper.h"
 #include "util/Log.h"
+#include "util/Timer.h"
 
 // _____________________________________________________________________________
 string Result::asDebugString() const {
@@ -116,7 +117,9 @@ void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
 }
 
 // _____________________________________________________________________________
-void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+void Result::applyLimitOffset(
+    const LimitOffsetClause& limitOffset,
+    std::function<void(std::chrono::milliseconds)> limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
@@ -124,15 +127,19 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
       !std::holds_alternative<cppcoro::generator<const IdTable>>(data_));
   using Gen = ad_utility::CacheableGenerator<IdTable>;
   if (std::holds_alternative<IdTable>(data_)) {
+    ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
     modifyIdTable(std::get<IdTable>(data_), limitOffset);
+    limitTimeCallback(limitTimer.msecs());
   } else if (std::holds_alternative<Gen>(data_)) {
     auto generator =
-        [](cppcoro::generator<IdTable> original,
-           LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
+        [](cppcoro::generator<IdTable> original, LimitOffsetClause limitOffset,
+           std::function<void(std::chrono::milliseconds)> limitTimeCallback)
+        -> cppcoro::generator<IdTable> {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
       for (auto&& idTable : original) {
+        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
         modifyIdTable(idTable, limitOffset);
         uint64_t offsetDelta = limitOffset.actualOffset(idTable.numRows());
         limitOffset._offset -= offsetDelta;
@@ -140,6 +147,7 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
           limitOffset._limit.value() -=
               limitOffset.actualSize(idTable.numRows() - offsetDelta);
         }
+        limitTimeCallback(limitTimer.msecs());
         if (limitOffset._offset == 0) {
           co_yield std::move(idTable);
         }
@@ -147,7 +155,8 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
           break;
         }
       }
-    }(std::move(std::get<Gen>(data_)).extractGenerator(), limitOffset);
+    }(std::move(std::get<Gen>(data_)).extractGenerator(), limitOffset,
+        std::move(limitTimeCallback));
     data_.emplace<Gen>(std::move(generator));
   } else {
     AD_FAIL();
@@ -288,6 +297,16 @@ void Result::setOnGeneratorFinished(
   std::get<Gen>(data_).setOnGeneratorFinished(std::move(onGeneratorFinished));
 }
 
+// _____________________________________________________________________________
+void Result::setOnNextChunkComputed(
+    std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
+  using Gen = ad_utility::CacheableGenerator<IdTable>;
+  // This should only ever get called on the "wrapped" generator stored in the
+  // cache.
+  AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
+  std::get<Gen>(data_).setOnNextChunkComputed(std::move(onNextChunkComputed));
+}
+
 Result Result::aggregateTable() const {
   using Gen = ad_utility::CacheableGenerator<IdTable>;
   AD_CONTRACT_CHECK(std::holds_alternative<Gen>(data_));
@@ -315,12 +334,13 @@ Result Result::aggregateTable() const {
 }
 
 // _____________________________________________________________________________
-Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
-                                        std::function<Result()> fallback) {
+Result Result::createResultWithFallback(
+    std::shared_ptr<const Result> original, std::function<Result()> fallback,
+    std::function<void(std::chrono::milliseconds)> onIteration) {
   AD_CONTRACT_CHECK(!original->isDataEvaluated());
   auto generator = [](std::shared_ptr<const Result> sharedResult,
-                      std::function<Result()> fallback)
-      -> cppcoro::generator<const IdTable> {
+                      std::function<Result()> fallback,
+                      auto onIteration) -> cppcoro::generator<const IdTable> {
     size_t index = 0;
     try {
       for (auto&& idTable : sharedResult->idTables()) {
@@ -338,30 +358,47 @@ Result Result::createResultWithFallback(std::shared_ptr<const Result> original,
     // If data is evaluated this means that this process is not deterministic
     // or that there's a wrong callback used here.
     AD_CORRECTNESS_CHECK(!freshResult.isDataEvaluated());
+    auto start = std::chrono::steady_clock::now();
     for (auto&& idTable : freshResult.idTables()) {
+      auto stop = std::chrono::steady_clock::now();
+      if (onIteration) {
+        onIteration(std::chrono::duration_cast<std::chrono::milliseconds>(
+            stop - start));
+      }
       if (index > 0) {
         index--;
         continue;
       }
       co_yield idTable;
+      start = std::chrono::steady_clock::now();
+    }
+    auto stop = std::chrono::steady_clock::now();
+    if (onIteration) {
+      onIteration(
+          std::chrono::duration_cast<std::chrono::milliseconds>(stop - start));
     }
   };
-  return Result{generator(std::move(original), std::move(fallback)),
+  return Result{generator(std::move(original), std::move(fallback),
+                          std::move(onIteration)),
                 original->sortedBy_, original->localVocab_};
 }
 
 // _____________________________________________________________________________
 Result Result::createResultAsMasterConsumer(
-    std::shared_ptr<const Result> original) {
+    std::shared_ptr<const Result> original, std::function<void()> onIteration) {
   using Gen = ad_utility::CacheableGenerator<IdTable>;
   AD_CONTRACT_CHECK(std::holds_alternative<Gen>(original->data_));
-  auto generator = [](auto original) -> cppcoro::generator<const IdTable> {
+  auto generator = [](auto original,
+                      auto onIteration) -> cppcoro::generator<const IdTable> {
     using ad_utility::IteratorWrapper;
     auto& generator = std::get<Gen>(original->data_);
     for (const IdTable& idTable : IteratorWrapper{generator, true}) {
+      if (onIteration) {
+        onIteration();
+      }
       co_yield idTable;
     }
   };
-  return Result{generator(std::move(original)), original->sortedBy_,
-                original->localVocab_};
+  return Result{generator(std::move(original), std::move(onIteration)),
+                original->sortedBy_, original->localVocab_};
 }
