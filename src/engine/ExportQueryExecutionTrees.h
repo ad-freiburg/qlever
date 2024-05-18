@@ -51,8 +51,8 @@ class ExportQueryExecutionTrees {
   // results.
   static nlohmann::json computeResultAsJSON(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer,
-      MediaType mediaType, CancellationHandle cancellationHandle);
+      const ad_utility::Timer& requestTimer, MediaType mediaType,
+      CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is

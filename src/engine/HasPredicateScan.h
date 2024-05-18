@@ -106,7 +106,7 @@ class HasPredicateScan : public Operation {
 
   template <int WIDTH>
   Result computeSubqueryS(IdTable* result,
-                               const CompactVectorOfStrings<Id>& patterns);
+                          const CompactVectorOfStrings<Id>& patterns);
 
  private:
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
