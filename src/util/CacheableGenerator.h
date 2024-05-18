@@ -27,8 +27,11 @@ class CacheableGenerator {
 
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
+  class Iterator;
+
   class ComputationStorage {
     friend CacheableGenerator;
+    friend Iterator;
     mutable std::shared_mutex mutex_;
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
@@ -211,7 +214,7 @@ class CacheableGenerator {
     }
 
     friend bool operator==(const Iterator& it, IteratorSentinel) noexcept {
-      return !it.storage_->lock()->isDone(it.currentIndex_);
+      return !it.storage()->isDone(it.currentIndex_);
     }
 
     friend bool operator!=(const Iterator& it, IteratorSentinel s) noexcept {
