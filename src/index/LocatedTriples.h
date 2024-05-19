@@ -42,6 +42,9 @@ struct LocatedTriple {
   static LocatedTriple locateTripleInPermutation(
       Id id1, Id id2, Id id3, const Permutation& permutation);
 
+  static std::vector<LocatedTriple> locateSortedTriplesInPermutation(
+      const IdTable& triples, const Permutation& permutation);
+
   // Special row index for triples that belong to the previous block (see the
   // definition for the location of a triple at the end of this file).
   //

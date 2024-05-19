@@ -13,6 +13,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
+#include "index/LocatedTriples.h"
 #include "util/AsioHelpers.h"
 #include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
@@ -652,9 +654,11 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
     }
   };
 
-  std::vector<std::array<Id, 3>> toInsert;
+  IdTable toInsert(3, qet.getRootOperation()->allocator());
+  // std::vector<std::array<Id, 3>> toInsert;
   toInsert.reserve(res->size() * toInsertTemplates.size());
-  std::vector<std::array<Id, 3>> toDelete;
+  IdTable toDelete(3, qet.getRootOperation()->allocator());
+  // std::vector<std::array<Id, 3>> toDelete;
   toDelete.reserve(res->size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
   // TODO: ideas only process template rows with variables here, do ones with
@@ -695,7 +699,31 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
   LOG(INFO) << "Calculating update query triples took " << step.msecs()
             << std::endl;
   step.start();
-  LOG(INFO) << "Locating triples took " << step.msecs() << std::endl;
+  auto locatePermutation = [&toDelete, &toInsert, &step,
+                            &qet](Permutation::Enum permutation) {
+    auto sortOrderTmp = Permutation::toKeyOrder(permutation);
+    const std::vector<ColumnIndex> sortOrder{sortOrderTmp.begin(),
+                                             sortOrderTmp.end()};
+    Engine::sort(toInsert, sortOrder);
+    Engine::sort(toDelete, sortOrder);
+    // std::sort(toInsert.begin(), toInsert.end());
+    // std::sort(toDelete.begin(), toDelete.end());
+    LOG(INFO) << "Sorting triples took " << step.msecs() << std::endl;
+    step.start();
+    const Permutation& pos =
+        qet.getQec()->getIndex().getImpl().getPermutation(permutation);
+    LocatedTriple::locateSortedTriplesInPermutation(toInsert, pos);
+    LocatedTriple::locateSortedTriplesInPermutation(toDelete, pos);
+    LOG(INFO) << "Locating triples took " << step.msecs() << std::endl;
+    step.start();
+  };
+
+  using Perm = Permutation::Enum;
+  for (auto permutation :
+       {Perm::PSO, Perm::POS, Perm::SPO, Perm::SOP, Perm::OPS, Perm::OSP}) {
+    locatePermutation(permutation);
+  }
+
   LOG(INFO) << "Update finished in " << total.msecs() << std::endl;
   throw NotSupportedException{
       "SPARQL 1.1 Update currently not supported by QLever."};

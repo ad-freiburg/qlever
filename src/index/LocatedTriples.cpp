@@ -11,6 +11,39 @@
 #include "index/IndexMetaData.h"
 #include "index/Permutation.h"
 
+// Locates the triples in an IdTable that are sorted according to the
+// permutation.
+std::vector<LocatedTriple> LocatedTriple::locateSortedTriplesInPermutation(
+    const IdTable& triples, const Permutation& permutation) {
+  AD_CONTRACT_CHECK(triples.numColumns() == 3);
+
+  if (triples.numRows() == 0) return {};
+
+  auto keyOrder = permutation.keyOrder();
+  const Permutation::MetaData& meta = permutation.metaData();
+  const vector<CompressedBlockMetadata>& blocks = meta.blockData();
+
+  vector<LocatedTriple> out{triples.size()};
+  size_t currentBlockIndex = 0;
+
+  for (size_t i : std::views::iota((size_t)0, triples.size())) {
+    auto id1 = triples(i, keyOrder[0]);
+    auto id2 = triples(i, keyOrder[1]);
+    auto id3 = triples(i, keyOrder[2]);
+    CompressedBlockMetadata::PermutedTriple triple = {id1, id2, id3};
+
+    while (triple > blocks.at(currentBlockIndex).lastTriple_ &&
+           currentBlockIndex > blocks.size() - 1) {
+      currentBlockIndex++;
+    }
+
+    out.push_back(
+        {currentBlockIndex, LocatedTriple::NO_ROW_INDEX, id1, id2, id3, false});
+  }
+
+  return out;
+}
+
 // ____________________________________________________________________________
 LocatedTriple LocatedTriple::locateTripleInPermutation(
     Id id1, Id id2, Id id3, const Permutation& permutation) {
