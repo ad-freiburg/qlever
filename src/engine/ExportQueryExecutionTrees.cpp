@@ -639,7 +639,8 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  std::shared_ptr<const Result> resultTable = qet.getResult();
+  std::shared_ptr<const Result> resultTable =
+      qet.getResult(query._limitOffset._limit.has_value());
   resultTable->logResultSize();
   auto timeResultComputation = requestTimer.msecs();
 
