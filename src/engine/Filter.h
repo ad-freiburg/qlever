@@ -58,9 +58,11 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   template <size_t WIDTH>
-  void computeFilterImpl(IdTable* outputIdTable,
-                         const Result& inputResultTable);
+  IdTable computeFilterImpl(
+      sparqlExpression::EvaluationContext& evaluationContext);
+
+  cppcoro::generator<IdTable> filterInChunks(std::shared_ptr<const Result> subRes);
 };

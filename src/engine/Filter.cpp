@@ -43,41 +43,67 @@ string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result Filter::computeResult([[maybe_unused]] bool requestLaziness) {
+Result Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
-  std::shared_ptr<const Result> subRes = _subtree->getResult();
+  std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Filter result computation..." << endl;
   checkCancellation();
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(subRes->idTable().numColumns());
+  if (subRes->isDataEvaluated()) {
+    sparqlExpression::EvaluationContext evaluationContext(
+        *getExecutionContext(), _subtree->getVariableColumns(),
+        subRes->idTable(), getExecutionContext()->getAllocator(),
+        subRes->localVocab(), cancellationHandle_);
 
-  size_t width = idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
-  LOG(DEBUG) << "Filter result computation done." << endl;
-  checkCancellation();
+    // TODO<joka921> This should be a mandatory argument to the
+    // EvaluationContext constructor.
+    evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
 
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+    size_t width = evaluationContext._inputTable.numColumns();
+    IdTable result = CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
+                                     evaluationContext);
+    LOG(DEBUG) << "Filter result computation done." << endl;
+    checkCancellation();
+
+    return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
+  }
+  return {filterInChunks(subRes), resultSortedOn(),
+          subRes->getSharedLocalVocab()};
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<IdTable> Filter::filterInChunks(
+    std::shared_ptr<const Result> subRes) {
+  for (const IdTable& idTable : subRes->idTables()) {
+    sparqlExpression::EvaluationContext evaluationContext(
+        *getExecutionContext(), _subtree->getVariableColumns(), idTable,
+        getExecutionContext()->getAllocator(), subRes->localVocab(),
+        cancellationHandle_);
+
+    // TODO<joka921> This should be a mandatory argument to the
+    // EvaluationContext constructor.
+    evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
+
+    size_t width = evaluationContext._inputTable.numColumns();
+    co_yield CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
+                             evaluationContext);
+    LOG(DEBUG) << "Filter result chunk done." << endl;
+    checkCancellation();
+  }
 }
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void Filter::computeFilterImpl(IdTable* outputIdTable,
-                               const Result& inputResultTable) {
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab(), cancellationHandle_);
-
-  // TODO<joka921> This should be a mandatory argument to the EvaluationContext
-  // constructor.
-  evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
+IdTable Filter::computeFilterImpl(
+    sparqlExpression::EvaluationContext& evaluationContext) {
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(evaluationContext._inputTable.numColumns());
 
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
-  auto output = std::move(*outputIdTable).toStatic<WIDTH>();
+  const auto input = evaluationContext._inputTable.asStaticView<WIDTH>();
+  auto output = std::move(idTable).toStatic<WIDTH>();
   // Clang 17 seems to incorrectly deduce the type, so try to trick it
   std::remove_const_t<decltype(output)>& output2 = output;
 
@@ -123,7 +149,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  *outputIdTable = std::move(output).toDynamic();
+  return std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________
