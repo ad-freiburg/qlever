@@ -6,8 +6,8 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/IdTriple.h"
-#include "util/HashMap.h"
 #include "index/CompressedRelation.h"
+#include "util/HashMap.h"
 
 class Permutation;
 
@@ -42,8 +42,18 @@ struct LocatedTriple {
   static LocatedTriple locateTripleInPermutation(
       Id id1, Id id2, Id id3, const Permutation& permutation);
 
+  // Added for benchmarking
+  static std::vector<LocatedTriple> locateTriplesInPermutation(
+      const IdTable& triples, const Permutation& permutation);
+  // Added for benchmarking
+  static std::vector<LocatedTriple> locateTriplesInPermutation(
+      const std::vector<IdTriple>& triples, const Permutation& permutation);
+
   static std::vector<LocatedTriple> locateSortedTriplesInPermutation(
       const IdTable& triples, const Permutation& permutation);
+  // Added for benchmarking
+  static std::vector<LocatedTriple> locateSortedTriplesInPermutation(
+      const std::vector<IdTriple>& triples, const Permutation& permutation);
 
   // Special row index for triples that belong to the previous block (see the
   // definition for the location of a triple at the end of this file).
@@ -86,13 +96,12 @@ class LocatedTriplesPerBlock {
 
  public:
   using ScanSpecification = CompressedRelationReader::ScanSpecification;
-  // Get the number of located triples for the given block that match `id1` (if
-  // provided) and `id2` (if provided). The return value is a pair of numbers:
   // Get the number of located triples for the given block that match the
   // ScanSpecification. The return value is a pair of numbers:
   // first, the number of existing triples ("to be deleted") and second, the
   // number of new triples ("to be inserted").
-  std::pair<size_t, size_t> numTriples(size_t blockIndex, ScanSpecification scanSpec) const;
+  std::pair<size_t, size_t> numTriples(size_t blockIndex,
+                                       ScanSpecification scanSpec) const;
 
   // Merge located triples for `blockIndex` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Consider only
@@ -115,11 +124,11 @@ class LocatedTriplesPerBlock {
   // larger than all triples there. This requires that the ScanSpecification
   // has `col0Id` and `col1Id` set.
   //
-  size_t mergeTriples(size_t blockIndex, std::optional<IdTable> block,
-                      IdTable& result, size_t offsetInResult,
-                      ScanSpecification scanSpec,
-                      size_t rowIndexInBlockBegin = 0,
-                      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
+  size_t mergeTriples(
+      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
+      size_t offsetInResult, ScanSpecification scanSpec,
+      size_t rowIndexInBlockBegin = 0,
+      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 
   // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
   // Return a handle to where it was added (`LocatedTriples` is a sorted set,

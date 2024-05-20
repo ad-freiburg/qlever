@@ -653,12 +653,28 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
       AD_FAIL();
     }
   };
+  // #define QL_UPDATE_VECTOR
+  // #define QL_UPDATE_PRESORT
 
+#ifdef QL_UPDATE_VECTOR
+  LOG(INFO) << "Executing update using std::vector" << std::endl;
+#else
+  LOG(INFO) << "Executing update using IdTable" << std::endl;
+#endif
+#ifdef QL_UPDATE_PRESORT
+  LOG(INFO) << "Sorting triples before location" << std::endl;
+#else
+  LOG(INFO) << "Locating triples without sorting before" << std::endl;
+#endif
+
+#ifdef QL_UPDATE_VECTOR
+  std::vector<std::array<Id, 3>> toInsert;
+  std::vector<std::array<Id, 3>> toDelete;
+#else
   IdTable toInsert(3, qet.getRootOperation()->allocator());
-  // std::vector<std::array<Id, 3>> toInsert;
-  toInsert.reserve(res->size() * toInsertTemplates.size());
   IdTable toDelete(3, qet.getRootOperation()->allocator());
-  // std::vector<std::array<Id, 3>> toDelete;
+#endif
+  toInsert.reserve(res->size() * toInsertTemplates.size());
   toDelete.reserve(res->size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
   // TODO: ideas only process template rows with variables here, do ones with
@@ -701,19 +717,29 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
   step.start();
   auto locatePermutation = [&toDelete, &toInsert, &step,
                             &qet](Permutation::Enum permutation) {
+#ifdef QL_UPDATE_PRESORT
     auto sortOrderTmp = Permutation::toKeyOrder(permutation);
     const std::vector<ColumnIndex> sortOrder{sortOrderTmp.begin(),
                                              sortOrderTmp.end()};
+#ifdef QL_UPDATE_VECTOR
+    std::sort(toInsert.begin(), toInsert.end());
+    std::sort(toDelete.begin(), toDelete.end());
+#else
     Engine::sort(toInsert, sortOrder);
     Engine::sort(toDelete, sortOrder);
-    // std::sort(toInsert.begin(), toInsert.end());
-    // std::sort(toDelete.begin(), toDelete.end());
+#endif
     LOG(INFO) << "Sorting triples took " << step.msecs() << std::endl;
     step.start();
+#endif
     const Permutation& pos =
         qet.getQec()->getIndex().getImpl().getPermutation(permutation);
+#ifdef QL_UPDATE_PRESORT
     LocatedTriple::locateSortedTriplesInPermutation(toInsert, pos);
     LocatedTriple::locateSortedTriplesInPermutation(toDelete, pos);
+#else
+    LocatedTriple::locateTriplesInPermutation(toInsert, pos);
+    LocatedTriple::locateTriplesInPermutation(toDelete, pos);
+#endif
     LOG(INFO) << "Locating triples took " << step.msecs() << std::endl;
     step.start();
   };

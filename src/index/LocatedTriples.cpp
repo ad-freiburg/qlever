@@ -44,6 +44,112 @@ std::vector<LocatedTriple> LocatedTriple::locateSortedTriplesInPermutation(
   return out;
 }
 
+// Added for benchmarking
+std::vector<LocatedTriple> LocatedTriple::locateSortedTriplesInPermutation(
+    const vector<IdTriple>& triples, const Permutation& permutation) {
+  if (triples.size() == 0) return {};
+
+  auto keyOrder = permutation.keyOrder();
+  const Permutation::MetaData& meta = permutation.metaData();
+  const vector<CompressedBlockMetadata>& blocks = meta.blockData();
+
+  vector<LocatedTriple> out{triples.size()};
+  size_t currentBlockIndex = 0;
+
+  for (auto [id1, id2, id3] : triples) {
+    CompressedBlockMetadata::PermutedTriple triple = {id1, id2, id3};
+
+    while (triple > blocks.at(currentBlockIndex).lastTriple_ &&
+           currentBlockIndex > blocks.size() - 1) {
+      currentBlockIndex++;
+    }
+
+    out.push_back(
+        {currentBlockIndex, LocatedTriple::NO_ROW_INDEX, id1, id2, id3, false});
+  }
+
+  return out;
+}
+
+// Added for benchmarking
+std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
+    const IdTable& triples, const Permutation& permutation) {
+  AD_CONTRACT_CHECK(triples.numColumns() == 3);
+
+  if (triples.numRows() == 0) return {};
+
+  auto keyOrder = permutation.keyOrder();
+  const Permutation::MetaData& meta = permutation.metaData();
+  const vector<CompressedBlockMetadata>& blocks = meta.blockData();
+
+  vector<LocatedTriple> out{triples.size()};
+  size_t currentBlockIndex;
+  for (size_t i : std::views::iota((size_t)0, triples.size())) {
+    auto id1 = triples(i, keyOrder[0]);
+    auto id2 = triples(i, keyOrder[1]);
+    auto id3 = triples(i, keyOrder[2]);
+    currentBlockIndex =
+        std::lower_bound(blocks.begin(), blocks.end(),
+                         std::array<Id, 3>{id1, id2, id3},
+                         [&](const CompressedBlockMetadata& block,
+                             const auto& triple) -> bool {
+                           // std::array<Id, 3> kann auch < aus den komponenten
+                           const auto& lastTriple = block.lastTriple_;
+                           if (lastTriple.col0Id_ < triple[0]) {
+                             return true;
+                           } else if (lastTriple.col0Id_ == triple[0]) {
+                             if (lastTriple.col1Id_ < triple[1]) {
+                               return true;
+                             } else if (lastTriple.col1Id_ == triple[1]) {
+                               return lastTriple.col2Id_ < triple[2];
+                             }
+                           }
+                           return false;
+                         }) -
+        blocks.begin();
+    out.push_back(
+        {currentBlockIndex, LocatedTriple::NO_ROW_INDEX, id1, id2, id3, false});
+  }
+
+  return out;
+}
+
+// Added for benchmarking
+std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
+    const std::vector<IdTriple>& triples, const Permutation& permutation) {
+  // Triples können auch sortiert sein.
+  const Permutation::MetaData& meta = permutation.metaData();
+  const vector<CompressedBlockMetadata>& blocks = meta.blockData();
+
+  vector<LocatedTriple> out{triples.size()};
+  size_t currentBlockIndex;
+  for (auto& [id1, id2, id3] : triples) {
+    currentBlockIndex =
+        std::lower_bound(blocks.begin(), blocks.end(),
+                         std::array<Id, 3>{id1, id2, id3},
+                         [&](const CompressedBlockMetadata& block,
+                             const auto& triple) -> bool {
+                           // std::array<Id, 3> kann auch < aus den komponenten
+                           const auto& lastTriple = block.lastTriple_;
+                           if (lastTriple.col0Id_ < triple[0]) {
+                             return true;
+                           } else if (lastTriple.col0Id_ == triple[0]) {
+                             if (lastTriple.col1Id_ < triple[1]) {
+                               return true;
+                             } else if (lastTriple.col1Id_ == triple[1]) {
+                               return lastTriple.col2Id_ < triple[2];
+                             }
+                           }
+                           return false;
+                         }) -
+        blocks.begin();
+    out.push_back(
+        {currentBlockIndex, LocatedTriple::NO_ROW_INDEX, id1, id2, id3, false});
+  }
+
+  return out;
+}
+
 // ____________________________________________________________________________
 LocatedTriple LocatedTriple::locateTripleInPermutation(
     Id id1, Id id2, Id id3, const Permutation& permutation) {
@@ -118,14 +224,16 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   DecompressedBlock blockTuples =
       reader.readAndDecompressBlock(*matchingBlock, columnIndices);
 
-  if(matchingBlock->firstTriple_.col0Id_ <= id1) {
+  if (matchingBlock->firstTriple_.col0Id_ <= id1) {
     // The triple is actually inside this block.
     locatedTriple.rowIndexInBlock =
         std::lower_bound(
-            blockTuples.begin(),
-            blockTuples.end(), std::array<Id, 3>{id1, id2, id3},
+            blockTuples.begin(), blockTuples.end(),
+            std::array<Id, 3>{id1, id2, id3},
             [](const auto& a, const auto& b) {
-              return a[0] < b[0] || (a[0] == b[0] && (a[1] < b[1] || (a[1] == b[1] && a[2] < b[2])));
+              return a[0] < b[0] ||
+                     (a[0] == b[0] &&
+                      (a[1] < b[1] || (a[1] == b[1] && a[2] < b[2])));
             }) -
         blockTuples.begin();
     // Check if the triple at the found position is equal to `id1 id2 id3` to
@@ -163,8 +271,8 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
         (scanSpec.col0Id().value() == locatedTriple.id1 &&
          (!scanSpec.col1Id() ||
           (scanSpec.col1Id().value() == locatedTriple.id2 &&
-           (!scanSpec.col2Id() || scanSpec.col2Id().value() == locatedTriple.id3)))))
-    {
+           (!scanSpec.col2Id() ||
+            scanSpec.col2Id().value() == locatedTriple.id3))))) {
       if (locatedTriple.existsInIndex) {
         ++countExists;
       } else {
@@ -175,13 +283,10 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
   return {countNew, countExists};
 }
 
-size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                            std::optional<IdTable> block,
-                                            IdTable& result,
-                                            size_t offsetInResult,
-                                            ScanSpecification scanSpec,
-                                            size_t rowIndexInBlockBegin,
-                                            size_t rowIndexInBlockEnd) const {
+size_t LocatedTriplesPerBlock::mergeTriples(
+    size_t blockIndex, std::optional<IdTable> block, IdTable& result,
+    size_t offsetInResult, ScanSpecification scanSpec,
+    size_t rowIndexInBlockBegin, size_t rowIndexInBlockEnd) const {
   // TODO:
   AD_CONTRACT_CHECK(!scanSpec.col2Id().has_value());
 
@@ -229,9 +334,11 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // considered, given the `matchMode`.
   auto locatedTripleMatches = [&]() {
     return !scanSpec.col0Id().has_value() ||
-           (locatedTriple->id1 == scanSpec.col0Id().value() && (!scanSpec.col1Id().has_value() ||
-            (locatedTriple->id2 == scanSpec.col1Id().value() && (!scanSpec.col2Id().has_value() ||
-             locatedTriple->id3 == scanSpec.col2Id().value()))));
+           (locatedTriple->id1 == scanSpec.col0Id().value() &&
+            (!scanSpec.col1Id().has_value() ||
+             (locatedTriple->id2 == scanSpec.col1Id().value() &&
+              (!scanSpec.col2Id().has_value() ||
+               locatedTriple->id3 == scanSpec.col2Id().value()))));
   };
 
   // Advance to the first located triple in the specified range.
