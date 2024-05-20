@@ -141,7 +141,7 @@ std::shared_ptr<const Result> Operation::getResult(
       // This check doesn't make sense when the result has not been evaluated
       // yet, so it should be moved into the operations eventually.
       AD_EXPENSIVE_CHECK(
-          result.isDataEvaluated() ||
+          !result.isDataEvaluated() ||
           result.checkDefinedness(getExternallyVisibleVariableColumns()));
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
