@@ -75,13 +75,20 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1(V(32))), P(0, 1));
 
   // Check the counts per block for a given `id1` and `id2`.
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(1))), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(2))), P(0, 1));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(11), V(3))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(20), V(4))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(21), V(5))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(30), V(6))), P(1, 0));
-  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(32), V(7))), P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(1))),
+            P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(10), V(2))),
+            P(0, 1));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(1, matchId1And2(V(11), V(3))),
+            P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(20), V(4))),
+            P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(2, matchId1And2(V(21), V(5))),
+            P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(30), V(6))),
+            P(1, 0));
+  ASSERT_EQ(locatedTriplesPerBlock.numTriples(3, matchId1And2(V(32), V(7))),
+            P(0, 1));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into a
@@ -134,7 +141,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {30, 30}});  // Row 7
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchId1(V(2)));
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0,
+                                        matchId1(V(2)));
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -148,7 +156,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {30, 30}});  // Row 4
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchId1(V(2)), 2);
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0,
+                                        matchId1(V(2)), 2);
     ASSERT_EQ(result, resultExpected);
   }
 
@@ -180,7 +189,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {40, 10}});  // Row 2
     IdTable result(2, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0, matchId1(V(1)));
+    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0,
+                                        matchId1(V(1)));
   }
 }
 
@@ -231,15 +241,18 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
           auto cancellationHandle =
               std::make_shared<ad_utility::CancellationHandle<>>();
           for (Id relationId : relationIds) {
-            auto scanSpec = CompressedRelationReader::ScanSpecification(relationId, std::nullopt, std::nullopt);
-            IdTable relation = permutation.scan(scanSpec, {},
-                                                cancellationHandle);
+            auto scanSpec = CompressedRelationReader::ScanSpecification(
+                relationId, std::nullopt, std::nullopt);
+            IdTable relation =
+                permutation.scan(scanSpec, {}, cancellationHandle);
             std::cout << "Relation: " << relationId << " -> " << relation
                       << std::endl;
           }
-          for (const CompressedBlockMetadata& block : permutation.metaData().blockData()) {
+          for (const CompressedBlockMetadata& block :
+               permutation.metaData().blockData()) {
             // The permuted triples themselves already end with std::endl
-            std::cout << "Block: size=" << block.numRows_ << " " << block.firstTriple_ << " -> " << block.lastTriple_;
+            std::cout << "Block: size=" << block.numRows_ << " "
+                      << block.firstTriple_ << " -> " << block.lastTriple_;
           }
         }
 
@@ -264,7 +277,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
           ASSERT_TRUE(locatedTriplesPerBlock.map_.contains(blockIndex))
               << "blockIndex = " << blockIndex << " not found";
           auto locatedTriplesSet = locatedTriplesPerBlock.map_.at(blockIndex);
-          std::vector<LT> computedLocatedTriples (locatedTriplesSet.begin(), locatedTriplesSet.end());
+          std::vector<LT> computedLocatedTriples(locatedTriplesSet.begin(),
+                                                 locatedTriplesSet.end());
           const std::vector<LT>& expectedLocatedTriples =
               expectedLocatedTriplesPerBlock.at(blockIndex);
           ASSERT_EQ(computedLocatedTriples, expectedLocatedTriples)
@@ -292,7 +306,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                                                     {2, 30, 30},    // Row 6
                                                     {3, 10, 10}});  // Row 7
 
-    // Locate the following triples, some of which exist in the relation and some of which do not, and which cover a variety of positons, including triples that are larger than all existing triples.
+    // Locate the following triples, some of which exist in the relation and
+    // some of which do not, and which cover a variety of positons, including
+    // triples that are larger than all existing triples.
     IdTable triplesToLocate =
         makeIdTableFromVector({{2, 15, 20},    // Equals Row 2
                                {2, 14, 20},    // Before Row 2
@@ -308,56 +324,68 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     std::cout << "Delta triples: " << triplesToLocate << std::endl;
 
     // With block size 8, we have each triple in its own block.
-    testWithGivenBlockSize(
-        triplesInIndex, triplesToLocate, 8_B,
-        {{2, { LT(2, 0, V(2), V(14), V(20), false), LT(2, 0, V(2), V(15), V(20), true) }},
-         {4, { LT(4, 0, V(2), V(20), V(10), true) }},
-         {5, { LT(5, 0, V(2), V(30), V(20), true) }},
-         {6, { LT(6, 0, V(2), V(30), V(30), true) }},
-         {7, { LT(7, 0, V(2), V(30), V(31), false) }},
-         {8, { LT(8, x, V(9), V(30), V(32), false) }}});
+    testWithGivenBlockSize(triplesInIndex, triplesToLocate, 8_B,
+                           {{2,
+                             {LT(2, 0, V(2), V(14), V(20), false),
+                              LT(2, 0, V(2), V(15), V(20), true)}},
+                            {4, {LT(4, 0, V(2), V(20), V(10), true)}},
+                            {5, {LT(5, 0, V(2), V(30), V(20), true)}},
+                            {6, {LT(6, 0, V(2), V(30), V(30), true)}},
+                            {7, {LT(7, 0, V(2), V(30), V(31), false)}},
+                            {8, {LT(8, x, V(9), V(30), V(32), false)}}});
 
-    // With block size 16, we have five blocks (Block 0 = Row 0, Block 1 = Row 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7).
-    testWithGivenBlockSize(
-        triplesInIndex, triplesToLocate, 16_B,
-        {{1, { LT(1, 1, V(2), V(14), V(20), false), LT(1, 1, V(2), V(15), V(20), true) }},
-         {2, { LT(2, 1, V(2), V(20), V(10), true) }},
-         {3, { LT(3, 0, V(2), V(30), V(20), true), LT(3, 1, V(2), V(30), V(30), true) }},
-         {4, { LT(4, 0, V(2), V(30), V(31), false) }},
-         {5, { LT(5, x, V(9), V(30), V(32), false) }}});
+    // With block size 16, we have five blocks (Block 0 = Row 0, Block 1 = Row
+    // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7).
+    testWithGivenBlockSize(triplesInIndex, triplesToLocate, 16_B,
+                           {{1,
+                             {LT(1, 1, V(2), V(14), V(20), false),
+                              LT(1, 1, V(2), V(15), V(20), true)}},
+                            {2, {LT(2, 1, V(2), V(20), V(10), true)}},
+                            {3,
+                             {LT(3, 0, V(2), V(30), V(20), true),
+                              LT(3, 1, V(2), V(30), V(30), true)}},
+                            {4, {LT(4, 0, V(2), V(30), V(31), false)}},
+                            {5, {LT(5, x, V(9), V(30), V(32), false)}}});
 
     // With block size 32, we have four blocks (Block 0 = Row 0, Block 1 = Row
     // 1+2+3+4, Block 2 = Row 5+6, Block 3 = Row 7). Note that a
     // relation that spans multiple blocks has these blocks on its own.
-    testWithGivenBlockSize(
-        triplesInIndex, triplesToLocate, 32_B,
-        {{1, { LT(1, 1, V(2), V(14), V(20), false), LT(1, 1, V(2), V(15), V(20), true), LT(1, 3, V(2), V(20), V(10), true) }},
-         {2, { LT(2, 0, V(2), V(30), V(20), true), LT(2, 1, V(2), V(30), V(30), true) }},
-         {3, { LT(3, 0, V(2), V(30), V(31), false) }},
-         {4, { LT(4, x, V(9), V(30), V(32), false) }}});
+    testWithGivenBlockSize(triplesInIndex, triplesToLocate, 32_B,
+                           {{1,
+                             {LT(1, 1, V(2), V(14), V(20), false),
+                              LT(1, 1, V(2), V(15), V(20), true),
+                              LT(1, 3, V(2), V(20), V(10), true)}},
+                            {2,
+                             {LT(2, 0, V(2), V(30), V(20), true),
+                              LT(2, 1, V(2), V(30), V(30), true)}},
+                            {3, {LT(3, 0, V(2), V(30), V(31), false)}},
+                            {4, {LT(4, x, V(9), V(30), V(32), false)}}});
 
     // With block size 48, we have three blocks (Block 0 = Row 0, Block 1 = Row
     // 1+2+3+4+5+6, Block 2 = Row 7).
-    testWithGivenBlockSize(
-        triplesInIndex, triplesToLocate, 48_B,
-        {{1,
-          { LT(1, 1, V(2), V(14), V(20), false), LT(1, 1, V(2), V(15), V(20), true), LT(1, 3, V(2), V(20), V(10), true), LT(1, 4, V(2), V(30), V(20), true),
-            LT(1, 5, V(2), V(30), V(30), true) }},
-         {2, { LT(2, 0, V(2), V(30), V(31), false) }},
-         {3, { LT(3, x, V(9), V(30), V(32), false) }}});
+    testWithGivenBlockSize(triplesInIndex, triplesToLocate, 48_B,
+                           {{1,
+                             {LT(1, 1, V(2), V(14), V(20), false),
+                              LT(1, 1, V(2), V(15), V(20), true),
+                              LT(1, 3, V(2), V(20), V(10), true),
+                              LT(1, 4, V(2), V(30), V(20), true),
+                              LT(1, 5, V(2), V(30), V(30), true)}},
+                            {2, {LT(2, 0, V(2), V(30), V(31), false)}},
+                            {3, {LT(3, x, V(9), V(30), V(32), false)}}});
 
-    testWithGivenBlockSize(
-        triplesInIndex, makeIdTableFromVector({{1, 10, 10}}), 48_B,
-        {{0, { LT(0, 0, V(1), V(10), V(10), true) }}});
+    testWithGivenBlockSize(triplesInIndex, makeIdTableFromVector({{1, 10, 10}}),
+                           48_B, {{0, {LT(0, 0, V(1), V(10), V(10), true)}}});
 
     // With block size 100'000, we have one block.
-    testWithGivenBlockSize(
-        triplesInIndex, triplesToLocate, 100'000_B,
-        {{0,
-          { LT(0, 2, V(2), V(14), V(20), false), LT(0, 2, V(2), V(15), V(20), true),
-            LT(0, 4, V(2), V(20), V(10), true), LT(0, 5, V(2), V(30), V(20), true),
-            LT(0, 6, V(2), V(30), V(30), true), LT(0, 7, V(2), V(30), V(31), false) }},
-         {1, { LT(1, x, V(9), V(30), V(32), false) }}});
+    testWithGivenBlockSize(triplesInIndex, triplesToLocate, 100'000_B,
+                           {{0,
+                             {LT(0, 2, V(2), V(14), V(20), false),
+                              LT(0, 2, V(2), V(15), V(20), true),
+                              LT(0, 4, V(2), V(20), V(10), true),
+                              LT(0, 5, V(2), V(30), V(20), true),
+                              LT(0, 6, V(2), V(30), V(30), true),
+                              LT(0, 7, V(2), V(30), V(31), false)}},
+                            {1, {LT(1, x, V(9), V(30), V(32), false)}}});
   }
 
   {
@@ -393,12 +421,19 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                                {9, 30, 32}});  // Larger than all.
 
     testWithGivenBlockSize(triplesInIndex, triplesToLocate, 100'000_B,
-                           {{0,{ LT(0, 0, V(1), V(5), V(20), false), LT(0, 0, V(1), V(10), V(10), true),
-        LT(0, 1, V(2), V(20), V(10), false), LT(0, 3, V(3), V(15), V(30), true),
-        LT(0, 5, V(3), V(20), V(15), false), LT(0, 7, V(4), V(30), V(30), false),
-        LT(0, 7, V(5), V(5), V(10), false), LT(0, 7, V(5), V(10), V(10), true),
-        LT(0, 8, V(6), V(10), V(10), false), LT(0, 11, V(7), V(20), V(5), false),
-        LT(0, 12, V(7), V(30), V(20), true), LT(0, 13, V(7), V(30), V(30), true) }},
-                            {1, { LT(1, x, V(9), V(30), V(32), false) }}});
+                           {{0,
+                             {LT(0, 0, V(1), V(5), V(20), false),
+                              LT(0, 0, V(1), V(10), V(10), true),
+                              LT(0, 1, V(2), V(20), V(10), false),
+                              LT(0, 3, V(3), V(15), V(30), true),
+                              LT(0, 5, V(3), V(20), V(15), false),
+                              LT(0, 7, V(4), V(30), V(30), false),
+                              LT(0, 7, V(5), V(5), V(10), false),
+                              LT(0, 7, V(5), V(10), V(10), true),
+                              LT(0, 8, V(6), V(10), V(10), false),
+                              LT(0, 11, V(7), V(20), V(5), false),
+                              LT(0, 12, V(7), V(30), V(20), true),
+                              LT(0, 13, V(7), V(30), V(30), true)}},
+                            {1, {LT(1, x, V(9), V(30), V(32), false)}}});
   }
 }

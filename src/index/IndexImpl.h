@@ -501,11 +501,10 @@ class IndexImpl {
 
  public:
   template <typename SortedTriplesType, typename... CallbackTypes>
-  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
-                                             SortedTriplesType&& sortedTriples,
-                                             const Permutation& p1,
-                                             const Permutation& p2,
-                                             CallbackTypes&&... perTripleCallbacks);
+  [[nodiscard]] size_t createPermutationPair(
+      size_t numColumns, SortedTriplesType&& sortedTriples,
+      const Permutation& p1, const Permutation& p2,
+      CallbackTypes&&... perTripleCallbacks);
 
  private:
   // wrapper for createPermutation that saves a lot of code duplications
