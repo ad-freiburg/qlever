@@ -103,7 +103,10 @@ class Operation {
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+  [[nodiscard]] virtual bool supportsLimit(
+      [[maybe_unused]] bool lazyResult) const {
+    return false;
+  }
 
  public:
   virtual float getMultiplicity(size_t col) = 0;

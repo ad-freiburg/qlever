@@ -2,8 +2,8 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef REUSABLEGENERATOR_H
-#define REUSABLEGENERATOR_H
+#ifndef CACHEABLEGENERATOR_H
+#define CACHEABLEGENERATOR_H
 
 #include <chrono>
 #include <optional>
@@ -67,6 +67,10 @@ class CacheableGenerator {
         }
         return;
       }
+      if (generatorIterator_.has_value() &&
+          generatorIterator_.value() == generator_.end()) {
+        return;
+      }
       if (masterState_ == MasterIteratorState::MASTER_STARTED) {
         if (!isMaster) {
           conditionVariable_.wait(lock, [this, index]() {
@@ -118,7 +122,7 @@ class CacheableGenerator {
    public:
     bool isDone(size_t index) noexcept {
       std::shared_lock lock{mutex_};
-      return index == cachedValues_.size() && generatorIterator_.has_value() &&
+      return index >= cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
 
@@ -201,7 +205,7 @@ class CacheableGenerator {
 
    public:
     explicit Iterator(std::weak_ptr<ComputationStorage> storage, bool isMaster)
-        : storage_{storage,
+        : storage_{std::move(storage),
                    [isMaster](auto&& storage) {
                      if (isMaster) {
                        auto pointer = storage.lock();
@@ -214,7 +218,7 @@ class CacheableGenerator {
     }
 
     friend bool operator==(const Iterator& it, IteratorSentinel) noexcept {
-      return !it.storage()->isDone(it.currentIndex_);
+      return it.storage()->isDone(it.currentIndex_);
     }
 
     friend bool operator!=(const Iterator& it, IteratorSentinel s) noexcept {
@@ -238,14 +242,14 @@ class CacheableGenerator {
     // Need to provide post-increment operator to implement the 'Range' concept.
     void operator++(int) { (void)operator++(); }
 
-    Reference operator*() const noexcept {
+    Reference operator*() const {
       return storage()->getCachedValue(currentIndex_);
     }
 
-    Pointer operator->() const noexcept { return std::addressof(operator*()); }
+    Pointer operator->() const { return std::addressof(operator*()); }
   };
 
-  Iterator begin(bool isMaster = false) const noexcept {
+  Iterator begin(bool isMaster = false) const {
     return Iterator{computationStorage_, isMaster};
   }
 
@@ -277,4 +281,4 @@ class CacheableGenerator {
 };
 };  // namespace ad_utility
 
-#endif  // REUSABLEGENERATOR_H
+#endif  // CACHEABLEGENERATOR_H

@@ -37,20 +37,21 @@ auto Result::getMergedLocalVocab(const Result& resultTable1,
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-void Result::validateIdTable(const IdTable& idTable) const {
-  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy_, [&idTable](size_t numCols) {
+void Result::validateIdTable(const IdTable& idTable,
+                             const std::vector<ColumnIndex>& sortedBy) {
+  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy, [&idTable](size_t numCols) {
     return numCols < idTable.numColumns();
   }));
 
-  [[maybe_unused]] auto compareRowsByJoinColumns = [this](const auto& row1,
-                                                          const auto& row2) {
-    for (size_t col : sortedBy_) {
-      if (row1[col] != row2[col]) {
-        return row1[col] < row2[col];
-      }
-    }
-    return false;
-  };
+  [[maybe_unused]] auto compareRowsByJoinColumns =
+      [&sortedBy](const auto& row1, const auto& row2) {
+        for (size_t col : sortedBy) {
+          if (row1[col] != row2[col]) {
+            return row1[col] < row2[col];
+          }
+        }
+        return false;
+      };
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(idTable, compareRowsByJoinColumns));
 }
 
@@ -61,7 +62,7 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
       sortedBy_{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  validateIdTable(std::get<IdTable>(data_));
+  validateIdTable(std::get<IdTable>(data_), sortedBy_);
 }
 
 // _____________________________________________________________________________
@@ -75,13 +76,13 @@ Result::Result(cppcoro::generator<IdTable> idTables,
                std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : data_{ad_utility::CacheableGenerator{
-          [this, idTables = std::move(
-                     idTables)]() mutable -> cppcoro::generator<IdTable> {
+          [](auto idTables,
+             auto sortedBy) mutable -> cppcoro::generator<IdTable> {
             for (IdTable& idTable : idTables) {
-              validateIdTable(idTable);
+              validateIdTable(idTable, sortedBy);
               co_yield std::move(idTable);
             }
-          }()}},
+          }(std::move(idTables), sortedBy)}},
       sortedBy_{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
@@ -123,6 +124,7 @@ void Result::applyLimitOffset(
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
+  AD_CONTRACT_CHECK(limitTimeCallback);
   AD_CONTRACT_CHECK(
       !std::holds_alternative<cppcoro::generator<const IdTable>>(data_));
   using Gen = ad_utility::CacheableGenerator<IdTable>;
@@ -140,12 +142,13 @@ void Result::applyLimitOffset(
       }
       for (auto&& idTable : original) {
         ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+        size_t originalSize = idTable.numRows();
         modifyIdTable(idTable, limitOffset);
-        uint64_t offsetDelta = limitOffset.actualOffset(idTable.numRows());
+        uint64_t offsetDelta = limitOffset.actualOffset(originalSize);
         limitOffset._offset -= offsetDelta;
         if (limitOffset._limit.has_value()) {
           limitOffset._limit.value() -=
-              limitOffset.actualSize(idTable.numRows() - offsetDelta);
+              limitOffset.actualSize(originalSize - offsetDelta);
         }
         limitTimeCallback(limitTimer.msecs());
         if (limitOffset._offset == 0) {
@@ -175,11 +178,13 @@ void Result::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
     auto generator =
         [](cppcoro::generator<IdTable> original,
            LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
+      size_t elementCount = 0;
       for (auto&& idTable : original) {
-        AD_CONTRACT_CHECK(idTable.numRows() ==
-                          limitOffset.actualSize(idTable.numRows()));
+        elementCount += idTable.numRows();
+        AD_CONTRACT_CHECK(elementCount <= limitOffset.actualSize(elementCount));
         co_yield std::move(idTable);
       }
+      AD_CONTRACT_CHECK(elementCount == limitOffset.actualSize(elementCount));
     }(std::move(std::get<Gen>(data_)).extractGenerator(), limitOffset);
     data_.emplace<Gen>(std::move(generator));
   } else {
@@ -378,9 +383,9 @@ Result Result::createResultWithFallback(
           std::chrono::duration_cast<std::chrono::milliseconds>(stop - start));
     }
   };
-  return Result{generator(std::move(original), std::move(fallback),
-                          std::move(onIteration)),
-                original->sortedBy_, original->localVocab_};
+  return Result{
+      generator(original, std::move(fallback), std::move(onIteration)),
+      original->sortedBy_, original->localVocab_};
 }
 
 // _____________________________________________________________________________
@@ -399,6 +404,6 @@ Result Result::createResultAsMasterConsumer(
       co_yield idTable;
     }
   };
-  return Result{generator(std::move(original), std::move(onIteration)),
+  return Result{generator(original, std::move(onIteration)),
                 original->sortedBy_, original->localVocab_};
 }

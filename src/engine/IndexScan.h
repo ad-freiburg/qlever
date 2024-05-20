@@ -92,8 +92,8 @@ class IndexScan : public Operation {
   }
 
   // Currently only the full scans support a limit clause.
-  [[nodiscard]] bool supportsLimit() const override {
-    return getResultWidth() == 3;
+  [[nodiscard]] bool supportsLimit(bool lazyResult) const override {
+    return !lazyResult && getResultWidth() == 3;
   }
 
   Permutation::Enum permutation() const { return permutation_; }

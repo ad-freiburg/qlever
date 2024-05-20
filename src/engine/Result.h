@@ -76,7 +76,8 @@ class Result {
   Result(cppcoro::generator<const IdTable> idTables,
          std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
 
-  void validateIdTable(const IdTable& idTable) const;
+  static void validateIdTable(const IdTable& idTable,
+                              const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following

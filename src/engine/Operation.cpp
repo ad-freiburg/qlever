@@ -159,7 +159,7 @@ std::shared_ptr<const Result> Operation::getResult(
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
       // the Limit is a full index scan with three variables.
-      if (!supportsLimit()) {
+      if (!supportsLimit(!result.isDataEvaluated())) {
         runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0},
                                         true);
         result.applyLimitOffset(_limit,
@@ -214,9 +214,10 @@ std::shared_ptr<const Result> Operation::getResult(
       return nullptr;
     }
 
-    if (result._resultPointer->resultTable()->isDataEvaluated()) {
-      updateRuntimeInformationOnSuccess(result, timer.msecs());
-    }
+    updateRuntimeInformationOnSuccess(
+        result, result._resultPointer->resultTable()->isDataEvaluated()
+                    ? timer.msecs()
+                    : result._resultPointer->runtimeInfo().totalTime_);
 
     if (result._resultPointer->resultTable()->isDataEvaluated()) {
       auto resultNumRows =
@@ -330,7 +331,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),

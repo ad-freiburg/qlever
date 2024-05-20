@@ -67,7 +67,10 @@ class CartesianProductJoin : public Operation {
   bool knownEmptyResult() override;
 
   // The Cartesian product join can efficiently evaluate a limited result.
-  [[nodiscard]] bool supportsLimit() const override { return true; }
+  [[nodiscard]] bool supportsLimit(
+      [[maybe_unused]] bool lazyResult) const override {
+    return true;
+  }
 
  protected:
   // Don't promise any sorting of the result.
