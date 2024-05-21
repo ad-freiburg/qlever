@@ -125,9 +125,10 @@ std::shared_ptr<const Result> Operation::getResult(
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult(computationMode == ComputationMode::LAZY);
+      Result result =
+          computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
       actuallyComputed = true;
-      AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY ||
+      AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
                         result.isDataEvaluated());
 
       checkCancellation();
@@ -202,7 +203,7 @@ std::shared_ptr<const Result> Operation::getResult(
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
-    bool onlyReadFromCache = computationMode == ComputationMode::CACHE_ONLY;
+    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
     auto result =
         pinResult

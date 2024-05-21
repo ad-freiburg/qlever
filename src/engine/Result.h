@@ -139,8 +139,8 @@ class Result {
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
   // all the corresponding local vocabs.
-  static SharedLocalVocabWrapper getMergedLocalVocab(
-      const Result& resultTable1, const Result& resultTable2);
+  static SharedLocalVocabWrapper getMergedLocalVocab(const Result& result1,
+                                                     const Result& result2);
 
   // Overload for more than two `Results`
   template <std::ranges::forward_range R>
