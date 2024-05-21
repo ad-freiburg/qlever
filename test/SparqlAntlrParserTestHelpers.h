@@ -836,4 +836,20 @@ inline auto VisibleVariables =
   return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
 };
 
+inline auto UpdateQuery =
+    [](const std::vector<SparqlTripleSimple>& toDelete,
+       const std::vector<SparqlTripleSimple>& toInsert,
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
+    -> Matcher<const ::ParsedQuery&> {
+  return testing::AllOf(
+      AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
+      AD_PROPERTY(ParsedQuery, updateClause,
+                  AD_FIELD(parsedQuery::UpdateClause, toDelete_,
+                           testing::Eq(toDelete))),
+      AD_PROPERTY(ParsedQuery, updateClause,
+                  AD_FIELD(parsedQuery::UpdateClause, toInsert_,
+                           testing::Eq(toInsert))),
+      RootGraphPattern(graphPatternMatcher));
+};
+
 }  // namespace matchers

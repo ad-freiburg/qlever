@@ -1625,7 +1625,10 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }
 
-TEST(SparqlParser, updateUnsupported) {
+// Update queries are WIP. The individual parts to parse some update queries
+// are in place the code to process them is still unfinished. Therefore we
+// don't accept update queries.
+TEST(SparqlParser, updateQueryUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto updateUnsupported =
@@ -1646,4 +1649,44 @@ TEST(SparqlParser, updateUnsupported) {
   expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
   expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
   expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
+}
+
+TEST(SparqlParser, UpdateQuery) {
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectUpdateFails = ExpectParseFails<&Parser::query>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  auto Literal = [](std::string s) {
+    return TripleComponent::Literal::fromStringRepresentation(s);
+  };
+
+  expectUpdate("INSERT DATA { <a> <b> <c> }",
+               m::UpdateQuery({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>")}},
+                              m::GraphPattern()));
+  expectUpdate(
+      "INSERT DATA { \"foo:bar\" <b> <c> }",
+      m::UpdateQuery({}, {{Literal("\"foo:bar\""), Iri("<b>"), Iri("<c>")}},
+                     m::GraphPattern()));
+  expectUpdate("DELETE DATA { <a> <b> <c> }",
+               m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {},
+                              m::GraphPattern()));
+  expectUpdate(
+      "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdate(
+      "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<b>"), Iri("<c>")}},
+          {{Iri("<a>"), Var("?a"), Iri("<c>")}},
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  // Unsupported features.
+  expectUpdateFails(
+      "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
+      "}");
+  expectUpdateFails("DELETE { ?a <b> <c> } USING <foo> WHERE { <d> <e> ?a }");
+  expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
 }
