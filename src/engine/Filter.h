@@ -64,5 +64,6 @@ class Filter : public Operation {
   IdTable computeFilterImpl(
       sparqlExpression::EvaluationContext& evaluationContext);
 
-  cppcoro::generator<IdTable> filterInChunks(std::shared_ptr<const Result> subRes);
+  cppcoro::generator<IdTable> filterInChunks(
+      std::shared_ptr<const Result> subRes);
 };
