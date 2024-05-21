@@ -21,7 +21,11 @@
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
 
-enum class ComputationMode { FULL, CACHE_ONLY, LAZY };
+enum class ComputationMode {
+  FULLY_MATERIALIZED,
+  ONLY_IF_CACHED,
+  LAZY_IF_SUPPORTED
+};
 
 class Operation {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -152,7 +156,7 @@ class Operation {
    */
   std::shared_ptr<const Result> getResult(
       bool isRoot = false,
-      ComputationMode computationMode = ComputationMode::FULL);
+      ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole

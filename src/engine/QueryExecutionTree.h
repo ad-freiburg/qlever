@@ -52,9 +52,9 @@ class QueryExecutionTree {
   size_t getResultWidth() const { return rootOperation_->getResultWidth(); }
 
   std::shared_ptr<const Result> getResult(bool requestLaziness = false) const {
-    return rootOperation_->getResult(isRoot(), requestLaziness
-                                                   ? ComputationMode::LAZY
-                                                   : ComputationMode::FULL);
+    return rootOperation_->getResult(
+        isRoot(), requestLaziness ? ComputationMode::LAZY_IF_SUPPORTED
+                                  : ComputationMode::FULLY_MATERIALIZED);
   }
 
   // A variable, its column index in the Id space result, and the `ResultType`

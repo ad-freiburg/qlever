@@ -124,7 +124,8 @@ std::shared_ptr<const Result> Operation::getResult(
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult(computationMode == ComputationMode::LAZY);
+      Result result =
+          computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -159,7 +160,7 @@ std::shared_ptr<const Result> Operation::getResult(
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
-    bool onlyReadFromCache = computationMode == ComputationMode::CACHE_ONLY;
+    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
     auto result = pinResult ? cache.computeOncePinned(cacheKey, computeLambda,
                                                       onlyReadFromCache)
