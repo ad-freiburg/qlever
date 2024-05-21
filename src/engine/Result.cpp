@@ -34,13 +34,13 @@ auto Result::getMergedLocalVocab(const Result& resultTable1,
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : _idTable{std::move(idTable)},
-      _sortedBy{std::move(sortedBy)},
+    : idTable_{std::move(idTable)},
+      sortedBy_{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
+  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy_, [this](size_t numCols) {
     return numCols < this->idTable().numColumns();
   }));
 
@@ -58,7 +58,7 @@ Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-Result::Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                LocalVocab&& localVocab)
     : Result(std::move(idTable), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}) {}
@@ -68,19 +68,18 @@ void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
-  auto& idTable = std::get<0>(_idTable);
   std::ranges::for_each(
-      idTable.getColumns(),
-      [offset = limitOffset.actualOffset(idTable.numRows()),
+      idTable_.getColumns(),
+      [offset = limitOffset.actualOffset(idTable_.numRows()),
        upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
+           limitOffset.upperBound(idTable_.numRows())](std::span<Id> column) {
         std::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
-  size_t targetSize = limitOffset.actualSize(idTable.numRows());
-  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
-  idTable.resize(targetSize);
-  idTable.shrinkToFit();
+  size_t targetSize = limitOffset.actualSize(idTable_.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable_.numRows());
+  idTable_.resize(targetSize);
+  idTable_.shrinkToFit();
 }
 
 // _____________________________________________________________________________
@@ -89,11 +88,10 @@ auto Result::getOrComputeDatatypeCountsPerColumn()
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
-  auto& idTable = std::get<0>(_idTable);
   auto& types = datatypeCountsPerColumn_.emplace();
-  types.resize(idTable.numColumns());
-  for (size_t i = 0; i < idTable.numColumns(); ++i) {
-    const auto& col = idTable.getColumn(i);
+  types.resize(idTable_.numColumns());
+  for (size_t i = 0; i < idTable_.numColumns(); ++i) {
+    const auto& col = idTable_.getColumn(i);
     auto& datatypes = types.at(i);
     for (Id id : col) {
       ++datatypes[static_cast<size_t>(id.getDatatype())];
@@ -115,28 +113,10 @@ bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 }
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const {
-  AD_CONTRACT_CHECK(isDataEvaluated());
-  return std::get<IdTable>(_idTable);
-}
-
-// _____________________________________________________________________________
-cppcoro::generator<IdTable>& Result::idTables() {
-  AD_CONTRACT_CHECK(!isDataEvaluated());
-  return std::get<cppcoro::generator<IdTable>>(_idTable);
-}
-
-// _____________________________________________________________________________
-bool Result::isDataEvaluated() const {
-  return std::holds_alternative<IdTable>(_idTable);
-}
+const IdTable& Result::idTable() const { return idTable_; }
 
 // _____________________________________________________________________________
 void Result::logResultSize() const {
-  if (isDataEvaluated()) {
-    LOG(INFO) << "Result has size " << idTable().size() << " x "
-              << idTable().numColumns() << std::endl;
-  } else {
-    LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
-  }
+  LOG(INFO) << "Result has size " << idTable().size() << " x "
+            << idTable().numColumns() << std::endl;
 }

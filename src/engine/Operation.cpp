@@ -125,8 +125,6 @@ std::shared_ptr<const Result> Operation::getResult(
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
       Result result = computeResult(computationMode == ComputationMode::LAZY);
-      AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY ||
-                        result.isDataEvaluated());
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.

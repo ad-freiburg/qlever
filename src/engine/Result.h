@@ -15,7 +15,6 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Generator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -23,12 +22,11 @@
 class Result {
  private:
   // The actual entries.
-  using TableType = std::variant<IdTable, cppcoro::generator<IdTable>>;
-  TableType _idTable;
+  IdTable idTable_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  std::vector<ColumnIndex> _sortedBy;
+  std::vector<ColumnIndex> sortedBy_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
@@ -81,9 +79,9 @@ class Result {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          SharedLocalVocabWrapper localVocab);
-  Result(TableType idTable, std::vector<ColumnIndex> sortedBy,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
@@ -100,11 +98,8 @@ class Result {
   // Const access to the underlying `IdTable`.
   const IdTable& idTable() const;
 
-  // Access to the underlying `IdTable`.
-  cppcoro::generator<IdTable>& idTables();
-
   // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
+  const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -145,8 +140,6 @@ class Result {
   // when you want to (potentially) add further words to the local vocabulary
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
-
-  bool isDataEvaluated() const;
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
