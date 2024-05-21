@@ -16,7 +16,6 @@
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/Generator.h"
-#include "util/Log.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data

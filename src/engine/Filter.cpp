@@ -45,7 +45,7 @@ string Filter::getDescriptor() const {
 // _____________________________________________________________________________
 Result Filter::computeResult([[maybe_unused]] bool requestLazyness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
-  shared_ptr<const Result> subRes = _subtree->getResult();
+  std::shared_ptr<const Result> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
   checkCancellation();
 

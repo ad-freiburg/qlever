@@ -267,7 +267,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     const LimitOffsetClause& limitAndOffset,
-    shared_ptr<const Result> resultTable,
+    std::shared_ptr<const Result> resultTable,
     CancellationHandle cancellationHandle) {
   using nlohmann::json;
 
@@ -387,7 +387,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
     const QueryExecutionTree& qet,
     const parsedQuery::SelectClause& selectClause,
     const LimitOffsetClause& limitAndOffset,
-    shared_ptr<const Result> resultTable,
+    std::shared_ptr<const Result> resultTable,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(resultTable != nullptr);
   LOG(DEBUG) << "Resolving strings for finished binary result...\n";
@@ -417,7 +417,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  shared_ptr<const Result> resultTable = qet.getResult();
+  std::shared_ptr<const Result> resultTable = qet.getResult();
   resultTable->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -562,7 +562,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       selectClause.getSelectedVariablesAsStrings();
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  shared_ptr<const Result> resultTable = qet.getResult();
+  std::shared_ptr<const Result> resultTable = qet.getResult();
 
   // In the XML format, the variables don't include the question mark.
   auto varsWithoutQuestionMark = std::views::transform(
@@ -636,7 +636,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer, uint64_t maxSend,
     CancellationHandle cancellationHandle) {
-  shared_ptr<const Result> resultTable = qet.getResult();
+  std::shared_ptr<const Result> resultTable = qet.getResult();
   resultTable->logResultSize();
   auto timeResultComputation = requestTimer.msecs();
 
@@ -723,7 +723,7 @@ nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
     AD_THROW(
         "SPARQL-compliant JSON format is only supported for SELECT queries");
   }
-  shared_ptr<const Result> resultTable = qet.getResult();
+  std::shared_ptr<const Result> resultTable = qet.getResult();
   resultTable->logResultSize();
   nlohmann::json j;
   auto limitAndOffset = query._limitOffset;

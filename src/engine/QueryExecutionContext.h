@@ -9,25 +9,16 @@
 #include <memory>
 #include <shared_mutex>
 #include <string>
-#include <vector>
 
-#include "engine/Engine.h"
 #include "engine/QueryPlanningCostFactors.h"
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
-#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
-#include "util/Log.h"
 #include "util/Synchronized.h"
-#include "util/http/websocket/QueryId.h"
-
-using std::shared_ptr;
-using std::string;
-using std::vector;
 
 class CacheValue {
  private:
@@ -39,7 +30,9 @@ class CacheValue {
       : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const shared_ptr<const Result>& resultTable() const { return _resultTable; }
+  const std::shared_ptr<const Result>& resultTable() const {
+    return _resultTable;
+  }
 
   const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
 

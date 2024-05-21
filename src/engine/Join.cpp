@@ -122,8 +122,9 @@ Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
-    return tree.getRootOperation()->getResult(false,
-                                              !(isSmall || containsUndef));
+    return tree.getRootOperation()->getResult(
+        false, (isSmall || containsUndef) ? ComputationMode::CACHE_ONLY
+                                          : ComputationMode::FULL);
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
@@ -153,7 +154,7 @@ Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
     }
   }
 
-  shared_ptr<const Result> leftRes =
+  std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
   if (leftRes->idTable().size() == 0) {
@@ -181,7 +182,7 @@ Result Join::computeResult([[maybe_unused]] bool requestLazyness) {
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const Result> rightRes =
+  std::shared_ptr<const Result> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
   checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,

@@ -70,9 +70,8 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // ________________________________________________________________________
-shared_ptr<const Result> Operation::getResult(bool isRoot,
-                                              bool onlyReadFromCache,
-                                              bool requestLazyness) {
+std::shared_ptr<const Result> Operation::getResult(
+    bool isRoot, ComputationMode computationMode) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
@@ -121,12 +120,13 @@ shared_ptr<const Result> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer, requestLazyness] {
+    auto computeLambda = [this, &timer, computationMode] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result = computeResult(requestLazyness);
-      AD_CONTRACT_CHECK(requestLazyness || result.isDataEvaluated());
+      Result result = computeResult(computationMode == ComputationMode::LAZY);
+      AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY ||
+                        result.isDataEvaluated());
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -161,10 +161,12 @@ shared_ptr<const Result> Operation::getResult(bool isRoot,
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                        onlyReadFromCache)
-                              : cache.computeOnce(cacheKey, computeLambda,
-                                                  onlyReadFromCache);
+    bool onlyReadFromCache = computationMode == ComputationMode::CACHE_ONLY;
+
+    auto result = pinResult ? cache.computeOncePinned(cacheKey, computeLambda,
+                                                      onlyReadFromCache)
+                            : cache.computeOnce(cacheKey, computeLambda,
+                                                onlyReadFromCache);
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
