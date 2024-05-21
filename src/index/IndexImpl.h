@@ -490,17 +490,20 @@ class IndexImpl {
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
   // multiplicities and also writes the MetaData to disk. So we end up with
   // fully functional permutations.
+  //
+  // TODO: The rest of this comment looks outdated.
+  //
   // performUnique must be set for the first pair created using vec to enforce
   // RDF standard (no duplicate triples).
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
-                                             auto&& sortedTriples,
-                                             const Permutation& p1,
-                                             const Permutation& p2,
-                                             auto&&... perTripleCallbacks);
+  template <typename SortedTriplesType, typename... CallbackTypes>
+  [[nodiscard]] size_t createPermutationPair(
+      size_t numColumns, SortedTriplesType&& sortedTriples,
+      const Permutation& p1, const Permutation& p2,
+      CallbackTypes&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation

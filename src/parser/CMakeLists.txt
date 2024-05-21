@@ -24,6 +24,7 @@ add_library(parser
         GraphPattern.cpp data/Variable.cpp
         Iri.cpp
         Literal.cpp
-        LiteralOrIri.cpp)
+        LiteralOrIri.cpp
+        Triples.h)
 qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine)
 
