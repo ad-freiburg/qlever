@@ -158,7 +158,7 @@ size_t Union::getCostEstimate() {
          getSizeEstimateBeforeLimit();
 }
 
-Result Union::computeResult([[maybe_unused]] bool requestLazyness) {
+Result Union::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
   std::shared_ptr<const Result> subRes1 = _subtrees[0]->getResult();
   std::shared_ptr<const Result> subRes2 = _subtrees[1]->getResult();
@@ -174,7 +174,7 @@ Result Union::computeResult([[maybe_unused]] bool requestLazyness) {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return Result{std::move(idTable), resultSortedOn(),
-                     Result::getMergedLocalVocab(*subRes1, *subRes2)};
+                Result::getMergedLocalVocab(*subRes1, *subRes2)};
 }
 
 void Union::computeUnion(

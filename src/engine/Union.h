@@ -61,7 +61,7 @@ class Union : public Operation {
   }
 
  private:
-  virtual Result computeResult([[maybe_unused]] bool requestLazyness) override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

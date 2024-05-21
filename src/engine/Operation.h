@@ -201,8 +201,8 @@ class Operation {
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
   virtual Result computeResultOnlyForTesting(
-      bool requestLazyness = false) final {
-    return computeResult(requestLazyness);
+      bool requestLaziness = false) final {
+    return computeResult(requestLaziness);
   }
 
  protected:
