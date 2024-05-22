@@ -290,7 +290,13 @@ TEST(ValueId, toDebugString) {
     ASSERT_EQ(stream.str(), expected);
   };
   test(ValueId::makeUndefined(), "U:0");
-  test(ValueId::makeFromInt(-42), "I:-42");
+  // Values with type undefined can usually only have one value (all data bits
+  // zero). Sometimes ValueIds with type undefined but non-zero data bits are
+  // used. The following test tests one of these internal ValueIds.
+  ValueId customUndefined = ValueId::fromBits(
+      ValueId::IntegerType::fromNBit(100) |
+      (static_cast<ValueId::T>(Datatype::Undefined) << ValueId::numDataBits));
+  test(customUndefined, "U:100");
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
