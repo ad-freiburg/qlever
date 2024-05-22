@@ -122,6 +122,7 @@ Result Join::computeResult([[maybe_unused]] bool requestLaziness) {
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
+    // TODO<joka921> Add a unit test that checks the correct conditions
     return tree.getRootOperation()->getResult(
         false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
                                           : ComputationMode::ONLY_IF_CACHED);
