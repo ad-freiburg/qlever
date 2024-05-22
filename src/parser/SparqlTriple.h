@@ -1,6 +1,7 @@
 //  Copyright 2024, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #pragma once
 

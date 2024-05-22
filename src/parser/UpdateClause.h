@@ -5,7 +5,7 @@
 #pragma once
 
 #include "parser/SelectClause.h"
-#include "parser/Triples.h"
+#include "parser/SparqlTriple.h"
 #include "parser/data/Types.h"
 
 namespace parsedQuery {
@@ -14,8 +14,8 @@ struct UpdateClause : ClauseBase {
   std::vector<SparqlTripleSimple> toDelete_;
 
   UpdateClause() = default;
-  explicit UpdateClause(std::vector<SparqlTripleSimple> toInsert,
-                        std::vector<SparqlTripleSimple> toDelete)
+  UpdateClause(std::vector<SparqlTripleSimple> toInsert,
+               std::vector<SparqlTripleSimple> toDelete)
       : toInsert_{std::move(toInsert)}, toDelete_{std::move(toDelete)} {}
 };
 }  // namespace parsedQuery

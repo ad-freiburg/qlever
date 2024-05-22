@@ -824,9 +824,9 @@ inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
     -> Matcher<const ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasConstructClause, testing::IsTrue()),
-      AD_PROPERTY(
-          ParsedQuery, constructClause,
-          AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems))),
+      AD_PROPERTY(ParsedQuery, constructClause,
+                  AD_FIELD(parsedQuery::ConstructClause, triples_,
+                           testing::ElementsAreArray(elems))),
       RootGraphPattern(m));
 }
 
@@ -845,10 +845,10 @@ inline auto UpdateQuery =
       AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
       AD_PROPERTY(ParsedQuery, updateClause,
                   AD_FIELD(parsedQuery::UpdateClause, toDelete_,
-                           testing::Eq(toDelete))),
+                           testing::ElementsAreArray(toDelete))),
       AD_PROPERTY(ParsedQuery, updateClause,
                   AD_FIELD(parsedQuery::UpdateClause, toInsert_,
-                           testing::Eq(toInsert))),
+                           testing::ElementsAreArray(toInsert))),
       RootGraphPattern(graphPatternMatcher));
 };
 

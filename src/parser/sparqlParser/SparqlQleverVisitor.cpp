@@ -330,8 +330,7 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   visit(ctx->prologue());
 
   if (ctx->update()) {
-    reportNotSupported(ctx->update(),
-                       "Multiple updates in one query are not supported.");
+    reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
   return visit(ctx->update1());
 }
@@ -360,37 +359,37 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::LoadContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Load is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Load is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::ClearContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Clear is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Clear is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::DropContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Drop is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Drop is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::CreateContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Create is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Create is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::AddContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Add is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Add is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::MoveContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Move is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Move is");
 }
 
 // ____________________________________________________________________________________
 void Visitor::visit(Parser::CopyContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Copy is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update Copy is");
 }
 
 // ____________________________________________________________________________________
@@ -408,18 +407,18 @@ void Visitor::visit(Parser::DeleteWhereContext* ctx) {
   // DeleteData only deletes the specified triples. DeleteWhere matches the
   // given pattern and then deletes the matched triples. This is a shortcut for
   // a modify query.
-  reportNotSupported(ctx, "SPARQL 1.1 Update DeleteWhere is not supported.");
+  reportNotSupported(ctx, "SPARQL 1.1 Update DeleteWhere is");
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   if (ctx->iri()) {
     // Could also be default; disallow completely for now.
-    reportNotSupported(ctx->iri(), "Named graphs are not supported.");
+    reportNotSupported(ctx->iri(), "Named graphs are");
   }
   if (!ctx->usingClause().empty()) {
     reportNotSupported(ctx->usingClause(0),
-                       "Using is not supported in Update/Insert.");
+                       "USING inside an DELETE or INSERT is");
   }
 
   parsedQuery_._rootGraphPattern = visit(ctx->groupGraphPattern());
@@ -473,14 +472,14 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::QuadDataContext* ctx) {
 vector<SparqlTripleSimple> Visitor::visit(Parser::QuadsContext* ctx) {
   if (!ctx->quadsNotTriples().empty()) {
     // Could also be default; disallow completely for now.
-    reportNotSupported(ctx->quadsNotTriples(0),
-                       "Named graphs are not supported.");
+    reportNotSupported(ctx->quadsNotTriples(0), "Named graphs are");
   }
 
   AD_CORRECTNESS_CHECK(ctx->triplesTemplate().size() == 1);
 
   auto convertAndRegisterTriple =
       [this](const std::array<GraphTerm, 3>& triple) -> SparqlTripleSimple {
+    // TODO:
     registerIfVariable(triple[0]);
     registerIfVariable(triple[1]);
     registerIfVariable(triple[2]);
@@ -489,9 +488,8 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::QuadsContext* ctx) {
             visitGraphTerm(triple[2])};
   };
 
-  std::vector<SparqlTripleSimple> triples = {ad_utility::transform(
-      visit(ctx->triplesTemplate(0)), convertAndRegisterTriple)};
-  return triples;
+  return ad_utility::transform(visit(ctx->triplesTemplate(0)),
+                               convertAndRegisterTriple);
 }
 
 // ____________________________________________________________________________________
