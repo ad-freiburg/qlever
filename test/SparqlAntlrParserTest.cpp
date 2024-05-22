@@ -1666,8 +1666,8 @@ TEST(SparqlParser, UpdateQuery) {
                m::UpdateQuery({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>")}},
                               m::GraphPattern()));
   expectUpdate(
-      "INSERT DATA { \"foo:bar\" <b> <c> }",
-      m::UpdateQuery({}, {{Literal("\"foo:bar\""), Iri("<b>"), Iri("<c>")}},
+      "INSERT DATA { <a> <b> \"foo:bar\" }",
+      m::UpdateQuery({}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\"")}},
                      m::GraphPattern()));
   expectUpdate("DELETE DATA { <a> <b> <c> }",
                m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {},

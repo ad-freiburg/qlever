@@ -341,16 +341,24 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     return visit(ctx->modify());
   }
 
+  // TODO: updates can be chained; think about how to enable this
+
   parsedQuery_._clause = parsedQuery::UpdateClause();
 
   if (ctx->insertData()) {
     parsedQuery_.updateClause().toInsert_ = visit(ctx->insertData());
   } else if (ctx->deleteData()) {
     parsedQuery_.updateClause().toDelete_ = visit(ctx->deleteData());
+  } else if (ctx->deleteWhere()) {
+    auto [toDelete, pattern] = visit(ctx->deleteWhere());
+    parsedQuery_.updateClause().toDelete_ = std::move(toDelete);
+    parsedQuery_._rootGraphPattern = std::move(pattern);
+  } else if (ctx->modify()) {
+    // updates the internal state of `parsedQuery_`
+    visit(ctx->modify());
   } else {
     visitAlternative<void>(ctx->load(), ctx->clear(), ctx->drop(), ctx->add(),
-                           ctx->move(), ctx->copy(), ctx->create(),
-                           ctx->deleteWhere());
+                           ctx->move(), ctx->copy(), ctx->create());
     AD_FAIL();
   }
 
@@ -403,11 +411,28 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteDataContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DeleteWhereContext* ctx) {
-  // DeleteData only deletes the specified triples. DeleteWhere matches the
-  // given pattern and then deletes the matched triples. This is a shortcut for
-  // a modify query.
-  reportNotSupported(ctx, "SPARQL 1.1 Update DeleteWhere is");
+std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
+    Parser::DeleteWhereContext* ctx) {
+  auto triples = visit(ctx->quadPattern());
+  auto transformTriple =
+      [&ctx](const SparqlTripleSimple& triple) -> SparqlTriple {
+    if (triple.p_.isVariable()) {
+      return {triple.s_, PropertyPath::fromVariable(triple.p_.getVariable()),
+              triple.o_};
+    } else if (triple.p_.isIri()) {
+      return {
+          triple.s_,
+          PropertyPath::fromIri(triple.p_.getIri().toStringRepresentation()),
+          triple.o_};
+    } else {
+      reportError(ctx, "Predicate must a PropertyPath");
+    }
+  };
+  GraphPattern pattern;
+  pattern._graphPatterns.emplace_back(
+      BasicGraphPattern{ad_utility::transform(triples, transformTriple)});
+
+  return {std::move(triples), std::move(pattern)};
 }
 
 // ____________________________________________________________________________________

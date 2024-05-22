@@ -221,7 +221,8 @@ class SparqlQleverVisitor {
 
   vector<SparqlTripleSimple> visit(Parser::DeleteDataContext* ctx);
 
-  void visit(Parser::DeleteWhereContext* ctx);
+  std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> visit(
+      Parser::DeleteWhereContext* ctx);
 
   ParsedQuery visit(Parser::ModifyContext* ctx);
 
@@ -625,6 +626,9 @@ class SparqlQleverVisitor {
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
 
+  // Constructs a TripleComponent from a GraphTerm.
   static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
+  // If argument is a variant that contains a Variable register that Variable as
+  // visible in the current scope.
   void registerIfVariable(const auto& variant);
 };
