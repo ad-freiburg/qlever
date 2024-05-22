@@ -123,9 +123,8 @@ Result Join::computeResult([[maybe_unused]] bool requestLaziness) {
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
     return tree.getRootOperation()->getResult(
-        false, (isSmall || containsUndef)
-                   ? ComputationMode::ONLY_IF_CACHED
-                   : ComputationMode::FULLY_MATERIALIZED);
+        false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
+                                          : ComputationMode::ONLY_IF_CACHED);
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
