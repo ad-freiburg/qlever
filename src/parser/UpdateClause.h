@@ -10,7 +10,6 @@
 
 namespace parsedQuery {
 struct UpdateClause : ClauseBase {
-  // Triples with no variables.
   std::vector<SparqlTripleSimple> toInsert_;
   std::vector<SparqlTripleSimple> toDelete_;
 
