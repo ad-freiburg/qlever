@@ -289,7 +289,7 @@ TEST(ValueId, toDebugString) {
     stream << id;
     ASSERT_EQ(stream.str(), expected);
   };
-  test(ValueId::makeUndefined(), "U:xx");
+  test(ValueId::makeUndefined(), "U:0");
   test(ValueId::makeFromInt(-42), "I:-42");
   test(ValueId::makeFromDouble(42.0), "D:42.000000");
   test(ValueId::makeFromBool(false), "B:false");

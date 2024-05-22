@@ -34,7 +34,7 @@ TEST(SparqlExpressionTypes, printIdOrString) {
 
   IdOrLiteralOrIri idOrString{Id::makeUndefined()};
   PrintTo(idOrString, &str);
-  ASSERT_EQ(str.str(), "U:xx");
+  ASSERT_EQ(str.str(), "U:0");
   idOrString = LiteralOrIri::literalWithoutQuotes("bimm");
   // Clear the stringstream.
   str.str({});

@@ -327,9 +327,14 @@ class ValueId {
   /// human-readable representation.
   friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
     ostr << toString(id.getDatatype())[0] << ':';
+    if (id.getDatatype() == Datatype::Undefined) {
+      return ostr << id.getBits();
+    }
+
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
-        ostr << "xx";
+        // already handled above
+        AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
