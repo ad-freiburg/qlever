@@ -616,8 +616,6 @@ boost::asio::awaitable<void> Server::processQuery(
                                    const std::string& expected) {
       return params.contains(param) && params.at(param) == expected;
     };
-    size_t maxSend = params.contains("send") ? std::stoul(params.at("send"))
-                                             : MAX_NOF_ROWS_IN_RESULT;
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Processing the following SPARQL query:"
@@ -646,6 +644,14 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = MediaType::turtle;
     } else if (containsParam("action", "binary_export")) {
       mediaType = MediaType::octetStream;
+    }
+    std::optional<uint64_t> maxSend =
+        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
+                                : std::nullopt;
+    // Limit JSON requests by default
+    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
+                                 mediaType == MediaType::qleverJson)) {
+      maxSend = MAX_NOF_ROWS_IN_RESULT;
     }
 
     std::string_view acceptHeader = request.base()[http::field::accept];
@@ -683,8 +689,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    plannedQuery =
-        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    plannedQuery = co_await parseAndPlan(query, qec, cancellationHandle,
+                                         timeLimit, maxSend);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
@@ -713,10 +719,10 @@ boost::asio::awaitable<void> Server::processQuery(
       case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
+            [&plannedQuery, &qet, &requestTimer, mediaType,
              &cancellationHandle] {
               return ExportQueryExecutionTrees::computeResultAsJSON(
-                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  plannedQuery.value().parsedQuery_, qet, requestTimer,
                   mediaType.value(), cancellationHandle);
             },
             cancellationHandle);
@@ -820,7 +826,8 @@ Awaitable<T> Server::computeInNewThread(Function function,
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit) {
+    SharedCancellationHandle handle, TimeLimit timeLimit,
+    std::optional<uint64_t> maxSend) {
   auto handleCopy = handle;
 
   // The usage of an `optional` here is required because of a limitation in
@@ -830,9 +837,13 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle),
-       timeLimit]() mutable -> std::optional<PlannedQuery> {
+       handle = std::move(handle), timeLimit,
+       maxSend]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
+        if (maxSend.has_value()) {
+          pq._limitOffset._limit =
+              std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+        }
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);

@@ -2,10 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include <cstdlib>
-
 #include "engine/QueryExecutionTree.h"
-#include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
@@ -51,12 +48,11 @@ class ExportQueryExecutionTrees {
   // single JSON object that is fully materialized before the function returns.
   // The `requestTimer` is used to report timing statistics on the query. It
   // must have already run during the query planning to produce the expected
-  // results. If `maxSend` is smaller than the size of the query result, then
-  // only the first `maxSend` rows are returned.
+  // results.
   static nlohmann::json computeResultAsJSON(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer, uint64_t maxSend,
-      MediaType mediaType, CancellationHandle cancellationHandle);
+      const ad_utility::Timer& requestTimer, MediaType mediaType,
+      CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -99,18 +95,17 @@ class ExportQueryExecutionTrees {
   // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
   static nlohmann::json computeQueryResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer, uint64_t maxSend,
+      const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
   // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
   static nlohmann::json computeSelectQueryResultAsSparqlJSON(
-      const ParsedQuery& query, const QueryExecutionTree& qet, uint64_t maxSend,
+      const ParsedQuery& query, const QueryExecutionTree& qet,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
@@ -120,9 +115,6 @@ class ExportQueryExecutionTrees {
    *  `computeQueryResultAsQLeverJSON` to obtain the "actual" query results
    * (without the meta data)
    * @param qet The `QueryExecutionTree` of the query.
-   * @param from the first <from> entries of the idTable are skipped
-   * @param limitAndOffset at most <limit> entries are written, starting at
-   * <from>
    * @param columns each pair of <columnInIdTable, correspondingType> tells
    * us which columns are to be serialized in which order
    * @param resultTable The query result in the ID space. If it is `nullptr`,
@@ -130,7 +122,7 @@ class ExportQueryExecutionTrees {
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
   static nlohmann::json idTableToQLeverJSONArray(
-      const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
+      const QueryExecutionTree& qet,
       const QueryExecutionTree::ColumnIndicesAndTypes& columns,
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
@@ -139,7 +131,6 @@ class ExportQueryExecutionTrees {
   static nlohmann::json constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
 
   // Generate an RDF graph for a CONSTRUCT query.
@@ -147,14 +138,12 @@ class ExportQueryExecutionTrees {
   constructQueryResultToTriples(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
-      CancellationHandle cancellationHandle);
+      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultToSparqlJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
@@ -163,7 +152,6 @@ class ExportQueryExecutionTrees {
   static ad_utility::streams::stream_generator constructQueryResultToStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
-      LimitOffsetClause limitAndOffset,
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
@@ -172,5 +160,5 @@ class ExportQueryExecutionTrees {
   static ad_utility::streams::stream_generator selectQueryResultToStream(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
-      LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle);
 };
