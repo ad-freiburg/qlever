@@ -19,6 +19,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/BlankNode.h"
+#include "parser/data/GraphRef.h"
 #include "parser/data/Iri.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/Types.h"
@@ -205,7 +206,7 @@ class SparqlQleverVisitor {
 
   void visit(Parser::LoadContext* ctx);
 
-  void visit(Parser::ClearContext* ctx);
+  ParsedQuery visit(Parser::ClearContext* ctx);
 
   void visit(Parser::DropContext* ctx);
 
@@ -232,11 +233,11 @@ class SparqlQleverVisitor {
 
   void visit(Parser::UsingClauseContext* ctx);
 
-  void visit(Parser::GraphOrDefaultContext* ctx);
+  GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
-  void visit(Parser::GraphRefContext* ctx);
+  GraphRef visit(Parser::GraphRefContext* ctx);
 
-  void visit(Parser::GraphRefAllContext* ctx);
+  GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
   vector<SparqlTripleSimple> visit(Parser::QuadPatternContext* ctx);
 

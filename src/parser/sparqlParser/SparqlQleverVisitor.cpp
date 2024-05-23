@@ -356,9 +356,12 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
   } else if (ctx->modify()) {
     // updates the internal state of `parsedQuery_`
     visit(ctx->modify());
+  } else if (ctx->clear()) {
+    // updates the internal state of `parsedQuery_`
+    visit(ctx->clear());
   } else {
-    visitAlternative<void>(ctx->load(), ctx->clear(), ctx->drop(), ctx->add(),
-                           ctx->move(), ctx->copy(), ctx->create());
+    visitAlternative<void>(ctx->load(), ctx->drop(), ctx->add(), ctx->move(),
+                           ctx->copy(), ctx->create());
     AD_FAIL();
   }
 
@@ -371,8 +374,19 @@ void Visitor::visit(Parser::LoadContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::ClearContext* ctx) {
-  reportNotSupported(ctx, "SPARQL 1.1 Update Clear is");
+ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
+  auto graphRef = visit(ctx->graphRefAll());
+
+  if (holds_alternative<DEFAULT>(graphRef)) {
+    parsedQuery_._clause = parsedQuery::UpdateClause();
+    parsedQuery_.updateClause().toDelete_ = {
+        {Variable("?s"), Variable("?p"), Variable("?o")}};
+    parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
+        BasicGraphPattern{{{Variable("?s"), "?p", Variable("?o")}}});
+    return parsedQuery_;
+  } else {
+    reportNotSupported(ctx, "Named Graphs are");
+  }
 }
 
 // ____________________________________________________________________________________
@@ -467,6 +481,33 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteClauseContext* ctx) {
 // ____________________________________________________________________________________
 vector<SparqlTripleSimple> Visitor::visit(Parser::InsertClauseContext* ctx) {
   return visit(ctx->quadPattern());
+}
+
+// ____________________________________________________________________________________
+GraphOrDefault Visitor::visit(Parser::GraphOrDefaultContext* ctx) {
+  if (ctx->iri()) {
+    return visit(ctx->iri());
+  } else {
+    return DEFAULT{};
+  }
+}
+
+// ____________________________________________________________________________________
+GraphRef Visitor::visit(Parser::GraphRefContext* ctx) {
+  return visit(ctx->iri());
+}
+
+// ____________________________________________________________________________________
+GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
+  if (ctx->graphRef()) {
+    return visit(ctx->graphRef());
+  } else if (ctx->DEFAULT()) {
+    return DEFAULT{};
+  } else if (ctx->NAMED()) {
+    return NAMED{};
+  } else if (ctx->ALL()) {
+    return ALL{};
+  }
 }
 
 // ____________________________________________________________________________________
