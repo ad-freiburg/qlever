@@ -140,9 +140,9 @@ class TransitivePathImpl : public TransitivePathBase {
    * on the time it takes to compute the hull. The set of nodes on the
    * start side should be as small as possible.
    *
-   * @return ResultTable The result of the TransitivePath operation
+   * @return Result The result of the TransitivePath operation
    */
-  ResultTable computeResult() override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
         rhs_.isVariable()) {
       AD_THROW(
@@ -150,7 +150,7 @@ class TransitivePathImpl : public TransitivePathBase {
           "not supported");
     }
     auto [startSide, targetSide] = decideDirection();
-    shared_ptr<const ResultTable> subRes = subtree_->getResult();
+    std::shared_ptr<const Result> subRes = subtree_->getResult();
 
     IdTable idTable{allocator()};
 
@@ -159,7 +159,7 @@ class TransitivePathImpl : public TransitivePathBase {
     size_t subWidth = subRes->idTable().numColumns();
 
     if (startSide.isBoundVariable()) {
-      shared_ptr<const ResultTable> sideRes =
+      std::shared_ptr<const Result> sideRes =
           startSide.treeAndCol_.value().first->getResult();
       size_t sideWidth = sideRes->idTable().numColumns();
 
@@ -169,7 +169,7 @@ class TransitivePathImpl : public TransitivePathBase {
                       sideRes->idTable());
 
       return {std::move(idTable), resultSortedOn(),
-              ResultTable::getMergedLocalVocab(*sideRes, *subRes)};
+              Result::getMergedLocalVocab(*sideRes, *subRes)};
     }
     CALL_FIXED_SIZE((std::array{resultWidth_, subWidth}),
                     &TransitivePathImpl<T>::computeTransitivePath, this,

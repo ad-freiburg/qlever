@@ -123,7 +123,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 // _____________________________________________________________________________
-ResultTable IndexScan::computeResult() {
+Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   IdTable idTable{getExecutionContext()->getAllocator()};
 
