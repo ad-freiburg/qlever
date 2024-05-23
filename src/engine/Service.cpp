@@ -37,7 +37,11 @@ std::string Service::getCacheKeyImpl() const {
   // TODO: This duplicates code in GraphPatternOperation.cpp .
   os << "SERVICE " << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
-     << parsedServiceClause_.graphPatternAsString_ << "\n}\n";
+     << parsedServiceClause_.graphPatternAsString_ << "\n";
+  if (siblingTree_ != nullptr) {
+    os << siblingTree_->getRootOperation()->getCacheKey() << "\n";
+  }
+  os << "}\n";
   return std::move(os).str();
 }
 
@@ -184,6 +188,8 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     return std::nullopt;
   }
 
+  checkCancellation();
+
   std::vector<ColumnIndex> commonColumnIndices;
   const auto& siblingVars = siblingTree_->getVariableColumns();
   std::string vars = "(";
@@ -192,24 +198,26 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     if (it == siblingVars.end()) {
       continue;
     }
-    vars += it->first.name() + " ";
+    absl::StrAppend(&vars, it->first.name(), " ");
     commonColumnIndices.push_back(it->second.columnIndex_);
   }
   vars.back() = ')';
+
+  checkCancellation();
 
   ad_utility::HashSet<std::string> rowSet;
 
   std::string values = " { ";
   for (size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex) {
     std::string row = "(";
-    for (size_t i = 0; i < commonColumnIndices.size(); ++i) {
+    for (const auto& columnIdx : commonColumnIndices) {
       const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
           siblingTree_->getRootOperation()->getIndex(),
-          siblingResult->idTable()(rowIndex, commonColumnIndices[i]),
+          siblingResult->idTable()(rowIndex, columnIdx),
           siblingResult->localVocab());
 
       if (optionalString.has_value()) {
-        row += optionalString.value().first + ' ';
+        absl::StrAppend(&row, optionalString.value().first, " ");
       }
     }
     row.back() = ')';
@@ -219,7 +227,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
     }
 
     rowSet.insert(row);
-    values += row + " ";
+    absl::StrAppend(&values, row, " ");
   }
 
   return "VALUES " + vars + values + "} . ";

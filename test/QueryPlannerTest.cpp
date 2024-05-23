@@ -1062,3 +1062,17 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
                                         HasSubstr("Query planning"),
                                         ad_utility::CancellationException);
 }
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, JoinWithService) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y ."
+      "SERVICE <https://endpoint.com> {?x <is-a> ?z . }}",
+      h::Join(scan("?x", "<is-a>", "?y"), h::Sort(h::Service())));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y . "
+      "SERVICE <https://endpoint.com> {?x <is-a> ?C . ?y <is-a> ?D }}",
+      h::MultiColumnJoin(scan("?x", "<is-a>", "?y"), h::Sort(h::Service())));
+}

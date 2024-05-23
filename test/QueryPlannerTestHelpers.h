@@ -15,6 +15,7 @@
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
+#include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
@@ -282,6 +283,9 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 
 // Match a `UNION` operation.
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
+
+// Match a `SERVICE` operation.
+constexpr auto Service = MatchTypeAndOrderedChildren<::Service>;
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

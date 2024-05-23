@@ -223,3 +223,49 @@ TEST_F(ServiceTest, computeResult) {
       siblingTree};
   EXPECT_NO_THROW(serviceOperation5.getResult());
 }
+
+TEST_F(ServiceTest, getCacheKey) {
+  parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
+                                           Iri{"<http://localhorst/api>"},
+                                           "PREFIX doof: <http://doof.org>",
+                                           "{ }"};
+
+  // The cacheKey of the Service Operation has to depend on the cacheKey of
+  // the siblingTree, as it might alter the Service Query.
+
+  Service service(
+      testQec, parsedServiceClause,
+      getTsvFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"));
+
+  auto ck_noSibling = service.getCacheKey();
+
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto siblingTree = std::make_shared<QueryExecutionTree>(
+      testQec,
+      std::make_shared<Values>(
+          testQec,
+          (parsedQuery::SparqlValues){
+              {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+              {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+               {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+  service.setSiblingTree(siblingTree);
+
+  auto ck_sibling = service.getCacheKey();
+  EXPECT_NE(ck_noSibling, ck_sibling);
+
+  auto siblingTree2 = std::make_shared<QueryExecutionTree>(
+      testQec,
+      std::make_shared<Values>(
+          testQec, (parsedQuery::SparqlValues){
+                       {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                       {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}}));
+
+  service.setSiblingTree(siblingTree2);
+
+  auto ck_changedSibling = service.getCacheKey();
+  EXPECT_NE(ck_sibling, ck_changedSibling);
+}
