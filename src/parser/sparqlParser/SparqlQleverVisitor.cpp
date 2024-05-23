@@ -345,11 +345,11 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
 
   parsedQuery_._clause = parsedQuery::UpdateClause();
 
-  if (ctx->insertData()) {
-    parsedQuery_.updateClause().toInsert_ = visit(ctx->insertData());
-  } else if (ctx->deleteData()) {
-    parsedQuery_.updateClause().toDelete_ = visit(ctx->deleteData());
-  } else if (ctx->deleteWhere()) {
+  // handles insertData and deleteData cases
+  visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertData());
+  visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteData());
+
+  if (ctx->deleteWhere()) {
     auto [toDelete, pattern] = visit(ctx->deleteWhere());
     parsedQuery_.updateClause().toDelete_ = std::move(toDelete);
     parsedQuery_._rootGraphPattern = std::move(pattern);
@@ -463,12 +463,8 @@ ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   parsedQuery_._rootGraphPattern = visit(ctx->groupGraphPattern());
 
   parsedQuery_._clause = parsedQuery::UpdateClause();
-  if (ctx->deleteClause()) {
-    parsedQuery_.updateClause().toDelete_ = visit(ctx->deleteClause());
-  }
-  if (ctx->insertClause()) {
-    parsedQuery_.updateClause().toInsert_ = visit(ctx->insertClause());
-  }
+  visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertClause());
+  visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteClause());
 
   return parsedQuery_;
 }
