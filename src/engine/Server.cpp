@@ -645,6 +645,13 @@ boost::asio::awaitable<void> Server::processQuery(
     } else if (containsParam("action", "binary_export")) {
       mediaType = MediaType::octetStream;
     }
+
+    std::string_view acceptHeader = request.base()[http::field::accept];
+
+    if (!mediaType.has_value()) {
+      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+    }
+
     std::optional<uint64_t> maxSend =
         params.contains("send") ? std::optional{std::stoul(params.at("send"))}
                                 : std::nullopt;
@@ -652,12 +659,6 @@ boost::asio::awaitable<void> Server::processQuery(
     if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
                                  mediaType == MediaType::qleverJson)) {
       maxSend = MAX_NOF_ROWS_IN_RESULT;
-    }
-
-    std::string_view acceptHeader = request.base()[http::field::accept];
-
-    if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
     }
 
     if (!mediaType.has_value()) {
