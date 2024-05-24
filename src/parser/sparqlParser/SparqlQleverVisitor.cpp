@@ -339,6 +339,8 @@ ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
 ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
   if (ctx->modify()) {
     return visit(ctx->modify());
+  } else if (ctx->clear()) {
+    return visit(ctx->clear());
   }
 
   // TODO: updates can be chained; think about how to enable this
@@ -353,12 +355,6 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
     auto [toDelete, pattern] = visit(ctx->deleteWhere());
     parsedQuery_.updateClause().toDelete_ = std::move(toDelete);
     parsedQuery_._rootGraphPattern = std::move(pattern);
-  } else if (ctx->modify()) {
-    // updates the internal state of `parsedQuery_`
-    visit(ctx->modify());
-  } else if (ctx->clear()) {
-    // updates the internal state of `parsedQuery_`
-    visit(ctx->clear());
   } else {
     visitAlternative<void>(ctx->load(), ctx->drop(), ctx->add(), ctx->move(),
                            ctx->copy(), ctx->create());
@@ -430,14 +426,8 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
   auto triples = visit(ctx->quadPattern());
   auto transformTriple =
       [&ctx](const SparqlTripleSimple& triple) -> SparqlTriple {
-    if (triple.p_.isVariable()) {
-      return {triple.s_, PropertyPath::fromVariable(triple.p_.getVariable()),
-              triple.o_};
-    } else if (triple.p_.isIri()) {
-      return {
-          triple.s_,
-          PropertyPath::fromIri(triple.p_.getIri().toStringRepresentation()),
-          triple.o_};
+    if (triple.p_.isVariable() || triple.p_.isIri()) {
+      return SparqlTriple::fromSimple(triple);
     } else {
       reportError(ctx, "Predicate must a PropertyPath");
     }
@@ -503,6 +493,8 @@ GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
     return NAMED{};
   } else if (ctx->ALL()) {
     return ALL{};
+  } else {
+    AD_FAIL();
   }
 }
 

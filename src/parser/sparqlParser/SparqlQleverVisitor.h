@@ -200,52 +200,53 @@ class SparqlQleverVisitor {
   [[nodiscard]] std::optional<parsedQuery::Values> visit(
       Parser::ValuesClauseContext* ctx);
 
-  ParsedQuery visit(Parser::UpdateContext* ctx);
+  [[nodiscard]] ParsedQuery visit(Parser::UpdateContext* ctx);
 
-  ParsedQuery visit(Parser::Update1Context* ctx);
+  [[nodiscard]] ParsedQuery visit(Parser::Update1Context* ctx);
 
-  void visit(Parser::LoadContext* ctx);
+  [[noreturn]] void visit(Parser::LoadContext* ctx);
 
-  ParsedQuery visit(Parser::ClearContext* ctx);
+  [[nodiscard]] ParsedQuery visit(Parser::ClearContext* ctx);
 
-  void visit(Parser::DropContext* ctx);
+  [[noreturn]] void visit(Parser::DropContext* ctx);
 
-  void visit(Parser::CreateContext* ctx);
+  [[noreturn]] void visit(Parser::CreateContext* ctx);
 
-  void visit(Parser::AddContext* ctx);
+  [[noreturn]] void visit(Parser::AddContext* ctx);
 
-  void visit(Parser::MoveContext* ctx);
+  [[noreturn]] void visit(Parser::MoveContext* ctx);
 
-  void visit(Parser::CopyContext* ctx);
+  [[noreturn]] void visit(Parser::CopyContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::InsertDataContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(
+      Parser::InsertDataContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::DeleteDataContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(
+      Parser::DeleteDataContext* ctx);
 
-  std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> visit(
-      Parser::DeleteWhereContext* ctx);
+  [[nodiscard]] std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern>
+  visit(Parser::DeleteWhereContext* ctx);
 
-  ParsedQuery visit(Parser::ModifyContext* ctx);
+  [[nodiscard]] ParsedQuery visit(Parser::ModifyContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::DeleteClauseContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(
+      Parser::DeleteClauseContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::InsertClauseContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(
+      Parser::InsertClauseContext* ctx);
 
-  void visit(Parser::UsingClauseContext* ctx);
+  [[nodiscard]] GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
 
-  GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
+  [[nodiscard]] GraphRef visit(Parser::GraphRefContext* ctx);
 
-  GraphRef visit(Parser::GraphRefContext* ctx);
+  [[nodiscard]] GraphRefAll visit(Parser::GraphRefAllContext* ctx);
 
-  GraphRefAll visit(Parser::GraphRefAllContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(
+      Parser::QuadPatternContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::QuadPatternContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(Parser::QuadDataContext* ctx);
 
-  vector<SparqlTripleSimple> visit(Parser::QuadDataContext* ctx);
-
-  vector<SparqlTripleSimple> visit(Parser::QuadsContext* ctx);
-
-  void visit(Parser::QuadsNotTriplesContext* ctx);
+  [[nodiscard]] vector<SparqlTripleSimple> visit(Parser::QuadsContext* ctx);
 
   [[nodiscard]] Triples visit(Parser::TriplesTemplateContext* ctx);
 

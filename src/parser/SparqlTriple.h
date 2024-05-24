@@ -77,4 +77,15 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
             : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
     return {s_, p, o_, additionalScanColumns_};
   }
+
+  // Constructs SparqlTriple from a simple triple. Fails with an exception if
+  // the predicate is neither a variable nor an iri.
+  static SparqlTriple fromSimple(const SparqlTripleSimple& triple) {
+    AD_CONTRACT_CHECK(triple.p_.isVariable() || triple.p_.isIri());
+    PropertyPath p = triple.p_.isVariable()
+                         ? PropertyPath::fromVariable(triple.p_.getVariable())
+                         : PropertyPath::fromIri(
+                               triple.p_.getIri().toStringRepresentation());
+    return {triple.s_, p, triple.o_};
+  }
 };
