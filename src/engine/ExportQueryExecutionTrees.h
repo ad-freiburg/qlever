@@ -2,12 +2,13 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+#pragma once
+
 #include "engine/QueryExecutionTree.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
-
-#pragma once
 
 // This class contains all the functionality to convert a query that has already
 // been parsed (by the SPARQL parser) and planned (by the query planner) into
