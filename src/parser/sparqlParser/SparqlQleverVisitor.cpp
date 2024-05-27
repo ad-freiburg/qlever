@@ -432,7 +432,7 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
     }
   };
   auto transformAndRegisterTriple =
-      [&ctx, registerIfVariable](const SparqlTripleSimple& triple) {
+      [registerIfVariable](const SparqlTripleSimple& triple) {
         registerIfVariable(triple.s_);
         registerIfVariable(triple.p_);
         registerIfVariable(triple.o_);
