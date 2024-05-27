@@ -1685,10 +1685,21 @@ TEST(SparqlParser, UpdateQuery) {
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");
   expectUpdateFails("DELETE WHERE { ?a \"foo\" ?c }");
+  expectUpdateFails("WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }");
+  expectUpdateFails("DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }");
+  expectUpdateFails("INSERT DATA { GRAPH <foo> }");
   // Unsupported features.
   expectUpdateFails(
       "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
       "}");
+  expectUpdateFails("LOAD <foo>");
+  expectUpdateFails("CLEAR NAMED");
+  expectUpdateFails("CLEAR GRAPH <foo>");
+  expectUpdateFails("CREATE GRAPH <foo>");
+  expectUpdateFails("DROP GRAPH <foo>");
+  expectUpdateFails("MOVE GRAPH <foo> TO DEFAULT");
+  expectUpdateFails("ADD GRAPH DEFAULT TO GRAPH <foo>");
+  expectUpdateFails("COPY GRAPH DEFAULT TO GRAPH <foo>");
   expectUpdateFails("DELETE { ?a <b> <c> } USING <foo> WHERE { <d> <e> ?a }");
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
 }

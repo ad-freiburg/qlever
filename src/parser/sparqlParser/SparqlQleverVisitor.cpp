@@ -438,7 +438,7 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
         if (triple.p_.isVariable() || triple.p_.isIri()) {
           return SparqlTriple::fromSimple(triple);
         } else {
-          reportError(ctx, "Predicate must a PropertyPath");
+          reportError(ctx, "Predicate must be a PropertyPath");
         }
       };
   GraphPattern pattern;
@@ -451,7 +451,6 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
   if (ctx->iri()) {
-    // Could also be default; disallow completely for now.
     reportNotSupported(ctx->iri(), "Named graphs are");
   }
   if (!ctx->usingClause().empty()) {
