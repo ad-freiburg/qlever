@@ -1654,7 +1654,7 @@ TEST(SparqlParser, updateQueryUnsupported) {
 TEST(SparqlParser, UpdateQuery) {
   auto expectUpdate = ExpectCompleteParse<&Parser::update>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
-  auto expectUpdateFails = ExpectParseFails<&Parser::query>{};
+  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
@@ -1683,6 +1683,11 @@ TEST(SparqlParser, UpdateQuery) {
           {{Var("?a"), Iri("<b>"), Iri("<c>")}},
           {{Iri("<a>"), Var("?a"), Iri("<c>")}},
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdate(
+      "DELETE WHERE { ?a <foo> ?c }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<foo>"), Var("?c")}}, {},
+          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");
   expectUpdateFails("DELETE WHERE { ?a \"foo\" ?c }");
   expectUpdateFails("WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }");
@@ -1698,8 +1703,8 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails("CREATE GRAPH <foo>");
   expectUpdateFails("DROP GRAPH <foo>");
   expectUpdateFails("MOVE GRAPH <foo> TO DEFAULT");
-  expectUpdateFails("ADD GRAPH DEFAULT TO GRAPH <foo>");
-  expectUpdateFails("COPY GRAPH DEFAULT TO GRAPH <foo>");
+  expectUpdateFails("ADD DEFAULT TO GRAPH <foo>");
+  expectUpdateFails("COPY DEFAULT TO GRAPH <foo>");
   expectUpdateFails("DELETE { ?a <b> <c> } USING <foo> WHERE { <d> <e> ?a }");
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
 }
