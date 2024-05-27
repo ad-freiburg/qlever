@@ -852,4 +852,12 @@ inline auto UpdateQuery =
       RootGraphPattern(graphPatternMatcher));
 };
 
+template <typename T>
+auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
+
+auto inline GraphRefIri = [](const string& iri) {
+  return testing::VariantWith<GraphRef>(AD_PROPERTY(
+      TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
+};
+
 }  // namespace matchers

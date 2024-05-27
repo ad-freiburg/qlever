@@ -1695,7 +1695,7 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");
   expectUpdateFails("WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }");
   expectUpdateFails("DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }");
-  expectUpdateFails("INSERT DATA { GRAPH <foo> }");
+  expectUpdateFails("INSERT DATA { GRAPH <foo> { } }");
   // Unsupported features.
   expectUpdateFails(
       "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
@@ -1723,4 +1723,13 @@ TEST(SparqlParser, GraphOrDefault) {
       "GRAPH <foo>",
       testing::VariantWith<GraphRef>(AD_PROPERTY(
           TripleComponent::Iri, toStringRepresentation, testing::Eq("<foo>"))));
+}
+
+TEST(SparqlParser, GraphRef) {
+  auto expectGraphRefAll = ExpectCompleteParse<&Parser::graphRefAll>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  expectGraphRefAll("DEFAULT", m::Variant<DEFAULT>());
+  expectGraphRefAll("NAMED", m::Variant<NAMED>());
+  expectGraphRefAll("ALL", m::Variant<ALL>());
+  expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
 }
