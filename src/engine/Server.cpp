@@ -690,8 +690,8 @@ boost::asio::awaitable<void> Server::processQuery(
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
 
-    plannedQuery = co_await parseAndPlan(query, qec, cancellationHandle,
-                                         timeLimit, maxSend);
+    plannedQuery =
+        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
@@ -702,6 +702,13 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(INFO) << "Query planning done in " << timeForQueryPlanning.count()
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
+
+    // Apply stricter limit for export if present
+    if (maxSend.has_value()) {
+      auto& pq = plannedQuery.value().parsedQuery_;
+      pq._limitOffset._limit =
+          std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+    }
 
     // This actually processes the query and sends the result in the requested
     // format.
@@ -827,8 +834,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit,
-    std::optional<uint64_t> maxSend) {
+    SharedCancellationHandle handle, TimeLimit timeLimit) {
   auto handleCopy = handle;
 
   // The usage of an `optional` here is required because of a limitation in
@@ -838,13 +844,9 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle), timeLimit,
-       maxSend]() mutable -> std::optional<PlannedQuery> {
+       handle = std::move(handle),
+       timeLimit]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
-        if (maxSend.has_value()) {
-          pq._limitOffset._limit =
-              std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
-        }
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
         qp.setEnablePatternTrick(enablePatternTrick);

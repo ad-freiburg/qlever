@@ -31,6 +31,11 @@ class Result {
   // The local vocabulary of the result.
   LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
 
+  // Currently unused flag to indicate if the operation creating this result
+  // already applied an offset and limit provided by the limit, so a consumer of
+  // this result know if it needs to skips those entries.
+  bool offsetAndLimitApplied_ = false;
+
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those remain valid after calling non-const function like
@@ -149,12 +154,6 @@ class Result {
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
 
-  // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
-  // Note: If additional members and invariants are added to the class (for
-  // example information about the datatypes in each column) make sure that
-  // those are still correct after performing this operation.
-  void applyLimitOffset(const LimitOffsetClause& limitOffset);
-
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function
   // `O(num-entries-in-table)` and then cached for subsequent usages.
@@ -165,4 +164,6 @@ class Result {
   // undefined values in the `_idTable` of this result. Return `true` iff the
   // check is succesful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
+
+  bool offsetAndLimitApplied() const;
 };

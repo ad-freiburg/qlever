@@ -150,7 +150,7 @@ Result CartesianProductJoin::computeResult(
 
   // Get all child results (possibly with limit, see above).
   for (auto& child : childView()) {
-    if (limitIfPresent.has_value()) {
+    if (limitIfPresent.has_value() && child.supportsLimit()) {
       child.setLimit(limitIfPresent.value());
     }
     subResults.push_back(child.getResult());

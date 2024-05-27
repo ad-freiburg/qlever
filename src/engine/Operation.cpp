@@ -144,19 +144,10 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
-      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-      // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables.
-      if (!supportsLimit()) {
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        // Note: both of the following calls have no effect and negligible
-        // runtime if neither a LIMIT nor an OFFSET were specified.
-        result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else {
-        AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                          _limit.actualSize(result.idTable().numRows()));
-      }
+      // This will hold true even when supportsLimit() returns false,
+      // because in this case `_limit` won't have been set on this operation.
+      AD_CONTRACT_CHECK(result.idTable().numRows() ==
+                        _limit.actualSize(result.idTable().numRows()));
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
