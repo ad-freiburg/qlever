@@ -204,19 +204,19 @@ class SparqlQleverVisitor {
 
   [[nodiscard]] ParsedQuery visit(Parser::Update1Context* ctx);
 
-  [[noreturn]] void visit(Parser::LoadContext* ctx);
+  [[noreturn]] void visit(const Parser::LoadContext* ctx) const;
 
   [[nodiscard]] ParsedQuery visit(Parser::ClearContext* ctx);
 
-  [[noreturn]] void visit(Parser::DropContext* ctx);
+  [[noreturn]] void visit(const Parser::DropContext* ctx) const;
 
-  [[noreturn]] void visit(Parser::CreateContext* ctx);
+  [[noreturn]] void visit(const Parser::CreateContext* ctx) const;
 
-  [[noreturn]] void visit(Parser::AddContext* ctx);
+  [[noreturn]] void visit(const Parser::AddContext* ctx) const;
 
-  [[noreturn]] void visit(Parser::MoveContext* ctx);
+  [[noreturn]] void visit(const Parser::MoveContext* ctx) const;
 
-  [[noreturn]] void visit(Parser::CopyContext* ctx);
+  [[noreturn]] void visit(const Parser::CopyContext* ctx) const;
 
   [[nodiscard]] vector<SparqlTripleSimple> visit(
       Parser::InsertDataContext* ctx);

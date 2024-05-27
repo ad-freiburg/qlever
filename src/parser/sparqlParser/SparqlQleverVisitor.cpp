@@ -329,10 +329,14 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
   visit(ctx->prologue());
 
+  auto query = visit(ctx->update1());
+
   if (ctx->update()) {
+    parsedQuery_ = ParsedQuery{};
     reportNotSupported(ctx->update(), "Multiple updates in one query are");
   }
-  return visit(ctx->update1());
+
+  return query;
 }
 
 // ____________________________________________________________________________________
@@ -342,8 +346,6 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
   } else if (ctx->clear()) {
     return visit(ctx->clear());
   }
-
-  // TODO: updates can be chained; think about how to enable this
 
   parsedQuery_._clause = parsedQuery::UpdateClause();
 
@@ -365,7 +367,7 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::LoadContext* ctx) {
+void Visitor::visit(const Parser::LoadContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Load is");
 }
 
@@ -386,27 +388,27 @@ ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::DropContext* ctx) {
+void Visitor::visit(const Parser::DropContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Drop is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::CreateContext* ctx) {
+void Visitor::visit(const Parser::CreateContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Create is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::AddContext* ctx) {
+void Visitor::visit(const Parser::AddContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Add is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::MoveContext* ctx) {
+void Visitor::visit(const Parser::MoveContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Move is");
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::CopyContext* ctx) {
+void Visitor::visit(const Parser::CopyContext* ctx) const {
   reportNotSupported(ctx, "SPARQL 1.1 Update Copy is");
 }
 

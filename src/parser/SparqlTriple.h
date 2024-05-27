@@ -61,8 +61,8 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   using Base::Base;
 
   // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(p_iri), std::move(o)} {}
+  SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
+      : Base{std::move(s), PropertyPath::fromIri(iri), std::move(o)} {}
 
   // ___________________________________________________________________________
   [[nodiscard]] string asString() const;
