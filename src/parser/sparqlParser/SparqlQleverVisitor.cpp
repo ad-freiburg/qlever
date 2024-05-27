@@ -347,11 +347,11 @@ ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
 
   parsedQuery_._clause = parsedQuery::UpdateClause();
 
-  // handles insertData and deleteData cases
-  visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertData());
-  visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteData());
-
-  if (ctx->deleteWhere()) {
+  if (ctx->insertData() || ctx->deleteData()) {
+    // handles insertData and deleteData cases
+    visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertData());
+    visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteData());
+  } else if (ctx->deleteWhere()) {
     auto [toDelete, pattern] = visit(ctx->deleteWhere());
     parsedQuery_.updateClause().toDelete_ = std::move(toDelete);
     parsedQuery_._rootGraphPattern = std::move(pattern);
@@ -424,17 +424,26 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteDataContext* ctx) {
 std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
     Parser::DeleteWhereContext* ctx) {
   auto triples = visit(ctx->quadPattern());
-  auto transformTriple =
-      [&ctx](const SparqlTripleSimple& triple) -> SparqlTriple {
-    if (triple.p_.isVariable() || triple.p_.isIri()) {
-      return SparqlTriple::fromSimple(triple);
-    } else {
-      reportError(ctx, "Predicate must a PropertyPath");
+  auto registerIfVariable = [this](const TripleComponent& component) {
+    if (component.isVariable()) {
+      addVisibleVariable(component.getVariable());
     }
   };
+  auto transformAndRegisterTriple =
+      [&ctx, registerIfVariable](const SparqlTripleSimple& triple) {
+        registerIfVariable(triple.s_);
+        registerIfVariable(triple.p_);
+        registerIfVariable(triple.o_);
+
+        if (triple.p_.isVariable() || triple.p_.isIri()) {
+          return SparqlTriple::fromSimple(triple);
+        } else {
+          reportError(ctx, "Predicate must a PropertyPath");
+        }
+      };
   GraphPattern pattern;
-  pattern._graphPatterns.emplace_back(
-      BasicGraphPattern{ad_utility::transform(triples, transformTriple)});
+  pattern._graphPatterns.emplace_back(BasicGraphPattern{
+      ad_utility::transform(triples, transformAndRegisterTriple)});
 
   return {std::move(triples), std::move(pattern)};
 }
@@ -531,19 +540,13 @@ vector<SparqlTripleSimple> Visitor::visit(Parser::QuadsContext* ctx) {
 
   AD_CORRECTNESS_CHECK(ctx->triplesTemplate().size() == 1);
 
-  auto convertAndRegisterTriple =
-      [this](const std::array<GraphTerm, 3>& triple) -> SparqlTripleSimple {
-    // TODO:
-    registerIfVariable(triple[0]);
-    registerIfVariable(triple[1]);
-    registerIfVariable(triple[2]);
-
+  auto convertTriple =
+      [](const std::array<GraphTerm, 3>& triple) -> SparqlTripleSimple {
     return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
             visitGraphTerm(triple[2])};
   };
 
-  return ad_utility::transform(visit(ctx->triplesTemplate(0)),
-                               convertAndRegisterTriple);
+  return ad_utility::transform(visit(ctx->triplesTemplate(0)), convertTriple);
 }
 
 // ____________________________________________________________________________________
@@ -644,10 +647,14 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
                                              propertyPathIdentity},
             varOrPath);
       };
-
+  auto registerIfVariable = [this](const auto& variant) {
+    if (holds_alternative<Variable>(variant)) {
+      addVisibleVariable(std::get<Variable>(variant));
+    }
+  };
   auto convertAndRegisterTriple =
-      [this,
-       &visitVarOrPath](const TripleWithPropertyPath& triple) -> SparqlTriple {
+      [&visitVarOrPath, &registerIfVariable](
+          const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
     registerIfVariable(triple.object_);
@@ -2386,11 +2393,4 @@ TripleComponent SparqlQleverVisitor::visitGraphTerm(
       return element.toSparql();
     }
   });
-}
-
-// _____________________________________________________________________________
-void SparqlQleverVisitor::registerIfVariable(const auto& variant) {
-  if (holds_alternative<Variable>(variant)) {
-    addVisibleVariable(std::get<Variable>(variant));
-  }
 }

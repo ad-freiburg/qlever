@@ -1683,6 +1683,8 @@ TEST(SparqlParser, UpdateQuery) {
           {{Var("?a"), Iri("<b>"), Iri("<c>")}},
           {{Iri("<a>"), Var("?a"), Iri("<c>")}},
           m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdateFails("INSERT DATA { ?a ?b ?c }");
+  expectUpdateFails("DELETE WHERE { ?a \"foo\" ?c }");
   // Unsupported features.
   expectUpdateFails(
       "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "

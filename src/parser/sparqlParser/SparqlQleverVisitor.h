@@ -630,7 +630,4 @@ class SparqlQleverVisitor {
 
   // Constructs a TripleComponent from a GraphTerm.
   static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
-  // If argument is a variant that contains a Variable register that Variable as
-  // visible in the current scope.
-  void registerIfVariable(const auto& variant);
 };
