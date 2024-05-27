@@ -12,7 +12,7 @@
 #include <stxxl/vector>
 #include <vector>
 
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
 #include "global/SpecialIds.h"

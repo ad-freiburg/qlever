@@ -16,8 +16,8 @@
 using std::string;
 using std::vector;
 
-// This Operation takes a ResultTable with at least one column containing ids,
-// and a column index referring to such a column. It then creates a ResultTable
+// This Operation takes a Result with at least one column containing ids,
+// and a column index referring to such a column. It then creates a Result
 // containing two columns, the first one filled with the ids of all predicates
 // for which there is an entry in the index with one of the entities in the
 // specified input column as its subject. The second output column contains a
@@ -103,6 +103,6 @@ class CountAvailablePredicates : public Operation {
   void computePatternTrickAllEntities(
       IdTable* result, const CompactVectorOfStrings<Id>& patterns) const;
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

@@ -39,7 +39,7 @@ TEST(OperationTest, getResultOnlyCached) {
   NeutralElementOperation n{qec};
   // The second `true` means "only read the result if it was cached".
   // We have just cleared the cache, and so this should return `nullptr`.
-  EXPECT_EQ(n.getResult(true, true), nullptr);
+  EXPECT_EQ(n.getResult(true, ComputationMode::ONLY_IF_CACHED), nullptr);
   EXPECT_EQ(n.runtimeInfo().status_, RuntimeInformation::Status::notStarted);
   // Nothing has been stored in the cache by this call.
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
@@ -58,7 +58,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // When we now request to only return the result if it is cached, we should
   // get exactly the same `shared_ptr` as with the previous call.
   NeutralElementOperation n3{qec};
-  EXPECT_EQ(n3.getResult(true, true), result);
+  EXPECT_EQ(n3.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
   EXPECT_EQ(n3.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
 
@@ -67,7 +67,7 @@ TEST(OperationTest, getResultOnlyCached) {
   QueryExecutionContext qecCopy{*qec};
   qecCopy._pinResult = true;
   NeutralElementOperation n4{&qecCopy};
-  EXPECT_EQ(n4.getResult(true, true), result);
+  EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
 
   // The cache status is `cachedNotPinned` because we found the element cached
   // but not pinned (it does reflect the status BEFORE the operation).
@@ -79,7 +79,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // We have pinned the result, so requesting it again should return a pinned
   // result.
   qecCopy._pinResult = false;
-  EXPECT_EQ(n4.getResult(true, true), result);
+  EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
   EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedPinned);
 
@@ -152,7 +152,7 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
     std::this_thread::sleep_for(5ms);
     handle->cancel(CancellationState::TIMEOUT);
   }};
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(),
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(operation.computeResult(false),
                                         ::testing::HasSubstr("timed out"),
                                         ad_utility::CancellationException);
 }
