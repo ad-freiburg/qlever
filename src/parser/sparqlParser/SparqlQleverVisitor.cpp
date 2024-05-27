@@ -440,7 +440,9 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
         if (triple.p_.isVariable() || triple.p_.isIri()) {
           return SparqlTriple::fromSimple(triple);
         } else {
-          reportError(ctx, "Predicate must be a PropertyPath");
+          // The predicate comes from a rule in the grammar (`verb`) which only
+          // allows variables and IRIs.
+          AD_FAIL();
         }
       };
   GraphPattern pattern;

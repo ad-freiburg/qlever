@@ -1688,8 +1688,11 @@ TEST(SparqlParser, UpdateQuery) {
       m::UpdateQuery(
           {{Var("?a"), Iri("<foo>"), Var("?c")}}, {},
           m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
+  expectUpdate("CLEAR DEFAULT",
+               m::UpdateQuery({{Var("?s"), Var("?p"), Var("?o")}}, {},
+                              m::GraphPattern(
+                                  m::Triples({{Var("?s"), "?p", Var("?o")}}))));
   expectUpdateFails("INSERT DATA { ?a ?b ?c }");
-  expectUpdateFails("DELETE WHERE { ?a \"foo\" ?c }");
   expectUpdateFails("WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }");
   expectUpdateFails("DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }");
   expectUpdateFails("INSERT DATA { GRAPH <foo> }");
@@ -1705,6 +1708,19 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails("MOVE GRAPH <foo> TO DEFAULT");
   expectUpdateFails("ADD DEFAULT TO GRAPH <foo>");
   expectUpdateFails("COPY DEFAULT TO GRAPH <foo>");
-  expectUpdateFails("DELETE { ?a <b> <c> } USING <foo> WHERE { <d> <e> ?a }");
+  expectUpdateFails(
+      "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }");
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
+}
+
+TEST(SparqlParser, GraphOrDefault) {
+  // Explicitly test this part, because all features that use it are not yet
+  // supported.
+  auto expectGraphOrDefault = ExpectCompleteParse<&Parser::graphOrDefault>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
+  expectGraphOrDefault(
+      "GRAPH <foo>",
+      testing::VariantWith<GraphRef>(AD_PROPERTY(
+          TripleComponent::Iri, toStringRepresentation, testing::Eq("<foo>"))));
 }
