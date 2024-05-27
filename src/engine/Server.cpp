@@ -605,7 +605,7 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
   ad_utility::Timer step{ad_utility::Timer::Started};
   LOG(INFO) << "Executing UPDATE" << std::endl;
 
-  std::shared_ptr<const ResultTable> res = qet.getResult();
+  std::shared_ptr<const Result> res = qet.getResult();
   LOG(INFO) << "Executing query body took " << step.msecs() << std::endl;
   step.start();
 
@@ -674,8 +674,8 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
   IdTable toInsert(3, qet.getRootOperation()->allocator());
   IdTable toDelete(3, qet.getRootOperation()->allocator());
 #endif
-  toInsert.reserve(res->size() * toInsertTemplates.size());
-  toDelete.reserve(res->size() * toDeleteTemplates.size());
+  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
+  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
   // TODO: ideas only process template rows with variables here, do ones with
   // only constants before
@@ -870,7 +870,6 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
     if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
-      shared_ptr<const ResultTable> resultTable = qet.getResult();
       Server::executeUpdateQuery(
           qet, plannedQuery.value().parsedQuery_.updateClause(),
           std::move(cancellationHandle));
