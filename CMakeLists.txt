@@ -70,7 +70,7 @@ include(FetchContent)
 FetchContent_Declare(
         googletest
         GIT_REPOSITORY https://github.com/google/googletest.git
-        GIT_TAG f8d7d77c06936315286eb55f8de22cd23c188571 # release-1.14.0
+        GIT_TAG 33af80a883ddc33d9c0fac0a5b4578301efb18de # main branch on 2024/05/16
 )
 
 ################################
@@ -241,7 +241,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 258e5a15759cc3d122d4a4826bc499af91d40aa9 # 2023-12-21
+        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
 )
 
 if (USE_PARALLEL)

@@ -193,7 +193,7 @@ TEST_F(GroupByTest, doGroupBy) {
       {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
       {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
 
-  ResultTable outTable{allocator()};
+  Result outTable{allocator()};
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.

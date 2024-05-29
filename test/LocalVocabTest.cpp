@@ -21,7 +21,7 @@
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/Sort.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
@@ -189,7 +189,7 @@ TEST(LocalVocab, propagation) {
     };
     std::ranges::transform(expectedWordsAsStrings,
                            std::back_inserter(expectedWords), toLitOrIri);
-    std::shared_ptr<const ResultTable> resultTable = operation.getResult();
+    std::shared_ptr<const Result> resultTable = operation.getResult();
     ASSERT_TRUE(resultTable)
         << "Operation: " << operation.getDescriptor() << std::endl;
     TestWords localVocabWords =
