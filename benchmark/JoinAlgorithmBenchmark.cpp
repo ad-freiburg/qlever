@@ -37,7 +37,7 @@
 #include "engine/Engine.h"
 #include "engine/Join.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
