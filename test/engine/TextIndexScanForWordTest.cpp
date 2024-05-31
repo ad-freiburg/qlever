@@ -32,8 +32,8 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   ASSERT_EQ(s1.getResultWidth(), 2);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.width(), 2);
-  ASSERT_EQ(result.size(), 3);
+  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().size(), 3);
   s2.getExternallyVisibleVariableColumns();
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
@@ -63,8 +63,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s1.getResultWidth(), 1);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.width(), 1);
-  ASSERT_EQ(result.size(), 2);
+  ASSERT_EQ(result.idTable().numColumns(), 1);
+  ASSERT_EQ(result.idTable().size(), 2);
 
   ASSERT_EQ("\"he failed the test\"",
             h::getTextRecordFromResultTable(qec, result, 0));
@@ -76,8 +76,8 @@ TEST(TextIndexScanForWord, WordScanBasic) {
   ASSERT_EQ(s2.getResultWidth(), 1);
 
   result = s2.computeResultOnlyForTesting();
-  ASSERT_EQ(result.width(), 1);
-  ASSERT_EQ(result.size(), 1);
+  ASSERT_EQ(result.idTable().numColumns(), 1);
+  ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ("\"testing can help\"",
             h::getTextRecordFromResultTable(qec, result, 0));

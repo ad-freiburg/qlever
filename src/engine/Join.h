@@ -115,7 +115,7 @@ class Join : public Operation {
   virtual string getCacheKeyImpl() const override;
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 
