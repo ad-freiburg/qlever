@@ -232,6 +232,7 @@ TEST_F(ServiceTest, computeResult) {
   const auto maxValueRowsDefault =
       RuntimeParameters().get<"service-max-value-rows">();
   RuntimeParameters().set<"service-max-value-rows">(0);
+  testQec->getQueryTreeCache().clearAll();
   Service serviceOperation6{
       testQec, parsedServiceClause5,
       getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
