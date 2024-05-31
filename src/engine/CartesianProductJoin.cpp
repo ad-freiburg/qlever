@@ -132,10 +132,11 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   }
 }
 // ____________________________________________________________________________
-ResultTable CartesianProductJoin::computeResult() {
+Result CartesianProductJoin::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   IdTable result{getExecutionContext()->getAllocator()};
   result.setNumColumns(getResultWidth());
-  std::vector<std::shared_ptr<const ResultTable>> subResults;
+  std::vector<std::shared_ptr<const Result>> subResults;
 
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -154,7 +155,7 @@ ResultTable CartesianProductJoin::computeResult() {
     }
     subResults.push_back(child.getResult());
     // Early stopping: If one of the results is empty, we can stop early.
-    if (subResults.back()->size() == 0) {
+    if (subResults.back()->idTable().size() == 0) {
       break;
     }
     // Example for the following calculation: If we have a LIMIT of 1000 and
@@ -162,13 +163,14 @@ ResultTable CartesianProductJoin::computeResult() {
     // needs to evaluate only its first 10 results. The +1 is because integer
     // divisions are rounded down by default.
     if (limitIfPresent.has_value()) {
-      limitIfPresent.value()._limit =
-          limitIfPresent.value()._limit.value() / subResults.back()->size() + 1;
+      limitIfPresent.value()._limit = limitIfPresent.value()._limit.value() /
+                                          subResults.back()->idTable().size() +
+                                      1;
     }
   }
 
   auto sizesView = std::views::transform(
-      subResults, [](const auto& child) { return child->size(); });
+      subResults, [](const auto& child) { return child->idTable().size(); });
   auto totalResultSize = std::accumulate(sizesView.begin(), sizesView.end(),
                                          1UL, std::multiplies{});
 
@@ -210,7 +212,7 @@ ResultTable CartesianProductJoin::computeResult() {
   auto subResultsDeref = std::views::transform(
       subResults, [](auto& x) -> decltype(auto) { return *x; });
   return {std::move(result), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(subResultsDeref)};
+          Result::getMergedLocalVocab(subResultsDeref)};
 }
 
 // ____________________________________________________________________________

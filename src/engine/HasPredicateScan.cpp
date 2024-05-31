@@ -254,7 +254,7 @@ size_t HasPredicateScan::getCostEstimate() {
 }
 
 // ___________________________________________________________________________
-ResultTable HasPredicateScan::computeResult() {
+Result HasPredicateScan::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());
 
@@ -365,7 +365,7 @@ void HasPredicateScan::computeFullScan(
 
 // ___________________________________________________________________________
 template <int WIDTH>
-ResultTable HasPredicateScan::computeSubqueryS(
+Result HasPredicateScan::computeSubqueryS(
     IdTable* dynResult, const CompactVectorOfStrings<Id>& patterns) {
   auto subresult = subtree().getResult();
   auto patternCol = subtreeColIdx();

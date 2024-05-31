@@ -5,23 +5,20 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #pragma once
-#include <set>
+
 #include <vector>
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "engine/CheckUsePatternTrick.h"
-#include "engine/Filter.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
 #include "parser/ParsedQuery.h"
-
-using std::vector;
 
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  template <typename T>
+  using vector = std::vector<T>;
 
  public:
   explicit QueryPlanner(QueryExecutionContext* qec,
@@ -136,7 +133,7 @@ class QueryPlanner {
                                                     std::move(operation))} {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
-    std::shared_ptr<ResultTable> _cachedResult;
+    std::shared_ptr<Result> _cachedResult;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;

@@ -14,25 +14,18 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/Log.h"
-
-using std::vector;
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is always a table and contained in the member `idTable()`.
-//
-// TODO: I would find it more appropriate to simply call this class `Result`.
-// Otherwise, it's not clear from the names what the difference between a
-// `ResultTable` and an `IdTable` is.
-class ResultTable {
+class Result {
  private:
   // The actual entries.
-  IdTable _idTable;
+  IdTable idTable_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
-  std::vector<ColumnIndex> _sortedBy;
+  std::vector<ColumnIndex> sortedBy_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
   // The local vocabulary of the result.
@@ -45,20 +38,19 @@ class ResultTable {
 
   // This class is used to enforce the invariant, that the `localVocab_` (which
   // is stored in a shared_ptr) is only shared between instances of the
-  // `ResultTable` class (where it is `const`). This gives a provable guarantee
+  // `Result` class (where it is `const`). This gives a provable guarantee
   // that the `localVocab_` is not mutated through some other code that still
   // owns a pointer to the same local vocab.
   class SharedLocalVocabWrapper {
    private:
-    // Only the `ResultTable` class is allowed to read or write the stored
+    // Only the `Result` class is allowed to read or write the stored
     // `shared_ptr`. Other code can obtain a `SharedLocalVocabWrapper` from a
-    // `ResultTable` and pass this wrapper into another `ResultTable`, but it
+    // `Result` and pass this wrapper into another `Result`, but it
     // can never access the `shared_ptr` directly.
-    std::shared_ptr<const LocalVocab> localVocab_ =
-        std::make_shared<const LocalVocab>();
+    std::shared_ptr<const LocalVocab> localVocab_;
     explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
-    friend class ResultTable;
+    friend class Result;
 
    public:
     // Create a wrapper from a `LocalVocab`. This is safe to call also from
@@ -84,35 +76,29 @@ class ResultTable {
   // if expensive checks are enabled, for example by not defining the `NDEBUG`
   // macro.
   // The first overload of the constructor is for local vocabs that are shared
-  // with another `ResultTable` via the `getSharedLocalVocab...` methods below.
+  // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              SharedLocalVocabWrapper localVocab);
-  ResultTable(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              LocalVocab&& localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         SharedLocalVocabWrapper localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
-  ResultTable(const ResultTable& other) = delete;
-  ResultTable& operator=(const ResultTable& other) = delete;
+  Result(const Result& other) = delete;
+  Result& operator=(const Result& other) = delete;
 
   // Moving of a result table is OK.
-  ResultTable(ResultTable&& other) = default;
-  ResultTable& operator=(ResultTable&& other) = default;
+  Result(Result&& other) = default;
+  Result& operator=(Result&& other) = default;
 
   // Default destructor.
-  virtual ~ResultTable() = default;
-
-  // Get the number of rows of this result.
-  size_t size() const { return _idTable.size(); }
-
-  // Get the number of columns of this result.
-  size_t width() const { return _idTable.numColumns(); }
+  virtual ~Result() = default;
 
   // Const access to the underlying `IdTable`.
-  const IdTable& idTable() const { return _idTable; }
+  const IdTable& idTable() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<ColumnIndex>& sortedBy() const { return _sortedBy; }
+  const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -135,16 +121,15 @@ class ResultTable {
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
   // all the corresponding local vocabs.
-  static SharedLocalVocabWrapper getMergedLocalVocab(
-      const ResultTable& resultTable1, const ResultTable& resultTable2);
+  static SharedLocalVocabWrapper getMergedLocalVocab(const Result& result1,
+                                                     const Result& result2);
 
-  // Overload for more than two `ResultTables`
+  // Overload for more than two `Results`
   template <std::ranges::forward_range R>
-  requires std::convertible_to<std::ranges::range_value_t<R>,
-                               const ResultTable&>
+  requires std::convertible_to<std::ranges::range_value_t<R>, const Result&>
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
-    for (const ResultTable& table : subResults) {
+    for (const Result& table : subResults) {
       vocabs.push_back(std::to_address(table.localVocab_));
     }
     return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
@@ -159,9 +144,7 @@ class ResultTable {
   // `Server::processQuery`. Ideally, this should only be called in one
   // place, but for now, this method at least makes sure that these log
   // messages look all the same.
-  void logResultSize() const {
-    LOG(INFO) << "Result has size " << size() << " x " << width() << std::endl;
-  }
+  void logResultSize() const;
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;

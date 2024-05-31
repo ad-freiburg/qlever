@@ -124,10 +124,12 @@ ExpressionPtr Visitor::processIriFunctionCall(
   } else if (checkPrefix(XSD_PREFIX)) {
     if (functionName == "integer" || functionName == "int") {
       checkNumArgs(1);
-      return sparqlExpression::makeIntExpression(std::move(argList[0]));
+      return sparqlExpression::makeConvertToIntExpression(
+          std::move(argList[0]));
     } else if (functionName == "double" || functionName == "decimal") {
       checkNumArgs(1);
-      return sparqlExpression::makeDoubleExpression(std::move(argList[0]));
+      return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
     }
   }
   reportNotSupported(ctx,
@@ -173,6 +175,15 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
+  if (ctx->update()) {
+    reportNotSupported(ctx->update(), "SPARQL 1.1 Update");
+  } else {
+    return visit(ctx->query());
+  }
 }
 
 // ____________________________________________________________________________________
@@ -1780,6 +1791,16 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMinutesExpression);
   } else if (functionName == "seconds") {
     return createUnary(&makeSecondsExpression);
+  } else if (functionName == "md5") {
+    return createUnary(&makeMD5Expression);
+  } else if (functionName == "sha1") {
+    return createUnary(&makeSHA1Expression);
+  } else if (functionName == "sha256") {
+    return createUnary(&makeSHA256Expression);
+  } else if (functionName == "sha384") {
+    return createUnary(&makeSHA384Expression);
+  } else if (functionName == "sha512") {
+    return createUnary(&makeSHA512Expression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();

@@ -58,9 +58,9 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   template <size_t WIDTH>
   void computeFilterImpl(IdTable* outputIdTable,
-                         const ResultTable& inputResultTable);
+                         const Result& inputResultTable);
 };

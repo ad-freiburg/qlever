@@ -11,6 +11,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
 template <typename NaryOperation>

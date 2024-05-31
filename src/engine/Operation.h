@@ -10,7 +10,7 @@
 #include <memory>
 
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
@@ -20,6 +20,12 @@
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+
+enum class ComputationMode {
+  FULLY_MATERIALIZED,
+  ONLY_IF_CACHED,
+  LAZY_IF_SUPPORTED
+};
 
 class Operation {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -140,14 +146,17 @@ class Operation {
    * @param isRoot Has be set to `true` iff this is the root operation of a
    * complete query to obtain the expected behavior wrt cache pinning and
    * runtime information in error cases.
-   * @param onlyReadFromCache If set to true the result is only returned if it
-   * can be read from the cache without any computation. If the result is not in
-   * the cache, `nullptr` will be returned.
+   * @param computationMode If set to `CACHE_ONLY` the result is only returned
+   * if it can be read from the cache without any computation. If the result is
+   * not in the cache, `nullptr` will be returned. If set to `LAZY` this will
+   * request the result to be computable at request in chunks. If the operation
+   * does not support this, it will do nothing.
    * @return A shared pointer to the result. May only be `nullptr` if
    * `onlyReadFromCache` is true.
    */
-  shared_ptr<const ResultTable> getResult(bool isRoot = false,
-                                          bool onlyReadFromCache = false);
+  std::shared_ptr<const Result> getResult(
+      bool isRoot = false,
+      ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole
@@ -195,8 +204,9 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ResultTable computeResultOnlyForTesting() final {
-    return computeResult();
+  virtual Result computeResultOnlyForTesting(
+      bool requestLaziness = false) final {
+    return computeResult(requestLaziness);
   }
 
  protected:
@@ -246,7 +256,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ResultTable computeResult() = 0;
+  virtual Result computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been succesfully computed or read from the cache.
@@ -260,7 +270,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 

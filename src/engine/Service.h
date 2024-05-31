@@ -96,7 +96,7 @@ class Service : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // Compute the result using `getTsvFunction_`.
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
