@@ -13100,7 +13100,8 @@ SparqlAutomaticParser::relationalExpression() {
 
       case SparqlAutomaticParser::NOT: {
         setState(1159);
-        match(SparqlAutomaticParser::NOT);
+        antlrcpp::downCast<RelationalExpressionContext*>(_localctx)->notToken =
+            match(SparqlAutomaticParser::NOT);
         setState(1160);
         match(SparqlAutomaticParser::IN);
         setState(1161);

@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -1286,6 +1287,7 @@ TEST(SparqlParser, Query) {
 // Some helper matchers for the `builtInCall` test below.
 namespace builtInCallTestHelpers {
 using namespace sparqlExpression;
+
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
 // `Expression` matches the `matcher`.
@@ -1294,6 +1296,26 @@ auto matchPtr(Matcher matcher = Matcher{})
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   return testing::Pointee(
       testing::WhenDynamicCastTo<const Expression&>(matcher));
+}
+
+auto variableExpressionMatcher = [](const Variable& var) {
+  return matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
+};
+
+template <typename Expression>
+auto matchPtrWithChildren(auto&&... childrenMatchers)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtr<Expression>(
+      AD_PROPERTY(SparqlExpression, childrenForTesting,
+                  testing::ElementsAre(childrenMatchers...)));
+}
+
+template <typename Expression>
+auto matchPtrWithVariables(const std::same_as<Variable> auto&... children)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtrWithChildren<Expression>(
+      variableExpressionMatcher(children)...);
 }
 
 // Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
@@ -1320,11 +1342,6 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
                               SparqlExpression, childrenForTesting,
                               ::testing::ElementsAre(childrenMatchers...))));
 }
-
-auto variableExpressionMatcher = [](const Variable& var) {
-  return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
-};
 
 auto idExpressionMatcher = [](Id id) {
   return matchPtr<IdExpression>(
@@ -1461,6 +1478,23 @@ TEST(SparqlParser, multiplicativeExpression) {
       matchNaryWithChildrenMatchers(&makeMultiplyExpression,
                                     matchNary(&makeDivideExpression, y, z),
                                     matchUnary(&makeAbsExpression)));
+}
+
+TEST(SparqlParser, relationalExpression) {
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
+  expectRelational("?x IN (?y, ?z)",
+                   matchPtrWithVariables<InExpression>(x, y, z));
+  expectRelational("?x NOT IN (?y, ?z)",
+                   matchNaryWithChildrenMatchers(
+                       &makeUnaryNegateExpression,
+                       matchPtrWithVariables<InExpression>(x, y, z)));
+  // TODO<joka921> Technically the other relational expressions (=, <, >, etc.)
+  // are also untested.
 }
 
 // Return a matcher for an `OperatorAndExpression`.
