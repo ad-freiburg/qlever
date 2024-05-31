@@ -16,6 +16,7 @@
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
 #include "util/Date.h"
+#include "util/Log.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
