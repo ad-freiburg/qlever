@@ -183,7 +183,7 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   }
 
   const auto& siblingResult = siblingTree_->getResult();
-  if (siblingResult->size() >
+  if (siblingResult->idTable().size() >
       RuntimeParameters().get<"service-max-value-rows">()) {
     return std::nullopt;
   }
@@ -208,7 +208,8 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
   ad_utility::HashSet<std::string> rowSet;
 
   std::string values = " { ";
-  for (size_t rowIndex = 0; rowIndex < siblingResult->size(); ++rowIndex) {
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+       ++rowIndex) {
     std::string row = "(";
     for (const auto& columnIdx : commonColumnIndices) {
       const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
