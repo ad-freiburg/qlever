@@ -285,7 +285,21 @@ constexpr auto OrderBy = [](const ::OrderBy::SortedVariables& sortedVariables,
 constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 
 // Match a `SERVICE` operation.
-constexpr auto Service = MatchTypeAndOrderedChildren<::Service>;
+constexpr auto Service = [](const std::optional<QetMatcher>& siblingMatcher,
+                            std::string_view graphPatternAsString) {
+  const auto optSiblingMatcher_ =
+      [&]() -> Matcher<const std::shared_ptr<QueryExecutionTree>&> {
+    if (siblingMatcher.has_value()) {
+      return Pointee(siblingMatcher.value());
+    }
+    return IsNull();
+  }();
+
+  return RootOperation<::Service>(
+      AllOf(AD_PROPERTY(::Service, getSiblingTree, optSiblingMatcher_),
+            AD_PROPERTY(::Service, getGraphPatternAsString,
+                        Eq(graphPatternAsString))));
+};
 
 /// Parse the given SPARQL `query`, pass it to a `QueryPlanner` with empty
 /// execution context, and return the resulting `QueryExecutionTree`

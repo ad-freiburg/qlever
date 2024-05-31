@@ -8,6 +8,7 @@
 #include <regex>
 
 #include "engine/Service.h"
+#include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -206,22 +207,39 @@ TEST_F(ServiceTest, computeResult) {
           (parsedQuery::SparqlValues){
               {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
               {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+               {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
                {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
 
   auto parsedServiceClause5 = parsedServiceClause;
-  parsedServiceClause5.graphPatternAsString_ = "{ ?x <ble> ?y . }";
+  parsedServiceClause5.graphPatternAsString_ =
+      "{ ?x <ble> ?y . ?y <is-a> ?z2 . }";
+  parsedServiceClause5.visibleVariables_.emplace_back("?z2");
 
   std::string_view expectedSparqlQuery5 =
-      "PREFIX doof: <http://doof.org> SELECT ?x ?y "
-      "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y . }";
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
+      "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y . ?y "
+      "<is-a> ?z2 . }";
 
   Service serviceOperation5{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(
-          expectedUrl, expectedSparqlQuery5,
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"),
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
+                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
+                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
       siblingTree};
   EXPECT_NO_THROW(serviceOperation5.getResult());
+
+  // Check 6: SiblingTree's rows exceed maxValue
+  const auto maxValueRowsDefault =
+      RuntimeParameters().get<"service-max-value-rows">();
+  RuntimeParameters().set<"service-max-value-rows">(0);
+  Service serviceOperation6{
+      testQec, parsedServiceClause5,
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
+                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
+                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      siblingTree};
+  EXPECT_NO_THROW(serviceOperation6.getResult());
+  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
 }
 
 TEST_F(ServiceTest, getCacheKey) {

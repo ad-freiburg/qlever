@@ -228,6 +228,8 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
     rowSet.insert(row);
     absl::StrAppend(&values, row, " ");
+
+    checkCancellation();
   }
 
   return "VALUES " + vars + values + "} . ";
