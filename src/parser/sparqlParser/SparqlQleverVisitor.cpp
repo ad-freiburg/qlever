@@ -437,13 +437,10 @@ std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
         registerIfVariable(triple.p_);
         registerIfVariable(triple.o_);
 
-        if (triple.p_.isVariable() || triple.p_.isIri()) {
-          return SparqlTriple::fromSimple(triple);
-        } else {
-          // The predicate comes from a rule in the grammar (`verb`) which only
-          // allows variables and IRIs.
-          AD_FAIL();
-        }
+        // The predicate comes from a rule in the grammar (`verb`) which only
+        // allows variables and IRIs.
+        AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
+        return SparqlTriple::fromSimple(triple);
       };
   GraphPattern pattern;
   pattern._graphPatterns.emplace_back(BasicGraphPattern{
