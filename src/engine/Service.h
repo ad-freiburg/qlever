@@ -73,8 +73,8 @@ class Service : public Operation {
   float getMultiplicity(size_t col) override;
 
   // Getters for testing.
-  auto getSiblingTree() const { return siblingTree_; }
-  auto getGraphPatternAsString() const {
+  const auto& getSiblingTree() const { return siblingTree_; }
+  const auto& getGraphPatternAsString() const {
     return parsedServiceClause_.graphPatternAsString_;
   }
 

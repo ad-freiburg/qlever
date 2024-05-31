@@ -287,7 +287,7 @@ constexpr auto Union = MatchTypeAndOrderedChildren<::Union>;
 // Match a `SERVICE` operation.
 constexpr auto Service = [](const std::optional<QetMatcher>& siblingMatcher,
                             std::string_view graphPatternAsString) {
-  const auto optSiblingMatcher_ =
+  const auto optSiblingMatcher =
       [&]() -> Matcher<const std::shared_ptr<QueryExecutionTree>&> {
     if (siblingMatcher.has_value()) {
       return Pointee(siblingMatcher.value());
@@ -296,7 +296,7 @@ constexpr auto Service = [](const std::optional<QetMatcher>& siblingMatcher,
   }();
 
   return RootOperation<::Service>(
-      AllOf(AD_PROPERTY(::Service, getSiblingTree, optSiblingMatcher_),
+      AllOf(AD_PROPERTY(::Service, getSiblingTree, optSiblingMatcher),
             AD_PROPERTY(::Service, getGraphPatternAsString,
                         Eq(graphPatternAsString))));
 };
