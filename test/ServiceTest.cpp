@@ -233,9 +233,12 @@ TEST_F(ServiceTest, computeResult) {
       RuntimeParameters().get<"service-max-value-rows">();
   RuntimeParameters().set<"service-max-value-rows">(0);
   testQec->getQueryTreeCache().clearAll();
+  std::string_view expectedSparqlQuery6 =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
+      "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
   Service serviceOperation6{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery6,
                             "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
                             "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
       siblingTree};
