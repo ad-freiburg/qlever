@@ -241,7 +241,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        GIT_TAG 9605d816c5ed3ad5e68b155974389fb84580b5b4  # 2024-05-31
 )
 
 if (USE_PARALLEL)
