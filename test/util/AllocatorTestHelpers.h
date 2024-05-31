@@ -10,9 +10,10 @@
 
 namespace ad_utility::testing {
 // Create an unlimited allocator.
-inline ad_utility::AllocatorWithLimit<Id>& makeAllocator() {
-  static ad_utility::AllocatorWithLimit<Id> a{
-      ad_utility::makeAllocationMemoryLeftThreadsafeObject(MemorySize::max())};
+inline ad_utility::AllocatorWithLimit<Id> makeAllocator(
+    MemorySize memorySize = MemorySize::max()) {
+  ad_utility::AllocatorWithLimit<Id> a{
+      ad_utility::makeAllocationMemoryLeftThreadsafeObject(memorySize)};
   return a;
 }
 }  // namespace ad_utility::testing

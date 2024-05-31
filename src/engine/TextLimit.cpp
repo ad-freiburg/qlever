@@ -18,11 +18,12 @@ TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
       scoreColumns_(scoreColumns) {}
 
 // _____________________________________________________________________________
-ResultTable TextLimit::computeResult() {
-  shared_ptr<const ResultTable> childRes = child_->getResult();
+Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
+  std::shared_ptr<const Result> childRes = child_->getResult();
 
   if (limit_ == 0) {
-    return {IdTable(childRes->width(), getExecutionContext()->getAllocator()),
+    return {IdTable(childRes->idTable().numColumns(),
+                    getExecutionContext()->getAllocator()),
             resultSortedOn(), childRes->getSharedLocalVocab()};
   }
 

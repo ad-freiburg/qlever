@@ -90,7 +90,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-ResultTable Join::computeResult() {
+Result Join::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -122,8 +122,10 @@ ResultTable Join::computeResult() {
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
-    return tree.getRootOperation()->getResult(false,
-                                              !(isSmall || containsUndef));
+    // TODO<joka921> Add a unit test that checks the correct conditions
+    return tree.getRootOperation()->getResult(
+        false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
+                                          : ComputationMode::ONLY_IF_CACHED);
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
@@ -153,10 +155,10 @@ ResultTable Join::computeResult() {
     }
   }
 
-  shared_ptr<const ResultTable> leftRes =
+  std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
-  if (leftRes->size() == 0) {
+  if (leftRes->idTable().size() == 0) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
@@ -181,7 +183,7 @@ ResultTable Join::computeResult() {
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const ResultTable> rightRes =
+  std::shared_ptr<const Result> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
   checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
@@ -191,7 +193,7 @@ ResultTable Join::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftRes, *rightRes)};
+          Result::getMergedLocalVocab(*leftRes, *rightRes)};
 }
 
 // _____________________________________________________________________________

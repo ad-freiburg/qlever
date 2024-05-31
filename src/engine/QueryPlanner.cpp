@@ -6,8 +6,9 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/strings/str_split.h>
+
 #include <algorithm>
-#include <ctime>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"

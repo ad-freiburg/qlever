@@ -16,7 +16,7 @@ using enum PositionInTriple;
 namespace {
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
-  ResultTable _resultTable{
+  Result _resultTable{
       IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
@@ -27,7 +27,7 @@ struct ContextWrapper {
 
   void setIdTable(IdTable&& table) {
     _resultTable =
-        ResultTable{std::move(table), {}, _resultTable.getSharedLocalVocab()};
+        Result{std::move(table), {}, _resultTable.getSharedLocalVocab()};
   }
 };
 

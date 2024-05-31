@@ -81,10 +81,10 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-ResultTable Bind::computeResult() {
+Result Bind::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
-  shared_ptr<const ResultTable> subRes = _subtree->getResult();
+  std::shared_ptr<const Result> subRes = _subtree->getResult();
   LOG(DEBUG) << "Got input to Bind operation." << endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
 
@@ -114,7 +114,7 @@ ResultTable Bind::computeResult() {
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 void Bind::computeExpressionBind(
     IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-    const ResultTable& inputResultTable,
+    const Result& inputResultTable,
     sparqlExpression::SparqlExpression* expression) const {
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),

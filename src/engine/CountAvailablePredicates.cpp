@@ -100,7 +100,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-ResultTable CountAvailablePredicates::computeResult() {
+Result CountAvailablePredicates::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
@@ -137,7 +138,7 @@ ResultTable CountAvailablePredicates::computeResult() {
                                                              patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
-    std::shared_ptr<const ResultTable> subresult = subtree_->getResult();
+    std::shared_ptr<const Result> subresult = subtree_->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 

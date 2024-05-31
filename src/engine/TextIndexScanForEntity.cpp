@@ -14,7 +14,8 @@ TextIndexScanForEntity::TextIndexScanForEntity(
       word_(std::move(word)) {}
 
 // _____________________________________________________________________________
-ResultTable TextIndexScanForEntity::computeResult() {
+Result TextIndexScanForEntity::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   IdTable idTable = getExecutionContext()->getIndex().getEntityMentionsForWord(
       word_, getExecutionContext()->getAllocator());
 

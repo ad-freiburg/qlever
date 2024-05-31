@@ -1,4 +1,4 @@
-//  Copyright 2023, University of Freiburg,
+//  Copyright 2024, University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
@@ -17,13 +17,14 @@ using ad_utility::source_location;
 
 // Create a `CartesianProductJoin` the children of which are `ValuesForTesting`
 // with results create from the `inputs`. The children will have disjoint sets
-// of variabled as required by the `CartesianProductJoin`. If
+// of variable as required by the `CartesianProductJoin`. If
 // `useLimitInSuboperations` is true, then the `ValuesForTesting` support the
 // LIMIT operation directly (this makes a difference in the `computeResult`
 // method of `CartesianProductJoin`).
 CartesianProductJoin makeJoin(const std::vector<VectorTable>& inputs,
                               bool useLimitInSuboperations = false) {
-  auto qec = ad_utility::testing::getQec();
+  auto qec =
+      ad_utility::testing::getQec("<only> <for> <cartesianProductJoinTests>");
   std::vector<std::shared_ptr<QueryExecutionTree>> valueOperations;
   size_t i = 0;
   auto v = [&i]() mutable { return Variable{"?" + std::to_string(i++)}; };
@@ -134,6 +135,30 @@ TEST(CartesianProductJoin, computeResult) {
        {10, 0},
        {11, 0}},
       {{{0}, {1}, {2}, {3}, {4}, {5}, {6}, {7}, {8}, {9}, {10}, {11}}, {{0}}});
+}
+
+// Test the throwing of the custom out of memory exception inside the
+// cartesian product join.
+TEST(CartesianProductJoin, outOfMemoryException) {
+  std::vector<VectorTable> tables;
+  VectorTable largeTable;
+  largeTable.emplace_back();
+  for (size_t i = 0; i < 10; ++i) {
+    largeTable.back().push_back(0);
+  }
+  for (size_t i = 0; i < 10; ++i) {
+    tables.push_back(largeTable);
+  }
+  auto largeJoin = makeJoin(tables);
+  auto allocator = largeJoin.getExecutionContext()->getAllocator();
+  // Manually deplete the allocator.
+  auto left = allocator.amountMemoryLeft().getBytes() / sizeof(Id);
+  auto ptr = allocator.allocate(left);
+  AD_EXPECT_THROW_WITH_MESSAGE(largeJoin.computeResultOnlyForTesting(),
+                               ::testing::HasSubstr("cross-product"));
+  // Avoid memory leaks and failures of unit tests that reuse the (static)
+  // allocator.
+  allocator.deallocate(ptr, left);
 }
 
 // ______________________________________________________________

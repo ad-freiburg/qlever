@@ -105,11 +105,11 @@ class HasPredicateScan : public Operation {
                               size_t resultSize);
 
   template <int WIDTH>
-  ResultTable computeSubqueryS(IdTable* result,
-                               const CompactVectorOfStrings<Id>& patterns);
+  Result computeSubqueryS(IdTable* result,
+                          const CompactVectorOfStrings<Id>& patterns);
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;
 };

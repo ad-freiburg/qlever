@@ -46,13 +46,13 @@ class Bind : public Operation {
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Implementation for the binding of arbitrary expressions.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   void computeExpressionBind(
       IdTable* outputIdTable, LocalVocab* outputLocalVocab,
-      const ResultTable& inputResultTable,
+      const Result& inputResultTable,
       sparqlExpression::SparqlExpression* expression) const;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap() const override;

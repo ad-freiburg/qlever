@@ -48,9 +48,9 @@ class TextIndexScanForWord : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  // Returns a ResultTable containing an IdTable with the columns being
+  // Returns a Result containing an IdTable with the columns being
   // the text variable and the completed word (if it was prefixed)
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 };
