@@ -8,6 +8,7 @@
 #include <absl/strings/str_cat.h>
 
 #include <bit>
+#include <boost/stacktrace.hpp>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -128,10 +129,11 @@ class ValueId {
   // GROUP BY and BIND operations (for performance reaons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
-    if (!std::is_constant_evaluated()) {
+    if !consteval {
+      LOG(ERROR) << "Exiting, stacktrace is \n "
+                 << boost::stacktrace::stacktrace() << std::endl;
       throw std::system_error{};
     }
-    // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() == *other.getLocalVocabIndex();
@@ -148,7 +150,9 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    if (!std::is_constant_evaluated()) {
+    if !consteval {
+      LOG(ERROR) << "Exiting, stacktrace is \n "
+                 << boost::stacktrace::stacktrace() << std::endl;
       throw std::system_error{};
     }
     // AD_FAIL();
