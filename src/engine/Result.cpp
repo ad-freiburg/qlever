@@ -63,6 +63,25 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
              SharedLocalVocabWrapper{std::move(localVocab)}) {}
 
 // _____________________________________________________________________________
+void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+  // Apply the OFFSET clause. If the offset is `0` or the offset is larger
+  // than the size of the `IdTable`, then this has no effect and runtime
+  // `O(1)` (see the docs for `std::shift_left`).
+  std::ranges::for_each(
+      idTable_.getColumns(),
+      [offset = limitOffset.actualOffset(idTable_.numRows()),
+       upperBound =
+           limitOffset.upperBound(idTable_.numRows())](std::span<Id> column) {
+        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+      });
+  // Resize the `IdTable` if necessary.
+  size_t targetSize = limitOffset.actualSize(idTable_.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable_.numRows());
+  idTable_.resize(targetSize);
+  idTable_.shrinkToFit();
+}
+
+// _____________________________________________________________________________
 auto Result::getOrComputeDatatypeCountsPerColumn()
     -> const DatatypeCountsPerColumn& {
   if (datatypeCountsPerColumn_.has_value()) {
@@ -100,6 +119,3 @@ void Result::logResultSize() const {
   LOG(INFO) << "Result has size " << idTable().size() << " x "
             << idTable().numColumns() << std::endl;
 }
-
-// _____________________________________________________________________________
-bool Result::offsetAndLimitApplied() const { return offsetAndLimitApplied_; }

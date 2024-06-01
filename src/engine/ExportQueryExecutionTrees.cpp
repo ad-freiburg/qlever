@@ -19,10 +19,6 @@ namespace {
 // LIMIT, the OFFSET, and the actual size of the `idTable`
 auto getRowIndices(const LimitOffsetClause& limitOffset, const Result& result) {
   const IdTable& idTable = result.idTable();
-  if (result.offsetAndLimitApplied()) {
-    // Don't apply offset twice if already applied
-    return std::views::iota(0ul, limitOffset.actualSize(idTable.size()));
-  }
   return std::views::iota(limitOffset.actualOffset(idTable.size()),
                           limitOffset.upperBound(idTable.size()));
 }

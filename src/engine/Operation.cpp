@@ -144,10 +144,24 @@ std::shared_ptr<const Result> Operation::getResult(
       updateRuntimeInformationOnSuccess(result,
                                         ad_utility::CacheStatus::computed,
                                         timer.msecs(), std::nullopt);
-      // This will hold true even when supportsLimit() returns false,
-      // because in this case `_limit` won't have been set on this operation.
-      AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                        _limit.actualSize(result.idTable().numRows()));
+      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+      // already perform it. An example for an operation that directly computes
+      // the Limit is a full index scan with three variables. Note that the
+      // `QueryPlanner` does currently only set the limit for operations that
+      // support it natively, except for operations in subqueries. This means
+      // that a lot of the time the limit is only artificially applied during
+      // export, allowing the cache to re-use the same operation for different
+      // limits and offsets.
+      if (!supportsLimit()) {
+        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
+        // Note: both of the following calls have no effect and negligible
+        // runtime if neither a LIMIT nor an OFFSET were specified.
+        result.applyLimitOffset(_limit);
+        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
+      } else {
+        AD_CONTRACT_CHECK(result.idTable().numRows() ==
+                          _limit.actualSize(result.idTable().numRows()));
+      }
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
