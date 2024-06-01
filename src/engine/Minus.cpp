@@ -32,7 +32,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-ResultTable Minus::computeResult() {
+Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -43,8 +43,9 @@ ResultTable Minus::computeResult() {
 
   LOG(DEBUG) << "Minus subresult computation done" << std::endl;
 
-  LOG(DEBUG) << "Computing minus of results of size " << leftResult->size()
-             << " and " << rightResult->size() << endl;
+  LOG(DEBUG) << "Computing minus of results of size "
+             << leftResult->idTable().size() << " and "
+             << rightResult->idTable().size() << endl;
 
   int leftWidth = leftResult->idTable().numColumns();
   int rightWidth = rightResult->idTable().numColumns();
@@ -56,7 +57,7 @@ ResultTable Minus::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftResult, *rightResult)};
+          Result::getMergedLocalVocab(*leftResult, *rightResult)};
 }
 
 // _____________________________________________________________________________

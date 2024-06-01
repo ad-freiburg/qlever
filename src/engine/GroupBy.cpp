@@ -222,9 +222,9 @@ void GroupBy::processGroup(
  * @param blockEnd Where the group ends.
  * @param input The input Table.
  * @param result
- * @param inTable The input ResultTable, which is required for its local
+ * @param inTable The input Result, which is required for its local
  *                vocabulary
- * @param outTable The output ResultTable, the vocabulary of which needs to be
+ * @param outTable The output Result, the vocabulary of which needs to be
  *                 expanded for GROUP_CONCAT aggregates
  * @param distinctHashSet An empty hash set. This is only passed in as an
  *                        argument to allow for efficient reusage of its
@@ -309,7 +309,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   *dynResult = std::move(result).toDynamic();
 }
 
-ResultTable GroupBy::computeResult() {
+Result GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -335,7 +335,7 @@ ResultTable GroupBy::computeResult() {
   auto hashMapOptimizationParams =
       checkIfHashMapOptimizationPossible(aggregates);
 
-  std::shared_ptr<const ResultTable> subresult;
+  std::shared_ptr<const Result> subresult;
   if (hashMapOptimizationParams.has_value()) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting

@@ -679,10 +679,12 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
 }
 
 // ________________________________________________________________________
-size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
+template <typename SortedTriplesType, typename... CallbackTypes>
+size_t IndexImpl::createPermutationPair(size_t numColumns,
+                                        SortedTriplesType&& sortedTriples,
                                         const Permutation& p1,
                                         const Permutation& p2,
-                                        auto&&... perTripleCallbacks) {
+                                        CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.

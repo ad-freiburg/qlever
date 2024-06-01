@@ -1,0 +1,16 @@
+# See .pre-commit-config.yaml for usage instructions.
+repos:
+    # Uses the local clang-format
+  - repo: local
+    hooks:
+      # Inspired by https://github.com/doublify/pre-commit-clang-format and
+      # https://github.com/pre-commit/mirrors-clang-format
+      - id: clang-format-16
+        name: clang-format
+        description: Format files with ClangFormat16.
+        entry: clang-format-16 -i
+        language: system
+        'types_or': [ c++, c ]
+        args: [ "-style=file" ]
+        require_serial: false
+
