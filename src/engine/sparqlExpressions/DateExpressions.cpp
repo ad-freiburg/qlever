@@ -4,6 +4,17 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+
+// Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
+// Note: This currently requires a copy of a string since the `Literal` class
+// has to add the quotation marks.
+constexpr auto toLiteral = [](std::string_view normalizedContent) {
+  return LiteralOrIri{
+      ad_utility::triple_component::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(normalizedContent))};
+};
+
 namespace sparqlExpression {
 namespace detail {
 // Date functions.
@@ -40,6 +51,22 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
   return Id::makeFromInt(optionalDay.value());
 };
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
+
+inline auto extractStrTimezone =
+    [](std::optional<DateOrLargeYear> d) -> IdOrLiteralOrIri {
+  if (d.has_value()) {
+    auto optionalTz = d.value().getStrTimezone();
+    if (optionalTz.has_value()) {
+      std::string tz = optionalTz.value();
+      return LiteralOrIri{Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(std::move(tz)))};
+    }
+  }
+  return Id::makeUndefined();
+};
+
 template <auto dateMember, auto makeId>
 inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
   if (!d.has_value() || !d->isDate()) {
@@ -63,6 +90,8 @@ NARY_EXPRESSION(YearExpression, 1, FV<decltype(extractYear), DateValueGetter>);
 NARY_EXPRESSION(MonthExpression, 1,
                 FV<decltype(extractMonth), DateValueGetter>);
 NARY_EXPRESSION(DayExpression, 1, FV<decltype(extractDay), DateValueGetter>);
+NARY_EXPRESSION(TimezoneStrExpression, 1,
+                FV<decltype(extractStrTimezone), DateValueGetter>);
 NARY_EXPRESSION(HoursExpression, 1,
                 FV<decltype(extractHours), DateValueGetter>);
 NARY_EXPRESSION(MinutesExpression, 1,
@@ -78,6 +107,10 @@ SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child) {
 
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child) {
   return std::make_unique<DayExpression>(std::move(child));
+}
+
+SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child) {
+  return std::make_unique<TimezoneStrExpression>(std::move(child));
 }
 
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child) {
