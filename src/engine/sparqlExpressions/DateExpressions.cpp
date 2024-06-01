@@ -4,17 +4,6 @@
 
 #include "engine/sparqlExpressions/NaryExpressionImpl.h"
 
-using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-
-// Convert a `string_view` to a `LiteralOrIri` that stores a `Literal`.
-// Note: This currently requires a copy of a string since the `Literal` class
-// has to add the quotation marks.
-constexpr auto toLiteral = [](std::string_view normalizedContent) {
-  return LiteralOrIri{
-      ad_utility::triple_component::Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(normalizedContent))};
-};
-
 namespace sparqlExpression {
 namespace detail {
 // Date functions.
