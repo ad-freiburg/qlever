@@ -1632,7 +1632,29 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   ASSERT_TRUE(cacheKeyString.find(rightCacheKeyString) != std::string::npos);
 }
 
-} // namespace stringRepresentation
+}  // namespace stringRepresentation
+
+namespace getMultiplicity {
+
+TEST(SpatialJoin, getMultiplicity){
+  std::string kg = createSmallDatasetWithPoints();
+  
+  // test, delete below
+  kg += "<node_1> <name> \"testing multiplicity\" .";
+
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 16);
+  
+  TripleComponent sub{Variable{"?sub"}};
+  TripleComponent obj{Variable{"?obj"}};
+  auto dummy = computeResultTest::buildIndexScan(qec, sub, "<name>", obj);
+  std::shared_ptr<Operation> op = dummy->getRootOperation();
+  std::cerr << op->getMultiplicity(0) << " " << op->getMultiplicity(1) << std::endl;
+}
+
+}  // namespace getMultiplicity
 
 // test the compute result method on the large dataset from above
 // TODO
