@@ -89,7 +89,7 @@ class GroupBy : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,

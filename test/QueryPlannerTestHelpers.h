@@ -4,10 +4,14 @@
 
 #pragma once
 
+#include <gmock/gmock-matchers.h>
+#include <gmock/gmock.h>
+
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
 #include "engine/CountAvailablePredicates.h"
+#include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/MultiColumnJoin.h"
@@ -21,8 +25,6 @@
 #include "engine/TextLimit.h"
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
-#include "gmock/gmock-matchers.h"
-#include "gmock/gmock.h"
 #include "parser/SparqlParser.h"
 #include "util/IndexTestHelpers.h"
 
