@@ -1763,6 +1763,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "strlang") {
+    return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
   } else if (functionName == "strbefore") {

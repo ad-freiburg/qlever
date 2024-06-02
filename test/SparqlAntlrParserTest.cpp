@@ -1416,6 +1416,10 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
 
+  expectFails("STRLANG()");
+  expectFails("STRALANG(?x)");
+  expectBuiltInCall("STRLANG(?x, ?y)",
+                    matchNary(&makeStrLangTagExpression, Var{"?x"}, Var{"?y"}));
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());

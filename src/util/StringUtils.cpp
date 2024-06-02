@@ -39,6 +39,15 @@ string getUppercase(const string& orig) {
   return retVal;
 }
 
+// ____________________________________________________________________________
+bool strIsLangTag(const string& input) {
+  UErrorCode status = U_ZERO_ERROR;
+  char localeID[ULOC_FULLNAME_CAPACITY];
+  uloc_forLanguageTag(input.c_str(), localeID, ULOC_FULLNAME_CAPACITY, NULL,
+                      &status);
+  return U_SUCCESS(status);
+}
+
 // ___________________________________________________________________________
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
