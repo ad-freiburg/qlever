@@ -41,11 +41,19 @@ string getUppercase(const string& orig) {
 
 // ____________________________________________________________________________
 bool strIsLangTag(const string& input) {
+  auto lenInput = input.length();
+  if (lenInput < 2) {
+    return false;
+  }
   UErrorCode status = U_ZERO_ERROR;
   char localeID[ULOC_FULLNAME_CAPACITY];
-  uloc_forLanguageTag(input.c_str(), localeID, ULOC_FULLNAME_CAPACITY, NULL,
-                      &status);
-  return U_SUCCESS(status);
+  int32_t parsedLength = 0;
+  uloc_forLanguageTag(input.c_str(), localeID, ULOC_FULLNAME_CAPACITY,
+                      &parsedLength, &status);
+  if (U_FAILURE(status) || parsedLength != static_cast<int32_t>(lenInput)) {
+    return false;
+  }
+  return true;
 }
 
 // ___________________________________________________________________________
