@@ -419,6 +419,25 @@ using EncodeForUriExpression =
 
 using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
 
+// STRING WITH DATATYPE IRI
+[[maybe_unused]] inline auto strIriDtTag =
+    [](std::optional<std::string> inputStr,
+       OptIri inputIri) -> IdOrLiteralOrIri {
+  if (!inputStr.has_value() || !inputIri.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    auto str = inputStr.value();
+    // retrieve the Iri as a string with brackets
+    auto iri = inputIri.value();
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(std::move(str)), std::move(iri));
+    return LiteralOrIri{lit};
+  }
+};
+
+using StrIriTagged = StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+
 // HASH
 template <auto HashFunc>
 [[maybe_unused]] inline constexpr auto hash =
@@ -498,6 +517,10 @@ Expr makeEncodeForUriExpression(Expr child) {
 
 Expr makeStrLangTagExpression(Expr child1, Expr child2) {
   return make<StrLangTagged>(child1, child2);
+}
+
+Expr makeStrIriDtExpression(Expr child1, Expr child2) {
+  return make<StrIriTagged>(child1, child2);
 }
 
 Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
