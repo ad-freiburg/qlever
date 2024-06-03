@@ -44,7 +44,7 @@ string getLowercase(const string& orig);
 
 string getUppercase(const string& orig);
 
-// check if the given string `language tag` as is `BPC47` conform.
+// Check if the given string `language tag` is `BPC47` conform.
 // Use the ICU library (unicode/uloc.h) for this procedure.
 bool strIsLangTag(const string& strLangTag);
 

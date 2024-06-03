@@ -56,7 +56,7 @@ SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeStrIriDtExpression(SparqlExpression::Ptr child1,
-                                          SparqlExpression::Ptr child2);
+                                             SparqlExpression::Ptr child2);
 SparqlExpression::Ptr makeStrLangTagExpression(SparqlExpression::Ptr child1,
                                                SparqlExpression::Ptr child2);
 

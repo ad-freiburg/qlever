@@ -427,7 +427,6 @@ using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
     return Id::makeUndefined();
   } else {
     auto str = inputStr.value();
-    // retrieve the Iri as a string with brackets
     auto iri = inputIri.value();
     auto lit =
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
@@ -436,7 +435,8 @@ using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
   }
 };
 
-using StrIriTagged = StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+using StrIriTagged =
+    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
 
 // HASH
 template <auto HashFunc>
