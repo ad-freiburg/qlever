@@ -344,6 +344,7 @@ class ConcurrentCache {
       } else if (onlyReadFromCache) {
         return {nullptr, CacheStatus::notInCacheAndNotComputed};
       } else if (lockPtr->_inProgress.contains(key)) {
+        // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
         // this call blocks and we currently hold a lock.
 
