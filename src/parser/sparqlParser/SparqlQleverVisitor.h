@@ -19,6 +19,7 @@
 #include "parser/ParsedQuery.h"
 #include "parser/RdfEscaping.h"
 #include "parser/data/BlankNode.h"
+#include "parser/data/GraphRef.h"
 #include "parser/data/Iri.h"
 #include "parser/data/SolutionModifiers.h"
 #include "parser/data/Types.h"
@@ -127,7 +128,7 @@ class SparqlQleverVisitor {
   ParsedQuery visit(Parser::QueryOrUpdateContext* ctx);
 
   // ___________________________________________________________________________
-  [[nodiscard]] ParsedQuery visit(Parser::QueryContext* ctx);
+  ParsedQuery visit(Parser::QueryContext* ctx);
 
   // ___________________________________________________________________________
   void visit(Parser::PrologueContext* ctx);
@@ -138,21 +139,19 @@ class SparqlQleverVisitor {
   // ___________________________________________________________________________
   void visit(Parser::PrefixDeclContext* ctx);
 
-  [[nodiscard]] ParsedQuery visit(Parser::SelectQueryContext* ctx);
+  ParsedQuery visit(Parser::SelectQueryContext* ctx);
 
-  [[nodiscard]] SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
+  SubQueryAndMaybeValues visit(Parser::SubSelectContext* ctx);
 
-  [[nodiscard]] parsedQuery::SelectClause visit(
-      Parser::SelectClauseContext* ctx);
+  parsedQuery::SelectClause visit(Parser::SelectClauseContext* ctx);
 
-  [[nodiscard]] std::variant<Variable, Alias> visit(
-      Parser::VarOrAliasContext* ctx);
+  std::variant<Variable, Alias> visit(Parser::VarOrAliasContext* ctx);
 
-  [[nodiscard]] Alias visit(Parser::AliasContext* ctx);
+  Alias visit(Parser::AliasContext* ctx);
 
-  [[nodiscard]] Alias visit(Parser::AliasWithoutBracketsContext* ctx);
+  Alias visit(Parser::AliasWithoutBracketsContext* ctx);
 
-  [[nodiscard]] ParsedQuery visit(Parser::ConstructQueryContext* ctx);
+  ParsedQuery visit(Parser::ConstructQueryContext* ctx);
 
   // The parser rules for which the visit overload is annotated [[noreturn]]
   // will always throw an exception because the corresponding feature is not
@@ -171,156 +170,180 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static void visit(Parser::SourceSelectorContext* ctx);
 
-  [[nodiscard]] PatternAndVisibleVariables visit(
-      Parser::WhereClauseContext* ctx);
+  PatternAndVisibleVariables visit(Parser::WhereClauseContext* ctx);
 
-  [[nodiscard]] SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
+  SolutionModifiers visit(Parser::SolutionModifierContext* ctx);
 
-  [[nodiscard]] vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
+  vector<GroupKey> visit(Parser::GroupClauseContext* ctx);
 
-  [[nodiscard]] GroupKey visit(Parser::GroupConditionContext* ctx);
+  GroupKey visit(Parser::GroupConditionContext* ctx);
 
-  [[nodiscard]] vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
+  vector<SparqlFilter> visit(Parser::HavingClauseContext* ctx);
 
-  [[nodiscard]] SparqlFilter visit(Parser::HavingConditionContext* ctx);
+  SparqlFilter visit(Parser::HavingConditionContext* ctx);
 
-  [[nodiscard]] OrderClause visit(Parser::OrderClauseContext* ctx);
+  OrderClause visit(Parser::OrderClauseContext* ctx);
 
-  [[nodiscard]] OrderKey visit(Parser::OrderConditionContext* ctx);
+  OrderKey visit(Parser::OrderConditionContext* ctx);
 
-  [[nodiscard]] LimitOffsetClause visit(Parser::LimitOffsetClausesContext* ctx);
+  LimitOffsetClause visit(Parser::LimitOffsetClausesContext* ctx);
 
-  [[nodiscard]] static uint64_t visit(Parser::LimitClauseContext* ctx);
+  static uint64_t visit(Parser::LimitClauseContext* ctx);
 
-  [[nodiscard]] static uint64_t visit(Parser::OffsetClauseContext* ctx);
+  static uint64_t visit(Parser::OffsetClauseContext* ctx);
 
-  [[nodiscard]] static uint64_t visit(Parser::TextLimitClauseContext* ctx);
+  static uint64_t visit(Parser::TextLimitClauseContext* ctx);
 
-  [[nodiscard]] std::optional<parsedQuery::Values> visit(
-      Parser::ValuesClauseContext* ctx);
+  std::optional<parsedQuery::Values> visit(Parser::ValuesClauseContext* ctx);
 
-  [[nodiscard]] Triples visit(Parser::TriplesTemplateContext* ctx);
+  ParsedQuery visit(Parser::UpdateContext* ctx);
 
-  [[nodiscard]] ParsedQuery::GraphPattern visit(
-      Parser::GroupGraphPatternContext* ctx);
+  ParsedQuery visit(Parser::Update1Context* ctx);
 
-  [[nodiscard]] OperationsAndFilters visit(
-      Parser::GroupGraphPatternSubContext* ctx);
+  [[noreturn]] void visit(const Parser::LoadContext* ctx) const;
 
-  [[nodiscard]] OperationOrFilterAndMaybeTriples visit(
+  ParsedQuery visit(Parser::ClearContext* ctx);
+
+  [[noreturn]] void visit(const Parser::DropContext* ctx) const;
+
+  [[noreturn]] void visit(const Parser::CreateContext* ctx) const;
+
+  [[noreturn]] void visit(const Parser::AddContext* ctx) const;
+
+  [[noreturn]] void visit(const Parser::MoveContext* ctx) const;
+
+  [[noreturn]] void visit(const Parser::CopyContext* ctx) const;
+
+  vector<SparqlTripleSimple> visit(Parser::InsertDataContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::DeleteDataContext* ctx);
+
+  std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> visit(
+      Parser::DeleteWhereContext* ctx);
+
+  ParsedQuery visit(Parser::ModifyContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::DeleteClauseContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::InsertClauseContext* ctx);
+
+  GraphOrDefault visit(Parser::GraphOrDefaultContext* ctx);
+
+  GraphRef visit(Parser::GraphRefContext* ctx);
+
+  GraphRefAll visit(Parser::GraphRefAllContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::QuadPatternContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::QuadDataContext* ctx);
+
+  vector<SparqlTripleSimple> visit(Parser::QuadsContext* ctx);
+
+  Triples visit(Parser::TriplesTemplateContext* ctx);
+
+  ParsedQuery::GraphPattern visit(Parser::GroupGraphPatternContext* ctx);
+
+  OperationsAndFilters visit(Parser::GroupGraphPatternSubContext* ctx);
+
+  OperationOrFilterAndMaybeTriples visit(
       Parser::GraphPatternNotTriplesAndMaybeTriplesContext* ctx);
 
-  [[nodiscard]] parsedQuery::BasicGraphPattern visit(
-      Parser::TriplesBlockContext* graphTerm);
+  parsedQuery::BasicGraphPattern visit(Parser::TriplesBlockContext* graphTerm);
 
   // Filter clauses are no independent graph patterns themselves, but their
   // scope is always the complete graph pattern enclosing them.
-  [[nodiscard]] OperationOrFilter visit(
-      Parser::GraphPatternNotTriplesContext* ctx);
+  OperationOrFilter visit(Parser::GraphPatternNotTriplesContext* ctx);
 
-  [[nodiscard]] parsedQuery::GraphPatternOperation visit(
+  parsedQuery::GraphPatternOperation visit(
       Parser::OptionalGraphPatternContext* ctx);
 
   [[noreturn]] static parsedQuery::GraphPatternOperation visit(
       const Parser::GraphGraphPatternContext* ctx);
 
-  [[nodiscard]] parsedQuery::Service visit(
-      Parser::ServiceGraphPatternContext* ctx);
+  parsedQuery::Service visit(Parser::ServiceGraphPatternContext* ctx);
 
-  [[nodiscard]] parsedQuery::GraphPatternOperation visit(
-      Parser::BindContext* ctx);
+  parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 
-  [[nodiscard]] parsedQuery::GraphPatternOperation visit(
-      Parser::InlineDataContext* ctx);
+  parsedQuery::GraphPatternOperation visit(Parser::InlineDataContext* ctx);
 
-  [[nodiscard]] parsedQuery::Values visit(Parser::DataBlockContext* ctx);
+  parsedQuery::Values visit(Parser::DataBlockContext* ctx);
 
-  [[nodiscard]] parsedQuery::SparqlValues visit(
-      Parser::InlineDataOneVarContext* ctx);
+  parsedQuery::SparqlValues visit(Parser::InlineDataOneVarContext* ctx);
 
-  [[nodiscard]] parsedQuery::SparqlValues visit(
-      Parser::InlineDataFullContext* ctx);
+  parsedQuery::SparqlValues visit(Parser::InlineDataFullContext* ctx);
 
-  [[nodiscard]] vector<TripleComponent> visit(
-      Parser::DataBlockSingleContext* ctx);
+  vector<TripleComponent> visit(Parser::DataBlockSingleContext* ctx);
 
-  [[nodiscard]] TripleComponent visit(Parser::DataBlockValueContext* ctx);
+  TripleComponent visit(Parser::DataBlockValueContext* ctx);
 
-  [[nodiscard]] GraphPatternOperation visit(
-      Parser::MinusGraphPatternContext* ctx);
+  GraphPatternOperation visit(Parser::MinusGraphPatternContext* ctx);
 
-  [[nodiscard]] GraphPatternOperation visit(
-      Parser::GroupOrUnionGraphPatternContext* ctx);
+  GraphPatternOperation visit(Parser::GroupOrUnionGraphPatternContext* ctx);
 
-  [[nodiscard]] SparqlFilter visit(Parser::FilterRContext* ctx);
+  SparqlFilter visit(Parser::FilterRContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::ConstraintContext* ctx);
+  ExpressionPtr visit(Parser::ConstraintContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::FunctionCallContext* ctx);
+  ExpressionPtr visit(Parser::FunctionCallContext* ctx);
 
-  [[nodiscard]] vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
+  vector<ExpressionPtr> visit(Parser::ArgListContext* ctx);
 
   std::vector<ExpressionPtr> visit(Parser::ExpressionListContext* ctx);
 
-  [[nodiscard]] std::optional<parsedQuery::ConstructClause> visit(
+  std::optional<parsedQuery::ConstructClause> visit(
       Parser::ConstructTemplateContext* ctx);
 
-  [[nodiscard]] Triples visit(Parser::ConstructTriplesContext* ctx);
+  Triples visit(Parser::ConstructTriplesContext* ctx);
 
-  [[nodiscard]] Triples visit(Parser::TriplesSameSubjectContext* ctx);
+  Triples visit(Parser::TriplesSameSubjectContext* ctx);
 
-  [[nodiscard]] PredicateObjectPairsAndTriples visit(
-      Parser::PropertyListContext* ctx);
+  PredicateObjectPairsAndTriples visit(Parser::PropertyListContext* ctx);
 
-  [[nodiscard]] PredicateObjectPairsAndTriples visit(
+  PredicateObjectPairsAndTriples visit(
       Parser::PropertyListNotEmptyContext* ctx);
 
-  [[nodiscard]] GraphTerm visit(Parser::VerbContext* ctx);
+  GraphTerm visit(Parser::VerbContext* ctx);
 
-  [[nodiscard]] ObjectsAndTriples visit(Parser::ObjectListContext* ctx);
+  ObjectsAndTriples visit(Parser::ObjectListContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
+  SubjectOrObjectAndTriples visit(Parser::ObjectRContext* ctx);
 
-  [[nodiscard]] vector<TripleWithPropertyPath> visit(
+  vector<TripleWithPropertyPath> visit(
       Parser::TriplesSameSubjectPathContext* ctx);
 
-  [[nodiscard]] std::optional<PathObjectPairsAndTriples> visit(
+  std::optional<PathObjectPairsAndTriples> visit(
       Parser::PropertyListPathContext* ctx);
 
-  [[nodiscard]] PathObjectPairsAndTriples visit(
-      Parser::PropertyListPathNotEmptyContext* ctx);
+  PathObjectPairsAndTriples visit(Parser::PropertyListPathNotEmptyContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::VerbPathContext* ctx);
+  PropertyPath visit(Parser::VerbPathContext* ctx);
 
-  [[nodiscard]] static Variable visit(Parser::VerbSimpleContext* ctx);
+  static Variable visit(Parser::VerbSimpleContext* ctx);
 
-  [[nodiscard]] PathObjectPairsAndTriples visit(
-      Parser::TupleWithoutPathContext* term);
+  PathObjectPairsAndTriples visit(Parser::TupleWithoutPathContext* term);
 
-  [[nodiscard]] PathObjectPairsAndTriples visit(
-      Parser::TupleWithPathContext* ctx);
+  PathObjectPairsAndTriples visit(Parser::TupleWithPathContext* ctx);
 
-  [[nodiscard]] ad_utility::sparql_types::VarOrPath visit(
+  ad_utility::sparql_types::VarOrPath visit(
       Parser::VerbPathOrSimpleContext* ctx);
 
-  [[nodiscard]] ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
+  ObjectsAndPathTriples visit(Parser::ObjectListPathContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
-      Parser::ObjectPathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::ObjectPathContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathContext* ctx);
+  PropertyPath visit(Parser::PathContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathAlternativeContext* ctx);
+  PropertyPath visit(Parser::PathAlternativeContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathSequenceContext* ctx);
+  PropertyPath visit(Parser::PathSequenceContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathEltContext* ctx);
+  PropertyPath visit(Parser::PathEltContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
+  PropertyPath visit(Parser::PathEltOrInverseContext* ctx);
 
   [[noreturn]] static void visit(Parser::PathModContext* ctx);
 
-  [[nodiscard]] PropertyPath visit(Parser::PathPrimaryContext* ctx);
+  PropertyPath visit(Parser::PathPrimaryContext* ctx);
 
   [[noreturn]] static PropertyPath visit(
       const Parser::PathNegatedPropertySetContext*);
@@ -330,52 +353,47 @@ class SparqlQleverVisitor {
 
   /// Note that in the SPARQL grammar the INTEGER rule refers to positive
   /// integers without an explicit sign.
-  [[nodiscard]] static uint64_t visit(Parser::IntegerContext* ctx);
+  static uint64_t visit(Parser::IntegerContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndTriples visit(
-      Parser::TriplesNodeContext* ctx);
+  SubjectOrObjectAndTriples visit(Parser::TriplesNodeContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndTriples visit(
-      Parser::BlankNodePropertyListContext* ctx);
+  SubjectOrObjectAndTriples visit(Parser::BlankNodePropertyListContext* ctx);
 
   SubjectOrObjectAndPathTriples visit(Parser::TriplesNodePathContext* ctx);
 
   SubjectOrObjectAndPathTriples visit(
       Parser::BlankNodePropertyListPathContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
+  SubjectOrObjectAndTriples visit(Parser::CollectionContext* ctx);
 
   [[noreturn]] SubjectOrObjectAndPathTriples visit(
       Parser::CollectionPathContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
+  SubjectOrObjectAndTriples visit(Parser::GraphNodeContext* ctx);
 
-  [[nodiscard]] SubjectOrObjectAndPathTriples visit(
-      Parser::GraphNodePathContext* ctx);
+  SubjectOrObjectAndPathTriples visit(Parser::GraphNodePathContext* ctx);
 
-  [[nodiscard]] GraphTerm visit(Parser::VarOrTermContext* ctx);
+  GraphTerm visit(Parser::VarOrTermContext* ctx);
 
-  [[nodiscard]] GraphTerm visit(Parser::VarOrIriContext* ctx);
+  GraphTerm visit(Parser::VarOrIriContext* ctx);
 
-  [[nodiscard]] static Variable visit(Parser::VarContext* ctx);
+  static Variable visit(Parser::VarContext* ctx);
 
-  [[nodiscard]] GraphTerm visit(Parser::GraphTermContext* ctx);
+  GraphTerm visit(Parser::GraphTermContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::ExpressionContext* ctx);
+  ExpressionPtr visit(Parser::ExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(
-      Parser::ConditionalOrExpressionContext* ctx);
+  ExpressionPtr visit(Parser::ConditionalOrExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(
-      Parser::ConditionalAndExpressionContext* ctx);
+  ExpressionPtr visit(Parser::ConditionalAndExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::ValueLogicalContext* ctx);
+  ExpressionPtr visit(Parser::ValueLogicalContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::RelationalExpressionContext* ctx);
+  ExpressionPtr visit(Parser::RelationalExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::NumericExpressionContext* ctx);
+  ExpressionPtr visit(Parser::NumericExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::AdditiveExpressionContext* ctx);
+  ExpressionPtr visit(Parser::AdditiveExpressionContext* ctx);
 
   // Helper structs, needed in the following `visit` functions. Combine an
   // explicit operator (+ - * /) with an expression.
@@ -385,41 +403,35 @@ class SparqlQleverVisitor {
     ExpressionPtr expression_;
   };
 
-  [[nodiscard]] OperatorAndExpression visit(
+  OperatorAndExpression visit(
       Parser::MultiplicativeExpressionWithSignContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
-      Parser::PlusSubexpressionContext* ctx);
+  OperatorAndExpression visit(Parser::PlusSubexpressionContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
-      Parser::MinusSubexpressionContext* ctx);
+  OperatorAndExpression visit(Parser::MinusSubexpressionContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
+  OperatorAndExpression visit(
       Parser::MultiplicativeExpressionWithLeadingSignButNoSpaceContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(
-      Parser::MultiplicativeExpressionContext* ctx);
+  ExpressionPtr visit(Parser::MultiplicativeExpressionContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
-      Parser::MultiplyOrDivideExpressionContext* ctx);
+  OperatorAndExpression visit(Parser::MultiplyOrDivideExpressionContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
-      Parser::MultiplyExpressionContext* ctx);
+  OperatorAndExpression visit(Parser::MultiplyExpressionContext* ctx);
 
-  [[nodiscard]] OperatorAndExpression visit(
-      Parser::DivideExpressionContext* ctx);
+  OperatorAndExpression visit(Parser::DivideExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::UnaryExpressionContext* ctx);
+  ExpressionPtr visit(Parser::UnaryExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::PrimaryExpressionContext* ctx);
+  ExpressionPtr visit(Parser::PrimaryExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::BrackettedExpressionContext* ctx);
+  ExpressionPtr visit(Parser::BrackettedExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::BuiltInCallContext* ctx);
+  ExpressionPtr visit(Parser::BuiltInCallContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::RegexExpressionContext* ctx);
+  ExpressionPtr visit(Parser::RegexExpressionContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::LangExpressionContext* ctx);
+  ExpressionPtr visit(Parser::LangExpressionContext* ctx);
 
   ExpressionPtr visit(Parser::SubstringExpressionContext* ctx);
 
@@ -429,39 +441,35 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static void visit(const Parser::NotExistsFuncContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::AggregateContext* ctx);
+  ExpressionPtr visit(Parser::AggregateContext* ctx);
 
-  [[nodiscard]] ExpressionPtr visit(Parser::IriOrFunctionContext* ctx);
+  ExpressionPtr visit(Parser::IriOrFunctionContext* ctx);
 
-  [[nodiscard]] std::string visit(Parser::RdfLiteralContext* ctx);
+  std::string visit(Parser::RdfLiteralContext* ctx);
 
-  [[nodiscard]] IntOrDouble visit(Parser::NumericLiteralContext* ctx);
+  IntOrDouble visit(Parser::NumericLiteralContext* ctx);
 
-  [[nodiscard]] static IntOrDouble visit(
-      Parser::NumericLiteralUnsignedContext* ctx);
+  static IntOrDouble visit(Parser::NumericLiteralUnsignedContext* ctx);
 
-  [[nodiscard]] static IntOrDouble visit(
-      Parser::NumericLiteralPositiveContext* ctx);
+  static IntOrDouble visit(Parser::NumericLiteralPositiveContext* ctx);
 
-  [[nodiscard]] static IntOrDouble visit(
-      Parser::NumericLiteralNegativeContext* ctx);
+  static IntOrDouble visit(Parser::NumericLiteralNegativeContext* ctx);
 
-  [[nodiscard]] static bool visit(Parser::BooleanLiteralContext* ctx);
+  static bool visit(Parser::BooleanLiteralContext* ctx);
 
-  [[nodiscard]] static RdfEscaping::NormalizedRDFString visit(
-      Parser::StringContext* ctx);
+  static RdfEscaping::NormalizedRDFString visit(Parser::StringContext* ctx);
 
-  [[nodiscard]] TripleComponent::Iri visit(Parser::IriContext* ctx);
+  TripleComponent::Iri visit(Parser::IriContext* ctx);
 
-  [[nodiscard]] static string visit(Parser::IrirefContext* ctx);
+  static string visit(Parser::IrirefContext* ctx);
 
-  [[nodiscard]] string visit(Parser::PrefixedNameContext* ctx);
+  string visit(Parser::PrefixedNameContext* ctx);
 
-  [[nodiscard]] GraphTerm visit(Parser::BlankNodeContext* ctx);
+  GraphTerm visit(Parser::BlankNodeContext* ctx);
 
-  [[nodiscard]] string visit(Parser::PnameLnContext* ctx);
+  string visit(Parser::PnameLnContext* ctx);
 
-  [[nodiscard]] string visit(Parser::PnameNsContext* ctx);
+  string visit(Parser::PnameNsContext* ctx);
 
  private:
   template <typename Visitor, typename Ctx>
@@ -469,7 +477,7 @@ class SparqlQleverVisitor {
       std::is_void_v<decltype(std::declval<Visitor&>().visit(
           std::declval<Ctx*>()))>;
 
-  [[nodiscard]] BlankNode newBlankNode() {
+  BlankNode newBlankNode() {
     std::string label = std::to_string(_blankNodeCounter);
     _blankNodeCounter++;
     // true means automatically generated
@@ -487,7 +495,7 @@ class SparqlQleverVisitor {
 
   // Process an IRI function call. This is used in both `visitFunctionCall` and
   // `visitIriOrFunction`.
-  [[nodiscard]] static ExpressionPtr processIriFunctionCall(
+  static ExpressionPtr processIriFunctionCall(
       const TripleComponent::Iri& iri, std::vector<ExpressionPtr> argList,
       const antlr4::ParserRuleContext*);
 
@@ -500,11 +508,11 @@ class SparqlQleverVisitor {
   // Return the `SparqlExpressionPimpl` for a context that returns a
   // `ExpressionPtr` when visited. The descriptor is set automatically on the
   // `SparqlExpressionPimpl`.
-  [[nodiscard]] SparqlExpressionPimpl visitExpressionPimpl(
-      auto* ctx, bool allowLanguageFilters = false);
+  SparqlExpressionPimpl visitExpressionPimpl(auto* ctx,
+                                             bool allowLanguageFilters = false);
 
   template <typename Expr>
-  [[nodiscard]] ExpressionPtr createExpression(auto... children) {
+  ExpressionPtr createExpression(auto... children) {
     return std::make_unique<Expr>(
         std::array<ExpressionPtr, sizeof...(children)>{std::move(children)...});
   }
@@ -516,7 +524,7 @@ class SparqlQleverVisitor {
   // Call `visit` for each of the `childContexts` and return the results of
   // those calls as a `vector`.
   template <typename Ctx>
-  [[nodiscard]] auto visitVector(const std::vector<Ctx*>& childContexts)
+  auto visitVector(const std::vector<Ctx*>& childContexts)
       -> std::vector<decltype(visit(childContexts[0]))>
       requires(!voidWhenVisited<SparqlQleverVisitor, Ctx>);
 
@@ -524,13 +532,12 @@ class SparqlQleverVisitor {
   // cast the result to `Out` and return it. Requires that for all of the
   // `ctxs`, `visit(ctxs)` is convertible to `Out`.
   template <typename Out, typename... Contexts>
-  [[nodiscard]] Out visitAlternative(Contexts*... ctxs);
+  Out visitAlternative(Contexts*... ctxs);
 
   // Returns `std::nullopt` if the pointer is the `nullptr`. Otherwise return
   // `visit(ctx)`.
   template <typename Ctx>
-  [[nodiscard]] auto visitOptional(Ctx* ctx)
-      -> std::optional<decltype(visit(ctx))>;
+  auto visitOptional(Ctx* ctx) -> std::optional<decltype(visit(ctx))>;
 
   /// If `ctx` is not `nullptr`, visit it, convert the result to `Intermediate`
   /// and assign it to `*target`. The case where `Intermediate!=Target` is
@@ -569,7 +576,7 @@ class SparqlQleverVisitor {
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.
   template <typename Context>
-  [[nodiscard]] Triples parseTriplesConstruction(Context* ctx);
+  Triples parseTriplesConstruction(Context* ctx);
 
   // If the triple is a special triple for the text index (i.e. its predicate is
   // either `ql:contains-word` or `ql:contains-entity`, register the magic
@@ -578,4 +585,7 @@ class SparqlQleverVisitor {
   // part of the query result.
   void setMatchingWordAndScoreVisibleIfPresent(
       auto* ctx, const TripleWithPropertyPath& triple);
+
+  // Constructs a TripleComponent from a GraphTerm.
+  static TripleComponent visitGraphTerm(const GraphTerm& graphTerm);
 };
