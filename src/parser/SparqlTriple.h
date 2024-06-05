@@ -1,6 +1,7 @@
 //  Copyright 2024, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//  Authors: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+//           Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
 #pragma once
 
@@ -60,8 +61,8 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
   using Base::Base;
 
   // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(p_iri), std::move(o)} {}
+  SparqlTriple(TripleComponent s, const std::string& iri, TripleComponent o)
+      : Base{std::move(s), PropertyPath::fromIri(iri), std::move(o)} {}
 
   // ___________________________________________________________________________
   [[nodiscard]] string asString() const;
@@ -75,5 +76,16 @@ class SparqlTriple : public SparqlTripleBase<PropertyPath> {
             ? TripleComponent{Variable{p_._iri}}
             : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
     return {s_, p, o_, additionalScanColumns_};
+  }
+
+  // Constructs SparqlTriple from a simple triple. Fails with an exception if
+  // the predicate is neither a variable nor an iri.
+  static SparqlTriple fromSimple(const SparqlTripleSimple& triple) {
+    AD_CONTRACT_CHECK(triple.p_.isVariable() || triple.p_.isIri());
+    PropertyPath p = triple.p_.isVariable()
+                         ? PropertyPath::fromVariable(triple.p_.getVariable())
+                         : PropertyPath::fromIri(
+                               triple.p_.getIri().toStringRepresentation());
+    return {triple.s_, p, triple.o_};
   }
 };
