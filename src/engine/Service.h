@@ -46,6 +46,9 @@ class Service : public Operation {
   // The function used to obtain the result from the remote endpoint.
   GetTsvFunction getTsvFunction_;
 
+  // Indicates whether the result will be requested in JSON or TSV format.
+  bool useJsonFormat_{true};
+
  public:
   // Construct from parsed Service clause.
   //
@@ -82,6 +85,11 @@ class Service : public Operation {
   // Compute the result using `getTsvFunction_`.
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
+  Result computeJsonResult(const ad_utility::httpUtils::Url& serviceUrl,
+                           const std::string& serviceQuery);
+  Result computeTsvResult(const ad_utility::httpUtils::Url& serviceUrl,
+                          const std::string& serviceQuery);
+
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.
   //
@@ -92,4 +100,8 @@ class Service : public Operation {
   template <size_t I>
   void writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
                       IdTable* idTable, LocalVocab* localVocab);
+
+  template <size_t I>
+  void writeJsonResult(const nlohmann::json& jsonResult, IdTable* idTable,
+                       LocalVocab* localVocab);
 };

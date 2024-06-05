@@ -105,6 +105,140 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
+  return useJsonFormat_ ? computeJsonResult(serviceUrl, serviceQuery)
+                        : computeTsvResult(serviceUrl, serviceQuery);
+}
+
+// ____________________________________________________________________________
+Result Service::computeJsonResult(const ad_utility::httpUtils::Url& serviceUrl,
+                                  const std::string& serviceQuery) {
+  cppcoro::generator<std::span<std::byte>> jsonByteResult = getTsvFunction_(
+      serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
+      serviceQuery, "application/sparql-query",
+      "application/sparql-results+json");
+
+  auto interResult = [](auto byteResult) -> cppcoro::generator<std::string> {
+    for (std::span<std::byte> bytes : byteResult) {
+      co_yield std::string{reinterpret_cast<const char*>(bytes.data()),
+                           bytes.size()};
+    }
+  }(std::move(jsonByteResult));
+
+  std::string jsonStr;
+  for (const auto& s : interResult) {
+    absl::StrAppend(&jsonStr, s);
+  }
+  const auto jsonResult = nlohmann::json::parse(jsonStr);
+
+  if (jsonResult.empty()) {
+    throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
+                                          serviceUrl.host(), " is empty"));
+  }
+
+  const auto vars = jsonResult["head"]["vars"].get<std::vector<std::string>>();
+  std::string headerRow = "?" + absl::StrJoin(vars, " ?");
+
+  std::string expectedHeaderRow = absl::StrJoin(
+      parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
+  if (headerRow != expectedHeaderRow) {
+    throw std::runtime_error(absl::StrCat(
+        "Header row of JSON result for SERVICE query is \"", headerRow,
+        "\", but expected \"", expectedHeaderRow, "\""));
+  }
+
+  // Set basic properties of the result table.
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(getResultWidth());
+  LocalVocab localVocab{};
+  // Fill the result table using the `writeJsonResult` method below.
+  size_t resWidth = getResultWidth();
+  CALL_FIXED_SIZE(resWidth, &Service::writeJsonResult, this, jsonResult,
+                  &idTable, &localVocab);
+
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+}
+
+// ____________________________________________________________________________
+template <size_t I>
+void Service::writeJsonResult(const nlohmann::json& jsonResult,
+                              IdTable* idTablePtr, LocalVocab* localVocab) {
+  IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
+  checkCancellation();
+  std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+
+  if (!jsonResult.contains("head") || !jsonResult["head"].contains("vars") ||
+      !jsonResult.contains("results") ||
+      !jsonResult["results"].contains("bindings")) {
+    throw std::runtime_error(
+        "JSON result does not have the expected structure");
+  }
+
+  const auto vars =
+      jsonResult["head"]["vars"].get<std::vector<std::string_view>>();
+  const auto bindings =
+      jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
+
+  size_t rowIdx = 0;
+  for (const auto& binding : bindings) {
+    idTable.emplace_back();
+    for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
+      if (!binding.contains(vars[colIdx])) {
+        throw std::runtime_error(absl::StrCat("Missing cell for variable ",
+                                              vars[colIdx], " in line ",
+                                              rowIdx + 1, " of JSON result"));
+      }
+
+      const auto& cell = binding[vars[colIdx]];
+      if (!cell.contains("type") || !cell.contains("value")) {
+        throw std::runtime_error(absl::StrCat("Missing type or value in cell ",
+                                              vars[colIdx], " in line ",
+                                              rowIdx + 1, " of JSON result"));
+      }
+
+      // TODO<unexenu> Instead of creating string values for the stringParser,
+      //  we should parse directly from json.
+      const auto type = cell["type"].get<std::string_view>();
+      auto objStr = cell["value"].get<std::string>();
+      if (type == "literal") {
+        if (cell.contains("xml:lang")) {
+          objStr = absl::StrCat("\"", objStr, "\"@",
+                                cell["xml:lang"].get<std::string>());
+        } else if (cell.contains("datatype")) {
+          objStr = absl::StrCat("\"", objStr, "\"^^<",
+                                cell["datatype"].get<std::string>(), ">");
+        }
+      } else if (type == "uri") {
+        objStr = absl::StrCat("<", objStr, ">");
+      } else if (type == "blank") {
+        objStr = absl::StrCat("_:", objStr);
+      } else {
+        throw std::runtime_error(
+            absl::StrCat("Type ", type, " not supported yet."));
+      }
+      TripleComponent tc =
+          TurtleStringParser<TokenizerCtre>::parseTripleObject(objStr);
+
+      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+      idTable(rowIdx, colIdx) = id;
+      if (id.getDatatype() == Datatype::LocalVocabIndex) {
+        ++numLocalVocabPerColumn[colIdx];
+      }
+    }
+    rowIdx++;
+    checkCancellation();
+  }
+
+  AD_CORRECTNESS_CHECK(rowIdx == idTable.size());
+  LOG(INFO) << "Number of rows in result: " << idTable.size() << std::endl;
+  LOG(INFO) << "Number of entries in local vocabulary per column: "
+            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
+  *idTablePtr = std::move(idTable).toDynamic();
+  checkCancellation();
+}
+
+// ____________________________________________________________________________
+Result Service::computeTsvResult(const ad_utility::httpUtils::Url& serviceUrl,
+                                 const std::string& serviceQuery) {
   // Send the query to the remote SPARQL endpoint via a POST request and get the
   // result as TSV.
   //
