@@ -1642,6 +1642,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
+  // Check if one of the two Operations is a SERVICE. If so, we can try
+  // to simplify the Service Query using the result of the other operation.
+  if (auto opt = createJoinWithService(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   if (jcs.size() >= 2) {
     // If there are two or more join columns and we are not using the
     // TwoColumnJoin (the if part before this comment), use a multiColumnJoin.
@@ -1767,6 +1774,35 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+
+// _____________________________________________________________________
+auto QueryPlanner::createJoinWithService(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
+  auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
+
+  // Exactly one of the two Operations can be a service.
+  if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
+    return std::nullopt;
+  }
+
+  auto service = aRootOp ? aRootOp : bRootOp;
+  auto sibling = bRootOp ? a : b;
+
+  service->setSiblingTree(sibling._qet);
+
+  const auto& qec = service->getExecutionContext();
+
+  SubtreePlan plan =
+      jcs.size() == 1
+          ? makeSubtreePlan<Join>(qec, a._qet, b._qet, jcs[0][0], jcs[0][1])
+          : makeSubtreePlan<MultiColumnJoin>(qec, a._qet, b._qet);
+  mergeSubtreePlanIds(plan, a, b);
+
   return plan;
 }
 
