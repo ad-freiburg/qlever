@@ -703,6 +703,21 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
+    // Apply stricter limit for export if present
+    if (maxSend.has_value()) {
+      auto& pq = plannedQuery.value().parsedQuery_;
+      pq._limitOffset._limit =
+          std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+    }
+    // Make sure we don't underflow here
+    AD_CORRECTNESS_CHECK(
+        plannedQuery.value().parsedQuery_._limitOffset._offset >=
+        qet.getRootOperation()->getLimit()._offset);
+    // Don't apply offset twice, if the offset was not applied to the operation
+    // then the exporter can safely apply it during export.
+    plannedQuery.value().parsedQuery_._limitOffset._offset -=
+        qet.getRootOperation()->getLimit()._offset;
+
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {

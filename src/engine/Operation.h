@@ -105,13 +105,6 @@ class Operation {
  private:
   virtual uint64_t getSizeEstimateBeforeLimit() = 0;
 
-  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
-  // its result.
-  [[nodiscard]] virtual bool supportsLimit(
-      [[maybe_unused]] bool lazyResult) const {
-    return false;
-  }
-
  public:
   virtual float getMultiplicity(size_t col) = 0;
   virtual bool knownEmptyResult() = 0;
@@ -180,6 +173,13 @@ class Operation {
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
 
+  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
+  // its result.
+  [[nodiscard]] virtual bool supportsLimit(
+      [[maybe_unused]] bool lazyResult) const {
+    return false;
+  }
+
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.
   void setLimit(const LimitOffsetClause& limitOffsetClause) {
@@ -213,6 +213,8 @@ class Operation {
     return computeResult(requestLaziness);
   }
 
+  const auto& getLimit() const { return _limit; }
+
  protected:
   // The QueryExecutionContext for this particular element.
   // No ownership.
@@ -223,8 +225,6 @@ class Operation {
    * @return The columns on which the result will be sorted.
    */
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
-
-  const auto& getLimit() const { return _limit; }
 
   /// interface to the generated warnings of this operation
   std::vector<std::string>& getWarnings() { return _warnings; }
