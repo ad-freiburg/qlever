@@ -1631,24 +1631,24 @@ TEST(SparqlParser, binaryStringExpressions) {
 TEST(SparqlParser, updateQueryUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto updateUnsupported =
-      contains("SPARQL 1.1 Update currently not supported by QLever.");
+  auto updateFeatureUnsupported = [&contains](const std::string& feature_name) {
+    return contains("SPARQL 1.1 Update " + feature_name +
+                    " is currently not supported by QLever.");
+  };
 
   // Test all the cases because some functionality will be enabled shortly.
-  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
-                    updateUnsupported);
-  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
-  expectUpdateFails("LOAD <a>", updateUnsupported);
-  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
-  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
-  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
-  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
-  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
-  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
+  expectUpdateFails("LOAD <a>", updateFeatureUnsupported("Load"));
+  expectUpdateFails(
+      "CLEAR GRAPH <a>",
+      contains("Named Graphs are currently not supported by QLever."));
+  expectUpdateFails("DROP GRAPH <a>", updateFeatureUnsupported("Drop"));
+  expectUpdateFails("CREATE GRAPH <a>", updateFeatureUnsupported("Create"));
+  expectUpdateFails("ADD GRAPH <a> TO DEFAULT",
+                    updateFeatureUnsupported("Add"));
+  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>",
+                    updateFeatureUnsupported("Move"));
+  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>",
+                    updateFeatureUnsupported("Copy"));
 }
 
 TEST(SparqlParser, UpdateQuery) {
