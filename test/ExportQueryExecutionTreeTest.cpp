@@ -57,7 +57,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   return ExportQueryExecutionTrees::computeResultAsJSON(
-      pq, qet, timer, 200, mediaType, std::move(cancellationHandle));
+      pq, qet, timer, mediaType, std::move(cancellationHandle));
 }
 
 // A test case that tests the correct execution and exporting of a SELECT query
@@ -862,8 +862,8 @@ TEST_P(JsonMediaTypesFixture, CancellationCancelsJson) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ExportQueryExecutionTrees::computeResultAsJSON(
-          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, 200,
-          GetParam(), std::move(cancellationHandle)),
+          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, GetParam(),
+          std::move(cancellationHandle)),
       HasSubstr("Query export"), ad_utility::CancellationException);
 }
 INSTANTIATE_TEST_SUITE_P(JsonMediaTypes, JsonMediaTypesFixture,
