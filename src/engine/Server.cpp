@@ -587,9 +587,13 @@ Awaitable<void> Server::sendStreamableResponse(
 
 // _____________________________________________________________________________
 // TODO: move somewhere else?
-void Server::executeUpdateQuery(const QueryExecutionTree& qet,
-                                parsedQuery::UpdateClause update,
-                                SharedCancellationHandle cancellationHandle) {
+nlohmann::json Server::executeUpdateQuery(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    SharedCancellationHandle cancellationHandle) {
+  AD_CONTRACT_CHECK(query.hasUpdateClause());
+  parsedQuery::UpdateClause update = query.updateClause();
+
   // TODO: replace calls with the usual `cancellationHandle->throwIfCancelled()`
   // once this is properly optimised and we actually do stuff here
   // For now an error should be shown even on timeout to indicate the Update
@@ -601,12 +605,13 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
     }
   };
 
-  ad_utility::Timer total{ad_utility::Timer::Started};
   ad_utility::Timer step{ad_utility::Timer::Started};
   LOG(INFO) << "Executing UPDATE" << std::endl;
 
   std::shared_ptr<const Result> res = qet.getResult();
-  LOG(INFO) << "Executing query body took " << step.msecs() << std::endl;
+  auto timeQueryBodyExecution = step.msecs();
+  LOG(INFO) << "Executing query body took " << timeQueryBodyExecution
+            << std::endl;
   step.start();
 
   auto& vocab = qet.getQec()->getIndex().getVocab();
@@ -634,7 +639,9 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
   std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
       ad_utility::transform(std::move(update.toDelete_),
                             transformSparqlTripleSimple);
-  LOG(INFO) << "Preparing template took " << step.msecs() << std::endl;
+  auto timeTemplatePrepration = step.msecs();
+  LOG(INFO) << "Preparing template took " << timeTemplatePrepration
+            << std::endl;
   step.start();
 
   auto resolveVariable = [](const ConstructQueryExportContext& context,
@@ -712,37 +719,44 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
 
   LOG(INFO) << "Inserting " << toInsert.size() << " triples." << std::endl;
   LOG(INFO) << "Deleting " << toDelete.size() << " triples." << std::endl;
-  LOG(INFO) << "Calculating update query triples took " << step.msecs()
-            << std::endl;
+  auto timeMaterializeUpdateTriples = step.msecs();
+  LOG(INFO) << "Calculating update query triples took "
+            << timeMaterializeUpdateTriples << std::endl;
   step.start();
-  auto locatePermutation = [&toDelete, &toInsert, &step,
-                            &qet](Permutation::Enum permutation) {
+  ad_utility::HashMap<Permutation::Enum, std::chrono::milliseconds>
+      timeToLocateInPermutation;
+  auto locatePermutation =
+      [&toDelete, &toInsert, &step, &qet,
+       &timeToLocateInPermutation](Permutation::Enum permutation) {
 #ifdef QL_UPDATE_PRESORT
-    auto sortOrderTmp = Permutation::toKeyOrder(permutation);
-    const std::vector<ColumnIndex> sortOrder{sortOrderTmp.begin(),
-                                             sortOrderTmp.end()};
+        auto sortOrderTmp = Permutation::toKeyOrder(permutation);
+        const std::vector<ColumnIndex> sortOrder{sortOrderTmp.begin(),
+                                                 sortOrderTmp.end()};
 #ifdef QL_UPDATE_VECTOR
-    std::sort(toInsert.begin(), toInsert.end());
-    std::sort(toDelete.begin(), toDelete.end());
+        std::sort(toInsert.begin(), toInsert.end());
+        std::sort(toDelete.begin(), toDelete.end());
 #else
-    Engine::sort(toInsert, sortOrder);
-    Engine::sort(toDelete, sortOrder);
+        Engine::sort(toInsert, sortOrder);
+        Engine::sort(toDelete, sortOrder);
 #endif
-    LOG(INFO) << "Sorting triples took " << step.msecs() << std::endl;
-    step.start();
+        LOG(INFO) << "Sorting triples took " << step.msecs() << std::endl;
+        step.start();
 #endif
-    const Permutation& pos =
-        qet.getQec()->getIndex().getImpl().getPermutation(permutation);
+        const Permutation& pos =
+            qet.getQec()->getIndex().getImpl().getPermutation(permutation);
 #ifdef QL_UPDATE_PRESORT
-    LocatedTriple::locateSortedTriplesInPermutation(toInsert, pos);
-    LocatedTriple::locateSortedTriplesInPermutation(toDelete, pos);
+        LocatedTriple::locateSortedTriplesInPermutation(toInsert, pos);
+        LocatedTriple::locateSortedTriplesInPermutation(toDelete, pos);
 #else
-    LocatedTriple::locateTriplesInPermutation(toInsert, pos);
-    LocatedTriple::locateTriplesInPermutation(toDelete, pos);
+        LocatedTriple::locateTriplesInPermutation(toInsert, pos);
+        LocatedTriple::locateTriplesInPermutation(toDelete, pos);
 #endif
-    LOG(INFO) << "Locating triples took " << step.msecs() << std::endl;
-    step.start();
-  };
+        timeToLocateInPermutation[permutation] = step.msecs();
+        LOG(INFO) << "Locating triples in "
+                  << timeToLocateInPermutation[permutation] << " took "
+                  << step.msecs() << std::endl;
+        step.start();
+      };
 
   using Perm = Permutation::Enum;
   for (auto permutation :
@@ -750,9 +764,39 @@ void Server::executeUpdateQuery(const QueryExecutionTree& qet,
     locatePermutation(permutation);
   }
 
-  LOG(INFO) << "Update finished in " << total.msecs() << std::endl;
-  throw NotSupportedException{
-      "SPARQL 1.1 Update currently not supported by QLever."};
+  nlohmann::json j;
+  j["query"] = query._originalString;
+  j["status"] = "ERROR";
+  j["exception"] =
+      "Not supported: SPARQL 1.1 Update currently not supported by QLever.";
+  j["warnings"] = qet.collectWarnings();
+
+  j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  runtimeInformation.addLimitOffsetRow(
+      query._limitOffset, std::chrono::milliseconds::zero(), false);
+  runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
+  j["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInformation);
+
+  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
+  LOG(INFO) << "Update finished in " << requestTimer.msecs() << std::endl;
+  j["time"]["queryBody"] =
+      std::to_string(timeQueryBodyExecution.count()) + "ms";
+  // TODO<qup42>: what does this field mean in the context of updates?
+  j["time"]["computeResult"] = j["time"]["queryBody"];
+  j["time"]["templatePreparation"] =
+      std::to_string(timeTemplatePrepration.count()) + "ms";
+  j["time"]["updateTripleMaterialization"] =
+      std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
+  for (auto permutation :
+       {Perm::PSO, Perm::POS, Perm::SPO, Perm::SOP, Perm::OPS, Perm::OSP}) {
+    j["time"]["locateTriples"][Permutation::toString(permutation)] =
+        std::to_string(timeToLocateInPermutation[permutation].count()) + "ms";
+  }
+
+  return j;
 }
 
 // ____________________________________________________________________________
@@ -870,10 +914,9 @@ boost::asio::awaitable<void> Server::processQuery(
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
     if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
-      Server::executeUpdateQuery(
-          qet, plannedQuery.value().parsedQuery_.updateClause(),
+      nlohmann::basic_json resp = Server::executeUpdateQuery(
+          plannedQuery.value().parsedQuery_, qet, requestTimer,
           std::move(cancellationHandle));
-      nlohmann::basic_json resp;
       co_return co_await sendJson(std::move(resp), responseStatus);
     }
 
