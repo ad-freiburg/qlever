@@ -50,7 +50,7 @@ inline auto extractStrTimezone =
     if (optionalTz.has_value()) {
       std::string tz = optionalTz.value();
       return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(std::move(tz)))};
+          asNormalizedStringViewUnsafe(optionalTz.value())};
     }
   }
   return Id::makeUndefined();
