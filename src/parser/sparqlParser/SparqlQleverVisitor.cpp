@@ -172,18 +172,14 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
       visitAlternative<ParsedQuery>(ctx->selectQuery(), ctx->constructQuery(),
                                     ctx->describeQuery(), ctx->askQuery());
 
-  query._originalString = ctx->getStart()->getInputStream()->toString();
-
   return query;
 }
 
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
-  if (ctx->update()) {
-    return visit(ctx->update());
-  } else {
-    return visit(ctx->query());
-  }
+  auto query = visitAlternative<ParsedQuery>(ctx->update(), ctx->query());
+  query._originalString = ctx->getStart()->getInputStream()->toString();
+  return query;
 }
 
 // ____________________________________________________________________________________
