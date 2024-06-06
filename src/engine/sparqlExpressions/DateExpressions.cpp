@@ -46,12 +46,9 @@ using Literal = ad_utility::triple_component::Literal;
 inline auto extractStrTimezone =
     [](std::optional<DateOrLargeYear> d) -> IdOrLiteralOrIri {
   if (d.has_value()) {
-    auto optionalTz = d.value().getStrTimezone();
-    if (optionalTz.has_value()) {
-      std::string tz = optionalTz.value();
-      return LiteralOrIri{Literal::literalWithNormalizedContent(
-          asNormalizedStringViewUnsafe(optionalTz.value())};
-    }
+    auto timezoneStr = d.value().getStrTimezone();
+    return LiteralOrIri{Literal::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(timezoneStr))};
   }
   return Id::makeUndefined();
 };

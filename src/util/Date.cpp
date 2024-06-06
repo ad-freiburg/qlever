@@ -283,10 +283,10 @@ std::optional<int> DateOrLargeYear::getDay() const {
 }
 
 // _____________________________________________________________________-
-std::optional<std::string> DateOrLargeYear::getStrTimezone() const {
+std::string DateOrLargeYear::getStrTimezone() const {
   if (isDate()) {
     return getDateUnchecked().formatTimeZone();
   } else {
-    return std::nullopt;
+    return "";
   }
 }

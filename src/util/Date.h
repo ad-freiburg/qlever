@@ -399,7 +399,7 @@ class DateOrLargeYear {
   // Get the timezone if there is an underlying complete `Date` w.r.t. this
   // DateOrLargeYear object. This implementation is necessary for the
   // `tz()`-function.
-  std::optional<std::string> getStrTimezone() const;
+  std::string getStrTimezone() const;
 
   Type getType() const {
     return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &

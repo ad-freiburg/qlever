@@ -541,6 +541,10 @@ TEST(SparqlExpression, dateOperators) {
                    IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
+  DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
 }
 
 // _____________________________________________________________________________________
