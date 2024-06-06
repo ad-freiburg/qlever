@@ -145,6 +145,19 @@ class LocatedTriplesPerBlock {
     ++numTriples_;
     return handle;
   };
+  std::vector<LocatedTriples::iterator> add(
+      std::vector<LocatedTriple> locatedTriple) {
+    std::vector<LocatedTriples::iterator> handles{locatedTriple.size()};
+    for (auto triple : locatedTriple) {
+      LocatedTriples& locatedTriples = map_[triple.blockIndex];
+      auto [handle, wasInserted] = locatedTriples.emplace(triple);
+      AD_CORRECTNESS_CHECK(wasInserted == true);
+      AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
+      ++numTriples_;
+      handles.emplace_back(handle);
+    }
+    return handles;
+  };
 
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }
