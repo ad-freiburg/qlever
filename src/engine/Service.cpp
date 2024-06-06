@@ -5,11 +5,14 @@
 #include "engine/Service.h"
 
 #include <absl/strings/str_cat.h>
+#include <absl/strings/str_join.h>
 #include <absl/strings/str_split.h>
 
 #include "engine/CallFixedSize.h"
+#include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Values.h"
 #include "engine/VariableToColumnMap.h"
+#include "global/RuntimeParameters.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "util/Exception.h"
@@ -21,10 +24,12 @@
 // ____________________________________________________________________________
 Service::Service(QueryExecutionContext* qec,
                  parsedQuery::Service parsedServiceClause,
-                 GetTsvFunction getTsvFunction)
+                 GetTsvFunction getTsvFunction,
+                 std::shared_ptr<QueryExecutionTree> siblingTree)
     : Operation{qec},
       parsedServiceClause_{std::move(parsedServiceClause)},
-      getTsvFunction_{std::move(getTsvFunction)} {}
+      getTsvFunction_{std::move(getTsvFunction)},
+      siblingTree_{std::move(siblingTree)} {}
 
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
@@ -32,7 +37,11 @@ std::string Service::getCacheKeyImpl() const {
   // TODO: This duplicates code in GraphPatternOperation.cpp .
   os << "SERVICE " << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
-     << parsedServiceClause_.graphPatternAsString_ << "\n}\n";
+     << parsedServiceClause_.graphPatternAsString_ << "\n";
+  if (siblingTree_ != nullptr) {
+    os << siblingTree_->getRootOperation()->getCacheKey() << "\n";
+  }
+  os << "}\n";
   return std::move(os).str();
 }
 
@@ -91,6 +100,14 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
   serviceIriString.remove_prefix(1);
   serviceIriString.remove_suffix(1);
   ad_utility::httpUtils::Url serviceUrl{serviceIriString};
+
+  // Try to simplify the Service Query using it's sibling Operation.
+  if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
+    auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
+    parsedServiceClause_.graphPatternAsString_ =
+        "{\n" + valuesClause.value() + '\n' +
+        parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
+  }
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
@@ -157,6 +174,66 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
                   std::move(tsvResult), &idTable, &localVocab);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+}
+
+// ____________________________________________________________________________
+std::optional<std::string> Service::getSiblingValuesClause() const {
+  if (siblingTree_ == nullptr) {
+    return std::nullopt;
+  }
+
+  const auto& siblingResult = siblingTree_->getResult();
+  if (siblingResult->idTable().size() >
+      RuntimeParameters().get<"service-max-value-rows">()) {
+    return std::nullopt;
+  }
+
+  checkCancellation();
+
+  std::vector<ColumnIndex> commonColumnIndices;
+  const auto& siblingVars = siblingTree_->getVariableColumns();
+  std::string vars = "(";
+  for (const auto& localVar : parsedServiceClause_.visibleVariables_) {
+    auto it = siblingVars.find(localVar);
+    if (it == siblingVars.end()) {
+      continue;
+    }
+    absl::StrAppend(&vars, it->first.name(), " ");
+    commonColumnIndices.push_back(it->second.columnIndex_);
+  }
+  vars.back() = ')';
+
+  checkCancellation();
+
+  ad_utility::HashSet<std::string> rowSet;
+
+  std::string values = " { ";
+  for (size_t rowIndex = 0; rowIndex < siblingResult->idTable().size();
+       ++rowIndex) {
+    std::string row = "(";
+    for (const auto& columnIdx : commonColumnIndices) {
+      const auto& optionalString = ExportQueryExecutionTrees::idToStringAndType(
+          siblingTree_->getRootOperation()->getIndex(),
+          siblingResult->idTable()(rowIndex, columnIdx),
+          siblingResult->localVocab());
+
+      if (optionalString.has_value()) {
+        absl::StrAppend(&row, optionalString.value().first, " ");
+      }
+    }
+    row.back() = ')';
+
+    if (rowSet.contains(row)) {
+      continue;
+    }
+
+    rowSet.insert(row);
+    absl::StrAppend(&values, row, " ");
+
+    checkCancellation();
+  }
+
+  return "VALUES " + vars + values + "} . ";
 }
 
 // ____________________________________________________________________________

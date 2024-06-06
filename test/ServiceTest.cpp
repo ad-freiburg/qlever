@@ -8,9 +8,11 @@
 #include <regex>
 
 #include "engine/Service.h"
+#include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
+#include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
@@ -192,4 +194,100 @@ TEST_F(ServiceTest, computeResult) {
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
   EXPECT_EQ(result->idTable(), expectedIdTable);
+
+  // Check 5: When a siblingTree with variables common to the Service Clause is
+  // passed, the Service Operation shall use the siblings result to reduce
+  // its Query complexity by injecting them as Value Clause
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto siblingTree = std::make_shared<QueryExecutionTree>(
+      testQec,
+      std::make_shared<Values>(
+          testQec,
+          (parsedQuery::SparqlValues){
+              {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+              {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+               {TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z2>"))},
+               {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+
+  auto parsedServiceClause5 = parsedServiceClause;
+  parsedServiceClause5.graphPatternAsString_ =
+      "{ ?x <ble> ?y . ?y <is-a> ?z2 . }";
+  parsedServiceClause5.visibleVariables_.emplace_back("?z2");
+
+  std::string_view expectedSparqlQuery5 =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
+      "WHERE { VALUES (?x ?y) { (<x> <y>) (<blu> <bla>) } . ?x <ble> ?y . ?y "
+      "<is-a> ?z2 . }";
+
+  Service serviceOperation5{
+      testQec, parsedServiceClause5,
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
+                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
+                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      siblingTree};
+  EXPECT_NO_THROW(serviceOperation5.getResult());
+
+  // Check 6: SiblingTree's rows exceed maxValue
+  const auto maxValueRowsDefault =
+      RuntimeParameters().get<"service-max-value-rows">();
+  RuntimeParameters().set<"service-max-value-rows">(0);
+  testQec->getQueryTreeCache().clearAll();
+  std::string_view expectedSparqlQuery6 =
+      "PREFIX doof: <http://doof.org> SELECT ?x ?y ?z2 "
+      "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
+  Service serviceOperation6{
+      testQec, parsedServiceClause5,
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery6,
+                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
+                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      siblingTree};
+  EXPECT_NO_THROW(serviceOperation6.getResult());
+  RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+}
+
+TEST_F(ServiceTest, getCacheKey) {
+  parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
+                                           Iri{"<http://localhorst/api>"},
+                                           "PREFIX doof: <http://doof.org>",
+                                           "{ }"};
+
+  // The cacheKey of the Service Operation has to depend on the cacheKey of
+  // the siblingTree, as it might alter the Service Query.
+
+  Service service(
+      testQec, parsedServiceClause,
+      getTsvFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"));
+
+  auto ck_noSibling = service.getCacheKey();
+
+  auto iri = ad_utility::testing::iri;
+  using TC = TripleComponent;
+  auto siblingTree = std::make_shared<QueryExecutionTree>(
+      testQec,
+      std::make_shared<Values>(
+          testQec,
+          (parsedQuery::SparqlValues){
+              {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+              {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
+               {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
+  service.setSiblingTree(siblingTree);
+
+  auto ck_sibling = service.getCacheKey();
+  EXPECT_NE(ck_noSibling, ck_sibling);
+
+  auto siblingTree2 = std::make_shared<QueryExecutionTree>(
+      testQec,
+      std::make_shared<Values>(
+          testQec, (parsedQuery::SparqlValues){
+                       {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
+                       {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}}));
+
+  service.setSiblingTree(siblingTree2);
+
+  auto ck_changedSibling = service.getCacheKey();
+  EXPECT_NE(ck_sibling, ck_changedSibling);
 }
