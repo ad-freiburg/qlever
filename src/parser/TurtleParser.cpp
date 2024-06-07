@@ -455,6 +455,81 @@ bool TurtleParser<T>::rdfLiteral() {
 
 // ______________________________________________________________________
 template <class T>
+TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
+    std::string_view normalizedLiteralContent,
+    const TripleComponent::Iri& typeIri) {
+  TurtleStringParser<T> parser;
+
+  auto literal =
+      TripleComponent::Literal::literalWithoutQuotes(normalizedLiteralContent);
+  std::string_view type = asStringViewUnsafe(typeIri.getContent());
+  const auto& strippedLiteral = normalizedLiteralContent;
+  try {
+    // TODO<joka921> clean this up by moving the check for the types to a
+    // separate module.
+    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
+        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
+        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
+        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
+        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
+        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
+        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE) {
+      parser.parseIntegerConstant(normalizedLiteralContent);
+    } else if (type == XSD_BOOLEAN_TYPE) {
+      if (strippedLiteral == "true") {
+        parser.lastParseResult_ = true;
+      } else if (strippedLiteral == "false") {
+        parser.lastParseResult_ = false;
+      } else {
+        LOG(DEBUG)
+            << strippedLiteral
+            << " could not be parsed as a boolean object of type " << type
+            << ". It is treated as a plain string literal without datatype "
+               "instead"
+            << std::endl;
+        parser.lastParseResult_ = std::move(literal);
+      }
+    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
+               type == XSD_FLOAT_TYPE) {
+      parser.parseDoubleConstant(strippedLiteral);
+    } else if (type == XSD_DATETIME_TYPE) {
+      parser.lastParseResult_ =
+          DateOrLargeYear::parseXsdDatetime(strippedLiteral);
+    } else if (type == XSD_DATE_TYPE) {
+      parser.lastParseResult_ = DateOrLargeYear::parseXsdDate(strippedLiteral);
+    } else if (type == XSD_GYEARMONTH_TYPE) {
+      parser.lastParseResult_ =
+          DateOrLargeYear::parseGYearMonth(strippedLiteral);
+    } else if (type == XSD_GYEAR_TYPE) {
+      parser.lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
+    } else {
+      literal.addDatatype(typeIri);
+      parser.lastParseResult_ = std::move(literal);
+    }
+  } catch (const DateParseException&) {
+    LOG(DEBUG) << strippedLiteral
+               << " could not be parsed as a date object of type " << type
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser.lastParseResult_ = std::move(literal);
+  } catch (const DateOutOfRangeException& ex) {
+    LOG(DEBUG)
+        << strippedLiteral
+        << " could not be parsed as a date object for the following reason: "
+        << ex.what()
+        << ". It is treated as a plain string literal without datatype "
+           "instead"
+        << std::endl;
+    parser.lastParseResult_ = std::move(literal);
+  } catch (const std::exception& e) {
+    parser.raise(e.what());
+  }
+  return parser.lastParseResult_;
+}
+
+// ______________________________________________________________________
+template <class T>
 bool TurtleParser<T>::booleanLiteral() {
   if (parseTerminal<TurtleTokenId::True>()) {
     lastParseResult_ = true;

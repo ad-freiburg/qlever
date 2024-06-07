@@ -78,6 +78,11 @@ class Service : public Operation {
   // A SERVICE clause has no children.
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
+  // Bind the given cell to a value ID.
+  static Id bindingToValueId(const nlohmann::json& cell,
+                             const Index::Vocab& vocabulary,
+                             LocalVocab* localVocab);
+
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;

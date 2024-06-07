@@ -193,3 +193,31 @@ TEST_F(ServiceTest, computeResult) {
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
   EXPECT_EQ(result->idTable(), expectedIdTable);
 }
+
+// Test that bindingToValueId behaves as expected.
+TEST_F(ServiceTest, bindingToValueId) {
+  Index::Vocab vocabulary;
+  LocalVocab localVocab{};
+
+  nlohmann::json j = {{"type", "literal"}, {"value", "Hello World"}};
+  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+
+  j["xml:lang"] = "de";
+  j["value"] = "\"\test\"";
+  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+
+  j.erase("xml:lang");
+  j["datatype"] = XSD_INT_TYPE;
+  j["value"] = "42";
+  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+
+  j["type"] = "uri";
+  j["value"] = "http://doof.org";
+  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+
+  j["type"] = "blank";
+  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+
+  j["type"] = "INVALID_TYPE";
+  EXPECT_ANY_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+}

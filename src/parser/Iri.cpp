@@ -35,6 +35,12 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 }
 
 // __________________________________________
+Iri Iri::fromIriWithoutBrackets(std::string_view s) {
+  AD_CORRECTNESS_CHECK(!s.starts_with("<") && !s.ends_with(">"));
+  return Iri{absl::StrCat("<", s, ">")};
+}
+
+// __________________________________________
 Iri Iri::fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix) {
   auto suffixNormalized = RdfEscaping::unescapePrefixedIri(suffix);
   return Iri{prefix, asNormalizedStringViewUnsafe(suffixNormalized)};

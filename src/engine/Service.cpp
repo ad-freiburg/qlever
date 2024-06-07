@@ -195,30 +195,8 @@ void Service::writeJsonResult(const nlohmann::json& jsonResult,
                                               rowIdx + 1, " of JSON result"));
       }
 
-      // TODO<unexenu> Instead of creating string values for the stringParser,
-      //  we should parse directly from json.
-      const auto type = cell["type"].get<std::string_view>();
-      auto objStr = cell["value"].get<std::string>();
-      if (type == "literal") {
-        if (cell.contains("xml:lang")) {
-          objStr = absl::StrCat("\"", objStr, "\"@",
-                                cell["xml:lang"].get<std::string>());
-        } else if (cell.contains("datatype")) {
-          objStr = absl::StrCat("\"", objStr, "\"^^<",
-                                cell["datatype"].get<std::string>(), ">");
-        }
-      } else if (type == "uri") {
-        objStr = absl::StrCat("<", objStr, ">");
-      } else if (type == "blank") {
-        objStr = absl::StrCat("_:", objStr);
-      } else {
-        throw std::runtime_error(
-            absl::StrCat("Type ", type, " not supported yet."));
-      }
-      TripleComponent tc =
-          TurtleStringParser<TokenizerCtre>::parseTripleObject(objStr);
+      Id id = bindingToValueId(cell, getIndex().getVocab(), localVocab);
 
-      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -338,4 +316,38 @@ void Service::writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
             << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
   *idTablePtr = std::move(idTable).toDynamic();
   checkCancellation();
+}
+
+// ____________________________________________________________________________
+Id Service::bindingToValueId(const nlohmann::json& cell,
+                             const Index::Vocab& vocabulary,
+                             LocalVocab* localVocab) {
+  const auto type = cell["type"].get<std::string_view>();
+  const auto value = cell["value"].get<std::string_view>();
+
+  TripleComponent tc;
+  if (type == "literal") {
+    std::string_view iriSV;
+
+    if (cell.contains("datatype")) {
+      iriSV = cell["datatype"].get<std::string_view>();
+      tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
+          value, TripleComponent::Iri::fromIriWithoutBrackets(
+                     cell["datatype"].get<std::string_view>()));
+    } else if (cell.contains("xml:lang")) {
+      tc = TripleComponent::Literal::literalWithoutQuotes(value);
+      tc.getLiteral().addLanguageTag(cell["xml:lang"].get<std::string_view>());
+    } else {
+      tc = TripleComponent::Literal::literalWithoutQuotes(value);
+    }
+  } else if (type == "uri") {
+    tc = TripleComponent::Iri::fromIriWithoutBrackets(value);
+  } else if (type == "blank") {
+    // TODO<unexenu>
+    throw std::runtime_error(absl::StrCat("Not implemented yet"));
+  } else {
+    throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
+  }
+
+  return std::move(tc).toValueId(vocabulary, *localVocab);
 }

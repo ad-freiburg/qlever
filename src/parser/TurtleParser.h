@@ -134,6 +134,10 @@ class TurtleParser : public TurtleParserBase {
   // Get the currently buffered triples. Used for testing.
   const std::vector<TurtleTriple>& getTriples() const { return triples_; }
 
+  static TripleComponent literalAndDatatypeToTripleComponent(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri);
+
  protected:
   // Data members.
 
