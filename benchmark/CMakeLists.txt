@@ -27,6 +27,8 @@ endfunction()
 # Add benchmarks after here.
 addAndLinkBenchmark(BenchmarkExamples)
 
+addAndLinkBenchmark(JoinAlgorithmBenchmark testUtil memorySize)
+
 addAndLinkBenchmark(IdTableCompressedWriterBenchmark engine testUtil)
 
 addAndLinkBenchmark(ParallelMergeBenchmark)

@@ -146,7 +146,12 @@ std::shared_ptr<const Result> Operation::getResult(
                                         timer.msecs(), std::nullopt);
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables.
+      // the Limit is a full index scan with three variables. Note that the
+      // `QueryPlanner` does currently only set the limit for operations that
+      // support it natively, except for operations in subqueries. This means
+      // that a lot of the time the limit is only artificially applied during
+      // export, allowing the cache to re-use the same operation for different
+      // limits and offsets.
       if (!supportsLimit()) {
         ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
         // Note: both of the following calls have no effect and negligible
