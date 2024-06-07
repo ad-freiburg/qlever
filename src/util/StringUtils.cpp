@@ -5,6 +5,9 @@
 
 #include "util/StringUtils.h"
 
+#include <unicode/bytestream.h>
+#include <unicode/casemap.h>
+
 namespace ad_utility {
 // ____________________________________________________________________________
 string_view commonPrefix(string_view a, const string_view b) {
@@ -41,19 +44,7 @@ string getUppercase(const string& orig) {
 
 // ____________________________________________________________________________
 bool strIsLangTag(const string& input) {
-  auto lenInput = input.length();
-  if (lenInput < 2) {
-    return false;
-  }
-  UErrorCode status = U_ZERO_ERROR;
-  char localeID[ULOC_FULLNAME_CAPACITY];
-  int32_t parsedLength = 0;
-  uloc_forLanguageTag(input.c_str(), localeID, ULOC_FULLNAME_CAPACITY,
-                      &parsedLength, &status);
-  if (U_FAILURE(status) || parsedLength != static_cast<int32_t>(lenInput)) {
-    return false;
-  }
-  return true;
+  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
 }
 
 // ___________________________________________________________________________

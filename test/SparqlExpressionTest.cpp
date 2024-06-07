@@ -740,6 +740,8 @@ TEST(SparqlExpression, strLangTagged) {
               IdOrLiteralOrIriVec{lit("de-Latn-de")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
               IdOrLiteralOrIriVec{lit("d1235")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("reporter")},
+              IdOrLiteralOrIriVec{lit("@")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
               IdOrLiteralOrIriVec{lit("")});
   checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},

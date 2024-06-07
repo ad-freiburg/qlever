@@ -408,10 +408,9 @@ using EncodeForUriExpression =
   } else if (!ad_utility::strIsLangTag(langTag.value())) {
     return Id::makeUndefined();
   } else {
-    auto str = input.value();
     auto lit =
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(std::move(str)),
+            asNormalizedStringViewUnsafe(input.value()),
             std::move(langTag.value()));
     return LiteralOrIri{lit};
   }
@@ -426,11 +425,9 @@ using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
   if (!inputStr.has_value() || !inputIri.has_value()) {
     return Id::makeUndefined();
   } else {
-    auto str = inputStr.value();
-    auto iri = inputIri.value();
     auto lit =
         ad_utility::triple_component::Literal::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(std::move(str)), std::move(iri));
+            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
     return LiteralOrIri{lit};
   }
 };
