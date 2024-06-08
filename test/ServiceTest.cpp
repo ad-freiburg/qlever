@@ -36,13 +36,13 @@ class ServiceTest : public ::testing::Test {
   //
   // 3. It tests that the post data is as expected.
   //
-  // 4. It returns the specified TSV.
+  // 4. It returns the specified JSON.
   //
   // NOTE: In a previous version of this test, we set up an actual test server.
   // The code can be found in the history of this PR.
   static auto constexpr getTsvFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         std::string_view predefinedResult) -> Service::GetTsvFunction {
+         nlohmann::json predefinedResult) -> Service::GetTsvFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -55,7 +55,7 @@ class ServiceTest : public ::testing::Test {
       // two checks are non-trivial.
       EXPECT_EQ(method, boost::beast::http::verb::post);
       EXPECT_EQ(contentTypeHeader, "application/sparql-query");
-      EXPECT_EQ(acceptHeader, "text/tab-separated-values");
+      EXPECT_EQ(acceptHeader, "application/sparql-results+json");
       EXPECT_EQ(url.asString(), expectedUrl);
 
       // Check that the whitespace-normalized POST data is the expected query.
@@ -66,22 +66,46 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-      return [](std::string_view result)
+      return [](nlohmann::json result)
                  -> cppcoro::generator<std::span<std::byte>> {
         // Randomly slice the string to make tests more robust.
         std::mt19937 rng{std::random_device{}()};
-        std::uniform_int_distribution<size_t> distribution{0,
-                                                           result.length() / 2};
 
-        for (size_t start = 0; start < result.length();) {
+        const std::string resultStr = result.dump();
+        std::uniform_int_distribution<size_t> distribution{
+            0, resultStr.length() / 2};
+
+        for (size_t start = 0; start < resultStr.length();) {
           size_t size = distribution(rng);
-          std::string resultCopy{result.substr(start, size)};
+          std::string resultCopy{resultStr.substr(start, size)};
           co_yield std::as_writable_bytes(std::span{resultCopy});
           start += size;
         }
       }(predefinedResult);
     };
   };
+
+  // Generates a JSON result from variables and rows for Testing.
+  // Limitations:
+  // 1. Only generates values of type uri.
+  // 2. Values per row can't exceed the specified columns.
+  static nlohmann::json getJsonResult(
+      std::vector<std::string_view> vars,
+      std::vector<std::vector<std::string_view>> rows) {
+    nlohmann::json res;
+    res["head"]["vars"] = vars;
+    res["results"]["bindings"] = nlohmann::json::array();
+    auto& bindings = res["results"]["bindings"];
+
+    for (size_t i = 0; i < rows.size(); ++i) {
+      nlohmann::json binding;
+      for (size_t j = 0; j < std::min(rows[i].size(), vars.size()); ++j) {
+        binding[vars[j]] = {{"type", "uri"}, {"value", rows[i][j]}};
+      }
+      bindings.push_back(binding);
+    }
+    return res;
+  }
 };
 
 // Test basic methods of class `Service`.
@@ -131,19 +155,20 @@ TEST_F(ServiceTest, computeResult) {
   std::string_view expectedSparqlQuery =
       "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
 
-  // CHECK 1: Returned TSV is empty -> an exception should be thrown.
+  // CHECK 1: Returned JSON is empty -> an exception should be thrown.
   Service serviceOperation1{
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, "")};
+      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, {})};
   ASSERT_ANY_THROW(serviceOperation1.getResult());
 
-  // CHECK 2: Header row of returned TSV is wrong (variables in wrong order) ->
+  // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
   Service serviceOperation2{
       testQec, parsedServiceClause,
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
-          "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
+          getJsonResult({"y", "x"},
+                        {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
   ASSERT_ANY_THROW(serviceOperation2.getResult());
 
   // CHECK 3: In one of the rows with the values, there is a different number of
@@ -152,17 +177,20 @@ TEST_F(ServiceTest, computeResult) {
       testQec, parsedServiceClause,
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
+          getJsonResult({"x", "y"},
+                        {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}))};
   ASSERT_ANY_THROW(serviceOperation3.getResult());
 
-  // CHECK 4: Returned TSV has correct format matching the query -> check that
+  // CHECK 4: Returned JSON has correct format matching the query -> check that
   // the result table returned by the operation corresponds to the contents of
-  // the TSV and its local vocabulary are correct.
+  // the JSON and its local vocabulary are correct.
   Service serviceOperation4{
       testQec, parsedServiceClause,
       getTsvFunctionFactory(
           expectedUrl, expectedSparqlQuery,
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
+          getJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
   std::shared_ptr<const Result> result = serviceOperation4.getResult();
 
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
@@ -187,7 +215,7 @@ TEST_F(ServiceTest, computeResult) {
   Id idBla = Id::makeFromLocalVocabIndex(idxBla.value());
   Id idBlu = Id::makeFromLocalVocabIndex(idxBlu.value());
 
-  // Check that the result table corresponds to the contents of the TSV.
+  // Check that the result table corresponds to the contents of the JSON.
   EXPECT_TRUE(result);
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});

@@ -327,10 +327,7 @@ Id Service::bindingToValueId(const nlohmann::json& cell,
 
   TripleComponent tc;
   if (type == "literal") {
-    std::string_view iriSV;
-
     if (cell.contains("datatype")) {
-      iriSV = cell["datatype"].get<std::string_view>();
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
           value, TripleComponent::Iri::fromIriWithoutBrackets(
                      cell["datatype"].get<std::string_view>()));
