@@ -51,4 +51,62 @@ class RandomExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
+// FOR UUID EXPRESSION
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Literal = ad_utility::triple_component::Literal;
+using Iri = ad_utility::triple_component::Iri;
+
+inline constexpr auto toLiteral = [](std::string_view str) {
+  return LiteralOrIri{
+      Literal::literalWithNormalizedContent(asNormalizedStringViewUnsafe(str))};
+};
+
+inline constexpr auto toIri = [](std::string_view str) {
+  return LiteralOrIri{
+      Iri::fromStringRepresentation(absl::StrJoin("<", "urn:uuid:", str, ">"))};
+};
+
+inline constexpr auto litUuidKey = [](int64_t randId) {
+  return "STRUUID" + std::to_string(randId);
+};
+
+inline constexpr auto iriUuidKey = [](int64_t randId) {
+  return "UUID" + std::to_string(randId);
+};
+
+template <auto FuncConv, auto FuncKey>
+class UuidExpression : public SparqlExpression {
+ private:
+  int64_t randId = ad_utility::FastRandomIntGenerator<int64_t>{}();
+
+ public:
+  ExpressionResult evaluate(EvaluationContext* context) const override {
+    VectorWithMemoryLimit<IdOrLiteralOrIri> result{context->_allocator};
+    const size_t numElements = context->_endIndex - context->_beginIndex;
+    result.reserve(numElements);
+    ad_utility::UuidGenerator uuidGen = {};
+
+    if (context->_isPartOfGroupBy) {
+      return FuncConc(uuidGen());
+    }
+
+    ad_utility::chunkedForLoop<1000>(
+        0, numElements,
+        [&result, &uuidGen](size_t) { result.push_back(FuncConv(uuidGen())); },
+        [context]() { context->cancellationHandle_->throwIfCancelled(); });
+    return result;
+  }
+
+  string getCacheKey(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
+    return FuncKey(randId);
+  }
+
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+};
+
+UuidExpression<toLiteral, litUuidKey> StrUuid;
+UuidExpression<toIri, iriUuidKey> Uuid;
+
 }  // namespace sparqlExpression
