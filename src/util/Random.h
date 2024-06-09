@@ -113,11 +113,15 @@ class UuidGenerator {
       RandomSeed seed = RandomSeed::make(std::random_device{}()))
       : _randomEngine{seed.get()}, _gen(_randomEngine) {}
 
-  std::string_view operator()() { return boost::uuids::to_string(_gen()); }
+  std::string_view operator()() {
+    _uuidStr = boost::uuids::to_string(_gen());
+    return _uuidStr;
+  }
 
  private:
   std::mt19937_64 _randomEngine;
   boost::uuids::basic_random_generator<std::mt19937_64> _gen;
+  std::string _uuidStr;
 };
 
 /// Randomly shuffle range denoted by `[begin, end)`
