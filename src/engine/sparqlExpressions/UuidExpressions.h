@@ -2,6 +2,8 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
+// Test for UuidExpression can be found in RandomExpressionTest.cpp
+
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -25,11 +27,11 @@ inline constexpr auto fromIri = [](std::string_view str) {
 };
 
 inline constexpr auto litUuidKey = [](int64_t randId) {
-  return "STRUUID " + std::to_string(randId);
+  return absl::StrCat("STRUUID "sv, std::to_string(randId));
 };
 
 inline constexpr auto iriUuidKey = [](int64_t randId) {
-  return "UUID " + std::to_string(randId);
+  return absl::StrCat("UUID "sv, std::to_string(randId));
 };
 
 // With UuidExpression<fromIri, iriUuidKey>, the UUIDs are returned as an
@@ -39,7 +41,7 @@ inline constexpr auto iriUuidKey = [](int64_t randId) {
 template <auto FuncConv, auto FuncKey>
 class UuidExpression : public SparqlExpression {
  private:
-  int64_t randId = ad_utility::FastRandomIntGenerator<int64_t>{}();
+  int64_t randId_ = ad_utility::FastRandomIntGenerator<int64_t>{}();
 
  public:
   ExpressionResult evaluate(EvaluationContext* context) const override {
@@ -61,7 +63,7 @@ class UuidExpression : public SparqlExpression {
 
   string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return FuncKey(randId);
+    return FuncKey(randId_);
   }
 
  private:

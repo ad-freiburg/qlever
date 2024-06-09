@@ -10,6 +10,7 @@
 #include <random>
 #include <ranges>
 #include <type_traits>
+#include <unordered_set>
 
 #include "../test/util/RandomTestHelpers.h"
 #include "util/Exception.h"
@@ -233,6 +234,25 @@ TEST(RandomShuffleTest, Seed) {
               ASSERT_EQ(inputArrays.front(), inputArray);
             });
       });
+}
+
+TEST(UuidGeneratorTest, StrUuidGeneratorTest) {
+  // Test few times that the returned UUID str is not
+  // "00000000-0000-0000-0000-000000000000" (nil-UUID)
+  // and that none of the str-UUIDS is rquivalent to the already
+  // created ones.
+  boost::uuids::string_generator getUuid;
+  UuidGenerator gen = UuidGenerator();
+  std::unordered_set<std::string> setUuids;
+  size_t i = 100;
+  while (i < 100) {
+    std::string_view strUuid = gen();
+    boost::uuids::uuid uuid = getUuid(strUuid.data());
+    ASSERT_EQ(uuid.is_nil(), false);
+    ASSERT_EQ(setUuids.find(std::string(strUuid)), setUuids.end());
+    setUuids.insert(std::string(strUuid));
+    i++;
+  }
 }
 
 }  // namespace ad_utility
