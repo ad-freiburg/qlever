@@ -256,8 +256,10 @@ class CacheableGenerator {
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
   cppcoro::generator<T> extractGenerator() && {
-    std::unique_lock lock{computationStorage_->mutex_};
-    cppcoro::generator<T> result{std::move(computationStorage_->generator_)};
+    auto pointerCopy = computationStorage_;
+    AD_CORRECTNESS_CHECK(pointerCopy);
+    std::unique_lock lock{pointerCopy->mutex_};
+    cppcoro::generator<T> result{std::move(pointerCopy->generator_)};
     computationStorage_.reset();
     return result;
   }
