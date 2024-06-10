@@ -18,6 +18,7 @@
 #include "parser/PropertyPath.h"
 #include "parser/SelectClause.h"
 #include "parser/TripleComponent.h"
+#include "parser/UpdateClause.h"
 #include "parser/data/GroupKey.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/OrderKey.h"
@@ -49,74 +50,7 @@ class SparqlPrefix {
   bool operator==(const SparqlPrefix&) const = default;
 };
 
-inline bool isVariable(const string& elem) { return elem.starts_with("?"); }
-inline bool isVariable(const TripleComponent& elem) {
-  return elem.isVariable();
-}
-
-inline bool isVariable(const PropertyPath& elem) {
-  return elem._operation == PropertyPath::Operation::IRI &&
-         isVariable(elem._iri);
-}
-
 std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
-
-// Data container for parsed triples from the where clause.
-// It is templated on the predicate type, see the instantiations below.
-template <typename Predicate>
-class SparqlTripleBase {
- public:
-  using AdditionalScanColumns = std::vector<std::pair<ColumnIndex, Variable>>;
-  SparqlTripleBase(TripleComponent s, Predicate p, TripleComponent o,
-                   AdditionalScanColumns additionalScanColumns = {})
-      : s_(std::move(s)),
-        p_(std::move(p)),
-        o_(std::move(o)),
-        additionalScanColumns_(std::move(additionalScanColumns)) {}
-
-  bool operator==(const SparqlTripleBase& other) const = default;
-  TripleComponent s_;
-  Predicate p_;
-  TripleComponent o_;
-  // The additional columns (e.g. patterns) that are to be attached when
-  // performing an index scan using this triple.
-  // TODO<joka921> On this level we should not store `ColumnIndex`, but the
-  // special predicate IRIs that are to be attached here.
-  std::vector<std::pair<ColumnIndex, Variable>> additionalScanColumns_;
-};
-
-// A triple where the predicate is a `TripleComponent`, so a fixed entity or a
-// variable, but not a property path.
-class SparqlTripleSimple : public SparqlTripleBase<TripleComponent> {
-  using Base = SparqlTripleBase<TripleComponent>;
-  using Base::Base;
-};
-
-// A triple where the predicate is a `PropertyPath` (which technically still
-// might be a variable or fixed entity in the current implementation).
-class SparqlTriple : public SparqlTripleBase<PropertyPath> {
- public:
-  using Base = SparqlTripleBase<PropertyPath>;
-  using Base::Base;
-
-  // ___________________________________________________________________________
-  SparqlTriple(TripleComponent s, const std::string& p_iri, TripleComponent o)
-      : Base{std::move(s), PropertyPath::fromIri(p_iri), std::move(o)} {}
-
-  // ___________________________________________________________________________
-  [[nodiscard]] string asString() const;
-
-  // Convert to a simple triple. Fails with an exception if the predicate
-  // actually is a property path.
-  SparqlTripleSimple getSimple() const {
-    AD_CONTRACT_CHECK(p_.isIri());
-    TripleComponent p =
-        isVariable(p_._iri)
-            ? TripleComponent{Variable{p_._iri}}
-            : TripleComponent(TripleComponent::Iri::fromIriref(p_._iri));
-    return {s_, p, o_, additionalScanColumns_};
-  }
-};
 
 // Forward declaration
 namespace parsedQuery {
@@ -131,6 +65,8 @@ class ParsedQuery {
   using SelectClause = parsedQuery::SelectClause;
 
   using ConstructClause = parsedQuery::ConstructClause;
+
+  using UpdateClause = parsedQuery::UpdateClause;
 
   ParsedQuery() = default;
 
@@ -147,7 +83,8 @@ class ParsedQuery {
 
   // explicit default initialisation because the constructor
   // of SelectClause is private
-  std::variant<SelectClause, ConstructClause> _clause{SelectClause{}};
+  std::variant<SelectClause, ConstructClause, UpdateClause> _clause{
+      SelectClause{}};
 
   [[nodiscard]] bool hasSelectClause() const {
     return std::holds_alternative<SelectClause>(_clause);
@@ -155,6 +92,10 @@ class ParsedQuery {
 
   [[nodiscard]] bool hasConstructClause() const {
     return std::holds_alternative<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] bool hasUpdateClause() const {
+    return std::holds_alternative<UpdateClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) selectClause() const {
@@ -165,12 +106,20 @@ class ParsedQuery {
     return std::get<ConstructClause>(_clause);
   }
 
+  [[nodiscard]] decltype(auto) updateClause() const {
+    return std::get<UpdateClause>(_clause);
+  }
+
   [[nodiscard]] decltype(auto) selectClause() {
     return std::get<SelectClause>(_clause);
   }
 
   [[nodiscard]] decltype(auto) constructClause() {
     return std::get<ConstructClause>(_clause);
+  }
+
+  [[nodiscard]] decltype(auto) updateClause() {
+    return std::get<UpdateClause>(_clause);
   }
 
   // Add a variable, that was found in the query body.

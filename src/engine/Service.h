@@ -49,6 +49,9 @@ class Service : public Operation {
   // Indicates whether the result will be requested in JSON or TSV format.
   bool useJsonFormat_{true};
 
+  // The siblingTree, used for SERVICE clause optimization.
+  std::shared_ptr<QueryExecutionTree> siblingTree_;
+
  public:
   // Construct from parsed Service clause.
   //
@@ -57,13 +60,26 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest);
+          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest,
+          std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
+
+  // Set the siblingTree (subTree that will later be joined with the Result of
+  // the Service Operation), used to reduce the Service Queries Complexity.
+  void setSiblingTree(std::shared_ptr<QueryExecutionTree> siblingTree) {
+    siblingTree_ = siblingTree;
+  }
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
   size_t getResultWidth() const override;
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
+
+  // Getters for testing.
+  const auto& getSiblingTree() const { return siblingTree_; }
+  const auto& getGraphPatternAsString() const {
+    return parsedServiceClause_.graphPatternAsString_;
+  }
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
@@ -93,6 +109,9 @@ class Service : public Operation {
 
   Result computeTsvResult(const ad_utility::httpUtils::Url& serviceUrl,
                           const std::string& serviceQuery);
+
+  // Get a VALUES clause that contains the values of the siblingTree's result.
+  std::optional<std::string> getSiblingValuesClause() const;
 
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.
