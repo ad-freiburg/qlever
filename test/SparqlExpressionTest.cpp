@@ -516,6 +516,35 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
+
+  // test makeTimezoneStrExpression
+  using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
+  auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  Timezone tz = -5;
+  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d1)},
+                   IdOrLiteralOrIriVec{lit("-05:00")});
+  tz = 23;
+  auto d2 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d2)},
+                   IdOrLiteralOrIriVec{lit("+23:00")});
+  tz = Date::TimeZoneZ{};
+  auto d3 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
+  tz = Date::NoTimeZone{};
+  DateOrLargeYear d4 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d5 = DateOrLargeYear(Date(2012, 1, 4, 14, 45));
+  checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
+  Id U = Id::makeUndefined();
+  checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
+                   IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
+  DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
 }
 
 // _____________________________________________________________________________________
