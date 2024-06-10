@@ -104,7 +104,7 @@ void compareIdTableWithExpectedContent(
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during
- * normal programm usage.
+ * normal program usage.
  */
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table);
 

@@ -30,7 +30,7 @@ concept ValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, bool, const ParameterTypes&...>;
 
 // Simple struct, that holds an error message. For use as the return type of
-// invocable object, that fullfill `ExceptionValidator`.
+// invocable object, that fulfill `ExceptionValidator`.
 struct ErrorMessage {
  private:
   std::string message_;

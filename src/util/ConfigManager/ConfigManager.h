@@ -309,7 +309,7 @@ class ConfigManager {
   get thrown, if the `validatorFunction` returns false.
   @param validatorDescriptor A description of the invariant, that
   `validatorFunction` imposes.
-  @param configOptionsToBeChecked Proxies for the configuration options, whos
+  @param configOptionsToBeChecked Proxies for the configuration options, whose
   values will be passed to the validator function as function arguments. Will
   keep the same order.
   */

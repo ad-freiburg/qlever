@@ -105,7 +105,7 @@ size_t findLiteralEnd(std::string_view input, std::string_view literalEnd);
 @brief Add elements of the range to a stream, with the `separator` between the
 elements.
 
-@tparam Range An input range, whos dereferenced iterators can be inserted into
+@tparam Range An input range, whose dereferenced iterators can be inserted into
 streams.
 
 @param separator Will be put between each of the string representations

@@ -43,7 +43,7 @@ class SortPerformanceEstimator {
       size_t maxNumberOfElementsToSort);
 
   /// Set up the sort estimates. This will take some time. Only samples, that
-  /// can be allocated by the allocator and that have less thatn
+  /// can be allocated by the allocator and that have less than
   /// `maxNumberOfElementsToSort` elements will actually be measured.
   void computeEstimatesExpensively(
       const ad_utility::AllocatorWithLimit<Id>& allocator,

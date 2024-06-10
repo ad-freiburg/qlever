@@ -84,7 +84,7 @@ TreeNode* TreeNode::insert(string_view value) {
 
 // ___________________________________________________________________________
 std::pair<size_t, TreeNode*> TreeNode::getMaximum(size_t codelength) {
-  // _sharedCount = _ownCount + sum over childrens _sharedCount
+  // _sharedCount = _ownCount + sum over children's _sharedCount
   _sharedCount = _ownCount;
 
   // get Maximum score and node from all the children

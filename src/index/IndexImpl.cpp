@@ -1418,7 +1418,7 @@ namespace {
 // Return a lambda that is called repeatedly with triples that are sorted by the
 // `idx`-th column and counts the number of distinct entities that occur in a
 // triple where none of the elements fulfills the `isQleverInternalId`
-// predicate. This is used to cound the number of distinct subjects, objects,
+// predicate. This is used to count the number of distinct subjects, objects,
 // and predicates during the index building.
 template <size_t idx>
 auto makeNumDistinctIdsCounter =

@@ -55,7 +55,7 @@ static void writeBenchmarkClassAndBenchmarkResultsToJsonFile(
   AD_CORRECTNESS_CHECK(benchmarkClassAndBenchmarkResultsAsJson.is_array());
 
   /*
-  Add the old json arry entries to the new json array entries, if a non empty
+  Add the old json array entries to the new json array entries, if a non empty
   file exists. Otherwise, we create/fill the file.
   */
   if (appendToJsonInFile && std::filesystem::exists(jsonFileName) &&
@@ -126,7 +126,7 @@ int main(int argc, char** argv) {
       "Writes the benchmarks as json to a json file, overriding the previous"
       " content of the file.")(
       "append,a",
-      "Causes the json option to append to the end of the json arry in the "
+      "Causes the json option to append to the end of the json array in the "
       "json file, if there is one, instead of overriding the previous content "
       "of "
       "the file.")(

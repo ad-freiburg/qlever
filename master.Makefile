@@ -8,7 +8,7 @@ SHELL = /bin/bash
 # This Makefile provides the following targets:
 #
 # pin: Pin queries to cache, so that all autocompletion queries are fast, even
-#      when "Clear cache" is clicked in the QLever UI (ther results for pinned 
+#      when "Clear cache" is clicked in the QLever UI (the results for pinned 
 #      queries will never be removed, unless ... see target clear).
 #
 # clear: Clear the cache completely (including pinned results). Note that this
@@ -57,7 +57,7 @@ CACHE_MAX_NUM_ENTRIES = 1000
 # The URL of the QLever backend.
 QLEVER_API = https://qlever.cs.uni-freiburg.de/api/$(SLUG)
 
-# The URL of the QLever UI istance ... TODO: it's confusing that this also has
+# The URL of the QLever UI instance ... TODO: it's confusing that this also has
 # /api/ in the name, it actually has nothing to do with the URLs from the QLever
 # backends (which are defined in the Apache configuration of QLever).
 WARMUP_API = $(subst /api/,/api/warmup/,$(QLEVER_API))

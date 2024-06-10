@@ -216,7 +216,7 @@ std::shared_ptr<const Result> Operation::getResult(
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
-        "Unexpected expection that is not a subclass of std::exception");
+        "Unexpected exception that is not a subclass of std::exception");
   }
 }
 

@@ -205,7 +205,7 @@ class BenchmarkRegister {
   using BenchmarkPointer = std::unique_ptr<BenchmarkInterface>;
 
   /*
-  Static vector of all registered benchmark classe instances.
+  Static vector of all registered benchmark class instances.
    */
   inline static std::vector<BenchmarkPointer> registeredBenchmarks{};
 
