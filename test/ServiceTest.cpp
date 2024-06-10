@@ -223,29 +223,36 @@ TEST_F(ServiceTest, computeResult) {
 }
 
 // Test that bindingToValueId behaves as expected.
-TEST_F(ServiceTest, bindingToValueId) {
+TEST_F(ServiceTest, bindingToTripleComponent) {
   Index::Vocab vocabulary;
-  LocalVocab localVocab{};
+  nlohmann::json binding;
+  EXPECT_EQ(Service::bindingToTripleComponent(binding),
+            TripleComponent::UNDEF());
 
-  nlohmann::json j = {{"type", "literal"}, {"value", "Hello World"}};
-  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding = {{"type", "literal"}, {"value", "Hello World"}};
+  EXPECT_EQ(Service::bindingToTripleComponent(binding),
+            TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 
-  j["xml:lang"] = "de";
-  j["value"] = "\"\test\"";
-  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding["xml:lang"] = "de";
+  binding["value"] = "Hallo Welt";
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(binding),
+      TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  j.erase("xml:lang");
-  j["datatype"] = XSD_INT_TYPE;
-  j["value"] = "42";
-  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding.erase("xml:lang");
+  binding["datatype"] = XSD_INT_TYPE;
+  binding["value"] = "42";
+  EXPECT_EQ(Service::bindingToTripleComponent(binding), 42);
 
-  j["type"] = "uri";
-  j["value"] = "http://doof.org";
-  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding.erase("datatype");
+  binding["type"] = "uri";
+  binding["value"] = "http://doof.org";
+  EXPECT_EQ(Service::bindingToTripleComponent(binding),
+            TripleComponent::Iri::fromIriWithoutBrackets("http://doof.org"));
 
-  j["type"] = "blank";
-  EXPECT_NO_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding["type"] = "blank";
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent(binding));
 
-  j["type"] = "INVALID_TYPE";
-  EXPECT_ANY_THROW(Service::bindingToValueId(j, vocabulary, &localVocab));
+  binding["type"] = "INVALID_TYPE";
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent(binding));
 }

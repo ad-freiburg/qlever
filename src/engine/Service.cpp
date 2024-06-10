@@ -173,9 +173,9 @@ void Service::writeJsonResult(const nlohmann::json& jsonResult,
         "JSON result does not have the expected structure");
   }
 
-  const auto vars =
+  const auto& vars =
       jsonResult["head"]["vars"].get<std::vector<std::string_view>>();
-  const auto bindings =
+  const auto& bindings =
       jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
 
   size_t rowIdx = 0;
@@ -187,7 +187,6 @@ void Service::writeJsonResult(const nlohmann::json& jsonResult,
                                               vars[colIdx], " in line ",
                                               rowIdx + 1, " of JSON result"));
       }
-
       const auto& cell = binding[vars[colIdx]];
       if (!cell.contains("type") || !cell.contains("value")) {
         throw std::runtime_error(absl::StrCat("Missing type or value in cell ",
@@ -195,8 +194,8 @@ void Service::writeJsonResult(const nlohmann::json& jsonResult,
                                               rowIdx + 1, " of JSON result"));
       }
 
-      Id id = bindingToValueId(cell, getIndex().getVocab(), localVocab);
-
+      TripleComponent tc = bindingToTripleComponent(cell);
+      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
       idTable(rowIdx, colIdx) = id;
       if (id.getDatatype() == Datatype::LocalVocabIndex) {
         ++numLocalVocabPerColumn[colIdx];
@@ -319,9 +318,7 @@ void Service::writeTsvResult(cppcoro::generator<std::string_view> tsvResult,
 }
 
 // ____________________________________________________________________________
-Id Service::bindingToValueId(const nlohmann::json& cell,
-                             const Index::Vocab& vocabulary,
-                             LocalVocab* localVocab) {
+TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
   const auto type = cell["type"].get<std::string_view>();
   const auto value = cell["value"].get<std::string_view>();
 
@@ -332,19 +329,18 @@ Id Service::bindingToValueId(const nlohmann::json& cell,
           value, TripleComponent::Iri::fromIriWithoutBrackets(
                      cell["datatype"].get<std::string_view>()));
     } else if (cell.contains("xml:lang")) {
-      tc = TripleComponent::Literal::literalWithoutQuotes(value);
-      tc.getLiteral().addLanguageTag(cell["xml:lang"].get<std::string_view>());
+      tc = TripleComponent::Literal::literalWithoutQuotes(
+          value, cell["xml:lang"].get<std::string>());
     } else {
       tc = TripleComponent::Literal::literalWithoutQuotes(value);
     }
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIriWithoutBrackets(value);
   } else if (type == "blank") {
-    // TODO<unexenu>
-    throw std::runtime_error(absl::StrCat("Not implemented yet"));
+    throw std::runtime_error(
+        "Blank nodes in the result of a SERVICE are currently not supported.");
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
   }
-
-  return std::move(tc).toValueId(vocabulary, *localVocab);
+  return tc;
 }

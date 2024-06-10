@@ -78,10 +78,8 @@ class Service : public Operation {
   // A SERVICE clause has no children.
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  // Bind the given cell to a value ID.
-  static Id bindingToValueId(const nlohmann::json& cell,
-                             const Index::Vocab& vocabulary,
-                             LocalVocab* localVocab);
+  // Convert the given binding to TripleComponent.
+  static TripleComponent bindingToTripleComponent(const nlohmann::json& cell);
 
  private:
   // The string returned by this function is used as cache key.
@@ -92,6 +90,7 @@ class Service : public Operation {
 
   Result computeJsonResult(const ad_utility::httpUtils::Url& serviceUrl,
                            const std::string& serviceQuery);
+
   Result computeTsvResult(const ad_utility::httpUtils::Url& serviceUrl,
                           const std::string& serviceQuery);
 
