@@ -1216,9 +1216,9 @@ TEST(SparqlParser, ConstructQuery) {
 }
 
 TEST(SparqlParser, Query) {
-  auto expectQuery = ExpectCompleteParse<&Parser::query>{
+  auto expectQuery = ExpectCompleteParse<&Parser::queryOrUpdate>{
       {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
-  auto expectQueryFails = ExpectParseFails<&Parser::query>{};
+  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   // Test that `_originalString` is correctly set.
   expectQuery(
       "SELECT * WHERE { ?a <bar> ?foo }",

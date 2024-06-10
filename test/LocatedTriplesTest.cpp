@@ -218,8 +218,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
         // Create a permutation pair from `triplesInIndex`.
         const auto& testAllocator = ad_utility::testing::makeAllocator();
-        Permutation SPO{Permutation::SPO, testAllocator};
-        Permutation SOP{Permutation::SOP, testAllocator};
+        Permutation SPO{Permutation::SPO, {}, testAllocator};
+        Permutation SOP{Permutation::SOP, {}, testAllocator};
         IndexImpl indexBuilder(testAllocator);
         indexBuilder.setOnDiskBase(testIndexBasename);
         indexBuilder.blocksizePermutationPerColumn() = blockSize;
@@ -232,7 +232,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                                            SOP);
 
         // Load the SPO permutation from disk.
-        Permutation permutation(Permutation::SPO, testAllocator);
+        Permutation permutation(Permutation::SPO, {}, testAllocator);
         permutation.loadFromDisk(testIndexBasename);
 
         // Check that the permutation indeed consists of the relations that we

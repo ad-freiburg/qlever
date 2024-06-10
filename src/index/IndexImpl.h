@@ -18,6 +18,7 @@
 #include "global/SpecialIds.h"
 #include "index/CompressedRelation.h"
 #include "index/ConstantsIndexBuilding.h"
+#include "index/DeltaTriples.h"
 #include "index/DocsDB.h"
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
@@ -131,6 +132,10 @@ class IndexImpl {
   off_t currenttOffset_;
   mutable ad_utility::File textIndexFile_;
 
+  // Reference to the delta triples from the `Index` class of which this class
+  // is the implementation.
+  std::unique_ptr<DeltaTriples> deltaTriples_;
+
   // If false, only PSO and POS permutations are loaded and expected.
   bool loadAllPermutations_ = true;
 
@@ -157,15 +162,35 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{Permutation::Enum::POS, allocator_};
-  Permutation pso_{Permutation::Enum::PSO, allocator_};
-  Permutation sop_{Permutation::Enum::SOP, allocator_};
-  Permutation spo_{Permutation::Enum::SPO, allocator_};
-  Permutation ops_{Permutation::Enum::OPS, allocator_};
-  Permutation osp_{Permutation::Enum::OSP, allocator_};
+  Permutation pos_{
+      Permutation::Enum::POS,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::POS),
+      allocator_};
+  Permutation pso_{
+      Permutation::Enum::PSO,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::PSO),
+      allocator_};
+  Permutation sop_{
+      Permutation::Enum::SOP,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SOP),
+      allocator_};
+  Permutation spo_{
+      Permutation::Enum::SPO,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SPO),
+      allocator_};
+  Permutation ops_{
+      Permutation::Enum::OPS,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OPS),
+      allocator_};
+  Permutation osp_{
+      Permutation::Enum::OSP,
+      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OSP),
+      allocator_};
 
  public:
-  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
+  explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     std::unique_ptr<DeltaTriples> deltaTriples =
+                         std::unique_ptr<DeltaTriples>());
 
   // Forbid copying.
   IndexImpl& operator=(const IndexImpl&) = delete;
@@ -192,6 +217,9 @@ class IndexImpl {
   // `Permutation` object by reference (`pso_`).
   Permutation& getPermutation(Permutation::Enum p);
   const Permutation& getPermutation(Permutation::Enum p) const;
+
+  const DeltaTriples& deltaTriples() const { return *deltaTriples_; }
+  DeltaTriples& deltaTriples() { return *deltaTriples_; }
 
   // Creates an index from a file. Parameter Parser must be able to split the
   // file's format into triples.

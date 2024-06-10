@@ -121,7 +121,8 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
   const Permutation::MetaData& meta = permutation.metaData();
   const vector<CompressedBlockMetadata>& blocks = meta.blockData();
 
-  vector<LocatedTriple> out{triples.size()};
+  vector<LocatedTriple> out;
+  out.reserve(triples.size());
   size_t currentBlockIndex;
   for (auto& [id1, id2, id3] : triples) {
     currentBlockIndex =
@@ -221,8 +222,8 @@ LocatedTriple LocatedTriple::locateTripleInPermutation(
   // Read and decompress the block. We could omit `col0Id` if the block consists
   // of only one relation, but the performance impact would be little.
   std::array<ColumnIndex, 3> columnIndices{0u, 1u, 2u};
-  DecompressedBlock blockTuples =
-      reader.readAndDecompressBlock(*matchingBlock, columnIndices);
+  DecompressedBlock blockTuples = reader.readAndDecompressBlock(
+      *matchingBlock, columnIndices, LocatedTriplesPerBlock{}, 0);
 
   if (matchingBlock->firstTriple_.col0Id_ <= id1) {
     // The triple is actually inside this block.
@@ -321,9 +322,12 @@ size_t LocatedTriplesPerBlock::mergeTriples(
   if (scanSpec.col1Id().has_value()) {
     AD_CONTRACT_CHECK(!block.has_value() || block.value().numColumns() == 1);
     AD_CONTRACT_CHECK(result.numColumns() == 1);
-  } else {
+  } else if (scanSpec.col2Id().has_value()) {
     AD_CONTRACT_CHECK(!block.has_value() || block.value().numColumns() == 2);
     AD_CONTRACT_CHECK(result.numColumns() == 2);
+  } else {
+    AD_CONTRACT_CHECK(!block.has_value() || block.value().numColumns() == 3);
+    AD_CONTRACT_CHECK(result.numColumns() == 3);
   }
 
   auto resultEntry = result.begin() + offsetInResult;
@@ -342,8 +346,14 @@ size_t LocatedTriplesPerBlock::mergeTriples(
   };
 
   // Advance to the first located triple in the specified range.
+  // TODO<qup42> this currently only works when we insert into on existing block
+  AD_CONTRACT_CHECK(block.has_value());
   while (locatedTriple != locatedTriples.end() &&
-         locatedTriple->rowIndexInBlock < rowIndexInBlockBegin) {
+         (block.value()[rowIndexInBlockBegin][0] > locatedTriple->id1 ||
+          (block.value()[rowIndexInBlockBegin][0] == locatedTriple->id1 &&
+           (block.value()[rowIndexInBlockBegin][1] > locatedTriple->id2 ||
+            (block.value()[rowIndexInBlockBegin][1] == locatedTriple->id2 &&
+             block.value()[rowIndexInBlockBegin][2] > locatedTriple->id3))))) {
     ++locatedTriple;
   }
 
@@ -356,19 +366,28 @@ size_t LocatedTriplesPerBlock::mergeTriples(
     rowIndexInBlockEnd = rowIndexInBlockBegin + 1;
     AD_CORRECTNESS_CHECK(rowIndexInBlockBegin < rowIndexInBlockEnd);
   }
+  auto cmp = [](auto lt, auto row) {
+    return (row[0] > lt->id1 ||
+            (row[0] == lt->id1 &&
+             (row[1] > lt->id2 || (row[1] == lt->id2 && row[2] > lt->id3))));
+  };
   for (size_t rowIndex = rowIndexInBlockBegin; rowIndex < rowIndexInBlockEnd;
        ++rowIndex) {
     // Append triples that are marked for insertion at this `rowIndex` to the
     // result.
     while (locatedTriple != locatedTriples.end() &&
-           locatedTriple->rowIndexInBlock == rowIndex &&
+           cmp(locatedTriple, block.value()[rowIndex]) &&
            locatedTriple->existsInIndex == false) {
       if (locatedTripleMatches()) {
         if (scanSpec.col1Id().has_value() && !scanSpec.col2Id().has_value()) {
           (*resultEntry)[0] = locatedTriple->id3;
-        } else {
+        } else if (scanSpec.col2Id().has_value()) {
           (*resultEntry)[0] = locatedTriple->id2;
           (*resultEntry)[1] = locatedTriple->id3;
+        } else {
+          (*resultEntry)[0] = locatedTriple->id1;
+          (*resultEntry)[1] = locatedTriple->id2;
+          (*resultEntry)[2] = locatedTriple->id3;
         }
         ++resultEntry;
       }
@@ -379,7 +398,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(
     // marked for deletion and matches (also skip it if it does not match).
     bool deleteThisEntry = false;
     if (locatedTriple != locatedTriples.end() &&
-        locatedTriple->rowIndexInBlock == rowIndex &&
+        cmp(locatedTriple, block.value()[rowIndex]) &&
         locatedTriple->existsInIndex == true) {
       deleteThisEntry = locatedTripleMatches();
       ++locatedTriple;

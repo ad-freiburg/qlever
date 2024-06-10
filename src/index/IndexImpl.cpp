@@ -40,8 +40,10 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     std::unique_ptr<DeltaTriples> deltaTriples)
+    : allocator_{std::move(allocator)},
+      deltaTriples_(std::move(deltaTriples)){};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(

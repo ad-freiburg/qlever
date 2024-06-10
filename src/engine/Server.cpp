@@ -590,7 +590,7 @@ Awaitable<void> Server::sendStreamableResponse(
 nlohmann::json Server::executeUpdateQuery(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
-    SharedCancellationHandle cancellationHandle) {
+    SharedCancellationHandle cancellationHandle, Index& index) {
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   parsedQuery::UpdateClause update = query.updateClause();
 
@@ -660,27 +660,16 @@ nlohmann::json Server::executeUpdateQuery(
       AD_FAIL();
     }
   };
-  // #define QL_UPDATE_VECTOR
-  // #define QL_UPDATE_PRESORT
 
-#ifdef QL_UPDATE_VECTOR
   LOG(INFO) << "Executing update using std::vector" << std::endl;
-#else
-  LOG(INFO) << "Executing update using IdTable" << std::endl;
-#endif
 #ifdef QL_UPDATE_PRESORT
   LOG(INFO) << "Sorting triples before location" << std::endl;
 #else
   LOG(INFO) << "Locating triples without sorting before" << std::endl;
 #endif
 
-#ifdef QL_UPDATE_VECTOR
-  std::vector<std::array<Id, 3>> toInsert;
-  std::vector<std::array<Id, 3>> toDelete;
-#else
-  IdTable toInsert(3, qet.getRootOperation()->allocator());
-  IdTable toDelete(3, qet.getRootOperation()->allocator());
-#endif
+  std::vector<IdTriple> toInsert;
+  std::vector<IdTriple> toDelete;
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
@@ -717,52 +706,15 @@ nlohmann::json Server::executeUpdateQuery(
     }
   }
 
-  LOG(INFO) << "Inserting " << toInsert.size() << " triples." << std::endl;
-  LOG(INFO) << "Deleting " << toDelete.size() << " triples." << std::endl;
   auto timeMaterializeUpdateTriples = step.msecs();
   LOG(INFO) << "Calculating update query triples took "
             << timeMaterializeUpdateTriples << std::endl;
   step.start();
-  ad_utility::HashMap<Permutation::Enum, std::chrono::milliseconds>
-      timeToLocateInPermutation;
-  auto locatePermutation =
-      [&toDelete, &toInsert, &step, &qet,
-       &timeToLocateInPermutation](Permutation::Enum permutation) {
-#ifdef QL_UPDATE_PRESORT
-        auto sortOrderTmp = Permutation::toKeyOrder(permutation);
-        const std::vector<ColumnIndex> sortOrder{sortOrderTmp.begin(),
-                                                 sortOrderTmp.end()};
-#ifdef QL_UPDATE_VECTOR
-        std::sort(toInsert.begin(), toInsert.end());
-        std::sort(toDelete.begin(), toDelete.end());
-#else
-        Engine::sort(toInsert, sortOrder);
-        Engine::sort(toDelete, sortOrder);
-#endif
-        LOG(INFO) << "Sorting triples took " << step.msecs() << std::endl;
-        step.start();
-#endif
-        const Permutation& pos =
-            qet.getQec()->getIndex().getImpl().getPermutation(permutation);
-#ifdef QL_UPDATE_PRESORT
-        LocatedTriple::locateSortedTriplesInPermutation(toInsert, pos);
-        LocatedTriple::locateSortedTriplesInPermutation(toDelete, pos);
-#else
-        LocatedTriple::locateTriplesInPermutation(toInsert, pos);
-        LocatedTriple::locateTriplesInPermutation(toDelete, pos);
-#endif
-        timeToLocateInPermutation[permutation] = step.msecs();
-        LOG(INFO) << "Locating triples in "
-                  << timeToLocateInPermutation[permutation] << " took "
-                  << step.msecs() << std::endl;
-        step.start();
-      };
 
-  using Perm = Permutation::Enum;
-  for (auto permutation :
-       {Perm::PSO, Perm::POS, Perm::SPO, Perm::SOP, Perm::OPS, Perm::OSP}) {
-    locatePermutation(permutation);
-  }
+  index.deltaTriples().insertTriples(std::move(toInsert));
+  index.deltaTriples().deleteTriples(std::move(toDelete));
+  auto timeDeltaTriples = step.msecs();
+  step.start();
 
   nlohmann::json j;
   j["query"] = query._originalString;
@@ -790,11 +742,7 @@ nlohmann::json Server::executeUpdateQuery(
       std::to_string(timeTemplatePrepration.count()) + "ms";
   j["time"]["updateTripleMaterialization"] =
       std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
-  for (auto permutation :
-       {Perm::PSO, Perm::POS, Perm::SPO, Perm::SOP, Perm::OPS, Perm::OSP}) {
-    j["time"]["locateTriples"][Permutation::toString(permutation)] =
-        std::to_string(timeToLocateInPermutation[permutation].count()) + "ms";
-  }
+  j["time"]["deltaTriples"] = std::to_string(timeDeltaTriples.count()) + "ms";
 
   return j;
 }
@@ -916,7 +864,7 @@ boost::asio::awaitable<void> Server::processQuery(
     if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
       nlohmann::basic_json resp = Server::executeUpdateQuery(
           plannedQuery.value().parsedQuery_, qet, requestTimer,
-          std::move(cancellationHandle));
+          std::move(cancellationHandle), index_);
       co_return co_await sendJson(std::move(resp), responseStatus);
     }
 

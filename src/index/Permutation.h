@@ -8,6 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "index/LocatedTriples.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
@@ -47,7 +48,9 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
-  explicit Permutation(Enum permutation, Allocator allocator);
+  explicit Permutation(Enum permutation,
+                       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+                       Allocator allocator);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
@@ -143,6 +146,9 @@ class Permutation {
   // `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
+
+  // The delta triples and their positions in this permutation.
+  const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
 
   bool isLoaded_ = false;
 };

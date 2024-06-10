@@ -147,7 +147,8 @@ class LocatedTriplesPerBlock {
   };
   std::vector<LocatedTriples::iterator> add(
       std::vector<LocatedTriple> locatedTriple) {
-    std::vector<LocatedTriples::iterator> handles{locatedTriple.size()};
+    std::vector<LocatedTriples::iterator> handles;
+    handles.reserve(locatedTriple.size());
     for (auto triple : locatedTriple) {
       LocatedTriples& locatedTriples = map_[triple.blockIndex];
       auto [handle, wasInserted] = locatedTriples.emplace(triple);

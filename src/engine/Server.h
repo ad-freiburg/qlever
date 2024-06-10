@@ -234,8 +234,9 @@ class Server {
       const QueryExecutionTree& qet,
       SharedCancellationHandle cancellationHandle) const;
 
-  nlohmann::json executeUpdateQuery(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer,
-      SharedCancellationHandle cancellationHandle);
+  nlohmann::json executeUpdateQuery(const ParsedQuery& query,
+                                    const QueryExecutionTree& qet,
+                                    const ad_utility::Timer& requestTimer,
+                                    SharedCancellationHandle cancellationHandle,
+                                    Index& index);
 };
