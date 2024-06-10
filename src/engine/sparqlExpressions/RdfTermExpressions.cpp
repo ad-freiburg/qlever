@@ -29,7 +29,7 @@ inline auto getDatatype = [](OptLiteral input) -> IdOrLiteralOrIri {
   }
 };
 
-  using GetDatatype = NARY<1, FV<decltype(getDatatype), LiteralValueGetter>>;
+using GetDatatype = NARY<1, FV<decltype(getDatatype), LiteralValueGetter>>;
 }  //  namespace detail
 
 using namespace detail;
