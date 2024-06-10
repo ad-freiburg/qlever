@@ -29,6 +29,9 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
+// Return type for `LiteralValueGetter`
+using OptLiteral = std::optional<ad_utility::triple_component::Literal>;
+
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
 // general args to a numeric value (-> `int64_t or double`).
 using IntDoubleStr = std::variant<std::monostate, int64_t, double, std::string>;
@@ -239,4 +242,19 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
   IntDoubleStr operator()(const LiteralOrIri& s,
                           const EvaluationContext*) const;
 };
+
+// `LiteralValueGetter` returns an std::optional<Literal> object.
+// Remark: probably better to template it in combination with
+// IriValueGetter from other pull request later on
+struct LiteralValueGetter : Mixin<LiteralValueGetter> {
+  using Mixin<LiteralValueGetter>::operator();
+  OptLiteral operator()(
+      [[maybe_unused]] ValueId id,
+      [[maybe_unused]] const EvaluationContext* context) const {
+    return std::nullopt;
+  }
+  OptLiteral operator()(const LiteralOrIri& litOrIri,
+                        const EvaluationContext* context) const;
+};
+
 }  // namespace sparqlExpression::detail

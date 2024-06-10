@@ -171,3 +171,14 @@ IntDoubleStr ToNumericValueGetter::operator()(
     [[maybe_unused]] const EvaluationContext* context) const {
   return std::string(asStringViewUnsafe(s.getContent()));
 }
+
+// ____________________________________________________________________________
+OptLiteral LiteralValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  if (litOrIri.isLiteral()) {
+    return litOrIri.getLiteral();
+  } else {
+    return std::nullopt;
+  }
+}

@@ -835,6 +835,41 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, testDatatype) {
+  U = Id::makeUndefined();
+  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815));
+  auto DateId = Id::makeFromDate(d1);
+  auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
+  checkGetDatatype(IdOrLiteralOrIriVec{lit(
+                       "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("Simple StrStr")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("english", "@en")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId}, IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromInt(2)},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit(" ", "@de-LATN-de")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("testval", "^^<http://example/iri/test#test>")},
+      IdOrLiteralOrIriVec{iriref("<http://example/iri/test#test>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{iriref("<http://example/iri/test>")},
+                   IdOrLiteralOrIriVec{U});
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testStrToHashExpressions) {
   auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
   auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
