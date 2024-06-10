@@ -394,7 +394,7 @@ endif ()
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
-add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE -DBOOST_STACKTRACE_LINK")
+add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE")
 add_compile_options("-g;-fno-inline")
 add_link_options( "-no-pie")
 link_libraries(dl)
