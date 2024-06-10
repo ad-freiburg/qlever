@@ -425,3 +425,10 @@ qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_I
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
+
+compile_definitions(BOOST_STACKTRACE_USE_ADDR2LINE)
+compile_options("-g;-fno-inline")
+link_options( "-no-pie")
+link_libraries(dl)
+
+

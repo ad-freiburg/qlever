@@ -7,6 +7,7 @@
 #include "./IndexImpl.h"
 
 #include <algorithm>
+#include <boost/stacktrace.hpp>
 #include <cstdio>
 #include <future>
 #include <optional>
@@ -46,6 +47,8 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
+  LOG(ERROR) << "Stacktrace: \n"
+             << boost::stacktrace::stacktrace() << std::endl;
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
@@ -101,7 +104,8 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) -> IdNoLocalVocab {
+  auto projectionForComparator =
+      []<typename T>(const T& rowOrId) -> IdNoLocalVocab {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
