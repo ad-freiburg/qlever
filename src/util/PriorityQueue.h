@@ -153,7 +153,7 @@ class TreeBasedPQ {
   /**
    * Update the key of a value in the HeapBasedPQ
    * @param newKey
-   * @param handle inout parameter, will be changed to be a valid handle after
+   * @param handle in/out parameter, will be changed to be a valid handle after
    * the operation has finished.
    * @throws NotInPQException if the handle does not point into the PQ (because
    * of pop or erase operations)
@@ -370,7 +370,7 @@ class HeapBasedPQ {
    * associated with the handle
    *
    * @param newKey
-   * @param handle Inout parameter: Updated s.t. it stays valid.
+   * @param handle in/out parameter: Updated s.t. it stays valid.
    * @throws NotInPQException if the handle does not point into the PQ (because
    * of pop or erase operations)
    */

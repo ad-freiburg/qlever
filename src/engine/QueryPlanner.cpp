@@ -1161,8 +1161,8 @@ void QueryPlanner::applyTextLimitsIfPossible(
       if (((plan._idsOfIncludedNodes &
             textLimit.idsOfMustBeFinishedOperations_) ^
            textLimit.idsOfMustBeFinishedOperations_) != 0) {
-        // Ther is still an operation that needs to be finished before this text
-        // limit can be applied
+        // There is still an operation that needs to be finished before this
+        // text limit can be applied
         i++;
         continue;
       }

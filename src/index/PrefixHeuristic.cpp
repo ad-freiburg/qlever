@@ -118,7 +118,7 @@ std::pair<size_t, TreeNode*> TreeNode::getMaximum(size_t codelength) {
 
   _score = _sharedCount * relevantLength;
 
-  // Check if our own score is greater than any of the childrens
+  // Check if our own score is greater than any of the children
   // we choose >= so we get a valid pointer when there is only the root with
   // score 0 left.
   if (_score >= maxScore) {
