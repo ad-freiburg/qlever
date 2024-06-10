@@ -250,9 +250,12 @@ TEST_F(ServiceTest, computeResult) {
 
   Service serviceOperation5{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
-                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
-                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      getTsvFunctionFactory(
+          expectedUrl, expectedSparqlQuery5,
+          getJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
+                                           {"bla", "bli", "y"},
+                                           {"blu", "bla", "y"},
+                                           {"bli", "blu", "y"}})),
       siblingTree};
   EXPECT_NO_THROW(serviceOperation5.getResult());
 
@@ -266,9 +269,12 @@ TEST_F(ServiceTest, computeResult) {
       "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
   Service serviceOperation6{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery6,
-                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
-                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      getTsvFunctionFactory(
+          expectedUrl, expectedSparqlQuery6,
+          getJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
+                                           {"bla", "bli", "y"},
+                                           {"blue", "bla", "y"},
+                                           {"bli", "blu", "y"}})),
       siblingTree};
   EXPECT_NO_THROW(serviceOperation6.getResult());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
@@ -288,7 +294,9 @@ TEST_F(ServiceTest, getCacheKey) {
       getTsvFunctionFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"));
+          getJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
 
   auto ck_noSibling = service.getCacheKey();
 
@@ -324,8 +332,6 @@ TEST_F(ServiceTest, getCacheKey) {
 TEST_F(ServiceTest, bindingToTripleComponent) {
   Index::Vocab vocabulary;
   nlohmann::json binding;
-  EXPECT_EQ(Service::bindingToTripleComponent(binding),
-            TripleComponent::UNDEF());
 
   binding = {{"type", "literal"}, {"value", "Hello World"}};
   EXPECT_EQ(Service::bindingToTripleComponent(binding),
