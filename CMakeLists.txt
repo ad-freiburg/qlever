@@ -428,7 +428,7 @@ qlever_target_link_libraries(PrintIndexVersionMain util)
 
 add_definitions(BOOST_STACKTRACE_USE_ADDR2LINE)
 add_compile_options("-g;-fno-inline")
-link_options( "-no-pie")
+add_link_options( "-no-pie")
 link_libraries(dl)
 
 
