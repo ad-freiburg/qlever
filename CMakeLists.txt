@@ -426,7 +426,7 @@ qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_I
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
 
-add_definitions(BOOST_STACKTRACE_USE_ADDR2LINE)
+add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE")
 add_compile_options("-g;-fno-inline")
 add_link_options( "-no-pie")
 link_libraries(dl)
