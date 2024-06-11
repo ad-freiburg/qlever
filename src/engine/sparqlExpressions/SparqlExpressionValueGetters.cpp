@@ -188,9 +188,9 @@ LiteralOrString makeDatatypeValueGetter::operator()(
     auto str = strAndType.first;
     auto dt = strAndType.second;
     if (dt == nullptr || dt[0] == '\0') {
-      return std::move(optionalStringAndType.value().first);
+      return str;
     } else {
-      return absl::StrCat("\"", str, "\"^^<", dt, ">");
+      return absl::StrCat("\""sv, str, "\"^^<"sv, dt, ">"sv);
     }
   }
 }
