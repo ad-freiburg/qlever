@@ -104,8 +104,7 @@ class LocatedTriplesPerBlock {
   // has `col0Id` and `col1Id` set.
   //
   size_t mergeTriples(
-      size_t blockIndex, std::optional<IdTable> block, IdTable& result,
-      size_t offsetInResult, ScanSpecification scanSpec,
+      size_t blockIndex, IdTable block, IdTable& result, size_t offsetInResult,
       size_t rowIndexInBlockBegin = 0,
       size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
 

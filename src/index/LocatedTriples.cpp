@@ -84,36 +84,27 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
   return {countNew, countExists};
 }
 
-size_t LocatedTriplesPerBlock::mergeTriples(
-    size_t blockIndex, std::optional<IdTable> block, IdTable& result,
-    size_t offsetInResult, ScanSpecification scanSpec,
-    size_t rowIndexInBlockBegin, size_t rowIndexInBlockEnd) const {
-  // TODO:
-  AD_CONTRACT_CHECK(!scanSpec.col2Id().has_value());
-
+size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
+                                            IdTable& result,
+                                            size_t offsetInResult,
+                                            size_t rowIndexInBlockBegin,
+                                            size_t rowIndexInBlockEnd) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  // The special case `block == std::nullopt` (write only located triples to
-  // `result`) is only allowed, when the `matchMode` is `MatchId1` or
-  // `MatchId1AndId2`, but not `MatchAll`.
-  AD_CONTRACT_CHECK(block.has_value() || !scanSpec.col2Id().has_value());
-
   // If `rowIndexInBlockEnd` has the default value (see `LocatedTriples.h`), the
   // intended semantics is that we read the whole block (note that we can't have
   // a default value that depends on the values of previous arguments).
-  if (rowIndexInBlockEnd == LocatedTriple::NO_ROW_INDEX && block.has_value()) {
-    rowIndexInBlockEnd = block.value().size();
+  if (rowIndexInBlockEnd == LocatedTriple::NO_ROW_INDEX) {
+    rowIndexInBlockEnd = block.size();
   }
 
   // Check that `rowIndexInBlockBegin` and `rowIndexInBlockEnd` define a valid
   // and non-emtpy range and that it is a subrange of `block` (unless the latter
   // is `std::nullopt`).
-  if (block.has_value()) {
-    AD_CONTRACT_CHECK(rowIndexInBlockBegin < block.value().size());
-    AD_CONTRACT_CHECK(rowIndexInBlockEnd <= block.value().size());
-  }
+  AD_CONTRACT_CHECK(rowIndexInBlockBegin < block.size());
+  AD_CONTRACT_CHECK(rowIndexInBlockEnd <= block.size());
   AD_CONTRACT_CHECK(rowIndexInBlockBegin < rowIndexInBlockEnd);
 
   // If we restrict `id1` and `id2`, the index block and the result must have
@@ -129,102 +120,87 @@ size_t LocatedTriplesPerBlock::mergeTriples(
                  i.getDatatype() == Datatype::WordVocabIndex;
         });
   };
-  LOG(INFO) << scanSpec << std::endl;
   LOG(INFO) << "Number of columns (result) " << result.numColumns()
             << std::endl;
-  LOG(INFO) << "Number of columns (input) " << block.value().numColumns()
+  LOG(INFO) << "Number of columns (input) " << block.numColumns() << std::endl;
+  LOG(INFO) << "Number of index columns  " << numberOfIndexColumns(block)
             << std::endl;
-  LOG(INFO) << "Number of index columns  "
-            << numberOfIndexColumns(block.value()) << std::endl;
-  LOG(INFO) << "First row " << block.value()[0] << std::endl;
+  LOG(INFO) << "First row " << block[0] << std::endl;
 
-  if (!scanSpec.col0Id().has_value()) {
-    AD_CONTRACT_CHECK(!block.has_value() ||
-                      result.numColumns() == block.value().numColumns());
-    AD_CONTRACT_CHECK(!block.has_value() || block.value().empty() ||
-                      numberOfIndexColumns(block.value()) == 3);
-    AD_CONTRACT_CHECK(result.numColumns() >= 3);
-  } else if (!scanSpec.col1Id().has_value()) {
-    AD_CONTRACT_CHECK(!block.has_value() ||
-                      result.numColumns() == block.value().numColumns());
-    AD_CONTRACT_CHECK(!block.has_value() || block.value().empty() ||
-                      numberOfIndexColumns(block.value()) == 2);
-    AD_CONTRACT_CHECK(result.numColumns() >= 2);
-  } else {
-    AD_CORRECTNESS_CHECK(!scanSpec.col2Id().has_value());
-    AD_CONTRACT_CHECK(!block.has_value() ||
-                      result.numColumns() == block.value().numColumns());
-    AD_CONTRACT_CHECK(!block.has_value() || block.value().empty() ||
-                      numberOfIndexColumns(block.value()) == 1);
-    AD_CONTRACT_CHECK(result.numColumns() >= 1);
-  }
+  auto numIndexColumns = numberOfIndexColumns(block);
+  AD_CONTRACT_CHECK(result.numColumns() == block.numColumns());
+  AD_CONTRACT_CHECK(result.numColumns() >= 1);
 
   auto resultEntry = result.begin() + offsetInResult;
   const auto& locatedTriples = map_.at(blockIndex);
   auto locatedTriple = locatedTriples.begin();
 
   // Advance to the first located triple in the specified range.
-  // TODO<qup42> this currently only works when we insert into on existing block
-  AD_CONTRACT_CHECK(block.has_value());
-  auto cmpLt = [](auto lt, auto row) {
+  auto cmpLt = [&numIndexColumns](auto lt, auto row) {
     LOG(INFO) << "Comparing " << *lt << " < " << row << std::endl;
-    return (row[0] > lt->id1 ||
-            (row[0] == lt->id1 &&
-             (row[1] > lt->id2 || (row[1] == lt->id2 && row[2] > lt->id3))));
+    if (numIndexColumns == 3) {
+      return (row[0] > lt->id1 ||
+              (row[0] == lt->id1 &&
+               (row[1] > lt->id2 || (row[1] == lt->id2 && row[2] > lt->id3))));
+    } else if (numIndexColumns == 2) {
+      return (row[0] > lt->id2 || (row[0] == lt->id2 && (row[1] > lt->id3)));
+    } else if (numIndexColumns == 1) {
+      return (row[0] > lt->id3);
+    }
   };
-  auto cmpEq = [](auto lt, auto row) {
+  auto cmpEq = [&numIndexColumns](auto lt, auto row) {
     LOG(INFO) << "Comparing " << *lt << " == " << row << std::endl;
-    return (row[0] == lt->id1 && row[1] == lt->id2 && row[2] == lt->id3);
+    if (numIndexColumns == 3) {
+      return (row[0] == lt->id1 && row[1] == lt->id2 && row[2] == lt->id3);
+    } else if (numIndexColumns == 2) {
+      return (row[0] == lt->id2 && row[1] == lt->id3);
+    } else if (numIndexColumns == 1) {
+      return (row[0] == lt->id3);
+    }
   };
-  while (locatedTriple != locatedTriples.end() &&
-         cmpLt(locatedTriple, block.value()[rowIndexInBlockBegin])) {
+
+  while (numIndexColumns == 3 && locatedTriple != locatedTriples.end() &&
+         cmpLt(locatedTriple, block[rowIndexInBlockBegin])) {
+    LOG(INFO) << "Skipping LocatedTriple " << *locatedTriple << std::endl;
     ++locatedTriple;
   }
 
-  // Iterate over all located triples in the specified range. In the special
-  // case `block == std::nullopt` (only write located triples to `result`), all
-  // relevant located triples have `rowIndexInBlock == NO_ROW_INDEX` (here we
-  // need that `NO_ROW_INDEX` is the maximal `size_t` value minus one).
-  if (!block.has_value()) {
-    rowIndexInBlockBegin = LocatedTriple::NO_ROW_INDEX;
-    rowIndexInBlockEnd = rowIndexInBlockBegin + 1;
-    AD_CORRECTNESS_CHECK(rowIndexInBlockBegin < rowIndexInBlockEnd);
-  }
   for (size_t rowIndex = rowIndexInBlockBegin; rowIndex < rowIndexInBlockEnd;
        ++rowIndex) {
     // Append triples that are marked for insertion at this `rowIndex` to the
     // result.
+    LOG(INFO) << "New Block Row " << block[rowIndex] << std::endl;
     while (locatedTriple != locatedTriples.end() &&
-           cmpLt(locatedTriple, block.value()[rowIndex]) &&
+           cmpLt(locatedTriple, block[rowIndex]) &&
            locatedTriple->shouldTripleExist == true) {
-      if (scanSpec.matches(locatedTriple->getIdTriple())) {
-        if (scanSpec.col1Id().has_value() && !scanSpec.col2Id().has_value()) {
-          (*resultEntry)[0] = locatedTriple->id3;
-        } else if (scanSpec.col2Id().has_value()) {
-          (*resultEntry)[0] = locatedTriple->id2;
-          (*resultEntry)[1] = locatedTriple->id3;
-        } else {
-          (*resultEntry)[0] = locatedTriple->id1;
-          (*resultEntry)[1] = locatedTriple->id2;
-          (*resultEntry)[2] = locatedTriple->id3;
-        }
-        ++resultEntry;
+      if (numIndexColumns == 1) {
+        (*resultEntry)[0] = locatedTriple->id3;
+      } else if (numIndexColumns == 2) {
+        (*resultEntry)[0] = locatedTriple->id2;
+        (*resultEntry)[1] = locatedTriple->id3;
+      } else {
+        (*resultEntry)[0] = locatedTriple->id1;
+        (*resultEntry)[1] = locatedTriple->id2;
+        (*resultEntry)[2] = locatedTriple->id3;
       }
+      ++resultEntry;
       ++locatedTriple;
+      LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
 
     // Append the triple at this position to the result if and only if it is not
     // marked for deletion and matches (also skip it if it does not match).
     bool deleteThisEntry = false;
     if (locatedTriple != locatedTriples.end() &&
-        cmpEq(locatedTriple, block.value()[rowIndex]) &&
+        cmpEq(locatedTriple, block[rowIndex]) &&
         locatedTriple->shouldTripleExist == false) {
-      deleteThisEntry = scanSpec.matches(locatedTriple->getIdTriple());
+      deleteThisEntry = true;
 
       ++locatedTriple;
+      LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
-    if (block.has_value() && !deleteThisEntry) {
-      *resultEntry++ = block.value()[rowIndex];
+    if (!deleteThisEntry) {
+      *resultEntry++ = block[rowIndex];
     }
   };
 

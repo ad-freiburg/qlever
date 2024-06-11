@@ -102,6 +102,12 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                          {2, 30, 20},    // Row 4
                                          {3, 30, 30}});  // Row 5
 
+  auto dropFirstColumns = [](int64_t n, auto& table) {
+    std::vector<ColumnIndex> indices(table.numColumns() - n);
+    std::iota(indices.begin(), indices.end(), n);
+    table.setColumnSubset(indices);
+  };
+
   // A set of located triples for that block.
   auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
       {LocatedTriple{1, V(1), V(10), V(10), false},    // Delete row 0
@@ -124,76 +130,37 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                                     {2, 30, 10}});  // Row 6
     IdTable result(3, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, matchAll);
-    ASSERT_EQ(result, resultExpected);
-  }
-
-  // Merge only the triples with `id1 == V(2)` into `block` (three triples
-  // inserted and one triple deleted).
-  {
-    IdTable resultExpected = makeIdTableFromVector({{1, 10, 10},    // Row 0
-                                                    {2, 11, 10},    // Row 1
-                                                    {2, 15, 20},    // Row 2
-                                                    {2, 15, 30},    // Row 3
-                                                    {2, 20, 10},    // Row 4
-                                                    {2, 21, 11},    // Row 5
-                                                    {2, 30, 10},    // Row 6
-                                                    {3, 30, 30}});  // Row 7
-    IdTable result(2, ad_utility::testing::makeAllocator());
-    result.resize(resultExpected.size());
-    auto inp = block.clone();
-    std::vector<ColumnIndex> indices(inp.numColumns() - 1);
-    std::iota(indices.begin(), indices.end(), 1);
-    inp.setColumnSubset(indices);
-    locatedTriplesPerBlock.mergeTriples(1, std::move(inp), result, 0,
-                                        matchId1(V(2)));
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0);
     ASSERT_EQ(result, resultExpected);
   }
 
   // Repeat but with a partial block that leaves out the first two elements of
   // `block`.
   {
-    IdTable resultExpected = makeIdTableFromVector({{15, 30},    // Row 0
-                                                    {20, 10},    // Row 1
-                                                    {21, 11},    // Row 2
-                                                    {30, 10},    // Row 3
-                                                    {30, 30}});  // Row 4
-    IdTable result(2, ad_utility::testing::makeAllocator());
+    IdTable resultExpected = makeIdTableFromVector({{2, 15, 30},    // Row 0
+                                                    {2, 20, 10},    // Row 1
+                                                    {2, 21, 11},    // Row 2
+                                                    {2, 30, 10}});  // Row 3
+    IdTable result(3, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0,
-                                        matchId1(V(2)), 2);
+    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, 2);
     ASSERT_EQ(result, resultExpected);
   }
 
   // Merge only the triples with `id1 == V(2)` and `id2 == V(30)` into the
   // corresponding partial block (one triple inserted, one triple deleted).
   {
-    IdTable blockColumnId3(1, ad_utility::testing::makeAllocator());
-    blockColumnId3.resize(block.size());
-    for (size_t i = 0; i < block.size(); ++i) {
-      blockColumnId3(i, 0) = block(i, 1);
-    }
-    IdTable resultExpected = makeIdTableFromVector({{10}, {30}});
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+        {LocatedTriple{1, V(2), V(15), V(25), true},     // Insert before row 2
+         LocatedTriple{1, V(2), V(15), V(30), false}});  // Delete row 2
+    IdTable blockColumnId3 = block.clone();
+    dropFirstColumns(2, blockColumnId3);
+    IdTable resultExpected = makeIdTableFromVector({{20}, {25}});
     IdTable result(1, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
     locatedTriplesPerBlock.mergeTriples(1, std::move(blockColumnId3), result, 0,
-                                        matchId1And2(V(2), V(30)), 4, 6);
+                                        1, 3);
     ASSERT_EQ(result, resultExpected);
-  }
-
-  // Merge special triples.
-  {
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {LocatedTriple{2, V(1), V(30), V(40), true},
-         LocatedTriple{2, V(1), V(30), V(50), true},
-         LocatedTriple{2, V(1), V(40), V(10), true}});
-    IdTable resultExpected = makeIdTableFromVector({{30, 40},    // Row 0
-                                                    {30, 50},    // Row 1
-                                                    {40, 10}});  // Row 2
-    IdTable result(2, ad_utility::testing::makeAllocator());
-    result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(2, std::nullopt, result, 0,
-                                        matchId1(V(1)));
   }
 }
 

@@ -449,9 +449,10 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allColumns));
   // A block is uniquely identified by its start position in the file.
-  auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   // TODO<qup42>: invalidate cache when blocks are updated
-  // auto sharedResultFromCache =
+  // auto cacheKey =
+  // blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_; auto
+  // sharedResultFromCache =
   //    blockCache_
   //        .computeOnce(cacheKey,
   //                     [&]() {
@@ -713,9 +714,8 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
                                                 allocator};
   decompressedBlockWithUpdate.resize(numRowsToRead +
                                      locatedTriplesThisBlock.size());
-  locatedTriples.mergeTriples(
-      blockIndex, std::move(decompressedBlock), decompressedBlockWithUpdate, 0,
-      ScanSpecification(std::nullopt, std::nullopt, std::nullopt));
+  locatedTriples.mergeTriples(blockIndex, std::move(decompressedBlock),
+                              decompressedBlockWithUpdate, 0);
   return decompressedBlockWithUpdate;
 }
 
@@ -741,9 +741,8 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
   DecompressedBlock decompressedBlockWithUpdate{table.numColumns(), allocator};
   decompressedBlockWithUpdate.resize(numRowsToRead +
                                      locatedTriplesThisBlock.size());
-  locatedTriples.mergeTriples(
-      blockIndex, std::move(table), decompressedBlockWithUpdate, 0,
-      ScanSpecification(std::nullopt, std::nullopt, std::nullopt));
+  locatedTriples.mergeTriples(blockIndex, std::move(table),
+                              decompressedBlockWithUpdate, 0);
   return;
 }
 
