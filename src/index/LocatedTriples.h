@@ -11,49 +11,28 @@
 
 class Permutation;
 
-// A triple and its location in a particular permutation.
-//
-// If a triple is not contained in the permutation, the location is the location
-// of the next larger triple (which may be in the next block or beyond the last
-// block). For a detailed definition of all border cases, see the definition at
+// A triple and its block in a particular permutation.
+// For a detailed definition of all border cases, see the definition at
 // the end of this file.
-//
-// NOTE: Technically, `blockIndex` and the `existsInIndex` are redundant in this
-// record because they can be derived when the class is used. However, they are
-// useful for testing, and for a small nuber of delta triples (think millions),
-// space efficiency is not a significant issue for this class.
 struct LocatedTriple {
-  // The index of the block and the location within that block, according to the
-  // definition above.
+  // The index of the block, according to the definition above.
   size_t blockIndex;
-  size_t rowIndexInBlock;
   // The `Id`s of the triple in the order of the permutation. For example,
-  // for an object pertaining to the SPO permutation: `id1` is the subject,
-  // `id2` is the predicate, and `id3` is the object.
+  // for an object pertaining to the OPS permutation: `id1` is the object,
+  // `id2` is the predicate, and `id3` is the subject.
   Id id1;
   Id id2;
   Id id3;
-  // Flag that is true if and only if the triple exists in the permutation. It
-  // is then equal to the triple at the position given by `blockIndex` and
-  // `rowIndexInBlock`.
-  bool existsInIndex;
 
-  // Locate the given triple in the given permutation.
-  static LocatedTriple locateTripleInPermutation(
-      Id id1, Id id2, Id id3, const Permutation& permutation);
+  IdTriple getIdTriple() const { return {id1, id2, id3}; }
+  // Flag that is true the given triple should be inserted and false if should
+  // be deleted.
+  bool shouldTripleExist;
 
-  // Added for benchmarking
+  // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const IdTable& triples, const Permutation& permutation);
-  // Added for benchmarking
-  static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const std::vector<IdTriple>& triples, const Permutation& permutation);
-
-  static std::vector<LocatedTriple> locateSortedTriplesInPermutation(
-      const IdTable& triples, const Permutation& permutation);
-  // Added for benchmarking
-  static std::vector<LocatedTriple> locateSortedTriplesInPermutation(
-      const std::vector<IdTriple>& triples, const Permutation& permutation);
+      const std::vector<IdTriple>& triples, const Permutation& permutation,
+      bool shouldExist);
 
   // Special row index for triples that belong to the previous block (see the
   // definition for the location of a triple at the end of this file).

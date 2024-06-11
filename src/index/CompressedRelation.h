@@ -11,6 +11,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "global/IdTriple.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
@@ -376,6 +377,14 @@ class CompressedRelationReader {
     void setCol1Id(T col1Id) {
       col1Id_ = col1Id;
       validate();
+    }
+
+    bool matches(const IdTriple& triple) {
+      return !col0Id_.has_value() ||
+             (triple[0] == col0Id_.value() &&
+              (!col1Id_.has_value() ||
+               (triple[1] == col1Id_.value() &&
+                (!col2Id_.has_value() || triple[2] == col2Id_.value()))));
     }
   };
 

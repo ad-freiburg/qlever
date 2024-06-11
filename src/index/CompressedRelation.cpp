@@ -451,16 +451,17 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   // A block is uniquely identified by its start position in the file.
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   // TODO<qup42>: invalidate cache when blocks are updated
-  auto sharedResultFromCache =
-      blockCache_
-          .computeOnce(cacheKey,
-                       [&]() {
-                         return readAndDecompressBlock(
-                             blockMetadata, allColumns, locatedTriples,
-                             blockIndex);
-                       })
-          ._resultPointer;
-  const DecompressedBlock& block = *sharedResultFromCache;
+  // auto sharedResultFromCache =
+  //    blockCache_
+  //        .computeOnce(cacheKey,
+  //                     [&]() {
+  //                       return readAndDecompressBlock(
+  //                           blockMetadata, allColumns, locatedTriples,
+  //                           blockIndex);
+  //                     })
+  //        ._resultPointer;
+  const DecompressedBlock& block = readAndDecompressBlock(
+      blockMetadata, allColumns, locatedTriples, blockIndex);
 
   // Find the range in the blockMetadata, that belongs to the same relation
   // `col0Id`

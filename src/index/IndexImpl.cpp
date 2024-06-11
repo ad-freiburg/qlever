@@ -42,8 +42,8 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
                      std::unique_ptr<DeltaTriples> deltaTriples)
-    : allocator_{std::move(allocator)},
-      deltaTriples_(std::move(deltaTriples)){};
+    : deltaTriples_(std::move(deltaTriples)),
+      allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(

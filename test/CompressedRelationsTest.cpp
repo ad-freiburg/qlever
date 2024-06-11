@@ -195,7 +195,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       CompressedRelationReader::ScanSpecification scanSpec{
           metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      auto size = reader.getResultSizeOfScan(scanSpec, blocks, {});
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
                       cancellationHandle, {});

@@ -9,4 +9,6 @@
 #include "global/Id.h"
 
 // Should we have an own class for this? We need this at several places.
+// TODO<qup42> some matching comparison operators between
+// idtriple/permutedtriple would be nice
 using IdTriple = std::array<Id, 3>;

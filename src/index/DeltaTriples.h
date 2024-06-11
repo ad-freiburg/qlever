@@ -83,11 +83,9 @@ class DeltaTriples {
   size_t numDeleted() const { return triplesDeleted_.size(); }
 
   // Insert triple.
-  void insertTriple(IdTriple idTriple);
   void insertTriples(std::vector<IdTriple> triples);
 
   // Delete triple.
-  void deleteTriple(IdTriple idTriple);
   void deleteTriples(std::vector<IdTriple> triples);
 
   // Get `TripleWithPosition` objects for given permutation.
@@ -112,9 +110,8 @@ class DeltaTriples {
   //
   // TODO: The function is name is misleading, since this method does not only
   // locate, but also add to the mentioned data structures.
-  LocatedTripleHandles locateTripleInAllPermutations(const IdTriple& idTriple);
   std::vector<LocatedTripleHandles> locateTriplesInAllPermutations(
-      const std::vector<IdTriple>& idTriples);
+      const std::vector<IdTriple>& idTriples, bool shouldExist);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method
