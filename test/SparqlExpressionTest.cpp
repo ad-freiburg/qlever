@@ -838,7 +838,13 @@ TEST(SparqlExpression, isSomethingFunctions) {
 TEST(SparqlExpression, testDatatype) {
   U = Id::makeUndefined();
   auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815));
-  auto DateId = Id::makeFromDate(d1);
+  auto d2 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  auto d3 = DateOrLargeYear(-10000, DateOrLargeYear::Type::Year);
+  auto d4 = DateOrLargeYear(Date(2024, 6, 11));
+  auto DateId1 = Id::makeFromDate(d1);
+  auto DateId2 = Id::makeFromDate(d2);
+  auto DateId3 = Id::makeFromDate(d3);
+  auto DateId4 = Id::makeFromDate(d4);
   auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
   checkGetDatatype(IdOrLiteralOrIriVec{lit(
                        "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
@@ -852,9 +858,30 @@ TEST(SparqlExpression, testDatatype) {
       IdOrLiteralOrIriVec{
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
   checkGetDatatype(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U});
-  checkGetDatatype(IdOrLiteralOrIriVec{DateId}, IdOrLiteralOrIriVec{U});
-  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromInt(2)},
-                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId1},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#dateTime>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId2},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId3},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId4},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#date>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#decimal>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromBool(false)},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(true)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
   checkGetDatatype(
       IdOrLiteralOrIriVec{lit("")},
       IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});

@@ -29,8 +29,10 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
-// Return type for `LiteralValueGetter`
-using OptLiteral = std::optional<ad_utility::triple_component::Literal>;
+// Return type for `makeDatatypeValueGetter`.
+using LiteralOrString =
+    std::variant<std::monostate, ad_utility::triple_component::Literal,
+                 std::string>;
 
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
 // general args to a numeric value (-> `int64_t or double`).
@@ -243,18 +245,15 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
                           const EvaluationContext*) const;
 };
 
-// `LiteralValueGetter` returns an std::optional<Literal> object.
-// Remark: probably better to template it in combination with
-// IriValueGetter from other pull request later on
-struct LiteralValueGetter : Mixin<LiteralValueGetter> {
-  using Mixin<LiteralValueGetter>::operator();
-  OptLiteral operator()(
-      [[maybe_unused]] ValueId id,
-      [[maybe_unused]] const EvaluationContext* context) const {
-    return std::nullopt;
-  }
-  OptLiteral operator()(const LiteralOrIri& litOrIri,
-                        const EvaluationContext* context) const;
+// ValueGetter for implementation of datatype() in RdfTermExpressions.cpp.
+// Returns an object of type std::variant<std::monostate,
+// ad_utility::triple_component::Literal, std::string> object.
+struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
+  using Mixin<makeDatatypeValueGetter>::operator();
+  LiteralOrString operator()(ValueId id,
+                             const EvaluationContext* context) const;
+  LiteralOrString operator()(const LiteralOrIri& litOrIri,
+                             const EvaluationContext* context) const;
 };
 
 }  // namespace sparqlExpression::detail

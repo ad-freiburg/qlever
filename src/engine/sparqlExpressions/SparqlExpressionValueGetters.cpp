@@ -173,12 +173,35 @@ IntDoubleStr ToNumericValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-OptLiteral LiteralValueGetter::operator()(
+LiteralOrString makeDatatypeValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  // 1. false: don't remove the brackets (easier to make an explicit literal
+  // later on)  2. false: we also want to consider other "typed" types w.r.t. to
+  // DATATYPE()
+  auto optionalStringAndType =
+      ExportQueryExecutionTrees::idToStringAndType<false, false, std::identity>(
+          context->_qec.getIndex(), id, context->_localVocab);
+  if (!optionalStringAndType.has_value()) {
+    return std::monostate{};
+  } else {
+    auto strAndType = optionalStringAndType.value();
+    auto str = strAndType.first;
+    auto dt = strAndType.second;
+    if (dt == nullptr || dt[0] == '\0') {
+      return std::move(optionalStringAndType.value().first);
+    } else {
+      return absl::StrCat("\"", str, "\"^^<", dt, ">");
+    }
+  }
+}
+
+// ____________________________________________________________________________
+LiteralOrString makeDatatypeValueGetter::operator()(
     const LiteralOrIri& litOrIri,
     [[maybe_unused]] const EvaluationContext* context) const {
   if (litOrIri.isLiteral()) {
     return litOrIri.getLiteral();
   } else {
-    return std::nullopt;
+    return std::monostate{};
   }
 }

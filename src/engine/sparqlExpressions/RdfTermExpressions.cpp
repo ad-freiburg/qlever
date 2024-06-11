@@ -8,31 +8,41 @@ using Lit = ad_utility::triple_component::Literal;
 using IRI = ad_utility::triple_component::Iri;
 
 namespace sparqlExpression {
-namespace detail {
+namespace detail::rdf_expressions {
 
 inline auto getIri = [](std::string_view str) {
   return IRI::fromStringRepresentation(absl::StrCat("<"sv, str, ">"sv));
 };
 
-inline auto getDatatype = [](OptLiteral input) -> IdOrLiteralOrIri {
-  if (!input.has_value()) {
-    return Id::makeUndefined();
+template <auto FuncIri>
+inline auto getDatatypeForLit = [](Lit literal) {
+  if (literal.hasDatatype()) {
+    return LiteralOrIri{FuncIri(asStringViewUnsafe(literal.getDatatype()))};
+  } else if (literal.hasLanguageTag()) {
+    return LiteralOrIri{FuncIri(RDF_LANGTAG_STRING)};
   } else {
-    Lit literal = input.value();
-    if (literal.hasDatatype()) {
-      return LiteralOrIri{getIri(asStringViewUnsafe(literal.getDatatype()))};
-    } else if (literal.hasLanguageTag()) {
-      return LiteralOrIri{getIri(RDF_LANGTAG_STRING)};
-    } else {
-      return LiteralOrIri{getIri(XSD_STRING)};
-    }
+    return LiteralOrIri{FuncIri(XSD_STRING)};
+  }
+};
+constexpr auto getDatatypeIri = getDatatypeForLit<getIri>;
+
+// ____________________________________________________________________________
+inline auto getDatatype = [](LiteralOrString input) -> IdOrLiteralOrIri {
+  if (std::holds_alternative<Lit>(input)) {
+    return getDatatypeIri(std::get<Lit>(input));
+  } else if (std::holds_alternative<std::string>(input)) {
+    return getDatatypeIri(
+        Lit::fromStringRepresentation(std::get<std::string>(input)));
+  } else {
+    AD_CORRECTNESS_CHECK(std::holds_alternative<std::monostate>(input));
+    return Id::makeUndefined();
   }
 };
 
-using GetDatatype = NARY<1, FV<decltype(getDatatype), LiteralValueGetter>>;
-}  //  namespace detail
+using GetDatatype = NARY<1, FV<decltype(getDatatype), makeDatatypeValueGetter>>;
+}  //  namespace detail::rdf_expressions
 
-using namespace detail;
+using namespace detail::rdf_expressions;
 using Expr = SparqlExpression::Ptr;
 
 Expr makeDatatypeExpression(Expr child) {
