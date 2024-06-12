@@ -184,9 +184,7 @@ LiteralOrString makeDatatypeValueGetter::operator()(
   if (!optionalStringAndType.has_value()) {
     return std::monostate{};
   } else {
-    auto strAndType = optionalStringAndType.value();
-    auto str = strAndType.first;
-    auto dt = strAndType.second;
+    const auto& [str, dt] = optionalStringAndType.value();
     if (dt == nullptr || dt[0] == '\0') {
       return str;
     } else {

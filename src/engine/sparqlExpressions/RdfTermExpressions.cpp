@@ -8,14 +8,14 @@ using Lit = ad_utility::triple_component::Literal;
 using IRI = ad_utility::triple_component::Iri;
 
 namespace sparqlExpression {
-namespace detail::rdf_expressions {
+namespace detail::rdfExpressions {
 
 inline auto getIri = [](std::string_view str) {
   return IRI::fromStringRepresentation(absl::StrCat("<"sv, str, ">"sv));
 };
 
 template <auto FuncIri>
-inline auto getDatatypeForLit = [](Lit literal) {
+inline auto getDatatypeForLit = [](const Lit& literal) {
   if (literal.hasDatatype()) {
     return LiteralOrIri{FuncIri(asStringViewUnsafe(literal.getDatatype()))};
   } else if (literal.hasLanguageTag()) {
@@ -40,9 +40,10 @@ inline auto getDatatype = [](LiteralOrString input) -> IdOrLiteralOrIri {
 };
 
 using GetDatatype = NARY<1, FV<decltype(getDatatype), makeDatatypeValueGetter>>;
-}  //  namespace detail::rdf_expressions
 
-using namespace detail::rdf_expressions;
+}  //  namespace detail::rdfExpressions
+
+using namespace detail::rdfExpressions;
 using Expr = SparqlExpression::Ptr;
 
 Expr makeDatatypeExpression(Expr child) {
