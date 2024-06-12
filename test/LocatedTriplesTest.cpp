@@ -101,22 +101,24 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {3, 30, 30}   // Row 5
     });
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
         LT{1, IT(1, 10, 10), false},  // Delete row 0
         LT{1, IT(1, 10, 11), true},   // Insert before row 1
         LT{1, IT(2, 11, 10), true},   // Insert before row 1
-        LT{1, IT(2, 21, 11), true},   // Insert before row 4
         LT{1, IT(2, 30, 10), true},   // Insert before row 4
         LT{1, IT(2, 30, 20), false},  // Delete row 4
-        LT{1, IT(3, 30, 30), false}   // Delete row 5
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
     IdTable resultExpected = makeIdTableFromVector({
+        {1, 5, 10},
         {1, 10, 11},  // LT 2
         {2, 11, 10},  // LT 3
         {2, 15, 20},  // orig. Row 1
         {2, 15, 30},  // orig. Row 2
         {2, 20, 10},  // orig. Row 3
-        {2, 21, 11},  // LT 4
-        {2, 30, 10}   // LT 5
+        {2, 30, 10},  // LT 4
+        {4, 10, 10}   // LT 7
     });
 
     mergeAndCheck(block.clone(), resultExpected, locatedTriplesPerBlock);
@@ -293,10 +295,11 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Locate the following triples, some of which exist in the relation and
     // some of which do not, and which cover a variety of positons, including
     // triples that are larger than all existing triples.
-    std::vector<IdTriple> triplesToLocate{IT(2, 15, 20),   // Equals Row 2
+    std::vector<IdTriple> triplesToLocate{IT(1, 5, 10),    // Before Row 0
+                                          IT(1, 15, 10),   // Before Row 1
+                                          IT(2, 10, 10),   // Equals Row 1
                                           IT(2, 14, 20),   // Before Row 2
                                           IT(2, 20, 10),   // Equals Row 4
-                                          IT(2, 30, 20),   // Equals Row 5
                                           IT(2, 30, 30),   // Equals Row 6
                                           IT(2, 30, 31),   // Before Row 7
                                           IT(9, 30, 32)};  // Larger than all.
@@ -309,9 +312,10 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // With block size 8, we have each triple in its own block.
     testWithGivenBlockSize(
         triplesInIndex, triplesToLocate, 8_B,
-        {{2, {LT(2, IT(2, 14, 20), false), LT(2, IT(2, 15, 20), false)}},
+        {{0, {LT(0, IT(1, 5, 10), false)}},
+         {1, {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false)}},
+         {2, {LT(2, IT(2, 14, 20), false)}},
          {4, {LT(4, IT(2, 20, 10), false)}},
-         {5, {LT(5, IT(2, 30, 20), false)}},
          {6, {LT(6, IT(2, 30, 30), false)}},
          {7, {LT(7, IT(2, 30, 31), false)}},
          {8, {LT(8, IT(9, 30, 32), false)}}});
@@ -320,9 +324,12 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7).
     testWithGivenBlockSize(
         triplesInIndex, triplesToLocate, 16_B,
-        {{1, {LT(1, IT(2, 14, 20), false), LT(1, IT(2, 15, 20), false)}},
+        {{0, {LT(0, IT(1, 5, 10), false)}},
+         {1,
+          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+           LT(1, IT(2, 14, 20), false)}},
          {2, {LT(2, IT(2, 20, 10), false)}},
-         {3, {LT(3, IT(2, 30, 20), false), LT(3, IT(2, 30, 30), false)}},
+         {3, {LT(3, IT(2, 30, 30), false)}},
          {4, {LT(4, IT(2, 30, 31), false)}},
          {5, {LT(5, IT(9, 30, 32), false)}}});
 
@@ -331,10 +338,11 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // relation that spans multiple blocks has these blocks on its own.
     testWithGivenBlockSize(
         triplesInIndex, triplesToLocate, 32_B,
-        {{1,
-          {LT(1, IT(2, 14, 20), false), LT(1, IT(2, 15, 20), false),
-           LT(1, IT(2, 20, 10), false)}},
-         {2, {LT(2, IT(2, 30, 20), false), LT(2, IT(2, 30, 30), false)}},
+        {{0, {LT(0, IT(1, 5, 10), false)}},
+         {1,
+          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+           LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false)}},
+         {2, {LT(2, IT(2, 30, 30), false)}},
          {3, {LT(3, IT(2, 30, 31), false)}},
          {4, {LT(4, IT(9, 30, 32), false)}}});
 
@@ -342,23 +350,22 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // 1+2+3+4+5+6, Block 2 = Row 7).
     testWithGivenBlockSize(
         triplesInIndex, triplesToLocate, 48_B,
-        {{1,
-          {LT(1, IT(2, 14, 20), false), LT(1, IT(2, 15, 20), false),
-           LT(1, IT(2, 20, 10), false), LT(1, IT(2, 30, 20), false),
+        {{0, {LT(0, IT(1, 5, 10), false)}},
+         {1,
+          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+           LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false),
            LT(1, IT(2, 30, 30), false)}},
          {2, {LT(2, IT(2, 30, 31), false)}},
          {3, {LT(3, IT(9, 30, 32), false)}}});
-
-    testWithGivenBlockSize(triplesInIndex, {IT(1, 10, 10)}, 48_B,
-                           {{0, {LT(0, IT(1, 10, 10), false)}}});
 
     // With block size 100'000, we have one block.
     testWithGivenBlockSize(
         triplesInIndex, triplesToLocate, 100'000_B,
         {{0,
-          {LT(0, IT(2, 14, 20), false), LT(0, IT(2, 15, 20), false),
-           LT(0, IT(2, 20, 10), false), LT(0, IT(2, 30, 20), false),
-           LT(0, IT(2, 30, 30), false), LT(0, IT(2, 30, 31), false)}},
+          {LT(0, IT(1, 5, 10), false), LT(0, IT(1, 15, 10), false),
+           LT(0, IT(2, 10, 10), false), LT(0, IT(2, 14, 20), false),
+           LT(0, IT(2, 20, 10), false), LT(0, IT(2, 30, 30), false),
+           LT(0, IT(2, 30, 31), false)}},
          {1, {LT(1, IT(9, 30, 32), false)}}});
   }
 
