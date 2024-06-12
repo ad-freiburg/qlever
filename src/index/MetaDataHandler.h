@@ -68,7 +68,7 @@ class MetaDataWrapperDense {
   MetaDataWrapperDense& operator=(MetaDataWrapperDense<M>&& other) = default;
 
   // Templated setup version
-  // Arguments are passsed through to template argument M.
+  // Arguments are passed through to template argument M.
   // TODO<joka921>: enable_if  for better error messages
   template <typename... Args>
   void setup(Args... args) {

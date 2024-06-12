@@ -28,7 +28,7 @@ class LangExpression : public SparqlExpression {
 
   // The following methods are required for the virtual interface of
   // `SparqlExpression`, but they will always fail at runtime when executed. All
-  // occurences of `LanguageExpression` should be detected and dealt with by the
+  // occurrences of `LanguageExpression` should be detected and dealt with by the
   // parser before any of these methods is ever called.
   ExpressionResult evaluate(EvaluationContext*) const override { AD_FAIL(); }
 

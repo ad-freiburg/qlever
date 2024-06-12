@@ -271,7 +271,7 @@ class ResultTable : public BenchmarkMetadataGetter {
 
  private:
   /*
-  @brief Sets the member variables for the constructure functions.
+  @brief Sets the member variables for the constructor functions.
 
   @param descriptor A string to identify this instance in json format later.
   @param descriptorForLog A string to identify this instance in the log.

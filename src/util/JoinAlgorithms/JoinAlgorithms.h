@@ -662,7 +662,7 @@ class BlockAndSubrange {
 
 // A helper struct for the zipper join on blocks algorithm (see below). It
 // combines the current iterator, then end iterator, the relevant projection to
-// obtain the input to the comparsion, and a buffer for blocks that are
+// obtain the input to the comparison, and a buffer for blocks that are
 // currently required by the join algorithm for one side of the join.
 template <typename Iterator, typename End, typename Projection>
 struct JoinSide {

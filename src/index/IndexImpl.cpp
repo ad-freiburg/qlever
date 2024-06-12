@@ -33,7 +33,7 @@
 using std::array;
 using namespace ad_utility::memory_literals;
 
-// During the index building we typically have two permutation sortings present
+// During the index building we typically have two permutation sorting present
 // at the same time, as we directly push the triples from the first sorting to
 // the second sorting. We therefore have to adjust the amount of memory per
 // external sorter.
@@ -152,7 +152,7 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
   // The column with index 1 always is `has-predicate` and is not needed here.
-  // Note that the order of the columns during index building  is alwasy `SPO`,
+  // Note that the order of the columns during index building  is always `SPO`,
   // but the sorting might be different (PSO in this case).
   auto lazyPatternScan = lazyScanWithPermutedColumns(
       hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});

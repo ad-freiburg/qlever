@@ -522,7 +522,7 @@ class CompressedRelationReader {
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to. Throw an exception if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
-  // index scans between joining them to get better estimates for the begginning
+  // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
       const MetadataAndBlocks& metadataAndBlocks) const;

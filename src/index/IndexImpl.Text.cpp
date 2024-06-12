@@ -25,7 +25,7 @@ namespace {
 
 // Custom delimiter class for tokenization of literals using `absl::StrSplit`.
 // The `Find` function returns the next delimiter in `text` after the given
-// `pos` or an empty subtring if there is no next delimiter.
+// `pos` or an empty substring if there is no next delimiter.
 struct LiteralsTokenizationDelimiter {
   absl::string_view Find(absl::string_view text, size_t pos) {
     auto isWordChar = [](char c) -> bool { return std::isalnum(c); };

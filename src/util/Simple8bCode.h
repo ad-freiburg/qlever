@@ -127,7 +127,7 @@ class Simple8bCode {
         }
         // Check that the max value (60 bit) is not exceeded.
         // I put it here to same some for this check, otherwise we must
-        // for each elements in hte plaintext do this check.
+        // for each elements in the plaintext do this check.
         assert(get(nofElementsEncoded + nofItemsInWord) <= 0x0FFFFFFFFFFFFFFF);
       }
     }

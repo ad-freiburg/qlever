@@ -42,7 +42,7 @@ class ConfigOption {
 
  private:
   /*
-  Holds the type dependant data of the class, because the class is not a
+  Holds the type dependent data of the class, because the class is not a
   templated class, but sometimes behaves like one.
   */
   template <typename T>

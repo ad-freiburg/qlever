@@ -65,7 +65,7 @@ class RegexExpression : public SparqlExpression {
 namespace detail {
 // Check if `regex` is a prefix regex which means that it starts with `^` and
 // contains no other "special" regex characters like `*` or `.`. If this check
-// suceeds, the prefix is returned without the leading `^` and with all escaping
+// succeeds, the prefix is returned without the leading `^` and with all escaping
 // undone. Else, `std::nullopt` is returned.
 std::optional<std::string> getPrefixRegex(std::string regex);
 }  // namespace detail

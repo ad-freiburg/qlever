@@ -477,7 +477,7 @@ TEST_P(TransitivePathTest, zeroLengthException) {
   AD_EXPECT_THROW_WITH_MESSAGE(
       T->computeResultOnlyForTesting(),
       ::testing::ContainsRegex(
-          "This query might have to evalute the empty path, which is currently "
+          "This query might have to evaluate the empty path, which is currently "
           "not supported"));
 }
 

@@ -75,7 +75,7 @@ std::shared_ptr<const Result> Operation::getResult(
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
-    // Reset runtime info, tests may re-use Operation objects.
+    // Reset runtime info, tests may reuse Operation objects.
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
@@ -150,7 +150,7 @@ std::shared_ptr<const Result> Operation::getResult(
       // `QueryPlanner` does currently only set the limit for operations that
       // support it natively, except for operations in subqueries. This means
       // that a lot of the time the limit is only artificially applied during
-      // export, allowing the cache to re-use the same operation for different
+      // export, allowing the cache to reuse the same operation for different
       // limits and offsets.
       if (!supportsLimit()) {
         ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};

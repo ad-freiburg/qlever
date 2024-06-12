@@ -100,7 +100,7 @@ class ConfigOptionValidatorManager {
   */
   std::function<void(void)> wrappedValidatorFunction_;
 
-  // A descripton of the invariant, this validator imposes.
+  // A description of the invariant, this validator imposes.
   std::string descriptor_;
 
   // Pointer to the `configOption`, that will be checked.

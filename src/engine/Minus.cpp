@@ -99,7 +99,7 @@ void Minus::computeMinus(
     const IdTable& dynA, const IdTable& dynB,
     const std::vector<std::array<ColumnIndex, 2>>& joinColumns,
     IdTable* dynResult) const {
-  // Substract dynB from dynA. The result should be all result mappings mu
+  // Subtract dynB from dynA. The result should be all result mappings mu
   // for which all result mappings mu' in dynB are not compatible (one value
   // for a variable defined in both differs) or the domain of mu and mu' are
   // disjoint (mu' defines no solution for any variables for which mu defines a

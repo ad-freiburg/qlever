@@ -241,7 +241,7 @@ class HeapBasedPQ {
     const Value& value() const { return mData->mValue; }
     Value& value() { return mData->mValue; }
 
-    // was the value asociated with this handle already deleted because of an
+    // was the value associated with this handle already deleted because of an
     // erase operation
     bool isValid() const { return (mData->mScore).index() == 1; };
 

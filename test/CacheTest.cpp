@@ -69,7 +69,7 @@ TEST(LRUCacheTest, testSimpleMapUsage) {
   ASSERT_EQ(*cache["5"], "xxxxx");
   // Non-existing elements must yield shared_ptr<const Value>(nullptr)
   // this bool converts to false
-  ASSERT_FALSE(cache["non-existant"]);
+  ASSERT_FALSE(cache["non-existent"]);
 }
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsageWithDrop) {

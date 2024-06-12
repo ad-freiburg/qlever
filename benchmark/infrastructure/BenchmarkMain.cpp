@@ -33,7 +33,7 @@ using namespace ad_benchmark;
 @brief Transform the given benchmark classes and corresponding results to
 json, and write them to the specified json file.
 
-@param benchmarkClassAndResults The benchmark classes togehter with their
+@param benchmarkClassAndResults The benchmark classes together with their
 results of running `runAllBenchmarks`.
 @param jsonFileName The name of the json file, where the json informationen
 should be written in.
@@ -107,7 +107,7 @@ static __attribute__((noreturn)) void printConfigurationOptionsAndExit() {
  * and prints their measured time in a fitting format.
  */
 int main(int argc, char** argv) {
-  // The filename, should the write option be choosen.
+  // The filename, should the write option be chosen.
   std::string writeFileName = "";
   // The short hand, for the benchmark configuration.
   std::string shortHandConfigurationString = "";
@@ -158,7 +158,7 @@ int main(int argc, char** argv) {
   po::store(po::parse_command_line(argc, argv, options), vm);
   po::notify(vm);
 
-  // If write was choosen, then the given file must be a json file.
+  // If write was chosen, then the given file must be a json file.
   if (vm.count("write") && !writeFileName.ends_with(".json")) {
     std::cerr << "The file defined via `--write` must be a `.json` file.\n";
     printUsageAndExit();
@@ -202,7 +202,7 @@ int main(int argc, char** argv) {
   Pairing the measured times up together with the the benchmark classes,
   that created them. Note: All the classes registered in `BenchmarkRegister`
   are always ran in the same order. So the benchmark class and benchmark
-  results are always at the same index position, and are grouped togehter
+  results are always at the same index position, and are grouped together
   correctly.
   */
   const auto& benchmarkClassAndResults{ad_utility::zipVectors(

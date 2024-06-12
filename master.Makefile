@@ -17,7 +17,7 @@ SHELL = /bin/bash
 # clear-unpinned: Clear all unpinned results from the cache. This is exactly
 #                 what happens when clicking "Clear cache" in the QLever UI.
 #
-# show-all-ac-queries: Show the AC queries for subject, predicat, object for
+# show-all-ac-queries: Show the AC queries for subject, predicate, object for
 #                      copy&paste in the QLever UI backend settings.
 
 # This Makefile should be used as follows:
@@ -112,7 +112,7 @@ show-config-default:
 CAT_TTL = cat $(DB).ttl
 
 index:
-	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove_index, which would exeucte the following:\033[0m"; echo; make -sn remove_index; echo; else \
+	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove_index, which would execute the following:\033[0m"; echo; make -sn remove_index; echo; else \
 	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) $(TEXT_OPTIONS_INDEX) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* ) \
 	fi
 

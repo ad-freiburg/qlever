@@ -893,7 +893,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
-      // to make these checks more explicity.
+      // to make these checks more explicitly.
       Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());

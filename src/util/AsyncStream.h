@@ -45,7 +45,7 @@ cppcoro::generator<typename Range::value_type> runStreamAsync(
     queue.finish();
   }};
 
-  // Only rethrow an exception from the `thread` if no exception occured in this
+  // Only rethrow an exception from the `thread` if no exception occurred in this
   // thread to avoid crashes because of multiple active exceptions.
   auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
       [&queue, &thread, &exception] {

@@ -61,7 +61,7 @@ class SortPerformanceEstimator {
   static constexpr size_t NUM_SAMPLES_COLS = sampleValuesCols.size();
   static constexpr size_t NUM_SAMPLES_ROWS = sampleValuesRows.size();
 
-  // The time in seconds for the samples that are sorted during initializtion.
+  // The time in seconds for the samples that are sorted during initialization.
   // _samples[i][j] is the measured time it takes to sort an IdTable with
   // sampleValuesRows[i] rows and sampleValuesCols[j] columns.
   // The values are default-initialized to 0.
