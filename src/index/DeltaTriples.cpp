@@ -153,14 +153,3 @@ const LocatedTriplesPerBlock& DeltaTriples::getTriplesWithPositionsPerBlock(
       AD_FAIL();
   }
 }
-
-// ____________________________________________________________________________
-IdTriple DeltaTriples::getIdTriple(const TurtleTriple& turtleTriple) {
-  TripleComponent subject = turtleTriple.subject_;
-  TripleComponent predicate = turtleTriple.predicate_;
-  TripleComponent object = turtleTriple.object_;
-  Id subjectId = std::move(subject).toValueId(index_.getVocab(), localVocab_);
-  Id predId = std::move(predicate).toValueId(index_.getVocab(), localVocab_);
-  Id objectId = std::move(object).toValueId(index_.getVocab(), localVocab_);
-  return IdTriple{subjectId, predId, objectId};
-}

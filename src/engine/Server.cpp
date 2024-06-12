@@ -615,7 +615,7 @@ nlohmann::json Server::executeUpdateQuery(
   step.start();
 
   auto& vocab = qet.getQec()->getIndex().getVocab();
-  auto localVocab = LocalVocab();
+  LocalVocab& localVocab = index.deltaTriples().localVocab();
   using IdOrVariable = std::variant<Id, Variable>;
 
   auto transformSparqlTripleComponent =

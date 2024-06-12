@@ -95,14 +95,6 @@ class DeltaTriples {
   // TODO: made public as long as we are trying to figure out how this works.
  private:
  public:
-  // Get triples of `Id`s from `TurtleTriple` (which is the kind of triple we
-  // get from `TurtleParser`, see the code currently handling insertions and
-  // deletions in `Server.cpp`).
-  //
-  // NOTE: This is not `const` because translating to IDs may augment the local
-  // vocabulary.
-  IdTriple getIdTriple(const TurtleTriple& turtleTriple);
-
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
   // Return the iterators of where it was added (so that we can easily delete it
