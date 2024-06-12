@@ -759,7 +759,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     @brief The generated lambda returns true, iff if it is called with a value,
     that is bigger than the given minimum value
 
-    @param canBeEqual If true, the generated lamba also returns true, if the
+    @param canBeEqual If true, the generated lambda also returns true, if the
     values are equal.
     */
     auto generateBiggerEqualLambda = []<typename T>(const T& minimumValue,

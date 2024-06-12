@@ -1532,7 +1532,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
     LOG(INFO) << asString() << std::endl;
     LOG(INFO) << other.asString() << std::endl;
     LOG(INFO) << "Two nodes in this graph were matches to the same node in "
-                 "the other grap"
+                 "the other graph"
               << std::endl;
     return false;
   }
