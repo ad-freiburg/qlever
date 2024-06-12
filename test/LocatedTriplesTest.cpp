@@ -111,7 +111,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
     IdTable resultExpected = makeIdTableFromVector({
-        {1, 5, 10},
+        {1, 5, 10},   // LT 1
         {1, 10, 11},  // LT 2
         {2, 11, 10},  // LT 3
         {2, 15, 20},  // orig. Row 1

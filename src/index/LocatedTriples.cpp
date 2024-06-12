@@ -131,12 +131,19 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
       return (row[0] == lt->triple[2]);
     }
   };
-
-  while (numIndexColumns == 3 && locatedTriple != locatedTriples.end() &&
-         cmpLt(locatedTriple, block[0])) {
-    LOG(INFO) << "Skipping LocatedTriple " << *locatedTriple << std::endl;
-    ++locatedTriple;
-  }
+  auto writeTripleToResult = [&resultEntry, &locatedTriple,
+                              &numIndexColumns]() {
+    if (numIndexColumns == 1) {
+      (*resultEntry)[0] = locatedTriple->triple[2];
+    } else if (numIndexColumns == 2) {
+      (*resultEntry)[0] = locatedTriple->triple[1];
+      (*resultEntry)[1] = locatedTriple->triple[2];
+    } else {
+      (*resultEntry)[0] = locatedTriple->triple[0];
+      (*resultEntry)[1] = locatedTriple->triple[1];
+      (*resultEntry)[2] = locatedTriple->triple[2];
+    }
+  };
 
   for (size_t rowIndex = 0; rowIndex < block.size(); ++rowIndex) {
     // Append triples that are marked for insertion at this `rowIndex` to the
@@ -145,16 +152,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     while (locatedTriple != locatedTriples.end() &&
            cmpLt(locatedTriple, block[rowIndex]) &&
            locatedTriple->shouldTripleExist == true) {
-      if (numIndexColumns == 1) {
-        (*resultEntry)[0] = locatedTriple->triple[2];
-      } else if (numIndexColumns == 2) {
-        (*resultEntry)[0] = locatedTriple->triple[1];
-        (*resultEntry)[1] = locatedTriple->triple[2];
-      } else {
-        (*resultEntry)[0] = locatedTriple->triple[0];
-        (*resultEntry)[1] = locatedTriple->triple[1];
-        (*resultEntry)[2] = locatedTriple->triple[2];
-      }
+      writeTripleToResult();
       ++resultEntry;
       ++locatedTriple;
       LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
@@ -175,6 +173,13 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
       *resultEntry++ = block[rowIndex];
     }
   };
+  while (locatedTriple != locatedTriples.end() &&
+         locatedTriple->shouldTripleExist == true) {
+    writeTripleToResult();
+    ++resultEntry;
+    ++locatedTriple;
+    LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
+  }
 
   // Return the number of rows written to `result`.
   return resultEntry - (result.begin() + offsetInResult);
