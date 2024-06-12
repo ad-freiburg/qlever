@@ -20,11 +20,8 @@ struct LocatedTriple {
   // The `Id`s of the triple in the order of the permutation. For example,
   // for an object pertaining to the OPS permutation: `id1` is the object,
   // `id2` is the predicate, and `id3` is the subject.
-  Id id1;
-  Id id2;
-  Id id3;
+  IdTriple triple;
 
-  IdTriple getIdTriple() const { return {id1, id2, id3}; }
   // Flag that is true the given triple should be inserted and false if should
   // be deleted.
   bool shouldTripleExist;
@@ -51,7 +48,7 @@ struct LocatedTriple {
 // of the order makes it clearer.
 struct LocatedTripleCompare {
   bool operator()(const LocatedTriple& x, const LocatedTriple& y) const {
-    return IdTriple{x.id1, x.id2, x.id3} < IdTriple{y.id1, y.id2, y.id3};
+    return x.triple < y.triple;
   }
 };
 using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;

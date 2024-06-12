@@ -45,8 +45,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
                            return false;
                          }) -
         blocks.begin();
-    out.push_back(
-        {currentBlockIndex, triple[0], triple[1], triple[2], shouldExist});
+    out.push_back({currentBlockIndex, triple, shouldExist});
   }
 
   return out;
@@ -108,25 +107,28 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   auto cmpLt = [&numIndexColumns](auto lt, auto row) {
     LOG(INFO) << "Comparing " << *lt << " < " << row << std::endl;
     if (numIndexColumns == 3) {
-      return (row[0] > lt->id1 ||
-              (row[0] == lt->id1 &&
-               (row[1] > lt->id2 || (row[1] == lt->id2 && row[2] > lt->id3))));
+      return (row[0] > lt->triple[0] ||
+              (row[0] == lt->triple[0] &&
+               (row[1] > lt->triple[1] ||
+                (row[1] == lt->triple[1] && row[2] > lt->triple[2]))));
     } else if (numIndexColumns == 2) {
-      return (row[0] > lt->id2 || (row[0] == lt->id2 && (row[1] > lt->id3)));
+      return (row[0] > lt->triple[1] ||
+              (row[0] == lt->triple[1] && (row[1] > lt->triple[2])));
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return (row[0] > lt->id3);
+      return (row[0] > lt->triple[2]);
     }
   };
   auto cmpEq = [&numIndexColumns](auto lt, auto row) {
     LOG(INFO) << "Comparing " << *lt << " == " << row << std::endl;
     if (numIndexColumns == 3) {
-      return (row[0] == lt->id1 && row[1] == lt->id2 && row[2] == lt->id3);
+      return (row[0] == lt->triple[0] && row[1] == lt->triple[1] &&
+              row[2] == lt->triple[2]);
     } else if (numIndexColumns == 2) {
-      return (row[0] == lt->id2 && row[1] == lt->id3);
+      return (row[0] == lt->triple[1] && row[1] == lt->triple[2]);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return (row[0] == lt->id3);
+      return (row[0] == lt->triple[2]);
     }
   };
 
@@ -144,14 +146,14 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
            cmpLt(locatedTriple, block[rowIndex]) &&
            locatedTriple->shouldTripleExist == true) {
       if (numIndexColumns == 1) {
-        (*resultEntry)[0] = locatedTriple->id3;
+        (*resultEntry)[0] = locatedTriple->triple[2];
       } else if (numIndexColumns == 2) {
-        (*resultEntry)[0] = locatedTriple->id2;
-        (*resultEntry)[1] = locatedTriple->id3;
+        (*resultEntry)[0] = locatedTriple->triple[1];
+        (*resultEntry)[1] = locatedTriple->triple[2];
       } else {
-        (*resultEntry)[0] = locatedTriple->id1;
-        (*resultEntry)[1] = locatedTriple->id2;
-        (*resultEntry)[2] = locatedTriple->id3;
+        (*resultEntry)[0] = locatedTriple->triple[0];
+        (*resultEntry)[1] = locatedTriple->triple[1];
+        (*resultEntry)[2] = locatedTriple->triple[2];
       }
       ++resultEntry;
       ++locatedTriple;
@@ -180,8 +182,8 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-  os << "LT(" << lt.blockIndex << " " << lt.id1 << " " << lt.id2 << " "
-     << lt.id3 << " " << lt.shouldTripleExist << ")";
+  os << "LT(" << lt.blockIndex << " " << lt.triple[0] << " " << lt.triple[1]
+     << " " << lt.triple[2] << " " << lt.shouldTripleExist << ")";
   return os;
 }
 
