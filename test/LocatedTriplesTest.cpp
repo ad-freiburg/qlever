@@ -24,11 +24,9 @@ class LocatedTriplesTest : public ::testing::Test {
   // Make `LocatedTriplesPerBlock` from a list of `LocatedTriple` objects (the
   // order in which the objects are given does not matter).
   LocatedTriplesPerBlock makeLocatedTriplesPerBlock(
-      std::vector<LocatedTriple> locatedTriples) {
+      const std::vector<LocatedTriple>& locatedTriples) {
     LocatedTriplesPerBlock result;
-    for (auto locatedTriple : locatedTriples) {
-      result.add(locatedTriple);
-    }
+    result.add(locatedTriples);
     return result;
   }
 };
@@ -131,35 +129,6 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable result(3, ad_utility::testing::makeAllocator());
     result.resize(resultExpected.size());
     locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0);
-    ASSERT_EQ(result, resultExpected);
-  }
-
-  // Repeat but with a partial block that leaves out the first two elements of
-  // `block`.
-  {
-    IdTable resultExpected = makeIdTableFromVector({{2, 15, 30},    // Row 0
-                                                    {2, 20, 10},    // Row 1
-                                                    {2, 21, 11},    // Row 2
-                                                    {2, 30, 10}});  // Row 3
-    IdTable result(3, ad_utility::testing::makeAllocator());
-    result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, block.clone(), result, 0, 2);
-    ASSERT_EQ(result, resultExpected);
-  }
-
-  // Merge only the triples with `id1 == V(2)` and `id2 == V(30)` into the
-  // corresponding partial block (one triple inserted, one triple deleted).
-  {
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {LocatedTriple{1, V(2), V(15), V(25), true},     // Insert before row 2
-         LocatedTriple{1, V(2), V(15), V(30), false}});  // Delete row 2
-    IdTable blockColumnId3 = block.clone();
-    dropFirstColumns(2, blockColumnId3);
-    IdTable resultExpected = makeIdTableFromVector({{20}, {25}});
-    IdTable result(1, ad_utility::testing::makeAllocator());
-    result.resize(resultExpected.size());
-    locatedTriplesPerBlock.mergeTriples(1, std::move(blockColumnId3), result, 0,
-                                        1, 3);
     ASSERT_EQ(result, resultExpected);
   }
 }

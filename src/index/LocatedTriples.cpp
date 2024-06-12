@@ -63,49 +63,21 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
     return {0, 0};
   }
 
-  // Otherwise iterate over all located triples and count how many of them exist
-  // in the index ("to be deleted") and how many are new ("to be inserted").
-  size_t countExists = 0;
-  size_t countNew = 0;
-  for (const LocatedTriple& locatedTriple : map_.at(blockIndex)) {
-    if (!scanSpec.col0Id() ||
-        (scanSpec.col0Id().value() == locatedTriple.id1 &&
-         (!scanSpec.col1Id() ||
-          (scanSpec.col1Id().value() == locatedTriple.id2 &&
-           (!scanSpec.col2Id() ||
-            scanSpec.col2Id().value() == locatedTriple.id3))))) {
-      if (locatedTriple.shouldTripleExist) {
-        ++countExists;
-      } else {
-        ++countNew;
-      }
-    }
-  }
-  return {countNew, countExists};
+  auto blockUpdateTriples = map_.at(blockIndex);
+  size_t countDeletes = std::count_if(
+      blockUpdateTriples.begin(), blockUpdateTriples.end(),
+      [](const LocatedTriple& elem) { return !elem.shouldTripleExist; });
+  size_t countInserts = blockUpdateTriples.size() - countDeletes;
+
+  return {countInserts, countDeletes};
 }
 
 size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
                                             IdTable& result,
-                                            size_t offsetInResult,
-                                            size_t rowIndexInBlockBegin,
-                                            size_t rowIndexInBlockEnd) const {
+                                            size_t offsetInResult) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
-
-  // If `rowIndexInBlockEnd` has the default value (see `LocatedTriples.h`), the
-  // intended semantics is that we read the whole block (note that we can't have
-  // a default value that depends on the values of previous arguments).
-  if (rowIndexInBlockEnd == LocatedTriple::NO_ROW_INDEX) {
-    rowIndexInBlockEnd = block.size();
-  }
-
-  // Check that `rowIndexInBlockBegin` and `rowIndexInBlockEnd` define a valid
-  // and non-emtpy range and that it is a subrange of `block` (unless the latter
-  // is `std::nullopt`).
-  AD_CONTRACT_CHECK(rowIndexInBlockBegin < block.size());
-  AD_CONTRACT_CHECK(rowIndexInBlockEnd <= block.size());
-  AD_CONTRACT_CHECK(rowIndexInBlockBegin < rowIndexInBlockEnd);
 
   // If we restrict `id1` and `id2`, the index block and the result must have
   // one column (for the `id3`). Otherwise, they must have two columns (for the
@@ -144,7 +116,8 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
                (row[1] > lt->id2 || (row[1] == lt->id2 && row[2] > lt->id3))));
     } else if (numIndexColumns == 2) {
       return (row[0] > lt->id2 || (row[0] == lt->id2 && (row[1] > lt->id3)));
-    } else if (numIndexColumns == 1) {
+    } else {
+      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
       return (row[0] > lt->id3);
     }
   };
@@ -154,19 +127,19 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
       return (row[0] == lt->id1 && row[1] == lt->id2 && row[2] == lt->id3);
     } else if (numIndexColumns == 2) {
       return (row[0] == lt->id2 && row[1] == lt->id3);
-    } else if (numIndexColumns == 1) {
+    } else {
+      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
       return (row[0] == lt->id3);
     }
   };
 
   while (numIndexColumns == 3 && locatedTriple != locatedTriples.end() &&
-         cmpLt(locatedTriple, block[rowIndexInBlockBegin])) {
+         cmpLt(locatedTriple, block[0])) {
     LOG(INFO) << "Skipping LocatedTriple " << *locatedTriple << std::endl;
     ++locatedTriple;
   }
 
-  for (size_t rowIndex = rowIndexInBlockBegin; rowIndex < rowIndexInBlockEnd;
-       ++rowIndex) {
+  for (size_t rowIndex = 0; rowIndex < block.size(); ++rowIndex) {
     // Append triples that are marked for insertion at this `rowIndex` to the
     // result.
     LOG(INFO) << "New Block Row " << block[rowIndex] << std::endl;

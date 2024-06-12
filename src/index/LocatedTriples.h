@@ -103,28 +103,18 @@ class LocatedTriplesPerBlock {
   // larger than all triples there. This requires that the ScanSpecification
   // has `col0Id` and `col1Id` set.
   //
-  size_t mergeTriples(
-      size_t blockIndex, IdTable block, IdTable& result, size_t offsetInResult,
-      size_t rowIndexInBlockBegin = 0,
-      size_t rowIndexInBlockEnd = LocatedTriple::NO_ROW_INDEX) const;
+  size_t mergeTriples(size_t blockIndex, IdTable block, IdTable& result,
+                      size_t offsetInResult) const;
 
-  // Add the given `locatedTriple` to the given `LocatedTriplesPerBlock`.
-  // Return a handle to where it was added (`LocatedTriples` is a sorted set,
-  // see above). We need this handle so that we can easily remove the
-  // `locatedTriple` from the set again in case we need to.
+  // Add the given `locatedTriples` to the given `LocatedTriplesPerBlock`.
+  // Return handles to where they were added (`LocatedTriples` is a sorted set,
+  // see above). We need the handles so that we can easily remove the
+  // `locatedTriples` from the set again in case we need to.
   //
-  // Precondition: The `locatedTriple` must not already exist in
+  // Precondition: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
-  LocatedTriples::iterator add(const LocatedTriple& locatedTriple) {
-    LocatedTriples& locatedTriples = map_[locatedTriple.blockIndex];
-    auto [handle, wasInserted] = locatedTriples.emplace(locatedTriple);
-    AD_CORRECTNESS_CHECK(wasInserted == true);
-    AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
-    ++numTriples_;
-    return handle;
-  };
   std::vector<LocatedTriples::iterator> add(
-      std::vector<LocatedTriple> locatedTriple) {
+      const std::vector<LocatedTriple>& locatedTriple) {
     std::vector<LocatedTriples::iterator> handles;
     handles.reserve(locatedTriple.size());
     for (auto triple : locatedTriple) {
