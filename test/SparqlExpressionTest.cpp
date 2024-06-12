@@ -752,6 +752,8 @@ TEST(SparqlExpression, strIriDtTagged) {
                  IdOrLiteralOrIriVec{U});
   checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
                  IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
+                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
 }
 
 // _____________________________________________________________________________________
