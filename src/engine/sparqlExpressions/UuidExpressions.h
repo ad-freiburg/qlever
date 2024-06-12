@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 
-// Test for UuidExpression can be found in RandomExpressionTest.cpp
+// Test for UuidExpressionImpl can be found in RandomExpressionTest.cpp
 
 #pragma once
 
@@ -11,6 +11,7 @@
 #include "util/Random.h"
 
 namespace sparqlExpression {
+namespace util::uuidExpression {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -27,19 +28,19 @@ inline constexpr auto fromIri = [](std::string_view str) {
 };
 
 inline constexpr auto litUuidKey = [](int64_t randId) {
-  return absl::StrCat("STRUUID "sv, std::to_string(randId));
+  return absl::StrCat("STRUUID "sv, randId);
 };
 
 inline constexpr auto iriUuidKey = [](int64_t randId) {
-  return absl::StrCat("UUID "sv, std::to_string(randId));
+  return absl::StrCat("UUID "sv, randId);
 };
 
-// With UuidExpression<fromIri, iriUuidKey>, the UUIDs are returned as an
+// With UuidExpressionImpl<fromIri, iriUuidKey>, the UUIDs are returned as an
 // Iri object: <urn:uuid:b9302fb5-642e-4d3b-af19-29a8f6d894c9> (example). With
-// UuidExpression<fromLiteral,, litUuidKey>, the UUIDs are returned as as an
+// UuidExpressionImpl<fromLiteral,, litUuidKey>, the UUIDs are returned as an
 // Literal object: "73cd4307-8a99-4691-a608-b5bda64fb6c1" (example).
 template <auto FuncConv, auto FuncKey>
-class UuidExpression : public SparqlExpression {
+class UuidExpressionImpl : public SparqlExpression {
  private:
   int64_t randId_ = ad_utility::FastRandomIntGenerator<int64_t>{}();
 
@@ -69,5 +70,11 @@ class UuidExpression : public SparqlExpression {
  private:
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
+
+}  //  namespace util::uuidExpression
+
+using namespace util::uuidExpression;
+using UuidExpression = UuidExpressionImpl<fromIri, iriUuidKey>;
+using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 
 }  // namespace sparqlExpression

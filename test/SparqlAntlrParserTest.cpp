@@ -1398,9 +1398,8 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
   expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
-  expectBuiltInCall("STRUUID()",
-                    matchPtr<UuidExpression<fromLiteral, litUuidKey>>());
-  expectBuiltInCall("UUID()", matchPtr<UuidExpression<fromIri, iriUuidKey>>());
+  expectBuiltInCall("STRUUID()", matchPtr<StrUuidExpression>());
+  expectBuiltInCall("UUID()", matchPtr<UuidExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE(?x, ?y, ?z)",

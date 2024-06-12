@@ -2018,10 +2018,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return std::make_unique<RandomExpression>();
   } else if (functionName == "uuid") {
     AD_CONTRACT_CHECK(argList.empty());
-    return std::make_unique<UuidExpression<fromIri, iriUuidKey>>();
+    return std::make_unique<UuidExpression>();
   } else if (functionName == "struuid") {
     AD_CONTRACT_CHECK(argList.empty());
-    return std::make_unique<UuidExpression<fromLiteral, litUuidKey>>();
+    return std::make_unique<StrUuidExpression>();
   } else if (functionName == "ceil") {
     return createUnary(&makeCeilExpression);
   } else if (functionName == "abs") {

@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <ctre.hpp>
 #include <random>
 #include <ranges>
 #include <type_traits>
@@ -241,16 +242,21 @@ TEST(UuidGeneratorTest, StrUuidGeneratorTest) {
   // "00000000-0000-0000-0000-000000000000" (nil-UUID)
   // and that none of the str-UUIDS is rquivalent to the already
   // created ones.
+  // Pattern for checking that UUID is properly formatted
+  static constexpr auto uuidPattern = ctll::fixed_string{
+      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
+      "3}-[0-9a-fA-F]{12}$"};
   boost::uuids::string_generator getUuid;
   UuidGenerator gen = UuidGenerator();
   std::unordered_set<std::string> setUuids;
-  size_t i = 100;
+  size_t i = 0;
   while (i < 100) {
-    std::string_view strUuid = gen();
+    std::string strUuid = gen();
     boost::uuids::uuid uuid = getUuid(strUuid.data());
     ASSERT_EQ(uuid.is_nil(), false);
-    ASSERT_EQ(setUuids.find(std::string(strUuid)), setUuids.end());
-    setUuids.insert(std::string(strUuid));
+    ASSERT_EQ(setUuids.find(strUuid), setUuids.end());
+    ASSERT_TRUE(ctre::match<uuidPattern>(strUuid));
+    setUuids.insert(strUuid);
     i++;
   }
 }

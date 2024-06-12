@@ -65,22 +65,22 @@ TEST(RandomExpression, simpleMemberFunctions) {
 // The tests for UUID expressions follow almost exactly the pattern
 // of the above defined test for RandomExpression.
 TEST(UuidExpression, simpleMemberFunctionStrUuid) {
-  UuidExpression<fromLiteral, litUuidKey> strUuid;
+  StrUuidExpression strUuid;
   ASSERT_TRUE(strUuid.getUnaggregatedVariables().empty());
   auto cacheKeyStrUuid = strUuid.getCacheKey({});
   ASSERT_THAT(cacheKeyStrUuid, ::testing::StartsWith("STRUUID "));
   ASSERT_EQ(cacheKeyStrUuid, strUuid.getCacheKey({}));
-  UuidExpression<fromLiteral, litUuidKey> strUuid2;
+  StrUuidExpression strUuid2;
   ASSERT_NE(cacheKeyStrUuid, strUuid2.getCacheKey({}));
 }
 
 TEST(UuidExpression, simpleMemberFunctionLitUuid) {
-  UuidExpression<fromIri, iriUuidKey> iriUuid;
+  UuidExpression iriUuid;
   ASSERT_TRUE(iriUuid.getUnaggregatedVariables().empty());
   auto cacheKeyIriUuid = iriUuid.getCacheKey({});
   ASSERT_THAT(cacheKeyIriUuid, ::testing::StartsWith("UUID "));
   ASSERT_EQ(cacheKeyIriUuid, iriUuid.getCacheKey({}));
-  UuidExpression<fromIri, iriUuidKey> iriUuid2;
+  UuidExpression iriUuid2;
   ASSERT_NE(cacheKeyIriUuid, iriUuid2.getCacheKey({}));
 }
 
@@ -89,8 +89,7 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
   auto& evaluationContext = testContext.context;
   evaluationContext._beginIndex = 43;
   evaluationContext._endIndex = 1044;
-  auto resultAsVariant =
-      UuidExpression<fromLiteral, litUuidKey>{}.evaluate(&evaluationContext);
+  auto resultAsVariant = StrUuidExpression{}.evaluate(&evaluationContext);
 
   using V = VectorWithMemoryLimit<IdOrLiteralOrIri>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
@@ -110,8 +109,7 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
   }
 
   evaluationContext._isPartOfGroupBy = true;
-  auto resultAsVariant2 =
-      UuidExpression<fromLiteral, litUuidKey>{}.evaluate(&evaluationContext);
+  auto resultAsVariant2 = StrUuidExpression{}.evaluate(&evaluationContext);
   ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
   IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
   ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(litOrIriUuid));
@@ -123,8 +121,7 @@ TEST(UuidExpression, evaluateUuidExpression) {
   auto& evaluationContext = testContext.context;
   evaluationContext._beginIndex = 43;
   evaluationContext._endIndex = 1044;
-  auto resultAsVariant =
-      UuidExpression<fromIri, iriUuidKey>{}.evaluate(&evaluationContext);
+  auto resultAsVariant = UuidExpression{}.evaluate(&evaluationContext);
 
   using V = VectorWithMemoryLimit<IdOrLiteralOrIri>;
   ASSERT_TRUE(std::holds_alternative<V>(resultAsVariant));
@@ -144,8 +141,7 @@ TEST(UuidExpression, evaluateUuidExpression) {
   }
 
   evaluationContext._isPartOfGroupBy = true;
-  auto resultAsVariant2 =
-      UuidExpression<fromIri, iriUuidKey>{}.evaluate(&evaluationContext);
+  auto resultAsVariant2 = UuidExpression{}.evaluate(&evaluationContext);
   ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
   IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
   ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(litOrIriUuid));
