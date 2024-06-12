@@ -97,11 +97,12 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
       continue;
     }
     numInputs += block.size();
-    auto beg = lastValueFromPreviousBlock
-                   ? std::ranges::find_if(
-                         block, [&p = lastValueFromPreviousBlock.value()](
-                                    const auto& el) { return el != p; })
-                   : block.begin();
+    auto beg =
+        lastValueFromPreviousBlock
+            ? std::ranges::find_if_not(
+                  block, [&p = lastValueFromPreviousBlock.value(), comparator](
+                             const auto& el) { return comparator(el, p); })
+            : block.begin();
     lastValueFromPreviousBlock = *(block.end() - 1);
     auto it = std::unique(beg, block.end(), comparator);
     block.erase(it, block.end());
