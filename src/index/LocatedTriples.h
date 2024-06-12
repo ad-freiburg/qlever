@@ -104,6 +104,8 @@ class LocatedTriplesPerBlock {
   std::vector<LocatedTriples::iterator> add(
       const std::vector<LocatedTriple>& locatedTriple);
 
+  void erase(size_t blockIndex, LocatedTriples::iterator iter);
+
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }
 
@@ -115,13 +117,15 @@ class LocatedTriplesPerBlock {
     map_.clear();
     numTriples_ = 0;
   }
+
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const LocatedTriplesPerBlock& ltpb);
 };
 
 // Human-readable representation of `LocatedTriple`, `LocatedTriples`, and
 // `LocatedTriplesPerBlock`, which are very useful for debugging.
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
-std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb);
 std::ostream& operator<<(std::ostream& os,
                          const columnBasedIdTable::Row<Id>& idTableRow);
 std::ostream& operator<<(std::ostream& os, const IdTable& idTable);

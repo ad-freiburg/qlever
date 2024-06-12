@@ -197,6 +197,13 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
 };
 
 // ____________________________________________________________________________
+void LocatedTriplesPerBlock::erase(size_t blockIndex,
+                                   LocatedTriples::iterator iter) {
+  AD_CONTRACT_CHECK(map_.contains(blockIndex));
+  map_[blockIndex].erase(iter);
+}
+
+// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
   os << "LT(" << lt.blockIndex << " " << lt.triple[0] << " " << lt.triple[1]
      << " " << lt.triple[2] << " " << lt.shouldTripleExist << ")";

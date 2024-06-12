@@ -704,16 +704,15 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
     auto col = decompressedBlock.getColumn(i);
     decompressColumn(compressedBlock[i], numRowsToRead, col.data());
   }
-  if (!locatedTriples.map_.contains(blockIndex)) {
+  auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
+  if (numInserts == 0 && numDeletes == 0) {
     // no updates in this block - return early
     return decompressedBlock;
   }
-  auto locatedTriplesThisBlock = locatedTriples.map_.at(blockIndex);
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
   DecompressedBlock decompressedBlockWithUpdate{decompressedBlock.numColumns(),
                                                 allocator};
-  decompressedBlockWithUpdate.resize(numRowsToRead +
-                                     locatedTriplesThisBlock.size());
+  decompressedBlockWithUpdate.resize(numRowsToRead + numInserts);
   locatedTriples.mergeTriples(blockIndex, std::move(decompressedBlock),
                               decompressedBlockWithUpdate, 0);
   return decompressedBlockWithUpdate;
@@ -732,15 +731,14 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
     decompressColumn(compressedBlock[i], numRowsToRead,
                      col.data() + offsetInTable);
   }
-  if (!locatedTriples.map_.contains(blockIndex)) {
+  auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
+  if (numInserts == 0 && numDeletes == 0) {
     // no updates in this block - return early
     return;
   }
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
-  auto locatedTriplesThisBlock = locatedTriples.map_.at(blockIndex);
   DecompressedBlock decompressedBlockWithUpdate{table.numColumns(), allocator};
-  decompressedBlockWithUpdate.resize(numRowsToRead +
-                                     locatedTriplesThisBlock.size());
+  decompressedBlockWithUpdate.resize(numRowsToRead + numInserts);
   locatedTriples.mergeTriples(blockIndex, std::move(table),
                               decompressedBlockWithUpdate, 0);
   return;

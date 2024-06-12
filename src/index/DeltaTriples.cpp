@@ -63,8 +63,7 @@ void DeltaTriples::eraseTripleInAllPermutations(
   // Helper lambda for erasing for one particular permutation.
   auto erase = [](LocatedTriples::iterator locatedTriple,
                   LocatedTriplesPerBlock& locatedTriplesPerBlock) {
-    size_t blockIndex = locatedTriple->blockIndex;
-    locatedTriplesPerBlock.map_[blockIndex].erase(locatedTriple);
+    locatedTriplesPerBlock.erase(locatedTriple->blockIndex, locatedTriple);
   };
   // Now erase for all permutations.
   erase(handles.forPSO, locatedTriplesPerBlockInPSO_);
