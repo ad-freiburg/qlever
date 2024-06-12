@@ -31,15 +31,6 @@ class LocatedTriplesTest : public ::testing::Test {
   }
 };
 
-using ScanSpec = CompressedRelationReader::ScanSpecification;
-const ScanSpec matchAll = {std::nullopt, std::nullopt, std::nullopt};
-auto matchId1 = [](Id id1) -> ScanSpec {
-  return {id1, std::nullopt, std::nullopt};
-};
-auto matchId1And2 = [](Id id1, Id id2) -> ScanSpec {
-  return {id1, id2, std::nullopt};
-};
-
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   // Set up lists of located triples for three blocks.

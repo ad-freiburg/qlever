@@ -22,8 +22,8 @@ struct LocatedTriple {
   // `id2` is the predicate, and `id3` is the subject.
   IdTriple triple;
 
-  // Flag that is true the given triple should be inserted and false if should
-  // be deleted.
+  // Flag that is true if the given triple is inserted and false if it
+  // is deleted.
   bool shouldTripleExist;
 
   // Locate the given triples in the given permutation.
@@ -31,14 +31,7 @@ struct LocatedTriple {
       const std::vector<IdTriple>& triples, const Permutation& permutation,
       bool shouldExist);
 
-  // Special row index for triples that belong to the previous block (see the
-  // definition for the location of a triple at the end of this file).
-  //
-  // NOTE: It is important that `NO_ROW_INDEX + 1 > NO_ROW_INDEX`, hence it is
-  // defined as `max() - 1` and not as the seemingly more natural `max()`.
-  static const size_t NO_ROW_INDEX = std::numeric_limits<size_t>::max() - 1;
-
-  auto operator<=>(const LocatedTriple&) const = default;
+  bool operator==(const LocatedTriple&) const = default;
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
@@ -71,7 +64,6 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
  public:
-  using ScanSpecification = CompressedRelationReader::ScanSpecification;
   // Get the number of located triples for the given block that match the
   // ScanSpecification. The return value is a pair of numbers:
   // first, the number of existing triples ("to be deleted") and second, the
@@ -110,19 +102,7 @@ class LocatedTriplesPerBlock {
   // Precondition: The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      const std::vector<LocatedTriple>& locatedTriple) {
-    std::vector<LocatedTriples::iterator> handles;
-    handles.reserve(locatedTriple.size());
-    for (auto triple : locatedTriple) {
-      LocatedTriples& locatedTriples = map_[triple.blockIndex];
-      auto [handle, wasInserted] = locatedTriples.emplace(triple);
-      AD_CORRECTNESS_CHECK(wasInserted == true);
-      AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
-      ++numTriples_;
-      handles.emplace_back(handle);
-    }
-    return handles;
-  };
+      const std::vector<LocatedTriple>& locatedTriple);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }

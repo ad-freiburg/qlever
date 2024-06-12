@@ -181,6 +181,22 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
 }
 
 // ____________________________________________________________________________
+std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
+    const std::vector<LocatedTriple>& locatedTriple) {
+  std::vector<LocatedTriples::iterator> handles;
+  handles.reserve(locatedTriple.size());
+  for (auto triple : locatedTriple) {
+    LocatedTriples& locatedTriples = map_[triple.blockIndex];
+    auto [handle, wasInserted] = locatedTriples.emplace(triple);
+    AD_CORRECTNESS_CHECK(wasInserted == true);
+    AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
+    ++numTriples_;
+    handles.emplace_back(handle);
+  }
+  return handles;
+};
+
+// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
   os << "LT(" << lt.blockIndex << " " << lt.triple[0] << " " << lt.triple[1]
      << " " << lt.triple[2] << " " << lt.shouldTripleExist << ")";
