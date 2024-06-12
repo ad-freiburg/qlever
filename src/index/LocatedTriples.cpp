@@ -54,10 +54,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 
 // ____________________________________________________________________________
 std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
-    size_t blockIndex, ScanSpecification scanSpec) const {
-  // TODO:
-  AD_CONTRACT_CHECK(!scanSpec.col2Id().has_value());
-
+    size_t blockIndex) const {
   // If no located triples for `blockIndex` exist, there is no entry in `map_`.
   if (!map_.contains(blockIndex)) {
     return {0, 0};

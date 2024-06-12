@@ -79,8 +79,7 @@ class LocatedTriplesPerBlock {
   // ScanSpecification. The return value is a pair of numbers:
   // first, the number of existing triples ("to be deleted") and second, the
   // number of new triples ("to be inserted").
-  std::pair<size_t, size_t> numTriples(size_t blockIndex,
-                                       ScanSpecification scanSpec) const;
+  std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
 
   // Merge located triples for `blockIndex` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Consider only
