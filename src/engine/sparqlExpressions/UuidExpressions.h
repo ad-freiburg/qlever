@@ -11,7 +11,7 @@
 #include "util/Random.h"
 
 namespace sparqlExpression {
-namespace util::uuidExpression {
+namespace detail::uuidExpression {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 
@@ -71,9 +71,9 @@ class UuidExpressionImpl : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
-}  //  namespace util::uuidExpression
+}  //  namespace detail::uuidExpression
 
-using namespace util::uuidExpression;
+using namespace detail::uuidExpression;
 using UuidExpression = UuidExpressionImpl<fromIri, iriUuidKey>;
 using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
 
