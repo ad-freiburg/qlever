@@ -52,6 +52,7 @@ SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 

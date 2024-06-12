@@ -1382,6 +1382,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
+  expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
   expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
   expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));

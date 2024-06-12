@@ -1998,6 +1998,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
     return createUnary(&makeDayExpression);
+  } else if (functionName == "tz") {
+    return createUnary(&makeTimezoneStrExpression);
   } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
   } else if (functionName == "minutes") {
