@@ -52,8 +52,14 @@ SparqlExpression::Ptr makeSecondsExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMinutesExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeHoursExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeDayExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
+
+SparqlExpression::Ptr makeStrIriDtExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrLangTagExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
@@ -78,9 +84,20 @@ SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
 
+SparqlExpression::Ptr makeMD5Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA1Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA256Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA384Expression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeSHA512Expression(SparqlExpression::Ptr child);
+
 SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
                                        SparqlExpression::Ptr child2,
                                        SparqlExpression::Ptr child3);
+
+// Implemented in ConvertToNumeric.cpp
+SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
+SparqlExpression::Ptr makeConvertToDoubleExpression(
+    SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 

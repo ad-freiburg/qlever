@@ -35,11 +35,6 @@ class MultiColumnJoin : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
-
   bool knownEmptyResult() override {
     return _left->knownEmptyResult() || _right->knownEmptyResult();
   }
@@ -68,7 +63,7 @@ class MultiColumnJoin : public Operation {
       IdTable* resultMightBeUnsorted);
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

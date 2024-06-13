@@ -79,7 +79,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip

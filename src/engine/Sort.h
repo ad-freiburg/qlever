@@ -32,10 +32,6 @@ class Sort : public Operation {
     return sortColumnIndices_;
   }
 
-  virtual void setTextLimit(size_t limit) override {
-    subtree_->setTextLimit(limit);
-  }
-
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
     return subtree_->getSizeEstimate();
@@ -71,7 +67,7 @@ class Sort : public Operation {
   }
 
  private:
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   [[nodiscard]] VariableToColumnMap computeVariableToColumnMap()
       const override {

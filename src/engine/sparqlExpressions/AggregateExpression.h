@@ -238,32 +238,32 @@ using AvgExpression =
 // TODO<joka921> Comment
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
-    []<typename T, typename U>(const T& a, const U& b,
-                               const EvaluationContext* ctx) -> IdOrString {
+    []<typename T, typename U>(
+        const T& a, const U& b,
+        const EvaluationContext* ctx) -> IdOrLiteralOrIri {
   // TODO<joka921> moveTheStrings.
   return toBoolNotUndef(
              sparqlExpression::compareIdsOrStrings<
                  Comp, valueIdComparators::ComparisonForIncompatibleTypes::
                            CompareByType>(a, b, ctx))
-             ? IdOrString{a}
-             : IdOrString{b};
+             ? IdOrLiteralOrIri{a}
+             : IdOrLiteralOrIri{b};
 };
 // Min and Max.
 template <valueIdComparators::Comparison comparison>
-inline const auto minMaxLambdaForAllTypes = []<SingleExpressionResult T>(
-                                                const T& a, const T& b,
-                                                const EvaluationContext* ctx) {
-  auto actualImpl = [ctx](const auto& x, const auto& y) {
-    return compareIdsOrStrings<comparison>(x, y, ctx);
-  };
-  if constexpr (ad_utility::isSimilar<T, Id>) {
-    return std::get<Id>(actualImpl(a, b));
-  } else {
-    auto base = [](const IdOrString& i) -> const IdOrStringBase& { return i; };
-    // TODO<joka921> We should definitely move strings here.
-    return std::visit(actualImpl, base(a), base(b));
-  }
-};
+inline const auto minMaxLambdaForAllTypes =
+    []<SingleExpressionResult T>(const T& a, const T& b,
+                                 const EvaluationContext* ctx) {
+      auto actualImpl = [ctx](const auto& x, const auto& y) {
+        return compareIdsOrStrings<comparison>(x, y, ctx);
+      };
+      if constexpr (ad_utility::isSimilar<T, Id>) {
+        return std::get<Id>(actualImpl(a, b));
+      } else {
+        // TODO<joka921> We should definitely move strings here.
+        return std::visit(actualImpl, a, b);
+      }
+    };
 
 constexpr inline auto minLambdaForAllTypes =
     minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;

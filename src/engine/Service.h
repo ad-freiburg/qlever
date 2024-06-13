@@ -46,6 +46,9 @@ class Service : public Operation {
   // The function used to obtain the result from the remote endpoint.
   GetTsvFunction getTsvFunction_;
 
+  // The siblingTree, used for SERVICE clause optimization.
+  std::shared_ptr<QueryExecutionTree> siblingTree_;
+
  public:
   // Construct from parsed Service clause.
   //
@@ -54,7 +57,14 @@ class Service : public Operation {
   // but in our tests (`ServiceTest`) we use a mock function that does not
   // require a running `HttpServer`.
   Service(QueryExecutionContext* qec, parsedQuery::Service parsedServiceClause,
-          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest);
+          GetTsvFunction getTsvFunction = sendHttpOrHttpsRequest,
+          std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
+
+  // Set the siblingTree (subTree that will later be joined with the Result of
+  // the Service Operation), used to reduce the Service Queries Complexity.
+  void setSiblingTree(std::shared_ptr<QueryExecutionTree> siblingTree) {
+    siblingTree_ = siblingTree;
+  }
 
   // Methods inherited from base class `Operation`.
   std::string getDescriptor() const override;
@@ -62,15 +72,18 @@ class Service : public Operation {
   std::vector<ColumnIndex> resultSortedOn() const override { return {}; }
   float getMultiplicity(size_t col) override;
 
+  // Getters for testing.
+  const auto& getSiblingTree() const { return siblingTree_; }
+  const auto& getGraphPatternAsString() const {
+    return parsedServiceClause_.graphPatternAsString_;
+  }
+
  private:
   uint64_t getSizeEstimateBeforeLimit() override;
 
  public:
   size_t getCostEstimate() override;
   VariableToColumnMap computeVariableToColumnMap() const override;
-
-  // Not relevant for SERVICE.
-  void setTextLimit([[maybe_unused]] size_t limit) override {}
 
   // We know nothing about the result at query planning time.
   bool knownEmptyResult() override { return false; }
@@ -83,7 +96,10 @@ class Service : public Operation {
   std::string getCacheKeyImpl() const override;
 
   // Compute the result using `getTsvFunction_`.
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Get a VALUES clause that contains the values of the siblingTree's result.
+  std::optional<std::string> getSiblingValuesClause() const;
 
   // Write the given TSV result to the given result object. The `I` is the width
   // of the result table.

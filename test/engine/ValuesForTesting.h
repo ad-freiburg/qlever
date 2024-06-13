@@ -6,7 +6,7 @@
 
 #include "engine/Operation.h"
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "util/Algorithm.h"
 #include "util/Random.h"
 
@@ -49,7 +49,7 @@ class ValuesForTesting : public Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  ResultTable computeResult() override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     auto table = table_.clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),
@@ -89,8 +89,6 @@ class ValuesForTesting : public Operation {
   vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
   }
-
-  void setTextLimit(size_t limit) override { (void)limit; }
 
   size_t getCostEstimate() override { return costEstimate_; }
 

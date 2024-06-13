@@ -25,7 +25,6 @@ class NeutralElementOperation : public Operation {
     return "NeutralElement";
   };
   [[nodiscard]] size_t getResultWidth() const override { return 0; };
-  void setTextLimit(size_t) override{};
   size_t getCostEstimate() override { return 0; }
 
  private:
@@ -41,7 +40,7 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
-  ResultTable computeResult() override {
+  Result computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);

@@ -208,6 +208,11 @@ std::unique_ptr<ExternalSorter<SortByPSO, 5>> IndexImpl::buildOspWithPatterns(
   // S P O PatternOfS PatternOfO, sorted by OPS.
   auto blockGenerator =
       [](auto& queue) -> cppcoro::generator<IdTableStatic<0>> {
+    // If an exception occurs in the block that is consuming the blocks yielded
+    // from this generator, we have to explicitly finish the `queue`, otherwise
+    // there will be a deadlock because the threads involved in the queue can
+    // never join.
+    absl::Cleanup cl{[&queue]() { queue.finish(); }};
     while (auto block = queue.pop()) {
       co_yield fixBlockAfterPatternJoin(std::move(block));
     }
@@ -674,10 +679,12 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
 }
 
 // ________________________________________________________________________
-size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
+template <typename SortedTriplesType, typename... CallbackTypes>
+size_t IndexImpl::createPermutationPair(size_t numColumns,
+                                        SortedTriplesType&& sortedTriples,
                                         const Permutation& p1,
                                         const Permutation& p2,
-                                        auto&&... perTripleCallbacks) {
+                                        CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
@@ -1372,7 +1379,7 @@ IdTable IndexImpl::scan(
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns, allocator_};
+    return IdTable{numColumns + additionalColumns.size(), allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,
               cancellationHandle);

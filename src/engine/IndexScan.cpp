@@ -4,10 +4,11 @@
 
 #include "engine/IndexScan.h"
 
+#include <absl/strings/str_join.h>
+
 #include <sstream>
 #include <string>
 
-#include "absl/strings/str_join.h"
 #include "index/IndexImpl.h"
 #include "index/TriplesView.h"
 #include "parser/ParsedQuery.h"
@@ -122,7 +123,7 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   return variableToColumnMap;
 }
 // _____________________________________________________________________________
-ResultTable IndexScan::computeResult() {
+Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   IdTable idTable{getExecutionContext()->getAllocator()};
 

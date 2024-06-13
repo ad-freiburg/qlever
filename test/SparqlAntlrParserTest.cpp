@@ -20,7 +20,6 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
-#include "global/Constants.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -524,14 +523,13 @@ TEST(SparqlParser, Integer) {
 TEST(SparqlParser, LimitOffsetClause) {
   auto expectLimitOffset = ExpectCompleteParse<&Parser::limitOffsetClauses>{};
   auto expectLimitOffsetFails = ExpectParseFails<&Parser::limitOffsetClauses>();
-  expectLimitOffset("LIMIT 10", m::LimitOffset(10, TEXT_LIMIT_DEFAULT, 0));
+  expectLimitOffset("LIMIT 10", m::LimitOffset(10, std::nullopt, 0));
   expectLimitOffset("OFFSET 31 LIMIT 12 TEXTLIMIT 14",
                     m::LimitOffset(12, 14, 31));
   expectLimitOffset("textlimit 999", m::LimitOffset(std::nullopt, 999, 0));
-  expectLimitOffset("LIMIT      999",
-                    m::LimitOffset(999, TEXT_LIMIT_DEFAULT, 0));
+  expectLimitOffset("LIMIT      999", m::LimitOffset(999, std::nullopt, 0));
   expectLimitOffset("OFFSET 43",
-                    m::LimitOffset(std::nullopt, TEXT_LIMIT_DEFAULT, 43));
+                    m::LimitOffset(std::nullopt, std::nullopt, 43));
   expectLimitOffset("TEXTLIMIT 43 LIMIT 19", m::LimitOffset(19, 43, 0));
   expectLimitOffsetFails("LIMIT20");
   expectIncompleteParse(parse<&Parser::limitOffsetClauses>(
@@ -1384,6 +1382,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
+  expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
   expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
   expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));
@@ -1418,12 +1417,37 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
 
+  expectFails("STRDT()");
+  expectFails("STRDT(?x)");
+  expectBuiltInCall("STRDT(?x, ?y)",
+                    matchNary(&makeStrIriDtExpression, Var{"?x"}, Var{"?y"}));
+  expectBuiltInCall(
+      "STRDT(?x, <http://example/romanNumeral>)",
+      matchNaryWithChildrenMatchers(
+          &makeStrIriDtExpression, variableExpressionMatcher(Var{"?x"}),
+          matchLiteralExpression(iri("<http://example/romanNumeral>"))));
+
+  expectFails("STRLANG()");
+  expectFails("STRALANG(?x)");
+  expectBuiltInCall("STRLANG(?x, ?y)",
+                    matchNary(&makeStrLangTagExpression, Var{"?x"}, Var{"?y"}));
+  expectBuiltInCall(
+      "STRLANG(?x, \"en\")",
+      matchNaryWithChildrenMatchers(&makeStrLangTagExpression,
+                                    variableExpressionMatcher(Var{"?x"}),
+                                    matchLiteralExpression(lit("en"))));
+
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
   expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
-  expectFails("SHA512(?x)");
+
+  expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
+  expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
+  expectBuiltInCall("SHA256(?x)", matchUnary(&makeSHA256Expression));
+  expectBuiltInCall("SHA384(?x)", matchUnary(&makeSHA384Expression));
+  expectBuiltInCall("SHA512(?x)", matchUnary(&makeSHA512Expression));
 
   expectBuiltInCall("encode_for_uri(?x)",
                     matchUnary(&makeEncodeForUriExpression));
@@ -1536,6 +1560,7 @@ TEST(SparqlParser, FunctionCall) {
   // manually add it when constructing parser inputs.
   auto geof = absl::StrCat("<", GEOF_PREFIX.second);
   auto math = absl::StrCat("<", MATH_PREFIX.second);
+  auto xsd = absl::StrCat("<", XSD_PREFIX.second);
 
   // Correct function calls. Check that the parser picks the correct expression.
   expectFunctionCall(absl::StrCat(geof, "latitude>(?x)"),
@@ -1557,6 +1582,14 @@ TEST(SparqlParser, FunctionCall) {
                      matchUnary(&makeCosExpression));
   expectFunctionCall(absl::StrCat(math, "tan>(?x)"),
                      matchUnary(&makeTanExpression));
+  expectFunctionCall(absl::StrCat(xsd, "int>(?x)"),
+                     matchUnary(&makeConvertToIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "integer>(?x)"),
+                     matchUnary(&makeConvertToIntExpression));
+  expectFunctionCall(absl::StrCat(xsd, "double>(?x)"),
+                     matchUnary(&makeConvertToDoubleExpression));
+  expectFunctionCall(absl::StrCat(xsd, "decimal>(?x)"),
+                     matchUnary(&makeConvertToDoubleExpression));
 
   // Wrong number of arguments.
   expectFunctionCallFails(
@@ -1611,4 +1644,113 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
+}
+
+// Update queries are WIP. The individual parts to parse some update queries
+// are in place the code to process them is still unfinished. Therefore we
+// don't accept update queries.
+TEST(SparqlParser, updateQueryUnsupported) {
+  auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
+  auto updateUnsupported =
+      contains("SPARQL 1.1 Update currently not supported by QLever.");
+
+  // Test all the cases because some functionality will be enabled shortly.
+  expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE DATA { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("DELETE { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("INSERT { <a> <b> <c> } WHERE { ?s ?p ?o }",
+                    updateUnsupported);
+  expectUpdateFails("DELETE WHERE { <a> <b> <c> }", updateUnsupported);
+  expectUpdateFails("LOAD <a>", updateUnsupported);
+  expectUpdateFails("CLEAR GRAPH <a>", updateUnsupported);
+  expectUpdateFails("DROP GRAPH <a>", updateUnsupported);
+  expectUpdateFails("CREATE GRAPH <a>", updateUnsupported);
+  expectUpdateFails("ADD GRAPH <a> TO DEFAULT", updateUnsupported);
+  expectUpdateFails("MOVE DEFAULT TO GRAPH <a>", updateUnsupported);
+  expectUpdateFails("COPY GRAPH <a> TO GRAPH <a>", updateUnsupported);
+}
+
+TEST(SparqlParser, UpdateQuery) {
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
+  auto Iri = [](std::string_view stringWithBrackets) {
+    return TripleComponent::Iri::fromIriref(stringWithBrackets);
+  };
+  auto Literal = [](std::string s) {
+    return TripleComponent::Literal::fromStringRepresentation(s);
+  };
+
+  expectUpdate("INSERT DATA { <a> <b> <c> }",
+               m::UpdateQuery({}, {{Iri("<a>"), Iri("<b>"), Iri("<c>")}},
+                              m::GraphPattern()));
+  expectUpdate(
+      "INSERT DATA { <a> <b> \"foo:bar\" }",
+      m::UpdateQuery({}, {{Iri("<a>"), Iri("<b>"), Literal("\"foo:bar\"")}},
+                     m::GraphPattern()));
+  expectUpdate("DELETE DATA { <a> <b> <c> }",
+               m::UpdateQuery({{Iri("<a>"), Iri("<b>"), Iri("<c>")}}, {},
+                              m::GraphPattern()));
+  expectUpdate(
+      "DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<b>"), Iri("<c>")}}, {},
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdate(
+      "DELETE { ?a <b> <c> } INSERT { <a> ?a <c> } WHERE { <d> <e> ?a }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<b>"), Iri("<c>")}},
+          {{Iri("<a>"), Var("?a"), Iri("<c>")}},
+          m::GraphPattern(m::Triples({{Iri("<d>"), "<e>", Var{"?a"}}}))));
+  expectUpdate(
+      "DELETE WHERE { ?a <foo> ?c }",
+      m::UpdateQuery(
+          {{Var("?a"), Iri("<foo>"), Var("?c")}}, {},
+          m::GraphPattern(m::Triples({{Var{"?a"}, "<foo>", Var{"?c"}}}))));
+  expectUpdate("CLEAR DEFAULT",
+               m::UpdateQuery({{Var("?s"), Var("?p"), Var("?o")}}, {},
+                              m::GraphPattern(
+                                  m::Triples({{Var("?s"), "?p", Var("?o")}}))));
+  expectUpdateFails("INSERT DATA { ?a ?b ?c }");
+  expectUpdateFails("WITH <foo> DELETE { ?a ?b ?c } WHERE { ?a ?b ?c }");
+  expectUpdateFails("DELETE { ?a ?b ?c } USING <foo> WHERE { ?a ?b ?c }");
+  expectUpdateFails("INSERT DATA { GRAPH <foo> { } }");
+  // Unsupported features.
+  expectUpdateFails(
+      "INSERT DATA { <a> <b> <c> } ; INSERT { ?a <b> <c> } WHERE { <d> <e> ?a "
+      "}");
+  expectUpdateFails("LOAD <foo>");
+  expectUpdateFails("CLEAR NAMED");
+  expectUpdateFails("CLEAR GRAPH <foo>");
+  expectUpdateFails("CREATE GRAPH <foo>");
+  expectUpdateFails("DROP GRAPH <foo>");
+  expectUpdateFails("MOVE GRAPH <foo> TO DEFAULT");
+  expectUpdateFails("ADD DEFAULT TO GRAPH <foo>");
+  expectUpdateFails("COPY DEFAULT TO GRAPH <foo>");
+  expectUpdateFails(
+      "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }");
+  expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
+}
+
+TEST(SparqlParser, GraphOrDefault) {
+  // Explicitly test this part, because all features that use it are not yet
+  // supported.
+  auto expectGraphOrDefault = ExpectCompleteParse<&Parser::graphOrDefault>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
+  expectGraphOrDefault(
+      "GRAPH <foo>",
+      testing::VariantWith<GraphRef>(AD_PROPERTY(
+          TripleComponent::Iri, toStringRepresentation, testing::Eq("<foo>"))));
+}
+
+TEST(SparqlParser, GraphRef) {
+  auto expectGraphRefAll = ExpectCompleteParse<&Parser::graphRefAll>{
+      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  expectGraphRefAll("DEFAULT", m::Variant<DEFAULT>());
+  expectGraphRefAll("NAMED", m::Variant<NAMED>());
+  expectGraphRefAll("ALL", m::Variant<ALL>());
+  expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
 }

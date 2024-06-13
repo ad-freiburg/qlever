@@ -94,6 +94,8 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(StringUtilsTest util)
 
+addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
+
 addLinkAndDiscoverTest(CacheTest)
 
 addLinkAndDiscoverTest(ConcurrentCacheTest)
@@ -115,6 +117,8 @@ addLinkAndDiscoverTestSerial(IndexTest index)
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
+
+addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
 addLinkAndDiscoverTest(QueryPlannerTest engine)
 

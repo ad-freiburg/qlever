@@ -39,8 +39,6 @@ class Union : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override;
-
   virtual bool knownEmptyResult() override;
 
   virtual float getMultiplicity(size_t col) override;
@@ -63,7 +61,7 @@ class Union : public Operation {
   }
 
  private:
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

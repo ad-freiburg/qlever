@@ -7,8 +7,6 @@
 
 #include "./Operation.h"
 
-using std::string;
-
 class SparqlTriple;
 class SparqlTripleSimple;
 
@@ -43,17 +41,13 @@ class IndexScan : public Operation {
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
   }
-  string getDescriptor() const override;
+  std::string getDescriptor() const override;
 
   size_t getResultWidth() const override;
 
   vector<ColumnIndex> resultSortedOn() const override;
 
   size_t numVariables() const { return numVariables_; }
-
-  void setTextLimit(size_t) override {
-    // Do nothing.
-  }
 
   // Return the exact result size of the index scan. This is always known as it
   // can be read from the Metadata.
@@ -93,6 +87,10 @@ class IndexScan : public Operation {
 
   bool knownEmptyResult() override { return getExactSize() == 0; }
 
+  bool isIndexScanWithNumVariables(size_t target) const override {
+    return numVariables() == target;
+  }
+
   // Currently only the full scans support a limit clause.
   [[nodiscard]] bool supportsLimit() const override {
     return getResultWidth() == 3;
@@ -106,7 +104,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
  private:
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -114,7 +112,7 @@ class IndexScan : public Operation {
 
   size_t computeSizeEstimate() const;
 
-  string getCacheKeyImpl() const override;
+  std::string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

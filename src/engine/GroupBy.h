@@ -62,10 +62,6 @@ class GroupBy : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override {
-    _subtree->setTextLimit(limit);
-  }
-
   virtual bool knownEmptyResult() override {
     return _subtree->knownEmptyResult();
   }
@@ -93,7 +89,7 @@ class GroupBy : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,

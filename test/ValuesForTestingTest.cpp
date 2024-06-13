@@ -19,7 +19,6 @@ TEST(ValuesForTesting, valuesForTesting) {
       getQec(), table.clone(), {Variable{"?x"}, {Variable{"?y"}}}};
   // The following line has no effect. TODO<joka921> provide default
   // implementations for such boilerplate methods in the `Operation` base class.
-  v.setTextLimit(12340);
   ASSERT_EQ(v.getResultWidth(), 2u);
   ASSERT_EQ(v.getSizeEstimate(), 3u);
   ASSERT_EQ(v.getCostEstimate(), 3u);
@@ -28,8 +27,7 @@ TEST(ValuesForTesting, valuesForTesting) {
 
   ASSERT_THAT(
       v.getCacheKey(),
-      ::testing::StartsWith(
-          "Values for testing with 2 columns. VocabIndex:3 VocabIndex:12"));
+      ::testing::StartsWith("Values for testing with 2 columns. V:3 V:12"));
   ASSERT_THAT(v.getCacheKey(), ::testing::EndsWith("Supports limit: 0"));
   ASSERT_EQ(v.getDescriptor(), "explicit values for testing");
   ASSERT_TRUE(v.resultSortedOn().empty());

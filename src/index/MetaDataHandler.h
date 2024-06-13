@@ -1,24 +1,40 @@
-// Copyright 2018, University of Freiburg,
+// Copyright 2018 - 2023, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Author: Johannes Kalmbach (johannes.kalmbach@gmail.com)
-//
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
+
 #pragma once
 
 #include <cassert>
 #include <stxxl/vector>
 
-#include "../global/Id.h"
-#include "../util/Exception.h"
-#include "../util/HashMap.h"
-#include "../util/Iterators.h"
-#include "../util/Log.h"
-#include "../util/Serializer/Serializer.h"
-#include "./CompressedRelation.h"
+#include "global/Id.h"
+#include "index/CompressedRelation.h"
+#include "util/Exception.h"
+#include "util/HashMap.h"
+#include "util/Iterators.h"
+#include "util/Log.h"
+#include "util/Serializer/Serializer.h"
 
-// _____________________________________________________________________
+// Wrapper class for access to `CompressedRelationMetadata` objects (one per
+// relation) stored in a vector. Specifically, our index uses this with `M =
+// MmapVector<CompressedRelationMetadata>>`; see `index/IndexMetaData.h` at the
+// bottom.
+//
+// TODO: We needed this at some point because we used to have two implementation
+// of `IndexMetaData`, one using mmaps and one using hash maps, and we wanted to
+// have a common interface for both. We no longer use the hash map
+// implementation and so the wrapper class (and the complexity that goes along
+// with it) is probably no longer needed.
 template <class M>
 class MetaDataWrapperDense {
+ private:
+  // A vector of metadata objects.
+  M _vec;
+
  public:
+  // An iterator with an additional method `getId()` that gives the relation ID
+  // of the current metadata object.
   template <typename BaseIterator>
   struct AddGetIdIterator : BaseIterator {
     using BaseIterator::BaseIterator;
@@ -39,6 +55,7 @@ class MetaDataWrapperDense {
   // The underlying array is sorted, so all iterators are ordered iterators
   using ConstOrderedIterator = ConstIterator;
 
+  // The type of the stored metadata objects.
   using value_type = typename M::value_type;
 
   // _________________________________________________________
@@ -88,7 +105,7 @@ class MetaDataWrapperDense {
 
   // ____________________________________________________________
   void set(Id id, const value_type& value) {
-    // Assert that the ids are ascending.
+    // Check that the `Id`s are added in strictly ascending order.
     AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
     _vec.push_back(value);
   }
@@ -116,5 +133,10 @@ class MetaDataWrapperDense {
     };
     return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
   }
-  M _vec;
+  Iterator lower_bound(Id id) {
+    auto cmp = [](const auto& metaData, Id id) {
+      return metaData.col0Id_ < id;
+    };
+    return std::lower_bound(_vec.begin(), _vec.end(), id, cmp);
+  }
 };

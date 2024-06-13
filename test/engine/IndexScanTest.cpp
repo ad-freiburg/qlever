@@ -141,6 +141,7 @@ void testLazyScanWithColumnThrows(
   };
   EXPECT_ANY_THROW(makeScan());
 }
+
 }  // namespace
 
 TEST(IndexScan, lazyScanForJoinOfTwoScans) {

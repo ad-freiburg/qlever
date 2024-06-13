@@ -23,14 +23,13 @@ static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 
 static constexpr ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
-static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
+constexpr uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 
 static const size_t BUFFER_SIZE_DOCSFILE_LINE = 100'000'000;
 
 static const size_t TEXT_PREDICATE_CARDINALITY_ESTIMATE = 1'000'000'000;
-static const size_t TEXT_LIMIT_DEFAULT = std::numeric_limits<size_t>::max();
 
 static const size_t GALLOP_THRESHOLD = 1000;
 
@@ -61,6 +60,8 @@ static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
     "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+static constexpr std::pair<std::string_view, std::string_view> XSD_PREFIX = {
+    "xsd", "http://www.w3.org/2001/XMLSchema#"};
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";

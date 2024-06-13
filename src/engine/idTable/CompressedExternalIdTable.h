@@ -667,6 +667,9 @@ class CompressedExternalIdTableSorter
       // requested for the output, and the single block is larger than this
       // blocksize, we manually have to split it into chunks.
       auto& block = this->currentBlock_;
+      if (block.empty()) {
+        co_return;
+      }
       const auto blocksizeOutput = blocksize.value_or(block.numRows());
       if (block.numRows() <= blocksizeOutput) {
         if (this->moveResultOnMerge_) {
@@ -735,7 +738,9 @@ class CompressedExternalIdTableSorter
       }
     }
     numPopped += result.numRows();
-    co_yield std::move(result).template toStatic<N>();
+    if (!result.empty()) {
+      co_yield std::move(result).template toStatic<N>();
+    }
     AD_CORRECTNESS_CHECK(numPopped == this->numElementsPushed_);
   }
 

@@ -37,11 +37,6 @@ class Minus : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void setTextLimit(size_t limit) override {
-    _left->setTextLimit(limit);
-    _right->setTextLimit(limit);
-  }
-
   bool knownEmptyResult() override { return _left->knownEmptyResult(); }
 
   float getMultiplicity(size_t col) override;
@@ -77,7 +72,7 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };

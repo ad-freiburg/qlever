@@ -32,8 +32,6 @@ class Values : public Operation {
 
   virtual vector<ColumnIndex> resultSortedOn() const override;
 
-  virtual void setTextLimit(size_t limit) override { (void)limit; }
-
   virtual bool knownEmptyResult() override {
     return parsedValues_._variables.empty() || parsedValues_._values.empty();
   }
@@ -50,7 +48,7 @@ class Values : public Operation {
 
  public:
   // These two are also used by class `Service`, hence public.
-  virtual ResultTable computeResult() override;
+  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

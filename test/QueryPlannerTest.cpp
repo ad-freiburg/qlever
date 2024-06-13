@@ -727,8 +727,8 @@ TEST(QueryPlanner, TransitivePathRightId) {
 
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, getId("<o>"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, getId("<o>"), 1};
   h::expect(
       "SELECT ?y WHERE {"
       "?x <p>+ <o> }",
@@ -756,8 +756,8 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
 
 TEST(QueryPlanner, TransitivePathBindRight) {
   auto scan = h::IndexScanFromStrings;
-  TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
-  TransitivePathSide right{std::nullopt, 1, Variable("?y"), 1};
+  TransitivePathSide left{std::nullopt, 1, Variable("?x"), 0};
+  TransitivePathSide right{std::nullopt, 0, Variable("?y"), 1};
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>* ?y."
@@ -766,7 +766,9 @@ TEST(QueryPlanner, TransitivePathBindRight) {
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
           scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")));
+               "?_qlever_internal_variable_query_planner_1",
+               {Permutation::POS})),
+      ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
 // __________________________________________________________________________
@@ -774,7 +776,7 @@ TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
       "SELECT * WHERE {"
       " BIND (3 + 5 AS ?x) }",
-      h::Bind(h::NeutralElementOperation(), "3 + 5", Variable{"?x"}));
+      h::Bind(h::NeutralElement(), "3 + 5", Variable{"?x"}));
 }
 
 // __________________________________________________________________________
@@ -863,6 +865,105 @@ TEST(QueryPlanner, TextIndexScanForEntity) {
           "always also needs corresponding ql:contains-word statement."));
 }
 
+TEST(QueryPlanner, TextLimit) {
+  auto qec = ad_utility::testing::getQec(
+      "<a> <p> \"this text contains some words and is part of the test\" . <a> "
+      "<p> <testEntity> . <a> <p> \"picking the right text can be a hard "
+      "test\" . <a> <p> \"only this text contains the word opti \" . "
+      "<a> <p> \"testing and picking\"",
+      true, true, true, 16_B, true);
+
+  auto wordScan = h::TextIndexScanForWord;
+  auto entityScan = h::TextIndexScanForEntity;
+
+  // Only contains word
+  h::expect("SELECT * WHERE { ?text ql:contains-word \"test*\" } TEXTLIMIT 10",
+            wordScan(Var{"?text"}, "test*"), qec);
+
+  // Contains fixed entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-word \"test*\" . ?text "
+      "ql:contains-entity <testEntity> } TEXTLIMIT 10",
+      h::TextLimit(
+          10,
+          h::Join(wordScan(Var{"?text"}, "test*"),
+                  entityScan(Var{"?text"}, "<testEntity>", "test*")),
+          Var{"?text"}, vector<Variable>{},
+          vector<Variable>{Var{"?text"}.getScoreVariable("<testEntity>")}),
+      qec);
+
+  // Contains entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" } TEXTLIMIT 10",
+      h::TextLimit(
+          10,
+          h::Join(wordScan(Var{"?text"}, "test*"),
+                  entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"})}),
+      qec);
+
+  // Contains entity and fixed entity
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" . ?text ql:contains-entity <testEntity>} "
+      "TEXTLIMIT 5",
+      h::TextLimit(
+          5,
+          h::UnorderedJoins(
+              wordScan(Var{"?text"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+              entityScan(Var{"?text"}, "<testEntity>", "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
+                           Var{"?text"}.getScoreVariable("<testEntity>")}),
+      qec);
+
+  // Contains two entities
+  h::expect(
+      "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
+      "ql:contains-word \"test*\" . ?text ql:contains-entity ?scientist2} "
+      "TEXTLIMIT 5",
+      h::TextLimit(
+          5,
+          h::UnorderedJoins(
+              wordScan(Var{"?text"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+              entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
+          Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
+          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
+                           Var{"?text"}.getScoreVariable(Var{"?scientist2"})}),
+      qec);
+
+  // Contains two text variables. Also checks if the textlimit at an efficient
+  // place in the query
+  h::expect(
+      "SELECT * WHERE { ?text1 ql:contains-entity ?scientist1 . ?text1 "
+      "ql:contains-word \"test*\" . ?text2 ql:contains-word \"test*\" . ?text2 "
+      "ql:contains-entity ?author1 . ?text2 ql:contains-entity ?author2 } "
+      "TEXTLIMIT 5",
+      h::CartesianProductJoin(
+          h::TextLimit(
+              5,
+              h::Join(wordScan(Var{"?text1"}, "test*"),
+                      entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
+              Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
+              vector<Variable>{
+                  Var{"?text1"}.getScoreVariable(Var{"?scientist1"})}),
+          h::TextLimit(5,
+                       h::UnorderedJoins(
+                           wordScan(Var{"?text2"}, "test*"),
+                           entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
+                           entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
+                       Var{"?text2"},
+                       vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+                       vector<Variable>{
+                           Var{"?text2"}.getScoreVariable(Var{"?author1"}),
+                           Var{"?text2"}.getScoreVariable(Var{"?author2"})})),
+      qec);
+}
+
 TEST(QueryPlanner, NonDistinctVariablesInTriple) {
   auto internalVar = [](int i) {
     return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
@@ -929,13 +1030,22 @@ TEST(QueryPlanner, CountAvailablePredicates) {
           0, Var{"?p"}, Var{"?cnt"},
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   h::expect(
-      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate ?p} "
+      "SELECT ?p (COUNT(DISTINCT ?s) as ?cnt) WHERE { ?s ql:has-predicate "
+      "?p} "
       "GROUP BY ?p",
       h::CountAvailablePredicates(
           0, Var{"?p"}, Var{"?cnt"},
           h::IndexScanFromStrings("?s", HAS_PATTERN_PREDICATE, "?p")));
   // TODO<joka921> Add a test for the case with subtrees with and without
   // rewriting of triples.
+}
+
+// Check that a MINUS operation that only refers to unbound variables is deleted
+// by the query planner.
+TEST(QueryPlanner, UnboundMinusIgnored) {
+  h::expect("SELECT * WHERE {MINUS{?x <is-a> ?y}}", h::NeutralElement());
+  h::expect("SELECT * WHERE { ?a <is-a> ?b MINUS{?x <is-a> ?y}}",
+            h::IndexScanFromStrings("?a", "<is-a>", "?b"));
 }
 
 // ___________________________________________________________________________
@@ -951,4 +1061,30 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(qp.createExecutionTree(pq),
                                         HasSubstr("Query planning"),
                                         ad_utility::CancellationException);
+}
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, JoinWithService) {
+  auto scan = h::IndexScanFromStrings;
+
+  auto sibling = scan("?x", "<is-a>", "?y");
+
+  std::string_view graphPatternAsString = "{ ?x <is-a> ?z . }";
+
+  h::expect(
+      "SELECT * WHERE {"
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
+      h::Service(std::nullopt, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y ."
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}",
+      h::UnorderedJoins(sibling, h::Service(sibling, graphPatternAsString)));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y . "
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
+      h::MultiColumnJoin(
+          sibling,
+          h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
 }

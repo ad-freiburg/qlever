@@ -107,8 +107,13 @@ void testExternalSorterImpl(size_t numDynamicColumns, size_t numRows,
     }
 
     for (size_t k = 0; k < 5; ++k) {
-      auto generator = writer.sortedView();
+      // Also test the case that the blocksize does not exactly divides the
+      // number of inputs.
+      auto blocksize = k == 1 ? 1 : 17;
       using namespace ::testing;
+      auto generator = k == 0 ? std::views::join(ad_utility::OwningView{
+                                    writer.getSortedBlocks(blocksize)})
+                              : writer.sortedView();
       if (mergeMultipleTimes || k == 0) {
         auto result = idTableFromRowGenerator<NumStaticColumns>(
             generator, numDynamicColumns);

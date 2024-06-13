@@ -4,12 +4,10 @@
 
 #include "../test/util/IdTableHelpers.h"
 
-#include <absl/strings/str_cat.h>
-
 #include <algorithm>
 #include <utility>
 
-#include "engine/ValuesForTesting.h"
+#include "../engine/ValuesForTesting.h"
 #include "engine/idTable/IdTable.h"
 #include "global/ValueId.h"
 #include "util/Algorithm.h"
@@ -59,6 +57,12 @@ void compareIdTableWithExpectedContent(
   std::ranges::sort(localExpectedContent, std::ranges::lexicographical_compare);
 
   ASSERT_EQ(localTable, localExpectedContent);
+}
+
+// ____________________________________________________________________________
+void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
+  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
+                  &table.idTable, table.joinColumn);
 }
 
 // ____________________________________________________________________________

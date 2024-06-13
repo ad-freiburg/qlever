@@ -360,11 +360,11 @@ inline auto Bind =
 };
 
 inline auto LimitOffset =
-    [](std::optional<uint64_t> limit, uint64_t textLimit,
+    [](std::optional<uint64_t> limit, std::optional<uint64_t> textLimit,
        uint64_t offset) -> Matcher<const LimitOffsetClause&> {
   return testing::AllOf(
       AD_FIELD(LimitOffsetClause, _limit, testing::Eq(limit)),
-      AD_FIELD(LimitOffsetClause, _textLimit, testing::Eq(textLimit)),
+      AD_FIELD(LimitOffsetClause, textLimit_, testing::Eq(textLimit)),
       AD_FIELD(LimitOffsetClause, _offset, testing::Eq(offset)));
 };
 
@@ -824,9 +824,9 @@ inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
     -> Matcher<const ParsedQuery&> {
   return testing::AllOf(
       AD_PROPERTY(ParsedQuery, hasConstructClause, testing::IsTrue()),
-      AD_PROPERTY(
-          ParsedQuery, constructClause,
-          AD_FIELD(parsedQuery::ConstructClause, triples_, testing::Eq(elems))),
+      AD_PROPERTY(ParsedQuery, constructClause,
+                  AD_FIELD(parsedQuery::ConstructClause, triples_,
+                           testing::ElementsAreArray(elems))),
       RootGraphPattern(m));
 }
 
@@ -834,6 +834,30 @@ inline auto ConstructQuery(const std::vector<std::array<GraphTerm, 3>>& elems,
 inline auto VisibleVariables =
     [](const std::vector<::Variable>& elems) -> Matcher<const ParsedQuery&> {
   return AD_PROPERTY(ParsedQuery, getVisibleVariables, testing::Eq(elems));
+};
+
+inline auto UpdateQuery =
+    [](const std::vector<SparqlTripleSimple>& toDelete,
+       const std::vector<SparqlTripleSimple>& toInsert,
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
+    -> Matcher<const ::ParsedQuery&> {
+  return testing::AllOf(
+      AD_PROPERTY(ParsedQuery, hasUpdateClause, testing::IsTrue()),
+      AD_PROPERTY(ParsedQuery, updateClause,
+                  AD_FIELD(parsedQuery::UpdateClause, toDelete_,
+                           testing::ElementsAreArray(toDelete))),
+      AD_PROPERTY(ParsedQuery, updateClause,
+                  AD_FIELD(parsedQuery::UpdateClause, toInsert_,
+                           testing::ElementsAreArray(toInsert))),
+      RootGraphPattern(graphPatternMatcher));
+};
+
+template <typename T>
+auto inline Variant = []() { return testing::VariantWith<T>(testing::_); };
+
+auto inline GraphRefIri = [](const string& iri) {
+  return testing::VariantWith<GraphRef>(AD_PROPERTY(
+      TripleComponent::Iri, toStringRepresentation, testing::Eq(iri)));
 };
 
 }  // namespace matchers

@@ -47,8 +47,8 @@ Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
   // If one of the inputs is a SCAN and the other one is not, always make the
   // SCAN the right child (which also gives a deterministic order of the
   // subtrees). This simplifies several branches in the `computeResult` method.
-  if (t1->getType() == QueryExecutionTree::SCAN &&
-      t2->getType() != QueryExecutionTree::SCAN) {
+  if (std::dynamic_pointer_cast<IndexScan>(t1->getRootOperation()) &&
+      !std::dynamic_pointer_cast<IndexScan>(t2->getRootOperation())) {
     swapChildren();
   }
   _left = std::move(t1);
@@ -90,7 +90,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-ResultTable Join::computeResult() {
+Result Join::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -122,8 +122,10 @@ ResultTable Join::computeResult() {
     // The third argument means "only get the result if it can be read from the
     // cache". So effectively, this returns the result if it is small, contains
     // UNDEF values, or is contained in the cache, otherwise `nullptr`.
-    return tree.getRootOperation()->getResult(false,
-                                              !(isSmall || containsUndef));
+    // TODO<joka921> Add a unit test that checks the correct conditions
+    return tree.getRootOperation()->getResult(
+        false, (isSmall || containsUndef) ? ComputationMode::FULLY_MATERIALIZED
+                                          : ComputationMode::ONLY_IF_CACHED);
   };
 
   auto leftResIfCached = getCachedOrSmallResult(*_left, _leftJoinCol);
@@ -131,12 +133,14 @@ ResultTable Join::computeResult() {
   auto rightResIfCached = getCachedOrSmallResult(*_right, _rightJoinCol);
   checkCancellation();
 
-  if (_left->getType() == QueryExecutionTree::SCAN &&
-      _right->getType() == QueryExecutionTree::SCAN) {
+  auto leftIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  if (leftIndexScan &&
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation())) {
     if (rightResIfCached && !leftResIfCached) {
       idTable = computeResultForIndexScanAndIdTable<true>(
-          rightResIfCached->idTable(), _rightJoinCol,
-          dynamic_cast<IndexScan&>(*_left->getRootOperation()), _leftJoinCol);
+          rightResIfCached->idTable(), _rightJoinCol, *leftIndexScan,
+          _leftJoinCol);
       checkCancellation();
       return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 
@@ -151,10 +155,10 @@ ResultTable Join::computeResult() {
     }
   }
 
-  shared_ptr<const ResultTable> leftRes =
+  std::shared_ptr<const Result> leftRes =
       leftResIfCached ? leftResIfCached : _left->getResult();
   checkCancellation();
-  if (leftRes->size() == 0) {
+  if (leftRes->idTable().size() == 0) {
     _right->getRootOperation()->updateRuntimeInformationWhenOptimizedOut();
     // TODO<joka921, hannahbast, SPARQL update> When we add triples to the
     // index, the vocabularies of index scans will not necessarily be empty and
@@ -169,17 +173,17 @@ ResultTable Join::computeResult() {
   const auto& leftIdTable = leftRes->idTable();
   auto leftHasUndef =
       !leftIdTable.empty() && leftIdTable.at(0, _leftJoinCol).isUndefined();
-  if (_right->getType() == QueryExecutionTree::SCAN && !rightResIfCached &&
-      !leftHasUndef) {
+  auto rightIndexScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+  if (rightIndexScan && !rightResIfCached && !leftHasUndef) {
     idTable = computeResultForIndexScanAndIdTable<false>(
-        leftRes->idTable(), _leftJoinCol,
-        dynamic_cast<IndexScan&>(*_right->getRootOperation()), _rightJoinCol);
+        leftRes->idTable(), _leftJoinCol, *rightIndexScan, _rightJoinCol);
     checkCancellation();
     return {std::move(idTable), resultSortedOn(),
             leftRes->getSharedLocalVocab()};
   }
 
-  shared_ptr<const ResultTable> rightRes =
+  std::shared_ptr<const Result> rightRes =
       rightResIfCached ? rightResIfCached : _right->getResult();
   checkCancellation();
   join(leftRes->idTable(), _leftJoinCol, rightRes->idTable(), _rightJoinCol,
@@ -189,7 +193,7 @@ ResultTable Join::computeResult() {
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
   return {std::move(idTable), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(*leftRes, *rightRes)};
+          Result::getMergedLocalVocab(*leftRes, *rightRes)};
 }
 
 // _____________________________________________________________________________
@@ -565,8 +569,11 @@ void updateRuntimeInfoForLazyScan(
 
 // ______________________________________________________________________________________________________
 IdTable Join::computeResultForTwoIndexScans() {
-  AD_CORRECTNESS_CHECK(_left->getType() == QueryExecutionTree::SCAN &&
-                       _right->getType() == QueryExecutionTree::SCAN);
+  auto leftScan =
+      std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
+  auto rightScan =
+      std::dynamic_pointer_cast<IndexScan>(_right->getRootOperation());
+  AD_CORRECTNESS_CHECK(leftScan && rightScan);
   // The join column already is the first column in both inputs, so we don't
   // have to permute the inputs and results for the `AddCombinedRowToIdTable`
   // class to work correctly.
@@ -575,12 +582,9 @@ IdTable Join::computeResultForTwoIndexScans() {
       1, IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
       cancellationHandle_};
 
-  auto& leftScan = dynamic_cast<IndexScan&>(*_left->getRootOperation());
-  auto& rightScan = dynamic_cast<IndexScan&>(*_right->getRootOperation());
-
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
   auto [leftBlocksInternal, rightBlocksInternal] =
-      IndexScan::lazyScanForJoinOfTwoScans(leftScan, rightScan);
+      IndexScan::lazyScanForJoinOfTwoScans(*leftScan, *rightScan);
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());
 
   auto leftBlocks = convertGenerator(std::move(leftBlocksInternal));
@@ -589,8 +593,8 @@ IdTable Join::computeResultForTwoIndexScans() {
   ad_utility::zipperJoinForBlocksWithoutUndef(leftBlocks, rightBlocks,
                                               std::less{}, rowAdder);
 
-  updateRuntimeInfoForLazyScan(leftScan, leftBlocks.details());
-  updateRuntimeInfoForLazyScan(rightScan, rightBlocks.details());
+  updateRuntimeInfoForLazyScan(*leftScan, leftBlocks.details());
+  updateRuntimeInfoForLazyScan(*rightScan, rightBlocks.details());
 
   AD_CORRECTNESS_CHECK(leftBlocks.details().numBlocksRead_ <=
                        rightBlocks.details().numElementsRead_);
