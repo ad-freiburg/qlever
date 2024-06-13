@@ -885,14 +885,16 @@ TEST(SparqlExpression, isSomethingFunctions) {
 // ____________________________________________________________________________
 TEST(SparqlExpression, testDatatype) {
   U = Id::makeUndefined();
-  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815));
-  auto d2 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
-  auto d3 = DateOrLargeYear(-10000, DateOrLargeYear::Type::Year);
-  auto d4 = DateOrLargeYear(Date(2024, 6, 11));
+  auto d1 = DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z");
+  auto d2 = DateOrLargeYear::parseGYear("-10000");
+  auto d3 = DateOrLargeYear::parseGYear("1900");
+  auto d4 = DateOrLargeYear::parseXsdDate("2024-06-13");
+  auto d5 = DateOrLargeYear::parseGYearMonth("2024-06");
   auto DateId1 = Id::makeFromDate(d1);
   auto DateId2 = Id::makeFromDate(d2);
   auto DateId3 = Id::makeFromDate(d3);
   auto DateId4 = Id::makeFromDate(d4);
+  auto DateId5 = Id::makeFromDate(d5);
   auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
   checkGetDatatype(IdOrLiteralOrIriVec{lit(
                        "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
@@ -918,12 +920,15 @@ TEST(SparqlExpression, testDatatype) {
   checkGetDatatype(
       IdOrLiteralOrIriVec{DateId4},
       IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#date>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
   checkGetDatatype(
       IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
       IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
-  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
-                   IdOrLiteralOrIriVec{
-                       iriref("<http://www.w3.org/2001/XMLSchema#decimal>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#double>")});
   checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromBool(false)},
                    IdOrLiteralOrIriVec{
                        iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});

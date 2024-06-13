@@ -4,6 +4,7 @@
 
 #include "SparqlExpressionValueGetters.h"
 
+#include "SparqlExpressionValueGettersHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "util/Conversions.h"
@@ -173,37 +174,25 @@ IntDoubleStr ToNumericValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-LiteralOrString makeDatatypeValueGetter::operator()(
+OptIri makeDatatypeValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  // 1. false: don't remove the brackets (easier to make an explicit literal
-  // later on)  2. false: we also want to consider other "typed" types w.r.t. to
-  // DATATYPE()
-  auto optionalStringAndType =
-      ExportQueryExecutionTrees::idToStringAndType<false, false, std::identity>(
-          context->_qec.getIndex(), id, context->_localVocab);
-  if (!optionalStringAndType.has_value()) {
-    return std::monostate{};
+  return idToIri(context->_qec.getIndex(), id, context->_localVocab);
+}
+
+// ____________________________________________________________________________
+OptIri makeDatatypeValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  if (litOrIri.isLiteral()) {
+    // namespace sparqlExpression::detail::helpers
+    return helpers::iriFromLiteral(
+        litOrIri.getLiteral().toStringRepresentation());
   } else {
-    const auto& [str, dt] = optionalStringAndType.value();
-    if (dt == nullptr || dt[0] == '\0') {
-      return str;
-    } else {
-      return absl::StrCat("\""sv, str, "\"^^<"sv, dt, ">"sv);
-    }
+    return std::nullopt;
   }
 }
 
 // ____________________________________________________________________________
-LiteralOrString makeDatatypeValueGetter::operator()(
-    const LiteralOrIri& litOrIri,
-    [[maybe_unused]] const EvaluationContext* context) const {
-  if (litOrIri.isLiteral()) {
-    return litOrIri.getLiteral();
-  } else {
-    return std::monostate{};
-  }
-}
-
 OptIri IriValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {

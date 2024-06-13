@@ -34,7 +34,8 @@ using IntOrDouble = std::variant<double, int64_t>;
 using LiteralOrString =
     std::variant<std::monostate, ad_utility::triple_component::Literal,
                  std::string>;
-// Used as return type for `IriValueGetter`
+
+// Used as return type for `IriValueGetter` and `makeDatatypeValueGetter`
 using OptIri = std::optional<Iri>;
 
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
@@ -253,9 +254,9 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 // ad_utility::triple_component::Literal, std::string> object.
 struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
   using Mixin<makeDatatypeValueGetter>::operator();
-  LiteralOrString operator()(ValueId id,
+  OptIri operator()(ValueId id,
                              const EvaluationContext* context) const;
-  LiteralOrString operator()(const LiteralOrIri& litOrIri,
+  OptIri operator()(const LiteralOrIri& litOrIri,
                              const EvaluationContext* context) const;
 };
 
