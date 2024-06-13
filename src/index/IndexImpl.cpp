@@ -1372,7 +1372,7 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
       col1String.has_value() ? col1String.value().get().toValueId(getVocab())
@@ -1390,7 +1390,7 @@ IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
                                 additionalColumns, cancellationHandle,
                                 limitOffset);

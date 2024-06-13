@@ -42,7 +42,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
 IdTable Permutation::scan(const ScanSpecification& scanSpec,
                           ColumnIndicesRef additionalColumns,
                           const CancellationHandle& cancellationHandle,
-                          LimitOffsetClause limitOffset) const {
+                          const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -139,7 +139,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   if (!blocks.has_value()) {
     auto blockSpan = CompressedRelationReader::getRelevantBlocks(
         scanSpec, meta_.blockData());

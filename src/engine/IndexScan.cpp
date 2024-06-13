@@ -285,8 +285,16 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   if (s.numVariables_ < 2) {
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
+
+  // If there is a LIMIT or OFFSET clause that constrains the scan
+  // (which can happen with an explicit subquery), we cannot use the prefiltered
+  // blocks, as we currently have no mechanism to include limits and offsets
+  // into the prefiltering.
+  auto actualBlocks = s.getLimit().isUnconstrained()
+                          ? std::optional{std::move(blocks)}
+                          : std::nullopt;
   return index.getPermutation(s.permutation())
-      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(blocks),
+      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
                 s.additionalColumns(), s.cancellationHandle_);
 };
 

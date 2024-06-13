@@ -28,7 +28,7 @@ static auto getBeginAndEnd(auto& range) {
 }
 static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
   auto& offset = limitOffset._offset;
-  auto relevantOffset = std::min(offset, block.size());
+  auto relevantOffset = std::min(static_cast<size_t>(offset), block.size());
   if (relevantOffset == block.size()) {
     block.clear();
   } else {
@@ -36,7 +36,8 @@ static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
   }
   offset -= relevantOffset;
   auto& limit = limitOffset._limit;
-  auto relevantLimit = std::min(block.size(), limit.value_or(block.size()));
+  auto relevantLimit =
+      std::min(block.size(), static_cast<size_t>(limit.value_or(block.size())));
   block.resize(relevantLimit);
   if (limit.has_value()) {
     limit.value() -= relevantLimit;
@@ -163,7 +164,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       co_yield lastBlock;
     }
   }
-  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_);
+  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_ ||
+                       !limitOffset.isUnconstrained());
 }
 
 namespace {
@@ -341,7 +343,7 @@ IdTable CompressedRelationReader::scan(
     std::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 

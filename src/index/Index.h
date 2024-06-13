@@ -243,13 +243,13 @@ class Index {
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
       const ad_utility::SharedCancellationHandle& cancellationHandle,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
   IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               LimitOffsetClause limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

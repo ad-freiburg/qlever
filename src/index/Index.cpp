@@ -280,7 +280,7 @@ IdTable Index::scan(
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
                       cancellationHandle, limitOffset);
 }
@@ -290,7 +290,7 @@ IdTable Index::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
-    LimitOffsetClause limitOffset) const {
+    const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(col0Id, col1Id, p, additionalColumns, cancellationHandle,
                       limitOffset);
 }

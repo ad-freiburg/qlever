@@ -403,13 +403,13 @@ class IndexImpl {
       const Permutation::Enum& permutation,
       Permutation::ColumnIndicesRef additionalColumns,
       const ad_utility::SharedCancellationHandle& cancellationHandle,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
-               LimitOffsetClause limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(const TripleComponent& col0,

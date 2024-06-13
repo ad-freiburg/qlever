@@ -60,7 +60,7 @@ class Permutation {
   IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               LimitOffsetClause limitOffset = {}) const;
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
@@ -92,7 +92,7 @@ class Permutation {
       const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
       ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
-      LimitOffsetClause limitOffset = {}) const;
+      const LimitOffsetClause& limitOffset = {}) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
 
