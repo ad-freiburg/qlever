@@ -434,6 +434,8 @@ class CompressedRelationReader {
   // The file that stores the actual permutations.
   ad_utility::File file_;
 
+  bool useUpdates_ = false;
+
  public:
   explicit CompressedRelationReader(Allocator allocator, ad_utility::File file)
       : allocator_{std::move(allocator)}, file_{std::move(file)} {}
@@ -546,6 +548,10 @@ class CompressedRelationReader {
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
 
+  // Enable/disable the use of triples gathered from Updates when querying.
+  void enableUpdateUse();
+  void disableUpdateUse();
+
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.
   // Only the columns specified by `columnIndices` are read.
@@ -588,7 +594,8 @@ class CompressedRelationReader {
   DecompressedBlock readAndDecompressBlock(
       const CompressedBlockMetadata& blockMetaData,
       ColumnIndicesRef columnIndices,
-      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex) const;
+      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex,
+      bool useUpdates) const;
 
  private:
   // Read the block identified by `blockMetadata` from disk, decompress it, and
@@ -605,7 +612,8 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetadata,
       std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
       ColumnIndicesRef columnIndices,
-      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex) const;
+      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex,
+      bool useUpdates) const;
 
   // Yield all the blocks in the range `[beginBlock, endBlock)`. If the
   // `columnIndices` are set, only the specified columns from the blocks
