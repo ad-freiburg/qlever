@@ -727,8 +727,7 @@ DecompressedBlock CompressedRelationReader::addUpdateTriples(
     DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
     size_t blockIndex) const {
   auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
-  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
-  DecompressedBlock blockWithUpdate{block.numColumns(), allocator};
+  DecompressedBlock blockWithUpdate{block.numColumns(), allocator_};
   blockWithUpdate.resize(block.numRows() + numInserts);
   auto rowsWritten = locatedTriples.mergeTriples(blockIndex, std::move(block),
                                                  blockWithUpdate, 0);
