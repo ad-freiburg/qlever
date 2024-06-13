@@ -295,7 +295,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           : std::nullopt;
   return index.getPermutation(s.permutation())
       .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
-                s.additionalColumns(), s.cancellationHandle_);
+                s.additionalColumns(), s.cancellationHandle_, s.getLimit());
 };
 
 // ________________________________________________________________
