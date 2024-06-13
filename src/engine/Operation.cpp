@@ -160,10 +160,9 @@ std::shared_ptr<const Result> Operation::getResult(
         runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
         auto numRows = result.idTable().numRows();
-        AD_CONTRACT_CHECK(
-            numRows ==
-            std::min(static_cast<size_t>(_limit._limit.value_or(numRows)),
-                     numRows));
+        auto limit = _limit._limit;
+        AD_CONTRACT_CHECK(!limit.has_value() ||
+                          numRows <= static_cast<size_t>(limit.value()));
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
