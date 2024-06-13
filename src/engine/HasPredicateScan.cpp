@@ -115,7 +115,7 @@ string HasPredicateScan::getDescriptor() const {
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + subject_.toRdfLiteral();
+      return "HasPredicateScan with subquery";
     default:
       return "HasPredicateScan";
   }

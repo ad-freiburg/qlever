@@ -85,13 +85,11 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
             cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto patternIdx =
-              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN - 1].getInt();
+          auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
-          auto patternIdxObject =
-              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN - 1].getInt();
+          auto patternIdxObject = row[3].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };
