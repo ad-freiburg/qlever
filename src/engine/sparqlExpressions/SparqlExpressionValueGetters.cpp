@@ -4,7 +4,6 @@
 
 #include "SparqlExpressionValueGetters.h"
 
-#include "SparqlExpressionValueGettersHelpers.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "util/Conversions.h"
@@ -174,9 +173,61 @@ IntDoubleStr ToNumericValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
+OptIri makeDatatypeValueGetter::iriFromLiteral(const std::string& str) const {
+  // check that we return an Iri w.r.t. Literals
+  if (!(str.starts_with("\"") || str.starts_with("'"))) {
+    return std::nullopt;
+  }
+  auto posDt = str.rfind("^^");
+  if (posDt != std::string::npos) {
+    return Iri::fromStringRepresentation(str.substr(posDt + 2));
+  } else if (str.rfind("@") != std::string::npos) {
+    return Iri::fromIri(RDF_LANGTAG_STRING);
+  } else {
+    return Iri::fromIri(XSD_STRING);
+  }
+};
+
+// ____________________________________________________________________________
 OptIri makeDatatypeValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return idToIri(context->_qec.getIndex(), id, context->_localVocab);
+  auto datatype = id.getDatatype();
+  std::optional<std::string> entity;
+  switch (datatype) {
+    case Datatype::Bool:
+      return Iri::fromIri(XSD_BOOLEAN_TYPE);
+    case Datatype::Double:
+      return Iri::fromIri(XSD_DOUBLE_TYPE);
+    case Datatype::Int:
+      return Iri::fromIri(XSD_INT_TYPE);
+    case Datatype::Date: {
+      auto dateType = id.getDate().toStringAndType().second;
+      if (dateType != nullptr) {
+        return Iri::fromIri(dateType);
+      } else {
+        return std::nullopt;
+      }
+    }
+    case Datatype::LocalVocabIndex: {
+      const auto& voc = context->_localVocab;
+      return iriFromLiteral(
+          voc.getWord(id.getLocalVocabIndex()).toStringRepresentation());
+    }
+    case Datatype::VocabIndex: {
+      const auto& idx = context->_qec.getIndex();
+      entity = idx.idToOptionalString(id.getVocabIndex());
+      if (entity.has_value()) {
+        return std::nullopt;
+      }
+      return iriFromLiteral(entity.value());
+    }
+    case Datatype::Undefined:
+    case Datatype::BlankNodeIndex:
+    case Datatype::TextRecordIndex:
+    case Datatype::WordVocabIndex:
+      return std::nullopt;
+  }
+  AD_FAIL();
 }
 
 // ____________________________________________________________________________
@@ -184,9 +235,7 @@ OptIri makeDatatypeValueGetter::operator()(
     const LiteralOrIri& litOrIri,
     [[maybe_unused]] const EvaluationContext* context) const {
   if (litOrIri.isLiteral()) {
-    // namespace sparqlExpression::detail::helpers
-    return helpers::iriFromLiteral(
-        litOrIri.getLiteral().toStringRepresentation());
+    return iriFromLiteral(litOrIri.getLiteral().toStringRepresentation());
   } else {
     return std::nullopt;
   }

@@ -257,6 +257,9 @@ struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
   OptIri operator()(ValueId id, const EvaluationContext* context) const;
   OptIri operator()(const LiteralOrIri& litOrIri,
                     const EvaluationContext* context) const;
+  // Helper function to retrieve Iri from LiteralOrIri-Content-String
+  // if an actual Literal was contained.
+  inline OptIri iriFromLiteral(const std::string& str) const;
 };
 
 // `IriValueGetter` returns an
