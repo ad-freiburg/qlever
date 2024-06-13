@@ -216,7 +216,7 @@ OptIri makeDatatypeValueGetter::operator()(
     case Datatype::VocabIndex: {
       const auto& idx = context->_qec.getIndex();
       entity = idx.idToOptionalString(id.getVocabIndex());
-      if (entity.has_value()) {
+      if (!entity.has_value()) {
         return std::nullopt;
       }
       return iriFromLiteral(entity.value());
