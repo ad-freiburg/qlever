@@ -734,6 +734,54 @@ TEST(SparqlExpression, substr) {
 }
 
 // _____________________________________________________________________________________
+TEST(SparqlExpression, strIriDtTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrIriTag =
+      std::bind_front(testNaryExpression, &makeStrIriDtExpression);
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{lit("123")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
+      IdOrLiteralOrIriVec{lit("iiii")},
+      IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
+                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, strLangTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrTag =
+      std::bind_front(testNaryExpression, &makeStrLangTagExpression);
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("chat")}, IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en-US")},
+              IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("en-US")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("Sprachnachricht", "@de-Latn-de")},
+              IdOrLiteralOrIriVec{lit("Sprachnachricht")},
+              IdOrLiteralOrIriVec{lit("de-Latn-de")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("d1235")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("reporter")},
+              IdOrLiteralOrIriVec{lit("@")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{lit("d")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{U});
+}
+
+// _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
   auto checkNegate = testUnaryExpression<&makeUnaryNegateExpression>;
   // Zero and NaN are considered to be false, so their negation is true

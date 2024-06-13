@@ -19,6 +19,7 @@
 
 using ad_utility::constantTimeEquals;
 using ad_utility::getUTF8Substring;
+using ad_utility::strIsLangTag;
 using ad_utility::utf8ToLower;
 using ad_utility::utf8ToUpper;
 
@@ -320,4 +321,26 @@ TEST(StringUtilsTest, findLiteralEnd) {
   EXPECT_EQ(findLiteralEnd("no\"thing", "\""), 2u);
   EXPECT_EQ(findLiteralEnd("no\\\"thi\"ng", "\""), 7u);
   EXPECT_EQ(findLiteralEnd("no\\\\\"thing", "\""), 4u);
+}
+
+TEST(StringUtilsTest, strLangTag) {
+  // INVALID TAGS
+  ASSERT_FALSE(strIsLangTag(""));
+  ASSERT_FALSE(strIsLangTag("de-@"));
+  ASSERT_FALSE(strIsLangTag("x46"));
+  ASSERT_FALSE(strIsLangTag("*-DE"));
+  ASSERT_FALSE(strIsLangTag("en@US"));
+  ASSERT_FALSE(strIsLangTag("de_US"));
+  ASSERT_FALSE(strIsLangTag("9046"));
+  ASSERT_FALSE(strIsLangTag("-fr-BE-"));
+  ASSERT_FALSE(strIsLangTag("de-366-?"));
+
+  // VALID TAGS
+  ASSERT_TRUE(strIsLangTag("en"));
+  ASSERT_TRUE(strIsLangTag("en-US"));
+  ASSERT_TRUE(strIsLangTag("es-419"));
+  ASSERT_TRUE(strIsLangTag("zh-Hant-HK"));
+  ASSERT_TRUE(strIsLangTag("fr-BE-1606nict"));
+  ASSERT_TRUE(strIsLangTag("de-CH-x-zh"));
+  ASSERT_TRUE(strIsLangTag("en"));
 }
