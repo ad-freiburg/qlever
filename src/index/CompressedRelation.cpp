@@ -67,8 +67,17 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     CompressedBlock compressedBlock =
         readCompressedBlockFromFile(block, columnIndices);
     lock.unlock();
-    return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_,
-                                              locatedTriplesPerBlock, myIndex)};
+    DecompressedBlock decompressedBlock =
+        decompressBlock(compressedBlock, block.numRows_);
+    auto [numInserts, numDeletes] = locatedTriplesPerBlock.numTriples(myIndex);
+    if (numInserts == 0 && numDeletes == 0) {
+      // no updates in this block
+    } else {
+      // update with Update Triples
+      decompressedBlock = addUpdateTriples(std::move(decompressedBlock),
+                                           locatedTriplesPerBlock, myIndex);
+    }
+    return std::pair{myIndex, std::move(decompressedBlock)};
   };
   const size_t numThreads =
       RuntimeParameters().get<"lazy-index-scan-num-threads">();
@@ -696,26 +705,28 @@ CompressedBlock CompressedRelationReader::readCompressedBlockFromFile(
 
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::decompressBlock(
-    const CompressedBlock& compressedBlock, size_t numRowsToRead,
-    const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex) const {
+    const CompressedBlock& compressedBlock, size_t numRowsToRead) const {
   DecompressedBlock decompressedBlock{compressedBlock.size(), allocator_};
   decompressedBlock.resize(numRowsToRead);
   for (size_t i = 0; i < compressedBlock.size(); ++i) {
     auto col = decompressedBlock.getColumn(i);
     decompressColumn(compressedBlock[i], numRowsToRead, col.data());
   }
+  return decompressedBlock;
+}
+
+// ____________________________________________________________________________
+DecompressedBlock CompressedRelationReader::addUpdateTriples(
+    DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
+    size_t blockIndex) const {
   auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
-  if (numInserts == 0 && numDeletes == 0) {
-    // no updates in this block - return early
-    return decompressedBlock;
-  }
   auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
-  DecompressedBlock decompressedBlockWithUpdate{decompressedBlock.numColumns(),
-                                                allocator};
-  decompressedBlockWithUpdate.resize(numRowsToRead + numInserts);
-  locatedTriples.mergeTriples(blockIndex, std::move(decompressedBlock),
-                              decompressedBlockWithUpdate, 0);
-  return decompressedBlockWithUpdate;
+  DecompressedBlock blockWithUpdate{block.numColumns(), allocator};
+  blockWithUpdate.resize(block.numRows() + numInserts);
+  auto rowsWritten = locatedTriples.mergeTriples(blockIndex, std::move(block),
+                                                 blockWithUpdate, 0);
+  blockWithUpdate.resize(rowsWritten);
+  return blockWithUpdate;
 }
 
 // ____________________________________________________________________________
@@ -764,8 +775,17 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, columnIndices);
   const auto numRowsToRead = blockMetaData.numRows_;
-  return decompressBlock(compressedColumns, numRowsToRead, locatedTriples,
-                         blockIndex);
+  DecompressedBlock decompressedBlock =
+      decompressBlock(compressedColumns, numRowsToRead);
+  auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
+  if (numInserts == 0 && numDeletes == 0) {
+    // no updates in this block
+    return decompressedBlock;
+  } else {
+    // add Update Triples
+    return addUpdateTriples(std::move(decompressedBlock), locatedTriples,
+                            blockIndex);
+  }
 }
 
 // ____________________________________________________________________________

@@ -557,9 +557,8 @@ class CompressedRelationReader {
   // have after decompression must be passed in via the `numRowsToRead`
   // argument. It is typically obtained from the corresponding
   // `CompressedBlockMetaData`.
-  DecompressedBlock decompressBlock(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex) const;
+  DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
+                                    size_t numRowsToRead) const;
 
   // Similar to `decompressBlock`, but the block is directly decompressed into
   // the `table`, starting at the `offsetInTable`-th row. The `table` and the
@@ -569,6 +568,10 @@ class CompressedRelationReader {
       const CompressedBlock& compressedBlock, size_t numRowsToRead,
       IdTable& table, size_t offsetInTable,
       const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex);
+
+  DecompressedBlock addUpdateTriples(
+      DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
+      size_t blockIndex) const;
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
