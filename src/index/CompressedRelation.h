@@ -544,14 +544,6 @@ class CompressedRelationReader {
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
 
-  // Similar to `decompressBlock`, but the block is directly decompressed into
-  // the `table`, starting at the `offsetInTable`-th row. The `table` and the
-  // `compressedBlock` must have the same number of columns, and the `table`
-  // must have at least `numRowsToRead + offsetInTable` rows.
-  static void decompressBlockToExistingIdTable(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable);
-
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
   // store the result at the `iterator`. For the `numRowsToRead` argument, see
