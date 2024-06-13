@@ -181,7 +181,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
     table.clear();
-    // Check that the scans also work with various values for LIMIT and OFFSET
+    // Check that the scans also work with various values for LIMIT and OFFSET.
     std::vector<LimitOffsetClause> limitOffsetClauses{
         {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
     for (const auto& limitOffset : limitOffsetClauses) {
@@ -192,9 +192,6 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
       col1And2.erase(
           col1And2.begin(),
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
-      if (col1And2.size() != table.numRows()) {
-        std::cerr << "mismatch " << std::endl;
-      }
       checkThatTablesAreEqual(col1And2, table);
     }
     for (const auto& block : reader.lazyScan(

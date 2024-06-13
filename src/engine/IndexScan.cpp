@@ -289,7 +289,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
-  // into the prefiltering.
+  // into the prefiltering (`std::nullopt` means `scan all blocks`).
   auto actualBlocks = s.getLimit().isUnconstrained()
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;

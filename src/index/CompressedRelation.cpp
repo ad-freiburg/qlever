@@ -26,21 +26,25 @@ using namespace std::chrono_literals;
 static auto getBeginAndEnd(auto& range) {
   return std::pair{std::ranges::begin(range), std::ranges::end(range)};
 }
+
+// modify the `block` according to the `limitOffset`. Also modify the
+// `limitOffset` to reflect the parts of the LIMIT and OFFSET that have been
+// performed by pruning this `block`.
 static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
   auto& offset = limitOffset._offset;
-  auto relevantOffset = std::min(static_cast<size_t>(offset), block.size());
-  if (relevantOffset == block.size()) {
+  auto offsetInBlock = std::min(static_cast<size_t>(offset), block.size());
+  if (offsetInBlock == block.size()) {
     block.clear();
   } else {
-    block.erase(block.begin(), block.begin() + relevantOffset);
+    block.erase(block.begin(), block.begin() + offsetInBlock);
   }
-  offset -= relevantOffset;
+  offset -= offsetInBlock;
   auto& limit = limitOffset._limit;
-  auto relevantLimit =
+  auto limitInBlock =
       std::min(block.size(), static_cast<size_t>(limit.value_or(block.size())));
-  block.resize(relevantLimit);
+  block.resize(limitInBlock);
   if (limit.has_value()) {
-    limit.value() -= relevantLimit;
+    limit.value() -= limitInBlock;
   }
 }
 
