@@ -254,12 +254,10 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 // ad_utility::triple_component::Literal, std::string> object.
 struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
   using Mixin<makeDatatypeValueGetter>::operator();
-  OptIri operator()(ValueId id,
-                             const EvaluationContext* context) const;
+  OptIri operator()(ValueId id, const EvaluationContext* context) const;
   OptIri operator()(const LiteralOrIri& litOrIri,
-                             const EvaluationContext* context) const;
+                    const EvaluationContext* context) const;
 };
-
 
 // `IriValueGetter` returns an
 // `std::optional<ad_utility::triple_component::Iri>` object. If the
