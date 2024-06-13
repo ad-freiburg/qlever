@@ -15,7 +15,7 @@ using namespace ad_utility::memory_literals;
 using enum ad_utility::ResizeResult;
 
 using Vec = std::vector<int>;
-auto vectorSizeGetter = [](const auto& pointer) {
+[[maybe_unused]] auto vectorSizeGetter = [](const auto& pointer) {
   return pointer->size() * sizeof(int) * 1_B;
 };
 
