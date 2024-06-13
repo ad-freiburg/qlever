@@ -420,6 +420,13 @@ IdTable CompressedRelationReader::scan(
                                &locatedTriplesPerBlock, &blockIndex]() mutable {
         ad_utility::TimeBlockAndLog tbl{"Decompression a block"};
 
+        auto [numInserts, numDeletes] =
+            locatedTriplesPerBlock.numTriples(blockIndex);
+        if (!(numInserts == 0 && numDeletes == 0)) {
+          LOG(INFO)
+              << "Cannot add update triples in decompressBlockToExistingIdTable"
+              << std::endl;
+        }
         decompressBlockToExistingIdTable(compressedBuffer, block.numRows_,
                                          result, rowIndexOfNextBlockStart,
                                          locatedTriplesPerBlock, blockIndex);
@@ -742,17 +749,6 @@ void CompressedRelationReader::decompressBlockToExistingIdTable(
     decompressColumn(compressedBlock[i], numRowsToRead,
                      col.data() + offsetInTable);
   }
-  auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
-  if (numInserts == 0 && numDeletes == 0) {
-    // no updates in this block - return early
-    return;
-  }
-  auto allocator = ad_utility::makeUnlimitedAllocator<Id>();
-  DecompressedBlock decompressedBlockWithUpdate{table.numColumns(), allocator};
-  decompressedBlockWithUpdate.resize(numRowsToRead + numInserts);
-  locatedTriples.mergeTriples(blockIndex, std::move(table),
-                              decompressedBlockWithUpdate, 0);
-  return;
 }
 
 // ____________________________________________________________________________
