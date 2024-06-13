@@ -73,8 +73,9 @@ class UuidExpressionImpl : public SparqlExpression {
 
 }  //  namespace detail::uuidExpression
 
-using namespace detail::uuidExpression;
-using UuidExpression = UuidExpressionImpl<fromIri, iriUuidKey>;
-using StrUuidExpression = UuidExpressionImpl<fromLiteral, litUuidKey>;
+using UuidExpression = detail::uuidExpression::UuidExpressionImpl<
+    detail::uuidExpression::fromIri, detail::uuidExpression::iriUuidKey>;
+using StrUuidExpression = detail::uuidExpression::UuidExpressionImpl<
+    detail::uuidExpression::fromLiteral, detail::uuidExpression::litUuidKey>;
 
 }  // namespace sparqlExpression

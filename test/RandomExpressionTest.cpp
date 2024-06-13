@@ -62,6 +62,7 @@ TEST(RandomExpression, simpleMemberFunctions) {
   ASSERT_NE(cacheKey, RandomExpression{}.getCacheKey({}));
 }
 
+using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 // The tests for UUID expressions follow almost exactly the pattern
 // of the above defined test for RandomExpression.
 TEST(UuidExpression, simpleMemberFunctionStrUuid) {
