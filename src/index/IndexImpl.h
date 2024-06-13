@@ -272,8 +272,8 @@ class IndexImpl {
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the Entities column (0) of the full has-relation
-   *         relation after unrolling the patterns.
+   * @return The multiplicity of the Entities column (0) of the full
+   * has-relation relation after unrolling the patterns.
    */
   double getAvgNumDistinctPredicatesPerSubject() const;
 

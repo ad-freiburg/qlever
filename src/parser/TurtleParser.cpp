@@ -734,7 +734,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
            !isParserExhausted_) {
       bool parsedStatement;
       std::optional<ParseException> ex;
-      // If this buffer reads from an mapped file, then exceptions are
+      // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
       try {

@@ -538,7 +538,7 @@ struct BlockSorter {
 #endif
   }
 };
-// Deduction guide for the implicit aggregate initialization (its  "constructor")
+// Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
 // it.
 template <typename Comparator>

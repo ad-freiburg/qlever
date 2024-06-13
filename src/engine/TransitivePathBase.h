@@ -270,8 +270,8 @@ class TransitivePathBase : public Operation {
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
-  // which keeps both possible sorting of the predicate of which transitivity
-  // is computed.
+  // which has to store both ways to sort the subtree until it knows which side
+  // becomes bound.
   virtual std::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};

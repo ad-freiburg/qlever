@@ -342,8 +342,8 @@ class MmapVectorView : private MmapVector<T> {
     open(filename, pattern);
   }
 
-  // explicitly close the vector to an uninitialized state and free the associated
-  // resources
+  // explicitly close the vector to an uninitialized state and free the
+  // associated resources
   void close();
 
   // destructor

@@ -56,8 +56,8 @@ cppcoro::generator<ContextFileParser::Line> IndexImpl::wordsInTextRecords(
       contextId = contextId.incremented();
     }
   }
-  // ROUND 2: Optionally, consider each literal from the internal vocabulary as a
-  // text record.
+  // ROUND 2: Optionally, consider each literal from the internal vocabulary as
+  // a text record.
   if (addWordsFromLiterals) {
     for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
          index = index.incremented()) {

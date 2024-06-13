@@ -338,8 +338,8 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 }
 
 /*
-The columns of the automatically generated benchmark tables contain the following
-information:
+The columns of the automatically generated benchmark tables contain the
+following information:
 - The parameter, that changes with every row.
 - Time needed for sorting `IdTable`s.
 - Time needed for merge/galloping join.
@@ -1931,7 +1931,8 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     generation of all other row entries.
     - The join column entries of the bigger table have a uniform distribution,
     are made up out of only the elements of the bigger tables and the generation
-    of one row entry is independent from the generation of all other row entries.
+    of one row entry is independent from the generation of all other row
+    entries.
     - The generation of join column entries in the smaller table is independent
     from the generation in the bigger table.
 

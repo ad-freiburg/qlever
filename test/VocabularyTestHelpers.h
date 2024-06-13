@@ -102,8 +102,8 @@ void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
                          words, ids);
 }
 
-// Same as the previous function, but explicitly state, which IDs are expected in
-// the vocabulary.
+// Same as the previous function, but explicitly state, which IDs are expected
+// in the vocabulary.
 void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
                                                       const auto& words,
                                                       const auto& ids) {

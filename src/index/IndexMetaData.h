@@ -110,8 +110,8 @@ class IndexMetaData {
 
   // `isPersistentMetaData` is true when we do not need to add relation meta
   // data to data_, but assume that it is already contained in data_. This must
-  // be a compile time parameter because we have to avoid instantiation of member
-  // function set() when `MapType` is read only  (e.g., when based on
+  // be a compile time parameter because we have to avoid instantiation of
+  // member function set() when `MapType` is read only  (e.g., when based on
   // MmapVectorView).
   template <bool isPersistentMetaData = false>
   void add(AddType addedValue);

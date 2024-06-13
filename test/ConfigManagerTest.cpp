@@ -129,8 +129,8 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   /*
   Trying to add a configuration option, whose entire path is a prefix of the
   path of an already added sub manager, should cause an exception. After all,
-  this would imply, that the sub manager is part of this new option. Which is not
-  supported at the moment.
+  this would imply, that the sub manager is part of this new option. Which is
+  not supported at the moment.
   */
   config.addSubManager({"sub"s, "manager"s})
       .addOption("someOpt"s, "", &notUsed, 42);
@@ -139,8 +139,8 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 
   /*
   Trying to add a configuration option, who contains the entire path of an
-  already added sub manager as prefix, should cause an exception. After all, such
-  recursive builds should have been done on `C++` level, not json level.
+  already added sub manager as prefix, should cause an exception. After all,
+  such recursive builds should have been done on `C++` level, not json level.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addOption({"sub"s, "manager"s, "someOption"s}, "", &notUsed, 42),
@@ -261,8 +261,8 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
 
   /*
   Trying to add a sub manager, whose entire path is a prefix of the path of an
-  already added sub manager, should cause an exception. After all, such recursive
-  builds should have been done on `C++` level, not json level.
+  already added sub manager, should cause an exception. After all, such
+  recursive builds should have been done on `C++` level, not json level.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addSubManager({"Shared_part"s, "Unique_part_1"s}),
@@ -291,8 +291,8 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
   /*
   Trying to add a sub manager, who contains the entire path of an already added
   config option as prefix, should cause an exception.
-  After all, this would imply, that the sub manager is part of this option. Which
-  is not supported at the moment.
+  After all, this would imply, that the sub manager is part of this option.
+  Which is not supported at the moment.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addSubManager({"some"s, "option"s, "manager"s}),
@@ -1633,8 +1633,8 @@ void doValidatorTest(
           ConfigManager& managerToAddValidatorTo,
           ConstConfigOptionProxy<std::string> option,
           const nlohmann::json::json_pointer& pathToOption) {
-        // The value, which causes the automatically generated validator with the
-        // given variant to fail.
+        // The value, which causes the automatically generated validator with
+        // the given variant to fail.
         const std::string& failValue =
             createDummyValueForValidator<std::string>(variantNumber);
 
