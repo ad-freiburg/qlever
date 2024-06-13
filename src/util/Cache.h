@@ -6,26 +6,23 @@
 
 #pragma once
 
-#include <assert.h>
+#include <gtest/gtest_prod.h>
 
+#include <cassert>
 #include <concepts>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <type_traits>
 #include <utility>
 
-#include "./HashMap.h"
-#include "PriorityQueue.h"
-#include "util/ConstexprUtils.h"
+#include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/PriorityQueue.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
 
 namespace ad_utility {
 
-using std::make_shared;
-using std::pair;
 using std::shared_ptr;
 using namespace ad_utility::memory_literals;
 
@@ -101,14 +98,13 @@ class FlexibleCache {
   };
 
   using EmplacedValue = shared_ptr<Value>;
-  // using Entry = pair<Key, ValuePtr>;
   using EntryList = PriorityQueue<Score, Entry, ScoreComparator>;
 
   using AccessMap = MapType<Key, typename EntryList::Handle>;
   using PinnedMap = MapType<Key, ValuePtr>;
   using SizeMap = MapType<Key, MemorySize>;
 
-  using TryEmplaceResult = pair<EmplacedValue, ValuePtr>;
+  using TryEmplaceResult = std::pair<EmplacedValue, ValuePtr>;
 
  public:
   //! Typical constructor. A default value may be added in time.
@@ -150,7 +146,7 @@ class FlexibleCache {
   /// Insert a key-value pair to the cache. Throws an exception if the key is
   /// already present. If the value is too big for the cache, nothing happens.
   ValuePtr insert(const Key& key, Value value) {
-    auto ptr = make_shared<Value>(std::move(value));
+    auto ptr = std::make_shared<Value>(std::move(value));
     return insert(key, std::move(ptr));
   }
 
@@ -158,7 +154,7 @@ class FlexibleCache {
   // is already present. If the value is too big for the cache, an exception is
   // thrown.
   ValuePtr insertPinned(const Key& key, Value value) {
-    auto ptr = make_shared<Value>(std::move(value));
+    auto ptr = std::make_shared<Value>(std::move(value));
     return insertPinned(key, std::move(ptr));
   }
 
@@ -242,14 +238,15 @@ class FlexibleCache {
                                    MemorySize& variable, bool pinned) {
       auto newSize = _valueSizeGetter(*(*this)[key]);
       auto& oldSize = _sizeMap.at(key);
-      // Overflowing if oldSize > newSize is fine here, the math adds up
-      // nevertheless.
-      auto sizeDelta = newSize - oldSize;
-      if (newSize > oldSize) {
-        if (_maxSizeSingleEntry >= newSize) {
+      if (newSize >= oldSize) {
+        auto sizeDelta = newSize - oldSize;
+        if (_maxSizeSingleEntry < newSize) {
           result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
           if (removeIfEntryGrewTooBig && !pinned) {
             erase(key);
+          } else {
+            oldSize += sizeDelta;
+            variable += sizeDelta;
           }
           // We don't know how to shrink the size here, so if
           // `removeIfEntryGrewTooBig` is false, this needs to be handled by the
@@ -262,12 +259,19 @@ class FlexibleCache {
           // We can't fit it in the cache, so remove if not pinned
           if (!pinned) {
             erase(key);
+          } else {
+            oldSize += sizeDelta;
+            variable += sizeDelta;
           }
           return;
         }
+        oldSize += sizeDelta;
+        variable += sizeDelta;
+      } else {
+        auto negativeSizeDelta = oldSize - newSize;
+        oldSize -= negativeSizeDelta;
+        variable -= negativeSizeDelta;
       }
-      oldSize += sizeDelta;
-      variable += sizeDelta;
       makeRoomIfFits(0_B);
     };
     if (containsPinned(key)) {
@@ -475,6 +479,17 @@ class FlexibleCache {
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
   SizeMap _sizeMap;
+
+  FRIEND_TEST(LRUCacheTest,
+              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased);
+
+  FRIEND_TEST(LRUCacheTest,
+              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned);
+  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed);
+  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned);
+  FRIEND_TEST(LRUCacheTest,
+              verifyNonPinnedEntriesAreRemovedToMakeRoomForResize);
+  FRIEND_TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement);
 };
 
 // Partial instantiation of FlexibleCache using the heap-based priority queue
