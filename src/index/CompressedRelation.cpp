@@ -584,20 +584,6 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 }
 
 // ____________________________________________________________________________
-void CompressedRelationReader::decompressBlockToExistingIdTable(
-    const CompressedBlock& compressedBlock, size_t numRowsToRead,
-    IdTable& table, size_t offsetInTable) {
-  AD_CORRECTNESS_CHECK(table.numRows() >= offsetInTable + numRowsToRead);
-  // TODO<joka921, C++23> use zip_view.
-  AD_CORRECTNESS_CHECK(compressedBlock.size() == table.numColumns());
-  for (size_t i = 0; i < compressedBlock.size(); ++i) {
-    auto col = table.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead,
-                     col.data() + offsetInTable);
-  }
-}
-
-// ____________________________________________________________________________
 template <typename Iterator>
 void CompressedRelationReader::decompressColumn(
     const std::vector<char>& compressedBlock, size_t numRowsToRead,
