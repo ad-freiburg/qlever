@@ -99,8 +99,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     popTimer.stop();
     cancellationHandle->throwIfCancelled();
     ++details.numBlocksRead_;
-    details.numElementsRead_ += block.numRows();
     pruneBlock(block, limitOffset);
+    details.numElementsRead_ += block.numRows();
     if (!block.empty()) {
       co_yield block;
     }
