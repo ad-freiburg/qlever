@@ -189,6 +189,15 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable resultExpected = block.clone();
     mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
   }
+  // Inserting a Triple that already exists should have no effect.
+  {
+    IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+        {LT{1, IT(1, 2, 4), false}, LT{1, IT(1, 2, 5), false},
+         LT{1, IT(1, 3, 5), false}});
+    IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
+    mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
+  }
 }
 
 // Test the locating of triples in a permutation using `locatedTriple`.

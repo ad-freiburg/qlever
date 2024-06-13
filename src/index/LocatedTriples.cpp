@@ -150,11 +150,16 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     // result.
     LOG(INFO) << "New Block Row " << block[rowIndex] << std::endl;
     while (locatedTriple != locatedTriples.end() &&
-           cmpLt(locatedTriple, block[rowIndex]) &&
-           locatedTriple->shouldTripleExist == true) {
-      writeTripleToResult();
-      ++resultEntry;
-      ++locatedTriple;
+           cmpLt(locatedTriple, block[rowIndex])) {
+      if (locatedTriple->shouldTripleExist == true) {
+        // Adding an inserted Triple between two triples.
+        writeTripleToResult();
+        ++resultEntry;
+        ++locatedTriple;
+      } else {
+        // Deletion of a triple that does not exist in the index has no effect.
+        ++locatedTriple;
+      }
       LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
 
@@ -162,11 +167,17 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     // marked for deletion and matches (also skip it if it does not match).
     bool deleteThisEntry = false;
     if (locatedTriple != locatedTriples.end() &&
-        cmpEq(locatedTriple, block[rowIndex]) &&
-        locatedTriple->shouldTripleExist == false) {
-      deleteThisEntry = true;
+        cmpEq(locatedTriple, block[rowIndex])) {
+      if (locatedTriple->shouldTripleExist == false) {
+        // A deletion of a triple that exists in the index.
+        deleteThisEntry = true;
 
-      ++locatedTriple;
+        ++locatedTriple;
+      } else {
+        // An insertion of a triple that already exists in the index has no
+        // effect.
+        ++locatedTriple;
+      }
       LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
     if (!deleteThisEntry) {
