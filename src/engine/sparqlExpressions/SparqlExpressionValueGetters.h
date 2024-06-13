@@ -21,6 +21,7 @@
 namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+using Iri = ad_utility::triple_component::Iri;
 
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.
@@ -33,6 +34,8 @@ using IntOrDouble = std::variant<double, int64_t>;
 using LiteralOrString =
     std::variant<std::monostate, ad_utility::triple_component::Literal,
                  std::string>;
+// Used as return type for `IriValueGetter`
+using OptIri = std::optional<Iri>;
 
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
 // general args to a numeric value (-> `int64_t or double`).
@@ -256,4 +259,18 @@ struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
                              const EvaluationContext* context) const;
 };
 
+
+// `IriValueGetter` returns an
+// `std::optional<ad_utility::triple_component::Iri>` object. If the
+// `LiteralOrIri` object contains an `Iri`, the Iri is returned. This
+// ValueGetter is currently used in `StringExpressions.cpp` within the
+// implementation of `STRDT()`.
+struct IriValueGetter : Mixin<IriValueGetter> {
+  using Mixin<IriValueGetter>::operator();
+  OptIri operator()([[maybe_unused]] ValueId id,
+                    const EvaluationContext*) const {
+    return std::nullopt;
+  }
+  OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
+};
 }  // namespace sparqlExpression::detail

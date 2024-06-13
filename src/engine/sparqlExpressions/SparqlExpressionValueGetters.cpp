@@ -203,3 +203,13 @@ LiteralOrString makeDatatypeValueGetter::operator()(
     return std::monostate{};
   }
 }
+
+OptIri IriValueGetter::operator()(
+    const LiteralOrIri& s,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  if (s.isIri()) {
+    return s.getIri();
+  } else {
+    return std::nullopt;
+  }
+}
