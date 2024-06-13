@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <string>
-#include <string_view>
 
 #include "util/Cache.h"
 #include "util/DefaultValueSizeGetter.h"
@@ -13,6 +12,12 @@
 
 using std::string;
 using namespace ad_utility::memory_literals;
+using enum ad_utility::ResizeResult;
+
+using Vec = std::vector<int>;
+auto vectorSizeGetter = [](const auto& pointer) {
+  return pointer->size() * sizeof(int) * 1_B;
+};
 
 // first some simple Tests for the general cache interface
 TEST(FlexibleCacheTest, Simple) {
@@ -237,10 +242,6 @@ TEST(LRUCacheTest, verifyTransformValueWorksIsNoOpForNonExistantValues) {
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased) {
-  using Vec = std::vector<int>;
-  auto vectorSizeGetter = [](const auto& pointer) {
-    return pointer->size() * sizeof(int) * 1_B;
-  };
   LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
       cache{1};
 
@@ -276,10 +277,6 @@ TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased) {
 // _____________________________________________________________________________
 TEST(LRUCacheTest,
      verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned) {
-  using Vec = std::vector<int>;
-  auto vectorSizeGetter = [](const auto& pointer) {
-    return pointer->size() * sizeof(int) * 1_B;
-  };
   LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
       cache{1};
 
@@ -314,11 +311,6 @@ TEST(LRUCacheTest,
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed) {
-  using enum ResizeResult;
-  using Vec = std::vector<int>;
-  auto vectorSizeGetter = [](const auto& pointer) {
-    return pointer->size() * sizeof(int) * 1_B;
-  };
   LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
       cache{3, 8_B, 4_B};
 
@@ -402,11 +394,6 @@ TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed) {
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned) {
-  using enum ResizeResult;
-  using Vec = std::vector<int>;
-  auto vectorSizeGetter = [](const auto& pointer) {
-    return pointer->size() * sizeof(int) * 1_B;
-  };
   LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
       cache{3, 8_B, 4_B};
 
@@ -493,11 +480,6 @@ TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned) {
 
 // _____________________________________________________________________________
 TEST(LRUCacheTest, verifyNonPinnedEntriesAreRemovedToMakeRoomForResize) {
-  using enum ResizeResult;
-  using Vec = std::vector<int>;
-  auto vectorSizeGetter = [](const auto& pointer) {
-    return pointer->size() * sizeof(int) * 1_B;
-  };
   LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
       cache{3, 8_B, 4_B};
 
