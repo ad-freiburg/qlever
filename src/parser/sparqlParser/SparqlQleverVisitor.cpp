@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -1972,6 +1973,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "strlang") {
+    return createBinary(&makeStrLangTagExpression);
+  } else if (functionName == "strdt") {
+    return createBinary(&makeStrIriDtExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
   } else if (functionName == "strbefore") {
@@ -1994,6 +1999,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
     return createUnary(&makeDayExpression);
+  } else if (functionName == "tz") {
+    return createUnary(&makeTimezoneStrExpression);
   } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
   } else if (functionName == "minutes") {
@@ -2013,6 +2020,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "uuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<UuidExpression>();
+  } else if (functionName == "struuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<StrUuidExpression>();
   } else if (functionName == "ceil") {
     return createUnary(&makeCeilExpression);
   } else if (functionName == "abs") {

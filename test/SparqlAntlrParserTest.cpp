@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -1382,6 +1383,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
+  expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
   expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
   expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));
@@ -1396,6 +1398,8 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
   expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+  expectBuiltInCall("STRUUID()", matchPtr<StrUuidExpression>());
+  expectBuiltInCall("UUID()", matchPtr<UuidExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE(?x, ?y, ?z)",
@@ -1415,6 +1419,26 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+
+  expectFails("STRDT()");
+  expectFails("STRDT(?x)");
+  expectBuiltInCall("STRDT(?x, ?y)",
+                    matchNary(&makeStrIriDtExpression, Var{"?x"}, Var{"?y"}));
+  expectBuiltInCall(
+      "STRDT(?x, <http://example/romanNumeral>)",
+      matchNaryWithChildrenMatchers(
+          &makeStrIriDtExpression, variableExpressionMatcher(Var{"?x"}),
+          matchLiteralExpression(iri("<http://example/romanNumeral>"))));
+
+  expectFails("STRLANG()");
+  expectFails("STRALANG(?x)");
+  expectBuiltInCall("STRLANG(?x, ?y)",
+                    matchNary(&makeStrLangTagExpression, Var{"?x"}, Var{"?y"}));
+  expectBuiltInCall(
+      "STRLANG(?x, \"en\")",
+      matchNaryWithChildrenMatchers(&makeStrLangTagExpression,
+                                    variableExpressionMatcher(Var{"?x"}),
+                                    matchLiteralExpression(lit("en"))));
 
   // The following three cases delegate to a separate parsing function, so we
   // only perform rather simple checks.

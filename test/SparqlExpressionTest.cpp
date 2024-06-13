@@ -516,6 +516,35 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
+
+  // test makeTimezoneStrExpression
+  using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
+  auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  Timezone tz = -5;
+  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d1)},
+                   IdOrLiteralOrIriVec{lit("-05:00")});
+  tz = 23;
+  auto d2 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d2)},
+                   IdOrLiteralOrIriVec{lit("+23:00")});
+  tz = Date::TimeZoneZ{};
+  auto d3 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
+  tz = Date::NoTimeZone{};
+  DateOrLargeYear d4 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d5 = DateOrLargeYear(Date(2012, 1, 4, 14, 45));
+  checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
+  Id U = Id::makeUndefined();
+  checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
+                   IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
+  DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
 }
 
 // _____________________________________________________________________________________
@@ -702,6 +731,54 @@ TEST(SparqlExpression, substr) {
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4), U);
   checkSubstr(Ux, IdOrLiteralOrIri{lit("hello")}, I(4),
               IdOrLiteralOrIri{lit("bye")});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, strIriDtTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrIriTag =
+      std::bind_front(testNaryExpression, &makeStrIriDtExpression);
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{lit("123")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
+      IdOrLiteralOrIriVec{lit("iiii")},
+      IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
+                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, strLangTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrTag =
+      std::bind_front(testNaryExpression, &makeStrLangTagExpression);
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("chat")}, IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en-US")},
+              IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("en-US")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("Sprachnachricht", "@de-Latn-de")},
+              IdOrLiteralOrIriVec{lit("Sprachnachricht")},
+              IdOrLiteralOrIriVec{lit("de-Latn-de")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("d1235")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("reporter")},
+              IdOrLiteralOrIriVec{lit("@")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{lit("d")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{U});
 }
 
 // _____________________________________________________________________________________

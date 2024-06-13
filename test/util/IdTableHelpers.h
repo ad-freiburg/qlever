@@ -103,6 +103,12 @@ void compareIdTableWithExpectedContent(
     ad_utility::source_location l = ad_utility::source_location::current());
 
 /*
+ * @brief Sorts an IdTable in place, in the same way, that we sort them during
+ * normal programm usage.
+ */
+void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table);
+
+/*
 @brief Creates a `IdTable`, where the rows are created via generator.
 
 @param numberRows numberColumns The number of rows and columns, the table should
