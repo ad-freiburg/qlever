@@ -320,7 +320,7 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
   reductionFactor /= children.size() - 1;
   auto sizeEstimate = inputSizeEstimate / reductionFactor;
 
-  size_t costEstimate = sizeEstimate;
+  size_t costEstimate = inputSizeEstimate;
 
   auto canBeEvaluatedWithBinarySearch =
       [&firstSortedVariable](const SparqlExpression::Ptr& left,
@@ -339,7 +339,7 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
                             return canBeEvaluatedWithBinarySearch(lhs, child) ||
                                    canBeEvaluatedWithBinarySearch(child, lhs);
                           })) {
-    costEstimate = 1;
+    costEstimate = sizeEstimate;
   }
   return {sizeEstimate, costEstimate};
 }

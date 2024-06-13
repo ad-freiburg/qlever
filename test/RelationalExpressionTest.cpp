@@ -9,6 +9,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -844,6 +845,48 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
 }
 
 TEST(RelationalExpression, InExpression) {}
+
+TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+  std::vector<std::unique_ptr<SparqlExpression>> children;
+  children.push_back(makeInt(30));
+  children.push_back(makeInt(27));
+  auto first = makeInt(42);
+  using namespace ::testing;
+  std::vector matchers{HasSubstr(children[0]->getCacheKey({})),
+                       HasSubstr(children[1]->getCacheKey({})),
+                       HasSubstr(first->getCacheKey({}))};
+  auto expression = InExpression(std::move(first), std::move(children));
+
+  EXPECT_THAT(expression.getCacheKey({}), AllOfArray(matchers));
+}
+
+TEST(RelationalExpression, InExpressionFilterEstimates) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+
+  auto makeVar = [](std::string v) {
+    return std::make_unique<sparqlExpression::VariableExpression>(
+        Variable{std::move(v)});
+  };
+  std::vector<std::unique_ptr<SparqlExpression>> children;
+  children.push_back(makeInt(30));
+  children.push_back(makeInt(27));
+  auto first = makeVar("?x");
+  using namespace ::testing;
+  auto expression = InExpression(std::move(first), std::move(children));
+  auto x = expression.getEstimatesForFilterExpression(200'000, Variable{"?x"});
+  EXPECT_EQ(x.costEstimate, 400);
+  EXPECT_EQ(x.sizeEstimate, 400);
+  x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
+  EXPECT_EQ(x.costEstimate, 200'000);
+  EXPECT_EQ(x.sizeEstimate, 400);
+}
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
 // because the relational expressions do not work properly with the current
