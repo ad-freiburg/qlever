@@ -616,8 +616,6 @@ boost::asio::awaitable<void> Server::processQuery(
                                    const std::string& expected) {
       return params.contains(param) && params.at(param) == expected;
     };
-    size_t maxSend = params.contains("send") ? std::stoul(params.at("send"))
-                                             : MAX_NOF_ROWS_IN_RESULT;
     const bool pinSubtrees = containsParam("pinsubtrees", "true");
     const bool pinResult = containsParam("pinresult", "true");
     LOG(INFO) << "Processing the following SPARQL query:"
@@ -652,6 +650,15 @@ boost::asio::awaitable<void> Server::processQuery(
 
     if (!mediaType.has_value()) {
       mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+    }
+
+    std::optional<uint64_t> maxSend =
+        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
+                                : std::nullopt;
+    // Limit JSON requests by default
+    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
+                                 mediaType == MediaType::qleverJson)) {
+      maxSend = MAX_NOF_ROWS_IN_RESULT;
     }
 
     if (!mediaType.has_value()) {
@@ -696,6 +703,21 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
+    // Apply stricter limit for export if present
+    if (maxSend.has_value()) {
+      auto& pq = plannedQuery.value().parsedQuery_;
+      pq._limitOffset._limit =
+          std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+    }
+    // Make sure we don't underflow here
+    AD_CORRECTNESS_CHECK(
+        plannedQuery.value().parsedQuery_._limitOffset._offset >=
+        qet.getRootOperation()->getLimit()._offset);
+    // Don't apply offset twice, if the offset was not applied to the operation
+    // then the exporter can safely apply it during export.
+    plannedQuery.value().parsedQuery_._limitOffset._offset -=
+        qet.getRootOperation()->getLimit()._offset;
+
     // This actually processes the query and sends the result in the requested
     // format.
     switch (mediaType.value()) {
@@ -713,10 +735,10 @@ boost::asio::awaitable<void> Server::processQuery(
       case sparqlJson: {
         // Normal case: JSON response
         auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, maxSend, mediaType,
+            [&plannedQuery, &qet, &requestTimer, mediaType,
              &cancellationHandle] {
               return ExportQueryExecutionTrees::computeResultAsJSON(
-                  plannedQuery.value().parsedQuery_, qet, requestTimer, maxSend,
+                  plannedQuery.value().parsedQuery_, qet, requestTimer,
                   mediaType.value(), cancellationHandle);
             },
             cancellationHandle);

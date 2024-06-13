@@ -4,28 +4,13 @@
 
 #pragma once
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_replace.h>
-#include <unicode/bytestream.h>
-#include <unicode/casemap.h>
 
-#include <algorithm>
-#include <cctype>
-#include <cstdint>
-#include <ctre-unicode.hpp>
-#include <functional>
-#include <iterator>
-#include <ranges>
-#include <sstream>
-#include <string>
 #include <string_view>
 
 #include "util/Algorithm.h"
 #include "util/Concepts.h"
 #include "util/CtreHelpers.h"
-#include "util/Exception.h"
-#include "util/Forward.h"
-#include "util/TypeTraits.h"
 
 using std::string;
 using std::string_view;
@@ -42,6 +27,10 @@ string_view commonPrefix(string_view a, string_view b);
 string getLowercase(const string& orig);
 
 string getUppercase(const string& orig);
+
+// Check if the given string `language tag` is `BPC47` conform.
+// Use the ICU library (unicode/uloc.h) for this procedure.
+bool strIsLangTag(const string& strLangTag);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale

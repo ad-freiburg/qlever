@@ -1062,3 +1062,29 @@ TEST(QueryPlanner, CancellationCancelsQueryPlanning) {
                                         HasSubstr("Query planning"),
                                         ad_utility::CancellationException);
 }
+
+// ___________________________________________________________________________
+TEST(QueryPlanner, JoinWithService) {
+  auto scan = h::IndexScanFromStrings;
+
+  auto sibling = scan("?x", "<is-a>", "?y");
+
+  std::string_view graphPatternAsString = "{ ?x <is-a> ?z . }";
+
+  h::expect(
+      "SELECT * WHERE {"
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
+      h::Service(std::nullopt, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y ."
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . }}",
+      h::UnorderedJoins(sibling, h::Service(sibling, graphPatternAsString)));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y . "
+      "SERVICE <https://endpoint.com> { ?x <is-a> ?z . ?y <is-a> ?a . }}",
+      h::MultiColumnJoin(
+          sibling,
+          h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
+}

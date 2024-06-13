@@ -5,6 +5,9 @@
 
 #include "util/StringUtils.h"
 
+#include <unicode/bytestream.h>
+#include <unicode/casemap.h>
+
 namespace ad_utility {
 // ____________________________________________________________________________
 string_view commonPrefix(string_view a, const string_view b) {
@@ -37,6 +40,11 @@ string getUppercase(const string& orig) {
     retVal += toupper(orig[i]);
   }
   return retVal;
+}
+
+// ____________________________________________________________________________
+bool strIsLangTag(const string& input) {
+  return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
 }
 
 // ___________________________________________________________________________

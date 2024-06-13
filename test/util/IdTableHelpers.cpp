@@ -60,6 +60,12 @@ void compareIdTableWithExpectedContent(
 }
 
 // ____________________________________________________________________________
+void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table) {
+  CALL_FIXED_SIZE((std::array{table.idTable.numColumns()}), &Engine::sort,
+                  &table.idTable, table.joinColumn);
+}
+
+// ____________________________________________________________________________
 IdTable generateIdTable(
     const size_t numberRows, const size_t numberColumns,
     const std::function<std::vector<ValueId>()>& rowGenerator) {
