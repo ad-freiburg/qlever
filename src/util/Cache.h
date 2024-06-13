@@ -238,41 +238,36 @@ class FlexibleCache {
                                    MemorySize& variable, bool pinned) {
       auto newSize = _valueSizeGetter(*(*this)[key]);
       auto& oldSize = _sizeMap.at(key);
-      if (newSize >= oldSize) {
-        auto sizeDelta = newSize - oldSize;
-        if (_maxSizeSingleEntry < newSize) {
-          result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
-          if (removeIfEntryGrewTooBig && !pinned) {
-            erase(key);
-          } else {
-            oldSize += sizeDelta;
-            variable += sizeDelta;
-          }
-          // We don't know how to shrink the size here, so if
-          // `removeIfEntryGrewTooBig` is false, this needs to be handled by the
-          // caller.
+      bool needsShrinking = newSize != oldSize;
+      MemorySize pinnedOffset = pinned ? 0_B : _totalSizePinned;
+      if (_maxSizeSingleEntry < newSize) {
+        result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
+        if (removeIfEntryGrewTooBig && !pinned) {
+          erase(key);
           return;
         }
-        MemorySize pinnedOffset = pinned ? 0_B : _totalSizePinned;
-        if (_maxSize - pinnedOffset < newSize) {
-          result = ResizeResult::EXCEEDS_MAX_SIZE;
-          // We can't fit it in the cache, so remove if not pinned
-          if (!pinned) {
-            erase(key);
-          } else {
-            oldSize += sizeDelta;
-            variable += sizeDelta;
-          }
+        // We don't know how to shrink the size here, so if
+        // `removeIfEntryGrewTooBig` is false, this needs to be handled by the
+        // caller.
+        needsShrinking = false;
+      } else if (_maxSize - std::min(pinnedOffset, _maxSize) < newSize) {
+        result = ResizeResult::EXCEEDS_MAX_SIZE;
+        // We can't fit it in the cache, so remove if not pinned
+        if (!pinned) {
+          erase(key);
           return;
         }
-        oldSize += sizeDelta;
-        variable += sizeDelta;
-      } else {
-        auto negativeSizeDelta = oldSize - newSize;
-        oldSize -= negativeSizeDelta;
-        variable -= negativeSizeDelta;
       }
-      makeRoomIfFits(0_B);
+
+      if (newSize >= oldSize) {
+        variable += newSize - oldSize;
+      } else {
+        variable -= oldSize - newSize;
+      }
+      oldSize = newSize;
+      if (needsShrinking && _totalSizePinned <= _maxSize) {
+        makeRoomIfFits(0_B);
+      }
     };
     if (containsPinned(key)) {
       applySizeDifference(_totalSizePinned, true);
