@@ -352,6 +352,9 @@ IdTable CompressedRelationReader::scan(
   auto sizes = relevantBlocks |
                std::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), 0ULL);
+  if (limitOffset._limit.has_value()) {
+    upperBoundSize = std::min(upperBoundSize, limitOffset._limit.value());
+  }
   result.reserve(upperBoundSize);
 
   for (const auto& block :
