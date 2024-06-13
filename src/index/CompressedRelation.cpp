@@ -26,12 +26,29 @@ using namespace std::chrono_literals;
 static auto getBeginAndEnd(auto& range) {
   return std::pair{std::ranges::begin(range), std::ranges::end(range)};
 }
+static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
+  auto& offset = limitOffset._offset;
+  auto relevantOffset = std::min(offset, block.size());
+  if (relevantOffset == block.size()) {
+    block.clear();
+  } else {
+    block.erase(block.begin(), block.begin() + relevantOffset);
+  }
+  offset -= relevantOffset;
+  auto& limit = limitOffset._limit;
+  auto relevantLimit = std::min(block.size(), limit.value_or(block.size()));
+  block.resize(relevantLimit);
+  if (limit.has_value()) {
+    limit.value() -= relevantLimit;
+  }
+}
 
 // ____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-    CancellationHandle cancellationHandle) const {
+    CancellationHandle cancellationHandle,
+    LimitOffsetClause& limitOffset) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -82,7 +99,13 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     cancellationHandle->throwIfCancelled();
     ++details.numBlocksRead_;
     details.numElementsRead_ += block.numRows();
-    co_yield block;
+    pruneBlock(block, limitOffset);
+    if (!block.empty()) {
+      co_yield block;
+    }
+    if (limitOffset._limit.value_or(1) == 0) {
+      co_return;
+    }
     popTimer.cont();
   }
   // The `OnDestruction...` above might be called too late, so we manually stop
@@ -94,8 +117,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
     std::vector<CompressedBlockMetadata> blockMetadata,
-    ColumnIndices additionalColumns,
-    CancellationHandle cancellationHandle) const {
+    ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+    LimitOffsetClause limitOffset) const {
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
@@ -118,20 +141,27 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   if (beginBlock < endBlock) {
     auto block = getIncompleteBlock(beginBlock);
-    co_yield block;
+    pruneBlock(block, limitOffset);
+    if (!block.empty()) {
+      co_yield block;
+    }
   }
 
   if (beginBlock + 1 < endBlock) {
     // We copy the cancellationHandle because it is still captured by reference
     // inside the `getIncompleteBlock` lambda.
-    auto blockGenerator = asyncParallelBlockGenerator(
-        beginBlock + 1, endBlock - 1, columnIndices, cancellationHandle);
+    auto blockGenerator =
+        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
+                                    cancellationHandle, limitOffset);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
     }
     auto lastBlock = getIncompleteBlock(endBlock - 1);
-    co_yield lastBlock;
+    pruneBlock(lastBlock, limitOffset);
+    if (!lastBlock.empty()) {
+      co_yield lastBlock;
+    }
   }
   AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_);
 }
@@ -310,7 +340,8 @@ IdTable CompressedRelationReader::scan(
     const ScanSpecification& scanSpec,
     std::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
-    const CancellationHandle& cancellationHandle) const {
+    const CancellationHandle& cancellationHandle,
+    LimitOffsetClause limitOffset) const {
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
@@ -324,7 +355,7 @@ IdTable CompressedRelationReader::scan(
   for (const auto& block :
        lazyScan(scanSpec, {relevantBlocks.begin(), relevantBlocks.end()},
                 {additionalColumns.begin(), additionalColumns.end()},
-                cancellationHandle)) {
+                cancellationHandle, limitOffset)) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();

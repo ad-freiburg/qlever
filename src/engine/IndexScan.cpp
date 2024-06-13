@@ -133,10 +133,10 @@ Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         additionalColumns(), cancellationHandle_);
+                         additionalColumns(), cancellationHandle_, getLimit());
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-                         additionalColumns(), cancellationHandle_);
+                         additionalColumns(), cancellationHandle_, getLimit());
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);

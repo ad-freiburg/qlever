@@ -159,8 +159,9 @@ std::shared_ptr<const Result> Operation::getResult(
         result.applyLimitOffset(_limit);
         runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
-        AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                          _limit.actualSize(result.idTable().numRows()));
+        auto numRows = result.idTable().numRows();
+        AD_CONTRACT_CHECK(numRows ==
+                          std::min(_limit._limit.value_or(numRows), numRows));
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
