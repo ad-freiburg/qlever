@@ -32,6 +32,8 @@ struct LocatedTriple {
       bool shouldExist);
 
   bool operator==(const LocatedTriple&) const = default;
+
+  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
@@ -45,6 +47,8 @@ struct LocatedTripleCompare {
   }
 };
 using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
+
+std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 
 // Sorted sets of located triples, grouped by block. We use this to store all
 // located triples for a permutation.
@@ -119,8 +123,6 @@ class LocatedTriplesPerBlock {
 
 // Human-readable representation of `LocatedTriple`, `LocatedTriples`, and
 // `LocatedTriplesPerBlock`, which are very useful for debugging.
-std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
-std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 std::ostream& operator<<(std::ostream& os,
                          const columnBasedIdTable::Row<Id>& idTableRow);
 std::ostream& operator<<(std::ostream& os, const IdTable& idTable);
