@@ -893,7 +893,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
-      // to make these checks more explicity.
+      // to make these checks more explicitly.
       Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
@@ -1161,8 +1161,8 @@ void QueryPlanner::applyTextLimitsIfPossible(
       if (((plan._idsOfIncludedNodes &
             textLimit.idsOfMustBeFinishedOperations_) ^
            textLimit.idsOfMustBeFinishedOperations_) != 0) {
-        // Ther is still an operation that needs to be finished before this text
-        // limit can be applied
+        // There is still an operation that needs to be finished before this
+        // text limit can be applied
         i++;
         continue;
       }
@@ -1532,7 +1532,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
     LOG(INFO) << asString() << std::endl;
     LOG(INFO) << other.asString() << std::endl;
     LOG(INFO) << "Two nodes in this graph were matches to the same node in "
-                 "the other grap"
+                 "the other graph"
               << std::endl;
     return false;
   }

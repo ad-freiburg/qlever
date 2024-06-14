@@ -330,7 +330,7 @@ Awaitable<void> Server::process(
     response = createJsonResponse(json, request);
   }
 
-  // Ping with or without messsage.
+  // Ping with or without message.
   if (urlPathAndParameters._path == "/ping") {
     if (auto msg = checkParameter("msg", std::nullopt)) {
       LOG(INFO) << "Alive check with message \"" << msg.value() << "\""
@@ -568,7 +568,7 @@ Awaitable<void> Server::sendStreamableResponse(
     // propagate it, and log it directly, so the code doesn't try to send
     // an HTTP response containing the error message onto a HTTP stream
     // that is already partially written. The only way to pass metadata
-    // after the beginning is by using the trailer mechanism as decribed
+    // after the beginning is by using the trailer mechanism as described
     // here:
     // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Trailer#chunked_transfer_encoding_using_a_trailing_header
     // This won't be treated as an error by any regular HTTP client, so

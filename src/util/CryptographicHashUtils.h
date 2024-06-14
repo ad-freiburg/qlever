@@ -35,23 +35,23 @@ inline constexpr auto hexFormatter = [](std::string* out, char c) {
   return absl::AlphaNumFormatter()(out, absl::Hex(c, absl::kZeroPad2));
 };
 
-// `HashMd5` takes an arguement of type `std::string_view` and provides
+// `HashMd5` takes an argument of type `std::string_view` and provides
 // a Hex value by applying `EVP_md5()` from the openssl library as a result.
 constexpr auto hashMd5 = hashImpl<&EVP_md5, MD5_DIGEST_LENGTH>;
 
-// `HashSha1` takes an arguement of type `std::string_view` and provides
+// `HashSha1` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha1()` from the openssl library as a result.
 constexpr auto hashSha1 = hashImpl<&EVP_sha1, SHA_DIGEST_LENGTH>;
 
-// `HashSha256` takes an arguement of type `std::string_view` and provides
+// `HashSha256` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha256()` from the openssl library as a result.
 constexpr auto hashSha256 = hashImpl<&EVP_sha256, SHA256_DIGEST_LENGTH>;
 
-// `HashSha384` takes an arguement of type `std::string_view` and provides
+// `HashSha384` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha384()` from the openssl library as a result.
 constexpr auto hashSha384 = hashImpl<&EVP_sha384, SHA384_DIGEST_LENGTH>;
 
-// `HashSha512` takes an arguement of type `std::string_view` and provides
+// `HashSha512` takes an argument of type `std::string_view` and provides
 // a Hex by applying `EVP_sha512()` from the openssl library as a result.
 constexpr auto hashSha512 = hashImpl<&EVP_sha512, SHA512_DIGEST_LENGTH>;
 

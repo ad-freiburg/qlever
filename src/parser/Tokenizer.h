@@ -211,7 +211,7 @@ struct SkipWhitespaceAndCommentsMixin {
   void skipWhitespaceAndComments() {
     // Call `skipWhitespace` and `skipComments` in a loop until no more input
     // was consumed. This is necessary because we might have multiple lines of
-    // comments that are spearated by whitespace.
+    // comments that are separated by whitespace.
     while (true) {
       bool a = skipWhitespace();
       bool b = skipComments();

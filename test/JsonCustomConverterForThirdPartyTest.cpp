@@ -121,7 +121,7 @@ TEST(JsonCustomConverterForThirdParty, StdVariant) {
   doSimpleTest(std::monostate{}, (int)42);
   doSimpleTest((float)4.2777422, std::monostate{});
 
-  // There is a custom exception, should the index for a value tpye be not
+  // There is a custom exception, should the index for a value type be not
   // valid. That is, to big, or to small.
   j["index"] = -1;
   ASSERT_THROW(variant = j.get<VariantType>(), nlohmann::detail::out_of_range);
@@ -160,11 +160,11 @@ TEST(JsonCustomConverterForThirdParty,
     pointer = j.get<PointerType>();
   };
 
-  // Uniqe pointer doesn't own an object.
+  // Unique pointer doesn't own an object.
   doCheckPreparation(nullptr, std::make_unique<PointerObjectType>(42));
   ASSERT_EQ(pointer.get(), nullptr);
 
-  // Uniqe pointer owns an object.
+  // Unique pointer owns an object.
   doCheckPreparation(std::make_unique<int>(42), nullptr);
   ASSERT_NE(pointer.get(), nullptr);
   ASSERT_EQ(*pointer, 42);

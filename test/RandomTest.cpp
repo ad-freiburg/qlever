@@ -162,7 +162,7 @@ TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
                                           seed};
   });
 
-  // For use withing the range tests.
+  // For use within the range tests.
   const std::vector<NumericalRange<size_t>> ranges{
       {4ul, 7ul}, {200ul, 70171ul}, {71747ul, 1936556173ul}};
 
@@ -181,7 +181,7 @@ TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
                                  std::numeric_limits<double>::max(), seed};
   });
 
-  // For use withing the range tests.
+  // For use within the range tests.
   const std::vector<NumericalRange<double>> ranges{
       {4.74717, 7.4}, {-200.0771370, -70.77713}, {-71747.6666, 1936556173.}};
 
