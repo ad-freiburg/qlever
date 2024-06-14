@@ -75,7 +75,11 @@ void DeltaTriples::eraseTripleInAllPermutations(
 };
 
 // ____________________________________________________________________________
-void DeltaTriples::insertTriples(std::vector<IdTriple> triples) {
+void DeltaTriples::insertTriples(
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    std::vector<IdTriple> triples) {
+  // TODO<qup42> use canellationHandle
+  (void)cancellationHandle;
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
   std::erase_if(triples, [this](const IdTriple& triple) {
@@ -103,7 +107,11 @@ void DeltaTriples::insertTriples(std::vector<IdTriple> triples) {
 }
 
 // ____________________________________________________________________________
-void DeltaTriples::deleteTriples(std::vector<IdTriple> triples) {
+void DeltaTriples::deleteTriples(
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    std::vector<IdTriple> triples) {
+  // TODO<qup42> use canellationHandle
+  (void)cancellationHandle;
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
   std::erase_if(triples, [this](const IdTriple& triple) {

@@ -83,10 +83,12 @@ class DeltaTriples {
   size_t numDeleted() const { return triplesDeleted_.size(); }
 
   // Insert triple.
-  void insertTriples(std::vector<IdTriple> triples);
+  void insertTriples(ad_utility::SharedCancellationHandle cancellationHandle,
+                     std::vector<IdTriple> triples);
 
   // Delete triple.
-  void deleteTriples(std::vector<IdTriple> triples);
+  void deleteTriples(ad_utility::SharedCancellationHandle cancellationHandle,
+                     std::vector<IdTriple> triples);
 
   // Get `TripleWithPosition` objects for given permutation.
   const LocatedTriplesPerBlock& getTriplesWithPositionsPerBlock(

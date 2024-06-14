@@ -594,24 +594,10 @@ nlohmann::json Server::executeUpdateQuery(
   AD_CONTRACT_CHECK(query.hasUpdateClause());
   parsedQuery::UpdateClause update = query.updateClause();
 
-  // TODO: replace calls with the usual `cancellationHandle->throwIfCancelled()`
-  // once this is properly optimised and we actually do stuff here
-  // For now an error should be shown even on timeout to indicate the Update
-  // is not support even though something seems to happen.
-  auto checkWatchdog = [&cancellationHandle]() {
-    if (cancellationHandle->isCancelled()) {
-      throw NotSupportedException{
-          "SPARQL 1.1 Update currently not supported by QLever."};
-    }
-  };
-
   ad_utility::Timer step{ad_utility::Timer::Started};
-  LOG(INFO) << "Executing UPDATE" << std::endl;
 
   std::shared_ptr<const Result> res = qet.getResult();
   auto timeQueryBodyExecution = step.msecs();
-  LOG(INFO) << "Executing query body took " << timeQueryBodyExecution
-            << std::endl;
   step.start();
 
   auto& vocab = qet.getQec()->getIndex().getVocab();
@@ -640,8 +626,6 @@ nlohmann::json Server::executeUpdateQuery(
       ad_utility::transform(std::move(update.toDelete_),
                             transformSparqlTripleSimple);
   auto timeTemplatePrepration = step.msecs();
-  LOG(INFO) << "Preparing template took " << timeTemplatePrepration
-            << std::endl;
   step.start();
 
   auto resolveVariable = [](const ConstructQueryExportContext& context,
@@ -660,13 +644,6 @@ nlohmann::json Server::executeUpdateQuery(
       AD_FAIL();
     }
   };
-
-  LOG(INFO) << "Executing update using std::vector" << std::endl;
-#ifdef QL_UPDATE_PRESORT
-  LOG(INFO) << "Sorting triples before location" << std::endl;
-#else
-  LOG(INFO) << "Locating triples without sorting before" << std::endl;
-#endif
 
   std::vector<IdTriple> toInsert;
   std::vector<IdTriple> toDelete;
@@ -689,7 +666,7 @@ nlohmann::json Server::executeUpdateQuery(
       }
 
       toInsert.push_back({subject.value(), predicate.value(), object.value()});
-      checkWatchdog();
+      cancellationHandle->throwIfCancelled();
     }
 
     for (const auto& [s, p, o] : toDeleteTemplates) {
@@ -702,17 +679,15 @@ nlohmann::json Server::executeUpdateQuery(
       }
 
       toDelete.push_back({subject.value(), predicate.value(), object.value()});
-      checkWatchdog();
+      cancellationHandle->throwIfCancelled();
     }
   }
 
   auto timeMaterializeUpdateTriples = step.msecs();
-  LOG(INFO) << "Calculating update query triples took "
-            << timeMaterializeUpdateTriples << std::endl;
   step.start();
 
-  index.deltaTriples().insertTriples(std::move(toInsert));
-  index.deltaTriples().deleteTriples(std::move(toDelete));
+  index.deltaTriples().insertTriples(cancellationHandle, std::move(toInsert));
+  index.deltaTriples().deleteTriples(cancellationHandle, std::move(toDelete));
   auto timeDeltaTriples = step.msecs();
   step.start();
 
@@ -733,11 +708,9 @@ nlohmann::json Server::executeUpdateQuery(
       nlohmann::ordered_json(runtimeInformation);
 
   j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
-  LOG(INFO) << "Update finished in " << requestTimer.msecs() << std::endl;
   j["time"]["queryBody"] =
       std::to_string(timeQueryBodyExecution.count()) + "ms";
-  // TODO<qup42>: what does this field mean in the context of updates?
-  j["time"]["computeResult"] = j["time"]["queryBody"];
+  j["time"]["computeResult"] = j["time"]["total"];
   j["time"]["templatePreparation"] =
       std::to_string(timeTemplatePrepration.count()) + "ms";
   j["time"]["updateTripleMaterialization"] =
