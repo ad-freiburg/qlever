@@ -234,8 +234,10 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
             [&triplesInIndex]() -> cppcoro::generator<IdTableStatic<0>> {
           co_yield triplesInIndex.clone();
         }();
-        indexBuilder.createPermutationPair(3, std::move(blocksOfTriples), SPO,
-                                           SOP);
+        // We don't care about the return value (number of relations in column
+        // 0).
+        (void)indexBuilder.createPermutationPair(3, std::move(blocksOfTriples),
+                                                 SPO, SOP);
 
         // Load the SPO permutation from disk.
         Permutation permutation(Permutation::SPO, {}, testAllocator);
