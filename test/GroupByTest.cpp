@@ -454,10 +454,10 @@ struct GroupByOptimizations : ::testing::Test {
   }
 
   static SparqlExpressionPimpl makeGroupConcatPimpl(
-      const Variable& var, const std::string& seperator = " ") {
+      const Variable& var, const std::string& separator = " ") {
     return SparqlExpressionPimpl{
         std::make_unique<GroupConcatExpression>(
-            false, makeVariableExpression(var), seperator),
+            false, makeVariableExpression(var), separator),
         "GROUP_CONCAT(?someVariable)"};
   }
 
@@ -1226,7 +1226,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   auto groupConcatExpression2 = makeGroupConcatPimpl(varY, ",");
   auto aliasGC2 = Alias{groupConcatExpression2, varW};
 
-  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;seperator=",") as ?w)
+  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;separator=",") as ?w)
   // WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
   auto result = groupBy.getResult();

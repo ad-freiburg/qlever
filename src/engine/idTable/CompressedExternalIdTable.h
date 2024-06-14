@@ -469,7 +469,7 @@ class CompressedExternalIdTable
   // exactly once.
   auto getRows() {
     if (!this->transformAndPushLastBlock()) {
-      // For the case of only a single block we have to mimick the exact same
+      // For the case of only a single block we have to mimic the exact same
       // return type as that of `writer_.getGeneratorForAllRows()`, that's why
       // there are the seemingly redundant multiple calls to
       // join(OwningView(vector(...))).
@@ -538,7 +538,7 @@ struct BlockSorter {
 #endif
   }
 };
-// Deduction guide for the implicit aggregate initializtion (its  "constructor")
+// Deduction guide for the implicit aggregate initialization (its "constructor")
 // in the aggregate above. Is actually not needed in C++20, but GCC 11 requires
 // it.
 template <typename Comparator>

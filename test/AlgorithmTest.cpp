@@ -31,7 +31,8 @@ TEST(Algorithm, Contains) {
       std::vector<std::string> substrings{"h", "a", "l", "ha", "al", "hal"};
       ASSERT_TRUE(std::ranges::all_of(
           substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string> noSubstrings{"x", "hl", "hel"};
+      std::vector<std::string> noSubstrings{"x", "hl",
+                                            "hel"};  // codespell-ignore
       ASSERT_TRUE(std::ranges::none_of(
           noSubstrings, [&s](const auto& el) { return contains(s, el); }));
     }
@@ -40,7 +41,8 @@ TEST(Algorithm, Contains) {
                                                "ha", "al", "hal"};
       ASSERT_TRUE(std::ranges::all_of(
           substrings, [&s](const auto& el) { return contains(s, el); }));
-      std::vector<std::string_view> noSubstrings{"x", "hl", "hel"};
+      std::vector<std::string_view> noSubstrings{"x", "hl",
+                                                 "hel"};  // codespell-ignore
       ASSERT_TRUE(std::ranges::none_of(
           noSubstrings, [&s](const auto& el) { return contains(s, el); }));
     }

@@ -110,8 +110,8 @@ class IndexMetaData {
 
   // `isPersistentMetaData` is true when we do not need to add relation meta
   // data to data_, but assume that it is already contained in data_. This must
-  // be a compile time parameter because we have to avoid instantation of member
-  // function set() when `MapType` is read only  (e.g., when based on
+  // be a compile time parameter because we have to avoid instantiation of
+  // member function set() when `MapType` is read only  (e.g., when based on
   // MmapVectorView).
   template <bool isPersistentMetaData = false>
   void add(AddType addedValue);
@@ -132,7 +132,7 @@ class IndexMetaData {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
                               std::is_same<MetaWrapperMmapView, T>::value;
   };
-  // Compile time information whether this instatiation if MMapBased or not
+  // Compile time information whether this instantiation if MMapBased or not
   static constexpr bool isMmapBased_ = IsMmapBased<MapType>::value;
 
   // This magic number is written when serializing the IndexMetaData to a file.

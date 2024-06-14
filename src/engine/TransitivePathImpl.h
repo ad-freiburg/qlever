@@ -146,7 +146,8 @@ class TransitivePathImpl : public TransitivePathBase {
     if (minDist_ == 0 && !isBoundOrId() && lhs_.isVariable() &&
         rhs_.isVariable()) {
       AD_THROW(
-          "This query might have to evalute the empty path, which is currently "
+          "This query might have to evaluate the empty path, which is "
+          "currently "
           "not supported");
     }
     auto [startSide, targetSide] = decideDirection();

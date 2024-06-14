@@ -39,7 +39,7 @@ inline std::atomic<size_t> BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 50'000;
 // before they are written to the output.
 inline std::atomic<size_t> BATCH_SIZE_VOCABULARY_MERGE = 10'000'000;
 
-// When the BZIP2 parser encouters a parsing exception it will increase its
+// When the BZIP2 parser encounters a parsing exception it will increase its
 // buffer and try again (we have no other way currently to determine if the
 // exception was "real" or only because we cut a statement in the middle. Once
 // it holds this many bytes in total, it will assume that there was indeed an
@@ -82,7 +82,7 @@ constexpr size_t QUEUE_SIZE_BEFORE_PARALLEL_PARSING = 10;
 constexpr size_t QUEUE_SIZE_AFTER_PARALLEL_PARSING = 10;
 
 // The blocksize parameter of the parallel vocabulary merging. Higher values
-// mean higher memory consumption, wherease a too low value will impact the
+// mean higher memory consumption, whereas a too low value will impact the
 // performance negatively.
 static constexpr size_t BLOCKSIZE_VOCABULARY_MERGING = 100;
 

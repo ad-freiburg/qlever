@@ -1,21 +1,21 @@
 1. We can reduce RAM and startup time by not keeping all meta data in RAM. In general, but especially for OXX and also SXX permutation.
 
 Downside:
-noticeable overhead for queries that are otherwise very fast (e.g. 1-5ms). We might end up with abotu as much overhead as well.
+noticeable overhead for queries that are otherwise very fast (e.g. 1-5ms). We might end up with about as much overhead as well.
 higher overhead for joins with ?s ?p ?o triples, because there a larger number metadata objects many have to be read.
 
 HOWTO:
 The meta-data structure has to change:
 BlockMetaData has to be moved to its own area on disk to make RelationMetaData objects fixed-size.
 This should not have much downsides but requires significant rewriting effort.
-From there, it should be rather striaghtforward and IndexMetaData->getRmd(...)
-will now do the reading and construction of meta data objects too. Since we use them throughout hte query planning a LRU cache may be useful once again.
+From there, it should be rather straightforward and IndexMetaData->getRmd(...)
+will now do the reading and construction of meta data objects too. Since we use them throughout the query planning a LRU cache may be useful once again.
 
 IS THERE AN EASIER WAY TO SAVE RAM?:
 What happens if i just skip all literals in OXX permutations?
 --> not possible because I still want to do ?x ?p "Albert Einstein"
 
-I could reduce usage of blocks even more, but there are already very few blocks in OXX permutations, the #obejct is simply so high.
+I could reduce usage of blocks even more, but there are already very few blocks in OXX permutations, the #object is simply so high.
 --> not useful
 
 I could try to decrease the ID size

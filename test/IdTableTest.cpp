@@ -67,7 +67,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
   // The following calls do not change the table, but are also not expected to
   // do so because we explicitly bind to a `value_type`.
   {
-    IdTable::row_type row = t[0];  // Explitly copy/materialize the full row.
+    IdTable::row_type row = t[0];  // Explicitly copy/materialize the full row.
     row[0] = V(50);
     // We have changed the copied row, but not the table.
     ASSERT_EQ(V(50), row[0]);
@@ -76,7 +76,7 @@ TEST(IdTable, DocumentationOfIteratorUsage) {
   {
     // Exactly the same example, but with `iterator`s and `iterator_traits`.
     std::iterator_traits<IdTable::iterator>::value_type row =
-        *t.begin();  // Explitly copy/materialize the full row.
+        *t.begin();  // Explicitly copy/materialize the full row.
     row[0] = V(51);
     // We have changed the copied row, but not the table.
     ASSERT_EQ(V(51), row[0]);
@@ -254,7 +254,7 @@ void runTestForDifferentTypes(auto testCase, std::string testCaseName) {
 // to be made. It is necessary because for some `IdTable` instantiations
 // (for example when the data is stored in a `BufferedVector`) the `clone`
 // member function needs additional arguments. Currently, the only additional
-// argument is the filenmae for the copy for `IdTables` that store their data in
+// argument is the filename for the copy for `IdTables` that store their data in
 // a `BufferedVector`. For an example usage see the test cases below.
 auto clone(const auto& table, auto... args) {
   if constexpr (requires { table.clone(); }) {

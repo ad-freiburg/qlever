@@ -163,11 +163,11 @@ void ResultTable::setEntry(const size_t& row, const size_t& column,
 
 // ____________________________________________________________________________
 ResultTable::operator std::string() const {
-  // Used for the formating of floats in the table. They will always be
-  // formated as having 4 values after the decimal point.
+  // Used for the formatting of floats in the table. They will always be
+  // formatted as having 4 values after the decimal point.
   static constexpr absl::string_view floatFormatSpecifier = "%.4f";
 
-  // What should be printed between columns. Used for nicer formating.
+  // What should be printed between columns. Used for nicer formatting.
   const std::string columnSeperator = " | ";
 
   // Convert an `EntryType` of `ResultTable` to a screen friendly
@@ -175,7 +175,7 @@ ResultTable::operator std::string() const {
   auto entryToStringVisitor = []<typename T>(const T& entry) {
     /*
     `EntryType` has multiple distinct possible types, that all need different
-    handeling. Fortunaly, we can decide the handeling at compile time and
+    handling. Fortunately, we can decide the handling at compile time and
     throw the others away, using `if constexpr(std::is_same<...,...>::value)`.
     */
     if constexpr (std::is_same_v<T, std::monostate>) {
@@ -276,11 +276,11 @@ ResultTable::operator std::string() const {
                         ad_utility::addIndentation(stream.str(), "    "));
   }
 
-  // For formating: What is the maximum string width of a column, if you
+  // For formatting: What is the maximum string width of a column, if you
   // compare all it's entries?
   std::vector<size_t> columnMaxStringWidth(numColumns(), 0);
   for (size_t column = 0; column < numColumns(); column++) {
-    // How long is the string representation of a colum entry in a wanted row?
+    // How long is the string representation of a column entry in a wanted row?
     auto stringWidthOfRow = std::views::transform(
         entries_, [&column, &entryToString](const std::vector<EntryType>& row) {
           return entryToString(row.at(column)).length();
@@ -317,7 +317,7 @@ ResultTable::operator std::string() const {
 
 // ____________________________________________________________________________
 void ResultTable::addRow() {
-  // Create an emptry row of the same size as every other row.
+  // Create an empty row of the same size as every other row.
   entries_.emplace_back(numColumns());
 }
 

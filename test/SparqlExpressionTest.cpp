@@ -1150,7 +1150,7 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
 
-  // Multiple matches withing the same string
+  // Multiple matches within the same string
   checkReplace(
       IdOrLiteralOrIri{lit("wEeDEflE")},
       std::tuple{IdOrLiteralOrIri{lit("weeeDeeflee")},

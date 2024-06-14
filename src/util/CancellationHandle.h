@@ -64,7 +64,7 @@ AD_ALWAYS_INLINE constexpr bool isCancelled(
 
 /// Helper struct to allow to conditionally compile fields into a class.
 struct Empty {
-  // Ignore potential assigment
+  // Ignore potential assignment
   template <typename... Args>
   explicit Empty(const Args&...) {}
 };

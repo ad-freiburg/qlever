@@ -618,7 +618,7 @@ class IdTable {
   // first copies the sorted input completely, and then calls `std::unique`,
   // followed by `erase` at the end. `DISTINCT` should be implemented via an
   // out-of-place algorithm that only writes the distinct elements. The the
-  // follwing two functions can be deleted.
+  // following two functions can be deleted.
   void erase(const iterator& beginIt, const iterator& endIt) requires(!isView) {
     AD_EXPENSIVE_CHECK(begin() <= beginIt && beginIt <= endIt &&
                        endIt <= end());

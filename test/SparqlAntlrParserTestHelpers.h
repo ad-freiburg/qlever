@@ -794,7 +794,7 @@ inline auto SelectQuery =
 
 namespace pq {
 
-// This is implemented as a separater Matcher because it generates some overhead
+// This is implemented as a separated Matcher because it generates some overhead
 // in the tests.
 inline auto OriginalString =
     [](const std::string& originalString) -> Matcher<const ::ParsedQuery&> {

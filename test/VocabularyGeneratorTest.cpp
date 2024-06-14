@@ -34,7 +34,7 @@ bool vocabTestCompare(const IdPairMMapVecView& a,
 auto V = ad_utility::testing::VocabId;
 }  // namespace
 
-// Test fixture that sets up the binary files vor partial vocabulary and
+// Test fixture that sets up the binary files for partial vocabulary and
 // everything else connected with vocabulary merging.
 class MergeVocabularyTest : public ::testing::Test {
  protected:
@@ -71,7 +71,7 @@ class MergeVocabularyTest : public ::testing::Test {
                    "lead to test failures\n";
     }
 
-    // make paths abolute under created tmp directory
+    // make paths absolute under created tmp directory
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
     _pathVocabExp = _basePath + std::string(".vocabExp");

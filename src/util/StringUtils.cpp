@@ -155,7 +155,7 @@ size_t findLiteralEnd(const std::string_view input,
     }
   }
 
-  // if we have found any unescaped occurence of literalEnd, return the last
+  // if we have found any unescaped occurrence of literalEnd, return the last
   // of these positions
   if (lastFoundPos != size_t(-1)) {
     return lastFoundPos;
