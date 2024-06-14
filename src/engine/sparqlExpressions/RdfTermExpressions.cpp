@@ -11,11 +11,11 @@ inline auto getDatatype = [](OptIri input) -> IdOrLiteralOrIri {
   if (!input.has_value()) {
     return Id::makeUndefined();
   } else {
-    return LiteralOrIri{input.value()};
+    return LiteralOrIri{std::move(input.value())};
   }
 };
 
-using GetDatatype = NARY<1, FV<decltype(getDatatype), makeDatatypeValueGetter>>;
+using GetDatatype = NARY<1, FV<decltype(getDatatype), DatatypeValueGetter>>;
 
 }  //  namespace detail::rdfExpressions
 

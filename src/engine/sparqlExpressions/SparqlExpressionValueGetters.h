@@ -30,12 +30,12 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
-// Return type for `makeDatatypeValueGetter`.
+// Return type for `DatatypeValueGetter`.
 using LiteralOrString =
     std::variant<std::monostate, ad_utility::triple_component::Literal,
                  std::string>;
 
-// Used as return type for `IriValueGetter` and `makeDatatypeValueGetter`
+// Used as return type for `IriValueGetter` and `DatatypeValueGetter`
 using OptIri = std::optional<Iri>;
 
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
@@ -252,14 +252,11 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
 // ValueGetter for implementation of datatype() in RdfTermExpressions.cpp.
 // Returns an object of type std::variant<std::monostate,
 // ad_utility::triple_component::Literal, std::string> object.
-struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
-  using Mixin<makeDatatypeValueGetter>::operator();
+struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
+  using Mixin<DatatypeValueGetter>::operator();
   OptIri operator()(ValueId id, const EvaluationContext* context) const;
   OptIri operator()(const LiteralOrIri& litOrIri,
                     const EvaluationContext* context) const;
-  // Helper function to retrieve Iri from LiteralOrIri-Content-String
-  // if an actual Literal was contained.
-  OptIri iriFromLiteral(const std::string& str) const;
 };
 
 // `IriValueGetter` returns an

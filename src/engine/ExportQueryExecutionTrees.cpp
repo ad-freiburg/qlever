@@ -181,7 +181,25 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
   }
 }
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
+ad_utility::triple_component::LiteralOrIri
+ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+    const Index& index, Id id, const LocalVocab& localVocab) {
+  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  std::optional<std::string> entity;
+  switch (id.getDatatype()) {
+    case Datatype::LocalVocabIndex:
+      return localVocab.getWord(id.getLocalVocabIndex());
+    case Datatype::VocabIndex:
+      entity = index.idToOptionalString(id.getVocabIndex());
+      AD_CONTRACT_CHECK(entity.has_value());
+      return LiteralOrIri::fromStringRepresentation(entity.value());
+    default:
+      AD_FAIL();
+  }
+};
+
+// _____________________________________________________________________________
 template <bool removeQuotesAndAngleBrackets, bool onlyReturnLiterals,
           typename EscapeFunction>
 std::optional<std::pair<std::string, const char*>>
@@ -220,17 +238,12 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case VocabIndex: {
-      std::optional<string> entity =
-          index.idToOptionalString(id.getVocabIndex());
-      AD_CONTRACT_CHECK(entity.has_value());
-      // TODO<joka921> make this more efficient AND more correct
-      auto litOrIri =
-          ad_utility::triple_component::LiteralOrIri::fromStringRepresentation(
-              entity.value());
-      return handleIriOrLiteral(litOrIri);
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
     }
     case LocalVocabIndex: {
-      return handleIriOrLiteral(localVocab.getWord(id.getLocalVocabIndex()));
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
     }
     case TextRecordIndex:
       return std::pair{

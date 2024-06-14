@@ -35,7 +35,7 @@ Iri Iri::fromIriref(std::string_view stringWithBrackets) {
 }
 
 // ____________________________________________________________________________
-Iri Iri::fromIri(std::string_view stringWithoutBrackets) {
+Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
   AD_CORRECTNESS_CHECK(!stringWithoutBrackets.starts_with('<') &&
                        !stringWithoutBrackets.ends_with('>'));
   return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};

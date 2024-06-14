@@ -883,7 +883,7 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
-TEST(SparqlExpression, testDatatype) {
+TEST(SparqlExpression, DatatypeExpression) {
   U = Id::makeUndefined();
   auto d1 = DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z");
   auto d2 = DateOrLargeYear::parseGYear("-10000");
