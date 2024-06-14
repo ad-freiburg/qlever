@@ -121,11 +121,15 @@ class LocatedTriplesPerBlock {
                                   const LocatedTriplesPerBlock& ltpb);
 };
 
-// Human-readable representation of `LocatedTriple`, `LocatedTriples`, and
-// `LocatedTriplesPerBlock`, which are very useful for debugging.
+// Human-readable representation , which are very useful for debugging.
+// TODO<qup42>: find a better place for these definitions
 std::ostream& operator<<(std::ostream& os,
                          const columnBasedIdTable::Row<Id>& idTableRow);
 std::ostream& operator<<(std::ostream& os, const IdTable& idTable);
+template <typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v);
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v);
 
 // DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
 //

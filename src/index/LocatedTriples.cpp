@@ -256,3 +256,25 @@ std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
   os << "}";
   return os;
 }
+
+// ____________________________________________________________________________
+template <typename T, std::size_t N>
+std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
+  using namespace std;
+  copy(v.begin(), v.end(), ostream_iterator<T>(os, ", "));
+  return os;
+}
+
+template std::ostream& operator<< <ValueId, 3ul>(
+    std::ostream& os, const std::array<ValueId, 3ul>& v);
+
+// ____________________________________________________________________________
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
+  using namespace std;
+  copy(v.begin(), v.end(), ostream_iterator<T>(os, ", "));
+  return os;
+}
+
+template std::ostream& operator<< <std::array<ValueId, 3>>(
+    std::ostream& os, const std::vector<std::array<ValueId, 3ul>>& v);
