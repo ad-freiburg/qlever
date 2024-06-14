@@ -147,7 +147,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  UpdateDisableOrBlockOffset offset;
+  DisableUpdatesOrBlockOffset offset;
   // TODO<qup42> assumption: block is None <=> the index is scanned;
   //  otherwise virtual/intermediate blocks are scanned
   //  also handle the other case
