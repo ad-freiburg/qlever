@@ -238,7 +238,7 @@ class FlexibleCache {
                                    MemorySize& variable, bool pinned) {
       auto newSize = _valueSizeGetter(*(*this)[key]);
       auto& oldSize = _sizeMap.at(key);
-      bool needsShrinking = newSize != oldSize;
+      bool needsShrinking = true;
       MemorySize pinnedOffset = pinned ? 0_B : _totalSizePinned;
       if (_maxSizeSingleEntry < newSize) {
         result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
