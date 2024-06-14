@@ -14,8 +14,8 @@
 namespace ad_utility {
 
 /*
-A version of `std::unique_ptr` with a copy assigment operator and a copy
-constructor, which both copy the dereferenced pointer to create a new instace
+A version of `std::unique_ptr` with a copy assignment operator and a copy
+constructor, which both copy the dereferenced pointer to create a new instance
 of the object for the `unique_ptr`.
 Currently not written with support for dynamically-allocated array of objects
 in mind, so that may not work.

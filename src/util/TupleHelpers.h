@@ -44,7 +44,7 @@ auto setupTupleFromCallable(F&& f) {
  * toUniquePtrTuple(int(3), std::string("foo")) ==
  * std::tuple(std::make_unique<int>(3), std::make_unique<std::string>("foo")) It
  * can take an arbitrary positive number of arguments. Currently this template
- * is linearly expanded, if this becomes a bottleneck at compiletime (e.g. for
+ * is linearly expanded, if this becomes a bottleneck at compile time (e.g. for
  * very long parameter packs) we could do something more intelligent.
  * @return std::tuple(std::make_unique<First>(std::forward<First>(l),
  * std::make_unique<FirstOfRem.....

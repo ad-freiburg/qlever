@@ -697,7 +697,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   byteVec_ = std::move(buf);
   tok_.reset(byteVec_.data(), byteVec_.size());
 
-  LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
+  LOG(TRACE) << "Successfully decompressed next batch of " << nextBytes.size()
              << " << bytes to parser\n";
 
   // repair the backup state, its pointers might have changed due to
@@ -734,7 +734,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
            !isParserExhausted_) {
       bool parsedStatement;
       std::optional<ParseException> ex;
-      // If this buffer reads from an mmaped file, then exceptions are
+      // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
       try {
@@ -751,7 +751,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
         // try to parse with a larger buffer and repeat the reading process
         // (maybe the failure was due to statements crossing our block).
         if (resetStateAndRead(&b)) {
-          // we have succesfully extended our buffer
+          // we have successfully extended our buffer
           if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
             auto d = tok_.view();
             LOG(ERROR) << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE

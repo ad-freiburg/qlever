@@ -1110,7 +1110,7 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTICT before the argument list (the
+  // The grammar allows an optional DISTINCT before the argument list (the
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {

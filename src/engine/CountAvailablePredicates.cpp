@@ -90,7 +90,7 @@ uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
 size_t CountAvailablePredicates::getCostEstimate() {
   if (subtree_.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
-    // constant cost per entry should be reasonable (altough non distinct
+    // constant cost per entry should be reasonable (although non distinct
     // entries are of course actually cheaper).
     return subtree_->getCostEstimate() + subtree_->getSizeEstimate();
   } else {
