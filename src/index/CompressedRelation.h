@@ -86,7 +86,7 @@ struct CompressedBlockMetadata {
     friend std::ostream& operator<<(std::ostream& str,
                                     const PermutedTriple& trip) {
       str << "Triple: " << trip.col0Id_ << ' ' << trip.col1Id_ << ' '
-          << trip.col2Id_ << std::endl;
+          << trip.col2Id_;
       return str;
     }
 
