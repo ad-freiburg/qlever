@@ -125,7 +125,7 @@ class ValueId {
   // NOTE: (Also for the operator<=> below: These comparisons only work
   // correctly if we only store entries in the local vocab that are NOT part of
   // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reaons). So a join with such
+  // GROUP BY and BIND operations (for performance reasons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
     if (getDatatype() == Datatype::LocalVocabIndex &&

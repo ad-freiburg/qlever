@@ -40,7 +40,7 @@ class HttpClientImpl {
   ~HttpClientImpl();
 
   // Send a request (the first argument must be either `http::verb::get` or
-  // `http::verb::post`) and return the body of the reponse (possibly very
+  // `http::verb::post`) and return the body of the response (possibly very
   // large) as an `cppcoro::generator<std::string_view>`. The same connection
   // can be used for multiple requests in a row.
   cppcoro::generator<std::span<std::byte>> sendRequest(

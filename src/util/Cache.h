@@ -478,7 +478,7 @@ class TreeBasedLRUCache
 };
 
 /// typedef for the simple name LRUCache that is fixed to one of the possible
-/// implementations at compiletime
+/// implementations at compile time
 #ifdef _QLEVER_USE_TREE_BASED_CACHE
 template <typename Key, typename Value, ValueSizeGetter<Value> ValueSizeGetter>
 using LRUCache = TreeBasedLRUCache<Key, Value, ValueSizeGetter>;

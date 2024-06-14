@@ -38,7 +38,7 @@ this changes multiplicities from
 the join column is does not change in multiplicity, size and #distinct change equally:
 2/2=1
 the next column will also have the size lowered to 2, but the #distincts may or may not be lowered
-in the last column, the size is lowered ot 2 and the #distincts HAS to be lowered, either to 2 or possibly even to 1
+in the last column, the size is lowered to 2 and the #distincts HAS to be lowered, either to 2 or possibly even to 1
 
 what happen's in B:
 We keep every 500th row.

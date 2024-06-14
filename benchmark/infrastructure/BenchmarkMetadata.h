@@ -13,7 +13,7 @@ namespace ad_benchmark {
  */
 class BenchmarkMetadata {
   // No real reason, to really build everything ourselves, when the
-  // nlohmann::ordered_json object already containes everything, that we could
+  // nlohmann::ordered_json object already contains everything, that we could
   // need.
   nlohmann::ordered_json data_;
 

@@ -539,7 +539,7 @@ class CompressedRelationReader {
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to. Throw an exception if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
-  // index scans between joining them to get better estimates for the begginning
+  // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
       const MetadataAndBlocks& metadataAndBlocks,
@@ -565,15 +565,6 @@ class CompressedRelationReader {
   // `CompressedBlockMetaData`.
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
-
-  // Similar to `decompressBlock`, but the block is directly decompressed into
-  // the `table`, starting at the `offsetInTable`-th row. The `table` and the
-  // `compressedBlock` must have the same number of columns, and the `table`
-  // must have at least `numRowsToRead + offsetInTable` rows.
-  static void decompressBlockToExistingIdTable(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable,
-      const LocatedTriplesPerBlock& locatedTriples, size_t blockIndex);
 
   DecompressedBlock addUpdateTriples(
       DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,

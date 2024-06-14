@@ -93,7 +93,7 @@ auto testTranslationNearLimits = []<size_t N>() {
 // to(b))))`, when `to` is `NBitInteger<N>::toNBit` and `from` is the
 // corresponding `fromNBit`. This tests the (well-defined) behavior of the
 // `NBitInteger`s in the presence of overflows. The `wouldOverflow(a, b)`
-// function must return `true` if `f(a, b)` would overlow, leading to undefined
+// function must return `true` if `f(a, b)` would overflow, leading to undefined
 // behavior. In those cases, the result `i(f(u(a), u(b))` is evaluated instead
 // of `f(a, b)`, where `i` is a cast to int64_t and `u` is a cast to `uint64_t`.
 // The behavior of this operation is well-defined because unsigned integer

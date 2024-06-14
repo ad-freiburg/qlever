@@ -10,7 +10,7 @@ function (linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
-# Add the exectutable ${basename} that is compiled from the source file
+# Add the executable ${basename} that is compiled from the source file
 # "${basename}".cpp
 function (addTest basename)
     add_executable(${basename} "${basename}.cpp")

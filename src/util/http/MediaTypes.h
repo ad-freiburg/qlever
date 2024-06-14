@@ -47,7 +47,7 @@ struct MediaTypeWithQuality {
   float _qualityValue;
   Variant _mediaType;
 
-  // Order first by the qualities, and then by the specifity of the type.
+  // Order first by the qualities, and then by the specificity of the type.
   std::partial_ordering operator<=>(const MediaTypeWithQuality& rhs) const {
     if (auto cmp = _qualityValue <=> rhs._qualityValue; cmp != 0) {
       return cmp;

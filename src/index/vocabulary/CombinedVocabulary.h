@@ -136,7 +136,7 @@ class CombinedVocabulary {
   }
 
   // Return a global ID (sometimes just an index) that is the largest global ID
-  // occuring in either of the underlying vocabularies plus 1. This ID can be
+  // occurring in either of the underlying vocabularies plus 1. This ID can be
   // used as the "end" ID to indicate "not found".
   [[nodiscard]] uint64_t getEndIndex() const {
     uint64_t endA = _firstVocab.size() == 0

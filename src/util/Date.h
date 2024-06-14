@@ -192,7 +192,7 @@ class Date {
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
-  /// representaion.
+  /// representation.
   static constexpr Date fromBits(uint64_t bytes) {
     return std::bit_cast<Date>(bytes);
   }
@@ -413,7 +413,7 @@ class DateOrLargeYear {
   // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
 
-  // The bitwise comparison also correpsonds to the semantic ordering of years
+  // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
   auto operator<=>(const DateOrLargeYear&) const = default;
 
