@@ -311,7 +311,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                                                     {3, 10, 10}});  // Row 7
 
     // Locate the following triples, some of which exist in the relation and
-    // some of which do not, and which cover a variety of positons, including
+    // some of which do not, and which cover a variety of positions, including
     // triples that are larger than all existing triples.
     std::vector<IdTriple> triplesToLocate{IT(1, 5, 10),    // Before Row 0
                                           IT(1, 15, 10),   // Before Row 1

@@ -262,7 +262,7 @@ class Index {
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
 
-  // Get acces to the delta triples.
+  // Get access to the delta triples.
   [[nodiscard]] DeltaTriples& deltaTriples();
   [[nodiscard]] const DeltaTriples& deltaTriples() const;
 };
