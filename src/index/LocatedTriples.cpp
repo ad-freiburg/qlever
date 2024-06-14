@@ -88,12 +88,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
                  i.getDatatype() == Datatype::WordVocabIndex;
         });
   };
-  LOG(INFO) << "Number of columns (result) " << result.numColumns()
-            << std::endl;
-  LOG(INFO) << "Number of columns (input) " << block.numColumns() << std::endl;
-  LOG(INFO) << "Number of index columns  " << numberOfIndexColumns(block)
-            << std::endl;
-  LOG(INFO) << "First row " << block[0] << std::endl;
 
   auto numIndexColumns = numberOfIndexColumns(block);
   AD_CONTRACT_CHECK(result.numColumns() == block.numColumns());
@@ -105,7 +99,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
 
   // Advance to the first located triple in the specified range.
   auto cmpLt = [&numIndexColumns](auto lt, auto row) {
-    LOG(INFO) << "Comparing " << *lt << " < " << row << std::endl;
     if (numIndexColumns == 3) {
       return (row[0] > lt->triple[0] ||
               (row[0] == lt->triple[0] &&
@@ -120,7 +113,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     }
   };
   auto cmpEq = [&numIndexColumns](auto lt, auto row) {
-    LOG(INFO) << "Comparing " << *lt << " == " << row << std::endl;
     if (numIndexColumns == 3) {
       return (row[0] == lt->triple[0] && row[1] == lt->triple[1] &&
               row[2] == lt->triple[2]);
@@ -148,7 +140,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   for (size_t rowIndex = 0; rowIndex < block.size(); ++rowIndex) {
     // Append triples that are marked for insertion at this `rowIndex` to the
     // result.
-    LOG(INFO) << "New Block Row " << block[rowIndex] << std::endl;
     while (locatedTriple != locatedTriples.end() &&
            cmpLt(locatedTriple, block[rowIndex])) {
       if (locatedTriple->shouldTripleExist == true) {
@@ -160,7 +151,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
         // Deletion of a triple that does not exist in the index has no effect.
         ++locatedTriple;
       }
-      LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
 
     // Append the triple at this position to the result if and only if it is not
@@ -178,7 +168,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
         // effect.
         ++locatedTriple;
       }
-      LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
     }
     if (!deleteThisEntry) {
       *resultEntry++ = block[rowIndex];
@@ -189,7 +178,6 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     writeTripleToResult();
     ++resultEntry;
     ++locatedTriple;
-    LOG(INFO) << "New LocatedTriple " << *locatedTriple << std::endl;
   }
 
   // Return the number of rows written to `result`.
