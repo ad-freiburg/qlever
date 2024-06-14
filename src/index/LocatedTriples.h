@@ -64,17 +64,17 @@ class LocatedTriplesPerBlock {
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
  public:
-  // Get the number of located triples for the given block that match the
-  // ScanSpecification. The return value is a pair of numbers:
-  // first, the number of existing triples ("to be deleted") and second, the
-  // number of new triples ("to be inserted").
+  // Get upper limits for the number of located triples for the given block. The
+  // return value is a pair of numbers: first, the number of existing triples
+  // ("to be deleted") and second, the number of new triples ("to be inserted").
+  // The numbers are only upper limits because there may be triples that have no
+  // effect (like adding an already existing triple and deleting a non-existent
+  // triple).
   std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
 
   // Merge located triples for `blockIndex` with the given index `block` and
-  // write to `result`, starting from position `offsetInResult`. Consider only
-  // located triples in the range specified by `rowIndexInBlockBegin` and
-  // `rowIndexInBlockEnd`. Consider only triples that match the
-  // ScanSpecification. Return the number of rows written to `result`.
+  // write to `result`, starting from position `offsetInResult`. Return the
+  // number of rows written to `result`.
   //
   // PRECONDITIONS:
   //
@@ -82,27 +82,22 @@ class LocatedTriplesPerBlock {
   // Otherwise, there is no need for merging and this method shouldn't be
   // called for efficiency reasons.
   //
-  // 2. It is the resposibility of the caller that there is enough space for the
-  // result of the merge in `result` starting from `offsetInResult`.
-  //
-  // 3. If `block == std::nullopt`, we are adding to `result` the located
-  // triples for block `blockIndex` where the `rowIndexInBlock` is
-  // `NO_ROW_INDEX`. These actually belong to the previous block, but were
-  // larger than all triples there. This requires that the ScanSpecification
-  // has `col0Id` and `col1Id` set.
-  //
+  // 2. It is the responsibility of the caller that there is enough space for
+  // the result of the merge in `result` starting from `offsetInResult`.
   size_t mergeTriples(size_t blockIndex, IdTable block, IdTable& result,
                       size_t offsetInResult) const;
 
-  // Add the given `locatedTriples` to the given `LocatedTriplesPerBlock`.
+  // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,
   // see above). We need the handles so that we can easily remove the
   // `locatedTriples` from the set again in case we need to.
   //
-  // Precondition: The `locatedTriples` must not already exist in
+  // PRECONDITIONS:
+  //
+  // 1. The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      const std::vector<LocatedTriple>& locatedTriple);
+      const std::vector<LocatedTriple>& locatedTriples);
 
   void erase(size_t blockIndex, LocatedTriples::iterator iter);
 
