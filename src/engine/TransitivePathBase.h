@@ -20,7 +20,7 @@ struct TransitivePathSide {
   // Column of the sub table where the Ids of this side are located
   size_t subCol_;
   std::variant<Id, Variable> value_;
-  // The column in the ouput table where this side Ids are written to.
+  // The column in the output table where this side Ids are written to.
   // This member is set by the TransitivePath class
   size_t outputCol_ = 0;
 
@@ -270,8 +270,8 @@ class TransitivePathBase : public Operation {
 
   // Return a set of subtrees that can be used alternatively when the left or
   // right side is bound. This is used by the `TransitivePathBinSearch` class,
-  // which keeps both possible sortings of the predicate of which transitivity
-  // is computed.
+  // which has to store both ways to sort the subtree until it knows which side
+  // becomes bound.
   virtual std::span<const std::shared_ptr<QueryExecutionTree>>
   alternativeSubtrees() const {
     return {};

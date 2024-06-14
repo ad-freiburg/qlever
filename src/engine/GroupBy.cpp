@@ -125,7 +125,7 @@ vector<ColumnIndex> GroupBy::computeSortColumns(
 // ____________________________________________________________________
 VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   VariableToColumnMap result;
-  // The returned columns are all groupByVariables followed by aggregrates.
+  // The returned columns are all groupByVariables followed by aggregates.
   const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;
   for (const auto& var : _groupByVariables) {

@@ -259,7 +259,7 @@ class Operation {
   virtual Result computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after
-  // it has either been succesfully computed or read from the cache.
+  // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
       Milliseconds duration) final;

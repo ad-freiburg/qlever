@@ -72,7 +72,7 @@ class CartesianProductJoin : public Operation {
  protected:
   // Don't promise any sorting of the result.
   // TODO<joka921> Depending on the implementation we could propagate sorted
-  // columsn from either the first or the last input, but it is questionable if
+  // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
   vector<ColumnIndex> resultSortedOn() const override { return {}; }
@@ -82,7 +82,7 @@ class CartesianProductJoin : public Operation {
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
-  // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip
+  // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write. If `StaticGroupSize != 0`, then the
   // group size is known at compile time which allows for more efficient loop

@@ -90,7 +90,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorQuarternary) {
 
   ASSERT_TRUE(comp("\"Hannibal\"@en", "\"HanNibal\"@en"));
 
-  // something is not smaller thant itself
+  // something is not smaller than itself
   ASSERT_FALSE(comp("\"beta\"", "\"beta\""));
 
   // Testing that latin and Hindi numbers mean exactly the same up to the
@@ -170,7 +170,7 @@ TEST(StringSortComparatorTest, TripleComponentComparatorTotal) {
 
   assertTrue("\"Hannibal\"@en", "\"HanNibal\"@en");
 
-  // something is not smaller thant itself
+  // something is not smaller than itself
   assertFalse("\"beta\"", "\"beta\"");
 
   // Testing that latin and Hindi numbers mean exactly the same up to the
@@ -205,7 +205,7 @@ TEST(StringSortComparatorTest, SimpleStringComparator) {
   ASSERT_TRUE(comp("alpha", "ALPHA"));
   ASSERT_FALSE(comp("ALPHA", "alpha"));
 
-  // something is not smaller thant itself
+  // something is not smaller than itself
   ASSERT_FALSE(comp("beta", "beta"));
 
   ASSERT_TRUE(comp("\"@u2", "@u2"));

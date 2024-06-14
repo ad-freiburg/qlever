@@ -161,13 +161,13 @@ class MmapVector {
   }
 
   // create Array of given size  fill with default value
-  // file contents will be overriden if existing!
+  // file contents will be overridden if existing!
   // allows read and write access
   void open(size_t size, const T& defaultValue, string filename,
             AccessPattern pattern = AccessPattern::None);
 
-  // create unititialized array of given size at path specified by filename
-  // file will be created or overriden!
+  // create uninitialized array of given size at path specified by filename
+  // file will be created or overridden!
   // allows read and write access
   void open(size_t size, string filename,
             AccessPattern pattern = AccessPattern::None);
@@ -305,7 +305,7 @@ class MmapVectorView : private MmapVector<T> {
   // ____________________________________________________
   size_t size() const { return MmapVector<T>::size(); }
 
-  // default constructor, leaves an unitialized vector that will throw until a
+  // default constructor, leaves an uninitialized vector that will throw until a
   // valid call to open()
   MmapVectorView() = default;
 
@@ -342,8 +342,8 @@ class MmapVectorView : private MmapVector<T> {
     open(filename, pattern);
   }
 
-  // explicitly close the vector to an unitialized state and free the associated
-  // ressources
+  // explicitly close the vector to an uninitialized state and free the
+  // associated resources
   void close();
 
   // destructor

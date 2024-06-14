@@ -52,7 +52,7 @@ auto generateDummyNonExceptionValidatorFunction(size_t variant) {
   return [... dummyValuesToCompareTo =
               createDummyValueForValidator<ParameterTypes>(variant)](
              const ParameterTypes&... args) {
-    // Special handeling for `args` of type bool is needed. For the reasoning:
+    // Special handling for `args` of type bool is needed. For the reasoning:
     // See the doc string.
     auto compare = []<typename T>(const T& arg,
                                   const T& dummyValueToCompareTo) {

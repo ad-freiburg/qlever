@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -1109,7 +1110,7 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTICT before the argument list (the
+  // The grammar allows an optional DISTINCT before the argument list (the
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
@@ -2019,6 +2020,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "uuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<UuidExpression>();
+  } else if (functionName == "struuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<StrUuidExpression>();
   } else if (functionName == "ceil") {
     return createUnary(&makeCeilExpression);
   } else if (functionName == "abs") {

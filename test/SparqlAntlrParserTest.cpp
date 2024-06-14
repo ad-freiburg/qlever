@@ -20,6 +20,7 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
 #include "parser/sparqlParser/SparqlQleverVisitor.h"
@@ -1397,6 +1398,8 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
   expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
+  expectBuiltInCall("STRUUID()", matchPtr<StrUuidExpression>());
+  expectBuiltInCall("UUID()", matchPtr<UuidExpression>());
   expectBuiltInCall("COALESCE(?x)", matchUnary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE()", matchNary(makeCoalesceExpressionVariadic));
   expectBuiltInCall("COALESCE(?x, ?y, ?z)",

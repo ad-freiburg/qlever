@@ -66,7 +66,7 @@ class MemorySize {
 
   /*
   Factory functions for creating an instance of this class with the wanted
-  memory size saved internally. Always requries the exact memory size unit and
+  memory size saved internally. Always requires the exact memory size unit and
   size wanted.
   */
   template <std::integral T>
@@ -175,7 +175,7 @@ constexpr ConstexprMap<std::string_view, size_t, 5> numBytesPerUnit(
 /*
 Helper function for dividing two instances of `size_t`.
 Needed, because there is no `std` division function, that takes unconverted
-`size_t`.This tends to lead to error and unprecise results. This function
+`size_t`.This tends to lead to error and imprecise results. This function
 however, should be about as precise as possible, when having the return type
 `double`.
 */
@@ -222,7 +222,7 @@ template <Arithmetic T>
 constexpr size_t convertMemoryUnitsToBytes(const T amountOfUnits,
                                            std::string_view unitName) {
   if constexpr (std::is_signed_v<T>) {
-    // Negativ values makes no sense.
+    // Negative values makes no sense.
     AD_CONTRACT_CHECK(amountOfUnits >= 0);
   }
 
@@ -267,7 +267,7 @@ multiplied/divied with.
 `MemorySize` records. It will be given the amount of bytes in `m`, followed by
 `c` for this calculation. Both will either have been cast to `size_t`, or
 `double.` Note, that the rounding and casting to `size_t` for floating point
-return types will be automaticly done, and can be ignored by `func`.
+return types will be automatically done, and can be ignored by `func`.
  */
 template <Arithmetic T, typename Func>
 requires std::invocable<Func, const double, const double> ||
@@ -289,7 +289,7 @@ constexpr MemorySize magicImplForDivAndMul(const MemorySize& m, const T c,
 template <std::integral T>
 constexpr MemorySize MemorySize::bytes(T numBytes) {
   if constexpr (std::is_signed_v<T>) {
-    // Doesn't make much sense to a negativ amount of memory.
+    // Doesn't make much sense to a negative amount of memory.
     AD_CONTRACT_CHECK(numBytes >= 0);
   }
 

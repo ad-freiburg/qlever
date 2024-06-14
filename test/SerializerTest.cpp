@@ -165,7 +165,7 @@ TEST(Serializer, SimpleExample) {
     A a{};  // Uninitialized, we will read into it;
     serialization::FileReadSerializer reader{filename};
     reader >> a;
-    // We have succesfully restored the values.
+    // We have successfully restored the values.
     ASSERT_EQ(a.a, 42);
     ASSERT_EQ(a.b, -5);
   }
@@ -425,7 +425,7 @@ TEST(Serializer, Array) {
   testWithAllSerializers(testNonTriviallyCopyableDatatype);
 }
 
-// Test that we can succesfully write `string_view`s to a serializer and
+// Test that we can successfully write `string_view`s to a serializer and
 // correctly read them as `string`s.
 TEST(Serializer, StringViewToString) {
   auto testString = [](auto&& writer, auto makeReaderFromWriter) {

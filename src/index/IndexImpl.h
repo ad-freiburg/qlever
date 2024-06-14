@@ -272,8 +272,8 @@ class IndexImpl {
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the Entites column (0) of the full has-relation
-   *         relation after unrolling the patterns.
+   * @return The multiplicity of the Entities column (0) of the full
+   * has-relation relation after unrolling the patterns.
    */
   double getAvgNumDistinctPredicatesPerSubject() const;
 
@@ -611,7 +611,7 @@ class IndexImpl {
  private:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
-   *        whithin any index method that returns data requiring the patterns
+   *        within any index method that returns data requiring the patterns
    *        file.
    */
   void throwExceptionIfNoPatterns() const;
