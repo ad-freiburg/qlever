@@ -192,7 +192,11 @@ size_t IndexScan::computeSizeEstimate() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::getCostEstimate() { return getSizeEstimateBeforeLimit(); }
+size_t IndexScan::getCostEstimate() {
+  // If we have a limit present, we only have to read the first
+  // `limit + offset` elements.
+  return getLimit().upperBound(getSizeEstimateBeforeLimit());
+}
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
@@ -293,6 +297,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   auto actualBlocks = s.getLimit().isUnconstrained()
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
+
   return index.getPermutation(s.permutation())
       .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
                 s.additionalColumns(), s.cancellationHandle_, s.getLimit());

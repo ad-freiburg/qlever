@@ -343,6 +343,13 @@ void Operation::createRuntimeInfoFromEstimates(
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
+  const auto& [limit, offset, _] = getLimit();
+  if (limit.has_value()) {
+    _runtimeInfo->addDetail("limit", limit.value());
+  }
+  if (offset > 0) {
+    _runtimeInfo->addDetail("offset", offset);
+  }
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);

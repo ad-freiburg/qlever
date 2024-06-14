@@ -103,8 +103,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     popTimer.stop();
     cancellationHandle->throwIfCancelled();
     ++details.numBlocksRead_;
-    pruneBlock(block, limitOffset);
     details.numElementsRead_ += block.numRows();
+    pruneBlock(block, limitOffset);
+    details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
       co_yield block;
     }
@@ -124,6 +125,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
     LimitOffsetClause limitOffset) const {
+  // We will modify `limitOffset` as we go, so we have to copy the original
+  // value for sanity checks which we apply later.
+  const auto originalLimit = limitOffset;
   AD_CONTRACT_CHECK(cancellationHandle);
   auto relevantBlocks = getRelevantBlocks(scanSpec, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
@@ -147,6 +151,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlock < endBlock) {
     auto block = getIncompleteBlock(beginBlock);
     pruneBlock(block, limitOffset);
+    details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
       co_yield block;
     }
@@ -165,9 +170,13 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     auto lastBlock = getIncompleteBlock(endBlock - 1);
     pruneBlock(lastBlock, limitOffset);
     if (!lastBlock.empty()) {
+      details.numElementsYielded_ += lastBlock.numRows();
       co_yield lastBlock;
     }
   }
+  const auto& limit = originalLimit._limit;
+  AD_CORRECTNESS_CHECK(!limit.has_value() ||
+                       details.numElementsYielded_ <= limit.value());
   AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_ ||
                        !limitOffset.isUnconstrained());
 }
