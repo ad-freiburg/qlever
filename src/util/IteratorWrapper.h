@@ -9,27 +9,21 @@
 
 namespace ad_utility {
 
-template <typename OriginalIterator, typename... Args>
+template <typename OriginalIterable, typename... Args>
 class IteratorWrapper {
-  OriginalIterator& iterator_;
+  OriginalIterable& iterable_;
   std::tuple<Args...> args_;
 
  public:
-  explicit IteratorWrapper(OriginalIterator& iterator, Args... args)
-      : iterator_{iterator}, args_{std::move(args)...} {}
+  explicit IteratorWrapper(OriginalIterable& iterator, Args... args)
+      : iterable_{iterator}, args_{std::move(args)...} {}
 
   auto begin() {
-    return std::apply([this](auto... args) { return iterator_.begin(args...); },
+    return std::apply([this](auto... args) { return iterable_.begin(args...); },
                       args_);
   }
 
-  auto end() { return iterator_.end(); }
-
-  auto& operator++() { return iterator_++; }
-
-  auto& operator*() { return *iterator_; }
-
-  auto operator->() { return std::addressof(operator*()); }
+  auto end() { return iterable_.end(); }
 };
 
 };  // namespace ad_utility
