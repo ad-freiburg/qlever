@@ -259,7 +259,7 @@ struct makeDatatypeValueGetter : Mixin<makeDatatypeValueGetter> {
                     const EvaluationContext* context) const;
   // Helper function to retrieve Iri from LiteralOrIri-Content-String
   // if an actual Literal was contained.
-  inline OptIri iriFromLiteral(const std::string& str) const;
+  OptIri iriFromLiteral(const std::string& str) const;
 };
 
 // `IriValueGetter` returns an

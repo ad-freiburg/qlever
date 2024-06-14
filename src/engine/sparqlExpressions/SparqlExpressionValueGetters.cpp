@@ -173,7 +173,8 @@ IntDoubleStr ToNumericValueGetter::operator()(
 }
 
 // ____________________________________________________________________________
-OptIri makeDatatypeValueGetter::iriFromLiteral(const std::string& str) const {
+inline OptIri makeDatatypeValueGetter::iriFromLiteral(
+    const std::string& str) const {
   // check that we return an Iri w.r.t. Literals
   if (!(str.starts_with("\"") || str.starts_with("'"))) {
     return std::nullopt;
@@ -191,16 +192,17 @@ OptIri makeDatatypeValueGetter::iriFromLiteral(const std::string& str) const {
 // ____________________________________________________________________________
 OptIri makeDatatypeValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
   auto datatype = id.getDatatype();
   std::optional<std::string> entity;
   switch (datatype) {
-    case Datatype::Bool:
+    case Bool:
       return Iri::fromIri(XSD_BOOLEAN_TYPE);
-    case Datatype::Double:
+    case Double:
       return Iri::fromIri(XSD_DOUBLE_TYPE);
-    case Datatype::Int:
+    case Int:
       return Iri::fromIri(XSD_INT_TYPE);
-    case Datatype::Date: {
+    case Date: {
       auto dateType = id.getDate().toStringAndType().second;
       if (dateType != nullptr) {
         return Iri::fromIri(dateType);
@@ -208,12 +210,12 @@ OptIri makeDatatypeValueGetter::operator()(
         return std::nullopt;
       }
     }
-    case Datatype::LocalVocabIndex: {
+    case LocalVocabIndex: {
       const auto& voc = context->_localVocab;
       return iriFromLiteral(
           voc.getWord(id.getLocalVocabIndex()).toStringRepresentation());
     }
-    case Datatype::VocabIndex: {
+    case VocabIndex: {
       const auto& idx = context->_qec.getIndex();
       entity = idx.idToOptionalString(id.getVocabIndex());
       if (!entity.has_value()) {
@@ -221,10 +223,10 @@ OptIri makeDatatypeValueGetter::operator()(
       }
       return iriFromLiteral(entity.value());
     }
-    case Datatype::Undefined:
-    case Datatype::BlankNodeIndex:
-    case Datatype::TextRecordIndex:
-    case Datatype::WordVocabIndex:
+    case Undefined:
+    case BlankNodeIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
       return std::nullopt;
   }
   AD_FAIL();
