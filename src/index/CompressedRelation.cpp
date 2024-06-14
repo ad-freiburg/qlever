@@ -336,10 +336,6 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  bool useUpdates = useUpdates_;
-  if (!additionalColumns.empty()) {
-    useUpdates = false;
-  }
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
