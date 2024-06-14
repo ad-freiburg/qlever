@@ -76,11 +76,6 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
 TEST_F(LocatedTriplesTest, mergeTriples) {
   using LT = LocatedTriple;
 
-  auto dropFirstColumns = [](int64_t n, auto& table) {
-    std::vector<ColumnIndex> indices(table.numColumns() - n);
-    std::iota(indices.begin(), indices.end(), n);
-    table.setColumnSubset(indices);
-  };
   auto mergeAndCheck = [](IdTable block, const IdTable& expectedResult,
                           const LocatedTriplesPerBlock& locatedTriples) {
     IdTable result(expectedResult.numColumns(),
