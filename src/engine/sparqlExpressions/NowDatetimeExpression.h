@@ -10,7 +10,7 @@
 namespace sparqlExpression {
 
 // The expression NOW() is evaluated within NowDatetimeExpression.
-// NowDatetimeExpression has to be explicitely instantiated with a
+// NowDatetimeExpression has to be explicitly instantiated with a
 // date-formatted string, which is for all evaluations within a Sparql query the
 // same.
 class NowDatetimeExpression : public SparqlExpression {
