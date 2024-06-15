@@ -44,7 +44,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
        LT{1, IT(11, 3, 0), true}, LT{2, IT(20, 4, 0), true},
        LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
        LT{4, IT(32, 7, 0), false}});
-  // A helper to check `numBlocks`, `numTriples` and `numTriples(blockIndex)`
+  // A helper to check `numBlocks`, `numTriples` and `numTriples(blockIndex_)`
   // for all blocks.
   auto checkNumbers =
       [&locatedTriplesPerBlock](

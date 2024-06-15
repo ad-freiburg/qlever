@@ -65,7 +65,7 @@ class DeltaTriples {
 
  public:
   // Construct for given index.
-  DeltaTriples(const Index& index) : index_(index) {}
+  explicit DeltaTriples(const Index& index) : index_(index) {}
 
   // Get the `Index` to which these delta triples refer.
   const Index& getIndex() const { return index_; }
@@ -95,7 +95,6 @@ class DeltaTriples {
       Permutation::Enum permutation) const;
 
   // TODO: made public as long as we are trying to figure out how this works.
- private:
  public:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).

@@ -375,7 +375,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   //                     [&]() {
   //                       return readAndDecompressBlock(
   //                           blockMetadata, allColumns, locatedTriples,
-  //                           blockIndex);
+  //                           offset);
   //                     })
   //        ._resultPointer;
   const DecompressedBlock& block =

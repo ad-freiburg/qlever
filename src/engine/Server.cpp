@@ -613,12 +613,12 @@ nlohmann::json Server::executeUpdateQuery(
     }
   };
   auto transformSparqlTripleSimple =
-      [&transformSparqlTripleComponent](
-          SparqlTripleSimple triple) -> std::array<IdOrVariable, 3> {
-    return {transformSparqlTripleComponent(std::move(triple.s_)),
+      [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
+        return std::array<IdOrVariable, 3>{
+            transformSparqlTripleComponent(std::move(triple.s_)),
             transformSparqlTripleComponent(std::move(triple.p_)),
             transformSparqlTripleComponent(std::move(triple.o_))};
-  };
+      };
   std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
       ad_utility::transform(std::move(update.toInsert_),
                             transformSparqlTripleSimple);
@@ -707,15 +707,14 @@ nlohmann::json Server::executeUpdateQuery(
   j["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
 
-  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
-  j["time"]["queryBody"] =
-      std::to_string(timeQueryBodyExecution.count()) + "ms";
+  j["time"]["total"] = std::format("{0:%Q}{0:%q}", requestTimer.msecs());
+  j["time"]["queryBody"] = std::format("{0:%Q}{0:%q}", timeQueryBodyExecution);
   j["time"]["computeResult"] = j["time"]["total"];
   j["time"]["templatePreparation"] =
-      std::to_string(timeTemplatePrepration.count()) + "ms";
+      std::format("{0:%Q}{0:%q}", timeTemplatePrepration);
   j["time"]["updateTripleMaterialization"] =
-      std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
-  j["time"]["deltaTriples"] = std::to_string(timeDeltaTriples.count()) + "ms";
+      std::format("{0:%Q}{0:%q}", timeMaterializeUpdateTriples);
+  j["time"]["deltaTriples"] = std::format("{0:%Q}{0:%q}", timeDeltaTriples);
 
   return j;
 }

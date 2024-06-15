@@ -28,24 +28,17 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
   for (auto triple : triples) {
     triple = permute(triple, permutation);
     currentBlockIndex =
-        std::lower_bound(blocks.begin(), blocks.end(), triple,
-                         [&](const CompressedBlockMetadata& block,
-                             const auto& triple) -> bool {
-                           // std::array<Id, 3> kann auch < aus den komponenten
-                           const auto& lastTriple = block.lastTriple_;
-                           if (lastTriple.col0Id_ < triple[0]) {
-                             return true;
-                           } else if (lastTriple.col0Id_ == triple[0]) {
-                             if (lastTriple.col1Id_ < triple[1]) {
-                               return true;
-                             } else if (lastTriple.col1Id_ == triple[1]) {
-                               return lastTriple.col2Id_ < triple[2];
-                             }
-                           }
-                           return false;
-                         }) -
+        std::ranges::lower_bound(
+            blocks, triple,
+            [&](const IdTriple& block, const IdTriple& triple) -> bool {
+              return block < triple;
+            },
+            [](const CompressedBlockMetadata& block) {
+              auto perm = block.lastTriple_;
+              return IdTriple{perm.col0Id_, perm.col1Id_, perm.col2Id_};
+            }) -
         blocks.begin();
-    out.push_back({currentBlockIndex, triple, shouldExist});
+    out.emplace_back(currentBlockIndex, triple, shouldExist);
   }
 
   return out;
@@ -54,15 +47,15 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 // ____________________________________________________________________________
 std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
     size_t blockIndex) const {
-  // If no located triples for `blockIndex` exist, there is no entry in `map_`.
+  // If no located triples for `blockIndex_` exist, there is no entry in `map_`.
   if (!map_.contains(blockIndex)) {
     return {0, 0};
   }
 
   auto blockUpdateTriples = map_.at(blockIndex);
-  size_t countDeletes = std::count_if(
-      blockUpdateTriples.begin(), blockUpdateTriples.end(),
-      [](const LocatedTriple& elem) { return !elem.shouldTripleExist; });
+  size_t countDeletes = std::ranges::count_if(
+      blockUpdateTriples,
+      [](const LocatedTriple& elem) { return !elem.shouldTripleExist_; });
   size_t countInserts = blockUpdateTriples.size() - countDeletes;
 
   return {countInserts, countDeletes};
@@ -80,13 +73,13 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   // `id2` and the `id3`).
   auto numberOfIndexColumns = [](const IdTable& idTable) {
     auto firstRow = idTable[0];
-    return std::count_if(
-        firstRow.begin(), firstRow.end(), [](const ValueId& i) {
-          return i.getDatatype() == Datatype::VocabIndex ||
-                 i.getDatatype() == Datatype::LocalVocabIndex ||
-                 i.getDatatype() == Datatype::TextRecordIndex ||
-                 i.getDatatype() == Datatype::WordVocabIndex;
-        });
+    return std::ranges::count_if(firstRow, [](const ValueId& i) {
+      using enum Datatype;
+      return i.getDatatype() == VocabIndex ||
+             i.getDatatype() == LocalVocabIndex ||
+             i.getDatatype() == TextRecordIndex ||
+             i.getDatatype() == WordVocabIndex;
+    });
   };
 
   auto numIndexColumns = numberOfIndexColumns(block);
@@ -98,51 +91,50 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   auto locatedTriple = locatedTriples.begin();
 
   // Advance to the first located triple in the specified range.
-  auto cmpLt = [&numIndexColumns](auto lt, auto row) {
+  auto cmpLt = [&numIndexColumns](auto lt, auto& row) {
     if (numIndexColumns == 3) {
-      return (row[0] > lt->triple[0] ||
-              (row[0] == lt->triple[0] &&
-               (row[1] > lt->triple[1] ||
-                (row[1] == lt->triple[1] && row[2] > lt->triple[2]))));
+      return (row[0] > lt->triple_[0] ||
+              (row[0] == lt->triple_[0] &&
+               (row[1] > lt->triple_[1] ||
+                (row[1] == lt->triple_[1] && row[2] > lt->triple_[2]))));
     } else if (numIndexColumns == 2) {
-      return (row[0] > lt->triple[1] ||
-              (row[0] == lt->triple[1] && (row[1] > lt->triple[2])));
+      return (row[0] > lt->triple_[1] ||
+              (row[0] == lt->triple_[1] && (row[1] > lt->triple_[2])));
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return (row[0] > lt->triple[2]);
+      return (row[0] > lt->triple_[2]);
     }
   };
-  auto cmpEq = [&numIndexColumns](auto lt, auto row) {
+  auto cmpEq = [&numIndexColumns](auto lt, auto& row) {
     if (numIndexColumns == 3) {
-      return (row[0] == lt->triple[0] && row[1] == lt->triple[1] &&
-              row[2] == lt->triple[2]);
+      return (row[0] == lt->triple_[0] && row[1] == lt->triple_[1] &&
+              row[2] == lt->triple_[2]);
     } else if (numIndexColumns == 2) {
-      return (row[0] == lt->triple[1] && row[1] == lt->triple[2]);
+      return (row[0] == lt->triple_[1] && row[1] == lt->triple_[2]);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return (row[0] == lt->triple[2]);
+      return (row[0] == lt->triple_[2]);
     }
   };
   auto writeTripleToResult = [&resultEntry, &locatedTriple,
                               &numIndexColumns]() {
     if (numIndexColumns == 1) {
-      (*resultEntry)[0] = locatedTriple->triple[2];
+      (*resultEntry)[0] = locatedTriple->triple_[2];
     } else if (numIndexColumns == 2) {
-      (*resultEntry)[0] = locatedTriple->triple[1];
-      (*resultEntry)[1] = locatedTriple->triple[2];
+      (*resultEntry)[0] = locatedTriple->triple_[1];
+      (*resultEntry)[1] = locatedTriple->triple_[2];
     } else {
-      (*resultEntry)[0] = locatedTriple->triple[0];
-      (*resultEntry)[1] = locatedTriple->triple[1];
-      (*resultEntry)[2] = locatedTriple->triple[2];
+      (*resultEntry)[0] = locatedTriple->triple_[0];
+      (*resultEntry)[1] = locatedTriple->triple_[1];
+      (*resultEntry)[2] = locatedTriple->triple_[2];
     }
   };
 
-  for (size_t rowIndex = 0; rowIndex < block.size(); ++rowIndex) {
+  for (auto row : block) {
     // Append triples that are marked for insertion at this `rowIndex` to the
     // result.
-    while (locatedTriple != locatedTriples.end() &&
-           cmpLt(locatedTriple, block[rowIndex])) {
-      if (locatedTriple->shouldTripleExist == true) {
+    while (locatedTriple != locatedTriples.end() && cmpLt(locatedTriple, row)) {
+      if (locatedTriple->shouldTripleExist_ == true) {
         // Adding an inserted Triple between two triples.
         writeTripleToResult();
         ++resultEntry;
@@ -156,9 +148,8 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     // Append the triple at this position to the result if and only if it is not
     // marked for deletion and matches (also skip it if it does not match).
     bool deleteThisEntry = false;
-    if (locatedTriple != locatedTriples.end() &&
-        cmpEq(locatedTriple, block[rowIndex])) {
-      if (locatedTriple->shouldTripleExist == false) {
+    if (locatedTriple != locatedTriples.end() && cmpEq(locatedTriple, row)) {
+      if (locatedTriple->shouldTripleExist_ == false) {
         // A deletion of a triple that exists in the index.
         deleteThisEntry = true;
 
@@ -170,11 +161,11 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
       }
     }
     if (!deleteThisEntry) {
-      *resultEntry++ = block[rowIndex];
+      *resultEntry++ = row;
     }
-  };
+  }
   while (locatedTriple != locatedTriples.end() &&
-         locatedTriple->shouldTripleExist == true) {
+         locatedTriple->shouldTripleExist_ == true) {
     writeTripleToResult();
     ++resultEntry;
     ++locatedTriple;
@@ -190,7 +181,7 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
-    LocatedTriples& locatedTriples = map_[triple.blockIndex];
+    LocatedTriples& locatedTriples = map_[triple.blockIndex_];
     auto [handle, wasInserted] = locatedTriples.emplace(triple);
     AD_CORRECTNESS_CHECK(wasInserted == true);
     AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
@@ -209,16 +200,15 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-  os << "LT(" << lt.blockIndex << " " << lt.triple[0] << " " << lt.triple[1]
-     << " " << lt.triple[2] << " " << lt.shouldTripleExist << ")";
+  os << "LT(" << lt.blockIndex_ << " " << lt.triple_[0] << " " << lt.triple_[1]
+     << " " << lt.triple_[2] << " " << lt.shouldTripleExist_ << ")";
   return os;
 }
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
-  std::copy(lts.begin(), lts.end(),
-            std::ostream_iterator<LocatedTriple>(os, " "));
+  std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
   return os;
 }
@@ -227,9 +217,8 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
 std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
   // Get the block indices in sorted order.
   std::vector<size_t> blockIndices;
-  std::transform(ltpb.map_.begin(), ltpb.map_.end(),
-                 std::back_inserter(blockIndices),
-                 [](const auto& entry) { return entry.first; });
+  std::ranges::transform(ltpb.map_, std::back_inserter(blockIndices),
+                         [](const auto& entry) { return entry.first; });
   std::ranges::sort(blockIndices);
   for (auto blockIndex : blockIndices) {
     os << "Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
@@ -251,8 +240,8 @@ std::ostream& operator<<(std::ostream& os,
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
   os << "{ ";
-  std::copy(idTable.begin(), idTable.end(),
-            std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
+  std::ranges::copy(
+      idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
   os << "}";
   return os;
 }
@@ -260,8 +249,7 @@ std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
 // ____________________________________________________________________________
 template <typename T, std::size_t N>
 std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
-  using namespace std;
-  copy(v.begin(), v.end(), ostream_iterator<T>(os, ", "));
+  std::ranges::copy(v, std::ostream_iterator<T>(os, ", "));
   return os;
 }
 
@@ -271,8 +259,7 @@ template std::ostream& operator<< <ValueId, 3ul>(
 // ____________________________________________________________________________
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
-  using namespace std;
-  copy(v.begin(), v.end(), ostream_iterator<T>(os, ", "));
+  std::ranges::copy(v.begin(), v.end(), std::ostream_iterator<T>(os, ", "));
   return os;
 }
 

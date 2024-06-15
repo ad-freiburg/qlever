@@ -53,7 +53,7 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
   }
 
   return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
-                       cancellationHandle, locatedTriplesPerBlock_, 0ul);
+                       cancellationHandle, locatedTriplesPerBlock_, 0UL);
 }
 
 // _____________________________________________________________________

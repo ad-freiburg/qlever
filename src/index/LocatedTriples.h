@@ -16,15 +16,15 @@ class Permutation;
 // the end of this file.
 struct LocatedTriple {
   // The index of the block, according to the definition above.
-  size_t blockIndex;
+  size_t blockIndex_;
   // The `Id`s of the triple in the order of the permutation. For example,
   // for an object pertaining to the OPS permutation: `id1` is the object,
   // `id2` is the predicate, and `id3` is the subject.
-  IdTriple triple;
+  IdTriple triple_;
 
   // Flag that is true if the given triple is inserted and false if it
   // is deleted.
-  bool shouldTripleExist;
+  bool shouldTripleExist_;
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
@@ -37,13 +37,13 @@ struct LocatedTriple {
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
-// this to store all located triples with the same `blockIndex`.
+// this to store all located triples with the same `blockIndex_`.
 //
 // NOTE: We could also overload `std::less` here, but the explicit specification
 // of the order makes it clearer.
 struct LocatedTripleCompare {
   bool operator()(const LocatedTriple& x, const LocatedTriple& y) const {
-    return x.triple < y.triple;
+    return x.triple_ < y.triple_;
   }
 };
 using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
@@ -67,7 +67,6 @@ class LocatedTriplesPerBlock {
   // LocatedTriples>`, but not sure whether that is good style.
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
- public:
   // Get upper limits for the number of located triples for the given block. The
   // return value is a pair of numbers: first, the number of existing triples
   // ("to be deleted") and second, the number of new triples ("to be inserted").
@@ -76,13 +75,13 @@ class LocatedTriplesPerBlock {
   // triple).
   std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
 
-  // Merge located triples for `blockIndex` with the given index `block` and
+  // Merge located triples for `blockIndex_` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Return the
   // number of rows written to `result`.
   //
   // PRECONDITIONS:
   //
-  // 1. The set of located triples for `blockIndex` must be non-empty.
+  // 1. The set of located triples for `blockIndex_` must be non-empty.
   // Otherwise, there is no need for merging and this method shouldn't be
   // called for efficiency reasons.
   //
