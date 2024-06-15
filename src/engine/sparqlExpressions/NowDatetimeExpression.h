@@ -19,7 +19,7 @@ class NowDatetimeExpression : public SparqlExpression {
   DateOrLargeYear date_;
 
  public:
-  NowDatetimeExpression(std::string dateTimeFormat)
+  explicit NowDatetimeExpression(const std::string& dateTimeFormat)
       : date_(DateOrLargeYear::parseXsdDatetime(dateTimeFormat)) {}
 
   std::string getCacheKey(
