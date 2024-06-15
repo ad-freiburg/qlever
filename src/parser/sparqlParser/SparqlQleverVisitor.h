@@ -8,6 +8,7 @@
 
 #include <antlr4-runtime.h>
 
+#include "absl/time/time.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -108,6 +109,11 @@ class SparqlQleverVisitor {
   // meaning of blank and anonymous nodes is different.
   bool isInsideConstructTriples_ = false;
 
+  // Member start time is needed for the NOW expression. All calls within
+  // the query execution reference it. The underlying date time format is e.g.:
+  // 2011-01-10T14:45:13.815-05:00
+  std::string startTime_;
+
  public:
   SparqlQleverVisitor() = default;
   explicit SparqlQleverVisitor(
@@ -122,6 +128,11 @@ class SparqlQleverVisitor {
 
   void setParseModeToInsideConstructTemplateForTesting() {
     isInsideConstructTriples_ = true;
+  }
+
+  void setStartTime() {
+    startTime_ = absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
+                                  absl::LocalTimeZone());
   }
 
   // ___________________________________________________________________________

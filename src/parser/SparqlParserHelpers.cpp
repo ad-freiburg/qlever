@@ -19,6 +19,7 @@ ParserAndVisitor::ParserAndVisitor(
   // propagate them to the user.
   parser_.removeErrorListeners();
   parser_.addErrorListener(&errorListener_);
+  visitor_.setStartTime();
   lexer_.removeErrorListeners();
   lexer_.addErrorListener(&errorListener_);
 }
@@ -29,5 +30,6 @@ ParserAndVisitor::ParserAndVisitor(
     SparqlQleverVisitor::DisableSomeChecksOnlyForTesting disableSomeChecks)
     : ParserAndVisitor{std::move(input), disableSomeChecks} {
   visitor_.setPrefixMapManually(std::move(prefixes));
+  visitor_.setStartTime();
 }
 }  // namespace sparqlParserHelpers
