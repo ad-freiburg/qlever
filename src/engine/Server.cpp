@@ -707,14 +707,15 @@ nlohmann::json Server::executeUpdateQuery(
   j["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
 
-  j["time"]["total"] = std::format("{0:%Q}{0:%q}", requestTimer.msecs());
-  j["time"]["queryBody"] = std::format("{0:%Q}{0:%q}", timeQueryBodyExecution);
+  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
+  j["time"]["queryBody"] =
+      std::to_string(timeQueryBodyExecution.count()) + "ms";
   j["time"]["computeResult"] = j["time"]["total"];
   j["time"]["templatePreparation"] =
-      std::format("{0:%Q}{0:%q}", timeTemplatePrepration);
+      std::to_string(timeTemplatePrepration.count()) + "ms";
   j["time"]["updateTripleMaterialization"] =
-      std::format("{0:%Q}{0:%q}", timeMaterializeUpdateTriples);
-  j["time"]["deltaTriples"] = std::format("{0:%Q}{0:%q}", timeDeltaTriples);
+      std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
+  j["time"]["deltaTriples"] = std::to_string(timeDeltaTriples.count()) + "ms";
 
   return j;
 }
