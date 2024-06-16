@@ -753,6 +753,12 @@ template void IndexImpl::createOSPAndOPS<
 template ExternalSorter<FirstPermutation, 3UL> IndexImpl::makeSorter<
     FirstPermutation, 3UL>(std::string_view permutationName) const;
 
+template ExternalSorter<SecondPermutation, 3UL> IndexImpl::makeSorter<
+    SecondPermutation, 3UL>(std::string_view permutationName) const;
+
+template ExternalSorter<ThirdPermutation, 3UL> IndexImpl::makeSorter<
+    ThirdPermutation, 3UL>(std::string_view permutationName) const;
+
 // _____________________________________________________________________________
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
