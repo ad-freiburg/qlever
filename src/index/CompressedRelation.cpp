@@ -518,6 +518,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
     if (firstColId == lastColId) {
       // The whole block has the same `colId` -> we get all the information
       // from the metadata.
+      // TODO<qup42> e.g. the count of triples in the block should be updated
       processColId(firstColId, blockMetadata.numRows_);
     } else {
       // Multiple `colId`s -> we have to read the block.

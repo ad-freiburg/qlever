@@ -30,11 +30,11 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     currentBlockIndex =
         std::ranges::lower_bound(
             blocks, triple,
-            [&](const IdTriple& block, const IdTriple& triple) -> bool {
+            [&](const IdTriple& block, const IdTriple& triple) {
               return block < triple;
             },
             [](const CompressedBlockMetadata& block) {
-              auto perm = block.lastTriple_;
+              const auto& perm = block.lastTriple_;
               return IdTriple{perm.col0Id_, perm.col1Id_, perm.col2Id_};
             }) -
         blocks.begin();

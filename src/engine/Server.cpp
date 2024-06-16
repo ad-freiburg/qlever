@@ -650,8 +650,6 @@ nlohmann::json Server::executeUpdateQuery(
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
-  // TODO: ideas only process template rows with variables here, do ones with
-  // only constants before
   // TODO: use ExportQueryExecutionTrees::getRowIndices as iterator
   for (size_t i : std::views::iota((size_t)0, res->idTable().size())) {
     ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
