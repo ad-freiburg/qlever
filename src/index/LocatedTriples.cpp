@@ -11,8 +11,8 @@
 #include "index/IndexMetaData.h"
 #include "index/Permutation.h"
 
-IdTriple permute(const IdTriple& triple, const Permutation& permutation) {
-  auto keyOrder = permutation.keyOrder();
+IdTriple permute(const IdTriple& triple,
+                 const std::array<size_t, 3>& keyOrder) {
   return {triple[keyOrder[0]], triple[keyOrder[1]], triple[keyOrder[2]]};
 }
 
@@ -26,7 +26,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
   out.reserve(triples.size());
   size_t currentBlockIndex;
   for (auto triple : triples) {
-    triple = permute(triple, permutation);
+    triple = permute(triple, permutation.keyOrder());
     currentBlockIndex =
         std::ranges::lower_bound(
             blocks, triple,

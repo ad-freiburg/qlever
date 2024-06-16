@@ -259,9 +259,16 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
           auto locatedTriplesSet = locatedTriplesPerBlock.map_.at(blockIndex);
           std::vector<LT> computedLocatedTriples(locatedTriplesSet.begin(),
                                                  locatedTriplesSet.end());
-          const std::vector<LT>& expectedLocatedTriples =
+          std::vector<LT> expectedLocatedTriples =
               expectedLocatedTriplesPerBlock.at(blockIndex);
-          ASSERT_EQ(computedLocatedTriples, expectedLocatedTriples)
+          std::vector<LT> expectedPermutedLocatedTriples =
+              ad_utility::transform(
+                  std::move(expectedLocatedTriples), [&permutation](LT&& lt) {
+                    return LT{lt.blockIndex_,
+                              permute(lt.triple_, permutation.keyOrder()),
+                              lt.shouldTripleExist_};
+                  });
+          ASSERT_EQ(computedLocatedTriples, expectedPermutedLocatedTriples)
               << "blockIndex = " << blockIndex
               << " doesn't have the expected LocatedTriples";
         }
@@ -310,58 +317,40 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     ad_utility::deleteFile(name + MMAP_FILE_SUFFIX);
   };
   // The actual test, for a given block size.
-  // TODO: Test for all permutations, right now it's only SPO.
-  auto testWithGivenBlockSize =
+  auto testWithGivenBlockSizeAll =
       [&checkRelationsForPermutation, &displayBlocks,
        &checkTripleLocationForPermutation, &createIndexFromIdTable,
-       &deletePermutation](const IdTable& triplesInIndex,
-                           const std::vector<IdTriple>& triplesToLocate,
-                           const ad_utility::MemorySize& blockSize,
-                           const ad_utility::HashMap<size_t, std::vector<LT>>&
-                               expectedLocatedTriplesPerBlock) {
+       &deletePermutation](
+          const IdTable& triplesInIndex,
+          const std::vector<IdTriple>& triplesToLocate,
+          const ad_utility::MemorySize& blockSize,
+          const ad_utility::HashMap<
+              Permutation::Enum, ad_utility::HashMap<size_t, std::vector<LT>>>&
+              expectedLocatedTriplesPerBlock) {
         std::string testIndexBasename = "LocatedTriplesTest.locatedTriple";
-
-        // Collect the distinct relation `Id`s.
-        std::vector<Id> relationIds;
-        for (size_t i = 0; i < triplesInIndex.numRows(); ++i) {
-          relationIds.push_back(triplesInIndex(i, 0));
-          ASSERT_TRUE(i == 0 || relationIds[i - 1] <= relationIds[i]);
-        }
-        relationIds = ad_utility::removeDuplicates(relationIds);
 
         const auto& testAllocator = ad_utility::testing::makeAllocator();
         createIndexFromIdTable(triplesInIndex, testAllocator, testIndexBasename,
                                blockSize);
 
-        // Load the permutations from disk.
-        Permutation SPO{Permutation::SPO, {}, testAllocator};
-        Permutation SOP{Permutation::SOP, {}, testAllocator};
-        Permutation OSP{Permutation::OSP, {}, testAllocator};
-        Permutation OPS{Permutation::OPS, {}, testAllocator};
-        Permutation PSO{Permutation::PSO, {}, testAllocator};
-        Permutation POS{Permutation::POS, {}, testAllocator};
-        SPO.loadFromDisk(testIndexBasename);
-        SOP.loadFromDisk(testIndexBasename);
-        OSP.loadFromDisk(testIndexBasename);
-        OPS.loadFromDisk(testIndexBasename);
-        PSO.loadFromDisk(testIndexBasename);
-        POS.loadFromDisk(testIndexBasename);
+        using enum Permutation::Enum;
+        for (auto& perm : {SPO, SOP, OSP, OPS, PSO, POS}) {
+          Permutation permutation{perm, {}, testAllocator};
+          permutation.loadFromDisk(testIndexBasename);
 
-        // Check that the permutation indeed consists of the relations that we
-        // have written to it.
-        checkRelationsForPermutation(SPO, relationIds);
-        displayBlocks(SPO.metaData().blockData());
-        // Check that triples were located correctly.
-        checkTripleLocationForPermutation(SPO, triplesToLocate,
-                                          expectedLocatedTriplesPerBlock);
+          if (expectedLocatedTriplesPerBlock.contains(perm)) {
+            displayBlocks(permutation.metaData().blockData());
 
-        // Delete the permutation files.
-        deletePermutation(testIndexBasename, SPO);
-        deletePermutation(testIndexBasename, SOP);
-        deletePermutation(testIndexBasename, OSP);
-        deletePermutation(testIndexBasename, OPS);
-        deletePermutation(testIndexBasename, PSO);
-        deletePermutation(testIndexBasename, POS);
+            checkTripleLocationForPermutation(
+                permutation, triplesToLocate,
+                expectedLocatedTriplesPerBlock.at(perm));
+          } else {
+            std::cout << "Skipping permutation " << Permutation::toString(perm)
+                      << std::endl;
+          }
+
+          deletePermutation(testIndexBasename, permutation);
+        }
       };
 
   {
@@ -393,63 +382,68 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     std::cout << "Delta triples: " << triplesToLocate << std::endl;
 
     // With block size 8, we have each triple in its own block.
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 8_B,
-        {{0, {LT(0, IT(1, 5, 10), false)}},
-         {1, {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false)}},
-         {2, {LT(2, IT(2, 14, 20), false)}},
-         {4, {LT(4, IT(2, 20, 10), false)}},
-         {6, {LT(6, IT(2, 30, 30), false)}},
-         {7, {LT(7, IT(2, 30, 31), false)}},
-         {8, {LT(8, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0, {LT(0, IT(1, 5, 10), false)}},
+           {1, {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false)}},
+           {2, {LT(2, IT(2, 14, 20), false)}},
+           {4, {LT(4, IT(2, 20, 10), false)}},
+           {6, {LT(6, IT(2, 30, 30), false)}},
+           {7, {LT(7, IT(2, 30, 31), false)}},
+           {8, {LT(8, IT(9, 30, 32), false)}}}}});
 
     // With block size 16, we have five blocks (Block 0 = Row 0, Block 1 = Row
     // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7).
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 16_B,
-        {{0, {LT(0, IT(1, 5, 10), false)}},
-         {1,
-          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
-           LT(1, IT(2, 14, 20), false)}},
-         {2, {LT(2, IT(2, 20, 10), false)}},
-         {3, {LT(3, IT(2, 30, 30), false)}},
-         {4, {LT(4, IT(2, 30, 31), false)}},
-         {5, {LT(5, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0, {LT(0, IT(1, 5, 10), false)}},
+           {1,
+            {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+             LT(1, IT(2, 14, 20), false)}},
+           {2, {LT(2, IT(2, 20, 10), false)}},
+           {3, {LT(3, IT(2, 30, 30), false)}},
+           {4, {LT(4, IT(2, 30, 31), false)}},
+           {5, {LT(5, IT(9, 30, 32), false)}}}}});
 
     // With block size 32, we have four blocks (Block 0 = Row 0, Block 1 = Row
     // 1+2+3+4, Block 2 = Row 5+6, Block 3 = Row 7). Note that a
     // relation that spans multiple blocks has these blocks on its own.
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 32_B,
-        {{0, {LT(0, IT(1, 5, 10), false)}},
-         {1,
-          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
-           LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false)}},
-         {2, {LT(2, IT(2, 30, 30), false)}},
-         {3, {LT(3, IT(2, 30, 31), false)}},
-         {4, {LT(4, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0, {LT(0, IT(1, 5, 10), false)}},
+           {1,
+            {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+             LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false)}},
+           {2, {LT(2, IT(2, 30, 30), false)}},
+           {3, {LT(3, IT(2, 30, 31), false)}},
+           {4, {LT(4, IT(9, 30, 32), false)}}}}});
 
     // With block size 48, we have three blocks (Block 0 = Row 0, Block 1 = Row
     // 1+2+3+4+5+6, Block 2 = Row 7).
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 48_B,
-        {{0, {LT(0, IT(1, 5, 10), false)}},
-         {1,
-          {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
-           LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false),
-           LT(1, IT(2, 30, 30), false)}},
-         {2, {LT(2, IT(2, 30, 31), false)}},
-         {3, {LT(3, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0, {LT(0, IT(1, 5, 10), false)}},
+           {1,
+            {LT(1, IT(1, 15, 10), false), LT(1, IT(2, 10, 10), false),
+             LT(1, IT(2, 14, 20), false), LT(1, IT(2, 20, 10), false),
+             LT(1, IT(2, 30, 30), false)}},
+           {2, {LT(2, IT(2, 30, 31), false)}},
+           {3, {LT(3, IT(9, 30, 32), false)}}}}});
 
     // With block size 100'000, we have one block.
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 100'000_B,
-        {{0,
-          {LT(0, IT(1, 5, 10), false), LT(0, IT(1, 15, 10), false),
-           LT(0, IT(2, 10, 10), false), LT(0, IT(2, 14, 20), false),
-           LT(0, IT(2, 20, 10), false), LT(0, IT(2, 30, 30), false),
-           LT(0, IT(2, 30, 31), false)}},
-         {1, {LT(1, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0,
+            {LT(0, IT(1, 5, 10), false), LT(0, IT(1, 15, 10), false),
+             LT(0, IT(2, 10, 10), false), LT(0, IT(2, 14, 20), false),
+             LT(0, IT(2, 20, 10), false), LT(0, IT(2, 30, 30), false),
+             LT(0, IT(2, 30, 31), false)}},
+           {1, {LT(1, IT(9, 30, 32), false)}}}}});
   }
 
   {
@@ -484,15 +478,16 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         IT(7, 30, 30),   // Equal Row 13
         IT(9, 30, 32)};  // Larger than all.
 
-    testWithGivenBlockSize(
+    testWithGivenBlockSizeAll(
         triplesInIndex, triplesToLocate, 100'000_B,
-        {{0,
-          {LT(0, IT(1, 5, 20), false), LT(0, IT(1, 10, 10), false),
-           LT(0, IT(2, 20, 10), false), LT(0, IT(3, 15, 30), false),
-           LT(0, IT(3, 20, 15), false), LT(0, IT(4, 30, 30), false),
-           LT(0, IT(5, 5, 10), false), LT(0, IT(5, 10, 10), false),
-           LT(0, IT(6, 10, 10), false), LT(0, IT(7, 20, 5), false),
-           LT(0, IT(7, 30, 20), false), LT(0, IT(7, 30, 30), false)}},
-         {1, {LT(1, IT(9, 30, 32), false)}}});
+        {{Permutation::SPO,
+          {{0,
+            {LT(0, IT(1, 5, 20), false), LT(0, IT(1, 10, 10), false),
+             LT(0, IT(2, 20, 10), false), LT(0, IT(3, 15, 30), false),
+             LT(0, IT(3, 20, 15), false), LT(0, IT(4, 30, 30), false),
+             LT(0, IT(5, 5, 10), false), LT(0, IT(5, 10, 10), false),
+             LT(0, IT(6, 10, 10), false), LT(0, IT(7, 20, 5), false),
+             LT(0, IT(7, 30, 20), false), LT(0, IT(7, 30, 30), false)}},
+           {1, {LT(1, IT(9, 30, 32), false)}}}}});
   }
 }

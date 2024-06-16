@@ -11,6 +11,8 @@
 
 class Permutation;
 
+IdTriple permute(const IdTriple& triple, const std::array<size_t, 3>& keyOrder);
+
 // A triple and its block in a particular permutation.
 // For a detailed definition of all border cases, see the definition at
 // the end of this file.
