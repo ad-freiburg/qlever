@@ -9,7 +9,6 @@
 #include "./util/IdTestHelpers.h"
 #include "index/CompressedRelation.h"
 #include "index/IndexImpl.h"
-#include "index/IndexMetaData.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 
@@ -162,8 +161,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30}   // Row 5
     });
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LocatedTriple{1, IT(1, 10, 12), false},  // Delete row 2
-        LocatedTriple{1, IT(1, 10, 13), true},   // Insert before row 3
+        LT{1, IT(1, 10, 12), false},  // Delete row 2
+        LT{1, IT(1, 10, 13), true},   // Insert before row 3
     });
     IdTable resultExpected = makeIdTableFromVector({
         {10},  // orig. Row 0
@@ -240,7 +239,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
              expectedLocatedTriplesPerBlock) {
         LocatedTriplesPerBlock locatedTriplesPerBlock;
         // TODO<qup42> test for adding/deleting (and not only deletion)
-        locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+        locatedTriplesPerBlock.add(LT::locateTriplesInPermutation(
             triplesToLocate, permutation, false));
 
         std::cout << locatedTriplesPerBlock;
