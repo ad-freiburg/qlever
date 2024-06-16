@@ -221,7 +221,7 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
                          [](const auto& entry) { return entry.first; });
   std::ranges::sort(blockIndices);
   for (auto blockIndex : blockIndices) {
-    os << "Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+    os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
        << std::endl;
   }
   return os;
@@ -249,7 +249,9 @@ std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
 // ____________________________________________________________________________
 template <typename T, std::size_t N>
 std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
+  os << "(";
   std::ranges::copy(v, std::ostream_iterator<T>(os, ", "));
+  os << ")";
   return os;
 }
 

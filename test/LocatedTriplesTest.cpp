@@ -197,16 +197,129 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 
 // Test the locating of triples in a permutation using `locatedTriple`.
 TEST_F(LocatedTriplesTest, locatedTriple) {
-  // The actual test, for a given block size.
-  //
-  // TODO: Test for all permutations, right now it's only SPO.
   using LT = LocatedTriple;
-  auto testWithGivenBlockSize =
-      [](const IdTable& triplesInIndex,
+
+  auto checkRelationsForPermutation =
+      [](const Permutation& permutation,
+         const std::vector<Id>& expectedRelations) {
+        auto cancellationHandle =
+            std::make_shared<ad_utility::CancellationHandle<>>();
+        // TODO<qup42,cpp23>: use zip
+        auto relationsAndCounts =
+            permutation.getDistinctCol0IdsAndCounts(cancellationHandle);
+        ASSERT_EQ(relationsAndCounts.numRows(), expectedRelations.size())
+            << "Expected and real number of relations differ";
+        for (size_t i = 0; i < expectedRelations.size(); i++) {
+          auto relationId = expectedRelations[i];
+          IdTable relationEntries =
+              permutation.scan(CompressedRelationReader::ScanSpecification(
+                                   relationId, std::nullopt, std::nullopt),
+                               {}, cancellationHandle);
+          // std::cout << "Relation: " << relationId << " -> " <<
+          // relationEntries << std::endl;
+          ASSERT_EQ(relationsAndCounts.at(i, 0), relationId);
+          // ASSERT_EQ(relationsAndCounts.at(i, 1), ??);
+          ASSERT_FALSE(relationEntries.empty())
+              << "Relation " << relationId << " is empty in Permutation "
+              << permutation.readableName();
+        }
+      };
+  auto displayBlocks =
+      [](const vector<CompressedBlockMetadata>& blockMetadata) {
+        for (size_t i = 0; i < blockMetadata.size(); i++) {
+          const auto& block = blockMetadata[i];
+          std::cout << "Block #" << i << "(n=" << block.numRows_
+                    << "): " << block.firstTriple_ << " -> "
+                    << block.lastTriple_ << std::endl;
+        }
+      };
+  auto checkTripleLocationForPermutation =
+      [](const Permutation& permutation,
          const std::vector<IdTriple>& triplesToLocate,
-         const ad_utility::MemorySize& blockSize,
          const ad_utility::HashMap<size_t, std::vector<LT>>&
              expectedLocatedTriplesPerBlock) {
+        LocatedTriplesPerBlock locatedTriplesPerBlock;
+        // TODO<qup42> test for adding/deleting (and not only deletion)
+        locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+            triplesToLocate, permutation, false));
+
+        std::cout << locatedTriplesPerBlock;
+
+        // Extract the sorted keys (block indices) from the map
+        std::vector<size_t> blockIndices;
+        for (const auto& [blockIndex, expectedLocatedTriples] :
+             expectedLocatedTriplesPerBlock) {
+          blockIndices.push_back(blockIndex);
+        }
+        std::sort(blockIndices.begin(), blockIndices.end());
+        // Check that all expected blocks are present and contain the expected
+        // Triples
+        for (auto blockIndex : blockIndices) {
+          ASSERT_TRUE(locatedTriplesPerBlock.map_.contains(blockIndex))
+              << "blockIndex = " << blockIndex << " not found";
+          auto locatedTriplesSet = locatedTriplesPerBlock.map_.at(blockIndex);
+          std::vector<LT> computedLocatedTriples(locatedTriplesSet.begin(),
+                                                 locatedTriplesSet.end());
+          const std::vector<LT>& expectedLocatedTriples =
+              expectedLocatedTriplesPerBlock.at(blockIndex);
+          ASSERT_EQ(computedLocatedTriples, expectedLocatedTriples)
+              << "blockIndex = " << blockIndex
+              << " doesn't have the expected LocatedTriples";
+        }
+        ASSERT_EQ(locatedTriplesPerBlock.numBlocks(),
+                  expectedLocatedTriplesPerBlock.size());
+      };
+  auto createIndexFromIdTable = [](const IdTable& triplesInIndex,
+                                   ad_utility::AllocatorWithLimit<Id> allocator,
+                                   const std::string& indexBasename,
+                                   const ad_utility::MemorySize& blockSize) {
+    IndexImpl indexBuilder(allocator);
+    indexBuilder.setOnDiskBase(indexBasename);
+    indexBuilder.blocksizePermutationPerColumn() = blockSize;
+
+    // This is still not a complete index. `Index::createFromOnDiskIndex`
+    // cannot be used, because the vocabulary is not generated.
+    // `IndexImpl::readIndexBuilderSettingsFromFile` also has to be called
+    // before building the index in this case.
+    std::function<bool(const ValueId&)> isInternalId = [](const ValueId&) {
+      return false;
+    };
+    auto firstSorter = indexBuilder.makeSorter<FirstPermutation>("first");
+    ad_utility::CompressedExternalIdTableSorterTypeErased&
+        typeErasedFirstSorter = firstSorter;
+    firstSorter.pushBlock(triplesInIndex.clone());
+    auto firstSorterWithUnique =
+        ad_utility::uniqueBlockView(typeErasedFirstSorter.getSortedOutput());
+    auto secondSorter = indexBuilder.makeSorter<SecondPermutation>("second");
+    indexBuilder.createSPOAndSOP(3, isInternalId,
+                                 std::move(firstSorterWithUnique),
+                                 std::move(secondSorter));
+    typeErasedFirstSorter.clearUnderlying();
+    auto thirdSorter = indexBuilder.makeSorter<ThirdPermutation>("third");
+    indexBuilder.createOSPAndOPS(3, isInternalId,
+                                 secondSorter.getSortedBlocks<0>(),
+                                 std::move(thirdSorter));
+    secondSorter.clear();
+    indexBuilder.createPSOAndPOS(3, isInternalId,
+                                 thirdSorter.getSortedBlocks<0>());
+    thirdSorter.clear();
+  };
+  auto deletePermutation = [](const std::string& indexBasename,
+                              const Permutation& permutation) {
+    std::string name = indexBasename + ".index" + permutation.fileSuffix();
+    ad_utility::deleteFile(name);
+    ad_utility::deleteFile(name + MMAP_FILE_SUFFIX);
+  };
+  // The actual test, for a given block size.
+  // TODO: Test for all permutations, right now it's only SPO.
+  auto testWithGivenBlockSize =
+      [&checkRelationsForPermutation, &displayBlocks,
+       &checkTripleLocationForPermutation, &createIndexFromIdTable,
+       &deletePermutation](const IdTable& triplesInIndex,
+                           const std::vector<IdTriple>& triplesToLocate,
+                           const ad_utility::MemorySize& blockSize,
+                           const ad_utility::HashMap<size_t, std::vector<LT>>&
+                               expectedLocatedTriplesPerBlock) {
         std::string testIndexBasename = "LocatedTriplesTest.locatedTriple";
 
         // Collect the distinct relation `Id`s.
@@ -217,83 +330,39 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         }
         relationIds = ad_utility::removeDuplicates(relationIds);
 
-        // Create a permutation pair from `triplesInIndex`.
         const auto& testAllocator = ad_utility::testing::makeAllocator();
+        createIndexFromIdTable(triplesInIndex, testAllocator, testIndexBasename,
+                               blockSize);
+
+        // Load the permutations from disk.
         Permutation SPO{Permutation::SPO, {}, testAllocator};
         Permutation SOP{Permutation::SOP, {}, testAllocator};
-        IndexImpl indexBuilder(testAllocator);
-        indexBuilder.setOnDiskBase(testIndexBasename);
-        indexBuilder.blocksizePermutationPerColumn() = blockSize;
-        // The function `createPermutationPair` expects a generator.
-        IndexImpl::BlocksOfTriples blocksOfTriples =
-            [&triplesInIndex]() -> cppcoro::generator<IdTableStatic<0>> {
-          co_yield triplesInIndex.clone();
-        }();
-        // We don't care about the return value (number of relations in column
-        // 0).
-        (void)indexBuilder.createPermutationPair(3, std::move(blocksOfTriples),
-                                                 SPO, SOP);
-
-        // Load the SPO permutation from disk.
-        Permutation permutation(Permutation::SPO, {}, testAllocator);
-        permutation.loadFromDisk(testIndexBasename);
+        Permutation OSP{Permutation::OSP, {}, testAllocator};
+        Permutation OPS{Permutation::OPS, {}, testAllocator};
+        Permutation PSO{Permutation::PSO, {}, testAllocator};
+        Permutation POS{Permutation::POS, {}, testAllocator};
+        SPO.loadFromDisk(testIndexBasename);
+        SOP.loadFromDisk(testIndexBasename);
+        OSP.loadFromDisk(testIndexBasename);
+        OPS.loadFromDisk(testIndexBasename);
+        PSO.loadFromDisk(testIndexBasename);
+        POS.loadFromDisk(testIndexBasename);
 
         // Check that the permutation indeed consists of the relations that we
         // have written to it.
-        {
-          auto cancellationHandle =
-              std::make_shared<ad_utility::CancellationHandle<>>();
-          for (Id relationId : relationIds) {
-            auto scanSpec = CompressedRelationReader::ScanSpecification(
-                relationId, std::nullopt, std::nullopt);
-            IdTable relation =
-                permutation.scan(scanSpec, {}, cancellationHandle);
-            std::cout << "Relation: " << relationId << " -> " << relation
-                      << std::endl;
-          }
-          for (const CompressedBlockMetadata& block :
-               permutation.metaData().blockData()) {
-            // The permuted triples themselves already end with std::endl
-            std::cout << "Block: size=" << block.numRows_ << " "
-                      << block.firstTriple_ << " -> " << block.lastTriple_;
-          }
-        }
-
-        // Now locate the triples from `triplesToLocate` in the permutation.
-        LocatedTriplesPerBlock locatedTriplesPerBlock;
-        // TODO<qup42> currently fixed to delete; find a way to reintroduce
-        locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-            triplesToLocate, permutation, false));
-
-        // Check that the locations are as expected. Process in order of
-        // increasing block index because it's easier to debug.
-        std::cout << locatedTriplesPerBlock;
-        std::vector<size_t> blockIndices;
-        for (const auto& [blockIndex, expectedLocatedTriples] :
-             expectedLocatedTriplesPerBlock) {
-          blockIndices.push_back(blockIndex);
-        }
-        std::sort(blockIndices.begin(), blockIndices.end());
-        for (auto blockIndex : blockIndices) {
-          ASSERT_TRUE(locatedTriplesPerBlock.map_.contains(blockIndex))
-              << "blockIndex = " << blockIndex << " not found";
-          auto locatedTriplesSet = locatedTriplesPerBlock.map_.at(blockIndex);
-          std::vector<LT> computedLocatedTriples(locatedTriplesSet.begin(),
-                                                 locatedTriplesSet.end());
-          const std::vector<LT>& expectedLocatedTriples =
-              expectedLocatedTriplesPerBlock.at(blockIndex);
-          ASSERT_EQ(computedLocatedTriples, expectedLocatedTriples)
-              << "blockIndex = " << blockIndex;
-        }
-        ASSERT_EQ(locatedTriplesPerBlock.numBlocks(),
-                  expectedLocatedTriplesPerBlock.size());
+        checkRelationsForPermutation(SPO, relationIds);
+        displayBlocks(SPO.metaData().blockData());
+        // Check that triples were located correctly.
+        checkTripleLocationForPermutation(SPO, triplesToLocate,
+                                          expectedLocatedTriplesPerBlock);
 
         // Delete the permutation files.
-        for (const auto& permutation_suffix : {"spo", "sop"}) {
-          std::string name = testIndexBasename + ".index." + permutation_suffix;
-          ad_utility::deleteFile(name);
-          ad_utility::deleteFile(name + MMAP_FILE_SUFFIX);
-        }
+        deletePermutation(testIndexBasename, SPO);
+        deletePermutation(testIndexBasename, SOP);
+        deletePermutation(testIndexBasename, OSP);
+        deletePermutation(testIndexBasename, OPS);
+        deletePermutation(testIndexBasename, PSO);
+        deletePermutation(testIndexBasename, POS);
       };
 
   {
