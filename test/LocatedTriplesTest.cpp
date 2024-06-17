@@ -17,6 +17,48 @@ namespace {
 auto V = ad_utility::testing::VocabId;
 }
 
+namespace Matchers {
+inline auto numBlocks =
+    [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+  return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
+                     testing::Eq(numBlocks));
+};
+
+inline auto numTriplesTotal =
+    [](size_t numTriples) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+  return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numTriples,
+                     testing::Eq(numTriples));
+};
+
+inline auto numTriplesBlockwise =
+    [](size_t blockIndex, std::pair<size_t, size_t> insertsAndDeletes)
+    -> testing::Matcher<const LocatedTriplesPerBlock&> {
+  return testing::ResultOf(
+      absl::StrCat(".numTriplesTotal(", std::to_string(blockIndex), ")"),
+      [blockIndex](const LocatedTriplesPerBlock& ltpb) {
+        return ltpb.numTriples(blockIndex);
+      },
+      testing::Eq(insertsAndDeletes));
+};
+
+// A Matcher to check `numBlocks`, `numTriplesTotal` and
+// `numTriplesTotal(blockIndex_)` for all blocks.
+auto allNums = [](size_t blocks, size_t triples,
+                  const ad_utility::HashMap<size_t, std::pair<size_t, size_t>>&
+                      numTriplesPerBlock)
+    -> testing::Matcher<const LocatedTriplesPerBlock&> {
+  auto blockMatchers = ad_utility::transform(
+      numTriplesPerBlock,
+      [](auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+        auto [blockIndex, insertsAndDeletes] = p;
+        return numTriplesBlockwise(blockIndex, insertsAndDeletes);
+      });
+  return testing::AllOf(numBlocks(blocks), numTriplesTotal(triples),
+                        testing::AllOfArray(blockMatchers));
+};
+}  // namespace Matchers
+namespace m = Matchers;
+
 // Fixture with helper functions.
 class LocatedTriplesTest : public ::testing::Test {
  protected:
@@ -43,31 +85,28 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
        LT{1, IT(11, 3, 0), true}, LT{2, IT(20, 4, 0), true},
        LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
        LT{4, IT(32, 7, 0), false}});
-  // A helper to check `numBlocks`, `numTriples` and `numTriples(blockIndex_)`
-  // for all blocks.
-  auto checkNumbers =
-      [&locatedTriplesPerBlock](
-          size_t numBlocks, size_t numTriples,
-          const ad_utility::HashMap<size_t, std::pair<size_t, size_t>>&
-              numTriplesPerBlock) {
-        ASSERT_EQ(locatedTriplesPerBlock.numBlocks(), numBlocks);
-        ASSERT_EQ(locatedTriplesPerBlock.numTriples(), numTriples);
 
-        for (auto [blockIndex, insertsAndDeletes] : numTriplesPerBlock) {
-          ASSERT_EQ(locatedTriplesPerBlock.numTriples(blockIndex),
-                    insertsAndDeletes);
-        }
-      };
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      m::allNums(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
-  checkNumbers(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}});
+  auto handles = locatedTriplesPerBlock.add({LT{3, IT(25, 5, 0), true}});
 
-  locatedTriplesPerBlock.add({LT{3, IT(25, 5, 0), true}});
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      m::allNums(4, 8, {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 1}}}));
 
-  checkNumbers(4, 8, {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 1}}});
+  locatedTriplesPerBlock.erase(3, handles[0]);
+
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      m::allNums(4, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
   locatedTriplesPerBlock.clear();
 
-  checkNumbers(0, 0, {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}});
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      m::allNums(0, 0, {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into
