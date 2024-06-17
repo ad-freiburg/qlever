@@ -196,6 +196,10 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
                                    LocatedTriples::iterator iter) {
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
   map_[blockIndex].erase(iter);
+  numTriples_--;
+  if (map_[blockIndex].empty()) {
+    map_.erase(blockIndex);
+  }
 }
 
 // ____________________________________________________________________________
