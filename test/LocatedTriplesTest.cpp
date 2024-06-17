@@ -90,17 +90,24 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
       locatedTriplesPerBlock,
       m::allNums(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
-  auto handles = locatedTriplesPerBlock.add({LT{3, IT(25, 5, 0), true}});
+  auto handles = locatedTriplesPerBlock.add(
+      {LT{3, IT(25, 5, 0), true}, LT{4, IT(31, 6, 1), false}});
 
   EXPECT_THAT(
       locatedTriplesPerBlock,
-      m::allNums(4, 8, {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 1}}}));
+      m::allNums(4, 9, {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
 
   locatedTriplesPerBlock.erase(3, handles[0]);
 
   EXPECT_THAT(
       locatedTriplesPerBlock,
-      m::allNums(4, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+      m::allNums(3, 8, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+
+  locatedTriplesPerBlock.erase(4, handles[1]);
+
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      m::allNums(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
   locatedTriplesPerBlock.clear();
 
