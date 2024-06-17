@@ -121,13 +121,12 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
 TEST_F(LocatedTriplesTest, mergeTriples) {
   using LT = LocatedTriple;
 
-  auto mergeAndCheck = [](IdTable block, const IdTable& expectedResult,
-                          const LocatedTriplesPerBlock& locatedTriples) {
-    IdTable result(expectedResult.numColumns(),
-                   ad_utility::testing::makeAllocator());
-    result.resize(expectedResult.size());
+  auto merge = [](size_t resultCols, size_t resultRows, IdTable block,
+                  const LocatedTriplesPerBlock& locatedTriples) {
+    IdTable result(resultCols, ad_utility::testing::makeAllocator());
+    result.resize(resultRows);
     locatedTriples.mergeTriples(1, std::move(block), result, 0);
-    ASSERT_EQ(result, expectedResult);
+    return result;
   };
 
   // Merge the `LocatesTriples` into a block with 3 index columns.
@@ -161,7 +160,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {4, 10, 10}   // LT 7
     });
 
-    mergeAndCheck(block.clone(), resultExpected, locatedTriplesPerBlock);
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
   }
 
   // Merge the `LocatesTriples` into a block with 2 index columns. This may
@@ -194,9 +195,12 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 10}   // LT 5
     });
 
-    mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
   }
 
+  // Merge the `LocatesTriples` into a block with 1 index columns.
   {
     IdTable block = makeIdTableFromVector({
         {10},  // Row 0
@@ -218,7 +222,10 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {23},  // orig. Row 4
         {30}   // orig. Row 5
     });
-    mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
+
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
   }
 
   // Inserting a Triple that already exists should have no effect.
@@ -227,7 +234,10 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     auto locatedTriplesPerBlock =
         makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
-    mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
+
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
   }
   // Inserting a Triple that already exists should have no effect.
   {
@@ -236,7 +246,34 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {LT{1, IT(1, 2, 4), false}, LT{1, IT(1, 2, 5), false},
          LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
-    mergeAndCheck(std::move(block), resultExpected, locatedTriplesPerBlock);
+
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
+  }
+
+  // Merging if the block has additional columns.
+  {
+    IdTable block =
+        makeIdTableFromVector({{1, 2, 3, ad_utility::testing::IntId(10),
+                                ad_utility::testing::IntId(11)},
+                               {1, 3, 5, ad_utility::testing::IntId(12),
+                                ad_utility::testing::IntId(11)},
+                               {1, 7, 9, ad_utility::testing::IntId(13),
+                                ad_utility::testing::IntId(14)}});
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+        {LT{1, IT(1, 3, 5), false}, LT{1, IT(1, 3, 6), true}});
+    IdTable resultExpected =
+        makeIdTableFromVector({{1, 2, 3, ad_utility::testing::IntId(10),
+                                ad_utility::testing::IntId(11)},
+                               {1, 3, 6, ad_utility::testing::UndefId(),
+                                ad_utility::testing::UndefId()},
+                               {1, 7, 9, ad_utility::testing::IntId(13),
+                                ad_utility::testing::IntId(14)}});
+
+    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
+                        std::move(block), locatedTriplesPerBlock);
+    EXPECT_EQ(merged, resultExpected);
   }
 }
 

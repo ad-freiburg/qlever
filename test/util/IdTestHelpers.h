@@ -11,6 +11,8 @@
 // Lambdas to simply create an `Id` with a given value and type during unit
 // tests.
 namespace ad_utility::testing {
+inline auto UndefId = []() { return Id::makeUndefined(); };
+
 inline auto IntId = [](const auto& i) { return Id::makeFromInt(i); };
 
 inline auto DoubleId = [](const auto& d) { return Id::makeFromDouble(d); };
