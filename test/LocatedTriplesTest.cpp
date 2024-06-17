@@ -223,6 +223,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
               << permutation.readableName();
         }
       };
+  // TODO<qup42> use or delete; keep for now
+  (void)checkRelationsForPermutation;
   auto displayBlocks =
       [](const vector<CompressedBlockMetadata>& blockMetadata) {
         for (size_t i = 0; i < blockMetadata.size(); i++) {
@@ -318,9 +320,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   };
   // The actual test, for a given block size.
   auto testWithGivenBlockSizeAll =
-      [&checkRelationsForPermutation, &displayBlocks,
-       &checkTripleLocationForPermutation, &createIndexFromIdTable,
-       &deletePermutation](
+      [&displayBlocks, &checkTripleLocationForPermutation,
+       &createIndexFromIdTable, &deletePermutation](
           const IdTable& triplesInIndex,
           const std::vector<IdTriple>& triplesToLocate,
           const ad_utility::MemorySize& blockSize,
