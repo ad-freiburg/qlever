@@ -193,20 +193,14 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
         return std::nullopt;
       }
     }
-    case LocalVocabIndex: {
-      const auto& optLit =
-          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-              context->_qec.getIndex(), id, context->_localVocab);
-      return optLit.has_value() ? (*this)(optLit.value(), context)
-                                : std::nullopt;
-    }
-    case VocabIndex: {
-      const auto& optLit =
-          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-              context->_qec.getIndex(), id, context->_localVocab);
-      return optLit.has_value() ? (*this)(optLit.value(), context)
-                                : std::nullopt;
-    }
+    case LocalVocabIndex:
+      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+                         context->_qec.getIndex(), id, context->_localVocab),
+                     context);
+    case VocabIndex:
+      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+                         context->_qec.getIndex(), id, context->_localVocab),
+                     context);
     case Undefined:
     case BlankNodeIndex:
     case TextRecordIndex:

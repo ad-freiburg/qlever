@@ -839,9 +839,6 @@ TEST(ExportQueryExecutionTree, CornerCases) {
       ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
-  ASSERT_EQ(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                qec->getIndex(), Id::max(), LocalVocab{}),
-            std::nullopt);
 }
 
 using enum ad_utility::MediaType;

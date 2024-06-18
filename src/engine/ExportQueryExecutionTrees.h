@@ -89,7 +89,7 @@ class ExportQueryExecutionTrees {
   // Acts as a helper to retrieve an LiteralOrIri object
   // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.
   // This function should only be called with suitable `Datatype` Id's.
-  static std::optional<ad_utility::triple_component::LiteralOrIri>
+  static ad_utility::triple_component::LiteralOrIri
   getLiteralOrIriFromVocabIndex(const Index& index, Id id,
                                 const LocalVocab& localVocab);
 

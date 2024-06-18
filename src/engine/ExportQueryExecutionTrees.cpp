@@ -182,7 +182,7 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
 }
 
 // _____________________________________________________________________________
-std::optional<ad_utility::triple_component::LiteralOrIri>
+ad_utility::triple_component::LiteralOrIri
 ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     const Index& index, Id id, const LocalVocab& localVocab) {
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
@@ -195,7 +195,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
       AD_CONTRACT_CHECK(entity.has_value());
       return LiteralOrIri::fromStringRepresentation(entity.value());
     default:
-      return std::nullopt;
+      AD_FAIL();
   }
 };
 
@@ -238,14 +238,12 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return std::pair{escapeFunction(std::move(entity.value())), nullptr};
     }
     case VocabIndex: {
-      const auto& optLit = getLiteralOrIriFromVocabIndex(index, id, localVocab);
-      return optLit.has_value() ? handleIriOrLiteral(optLit.value())
-                                : std::nullopt;
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
     }
     case LocalVocabIndex: {
-      const auto& optLit = getLiteralOrIriFromVocabIndex(index, id, localVocab);
-      return optLit.has_value() ? handleIriOrLiteral(optLit.value())
-                                : std::nullopt;
+      return handleIriOrLiteral(
+          getLiteralOrIriFromVocabIndex(index, id, localVocab));
     }
     case TextRecordIndex:
       return std::pair{
