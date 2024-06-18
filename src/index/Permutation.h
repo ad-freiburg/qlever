@@ -31,6 +31,8 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
+  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
+                               Enum::SOP, Enum::OPS, Enum::OSP};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
