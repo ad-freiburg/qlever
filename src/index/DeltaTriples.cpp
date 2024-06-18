@@ -1,6 +1,8 @@
-// Copyright 2023, University of Freiburg
-// Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+// Copyright 2023 - 2024, University of Freiburg
+//  Chair of Algorithms and Data Structures.
+//  Authors:
+//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
+//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include "index/DeltaTriples.h"
 
