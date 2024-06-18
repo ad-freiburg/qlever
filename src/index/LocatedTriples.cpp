@@ -73,6 +73,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   // If we restrict `id1` and `id2`, the index block and the result must have
   // one column (for the `id3`). Otherwise, they must have two columns (for the
   // `id2` and the `id3`).
+  // TODO<qup42>: require the number of index columns as parameter instead?
   auto numberOfIndexColumns = [](const IdTable& idTable) {
     auto firstRow = idTable[0];
     return std::ranges::count_if(firstRow, [](const ValueId& i) {
@@ -267,7 +268,7 @@ template std::ostream& operator<< <ValueId, 3ul>(
 // ____________________________________________________________________________
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
-  std::ranges::copy(v.begin(), v.end(), std::ostream_iterator<T>(os, ", "));
+  std::ranges::copy(v, std::ostream_iterator<T>(os, ", "));
   return os;
 }
 

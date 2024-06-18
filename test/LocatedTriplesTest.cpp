@@ -1,6 +1,8 @@
-//  Copyright 2023, University of Freiburg,
+// Copyright 2023 - 2024, University of Freiburg
 //  Chair of Algorithms and Data Structures.
-//  Author: Hannah Bast <bast@cs.uni-freiburg.de>
+//  Authors:
+//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
+//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #include <gtest/gtest.h>
 
@@ -146,6 +148,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(2, 11, 10), true},   // Insert before row 1
         LT{1, IT(2, 30, 10), true},   // Insert before row 4
         LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
@@ -183,6 +186,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(1, 21, 11), true},   // Insert before row 4
         LT{1, IT(1, 30, 10), true},   // Insert before row 4
         LT{1, IT(1, 30, 20), false},  // Delete row 4
+        LT{1, IT(1, 30, 25), false},  // Delete non-existent row
         LT{1, IT(1, 30, 30), false}   // Delete row 5
     });
     IdTable resultExpected = makeIdTableFromVector({
@@ -274,6 +278,34 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
                         std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
+  }
+
+  // Merging for a block that has no located triples returns an error.
+  {
+    IdTable block = makeIdTableFromVector({
+        {4, 10, 10},  // Row 0
+        {5, 15, 20},  // Row 1
+        {5, 15, 30},  // Row 2
+        {5, 20, 10},  // Row 3
+        {5, 30, 20},  // Row 4
+        {6, 30, 30}   // Row 5
+    });
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
+
+    IdTable result(3, ad_utility::testing::makeAllocator());
+    result.resize(locatedTriplesPerBlock.numTriples());
+    EXPECT_THROW(
+        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0),
+        ad_utility::Exception);
   }
 }
 
