@@ -194,9 +194,6 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       }
     }
     case LocalVocabIndex:
-      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                         context->_qec.getIndex(), id, context->_localVocab),
-                     context);
     case VocabIndex:
       return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
                          context->_qec.getIndex(), id, context->_localVocab),
