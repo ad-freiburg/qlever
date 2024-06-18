@@ -11,6 +11,27 @@
 #include "parser/TurtleParser.h"
 
 // ____________________________________________________________________________
+LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
+    Permutation::Enum permutation) {
+  switch (permutation) {
+    case Permutation::PSO:
+      return forPSO;
+    case Permutation::POS:
+      return forPOS;
+    case Permutation::SPO:
+      return forSPO;
+    case Permutation::SOP:
+      return forSOP;
+    case Permutation::OSP:
+      return forOSP;
+    case Permutation::OPS:
+      return forOPS;
+    default:
+      AD_FAIL();
+  }
+}
+
+// ____________________________________________________________________________
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
@@ -24,35 +45,22 @@ void DeltaTriples::clear() {
 
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
-DeltaTriples::locateTriplesInAllPermutations(
-    const std::vector<IdTriple>& idTriples, bool shouldExist) {
+DeltaTriples::locateAndAddTriples(const std::vector<IdTriple>& idTriples,
+                                  bool shouldExist) {
+  ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
+      intermediateHandles;
+  for (auto permutation : Permutation::ALL) {
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        idTriples, index_.getImpl().getPermutation(permutation), shouldExist);
+    intermediateHandles[permutation] =
+        getLocatedTriplesPerBlock(permutation).add(locatedTriples);
+  }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
-  auto handlespso = locatedTriplesPerBlockInPSO_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().PSO(), shouldExist));
-  auto handlespos = locatedTriplesPerBlockInPOS_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().POS(), shouldExist));
-  auto handlesspo = locatedTriplesPerBlockInSPO_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().SPO(), shouldExist));
-  auto handlessop = locatedTriplesPerBlockInSOP_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().SOP(), shouldExist));
-  auto handlesosp = locatedTriplesPerBlockInOSP_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().OSP(), shouldExist));
-  auto handlesops = locatedTriplesPerBlockInOPS_.add(
-      LocatedTriple::locateTriplesInPermutation(
-          idTriples, index_.getImpl().OPS(), shouldExist));
-  // TODO<qup42>: assert that all handles have the same length
-  for (size_t i = 0; i < idTriples.size(); i++) {
-    handles[i].forPSO = handlespso[i];
-    handles[i].forPOS = handlespos[i];
-    handles[i].forSPO = handlesspo[i];
-    handles[i].forSOP = handlessop[i];
-    handles[i].forOSP = handlesosp[i];
-    handles[i].forOPS = handlesops[i];
+  for (auto permutation : Permutation::ALL) {
+    for (size_t i = 0; i < idTriples.size(); i++) {
+      handles[i].forPermutation(permutation) =
+          intermediateHandles[permutation][i];
+    }
   }
   return handles;
 }
@@ -60,18 +68,11 @@ DeltaTriples::locateTriplesInAllPermutations(
 // ____________________________________________________________________________
 void DeltaTriples::eraseTripleInAllPermutations(
     DeltaTriples::LocatedTripleHandles& handles) {
-  // Helper lambda for erasing for one particular permutation.
-  auto erase = [](LocatedTriples::iterator locatedTriple,
-                  LocatedTriplesPerBlock& locatedTriplesPerBlock) {
-    locatedTriplesPerBlock.erase(locatedTriple->blockIndex_, locatedTriple);
-  };
-  // Now erase for all permutations.
-  erase(handles.forPSO, locatedTriplesPerBlockInPSO_);
-  erase(handles.forPOS, locatedTriplesPerBlockInPOS_);
-  erase(handles.forSPO, locatedTriplesPerBlockInSPO_);
-  erase(handles.forSOP, locatedTriplesPerBlockInSOP_);
-  erase(handles.forOSP, locatedTriplesPerBlockInOSP_);
-  erase(handles.forOPS, locatedTriplesPerBlockInOPS_);
+  // Erase for all permutations.
+  for (auto permutation : Permutation::ALL) {
+    auto lt_iter = handles.forPermutation(permutation);
+    getLocatedTriplesPerBlock(permutation).erase(lt_iter->blockIndex_, lt_iter);
+  }
 };
 
 // ____________________________________________________________________________
@@ -97,7 +98,7 @@ void DeltaTriples::insertTriples(
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
-      locateTriplesInAllPermutations(triples, true);
+      locateAndAddTriples(triples, true);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with std::views::zip in C++23
@@ -129,7 +130,7 @@ void DeltaTriples::deleteTriples(
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
-      locateTriplesInAllPermutations(triples, false);
+      locateAndAddTriples(triples, false);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with std::views::zip in C++23
@@ -139,8 +140,29 @@ void DeltaTriples::deleteTriples(
 }
 
 // ____________________________________________________________________________
-const LocatedTriplesPerBlock& DeltaTriples::getTriplesWithPositionsPerBlock(
+const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
+  // TODO: This `switch` would no longer be needed if the six
+  // locatedTriplesPerBlockIn... were a map with the permutation as key.
+  switch (permutation) {
+    case Permutation::PSO:
+      return locatedTriplesPerBlockInPSO_;
+    case Permutation::POS:
+      return locatedTriplesPerBlockInPOS_;
+    case Permutation::SPO:
+      return locatedTriplesPerBlockInSPO_;
+    case Permutation::SOP:
+      return locatedTriplesPerBlockInSOP_;
+    case Permutation::OSP:
+      return locatedTriplesPerBlockInOSP_;
+    case Permutation::OPS:
+      return locatedTriplesPerBlockInOPS_;
+    default:
+      AD_FAIL();
+  }
+}
+LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
+    Permutation::Enum permutation) {
   // TODO: This `switch` would no longer be needed if the six
   // locatedTriplesPerBlockIn... were a map with the permutation as key.
   switch (permutation) {

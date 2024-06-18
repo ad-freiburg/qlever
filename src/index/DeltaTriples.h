@@ -52,6 +52,8 @@ class DeltaTriples {
     LocatedTriples::iterator forSOP;
     LocatedTriples::iterator forOPS;
     LocatedTriples::iterator forOSP;
+
+    LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
 
   // The sets of triples added to and subtracted from the original index
@@ -91,19 +93,17 @@ class DeltaTriples {
                      std::vector<IdTriple> triples);
 
   // Get `TripleWithPosition` objects for given permutation.
-  const LocatedTriplesPerBlock& getTriplesWithPositionsPerBlock(
+  LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
+      Permutation::Enum permutation);
+  const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
       Permutation::Enum permutation) const;
 
-  // TODO: made public as long as we are trying to figure out how this works.
- public:
+ private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
   // Return the iterators of where it was added (so that we can easily delete it
   // again from these maps later).
-  //
-  // TODO: The function is name is misleading, since this method does not only
-  // locate, but also add to the mentioned data structures.
-  std::vector<LocatedTripleHandles> locateTriplesInAllPermutations(
+  std::vector<LocatedTripleHandles> locateAndAddTriples(
       const std::vector<IdTriple>& idTriples, bool shouldExist);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The

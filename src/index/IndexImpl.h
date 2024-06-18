@@ -162,30 +162,24 @@ class IndexImpl {
   // TODO: make those private and allow only const access
   // instantiations for the six permutations used in QLever.
   // They simplify the creation of permutations in the index class.
-  Permutation pos_{
-      Permutation::Enum::POS,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::POS),
-      allocator_};
-  Permutation pso_{
-      Permutation::Enum::PSO,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::PSO),
-      allocator_};
-  Permutation sop_{
-      Permutation::Enum::SOP,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SOP),
-      allocator_};
-  Permutation spo_{
-      Permutation::Enum::SPO,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::SPO),
-      allocator_};
-  Permutation ops_{
-      Permutation::Enum::OPS,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OPS),
-      allocator_};
-  Permutation osp_{
-      Permutation::Enum::OSP,
-      deltaTriples_->getTriplesWithPositionsPerBlock(Permutation::OSP),
-      allocator_};
+  Permutation pos_{Permutation::Enum::POS,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::POS),
+                   allocator_};
+  Permutation pso_{Permutation::Enum::PSO,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::PSO),
+                   allocator_};
+  Permutation sop_{Permutation::Enum::SOP,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::SOP),
+                   allocator_};
+  Permutation spo_{Permutation::Enum::SPO,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::SPO),
+                   allocator_};
+  Permutation ops_{Permutation::Enum::OPS,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::OPS),
+                   allocator_};
+  Permutation osp_{Permutation::Enum::OSP,
+                   deltaTriples_->getLocatedTriplesPerBlock(Permutation::OSP),
+                   allocator_};
 
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
