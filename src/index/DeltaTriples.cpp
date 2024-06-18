@@ -17,17 +17,17 @@ LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
     Permutation::Enum permutation) {
   switch (permutation) {
     case Permutation::PSO:
-      return forPSO;
+      return forPSO_;
     case Permutation::POS:
-      return forPOS;
+      return forPOS_;
     case Permutation::SPO:
-      return forSPO;
+      return forSPO_;
     case Permutation::SOP:
-      return forSOP;
+      return forSOP_;
     case Permutation::OSP:
-      return forOSP;
+      return forOSP_;
     case Permutation::OPS:
-      return forOPS;
+      return forOPS_;
     default:
       AD_FAIL();
   }

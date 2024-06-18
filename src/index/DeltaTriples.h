@@ -48,12 +48,12 @@ class DeltaTriples {
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
   struct LocatedTripleHandles {
-    LocatedTriples::iterator forPSO;
-    LocatedTriples::iterator forPOS;
-    LocatedTriples::iterator forSPO;
-    LocatedTriples::iterator forSOP;
-    LocatedTriples::iterator forOPS;
-    LocatedTriples::iterator forOSP;
+    LocatedTriples::iterator forPSO_;
+    LocatedTriples::iterator forPOS_;
+    LocatedTriples::iterator forSPO_;
+    LocatedTriples::iterator forSOP_;
+    LocatedTriples::iterator forOPS_;
+    LocatedTriples::iterator forOSP_;
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
