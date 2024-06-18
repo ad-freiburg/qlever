@@ -45,15 +45,20 @@ void DeltaTriples::clear() {
 
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
-DeltaTriples::locateAndAddTriples(const std::vector<IdTriple>& idTriples,
-                                  bool shouldExist) {
+DeltaTriples::locateAndAddTriples(
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    const std::vector<IdTriple>& idTriples, bool shouldExist) {
   ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
+    // TODO<qup42> also move the CancellationHandle into
+    // locateTriplesInPermutation
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         idTriples, index_.getImpl().getPermutation(permutation), shouldExist);
+    cancellationHandle->throwIfCancelled();
     intermediateHandles[permutation] =
         getLocatedTriplesPerBlock(permutation).add(locatedTriples);
+    cancellationHandle->throwIfCancelled();
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
@@ -79,8 +84,6 @@ void DeltaTriples::eraseTripleInAllPermutations(
 void DeltaTriples::insertTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple> triples) {
-  // TODO<qup42> use canellationHandle
-  (void)cancellationHandle;
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
   std::erase_if(triples, [this](const IdTriple& triple) {
@@ -98,7 +101,7 @@ void DeltaTriples::insertTriples(
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
-      locateAndAddTriples(triples, true);
+      locateAndAddTriples(std::move(cancellationHandle), triples, true);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with std::views::zip in C++23
@@ -111,8 +114,6 @@ void DeltaTriples::insertTriples(
 void DeltaTriples::deleteTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple> triples) {
-  // TODO<qup42> use canellationHandle
-  (void)cancellationHandle;
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
   std::erase_if(triples, [this](const IdTriple& triple) {
@@ -130,7 +131,7 @@ void DeltaTriples::deleteTriples(
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
-      locateAndAddTriples(triples, false);
+      locateAndAddTriples(std::move(cancellationHandle), triples, false);
 
   AD_CORRECTNESS_CHECK(triples.size() == handles.size());
   // TODO<qup42>: replace with std::views::zip in C++23
