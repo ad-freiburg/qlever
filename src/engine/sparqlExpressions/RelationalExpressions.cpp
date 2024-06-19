@@ -397,7 +397,7 @@ std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
 // _____________________________________________________________________________
 string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
   std::stringstream result;
-  result << "IN Expresssion with";
+  result << "IN Expression with";
   for (const auto& child : children_) {
     result << ' ' << child->getCacheKey(varColMap);
   }
