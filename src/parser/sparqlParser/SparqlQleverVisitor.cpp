@@ -60,9 +60,9 @@ std::string Visitor::getOriginalInputForContext(
 }
 
 // _____________________________________________________________________________
-void Visitor::setStartTime() {
-  startTime_ = absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
-                                absl::LocalTimeZone());
+std::string Visitor::currentTimeAsXsdString() {
+  return absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
+                          absl::LocalTimeZone());
 }
 
 // ___________________________________________________________________________

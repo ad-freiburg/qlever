@@ -23,7 +23,7 @@ class NowDatetimeExpression : public SparqlExpression {
 
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return absl::StrCat("NOW ", std::to_string(date_.toBits()));
+    return absl::StrCat("NOW ", date_.toBits());
   }
 
   ExpressionResult evaluate(

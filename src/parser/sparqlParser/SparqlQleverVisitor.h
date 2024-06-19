@@ -100,9 +100,7 @@ class SparqlQleverVisitor {
       DisableSomeChecksOnlyForTesting disableSomeChecksOnlyForTesting =
           DisableSomeChecksOnlyForTesting::False)
       : prefixMap_{std::move(prefixMap)},
-        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {
-    setStartTime();
-  }
+        disableSomeChecksOnlyForTesting_{disableSomeChecksOnlyForTesting} {}
 
   const PrefixMap& prefixMap() const { return prefixMap_; }
   void setPrefixMapManually(PrefixMap map) { prefixMap_ = std::move(map); }
@@ -459,14 +457,13 @@ class SparqlQleverVisitor {
   string visit(Parser::PnameNsContext* ctx);
 
  private:
-  // Member start time is needed for the NOW expression. All calls within
+  // Helper to assign variable `startTime_` a correctly formatted time string.
+  static std::string currentTimeAsXsdString();
+
+  // Member starTime_ is needed for the NOW expression. All calls within
   // the query execution reference it. The underlying date time format is e.g.:
   // 2011-01-10T14:45:13.815-05:00
-  std::string startTime_;
-
-  // Called in the constructor of `SparqlQleverVisitor`, assigns the variable
-  // `startTime_` a date-time string.
-  void setStartTime();
+  std::string startTime_ = currentTimeAsXsdString();
 
   template <typename Visitor, typename Ctx>
   static constexpr bool voidWhenVisited =
