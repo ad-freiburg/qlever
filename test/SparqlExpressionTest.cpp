@@ -890,12 +890,26 @@ TEST(SparqlExpression, DatatypeExpression) {
   auto d3 = DateOrLargeYear::parseGYear("1900");
   auto d4 = DateOrLargeYear::parseXsdDate("2024-06-13");
   auto d5 = DateOrLargeYear::parseGYearMonth("2024-06");
-  auto DateId1 = Id::makeFromDate(d1);
-  auto DateId2 = Id::makeFromDate(d2);
-  auto DateId3 = Id::makeFromDate(d3);
-  auto DateId4 = Id::makeFromDate(d4);
-  auto DateId5 = Id::makeFromDate(d5);
+  Id DateId1 = Id::makeFromDate(d1);
+  Id DateId2 = Id::makeFromDate(d2);
+  Id DateId3 = Id::makeFromDate(d3);
+  Id DateId4 = Id::makeFromDate(d4);
+  Id DateId5 = Id::makeFromDate(d5);
   auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().alpha},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().zz},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().notInVocabB},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().notInVocabD},
+                   IdOrLiteralOrIriVec{U});
   checkGetDatatype(IdOrLiteralOrIriVec{lit(
                        "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
                    IdOrLiteralOrIriVec{
@@ -947,6 +961,12 @@ TEST(SparqlExpression, DatatypeExpression) {
       IdOrLiteralOrIriVec{iriref("<http://example/iri/test#test>")});
   checkGetDatatype(IdOrLiteralOrIriVec{iriref("<http://example/iri/test>")},
                    IdOrLiteralOrIriVec{U});
+
+  // test corner case DatatypeValueGetter
+  TestContext ctx;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sparqlExpression::detail::DatatypeValueGetter{}(Id::max(), &ctx.context),
+      ::testing::ContainsRegex("should be unreachable"));
 }
 
 // ____________________________________________________________________________

@@ -187,11 +187,8 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
       return Iri::fromIrirefWithoutBrackets(XSD_INT_TYPE);
     case Date: {
       auto dateType = id.getDate().toStringAndType().second;
-      if (dateType != nullptr) {
-        return Iri::fromIrirefWithoutBrackets(dateType);
-      } else {
-        return std::nullopt;
-      }
+      AD_CORRECTNESS_CHECK(dateType != nullptr);
+      return Iri::fromIrirefWithoutBrackets(dateType);
     }
     case LocalVocabIndex:
     case VocabIndex:
