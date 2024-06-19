@@ -330,10 +330,10 @@ class TokenizerCtre : public SkipWhitespaceAndCommentsMixin<TokenizerCtre> {
   }
 
   /*
-   * The helper struct used for the intenal apply function
+   * The helper struct used for the internal apply function
    * Its static function process<regex>(string_view)
    * tries to match a prefix of the string_view with the regex and returns
-   * <true, matchContent> on sucess and <false, emptyStringView> on failure
+   * <true, matchContent> on success and <false, emptyStringView> on failure
    */
   struct Matcher {
     template <auto& regex>

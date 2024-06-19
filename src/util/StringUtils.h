@@ -94,7 +94,7 @@ size_t findLiteralEnd(std::string_view input, std::string_view literalEnd);
 @brief Add elements of the range to a stream, with the `separator` between the
 elements.
 
-@tparam Range An input range, whos dereferenced iterators can be inserted into
+@tparam Range An input range, whose dereferenced iterators can be inserted into
 streams.
 
 @param separator Will be put between each of the string representations
@@ -191,7 +191,7 @@ void lazyStrJoin(std::ostream* stream, Range&& r, std::string_view separator) {
     return;
   }
 
-  // Add the first entry without a seperator.
+  // Add the first entry without a separator.
   *stream << *begin;
 
   // Add the remaining entries.
@@ -259,7 +259,7 @@ std::string insertThousandSeparator(const std::string_view str,
     /*
     For walking over the string view.
     Our initialization value skips the leading digits, so that only the digits
-    remain, where we have to put the seperator in front of every three chars.
+    remain, where we have to put the separator in front of every three chars.
     */
     size_t currentIdx{s.length() % 3 == 0 ? 3 : s.length() % 3};
     ostream << s.substr(0, currentIdx);

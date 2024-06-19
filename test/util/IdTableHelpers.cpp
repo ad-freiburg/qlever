@@ -1,6 +1,6 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
 #include "../test/util/IdTableHelpers.h"
 
@@ -42,7 +42,7 @@ void compareIdTableWithExpectedContent(
   auto trace{generateLocationTrace(l, traceMessage.str())};
 
   // Because we compare tables later by sorting them, so that every table has
-  // one definit form, we need to create local copies.
+  // one definite form, we need to create local copies.
   IdTable localTable{table.clone()};
   IdTable localExpectedContent{expectedContent.clone()};
 
@@ -131,7 +131,7 @@ IdTable createRandomlyFilledIdTable(
     return ad_utility::testing::VocabId(randomNumberGenerator());
   };
 
-  // Assiging the column number to a generator function.
+  // Assigning the column number to a generator function.
   std::vector<const std::function<ValueId()>*> columnToGenerator(
       numberColumns, &normalEntryGenerator);
   std::ranges::for_each(joinColumnWithGenerator,

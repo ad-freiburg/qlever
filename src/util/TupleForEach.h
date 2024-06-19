@@ -16,7 +16,7 @@ void forEachInTuple(Tuple&& tuple, Function&& function) {
   std::apply(forEachInParamPack, std::forward<Tuple>(tuple));
 }
 
-/// Apply the `function` to each element of the `tuple`. Retur an `array` of
+/// Apply the `function` to each element of the `tuple`. Return an `array` of
 /// the results. The function is applied on the tuple elements sequentially
 /// from left to right.
 /// \param tuple must be a std::tuple<...>.

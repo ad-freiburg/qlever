@@ -102,8 +102,8 @@ void testUpperAndLowerBoundContiguousIDs(const auto& vocab, auto makeWordLarger,
                          words, ids);
 }
 
-// Same as the previous function, but explictly state, which IDs are expected in
-// the vocabulary.
+// Same as the previous function, but explicitly state, which IDs are expected
+// in the vocabulary.
 void testUpperAndLowerBoundWithStdLessFromWordsAndIds(auto vocabulary,
                                                       const auto& words,
                                                       const auto& ids) {
@@ -183,7 +183,7 @@ void testUpperAndLowerBoundWithNumericComparator(auto createVocabulary) {
 // Checks that vocabulary[ids[i]] == words[i].
 auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
                                        const auto& ids) {
-  // Not in any particulary order.
+  // Not in any particularly order.
   AD_CONTRACT_CHECK(words.size() == ids.size());
   ASSERT_EQ(words.size(), vocabulary.size());
   for (size_t i = 0; i < words.size(); ++i) {
@@ -193,7 +193,7 @@ auto testAccessOperatorFromWordsAndIds(auto vocabulary, const auto& words,
 // Check that the `operator[]` works as expected for an unordered vocabulary,
 // created via `createVocabulary(std::vector<std::string>)`.
 auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
-  // Not in any particulary order.
+  // Not in any particularly order.
   const std::vector<std::string> words{"alpha", "delta", "ALPHA", "beta", "42",
                                        "31",    "0a",    "a0",    "al"};
   std::vector<uint64_t> ids;

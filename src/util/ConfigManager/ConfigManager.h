@@ -44,7 +44,7 @@ class ConfigManager {
   Our hash map always saves either a configuration option, or a sub manager
   (another `ConfigManager`).
 
-  This class makes the handeling more explicit and allows for more information
+  This class makes the handling more explicit and allows for more information
   to be saved alongside the configuration options and sub managers.
   For example: The order, in which they were created.
   */
@@ -285,13 +285,13 @@ class ConfigManager {
 
   /*
   @brief Returns a string containing a json configuration and, optionally, the
-  string representations of all added configuration options, togehter with the
+  string representations of all added configuration options, together with the
   validator invariants.
 
   @param detailed Iff false, only print the json configuration. Otherwise, print
   the json configuration, followed by the string representations of all added
   configuration options, which contain more detailed information about the
-  configuration options, togehter with the validator invariants
+  configuration options, together with the validator invariants
   */
   std::string printConfigurationDoc(bool detailed) const;
 
@@ -309,7 +309,7 @@ class ConfigManager {
   get thrown, if the `validatorFunction` returns false.
   @param validatorDescriptor A description of the invariant, that
   `validatorFunction` imposes.
-  @param configOptionsToBeChecked Proxies for the configuration options, whos
+  @param configOptionsToBeChecked Proxies for the configuration options, whose
   values will be passed to the validator function as function arguments. Will
   keep the same order.
   */
@@ -552,7 +552,7 @@ class ConfigManager {
     /*
     We can't just create a `ConfigOption` variable, pass it and return it,
     because the hash map has ownership of the newly added `ConfigOption`.
-    Which was transfered via creating a new internal `ConfigOption` with move
+    Which was transferred via creating a new internal `ConfigOption` with move
     constructors.
     Which would mean, that our local `ConfigOption` isn't the `ConfigOption` we
     want to return a reference to.

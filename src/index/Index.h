@@ -134,8 +134,8 @@ class Index {
 
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the entites column (0) of the full has-relation
-   *         relation after unrolling the patterns.
+   * @return The multiplicity of the entities column (0) of the full
+   * has-relation relation after unrolling the patterns.
    */
   [[nodiscard]] double getAvgNumDistinctPredicatesPerSubject() const;
 

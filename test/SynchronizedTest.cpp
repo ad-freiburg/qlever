@@ -249,8 +249,9 @@ TEST(Synchronized, SFINAE) {
 
   // Outcommenting this does not compile and cannot be brought to compile
   // without making usage of the Synchronized classes "withWriteLock" method
-  // unecessarily hard. static_assert(!AllowsNonConstExclusiveAccessLambda<const
-  // Synchronized<Vec, std::shared_mutex>>::value);
+  // unnecessarily hard.
+  // static_assert(!AllowsNonConstExclusiveAccessLambda<const Synchronized<Vec,
+  // std::shared_mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::shared_mutex>>::value);
   static_assert(AllowsConstSharedAccessLambda<
@@ -269,8 +270,9 @@ TEST(Synchronized, SFINAE) {
 
   // Outcommenting this does not compile and cannot be brought to compile
   // without making usage of the Synchronized classes "withWriteLock" method
-  // unecessarily hard. static_assert(!AllowsNonConstExclusiveAccessLambda<const
-  // Synchronized<Vec, std::mutex>>::value);
+  // unnecessarily hard.
+  // static_assert(!AllowsNonConstExclusiveAccessLambda<const Synchronized<Vec,
+  // std::mutex>>::value);
   static_assert(AllowsConstExclusiveAccessLambda<
                 const Synchronized<Vec, std::mutex>>::value);
   static_assert(!AllowsConstSharedAccessLambda<

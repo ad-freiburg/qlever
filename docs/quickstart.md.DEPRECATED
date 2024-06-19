@@ -37,7 +37,7 @@ for known issues such as problems with Docker on Mac.
 
 Then open [http://localhost:7001/](http://localhost:7001/) in your browser.
 
-For example, all female scientists occuring in the text corpus with the regex
+For example, all female scientists occurring in the text corpus with the regex
 "algo.*" can be obtained with the following query
 
     SELECT ?x TEXT(?t) SCORE(?t) WHERE {

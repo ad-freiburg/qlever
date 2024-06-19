@@ -42,7 +42,7 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
 }
 
 /*
-@brief Return a string containing a titel version of `categoryName` and a string
+@brief Return a string containing a title version of `categoryName` and a string
 list representation of all the given category entries.
 Note: This function converts `CategoryType` objects by trying to cast them as
 `std::string`.
@@ -97,7 +97,7 @@ std::string benchmarkResultsToString(
     }
   };
 
-  // Visualization for single measurments, if there are any.
+  // Visualization for single measurements, if there are any.
   addNonEmptyCategoryToStringSteam("Single measurement benchmarks",
                                    results.getSingleMeasurements());
 

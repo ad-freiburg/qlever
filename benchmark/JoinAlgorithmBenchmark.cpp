@@ -130,7 +130,7 @@ struct SetOfIdTableColumnElements {
 /*
 @brief Create an overlap between the join columns of the IdTables, by randomly
 choosing distinct elements from the join column of the smaller table and
-overiding all their occurrences in the join column with randomly choosen
+overriding all their occurrences in the join column with randomly chosen
 distinct elements from the join column of the bigger table.
 
 @param smallerTable The table, where distinct join column elements will be
@@ -167,7 +167,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   // Collect and count the table elements.
   SetOfIdTableColumnElements biggerTableJoinColumnSet(biggerTableJoinColumnRef);
 
-  // Seeds for the random generators, so that things are less similiar.
+  // Seeds for the random generators, so that things are less similar.
   const std::array<ad_utility::RandomSeed, 2> seeds =
       createArrayOfRandomSeeds<2>(std::move(randomSeed));
 
@@ -229,7 +229,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
           Assign the value to itself.
           This is needed, because so we can indirectly track the first
           'encounter' with an distinct element in the smaller table and save
-          ressources.
+          resources.
           */
           smallerTableElementToNewElement.emplace(id, id);
         }
@@ -275,7 +275,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
   SetOfIdTableColumnElements smallerTableJoinColumnSet(
       smallerTableJoinColumnRef);
 
-  // Seeds for the random generators, so that things are less similiar.
+  // Seeds for the random generators, so that things are less similar.
   const std::array<ad_utility::RandomSeed, 2> seeds =
       createArrayOfRandomSeeds<2>(std::move(randomSeed));
 
@@ -304,7 +304,7 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
         const auto& biggerTableId{biggerTableJoinColumnSet.uniqueElements_.at(
             randomBiggerTableElement())};
 
-        // Skip this possibilty, if we have an overflow.
+        // Skip this possibility, if we have an overflow.
         size_t newMatches{
             smallerTableJoinColumnSet.numOccurrences_.at(smallerTableId)};
         if (const size_t numOccurencesBiggerTable{
@@ -338,12 +338,12 @@ static size_t createOverlapRandomly(IdTableAndJoinColumn* const smallerTable,
 }
 
 /*
-The columns of the automaticly generated benchmark tables contain the following
-informations:
+The columns of the automatically generated benchmark tables contain the
+following information:
 - The parameter, that changes with every row.
 - Time needed for sorting `IdTable`s.
 - Time needed for merge/galloping join.
-- Time needed for sorting and merge/galloping added togehter.
+- Time needed for sorting and merge/galloping added together.
 - Time needed for the hash join.
 - How many rows the result of joining the tables has.
 - How much faster the hash join is. For example: Two times faster.
@@ -390,7 +390,7 @@ concept exactlyOneGrowthFunction =
     ((growthFunction<Ts, size_t> || growthFunction<Ts, float>)+...) == 1;
 
 /*
-@brief Calculates the smalles whole exponent $n$, so that $base^n$ is equal, or
+@brief Calculates the smallest whole exponent $n$, so that $base^n$ is equal, or
 bigger, than the `startingPoint`.
 */
 template <std::convertible_to<double> T>
@@ -530,7 +530,7 @@ struct ConfigVariables {
   `IdTables` gets bigger with every row, while the other attributes stay the
   same.
   For the attributes, that don't stay the same, inclusive boundaries are
-  defined. Sometimes implicitely via other configuration option. (With the
+  defined. Sometimes implicitly via other configuration option. (With the
   exception of the sample size ratios for the special benchmarking class
   `BmSampleSizeRatio`.)
 
@@ -759,7 +759,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     @brief The generated lambda returns true, iff if it is called with a value,
     that is bigger than the given minimum value
 
-    @param canBeEqual If true, the generated lamba also returns true, if the
+    @param canBeEqual If true, the generated lambda also returns true, if the
     values are equal.
     */
     auto generateBiggerEqualLambda = []<typename T>(const T& minimumValue,
@@ -1107,7 +1107,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   - Return values of the parameter, you gave a function for.
   - Time needed for sorting `IdTable`s.
   - Time needed for merge/galloping join.
-  - Time needed for sorting and merge/galloping added togehter.
+  - Time needed for sorting and merge/galloping added together.
   - Time needed for the hash join.
   - How many rows the result of joining the tables has.
   - How much faster the hash join is. For example: Two times faster.
@@ -1145,7 +1145,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
   to be exactly the same.
   @param randomSeed Seed for the random generators.
   @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
-  be sorted by his join column before being joined? More specificly, some
+  be sorted by his join column before being joined? More specifically, some
   join algorithm require one, or both, of the IdTables to be sorted. If this
   argument is false, the time needed for sorting the required table will
   added to the time of the join algorithm.
@@ -1200,7 +1200,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
     // Returns the first argument, that is a growth function.
     auto returnFirstGrowthFunction =
         [&isGrowthFunction]<typename... Ts>(Ts&... args) -> auto& {
-      // Put them into a tuple, so that we can easly look them up.
+      // Put them into a tuple, so that we can easily look them up.
       auto tup = std::tuple<Ts&...>{AD_FWD(args)...};
 
       // Get the index of the first growth function.
@@ -1479,7 +1479,7 @@ class GeneralInterfaceImplementation : public BenchmarkInterface {
                       biggerTableJoinColumnSampleSizeRatio)) -
         1;
 
-    // Seeds for the random generators, so that things are less similiar
+    // Seeds for the random generators, so that things are less similar
     // between the tables.
     const std::array<ad_utility::RandomSeed, 5> seeds =
         createArrayOfRandomSeeds<5>(std::move(randomSeed));
@@ -1891,7 +1891,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
           "'max-memory' and 'bigger-table-num-columns'";
     } else {
       smallerTableNumRowsDescription =
-          "divison of 'max-bigger-table-rows' with 'min-ratio-rows'";
+          "division of 'max-bigger-table-rows' with 'min-ratio-rows'";
       smallerTableNumRowsConfigurationOptions = "'max-bigger-table-rows'";
     }
 
@@ -1918,7 +1918,7 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     };
 
     /*
-    Calculate the expexcted number of rows in the result for the simplified
+    Calculate the expected number of rows in the result for the simplified
     creation model of input tables join columns and overlaps, with the biggest
     sample size ratio used for both input tables. The simplified creation model
     assumes, that:
@@ -1927,12 +1927,13 @@ class BmSampleSizeRatio final : public GeneralInterfaceImplementation {
     overlaps are inserted later.
     - The join column entries of the smaller table have a uniform distribution,
     are made up out of the join column elements of both tables (smaller and
-    bigger) and the generation of one row entry is independet from the
+    bigger) and the generation of one row entry is independent from the
     generation of all other row entries.
     - The join column entries of the bigger table have a uniform distribution,
     are made up out of only the elements of the bigger tables and the generation
-    of one row entry is independet from the generation of all other row entries.
-    - The generation of join column entries in the smaller table is independet
+    of one row entry is independent from the generation of all other row
+    entries.
+    - The generation of join column entries in the smaller table is independent
     from the generation in the bigger table.
 
     Note: In reality, the set of possible join column entries for the smaller
@@ -2155,7 +2156,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   - Number of rows in the smaller table.
   - Time needed for sorting `IdTable`s.
   - Time needed for merge/galloping join.
-  - Time needed for sorting and merge/galloping added togehter.
+  - Time needed for sorting and merge/galloping added together.
   - Time needed for the hash join.
   - How many rows the result of joining the tables has.
   - How much faster the hash join is. For example: Two times faster.
@@ -2165,7 +2166,7 @@ class BmSmallerTableGrowsBiggerTableRemainsSameSize final
   @param tableDescriptor A identifier for the to be created benchmark table, so
   that it can be easier identified later.
   @param smallerTableSorted, biggerTableSorted Should the bigger/smaller table
-  be sorted by his join column before being joined? More specificly, some
+  be sorted by his join column before being joined? More specifically, some
   join algorithm require one, or both, of the IdTables to be sorted. If this
   argument is false, the time needed for sorting the required table will
   added to the time of the join algorithm.
