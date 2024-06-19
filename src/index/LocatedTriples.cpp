@@ -119,17 +119,14 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
       return (row[0] == lt->triple_[2]);
     }
   };
-  auto writeTripleToResult = [&resultEntry, &locatedTriple,
-                              &numIndexColumns]() {
-    if (numIndexColumns == 1) {
-      (*resultEntry)[0] = locatedTriple->triple_[2];
-    } else if (numIndexColumns == 2) {
-      (*resultEntry)[0] = locatedTriple->triple_[1];
-      (*resultEntry)[1] = locatedTriple->triple_[2];
-    } else {
-      (*resultEntry)[0] = locatedTriple->triple_[0];
-      (*resultEntry)[1] = locatedTriple->triple_[1];
-      (*resultEntry)[2] = locatedTriple->triple_[2];
+  auto writeTripleToResult = [&numIndexColumns, &result](auto resultEntry,
+                                                         auto& locatedTriple) {
+    for (size_t i = 0; i < numIndexColumns; i++) {
+      (*resultEntry)[i] = locatedTriple->triple_[3 - numIndexColumns + i];
+    }
+    // Write UNDEF to any additional columns.
+    for (size_t i = numIndexColumns; i < result.numColumns(); i++) {
+      (*resultEntry)[i] = ValueId::makeUndefined();
     }
   };
 
@@ -139,7 +136,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
     while (locatedTriple != locatedTriples.end() && cmpLt(locatedTriple, row)) {
       if (locatedTriple->shouldTripleExist_ == true) {
         // Adding an inserted Triple between two triples.
-        writeTripleToResult();
+        writeTripleToResult(resultEntry, locatedTriple);
         ++resultEntry;
         ++locatedTriple;
       } else {
@@ -169,7 +166,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   }
   while (locatedTriple != locatedTriples.end() &&
          locatedTriple->shouldTripleExist_ == true) {
-    writeTripleToResult();
+    writeTripleToResult(resultEntry, locatedTriple);
     ++resultEntry;
     ++locatedTriple;
   }
