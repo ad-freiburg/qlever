@@ -74,7 +74,7 @@ size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
   // one column (for the `id3`). Otherwise, they must have two columns (for the
   // `id2` and the `id3`).
   // TODO<qup42>: require the number of index columns as parameter instead?
-  auto numberOfIndexColumns = [](const IdTable& idTable) {
+  auto numberOfIndexColumns = [](const IdTable& idTable) -> size_t {
     auto firstRow = idTable[0];
     return std::ranges::count_if(firstRow, [](const ValueId& i) {
       using enum Datatype;
