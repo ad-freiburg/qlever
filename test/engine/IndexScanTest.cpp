@@ -70,9 +70,10 @@ void testLazyScan(Permutation::IdTableGenerator partialLazyScanResult,
   if (limitOffset.isUnconstrained()) {
     EXPECT_EQ(lazyScanRes, expected);
   } else {
-    // There are some prefilters that return an empty generator even with a
-    // limit present.
-    EXPECT_TRUE(lazyScanRes.empty() || lazyScanRes == expected);
+    // If the join on blocks could already determine that there are no matching
+    // blocks, then the lazy scan will be empty even with a limit present.
+    EXPECT_TRUE((lazyScanRes.empty() && expectedRows.empty()) ||
+                lazyScanRes == expected);
   }
 }
 
