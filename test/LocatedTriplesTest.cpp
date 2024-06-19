@@ -118,6 +118,20 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
       m::allNums(0, 0, {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
 }
 
+TEST_F(LocatedTriplesTest, erase) {
+  using LT = LocatedTriple;
+  // Set up lists of located triples for three blocks.
+  auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
+      {LT{1, IT(10, 1, 0), false}, LT{1, IT(10, 2, 1), false},
+       LT{1, IT(11, 3, 0), true}, LT{2, IT(20, 4, 0), true},
+       LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
+       LT{4, IT(32, 7, 0), false}});
+
+  auto handles = locatedTriplesPerBlock.add({LT{1, IT(15, 15, 15), false}});
+  EXPECT_THROW(locatedTriplesPerBlock.erase(5, handles[0]),
+               ad_utility::Exception);
+}
+
 // Test the method that merges the matching `LocatedTriple`s from a block into
 // an `IdTable`.
 TEST_F(LocatedTriplesTest, mergeTriples) {
@@ -311,7 +325,81 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable result(3, ad_utility::testing::makeAllocator());
     result.resize(locatedTriplesPerBlock.numTriples());
     EXPECT_THROW(
+        locatedTriplesPerBlock.mergeTriples(2, std::move(block), result, 0, 3),
+        ad_utility::Exception);
+  }
+
+  {
+    IdTable block = makeIdTableFromVector({
+        {1, 10, 10},  // Row 0
+        {2, 15, 20},  // Row 1
+        {2, 15, 30},  // Row 2
+        {2, 20, 10},  // Row 3
+        {2, 30, 20},  // Row 4
+        {3, 30, 30}   // Row 5
+    });
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
+    IdTable result(3, ad_utility::testing::makeAllocator());
+    result.resize(locatedTriplesPerBlock.numTriples());
+    EXPECT_THROW(
+        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 4),
+        ad_utility::Exception);
+  }
+
+  {
+    IdTable block = makeIdTableFromVector({
+        {1, 10, 10},  // Row 0
+        {2, 15, 20},  // Row 1
+        {2, 15, 30},  // Row 2
+        {2, 20, 10},  // Row 3
+        {2, 30, 20},  // Row 4
+        {3, 30, 30}   // Row 5
+    });
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
+    IdTable result(1, ad_utility::testing::makeAllocator());
+    result.resize(locatedTriplesPerBlock.numTriples());
+    EXPECT_THROW(
         locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 3),
+        ad_utility::Exception);
+  }
+
+  {
+    IdTable block = makeIdTableFromVector({
+        {},  // Row 0
+        {},  // Row 1
+        {},  // Row 2
+        {},  // Row 3
+        {},  // Row 4
+        {}   // Row 5
+    });
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},   // Insert before row 0
+        LT{1, IT(2, 11, 10), true},  // Insert before row 1
+    });
+    IdTable result(0, ad_utility::testing::makeAllocator());
+    result.resize(locatedTriplesPerBlock.numTriples());
+    EXPECT_THROW(
+        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 0),
         ad_utility::Exception);
   }
 }
