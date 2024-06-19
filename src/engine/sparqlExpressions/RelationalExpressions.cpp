@@ -53,18 +53,12 @@ requires isVectorResult<S> auto idGenerator(const S& values, size_t targetSize,
   }
 }
 
-// For the `Variable` class, the generator from the `sparqlExpressions` module
-// already yields the `ValueIds`.
-auto idGenerator(Variable variable, size_t targetSize,
-                 const EvaluationContext* context) {
-  return sparqlExpression::detail::makeGenerator(std::move(variable),
-                                                 targetSize, context);
-}
-// Same for the `SetOfIntervals` class.
-auto idGenerator(ad_utility::SetOfIntervals variable, size_t targetSize,
-                 const EvaluationContext* context) {
-  return sparqlExpression::detail::makeGenerator(std::move(variable),
-                                                 targetSize, context);
+// For the `Variable` and `SetOfIntervals` class, the generator from the
+// `sparqlExpressions` module already yields the `ValueIds`.
+template <ad_utility::SimilarToAny<Variable, ad_utility::SetOfIntervals> S>
+auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
+  return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
+                                                 context);
 }
 
 // Return a pair of generators that generate the values from `value1` and
@@ -315,7 +309,7 @@ namespace {
 // _____________________________________________________________________________
 SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
     uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
-    [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) {
+    const std::optional<Variable>& firstSortedVariable) {
   AD_CORRECTNESS_CHECK(children.size() >= 1);
   reductionFactor /= children.size() - 1;
   auto sizeEstimate = inputSizeEstimate / reductionFactor;
@@ -350,7 +344,7 @@ template <Comparison comp>
 SparqlExpression::Estimates
 RelationalExpression<comp>::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
-    [[maybe_unused]] const std::optional<Variable>& firstSortedVariable) const {
+    const std::optional<Variable>& firstSortedVariable) const {
   uint64_t reductionFactor = 0;
 
   if (comp == valueIdComparators::Comparison::EQ) {
@@ -365,28 +359,6 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
                                              children_, firstSortedVariable);
 }
 
-namespace {
-// A simple expression that just returns an explicit result.
-// It can only be used once as the result is moved out.
-struct DummyExpression : public SparqlExpression {
-  explicit DummyExpression(ExpressionResult result)
-      : _result{std::move(result)} {}
-  mutable ExpressionResult _result;
-  mutable bool resultWasMoved_ = false;
-  ExpressionResult evaluate(EvaluationContext*) const override {
-    AD_CORRECTNESS_CHECK(!resultWasMoved_);
-    resultWasMoved_ = true;
-    return std::move(_result);
-  }
-  vector<Variable> getUnaggregatedVariables() override { return {}; }
-  string getCacheKey(
-      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return "DummyDummyDummDumm";
-  }
-
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
-};
-}  // namespace
 // _____________________________________________________________________________
 ExpressionResult InExpression::evaluate(
     sparqlExpression::EvaluationContext* context) const {
@@ -407,9 +379,9 @@ ExpressionResult InExpression::evaluate(
       continue;
     }
     auto dummyExpression1 =
-        std::make_unique<DummyExpression>(std::move(subRes));
+        std::make_unique<SingleUseExpression>(std::move(subRes));
     auto dummyExpression2 =
-        std::make_unique<DummyExpression>(std::move(result));
+        std::make_unique<SingleUseExpression>(std::move(result));
     result = makeOrExpression(std::move(dummyExpression1),
                               std::move(dummyExpression2))
                  ->evaluate(context);

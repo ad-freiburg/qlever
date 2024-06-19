@@ -43,8 +43,9 @@ const auto NaN = std::numeric_limits<double>::quiet_NaN();
 template <Comparison comp>
 auto makeExpression(SingleExpressionResult auto leftValue,
                     SingleExpressionResult auto rightValue) {
-  auto leftChild = std::make_unique<DummyExpression>(std::move(leftValue));
-  auto rightChild = std::make_unique<DummyExpression>(std::move(rightValue));
+  auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
+  auto rightChild =
+      std::make_unique<SingleUseExpression>(std::move(rightValue));
 
   return relational::RelationalExpression<comp>(
       {std::move(leftChild), std::move(rightChild)});
@@ -52,10 +53,10 @@ auto makeExpression(SingleExpressionResult auto leftValue,
 
 auto makeInExpression(SingleExpressionResult auto leftValue,
                       SingleExpressionResult auto... rightValues) {
-  auto leftChild = std::make_unique<DummyExpression>(std::move(leftValue));
+  auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
   std::vector<SparqlExpression::Ptr> rightChildren;
   (..., (rightChildren.push_back(
-            std::make_unique<DummyExpression>(std::move(rightValues)))));
+            std::make_unique<SingleUseExpression>(std::move(rightValues)))));
   return relational::InExpression{std::move(leftChild),
                                   std::move(rightChildren)};
 }
@@ -886,6 +887,51 @@ TEST(RelationalExpression, InExpressionFilterEstimates) {
   x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
   EXPECT_EQ(x.costEstimate, 200'000);
   EXPECT_EQ(x.sizeEstimate, 400);
+}
+
+namespace {
+template <typename T>
+constexpr std::type_identity<T> TI{};
+}
+TEST(RelationalExpression, FilterEstimates) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+
+  auto makeVar = [](std::string v) {
+    return std::make_unique<sparqlExpression::VariableExpression>(
+        Variable{std::move(v)});
+  };
+  // Implementation for testing the size estimates of different relational
+  // expressions.
+  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
+                                  ad_utility::source_location l =
+                                      source_location::current()) {
+    auto tr = generateLocationTrace(l);
+
+    auto first = makeVar("?x");
+    using namespace ::testing;
+    auto expression =
+        T{std::array<SparqlExpression::Ptr, 2>{std::move(first), makeInt(30)}};
+    // This case can be solved via binary search.
+    auto x =
+        expression.getEstimatesForFilterExpression(200'000, Variable{"?x"});
+    EXPECT_EQ(x.costEstimate, expectedSize);
+    EXPECT_EQ(x.sizeEstimate, expectedSize);
+    // This case cannot be solved via binary search.
+    x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
+    EXPECT_EQ(x.costEstimate, 200'000);
+    EXPECT_EQ(x.sizeEstimate, expectedSize);
+  };
+
+  using std::type_identity;
+  // Less is estimated to leave 1/50 of the initial 200'000 values.
+  testImpl(TI<LessThanExpression>, 4000);
+  // Equal is estimated to leave 1/1000 of the initial 200'000 values.
+  testImpl(TI<EqualExpression>, 200);
+  // NotEqual is estimated to leave all of the initial 200'000 values.
+  testImpl(TI<NotEqualExpression>, 200'000);
 }
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
