@@ -10,7 +10,7 @@
 class SparqlTriple;
 class SparqlTripleSimple;
 
-class IndexScan : public Operation {
+class IndexScan final : public Operation {
  private:
   Permutation::Enum permutation_;
   TripleComponent subject_;
