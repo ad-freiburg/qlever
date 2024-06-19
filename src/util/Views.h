@@ -114,19 +114,98 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
 }
 
 // A view that owns its underlying storage. It is a rather simple drop-in
-// replacement for `std::ranges::owning_view` which is not yet supported by
+// replacement for `std::ranges::OwningView` which is not yet supported by
 // `GCC 11`.
 template <std::ranges::range UnderlyingRange>
-struct OwningView
+requires std::movable<UnderlyingRange> class OwningView
     : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
  private:
-  UnderlyingRange value_;
+  UnderlyingRange underlyingRange_ = UnderlyingRange();
 
  public:
-  explicit OwningView(UnderlyingRange&& range) : value_{std::move(range)} {}
-  auto begin() { return value_.begin(); }
-  auto end() { return value_.end(); }
+  OwningView() requires std::default_initializable<UnderlyingRange> = default;
+
+  constexpr explicit OwningView(UnderlyingRange&& underlyingRange) noexcept(
+      std::is_nothrow_move_constructible_v<UnderlyingRange>)
+      : underlyingRange_(std::move(underlyingRange)) {}
+
+  OwningView(OwningView&&) = default;
+  OwningView& operator=(OwningView&&) = default;
+
+  constexpr UnderlyingRange& base() & noexcept { return underlyingRange_; }
+
+  constexpr const UnderlyingRange& base() const& noexcept {
+    return underlyingRange_;
+  }
+
+  constexpr UnderlyingRange&& base() && noexcept {
+    return std::move(underlyingRange_);
+  }
+
+  constexpr const UnderlyingRange&& base() const&& noexcept {
+    return std::move(underlyingRange_);
+  }
+
+  constexpr std::ranges::iterator_t<UnderlyingRange> begin() {
+    return std::ranges::begin(underlyingRange_);
+  }
+
+  constexpr std::ranges::sentinel_t<UnderlyingRange> end() {
+    return std::ranges::end(underlyingRange_);
+  }
+
+  constexpr auto begin() const
+      requires std::ranges::range<const UnderlyingRange> {
+    return std::ranges::begin(underlyingRange_);
+  }
+
+  constexpr auto end() const requires std::ranges::range<const UnderlyingRange>
+  {
+    return std::ranges::end(underlyingRange_);
+  }
+
+  constexpr bool empty()
+      requires requires { std::ranges::empty(underlyingRange_); } {
+    return std::ranges::empty(underlyingRange_);
+  }
+
+  constexpr bool empty() const
+      requires requires { std::ranges::empty(underlyingRange_); } {
+    return std::ranges::empty(underlyingRange_);
+  }
+
+  constexpr auto size() requires std::ranges::sized_range<UnderlyingRange> {
+    return std::ranges::size(underlyingRange_);
+  }
+
+  constexpr auto size() const
+      requires std::ranges::sized_range<const UnderlyingRange> {
+    return std::ranges::size(underlyingRange_);
+  }
+
+  constexpr auto data() requires std::ranges::contiguous_range<UnderlyingRange>
+  {
+    return std::ranges::data(underlyingRange_);
+  }
+
+  constexpr auto data() const
+      requires std::ranges::contiguous_range<const UnderlyingRange> {
+    return std::ranges::data(underlyingRange_);
+  }
 };
+
+template <typename Range>
+concept can_ref_view =
+    requires { std::ranges::ref_view{std::declval<Range>()}; };
+
+template <typename Range>
+constexpr auto allView(Range&& range) {
+  if constexpr (can_ref_view<Range>) {
+    return std::ranges::ref_view{AD_FWD(range)};
+  } else {
+    return ad_utility::OwningView{AD_FWD(range)};
+  }
+}
 
 // Returns a view that contains all the values in `[0, upperBound)`, similar to
 // Python's `range` function. Avoids the common pitfall in `std::views::iota`
@@ -222,5 +301,10 @@ inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
 }
 
 }  // namespace ad_utility
+
+template <typename _Tp>
+inline constexpr bool
+    std::ranges::enable_borrowed_range<ad_utility::OwningView<_Tp>> =
+        std::ranges::enable_borrowed_range<_Tp>;
 
 #endif  // QLEVER_VIEWS_H

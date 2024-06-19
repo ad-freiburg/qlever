@@ -54,29 +54,10 @@ cppcoro::generator<const std::decay_t<std::invoke_result_t<Transformation, T>>> 
 }
 
 template <typename T, typename Transformation = std::identity>
-requires(std::ranges::input_range<T> && !ad_utility::SimilarTo<std::span<const ValueId>, T>)
-auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {})
-    -> cppcoro::generator<std::decay_t<
-        std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
+requires(std::ranges::input_range<T>)
+auto resultGenerator(T&& vector, size_t numItems, Transformation transformation = {}) {
   AD_CONTRACT_CHECK(numItems == vector.size());
-  for (auto& element : vector) {
-    // TODO<joka921> Use perfect forwarding and possibly yield references.
-    auto cpy = transformation(element);
-    co_yield cpy;
-  }
-}
-
-template <ad_utility::SimilarTo<std::span<const ValueId>> T,
-          typename Transformation = std::identity>
-auto resultGenerator(T vector, size_t numItems, Transformation transformation = {})
-    -> cppcoro::generator<std::decay_t<
-        std::invoke_result_t<Transformation, std::remove_reference_t<decltype(*vector.begin())>>>> {
-  AD_CONTRACT_CHECK(numItems == vector.size());
-  for (auto& element : vector) {
-    // TODO<joka921> Use perfect forwarding and possibly yield references.
-    auto cpy = transformation(element);
-    co_yield cpy;
-  }
+  return ad_utility::allView(AD_FWD(vector)) | std::views::transform(std::move(transformation));
 }
 
 template <typename Transformation = std::identity>
@@ -107,10 +88,8 @@ template <SingleExpressionResult Input, typename Transformation = std::identity>
 auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* context,
                    Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
-    std::span<const ValueId> inputWithVariableResolved{
-        getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(std::span<const ValueId>{inputWithVariableResolved}, numItems,
-                           transformation);
+    auto inputWithVariableResolved = getIdsFromVariable(std::forward<Input>(input), context);
+    return resultGenerator(std::move(inputWithVariableResolved), numItems, transformation);
   } else {
     return resultGenerator(std::forward<Input>(input), numItems, transformation);
   }
@@ -134,7 +113,8 @@ inline auto valueGetterGenerator = []<typename ValueGetter, SingleExpressionResu
 /// generator.
 inline auto applyFunction = []<typename Function, typename... Generators>(
                                 Function&& function, size_t numItems, Generators... generators)
-    -> cppcoro::generator<std::invoke_result_t<Function, typename Generators::value_type...>> {
+    -> cppcoro::generator<
+        std::invoke_result_t<Function, std::ranges::range_value_t<Generators>...>> {
   // A tuple holding one iterator to each of the generators.
   std::tuple iterators{generators.begin()...};
 
