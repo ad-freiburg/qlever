@@ -10,6 +10,8 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/VariableToColumnMap.h"
+#include "parser/GraphPatternOperation.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
@@ -23,7 +25,16 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
       indexToId_(),
       idToIndex_(allocator()) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
-  resultWidth_ = 4 + config_.edgePropertyIndices_.size();
+  resultWidth_ = 4 + config_.edgeProperties_.size();
+  variableColumns_[config_.start_] = makeAlwaysDefinedColumn(0);
+  variableColumns_[config_.end_] = makeAlwaysDefinedColumn(1);
+  variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(2);
+  variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(3);
+
+  for (size_t edgePropertyIndex = 0; edgePropertyIndex < config_.edgeProperties_.size(); edgePropertyIndex++) {
+    auto edgeProperty = config_.edgeProperties_[edgePropertyIndex];
+    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(4 + edgePropertyIndex);
+  }
 }
 
 // _____________________________________________________________________________
@@ -83,18 +94,21 @@ ResultTable PathSearch::computeResult() {
 
   const IdTable& dynSub = subRes->idTable();
 
-  std::vector<std::span<const Id>> edgePropertyLists;
-  for (auto edgePropertyIndex : config_.edgePropertyIndices_) {
-    edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
+  if (dynSub.size() > 0) {
+    std::vector<std::span<const Id>> edgePropertyLists;
+    for (auto edgeProperty : config_.edgeProperties_) {
+      auto edgePropertyIndex = subtree_->getVariableColumn(edgeProperty);
+      edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
+    }
+
+    buildGraph(dynSub.getColumn(getStartIndex()),
+               dynSub.getColumn(getEndIndex()), edgePropertyLists);
+
+    auto paths = findPaths();
+
+    CALL_FIXED_SIZE(std::array{getResultWidth()}, &PathSearch::pathsToResultTable,
+                    this, idTable, paths);
   }
-
-  buildGraph(dynSub.getColumn(config_.startColumn_),
-             dynSub.getColumn(config_.endColumn_), edgePropertyLists);
-
-  auto paths = findPaths();
-
-  CALL_FIXED_SIZE(std::array{getResultWidth()}, &PathSearch::pathsToResultTable,
-                  this, idTable, paths);
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
 };
@@ -160,6 +174,7 @@ std::vector<Path> PathSearch::findPaths() const {
 std::vector<Path> PathSearch::allPaths() const {
   std::vector<Path> paths;
   Path path;
+
   auto startIndex = idToIndex_.at(config_.source_);
 
   std::unordered_set<uint64_t> targets;
@@ -215,10 +230,10 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
       auto edge = path.edges_[edgeIndex];
       auto [start, end] = edge.toIds();
       table.emplace_back();
-      table(rowIndex, config_.startColumn_) = start;
-      table(rowIndex, config_.endColumn_) = end;
-      table(rowIndex, config_.pathIndexColumn_) = Id::makeFromInt(pathIndex);
-      table(rowIndex, config_.edgeIndexColumn_) = Id::makeFromInt(edgeIndex);
+      table(rowIndex, getStartIndex()) = start;
+      table(rowIndex, getEndIndex()) = end;
+      table(rowIndex, getPathIndex()) = Id::makeFromInt(pathIndex);
+      table(rowIndex, getEdgeIndex()) = Id::makeFromInt(edgeIndex);
 
       for (size_t edgePropertyIndex = 0;
            edgePropertyIndex < edge.edgeProperties_.size();

@@ -13,6 +13,7 @@
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
 #include "engine/OrderBy.h"
+#include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
@@ -254,6 +255,23 @@ inline auto TransitivePath =
                             TransitivePathSideMatcher(left)),
                 AD_PROPERTY(TransitivePathBase, getRight,
                             TransitivePathSideMatcher(right))));
+    };
+
+inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
+  return AllOf(
+    AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_))
+  );
+};
+
+// Match a PathSearch operation
+inline auto PathSearch =
+    [](PathSearchConfiguration config, const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::PathSearch>(
+          AllOf(Property("getChildren", &Operation::getChildren,
+                         ElementsAre(Pointee(childMatchers)...)),
+                AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config))
+          )
+      );
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

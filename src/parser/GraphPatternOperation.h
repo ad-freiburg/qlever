@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 
+#include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
@@ -136,6 +137,22 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
+struct PathQuery {
+  TripleComponent source_;
+  std::vector<TripleComponent> targets_;
+  std::optional<Variable> start_;
+  std::optional<Variable> end_;
+  std::optional<Variable> pathColumn_;
+  std::optional<Variable> edgeColumn_;
+  std::vector<Variable> edgeProperties_;
+  PathSearchAlgorithm algorithm_;
+
+  GraphPattern childGraphPattern_;
+
+  void addParameter(SparqlTriple& triple);
+  void fromBasicPattern(const BasicGraphPattern& pattern);
+};
+
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -152,7 +169,8 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, Minus,
+                 GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

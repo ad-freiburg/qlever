@@ -2,6 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Herrmann (johannes.r.herrmann(at)gmail.com)
 
+#pragma once
+
 #include <algorithm>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/depth_first_search.hpp>
@@ -15,17 +17,18 @@
 #include <vector>
 
 #include "engine/Operation.h"
-#include "engine/QueryExecutionTree.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/Id.h"
+#include "index/Vocabulary.h"
 
 // We deliberately use the `std::` variants of a hash set and hash map because
 // `absl`s types are not exception safe.
-struct HashId {
+struct IdHash {
   auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
 };
 
-using Map = std::unordered_map<
-    Id, size_t, HashId, std::equal_to<Id>,
+using IdToNodeMap = std::unordered_map<
+    Id, size_t, IdHash, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, size_t>>>;
 
 struct Edge {
@@ -59,6 +62,10 @@ struct Path {
     return !empty() ? std::optional<uint64_t>{edges_.back().end_}
                     : std::nullopt;
   }
+
+  bool ends_with(uint64_t node) const {
+    return (!empty() && node == lastNode().value());
+  }
 };
 
 typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
@@ -84,7 +91,7 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
 
   void examine_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
-    if (targets_.empty() || targets_.find(edge.end_) != targets_.end()) {
+    if (targets_.empty() || (currentPath_.ends_with(edge.start_) && targets_.find(edge.end_) != targets_.end())) {
       auto pathCopy = currentPath_;
       pathCopy.push_back(edge);
       allPaths_.push_back(pathCopy);
@@ -98,10 +105,8 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
 
   void finish_vertex(VertexDescriptor vertex, const Graph& graph) {
     (void)graph;
-    if (!currentPath_.empty()) {
-      if (Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
-        currentPath_.edges_.pop_back();
-      }
+    if (!currentPath_.empty() && Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
+      currentPath_.edges_.pop_back();
     }
   }
 };
@@ -160,11 +165,11 @@ struct PathSearchConfiguration {
   PathSearchAlgorithm algorithm_;
   Id source_;
   std::vector<Id> targets_;
-  size_t startColumn_;
-  size_t endColumn_;
-  size_t pathIndexColumn_;
-  size_t edgeIndexColumn_;
-  std::vector<size_t> edgePropertyIndices_;
+  Variable start_;
+  Variable end_;
+  Variable pathColumn_;
+  Variable edgeColumn_;
+  std::vector<Variable> edgeProperties_;
 };
 
 class PathSearch : public Operation {
@@ -174,9 +179,11 @@ class PathSearch : public Operation {
 
   Graph graph_;
   PathSearchConfiguration config_;
+  Id source_;
+  std::vector<Id> targets_;
 
   std::vector<Id> indexToId_;
-  Map idToIndex_;
+  IdToNodeMap idToIndex_;
 
  public:
   PathSearch(QueryExecutionContext* qec,
@@ -184,6 +191,16 @@ class PathSearch : public Operation {
              PathSearchConfiguration config);
 
   std::vector<QueryExecutionTree*> getChildren() override;
+  const Id& getSource() const { return source_; }
+  const std::vector<Id>& getTargets() const { return targets_; }
+
+  const PathSearchConfiguration& getConfig() const { return config_; }
+
+  ColumnIndex getStartIndex() const { return variableColumns_.at(config_.start_).columnIndex_; }
+  ColumnIndex getEndIndex() const { return variableColumns_.at(config_.end_).columnIndex_; }
+  ColumnIndex getPathIndex() const { return variableColumns_.at(config_.pathColumn_).columnIndex_; }
+  ColumnIndex getEdgeIndex() const { return variableColumns_.at(config_.edgeColumn_).columnIndex_; }
+
 
   string getCacheKeyImpl() const override;
   string getDescriptor() const override;

@@ -494,6 +494,7 @@ class QueryPlanner {
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
+    void visitPathSearch(parsedQuery::PathQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 

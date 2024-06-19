@@ -68,6 +68,54 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
+void PathQuery::addParameter(SparqlTriple& triple) {
+  auto simpleTriple = triple.getSimple();
+  TripleComponent predicate = simpleTriple.p_;
+  TripleComponent object = simpleTriple.o_;
+  AD_CORRECTNESS_CHECK(predicate.isIri());
+  if (predicate.getIri().toStringRepresentation().ends_with("source>")) {
+    AD_CORRECTNESS_CHECK(object.isIri());
+    source_ = std::move(object);
+  } else if (predicate.getIri().toStringRepresentation().ends_with("target>")) {
+    AD_CORRECTNESS_CHECK(object.isIri());
+    targets_.push_back(std::move(object));
+  } else if (predicate.getIri().toStringRepresentation().ends_with("start>")) {
+    AD_CORRECTNESS_CHECK(object.isVariable());
+    start_ = object.getVariable();
+  } else if (predicate.getIri().toStringRepresentation().ends_with("end>")) {
+    AD_CORRECTNESS_CHECK(object.isVariable());
+    end_ = object.getVariable();
+  } else if (predicate.getIri().toStringRepresentation().ends_with("pathColumn>")) {
+    AD_CORRECTNESS_CHECK(object.isVariable());
+    pathColumn_ = object.getVariable();
+  } else if (predicate.getIri().toStringRepresentation().ends_with("edgeColumn>")) {
+    AD_CORRECTNESS_CHECK(object.isVariable());
+    edgeColumn_ = object.getVariable();
+  } else if (predicate.getIri().toStringRepresentation().ends_with("edgeProperty>")) {
+    AD_CORRECTNESS_CHECK(object.isVariable());
+    edgeProperties_.push_back(object.getVariable());
+  } else if (predicate.getIri().toStringRepresentation().ends_with("algorithm>")) {
+    AD_CORRECTNESS_CHECK(object.isIri());
+    if (object.getIri().toStringRepresentation().ends_with("allPaths>")) {
+      algorithm_ = PathSearchAlgorithm::ALL_PATHS;
+    } else if (object.getIri().toStringRepresentation().ends_with("shortestPaths>")) {
+      algorithm_ = PathSearchAlgorithm::SHORTEST_PATHS;
+    } else {
+      AD_THROW("Unsupported algorithm in PathSearch");
+    }
+  } else {
+    AD_THROW("Unsupported argument in PathSearch");
+  }
+}
+
+// ____________________________________________________________________________
+void PathQuery::fromBasicPattern(const BasicGraphPattern& pattern) {
+  for (SparqlTriple triple: pattern._triples) {
+    addParameter(triple);
+  }
+}
+
+// ____________________________________________________________________________
 cppcoro::generator<const Variable> Bind::containedVariables() const {
   for (const auto* ptr : _expression.containedVariables()) {
     co_yield *ptr;
