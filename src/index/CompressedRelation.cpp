@@ -33,7 +33,8 @@ CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
     CancellationHandle cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+    size_t numIndexColumns) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -69,8 +70,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     lock.unlock();
     DecompressedBlock decompressedBlock =
         decompressBlock(compressedBlock, block.numRows_);
-    decompressedBlock = addUpdateTriples(std::move(decompressedBlock),
-                                         locatedTriplesPerBlock, myIndex);
+    decompressedBlock =
+        addUpdateTriples(std::move(decompressedBlock), locatedTriplesPerBlock,
+                         myIndex, numIndexColumns);
     return std::pair{myIndex, std::move(decompressedBlock)};
   };
   const size_t numThreads =
@@ -121,6 +123,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   }
 
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
+  auto numIndexColumns = columnIndices.size() - additionalColumns.size();
 
   auto getIncompleteBlock = [&](auto it) {
     auto blockOffset = addOffset(offset, beginBlockOffset + (it - beginBlock));
@@ -139,9 +142,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlock + 1 < endBlock) {
     // We copy the cancellationHandle because it is still captured by reference
     // inside the `getIncompleteBlock` lambda.
-    auto blockGenerator =
-        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
-                                    cancellationHandle, locatedTriplesPerBlock);
+    auto blockGenerator = asyncParallelBlockGenerator(
+        beginBlock + 1, endBlock - 1, columnIndices, cancellationHandle,
+        locatedTriplesPerBlock, numIndexColumns);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -365,6 +368,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   std::ranges::copy(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
       std::back_inserter(allColumns));
+  auto numIndexColumns = 3;
   // A block is uniquely identified by its start position in the file.
   // TODO<qup42>: invalidate cache when blocks are updated
   // auto cacheKey =
@@ -378,8 +382,8 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   //                           offset);
   //                     })
   //        ._resultPointer;
-  const DecompressedBlock& block =
-      readAndDecompressBlock(blockMetadata, allColumns, locatedTriples, offset);
+  const DecompressedBlock& block = readAndDecompressBlock(
+      blockMetadata, allColumns, locatedTriples, offset, numIndexColumns);
 
   // Find the range in the blockMetadata, that belongs to the same relation
   // `col0Id`
@@ -507,6 +511,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   auto relevantColumnIndex = prepareColumnIndices(scanSpec, {});
   AD_CORRECTNESS_CHECK(!relevantColumnIndex.empty());
   relevantColumnIndex.resize(1);
+  auto numIndexColumns = relevantColumnIndex.size();
 
   // Iterate over the blocks and only read (and decompress) those which contain
   // more than one different `colId`. For the others, we can determine the
@@ -529,7 +534,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
                     locatedTriplesPerBlock, beginBlockOffset + i)
               : readAndDecompressBlock(blockMetadata, relevantColumnIndex,
                                        locatedTriplesPerBlock,
-                                       beginBlockOffset + i);
+                                       beginBlockOffset + i, numIndexColumns);
       cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
@@ -627,7 +632,7 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::addUpdateTriples(
     DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
-    DisableUpdatesOrBlockOffset offset) const {
+    DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
   if (!useUpdates_ || std::holds_alternative<DisableUpdates>(offset)) {
     // updates are not enabled or not possible for this block
     return block;
@@ -639,8 +644,8 @@ DecompressedBlock CompressedRelationReader::addUpdateTriples(
   }
   DecompressedBlock blockWithUpdate{block.numColumns(), allocator_};
   blockWithUpdate.resize(block.numRows() + numInserts);
-  auto rowsWritten = locatedTriples.mergeTriples(blockIndex, std::move(block),
-                                                 blockWithUpdate, 0);
+  auto rowsWritten = locatedTriples.mergeTriples(
+      blockIndex, std::move(block), blockWithUpdate, 0, numIndexColumns);
   blockWithUpdate.resize(rowsWritten);
   return blockWithUpdate;
 }
@@ -662,13 +667,14 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     ColumnIndicesRef columnIndices,
     const LocatedTriplesPerBlock& locatedTriples,
-    DisableUpdatesOrBlockOffset offset) const {
+    DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
   CompressedBlock compressedColumns =
       readCompressedBlockFromFile(blockMetaData, columnIndices);
   const auto numRowsToRead = blockMetaData.numRows_;
   DecompressedBlock decompressedBlock =
       decompressBlock(compressedColumns, numRowsToRead);
-  return addUpdateTriples(std::move(decompressedBlock), locatedTriples, offset);
+  return addUpdateTriples(std::move(decompressedBlock), locatedTriples, offset,
+                          numIndexColumns);
 }
 
 // ____________________________________________________________________________

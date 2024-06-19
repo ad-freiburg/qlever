@@ -97,7 +97,7 @@ class LocatedTriplesPerBlock {
   // 2. It is the responsibility of the caller that there is enough space for
   // the result of the merge in `result` starting from `offsetInResult`.
   size_t mergeTriples(size_t blockIndex, IdTable block, IdTable& result,
-                      size_t offsetInResult) const;
+                      size_t offsetInResult, size_t numIndexColumns) const;
 
   // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,

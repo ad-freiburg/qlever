@@ -571,7 +571,7 @@ class CompressedRelationReader {
 
   DecompressedBlock addUpdateTriples(
       DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
-      DisableUpdatesOrBlockOffset offset) const;
+      DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const;
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -589,7 +589,7 @@ class CompressedRelationReader {
       const CompressedBlockMetadata& blockMetaData,
       ColumnIndicesRef columnIndices,
       const LocatedTriplesPerBlock& locatedTriples,
-      DisableUpdatesOrBlockOffset offset) const;
+      DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const;
 
  private:
   // Read the block identified by `blockMetadata` from disk, decompress it, and
@@ -617,7 +617,8 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      size_t numIndexColumns) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

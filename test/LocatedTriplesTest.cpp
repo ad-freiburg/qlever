@@ -123,11 +123,12 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
 TEST_F(LocatedTriplesTest, mergeTriples) {
   using LT = LocatedTriple;
 
-  auto merge = [](size_t resultCols, size_t resultRows, IdTable block,
-                  const LocatedTriplesPerBlock& locatedTriples) {
+  auto merge = [](size_t resultCols, size_t numIndexColumns, size_t resultRows,
+                  IdTable block, const LocatedTriplesPerBlock& locatedTriples) {
     IdTable result(resultCols, ad_utility::testing::makeAllocator());
     result.resize(resultRows);
-    locatedTriples.mergeTriples(1, std::move(block), result, 0);
+    locatedTriples.mergeTriples(1, std::move(block), result, 0,
+                                numIndexColumns);
     return result;
   };
 
@@ -163,8 +164,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {4, 10, 10}   // LT 7
     });
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
 
@@ -199,8 +201,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 10}   // LT 5
     });
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 2, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
 
@@ -227,8 +230,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30}   // orig. Row 5
     });
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 1, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
 
@@ -239,8 +243,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
   // Inserting a Triple that already exists should have no effect.
@@ -251,8 +256,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
          LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
 
@@ -275,8 +281,9 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 7, 9, ad_utility::testing::IntId(13),
                                 ad_utility::testing::IntId(14)}});
 
-    auto merged = merge(resultExpected.numColumns(), resultExpected.numRows(),
-                        std::move(block), locatedTriplesPerBlock);
+    auto merged =
+        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
+              std::move(block), locatedTriplesPerBlock);
     EXPECT_EQ(merged, resultExpected);
   }
 
@@ -304,7 +311,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable result(3, ad_utility::testing::makeAllocator());
     result.resize(locatedTriplesPerBlock.numTriples());
     EXPECT_THROW(
-        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0),
+        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 3),
         ad_utility::Exception);
   }
 }

@@ -65,27 +65,15 @@ std::pair<size_t, size_t> LocatedTriplesPerBlock::numTriples(
 
 size_t LocatedTriplesPerBlock::mergeTriples(size_t blockIndex, IdTable block,
                                             IdTable& result,
-                                            size_t offsetInResult) const {
+                                            size_t offsetInResult,
+                                            size_t numIndexColumns) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  // If we restrict `id1` and `id2`, the index block and the result must have
-  // one column (for the `id3`). Otherwise, they must have two columns (for the
-  // `id2` and the `id3`).
-  // TODO<qup42>: require the number of index columns as parameter instead?
-  auto numberOfIndexColumns = [](const IdTable& idTable) -> size_t {
-    auto firstRow = idTable[0];
-    return std::ranges::count_if(firstRow, [](const ValueId& i) {
-      using enum Datatype;
-      return i.getDatatype() == VocabIndex ||
-             i.getDatatype() == LocalVocabIndex ||
-             i.getDatatype() == TextRecordIndex ||
-             i.getDatatype() == WordVocabIndex;
-    });
-  };
-
-  auto numIndexColumns = numberOfIndexColumns(block);
+  // TODO<qup42>: We're assuming that the index columns are always {0, 1, 2},
+  // {1, 2} or {2}. Is this true?
+  AD_CONTRACT_CHECK(numIndexColumns <= block.numColumns());
   AD_CONTRACT_CHECK(result.numColumns() == block.numColumns());
   AD_CONTRACT_CHECK(result.numColumns() >= 1);
 
