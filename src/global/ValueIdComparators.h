@@ -151,7 +151,7 @@ class RangeFilter {
   }
 
  private:
-  // Only add the pair `[begin, end)` to `result_` of `_comparison` is any of
+  // Only add the pair `[begin, end)` to `_result` of `_comparison` is any of
   // the `acceptedComparisons`
   template <Comparison... acceptedComparisons>
   void addImpl(RandomIt begin, RandomIt end) {
