@@ -18,7 +18,6 @@
 #include "SparqlAntlrParserTestHelpers.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
-#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
@@ -1386,7 +1385,6 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
-  expectBuiltInCall("NOW()", matchPtr<NowDatetimeExpression>());
   expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
   expectBuiltInCall("minutes(?x)", matchUnary(&makeMinutesExpression));
   expectBuiltInCall("seconds(?x)", matchUnary(&makeSecondsExpression));
