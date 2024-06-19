@@ -124,7 +124,7 @@ TEST(TextIndexScanForEntity, CacheKeys) {
 
   TextIndexScanForEntity s8{qec, Variable{"?text7"}, newFixedEntity,
                             "sentences"};
-  // Same text var, same fixed entitiy, different words
+  // Same text var, same fixed entity, different words
   ASSERT_NE(s7.getCacheKeyImpl(), s8.getCacheKeyImpl());
 }
 

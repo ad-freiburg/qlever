@@ -107,7 +107,7 @@ class Synchronized {
    * type, return the result.
    *
    * Note that return type deduction is done via auto which means,
-   * that no references are passed out. This happens deliberatly as
+   * that no references are passed out. This happens deliberately as
    * passing out references to the underlying type would ignore the locking.
    */
   template <typename F>
@@ -146,7 +146,7 @@ class Synchronized {
    * return the result.
    *
    * Note that return type deduction is done via auto which means,
-   * that no references are passed out. This happens deliberatly as
+   * that no references are passed out. This happens deliberately as
    * passing out references to the underlying type would ignore the locking.
    * Only supported if the mutex allows shared locking and the
    * function type F only treats its object as const.

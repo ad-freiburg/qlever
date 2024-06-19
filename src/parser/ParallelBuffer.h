@@ -39,7 +39,7 @@ class ParallelBuffer {
    */
   virtual void open(const string& filename) = 0;
   /**
-   * @brief Get (approximately) the next blocksize_ bytes from the inut stream.
+   * @brief Get (approximately) the next blocksize_ bytes from the input stream.
    *
    * Only valid after a call to open().
    *

@@ -96,11 +96,11 @@ TEST(PqTest, TreeUpdateReinsert) {
     ASSERT_EQ(pq.size(), 0ul);
     ASSERT_THROW(pq.updateKey(15, &h), ad_utility::NotInPQException);
     ASSERT_EQ(pq.size(), 0ul);
-    auto h2 = pq.insert(500, "alot"s);
+    auto h2 = pq.insert(500, "alot"s);  // codespell-ignore
     ASSERT_EQ(pq.size(), 1ul);
     h = pq.pop();
     ASSERT_EQ(h.score(), 500);
-    ASSERT_EQ(h.value(), "alot"s);
+    ASSERT_EQ(h.value(), "alot"s);  // codespell-ignore
   };
   TreeBasedPQ<int, string> pq;
   test(pq);

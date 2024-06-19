@@ -298,7 +298,7 @@ std::string ConfigManager::createJsonPointerString(
   std::ostringstream pointerString;
 
   // We don't use a `lazyStrJoin` here, so that an empty `keys` produces an
-  // emptry string.
+  // empty string.
   std::ranges::for_each(
       keys, [&escapeSpecialCharacters, &pointerString](std::string_view key) {
         pointerString << "/" << escapeSpecialCharacters(key);
@@ -386,7 +386,7 @@ void ConfigManager::verifyPath(const std::vector<std::string>& path) const {
           `some/options/optionA` in json pointer terms, but in string terms,
           because `"option"` is a prefix of `"options"`.
 
-          This can be fixed, by adding the seperator `/` at the end of both
+          This can be fixed, by adding the separator `/` at the end of both
           string representation. Because the symbol `/` is not allowed in
           `xi`, for `any i in [0, N]`, but must be between them, it forces all
           the `xi` and `yi` to be equal.
