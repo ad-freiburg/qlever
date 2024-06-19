@@ -37,7 +37,12 @@ struct LocatedTriple {
 
   bool operator==(const LocatedTriple&) const = default;
 
-  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
+  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
+    os << "LT(" << lt.blockIndex_ << " " << lt.triple_[0] << " "
+       << lt.triple_[1] << " " << lt.triple_[2] << " " << lt.shouldTripleExist_
+       << ")";
+    return os;
+  }
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
@@ -121,7 +126,18 @@ class LocatedTriplesPerBlock {
   }
 
   friend std::ostream& operator<<(std::ostream& os,
-                                  const LocatedTriplesPerBlock& ltpb);
+                                  const LocatedTriplesPerBlock& ltpb) {
+    // Get the block indices in sorted order.
+    std::vector<size_t> blockIndices;
+    std::ranges::transform(ltpb.map_, std::back_inserter(blockIndices),
+                           [](const auto& entry) { return entry.first; });
+    std::ranges::sort(blockIndices);
+    for (auto blockIndex : blockIndices) {
+      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+         << std::endl;
+    }
+    return os;
+  }
 };
 
 // Human-readable representation , which are very useful for debugging.

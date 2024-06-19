@@ -203,31 +203,10 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-  os << "LT(" << lt.blockIndex_ << " " << lt.triple_[0] << " " << lt.triple_[1]
-     << " " << lt.triple_[2] << " " << lt.shouldTripleExist_ << ")";
-  return os;
-}
-
-// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
   std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
   os << "}";
-  return os;
-}
-
-// ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
-  // Get the block indices in sorted order.
-  std::vector<size_t> blockIndices;
-  std::ranges::transform(ltpb.map_, std::back_inserter(blockIndices),
-                         [](const auto& entry) { return entry.first; });
-  std::ranges::sort(blockIndices);
-  for (auto blockIndex : blockIndices) {
-    os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
-       << std::endl;
-  }
   return os;
 }
 
