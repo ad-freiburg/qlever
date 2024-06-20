@@ -245,6 +245,8 @@ TEST(TurtleParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("-142.321", fromIri(XSD_DECIMAL_TYPE)), -142.321);
   ASSERT_EQ(ladttc("-142321", fromIri(XSD_INT_TYPE)), -142321);
   ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
+  ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
+  ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
 }
 
 TEST(TurtleParserTest, blankNode) {

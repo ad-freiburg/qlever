@@ -16,7 +16,7 @@
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
-// `getTsvFunction` needed by the `Service` operation.
+// `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
   // Query execution context (with small test index) and allocator for testing,
@@ -42,9 +42,9 @@ class ServiceTest : public ::testing::Test {
   //
   // NOTE: In a previous version of this test, we set up an actual test server.
   // The code can be found in the history of this PR.
-  static auto constexpr getTsvFunctionFactory =
+  static auto constexpr getResultFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         nlohmann::json predefinedResult) -> Service::GetTsvFunction {
+         nlohmann::json predefinedResult) -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -160,35 +160,40 @@ TEST_F(ServiceTest, computeResult) {
   // CHECK 1: Returned JSON is empty -> an exception should be thrown.
   Service serviceOperation1{
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, {})};
+      getResultFunctionFactory(expectedUrl, expectedSparqlQuery, {})};
   ASSERT_ANY_THROW(serviceOperation1.getResult());
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
   Service serviceOperation2{
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           getJsonResult({"y", "x"},
                         {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}))};
   ASSERT_ANY_THROW(serviceOperation2.getResult());
 
-  // CHECK 3: In one of the rows with the values, there is a different number of
-  // columns than in the header row.
+  // CHECK 3: A result row of the returned JSON is missing a variable's value ->
+  // undefined value
+
   Service serviceOperation3{
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           getJsonResult({"x", "y"},
                         {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}))};
-  ASSERT_ANY_THROW(serviceOperation3.getResult());
+  auto result3 = serviceOperation3.getResult();
+  EXPECT_TRUE(result3);
+  EXPECT_TRUE(result3->idTable().at(1, 1).isUndefined());
+
+  testQec->clearCacheUnpinnedOnly();
 
   // CHECK 4: Returned JSON has correct format matching the query -> check that
   // the result table returned by the operation corresponds to the contents of
   // the JSON and its local vocabulary are correct.
   Service serviceOperation4{
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           expectedUrl, expectedSparqlQuery,
           getJsonResult(
               {"x", "y"},
@@ -250,7 +255,7 @@ TEST_F(ServiceTest, computeResult) {
 
   Service serviceOperation5{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           expectedUrl, expectedSparqlQuery5,
           getJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
                                            {"bla", "bli", "y"},
@@ -269,7 +274,7 @@ TEST_F(ServiceTest, computeResult) {
       "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
   Service serviceOperation6{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           expectedUrl, expectedSparqlQuery6,
           getJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
                                            {"bla", "bli", "y"},
@@ -291,7 +296,7 @@ TEST_F(ServiceTest, getCacheKey) {
 
   Service service(
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
           getJsonResult(
@@ -333,30 +338,26 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   Index::Vocab vocabulary;
   nlohmann::json binding;
 
-  binding = {{"type", "literal"}, {"value", "Hello World"}};
-  EXPECT_EQ(Service::bindingToTripleComponent(binding),
+  EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 
-  binding["xml:lang"] = "de";
-  binding["value"] = "Hallo Welt";
   EXPECT_EQ(
-      Service::bindingToTripleComponent(binding),
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
       TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
 
-  binding.erase("xml:lang");
-  binding["datatype"] = XSD_INT_TYPE;
-  binding["value"] = "42";
-  EXPECT_EQ(Service::bindingToTripleComponent(binding), 42);
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
+      42);
 
-  binding.erase("datatype");
-  binding["type"] = "uri";
-  binding["value"] = "http://doof.org";
-  EXPECT_EQ(Service::bindingToTripleComponent(binding),
+  EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIriWithoutBrackets("http://doof.org"));
 
-  binding["type"] = "blank";
-  EXPECT_ANY_THROW(Service::bindingToTripleComponent(binding));
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"type", "blank"}}));
 
-  binding["type"] = "INVALID_TYPE";
-  EXPECT_ANY_THROW(Service::bindingToTripleComponent(binding));
+  EXPECT_ANY_THROW(
+      Service::bindingToTripleComponent({{"type", "INVALID_TYPE"}}));
 }

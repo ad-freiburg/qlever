@@ -134,9 +134,16 @@ class TurtleParser : public TurtleParserBase {
   // Get the currently buffered triples. Used for testing.
   const std::vector<TurtleTriple>& getTriples() const { return triples_; }
 
+  // Convert literal and datatype to TripleComponent.
   static TripleComponent literalAndDatatypeToTripleComponent(
       std::string_view normalizedLiteralContent,
       const TripleComponent::Iri& typeIri);
+
+ private:
+  // Impl of the method above, also used in rdfLiteral parsing.
+  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
 
  protected:
   // Data members.
