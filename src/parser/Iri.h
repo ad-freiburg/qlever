@@ -39,6 +39,9 @@ class Iri {
   // Create a new iri given an iri with brackets
   static Iri fromIriref(std::string_view stringWithBrackets);
 
+  // create a new iri given an iri without brackets
+  static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);
+
   // Create a new iri given a prefix iri and its suffix
   static Iri fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix);
 
