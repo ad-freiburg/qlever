@@ -115,7 +115,7 @@ constexpr static bool isArray = false;
 template <typename T, size_t N>
 constexpr static bool isArray<std::array<T, N>> = true;
 
-// `SimilarToArray` is also true for `std::aray<...>&`, etc.
+// `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
 concept SimilarToArray = isArray<std::decay_t<T>>;
 

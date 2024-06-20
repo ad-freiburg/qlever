@@ -1,6 +1,6 @@
 // Copyright 2023, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Andre Schlegel (Januar of 2023, schlegea@informatik.uni-freiburg.de)
+// Author: Andre Schlegel (January of 2023, schlegea@informatik.uni-freiburg.de)
 
 #pragma once
 
@@ -84,7 +84,7 @@ IdTable makeIdTableFromVector(const VectorTable& content,
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample
- * solution and, if the option was choosen, if the IdTable is sorted by
+ * solution and, if the option was chosen, if the IdTable is sorted by
  * the join column.
  *
  * @param table The IdTable that should be tested.
@@ -104,7 +104,7 @@ void compareIdTableWithExpectedContent(
 
 /*
  * @brief Sorts an IdTable in place, in the same way, that we sort them during
- * normal programm usage.
+ * normal program usage.
  */
 void sortIdTableByJoinColumnInPlace(IdTableAndJoinColumn& table);
 
@@ -205,7 +205,7 @@ IdTable createRandomlyFilledIdTable(
         ad_utility::FastRandomIntGenerator<unsigned int>{}()));
 
 /*
-@brief Return a IdTable, that is completly randomly filled.
+@brief Return a IdTable, that is completely randomly filled.
 
 @param numberRows, numberColumns The size of the IdTable, that is to be
 returned.

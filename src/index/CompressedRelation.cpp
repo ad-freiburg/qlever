@@ -314,110 +314,19 @@ IdTable CompressedRelationReader::scan(
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
-  // Get all the blocks  that possibly might contain our pair of col0Id and
-  // col1Id
+  // Compute an upper bound for the size and reserve enough space in the result.
   auto relevantBlocks = getRelevantBlocks(scanSpec, blocks);
-  auto beginBlock = relevantBlocks.begin();
-  auto endBlock = relevantBlocks.end();
+  auto sizes = relevantBlocks |
+               std::views::transform(&CompressedBlockMetadata::numRows_);
+  auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), 0ULL);
+  result.reserve(upperBoundSize);
 
-  // The first and the last block might be incomplete (that is, only
-  // a part of these blocks is actually part of the result,
-  // set up a lambda which allows us to read these blocks, and returns
-  // the result as a vector.
-  auto readIncompleteBlock = [&](const auto& block) {
-    return readPossiblyIncompleteBlock(scanSpec, block, std::nullopt,
-                                       columnIndices);
-  };
-
-  // The first and the last block might be incomplete, compute
-  // and store the partial results from them.
-  std::optional<DecompressedBlock> firstBlockResult;
-  std::optional<DecompressedBlock> lastBlockResult;
-  size_t totalResultSize = 0;
-  if (beginBlock < endBlock) {
-    firstBlockResult = readIncompleteBlock(*beginBlock);
-    totalResultSize += firstBlockResult.value().size();
-    ++beginBlock;
-    cancellationHandle->throwIfCancelled();
+  for (const auto& block :
+       lazyScan(scanSpec, {relevantBlocks.begin(), relevantBlocks.end()},
+                {additionalColumns.begin(), additionalColumns.end()},
+                cancellationHandle)) {
+    result.insertAtEnd(block);
   }
-  if (beginBlock < endBlock) {
-    lastBlockResult = readIncompleteBlock(*(endBlock - 1));
-    totalResultSize += lastBlockResult.value().size();
-    endBlock--;
-    cancellationHandle->throwIfCancelled();
-  }
-
-  // Determine the total size of the result.
-  // First accumulate the complete blocks in the "middle"
-  totalResultSize += std::accumulate(beginBlock, endBlock, 0UL,
-                                     [](const auto& count, const auto& block) {
-                                       return count + block.numRows_;
-                                     });
-  result.resize(totalResultSize);
-  cancellationHandle->throwIfCancelled();
-
-  size_t rowIndexOfNextBlockStart = 0;
-  // Lambda that appends a possibly incomplete block (the first or last block)
-  // to the `result`.
-  auto addIncompleteBlockIfExists =
-      [&rowIndexOfNextBlockStart, &result](
-          const std::optional<DecompressedBlock>& incompleteBlock) mutable {
-        if (!incompleteBlock.has_value()) {
-          return;
-        }
-        AD_CORRECTNESS_CHECK(incompleteBlock->numColumns() ==
-                             result.numColumns());
-        for (auto i : ad_utility::integerRange(result.numColumns())) {
-          std::ranges::copy(
-              incompleteBlock->getColumn(i),
-              result.getColumn(i).data() + rowIndexOfNextBlockStart);
-        }
-        rowIndexOfNextBlockStart += incompleteBlock->numRows();
-      };
-
-  addIncompleteBlockIfExists(firstBlockResult);
-  cancellationHandle->throwIfCancelled();
-
-  // Insert the complete blocks from the middle in parallel
-  if (beginBlock < endBlock) {
-#pragma omp parallel
-#pragma omp single
-    for (; beginBlock < endBlock; ++beginBlock) {
-      const auto& block = *beginBlock;
-
-      // Read the block serially, only read the second column.
-      AD_CORRECTNESS_CHECK(block.offsetsAndCompressedSize_.size() >= 2);
-      CompressedBlock compressedBuffer =
-          readCompressedBlockFromFile(block, columnIndices);
-
-      // A lambda that owns the compressed block decompresses it to the
-      // correct position in the result. It may safely be run in parallel
-      auto decompressLambda = [rowIndexOfNextBlockStart, &block, &result,
-                               compressedBuffer =
-                                   std::move(compressedBuffer)]() mutable {
-        ad_utility::TimeBlockAndLog tbl{"Decompression a block"};
-
-        decompressBlockToExistingIdTable(compressedBuffer, block.numRows_,
-                                         result, rowIndexOfNextBlockStart);
-      };
-
-      // Register an OpenMP task that performs the decompression of this
-      // block in parallel
-#pragma omp task
-      {
-        if (!cancellationHandle->isCancelled()) {
-          decompressLambda();
-        }
-      }
-
-      // update the pointers
-      rowIndexOfNextBlockStart += block.numRows_;
-    }  // end of parallel region
-  }
-  cancellationHandle->throwIfCancelled();
-  // Add the last block.
-  addIncompleteBlockIfExists(lastBlockResult);
-  AD_CORRECTNESS_CHECK(rowIndexOfNextBlockStart == result.size());
   cancellationHandle->throwIfCancelled();
   return result;
 }
@@ -672,20 +581,6 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
     decompressColumn(compressedBlock[i], numRowsToRead, col.data());
   }
   return decompressedBlock;
-}
-
-// ____________________________________________________________________________
-void CompressedRelationReader::decompressBlockToExistingIdTable(
-    const CompressedBlock& compressedBlock, size_t numRowsToRead,
-    IdTable& table, size_t offsetInTable) {
-  AD_CORRECTNESS_CHECK(table.numRows() >= offsetInTable + numRowsToRead);
-  // TODO<joka921, C++23> use zip_view.
-  AD_CORRECTNESS_CHECK(compressedBlock.size() == table.numColumns());
-  for (size_t i = 0; i < compressedBlock.size(); ++i) {
-    auto col = table.getColumn(i);
-    decompressColumn(compressedBlock[i], numRowsToRead,
-                     col.data() + offsetInTable);
-  }
 }
 
 // ____________________________________________________________________________

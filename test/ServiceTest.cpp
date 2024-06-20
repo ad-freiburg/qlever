@@ -354,7 +354,7 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
 
   EXPECT_EQ(Service::bindingToTripleComponent(
                 {{"type", "uri"}, {"value", "http://doof.org"}}),
-            TripleComponent::Iri::fromIriWithoutBrackets("http://doof.org"));
+            TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
 
   EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"type", "blank"}}));
 

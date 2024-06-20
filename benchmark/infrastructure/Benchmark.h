@@ -98,7 +98,7 @@ class BenchmarkResults {
   }
 
   /*
-   * @brief Returns a vector of all the singe measurements.
+   * @brief Returns a vector of all the single measurements.
    */
   std::vector<ResultEntry> getSingleMeasurements() const;
 
@@ -185,7 +185,7 @@ class BenchmarkInterface {
   const ad_utility::ConfigManager& getConfigManager() const;
 
   /*
-  @brief Only used for manipulaton via the infrastructure. Is called directly
+  @brief Only used for manipulation via the infrastructure. Is called directly
   before `runAllBenchmarks`.
 
   Add/update the default metadata of the benchmark class. Currently
@@ -205,7 +205,7 @@ class BenchmarkRegister {
   using BenchmarkPointer = std::unique_ptr<BenchmarkInterface>;
 
   /*
-  Static vector of all registered benchmark classe instances.
+  Static vector of all registered benchmark class instances.
    */
   inline static std::vector<BenchmarkPointer> registeredBenchmarks{};
 
@@ -216,7 +216,7 @@ class BenchmarkRegister {
    *  implemented the `BenchmarkInterface`. Shouldn't take up much space
    *  and I couldn't find a better way of doing it.
    *
-   * @param benchmarkClasseInstance The memory managment of the passed
+   * @param benchmarkClasseInstance The memory management of the passed
    *  instances will be taken over by `BenchmarkRegister`.
    */
   explicit BenchmarkRegister(BenchmarkPointer&& benchmarkClasseInstance);
@@ -230,9 +230,9 @@ class BenchmarkRegister {
   /*
   @brief For each registered benchmark:
   - Update the default class metadata.
-  - Run the measurments.
+  - Run the measurements.
 
-  @return Every benchmark class get's measured with their own
+  @return Every benchmark class gets measured with their own
   `BenchmarkResults`. They should be in the same order as the registrations.
   */
   static std::vector<BenchmarkResults> runAllRegisteredBenchmarks();
@@ -247,7 +247,7 @@ class BenchmarkRegister {
 Macros for easier registering of benchmark classes.
 `declareRegisterVariable` and `declareRegisterVariableHidden` are needed for
 the implementation. Only `registerBenchmark` needs to be 'called', when one
-want's to register a benchmark class.
+wants to register a benchmark class.
 */
 #define AD_DECLARE_REGISTER_VARIABLE_HIDDEN(line, benchmarkClass, ...) \
   static BenchmarkRegister gRegisterVariable##benchmarkClass##line{    \

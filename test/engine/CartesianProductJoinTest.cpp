@@ -115,7 +115,7 @@ TEST(CartesianProductJoin, computeResult) {
                         {1, 3, 5}},
                        {{{0}, {1}}, {{2}, {3}}, {{4}, {5}}});
 
-  // Heterogenous sizes.
+  // Heterogeneous sizes.
   testCartesianProduct(
       {{0, 2, 4}, {1, 2, 4}, {0, 2, 5}, {1, 2, 5}, {0, 2, 6}, {1, 2, 6}},
       {{{0}, {1}}, {{2}}, {{4}, {5}, {6}}});

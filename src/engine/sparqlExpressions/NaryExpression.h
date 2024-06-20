@@ -56,6 +56,11 @@ SparqlExpression::Ptr makeTimezoneStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeMonthExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeYearExpression(SparqlExpression::Ptr child);
 
+SparqlExpression::Ptr makeStrIriDtExpression(SparqlExpression::Ptr child1,
+                                             SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeStrLangTagExpression(SparqlExpression::Ptr child1,
+                                               SparqlExpression::Ptr child2);
+
 SparqlExpression::Ptr makeStrExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeStrlenExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSubstrExpression(SparqlExpression::Ptr string,
@@ -93,6 +98,9 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
+
+// Implemented in RdfTermExpressions.cpp
+SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 

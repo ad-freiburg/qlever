@@ -8,7 +8,7 @@ SHELL = /bin/bash
 # This Makefile provides the following targets:
 #
 # pin: Pin queries to cache, so that all autocompletion queries are fast, even
-#      when "Clear cache" is clicked in the QLever UI (ther results for pinned 
+#      when "Clear cache" is clicked in the QLever UI (the results for pinned 
 #      queries will never be removed, unless ... see target clear).
 #
 # clear: Clear the cache completely (including pinned results). Note that this
@@ -17,7 +17,7 @@ SHELL = /bin/bash
 # clear-unpinned: Clear all unpinned results from the cache. This is exactly
 #                 what happens when clicking "Clear cache" in the QLever UI.
 #
-# show-all-ac-queries: Show the AC queries for subject, predicat, object for
+# show-all-ac-queries: Show the AC queries for subject, predicate, object for
 #                      copy&paste in the QLever UI backend settings.
 
 # This Makefile should be used as follows:
@@ -57,7 +57,7 @@ CACHE_MAX_NUM_ENTRIES = 1000
 # The URL of the QLever backend.
 QLEVER_API = https://qlever.cs.uni-freiburg.de/api/$(SLUG)
 
-# The URL of the QLever UI istance ... TODO: it's confusing that this also has
+# The URL of the QLever UI instance ... TODO: it's confusing that this also has
 # /api/ in the name, it actually has nothing to do with the URLs from the QLever
 # backends (which are defined in the Apache configuration of QLever).
 WARMUP_API = $(subst /api/,/api/warmup/,$(QLEVER_API))
@@ -112,7 +112,7 @@ show-config-default:
 CAT_TTL = cat $(DB).ttl
 
 index:
-	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove_index, which would exeucte the following:\033[0m"; echo; make -sn remove_index; echo; else \
+	@if ls $(DB).index.* 1> /dev/null 2>&1; then echo -e "\033[31mIndex exists, delete it first with make remove_index, which would execute the following:\033[0m"; echo; make -sn remove_index; echo; else \
 	time ( docker run -it --rm -v $(shell pwd):/index --entrypoint bash --name qlever.$(DB)-index $(DOCKER_IMAGE) -c "cd /index && $(CAT_TTL) | IndexBuilderMain -F ttl -f - -l -i $(DB) -K $(DB) $(TEXT_OPTIONS_INDEX) -s $(DB_BASE).settings.json | tee $(DB).index-log.txt"; rm -f $(DB)*tmp* ) \
 	fi
 

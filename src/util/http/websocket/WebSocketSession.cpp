@@ -122,7 +122,7 @@ net::awaitable<void> WebSocketSession::handleSession(
                                     queryRegistry, std::move(queryId)};
   // There is currently no safe way of which we know that allows us to respawn
   // the coroutine onto another thread AND make it safely cancellable at the
-  // same time. Therfore we just assert that the cancellation slot is not
+  // same time. Therefore we just assert that the cancellation slot is not
   // connected.
   auto slot = (co_await net::this_coro::cancellation_state).slot();
   AD_CORRECTNESS_CHECK(!slot.is_connected());

@@ -13,15 +13,20 @@
 #include <string>
 #include <vector>
 
+#include "absl/time/time.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
@@ -52,6 +57,12 @@ std::string Visitor::getOriginalInputForContext(
   // exists when the result of this call is used. Not performance-critical.
   return std::string{
       ad_utility::getUTF8Substring(fullInput, posBeg, posEnd - posBeg + 1)};
+}
+
+// _____________________________________________________________________________
+std::string Visitor::currentTimeAsXsdString() {
+  return absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
+                          absl::LocalTimeZone());
 }
 
 // ___________________________________________________________________________
@@ -1109,7 +1120,7 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTICT before the argument list (the
+  // The grammar allows an optional DISTINCT before the argument list (the
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
@@ -1972,6 +1983,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "strlang") {
+    return createBinary(&makeStrLangTagExpression);
+  } else if (functionName == "strdt") {
+    return createBinary(&makeStrIriDtExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
   } else if (functionName == "strbefore") {
@@ -1996,6 +2011,9 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDayExpression);
   } else if (functionName == "tz") {
     return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "now") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<NowDatetimeExpression>(startTime_);
   } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
   } else if (functionName == "minutes") {
@@ -2015,6 +2033,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "uuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<UuidExpression>();
+  } else if (functionName == "struuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<StrUuidExpression>();
   } else if (functionName == "ceil") {
     return createUnary(&makeCeilExpression);
   } else if (functionName == "abs") {
@@ -2041,6 +2065,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsLiteralExpression);
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
+  } else if (functionName == "datatype") {
+    return createUnary(&makeDatatypeExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));

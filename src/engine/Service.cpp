@@ -285,7 +285,7 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
   if (type == "literal") {
     if (cell.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
-          value, TripleComponent::Iri::fromIriWithoutBrackets(
+          value, TripleComponent::Iri::fromIrirefWithoutBrackets(
                      cell["datatype"].get<std::string_view>()));
     } else if (cell.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithoutQuotes(
@@ -294,7 +294,7 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
       tc = TripleComponent::Literal::literalWithoutQuotes(value);
     }
   } else if (type == "uri") {
-    tc = TripleComponent::Iri::fromIriWithoutBrackets(value);
+    tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "blank") {
     throw std::runtime_error(
         "Blank nodes in the result of a SERVICE are currently not supported.");

@@ -62,7 +62,7 @@ class ConfigOptions : public BenchmarkInterface {
                          "allowed for the configuration option \"num-signs\".",
                          numSigns);
 
-    manager.addOption("coin-flip-try", "The number of succesful coin flips.",
+    manager.addOption("coin-flip-try", "The number of successful coin flips.",
                       &wonOnTryX_, {false, false, false, false, false});
 
     // Sub manager can be used to organize things better. They are basically
@@ -94,7 +94,7 @@ class BMSingleMeasurements : public ConfigOptions {
       exponentiate(number);
     });
     auto& multipleTimes = results.addMeasurement(
-        "Recursivly exponentiate multiple times", [&number, &exponentiate]() {
+        "Recursively exponentiate multiple times", [&number, &exponentiate]() {
           size_t toExponentiate = number;
           for (size_t i = 0; i < 10'000'000'000; i++) {
             toExponentiate = exponentiate(toExponentiate);

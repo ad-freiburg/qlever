@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <array>
 #include <concepts>
+#include <ctre.hpp>
 #include <random>
 #include <ranges>
 #include <type_traits>
+#include <unordered_set>
 
 #include "../test/util/RandomTestHelpers.h"
 #include "util/Exception.h"
@@ -160,7 +162,7 @@ TEST(RandomNumberGeneratorTest, SlowRandomIntGenerator) {
                                           seed};
   });
 
-  // For use withing the range tests.
+  // For use within the range tests.
   const std::vector<NumericalRange<size_t>> ranges{
       {4ul, 7ul}, {200ul, 70171ul}, {71747ul, 1936556173ul}};
 
@@ -179,7 +181,7 @@ TEST(RandomNumberGeneratorTest, RandomDoubleGenerator) {
                                  std::numeric_limits<double>::max(), seed};
   });
 
-  // For use withing the range tests.
+  // For use within the range tests.
   const std::vector<NumericalRange<double>> ranges{
       {4.74717, 7.4}, {-200.0771370, -70.77713}, {-71747.6666, 1936556173.}};
 
@@ -233,6 +235,30 @@ TEST(RandomShuffleTest, Seed) {
               ASSERT_EQ(inputArrays.front(), inputArray);
             });
       });
+}
+
+TEST(UuidGeneratorTest, StrUuidGeneratorTest) {
+  // Test few times that the returned UUID str is not
+  // "00000000-0000-0000-0000-000000000000" (nil-UUID)
+  // and that none of the str-UUIDS is rquivalent to the already
+  // created ones.
+  // Pattern for checking that UUID is properly formatted
+  static constexpr auto uuidPattern = ctll::fixed_string{
+      "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{"
+      "3}-[0-9a-fA-F]{12}$"};
+  boost::uuids::string_generator getUuid;
+  UuidGenerator gen = UuidGenerator();
+  std::unordered_set<std::string> setUuids;
+  size_t i = 0;
+  while (i < 100) {
+    std::string strUuid = gen();
+    boost::uuids::uuid uuid = getUuid(strUuid.data());
+    ASSERT_EQ(uuid.is_nil(), false);
+    ASSERT_EQ(setUuids.find(strUuid), setUuids.end());
+    ASSERT_TRUE(ctre::match<uuidPattern>(strUuid));
+    setUuids.insert(strUuid);
+    i++;
+  }
 }
 
 }  // namespace ad_utility
