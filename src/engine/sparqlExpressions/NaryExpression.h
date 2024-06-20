@@ -99,6 +99,9 @@ SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
 
+// Implemented in RdfTermExpressions.cpp
+SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
+
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
 SparqlExpression::Ptr makeIsIriExpression(SparqlExpression::Ptr child);

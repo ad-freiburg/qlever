@@ -883,6 +883,93 @@ TEST(SparqlExpression, isSomethingFunctions) {
 }
 
 // ____________________________________________________________________________
+TEST(SparqlExpression, DatatypeExpression) {
+  U = Id::makeUndefined();
+  auto d1 = DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z");
+  auto d2 = DateOrLargeYear::parseGYear("-10000");
+  auto d3 = DateOrLargeYear::parseGYear("1900");
+  auto d4 = DateOrLargeYear::parseXsdDate("2024-06-13");
+  auto d5 = DateOrLargeYear::parseGYearMonth("2024-06");
+  Id DateId1 = Id::makeFromDate(d1);
+  Id DateId2 = Id::makeFromDate(d2);
+  Id DateId3 = Id::makeFromDate(d3);
+  Id DateId4 = Id::makeFromDate(d4);
+  Id DateId5 = Id::makeFromDate(d5);
+  auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().alpha},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().zz},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().notInVocabB},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().notInVocabD},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{lit(
+                       "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("Simple StrStr")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("english", "@en")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId1},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#dateTime>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId2},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId3},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId4},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#date>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#double>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromBool(false)},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(true)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit(" ", "@de-LATN-de")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("testval", "^^<http://example/iri/test#test>")},
+      IdOrLiteralOrIriVec{iriref("<http://example/iri/test#test>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{iriref("<http://example/iri/test>")},
+                   IdOrLiteralOrIriVec{U});
+
+  // test corner case DatatypeValueGetter
+  TestContext ctx;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sparqlExpression::detail::DatatypeValueGetter{}(Id::max(), &ctx.context),
+      ::testing::ContainsRegex("should be unreachable"));
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testStrToHashExpressions) {
   auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
   auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
