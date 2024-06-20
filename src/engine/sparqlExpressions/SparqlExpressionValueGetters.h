@@ -225,7 +225,7 @@ struct LiteralFromIdGetter : Mixin<LiteralFromIdGetter> {
 struct RegexValueGetter {
   template <SingleExpressionResult S>
   requires std::invocable<StringValueGetter, S&&, const EvaluationContext*>
-  std::unique_ptr<re2::RE2> operator()(S&& input,
+  std::shared_ptr<re2::RE2> operator()(S&& input,
                                        const EvaluationContext* context) const {
     auto str = StringValueGetter{}(AD_FWD(input), context);
     if (!str.has_value()) {
