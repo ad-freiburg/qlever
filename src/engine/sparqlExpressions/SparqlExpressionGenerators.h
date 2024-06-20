@@ -118,7 +118,7 @@ inline auto applyFunction = []<typename Function, typename... Generators>(
   std::tuple iterators{generators.begin()...};
 
   auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(std::move(*iterators)...);
+    return function(AD_MOVE(*iterators)...);
   };
 
   for (size_t i = 0; i < numItems; ++i) {
