@@ -9,4 +9,5 @@
 /// A simple macro that allows writing `AD_FWD(x)` instead of
 /// `std::forward<decltype(x)>(x)`.
 #define AD_FWD(x) std::forward<decltype(x)>(x)
+
 #endif  // QLEVER_FORWARD_H
