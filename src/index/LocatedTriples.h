@@ -15,6 +15,13 @@ class Permutation;
 
 IdTriple permute(const IdTriple& triple, const std::array<size_t, 3>& keyOrder);
 
+struct NumAddedAndDeleted {
+  size_t numAdded;
+  size_t numDeleted;
+
+  bool operator<=>(const NumAddedAndDeleted&) const = default;
+};
+
 // A triple and its block in a particular permutation.
 // For a detailed definition of all border cases, see the definition at
 // the end of this file.
@@ -37,12 +44,7 @@ struct LocatedTriple {
 
   bool operator==(const LocatedTriple&) const = default;
 
-  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-    os << "LT(" << lt.blockIndex_ << " " << lt.triple_[0] << " "
-       << lt.triple_[1] << " " << lt.triple_[2] << " " << lt.shouldTripleExist_
-       << ")";
-    return os;
-  }
+  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
@@ -82,7 +84,7 @@ class LocatedTriplesPerBlock {
   // The numbers are only upper limits because there may be triples that have no
   // effect (like adding an already existing triple and deleting a non-existent
   // triple).
-  std::pair<size_t, size_t> numTriples(size_t blockIndex) const;
+  NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
   // Merge located triples for `blockIndex_` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Return the
@@ -96,8 +98,8 @@ class LocatedTriplesPerBlock {
   //
   // 2. It is the responsibility of the caller that there is enough space for
   // the result of the merge in `result` starting from `offsetInResult`.
-  size_t mergeTriples(size_t blockIndex, IdTable block, IdTable& result,
-                      size_t offsetInResult, size_t numIndexColumns) const;
+  IdTable mergeTriples(size_t blockIndex, const IdTable& block,
+                       size_t numIndexColumns) const;
 
   // Add `locatedTriples` to the `LocatedTriplesPerBlock`.
   // Return handles to where they were added (`LocatedTriples` is a sorted set,
@@ -126,25 +128,11 @@ class LocatedTriplesPerBlock {
   }
 
   friend std::ostream& operator<<(std::ostream& os,
-                                  const LocatedTriplesPerBlock& ltpb) {
-    // Get the block indices in sorted order.
-    std::vector<size_t> blockIndices;
-    std::ranges::transform(ltpb.map_, std::back_inserter(blockIndices),
-                           [](const auto& entry) { return entry.first; });
-    std::ranges::sort(blockIndices);
-    for (auto blockIndex : blockIndices) {
-      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
-         << std::endl;
-    }
-    return os;
-  }
+                                  const LocatedTriplesPerBlock& ltpb);
 };
 
 // Human-readable representation , which are very useful for debugging.
 // TODO<qup42>: find a better place for these definitions
-std::ostream& operator<<(std::ostream& os,
-                         const columnBasedIdTable::Row<Id>& idTableRow);
-std::ostream& operator<<(std::ostream& os, const IdTable& idTable);
 template <typename T, std::size_t N>
 std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v);
 template <typename T>
@@ -152,23 +140,17 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v);
 
 // DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
 //
-// 1. The position is defined by the index of a block in the permutation and the
-// index of a row within that block.
-//
-// 2. If the triple is contained in the permutation, it is contained exactly
-// once and so there is a well defined block and position in that block.
+// 1. The position is defined by the index of a block.
 //
 // 2. If there is a block, where the first triple is smaller and the last triple
-// is larger, then that is the block and the position in that block is that of
-// the first triple that is (not smaller and hence) larger.
+// is larger or equal, then that is the block.
 //
 // 3. If the triple falls "between two blocks" (the last triple of the previous
 // block is smaller and the first triple of the next block is larger), then the
-// position is the first position in that next block.
+// block is the next block.
 //
 // 4. As a special case of 3, if the triple is smaller than all triples in the
 // permutation, the position is the first position of the first block.
 //
-// 5. If the triple is larger than all triples in the permutation, the block
-// index is one after the largest block index and the position within that
-// non-existing block is arbitrary.
+// 5. As a special case of 3, if the triple is larger than all triples in the
+// permutation, the block index is one after the largest block index.

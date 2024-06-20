@@ -14,11 +14,17 @@
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 
-// TODO: Why the namespace here? (copied from `test/IndexMetaDataTest.cpp`)
 namespace {
 auto V = ad_utility::testing::VocabId;
-}
 
+auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
+  return IdTriple{V(c1), V(c2), V(c3)};
+};
+
+}  // namespace
+
+// TODO<qup42>: move to LocatedTriplesTestHelpers.h if more matchers collect,
+// otherwise move it to the anonymous namespace above
 namespace Matchers {
 inline auto numBlocks =
     [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
@@ -32,8 +38,8 @@ inline auto numTriplesTotal =
                      testing::Eq(numTriples));
 };
 
-inline auto numTriplesBlockwise =
-    [](size_t blockIndex, std::pair<size_t, size_t> insertsAndDeletes)
+inline auto numTriplesBlockwise = [](size_t blockIndex,
+                                     NumAddedAndDeleted insertsAndDeletes)
     -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return testing::ResultOf(
       absl::StrCat(".numTriplesTotal(", std::to_string(blockIndex), ")"),
@@ -46,7 +52,7 @@ inline auto numTriplesBlockwise =
 // A Matcher to check `numBlocks`, `numTriplesTotal` and
 // `numTriplesTotal(blockIndex_)` for all blocks.
 auto allNums = [](size_t blocks, size_t triples,
-                  const ad_utility::HashMap<size_t, std::pair<size_t, size_t>>&
+                  const ad_utility::HashMap<size_t, NumAddedAndDeleted>&
                       numTriplesPerBlock)
     -> testing::Matcher<const LocatedTriplesPerBlock&> {
   auto blockMatchers = ad_utility::transform(
@@ -72,10 +78,6 @@ class LocatedTriplesTest : public ::testing::Test {
     result.add(locatedTriples);
     return result;
   }
-};
-
-auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
-  return IdTriple{V(c1), V(c2), V(c3)};
 };
 
 // Test the method that counts the number of `LocatedTriple's in a block.
@@ -137,15 +139,6 @@ TEST_F(LocatedTriplesTest, erase) {
 TEST_F(LocatedTriplesTest, mergeTriples) {
   using LT = LocatedTriple;
 
-  auto merge = [](size_t resultCols, size_t numIndexColumns, size_t resultRows,
-                  IdTable block, const LocatedTriplesPerBlock& locatedTriples) {
-    IdTable result(resultCols, ad_utility::testing::makeAllocator());
-    result.resize(resultRows);
-    locatedTriples.mergeTriples(1, std::move(block), result, 0,
-                                numIndexColumns);
-    return result;
-  };
-
   // Merge the `LocatesTriples` into a block with 3 index columns.
   {
     IdTable block = makeIdTableFromVector({
@@ -178,10 +171,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {4, 10, 10}   // LT 7
     });
 
-    auto merged =
-        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 2 index columns. This may
@@ -215,10 +206,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 10}   // LT 5
     });
 
-    auto merged =
-        merge(resultExpected.numColumns(), 2, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 2);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merge the `LocatesTriples` into a block with 1 index columns.
@@ -244,10 +233,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30}   // orig. Row 5
     });
 
-    auto merged =
-        merge(resultExpected.numColumns(), 1, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 1);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Inserting a Triple that already exists should have no effect.
@@ -257,10 +244,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
 
-    auto merged =
-        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
   // Inserting a Triple that already exists should have no effect.
   {
@@ -270,10 +255,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
          LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
-    auto merged =
-        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merging if the block has additional columns.
@@ -295,10 +278,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                {1, 7, 9, ad_utility::testing::IntId(13),
                                 ad_utility::testing::IntId(14)}});
 
-    auto merged =
-        merge(resultExpected.numColumns(), 3, resultExpected.numRows(),
-              std::move(block), locatedTriplesPerBlock);
-    EXPECT_EQ(merged, resultExpected);
+    auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
+    EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
 
   // Merging for a block that has no located triples returns an error.
@@ -322,11 +303,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
 
-    IdTable result(3, ad_utility::testing::makeAllocator());
-    result.resize(locatedTriplesPerBlock.numTriples());
-    EXPECT_THROW(
-        locatedTriplesPerBlock.mergeTriples(2, std::move(block), result, 0, 3),
-        ad_utility::Exception);
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3),
+                 ad_utility::Exception);
   }
 
   {
@@ -349,11 +327,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    IdTable result(3, ad_utility::testing::makeAllocator());
-    result.resize(locatedTriplesPerBlock.numTriples());
-    EXPECT_THROW(
-        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 4),
-        ad_utility::Exception);
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4),
+                 ad_utility::Exception);
   }
 
   {
@@ -376,11 +351,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(3, 30, 30), false},  // Delete row 5
         LT{1, IT(4, 10, 10), true},   // Insert after row 5
     });
-    IdTable result(1, ad_utility::testing::makeAllocator());
-    result.resize(locatedTriplesPerBlock.numTriples());
-    EXPECT_THROW(
-        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 3),
-        ad_utility::Exception);
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3),
+                 ad_utility::Exception);
   }
 
   {
@@ -396,11 +368,8 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         LT{1, IT(1, 5, 10), true},   // Insert before row 0
         LT{1, IT(2, 11, 10), true},  // Insert before row 1
     });
-    IdTable result(0, ad_utility::testing::makeAllocator());
-    result.resize(locatedTriplesPerBlock.numTriples());
-    EXPECT_THROW(
-        locatedTriplesPerBlock.mergeTriples(1, std::move(block), result, 0, 0),
-        ad_utility::Exception);
+    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0),
+                 ad_utility::Exception);
   }
 }
 
