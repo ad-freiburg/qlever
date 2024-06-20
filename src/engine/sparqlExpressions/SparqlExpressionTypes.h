@@ -28,11 +28,17 @@ template <typename T>
 class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
  public:
+  using Allocator = ad_utility::AllocatorWithLimit<T>;
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
+  // using Base::Base;
 
   template <typename... Args>
   requires(sizeof...(Args) > 0 && std::constructible_from<Base, Args && ...>)
   VectorWithMemoryLimit(Args&&... args) : Base{AD_FWD(args)...} {}
+
+  VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
+      : Base(init, alloc){};
+
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
