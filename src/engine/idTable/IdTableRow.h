@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "global/Id.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -94,6 +95,16 @@ class Row {
     return result;
   }
 };
+
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os,
+                         const columnBasedIdTable::Row<Id>& idTableRow) {
+  os << "(";
+  for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
+    os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
+  }
+  return os;
+}
 
 // The following two classes store a reference to a row in the underlying
 // column-based `Table`. This has to be its own class instead of `Row&` because

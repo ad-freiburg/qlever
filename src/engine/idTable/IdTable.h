@@ -766,6 +766,15 @@ class IdTable : public IdTableStatic<0> {
   IdTable(Base&& b) : Base(std::move(b)) {}
 };
 
+// ____________________________________________________________________________
+std::ostream& operator<<(std::ostream& os, const IdTable& idTable) {
+  os << "{ ";
+  std::ranges::copy(
+      idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
+  os << "}";
+  return os;
+}
+
 /// A constant view into an IdTable that does not own its data
 template <int COLS>
 using IdTableView =
