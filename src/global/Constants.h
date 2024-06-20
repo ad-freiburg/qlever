@@ -77,6 +77,7 @@ static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
+static const char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
 static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
@@ -112,6 +113,8 @@ static const char XSD_POSITIVE_INTEGER_TYPE[] =
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+static const char RDF_LANGTAG_STRING[] =
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
 static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
 static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";

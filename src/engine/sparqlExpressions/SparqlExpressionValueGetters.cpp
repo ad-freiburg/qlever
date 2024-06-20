@@ -115,7 +115,7 @@ template struct sparqlExpression::detail::IsSomethingValueGetter<
 template struct sparqlExpression::detail::IsSomethingValueGetter<
     &Index::Vocab::isLiteral, isLiteralPrefix>;
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<string> LiteralFromIdGetter::operator()(
     ValueId id, const sparqlExpression::EvaluationContext* context) const {
   auto optionalStringAndType =
@@ -128,7 +128,7 @@ std::optional<string> LiteralFromIdGetter::operator()(
   }
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 bool IsValidValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   // Every knowledge base value that is bound converts to "True"
@@ -137,7 +137,7 @@ bool IsValidValueGetter::operator()(
   return id != ValueId::makeUndefined();
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
@@ -165,14 +165,65 @@ IntDoubleStr ToNumericValueGetter::operator()(
   AD_FAIL();
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
 IntDoubleStr ToNumericValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {
   return std::string(asStringViewUnsafe(s.getContent()));
 }
 
-// ____________________________________________________________________________
+// _____________________________________________________________________________
+OptIri DatatypeValueGetter::operator()(ValueId id,
+                                       const EvaluationContext* context) const {
+  using enum Datatype;
+  auto datatype = id.getDatatype();
+  std::optional<std::string> entity;
+  switch (datatype) {
+    case Bool:
+      return Iri::fromIrirefWithoutBrackets(XSD_BOOLEAN_TYPE);
+    case Double:
+      return Iri::fromIrirefWithoutBrackets(XSD_DOUBLE_TYPE);
+    case Int:
+      return Iri::fromIrirefWithoutBrackets(XSD_INT_TYPE);
+    case Date: {
+      auto dateType = id.getDate().toStringAndType().second;
+      AD_CORRECTNESS_CHECK(dateType != nullptr);
+      return Iri::fromIrirefWithoutBrackets(dateType);
+    }
+    case LocalVocabIndex:
+    case VocabIndex:
+      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+                         context->_qec.getIndex(), id, context->_localVocab),
+                     context);
+    case Undefined:
+    case BlankNodeIndex:
+    case TextRecordIndex:
+    case WordVocabIndex:
+      return std::nullopt;
+  }
+  AD_FAIL();
+}
+
+// _____________________________________________________________________________
+OptIri DatatypeValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  if (litOrIri.isLiteral()) {
+    const auto& literal = litOrIri.getLiteral();
+    if (literal.hasLanguageTag()) {
+      return Iri::fromIrirefWithoutBrackets(RDF_LANGTAG_STRING);
+    } else if (literal.hasDatatype()) {
+      return Iri::fromIrirefWithoutBrackets(
+          asStringViewUnsafe(literal.getDatatype()));
+    } else {
+      return Iri::fromIrirefWithoutBrackets(XSD_STRING);
+    }
+  } else {
+    return std::nullopt;
+  }
+}
+
+// _____________________________________________________________________________
 OptIri IriValueGetter::operator()(
     const LiteralOrIri& s,
     [[maybe_unused]] const EvaluationContext* context) const {

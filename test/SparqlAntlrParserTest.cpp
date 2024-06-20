@@ -1398,6 +1398,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
   expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
+  expectBuiltInCall("DATATYPE(?x)", matchUnary(&makeDatatypeExpression));
   expectBuiltInCall("BOUND(?x)", matchUnary(&makeBoundExpression));
   expectBuiltInCall("RAND()", matchPtr<RandomExpression>());
   expectBuiltInCall("STRUUID()", matchPtr<StrUuidExpression>());
