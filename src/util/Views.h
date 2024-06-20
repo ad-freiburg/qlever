@@ -200,7 +200,9 @@ concept can_ref_view =
 
 template <typename Range>
 constexpr auto allView(Range&& range) {
-  if constexpr (can_ref_view<Range>) {
+  if constexpr (std::ranges::view<std::decay_t<Range>>) {
+    return AD_FWD(range);
+  } else if constexpr (can_ref_view<Range>) {
     return std::ranges::ref_view{AD_FWD(range)};
   } else {
     return ad_utility::OwningView{AD_FWD(range)};
