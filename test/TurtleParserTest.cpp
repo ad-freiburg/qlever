@@ -238,7 +238,7 @@ TEST(TurtleParserTest, rdfLiteral) {
 TEST(TurtleParserTest, literalAndDatatypeToTripleComponent) {
   auto ladttc =
       TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent;
-  auto fromIri = TripleComponent::Iri::fromIriWithoutBrackets;
+  auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
 
   ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
   ASSERT_EQ(ladttc("+42.2345", fromIri(XSD_DOUBLE_TYPE)), +42.2345);
