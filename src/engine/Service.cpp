@@ -143,8 +143,17 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
                                           serviceUrl.host(), " is empty"));
   }
 
+  if (!jsonResult.contains("head") || !jsonResult["head"].contains("vars") ||
+      !jsonResult["head"]["vars"].is_array() ||
+      !jsonResult.contains("results") ||
+      !jsonResult["results"].contains("bindings") ||
+      !jsonResult["results"]["bindings"].is_array()) {
+    throw std::runtime_error(
+        "JSON result does not have the expected structure");
+  }
+
   const auto vars = jsonResult["head"]["vars"].get<std::vector<std::string>>();
-  std::string headerRow = "?" + absl::StrJoin(vars, " ?");
+  std::string headerRow = absl::StrCat("?", absl::StrJoin(vars, " ?"));
 
   std::string expectedHeaderRow = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
@@ -173,13 +182,6 @@ void Service::writeJsonResult(const nlohmann::json& jsonResult,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
-
-  if (!jsonResult.contains("head") || !jsonResult["head"].contains("vars") ||
-      !jsonResult.contains("results") ||
-      !jsonResult["results"].contains("bindings")) {
-    throw std::runtime_error(
-        "JSON result does not have the expected structure");
-  }
 
   const auto& vars =
       jsonResult["head"]["vars"].get<std::vector<std::string_view>>();
