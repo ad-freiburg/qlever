@@ -223,18 +223,6 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
 }
 
 // ____________________________________________________________________________
-template <typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v) {
-  os << "(";
-  std::ranges::copy(v, std::ostream_iterator<T>(os, ", "));
-  os << ")";
-  return os;
-}
-
-template std::ostream& operator<< <ValueId, 3ul>(
-    std::ostream& os, const std::array<ValueId, 3ul>& v);
-
-// ____________________________________________________________________________
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
   std::ranges::copy(v, std::ostream_iterator<T>(os, ", "));
