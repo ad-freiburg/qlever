@@ -94,17 +94,16 @@ class Row {
     std::ranges::copy(*this, result.begin());
     return result;
   }
-};
 
-// ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os,
-                         const columnBasedIdTable::Row<Id>& idTableRow) {
-  os << "(";
-  for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
-    os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
+  template <std::enable_if_t<std::is_same_v<T, Id>, bool> = true>
+  friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow) {
+    os << "(";
+    for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
+      os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
+    }
+    return os;
   }
-  return os;
-}
+};
 
 // The following two classes store a reference to a row in the underlying
 // column-based `Table`. This has to be its own class instead of `Row&` because
