@@ -642,12 +642,7 @@ DecompressedBlock CompressedRelationReader::addUpdateTriples(
   if (numInserts == 0 && numDeletes == 0) {
     return block;
   }
-  DecompressedBlock blockWithUpdate{block.numColumns(), allocator_};
-  blockWithUpdate.resize(block.numRows() + numInserts);
-  auto rowsWritten = locatedTriples.mergeTriples(
-      blockIndex, std::move(block), blockWithUpdate, 0, numIndexColumns);
-  blockWithUpdate.resize(rowsWritten);
-  return blockWithUpdate;
+  return locatedTriples.mergeTriples(blockIndex, block, numIndexColumns);
 }
 
 // ____________________________________________________________________________
