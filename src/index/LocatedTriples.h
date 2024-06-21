@@ -130,8 +130,7 @@ class LocatedTriplesPerBlock {
 };
 
 // Human-readable representation , which are very useful for debugging.
-template <typename T>
-std::ostream& operator<<(std::ostream& os, const std::vector<T>& v);
+std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple>& v);
 
 // DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
 //
