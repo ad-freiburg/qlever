@@ -470,7 +470,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
         using enum Permutation::Enum;
         for (auto& perm : {SPO, SOP, OSP, OPS, PSO, POS}) {
-          Permutation permutation{perm, {}, testAllocator};
+          Permutation permutation{perm, testAllocator};
           permutation.loadFromDisk(testIndexBasename);
 
           if (expectedLocatedTriples.contains(perm)) {
