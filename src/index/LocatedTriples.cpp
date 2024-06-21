@@ -163,7 +163,9 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   }
   if (row != block.end()) {
     AD_CORRECTNESS_CHECK(locatedTriple == locatedTriples.end());
-    std::ranges::copy(row, block.end(), resultEntry);
+    while (row != block.end()) {
+      *resultEntry++ = *row++;
+    }
   }
 
   result.resize(resultEntry - result.begin());
