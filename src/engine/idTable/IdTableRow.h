@@ -95,8 +95,8 @@ class Row {
     return result;
   }
 
-  template <std::enable_if_t<std::is_same_v<T, Id>, bool> = true>
-  friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow) {
+  friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow)
+      requires(std::is_same_v<T, Id>) {
     os << "(";
     for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
       os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
