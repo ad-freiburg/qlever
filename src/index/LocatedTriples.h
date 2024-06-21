@@ -130,9 +130,6 @@ class LocatedTriplesPerBlock {
 };
 
 // Human-readable representation , which are very useful for debugging.
-// TODO<qup42>: find a better place for these definitions
-template <typename T, std::size_t N>
-std::ostream& operator<<(std::ostream& os, const std::array<T, N>& v);
 template <typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v);
 
