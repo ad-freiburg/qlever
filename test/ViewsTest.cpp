@@ -142,6 +142,10 @@ TEST(Views, owningView) {
               ::testing::ElementsAre(
                   "4", "fourhundredseventythousandBlimbambum", "3", "1"));
 
+  ASSERT_THAT(toVec(std::as_const(vecView)),
+              ::testing::ElementsAre(
+                  "4", "fourhundredseventythousandBlimbambum", "3", "1"));
+
   auto generator = []() -> cppcoro::generator<std::string> {
     co_yield "4";
     co_yield "fourhundredseventythousandBlimbambum";

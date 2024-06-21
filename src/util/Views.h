@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VIEWS_H
-#define QLEVER_VIEWS_H
+#pragma once
 
 #include <future>
 #include <ranges>
@@ -113,9 +112,9 @@ cppcoro::generator<typename SortedBlockView::value_type> uniqueBlockView(
   LOG(DEBUG) << "Number of unique elements: " << numUnique << std::endl;
 }
 
-// A view that owns its underlying storage. It is a rather simple drop-in
-// replacement for `std::ranges::owning_view` which is not yet supported by
-// `GCC 11`.
+// A view that owns its underlying storage. It is a replacement for
+// `std::ranges::owning_view` which is not yet supported by `GCC 11`. The
+// implementation is taken from libstdc++-13.
 template <std::ranges::range UnderlyingRange>
 requires std::movable<UnderlyingRange> class OwningView
     : public std::ranges::view_interface<OwningView<UnderlyingRange>> {
@@ -194,15 +193,22 @@ requires std::movable<UnderlyingRange> class OwningView
   }
 };
 
+// Helper concept for `ad_utility::allView`.
+namespace detail {
 template <typename Range>
 concept can_ref_view =
     requires { std::ranges::ref_view{std::declval<Range>()}; };
+}
 
+// A simple drop-in replacement for `std::views::all` which is required because
+// GCC11 doesn't support `std::owning_view` (see above).
+// As soon as we don't support GCC11 anymore, we can throw out those
+// implementations.
 template <typename Range>
 constexpr auto allView(Range&& range) {
   if constexpr (std::ranges::view<std::decay_t<Range>>) {
     return AD_FWD(range);
-  } else if constexpr (can_ref_view<Range>) {
+  } else if constexpr (detail::can_ref_view<Range>) {
     return std::ranges::ref_view{AD_FWD(range)};
   } else {
     return ad_utility::OwningView{AD_FWD(range)};
@@ -304,9 +310,7 @@ inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
 
 }  // namespace ad_utility
 
-template <typename _Tp>
+template <typename T>
 inline constexpr bool
-    std::ranges::enable_borrowed_range<ad_utility::OwningView<_Tp>> =
-        std::ranges::enable_borrowed_range<_Tp>;
-
-#endif  // QLEVER_VIEWS_H
+    std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
+        std::ranges::enable_borrowed_range<T>;
