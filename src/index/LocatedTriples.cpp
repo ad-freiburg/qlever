@@ -14,12 +14,6 @@
 #include "index/Permutation.h"
 
 // ____________________________________________________________________________
-IdTriple permute(const IdTriple& triple,
-                 const std::array<size_t, 3>& keyOrder) {
-  return {triple[keyOrder[0]], triple[keyOrder[1]], triple[keyOrder[2]]};
-}
-
-// ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     const std::vector<IdTriple>& triples, const Permutation& permutation,
     bool shouldExist) {
@@ -30,7 +24,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
   out.reserve(triples.size());
   size_t currentBlockIndex;
   for (auto triple : triples) {
-    triple = permute(triple, permutation.keyOrder());
+    triple = triple.permute(permutation.keyOrder());
     currentBlockIndex =
         std::ranges::lower_bound(
             blocks, triple,
@@ -50,8 +44,8 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-  os << "LT(" << lt.blockIndex_ << " " << lt.triple_[0] << " " << lt.triple_[1]
-     << " " << lt.triple_[2] << " " << lt.shouldTripleExist_ << ")";
+  os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
+     << lt.shouldTripleExist_ << ")";
   return os;
 }
 
@@ -89,32 +83,34 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
   auto cmpLt = [&numIndexColumns](auto lt, auto row) {
     if (numIndexColumns == 3) {
-      return std::tie(row[0], row[1], row[2]) >
-             std::tie(lt->triple_[0], lt->triple_[1], lt->triple_[2]);
+      return std::tie(row[0], row[1], row[2]) > std::tie(lt->triple_.ids_[0],
+                                                         lt->triple_.ids_[1],
+                                                         lt->triple_.ids_[2]);
     } else if (numIndexColumns == 2) {
       return std::tie(row[0], row[1]) >
-             std::tie(lt->triple_[1], lt->triple_[2]);
+             std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return std::tie(row[0]) > std::tie(lt->triple_[2]);
+      return std::tie(row[0]) > std::tie(lt->triple_.ids_[2]);
     }
   };
   auto cmpEq = [&numIndexColumns](auto lt, auto row) {
     if (numIndexColumns == 3) {
-      return std::tie(row[0], row[1], row[2]) ==
-             std::tie(lt->triple_[0], lt->triple_[1], lt->triple_[2]);
+      return std::tie(row[0], row[1], row[2]) == std::tie(lt->triple_.ids_[0],
+                                                          lt->triple_.ids_[1],
+                                                          lt->triple_.ids_[2]);
     } else if (numIndexColumns == 2) {
       return std::tie(row[0], row[1]) ==
-             std::tie(lt->triple_[1], lt->triple_[2]);
+             std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
     } else {
       AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return std::tie(row[0]) == std::tie(lt->triple_[2]);
+      return std::tie(row[0]) == std::tie(lt->triple_.ids_[2]);
     }
   };
   auto writeTripleToResult = [&numIndexColumns, &result](auto resultEntry,
                                                          auto& locatedTriple) {
     for (size_t i = 0; i < numIndexColumns; i++) {
-      (*resultEntry)[i] = locatedTriple->triple_[3 - numIndexColumns + i];
+      (*resultEntry)[i] = locatedTriple->triple_.ids_[3 - numIndexColumns + i];
     }
     // Write UNDEF to any additional columns.
     for (size_t i = numIndexColumns; i < result.numColumns(); i++) {
@@ -245,5 +241,5 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
   return os;
 }
 
-template std::ostream& operator<< <std::array<ValueId, 3>>(
-    std::ostream& os, const std::vector<std::array<ValueId, 3ul>>& v);
+template std::ostream& operator<< <IdTriple>(std::ostream& os,
+                                             const std::vector<IdTriple>& v);

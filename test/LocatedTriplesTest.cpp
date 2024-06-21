@@ -446,7 +446,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
               ad_utility::transform(
                   std::move(expectedLocatedTriples), [&permutation](LT&& lt) {
                     return LT{lt.blockIndex_,
-                              permute(lt.triple_, permutation.keyOrder()),
+                              lt.triple_.permute(permutation.keyOrder()),
                               lt.shouldTripleExist_};
                   });
           ASSERT_EQ(computedLocatedTriples, expectedPermutedLocatedTriples)

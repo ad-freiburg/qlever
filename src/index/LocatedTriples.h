@@ -13,8 +13,6 @@
 
 class Permutation;
 
-IdTriple permute(const IdTriple& triple, const std::array<size_t, 3>& keyOrder);
-
 struct NumAddedAndDeleted {
   size_t numAdded;
   size_t numDeleted;

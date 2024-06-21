@@ -663,7 +663,8 @@ nlohmann::json Server::executeUpdateQuery(
         continue;
       }
 
-      toInsert.push_back({subject.value(), predicate.value(), object.value()});
+      toInsert.push_back(
+          IdTriple(subject.value(), predicate.value(), object.value()));
       cancellationHandle->throwIfCancelled();
     }
 
@@ -676,7 +677,8 @@ nlohmann::json Server::executeUpdateQuery(
         continue;
       }
 
-      toDelete.push_back({subject.value(), predicate.value(), object.value()});
+      toDelete.push_back(
+          IdTriple(subject.value(), predicate.value(), object.value()));
       cancellationHandle->throwIfCancelled();
     }
   }
