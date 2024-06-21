@@ -176,10 +176,10 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
-    LocatedTriples& locatedTriples = map_[triple.blockIndex_];
-    auto [handle, wasInserted] = locatedTriples.emplace(triple);
+    LocatedTriples& locatedTriplesInBlock = map_[triple.blockIndex_];
+    auto [handle, wasInserted] = locatedTriplesInBlock.emplace(triple);
     AD_CORRECTNESS_CHECK(wasInserted == true);
-    AD_CORRECTNESS_CHECK(handle != locatedTriples.end());
+    AD_CORRECTNESS_CHECK(handle != locatedTriplesInBlock.end());
     ++numTriples_;
     handles.emplace_back(handle);
   }
