@@ -33,6 +33,11 @@ struct IdTriple {
 
   auto operator<=>(const IdTriple&) const = default;
 
+  template <typename H>
+  friend H AbslHashValue(H h, const IdTriple& c) {
+    return H::combine(std::move(h), c.ids_);
+  }
+
   // TODO<qup42>: should this be a `PermutedTriple`?
   IdTriple permute(const std::array<size_t, 3>& keyOrder) const {
     return IdTriple{ids_[keyOrder[0]], ids_[keyOrder[1]], ids_[keyOrder[2]]};

@@ -704,6 +704,60 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
   return numDistinctC0;
 }
 
+// Explicit instantiations needed for `test/LocatedTripleTest.cpp`.
+//
+// TODO: (from hannah) Do we really need to make `SortedTriplesType` a template
+// parameter (or `auto&&` as it was before)? To me it looks like this function
+// (and others of its kind) are always called with `sortedTriples` of type
+// `BlocksOfTriples`.
+template size_t IndexImpl::createPermutationPair<IndexImpl::BlocksOfTriples>(
+    size_t, IndexImpl::BlocksOfTriples&&, const Permutation&,
+    const Permutation&);
+template size_t IndexImpl::createPermutationPair<
+    IndexImpl::BlocksOfTriples,
+    decltype(std::declval<ad_utility::CompressedExternalIdTableSorter<
+                 SecondPermutation, 3>>()
+                 .makePushCallback())>(
+    size_t, IndexImpl::BlocksOfTriples&&, const Permutation&,
+    const Permutation&,
+    decltype(std::declval<ad_utility::CompressedExternalIdTableSorter<
+                 SecondPermutation, 3>>()
+                 .makePushCallback())&&);
+
+template size_t IndexImpl::createPermutationPair<
+    IndexImpl::BlocksOfTriples,
+    decltype(std::declval<ad_utility::CompressedExternalIdTableSorter<
+                 ThirdPermutation, 3>>()
+                 .makePushCallback())>(
+    size_t, IndexImpl::BlocksOfTriples&&, const Permutation&,
+    const Permutation&,
+    decltype(std::declval<ad_utility::CompressedExternalIdTableSorter<
+                 ThirdPermutation, 3>>()
+                 .makePushCallback())&&);
+
+template void IndexImpl::createPSOAndPOS(size_t,
+                                         std::function<bool(const ValueId&)>&,
+                                         BlocksOfTriples);
+
+template std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP<
+    ad_utility::CompressedExternalIdTableSorter<SecondPermutation, 3>>(
+    size_t, std::function<bool(const ValueId&)>&, BlocksOfTriples,
+    ad_utility::CompressedExternalIdTableSorter<SecondPermutation, 3>&&);
+
+template void IndexImpl::createOSPAndOPS<
+    ad_utility::CompressedExternalIdTableSorter<ThirdPermutation, 3>>(
+    size_t, std::function<bool(const ValueId&)>&, BlocksOfTriples,
+    ad_utility::CompressedExternalIdTableSorter<ThirdPermutation, 3>&&);
+
+template ExternalSorter<FirstPermutation, 3UL> IndexImpl::makeSorter<
+    FirstPermutation, 3UL>(std::string_view permutationName) const;
+
+template ExternalSorter<SecondPermutation, 3UL> IndexImpl::makeSorter<
+    SecondPermutation, 3UL>(std::string_view permutationName) const;
+
+template ExternalSorter<ThirdPermutation, 3UL> IndexImpl::makeSorter<
+    ThirdPermutation, 3UL>(std::string_view permutationName) const;
+
 // _____________________________________________________________________________
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
