@@ -91,13 +91,12 @@ void DeltaTriples::insertTriples(
   std::erase_if(triples, [this](const IdTriple& triple) {
     return triplesInserted_.contains(triple);
   });
-  std::erase_if(triples, [this](const IdTriple triple) {
-    bool isPresent = triplesDeleted_.contains(triple);
-    if (isPresent) {
-      eraseTripleInAllPermutations(triplesDeleted_.at(triple));
+  std::ranges::for_each(triples, [this](const IdTriple& triple) {
+    auto handle = triplesDeleted_.find(triple);
+    if (handle != triplesDeleted_.end()) {
+      eraseTripleInAllPermutations(handle->second);
       triplesDeleted_.erase(triple);
     }
-    return isPresent;
   });
 
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
@@ -121,13 +120,12 @@ void DeltaTriples::deleteTriples(
   std::erase_if(triples, [this](const IdTriple& triple) {
     return triplesDeleted_.contains(triple);
   });
-  std::erase_if(triples, [this](const IdTriple triple) {
-    bool isPresent = triplesInserted_.contains(triple);
-    if (isPresent) {
-      eraseTripleInAllPermutations(triplesInserted_.at(triple));
+  std::ranges::for_each(triples, [this](const IdTriple& triple) {
+    auto handle = triplesInserted_.find(triple);
+    if (handle != triplesInserted_.end()) {
+      eraseTripleInAllPermutations(handle->second);
       triplesInserted_.erase(triple);
     }
-    return isPresent;
   });
 
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;

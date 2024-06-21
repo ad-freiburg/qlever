@@ -86,11 +86,11 @@ class DeltaTriples {
   size_t numInserted() const { return triplesInserted_.size(); }
   size_t numDeleted() const { return triplesDeleted_.size(); }
 
-  // Insert triple.
+  // Insert triple. Must not contain duplicates.
   void insertTriples(ad_utility::SharedCancellationHandle cancellationHandle,
                      std::vector<IdTriple> triples);
 
-  // Delete triple.
+  // Delete triple. Must not contain duplicates.
   void deleteTriples(ad_utility::SharedCancellationHandle cancellationHandle,
                      std::vector<IdTriple> triples);
 
