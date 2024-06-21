@@ -136,15 +136,16 @@ std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple>& v);
 //
 // 1. The position is defined by the index of a block.
 //
-// 2. If there is a block, where the first triple is smaller and the last triple
-// is larger or equal, then that is the block.
+// 2. A triple belongs to the first block (with the smallest index) that also
+// contains at least one triple that is larger than or equal to the input
+// triple.
 //
-// 3. If the triple falls "between two blocks" (the last triple of the previous
-// block is smaller and the first triple of the next block is larger), then the
-// block is the next block.
+// 2.1. In particular, if the triple falls "between two blocks" (the last triple
+// of the previous block is smaller and the first triple of the next block is
+// larger), then the block is the next block.
 //
-// 4. As a special case of 3, if the triple is smaller than all triples in the
+// 2.2. In particular, if the triple is smaller than all triples in the
 // permutation, the position is the first position of the first block.
 //
-// 5. As a special case of 3, if the triple is larger than all triples in the
-// permutation, the block index is one after the largest block index.
+// 3. If the triple is larger than all triples in the permutation, the block
+// index is one after the largest block index.

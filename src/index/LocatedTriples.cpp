@@ -107,43 +107,38 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
       return std::tie(row[0]) == std::tie(lt->triple_.ids_[2]);
     }
   };
-  auto writeTripleToResult = [&numIndexColumns, &result](auto resultEntry,
-                                                         auto& locatedTriple) {
+
+  auto row = block.begin();
+  auto locatedTriple = locatedTriples.begin();
+  auto resultEntry = result.begin();
+
+  auto writeTripleToResult = [&numIndexColumns, &result,
+                              &resultEntry](auto& locatedTriple) {
     for (size_t i = 0; i < numIndexColumns; i++) {
-      (*resultEntry)[i] = locatedTriple->triple_.ids_[3 - numIndexColumns + i];
+      (*resultEntry)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
     // Write UNDEF to any additional columns.
     for (size_t i = numIndexColumns; i < result.numColumns(); i++) {
       (*resultEntry)[i] = ValueId::makeUndefined();
     }
+    resultEntry++;
   };
-
-  auto row = block.begin();
-  auto locatedTriple = locatedTriples.begin();
-  auto resultEntry = result.begin();
 
   while (row != block.end() && locatedTriple != locatedTriples.end()) {
     if (cmpLt(locatedTriple, *row)) {
       // locateTriple < row
       if (locatedTriple->shouldTripleExist_) {
         // Insertion of a non-existent triple.
-        writeTripleToResult(resultEntry, locatedTriple);
-        resultEntry++;
-        locatedTriple++;
-      } else {
-        // Deletion of a non-existent triple.
-        locatedTriple++;
+        writeTripleToResult(*locatedTriple);
       }
+      locatedTriple++;
     } else if (cmpEq(locatedTriple, *row)) {
       // locateTriple == row
-      if (locatedTriple->shouldTripleExist_) {
-        // Insertion of an already existing triple.
-        locatedTriple++;
-      } else {
+      if (!locatedTriple->shouldTripleExist_) {
         // Deletion of an existing triple.
-        locatedTriple++;
         row++;
       }
+      locatedTriple++;
     } else {
       // locateTriple > row
       // The row is not deleted - copy it
@@ -151,16 +146,10 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
     }
   }
 
-  if (locatedTriple != locatedTriples.end()) {
-    AD_CORRECTNESS_CHECK(row == block.end());
-    while (locatedTriple != locatedTriples.end()) {
-      if (locatedTriple->shouldTripleExist_ == true) {
-        writeTripleToResult(resultEntry, locatedTriple);
-        ++resultEntry;
-      }
-      ++locatedTriple;
-    }
-  }
+  std::ranges::for_each(
+      std::ranges::subrange(locatedTriple, locatedTriples.end()) |
+          std::views::filter(&LocatedTriple::shouldTripleExist_),
+      writeTripleToResult);
   if (row != block.end()) {
     AD_CORRECTNESS_CHECK(locatedTriple == locatedTriples.end());
     while (row != block.end()) {

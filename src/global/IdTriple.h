@@ -14,8 +14,7 @@
 struct IdTriple {
   std::array<Id, 3> ids_;
 
-  explicit IdTriple()
-      : ids_({Id::makeUndefined(), Id::makeUndefined(), Id::makeUndefined()}){};
+  explicit IdTriple() : ids_(){};
   explicit IdTriple(
       const CompressedBlockMetadata::PermutedTriple& permutedTriple)
       : ids_({permutedTriple.col0Id_, permutedTriple.col1Id_,
