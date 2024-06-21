@@ -39,7 +39,7 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   auto trace = generateLocationTrace(l);
   VectorWithMemoryLimit<T> input(inputAsVector.begin(), inputAsVector.end(),
                                  makeAllocator());
-  auto d = std::make_unique<DummyExpression>(input.clone());
+  auto d = std::make_unique<SingleUseExpression>(input.clone());
   auto t = TestContext{};
   t.context._endIndex = input.size();
   AggregateExpressionT m{distinct, std::move(d)};
