@@ -307,6 +307,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                  ad_utility::Exception);
   }
 
+  // There must at least `numIndexColumns` columns in the block.
   {
     IdTable block = makeIdTableFromVector({
         {1, 10, 10},  // Row 0
@@ -331,30 +332,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                  ad_utility::Exception);
   }
 
-  {
-    IdTable block = makeIdTableFromVector({
-        {1, 10, 10},  // Row 0
-        {2, 15, 20},  // Row 1
-        {2, 15, 30},  // Row 2
-        {2, 20, 10},  // Row 3
-        {2, 30, 20},  // Row 4
-        {3, 30, 30}   // Row 5
-    });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
-        LT{1, IT(1, 5, 10), true},    // Insert before row 0
-        LT{1, IT(1, 10, 10), false},  // Delete row 0
-        LT{1, IT(1, 10, 11), true},   // Insert before row 1
-        LT{1, IT(2, 11, 10), true},   // Insert before row 1
-        LT{1, IT(2, 30, 10), true},   // Insert before row 4
-        LT{1, IT(2, 30, 20), false},  // Delete row 4
-        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
-        LT{1, IT(3, 30, 30), false},  // Delete row 5
-        LT{1, IT(4, 10, 10), true},   // Insert after row 5
-    });
-    EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 3),
-                 ad_utility::Exception);
-  }
-
+  // There has to be at least one index row.
   {
     IdTable block = makeIdTableFromVector({
         {},  // Row 0
