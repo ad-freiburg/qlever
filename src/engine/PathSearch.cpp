@@ -101,8 +101,11 @@ ResultTable PathSearch::computeResult() {
       edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
     }
 
-    buildGraph(dynSub.getColumn(getStartIndex()),
-               dynSub.getColumn(getEndIndex()), edgePropertyLists);
+
+    auto subStartColumn = subtree_->getVariableColumn(config_.start_);
+    auto subEndColumn = subtree_->getVariableColumn(config_.end_);
+    buildGraph(dynSub.getColumn(subStartColumn),
+               dynSub.getColumn(subEndColumn), edgePropertyLists);
 
     auto paths = findPaths();
 
