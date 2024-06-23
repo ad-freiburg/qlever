@@ -860,7 +860,8 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?height > 1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
-  expectHavingConditionFails("(LANG(?x) = \"en\")");
+  expectHavingCondition("(LANG(?x) = \"en\")",
+                        m::stringMatchesFilter("(LANG(?x) = \"en\")"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {

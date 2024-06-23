@@ -2,6 +2,8 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
+// Test file for the LangExpression class: LanguageExpressionTests.h
+
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
@@ -16,6 +18,7 @@ class LangExpression : public SparqlExpression {
  private:
   // The stored variable.
   Variable variable_;
+  SparqlExpression::Ptr child_;
 
  public:
   // Construct from a child expression. The child must be a single variable,
@@ -26,17 +29,15 @@ class LangExpression : public SparqlExpression {
 
   bool containsLangExpression() const override { return true; }
 
-  // The following methods are required for the virtual interface of
-  // `SparqlExpression`, but they will always fail at runtime when executed. All
-  // occurrences of `LanguageExpression` should be detected and dealt with by
-  // the parser before any of these methods is ever called.
-  ExpressionResult evaluate(EvaluationContext*) const override { AD_FAIL(); }
+  ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  std::string getCacheKey(const VariableToColumnMap&) const override {
-    AD_FAIL();
-  }
+  std::string getCacheKey(const VariableToColumnMap&) const override;
 
  private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override { AD_FAIL(); }
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
+  static void checkCancellation(
+      const sparqlExpression::EvaluationContext* context,
+      ad_utility::source_location location =
+          ad_utility::source_location::current());
 };
 }  // namespace sparqlExpression

@@ -553,6 +553,7 @@ class SparqlQleverVisitor {
       const antlr4::ParserRuleContext* ctx, const std::string& feature);
 
  private:
+  /*
   // Throw an exception if the `expression` contains the `LANG()` function. The
   // `context` will be used to create the exception metadata.
   static void checkUnsupportedLangOperation(
@@ -565,6 +566,7 @@ class SparqlQleverVisitor {
   static void checkUnsupportedLangOperationAllowFilters(
       const antlr4::ParserRuleContext* ctx,
       const SparqlExpressionPimpl& expression);
+  */
 
   // Parse both `ConstructTriplesContext` and `TriplesTemplateContext` because
   // they have the same structure.

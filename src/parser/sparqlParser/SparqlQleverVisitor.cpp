@@ -163,14 +163,17 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
-                                                    bool allowLanguageFilters) {
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(
+    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
   SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
+  /*
   if (allowLanguageFilters) {
     checkUnsupportedLangOperationAllowFilters(ctx, result);
   } else {
     checkUnsupportedLangOperation(ctx, result);
   }
+  return result;
+  */
   return result;
 }
 
@@ -597,7 +600,7 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable, language);
       } else {
-        checkUnsupportedLangOperation(ctx, filter.expression_);
+        // checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -2383,6 +2386,7 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
       ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
 }
 
+/*
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperation(
     const antlr4::ParserRuleContext* ctx,
@@ -2394,7 +2398,9 @@ void Visitor::checkUnsupportedLangOperation(
         ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
   }
 }
+*/
 
+/*
 // _____________________________________________________________________________
 void Visitor::checkUnsupportedLangOperationAllowFilters(
     const antlr4::ParserRuleContext* ctx,
@@ -2407,6 +2413,7 @@ void Visitor::checkUnsupportedLangOperationAllowFilters(
         ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
   }
 }
+*/
 
 // _____________________________________________________________________________
 TripleComponent SparqlQleverVisitor::visitGraphTerm(
