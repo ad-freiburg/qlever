@@ -259,7 +259,14 @@ inline auto TransitivePath =
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   return AllOf(
-    AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_))
+    AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
+    AD_FIELD(PathSearchConfiguration, source_, Eq(config.source_)),
+    AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
+    AD_FIELD(PathSearchConfiguration, targets_, UnorderedElementsAreArray(config.targets_)),
+    AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
+    AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
+    AD_FIELD(PathSearchConfiguration, edgeColumn_, Eq(config.edgeColumn_)),
+    AD_FIELD(PathSearchConfiguration, edgeProperties_, UnorderedElementsAreArray(config.edgeProperties_))
   );
 };
 

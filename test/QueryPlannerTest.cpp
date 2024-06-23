@@ -783,8 +783,8 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
     {getId("<z>")},
     Variable("?start"),
     Variable("?end"),
-    Variable("?pathColumn"),
-    Variable("?edgeColumn"),
+    Variable("?path"),
+    Variable("?edge"),
     {}
   };
   h::expect(
@@ -818,8 +818,8 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
     {getId("<y>"), getId("<z>")},
     Variable("?start"),
     Variable("?end"),
-    Variable("?pathColumn"),
-    Variable("?edgeColumn"),
+    Variable("?path"),
+    Variable("?edge"),
     {}
   };
   h::expect(
@@ -855,8 +855,8 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
     {getId("<z>")},
     Variable("?start"),
     Variable("?end"),
-    Variable("?pathColumn"),
-    Variable("?edgeColumn"),
+    Variable("?path"),
+    Variable("?edge"),
     {Variable("?middle")}
   };
   h::expect(
@@ -901,8 +901,8 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
     {getId("<z>"), getId("<y>")},
     Variable("?start"),
     Variable("?end"),
-    Variable("?pathColumn"),
-    Variable("?edgeColumn"),
+    Variable("?path"),
+    Variable("?edge"),
     {Variable("?middle"), Variable("?middleAttribute")}
   };
   h::expect(
