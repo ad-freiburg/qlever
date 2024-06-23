@@ -27,23 +27,39 @@ using IdToNodeMap = std::unordered_map<
 
 enum PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
 
+/**
+ * @brief Struct to hold configuration parameters for the path search.
+ */
 struct PathSearchConfiguration {
+  // The path search algorithm to use.
   PathSearchAlgorithm algorithm_;
+  // The source node ID.
   Id source_;
-  std::vector<Id> targets_;
-  Variable start_;
-  Variable end_;
-  Variable pathColumn_;
-  Variable edgeColumn_;
+  // A list of target node IDs.
+  std::vector<Id> targets_; 
+  // Variable representing the start column in the result.
+  Variable start_; 
+  // Variable representing the end column in the result.
+  Variable end_; 
+  // Variable representing the path column in the result.
+  Variable pathColumn_; 
+  // Variable representing the edge column in the result.
+  Variable edgeColumn_; 
+  // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
 };
 
+/**
+ * @brief Class to perform various path search algorithms on a graph.
+ */
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   size_t resultWidth_;
   VariableToColumnMap variableColumns_;
 
+  // The graph on which the path search is performed.
   Graph graph_;
+  // Configuration for the path search.
   PathSearchConfiguration config_;
   Id source_;
   std::vector<Id> targets_;
@@ -57,8 +73,8 @@ class PathSearch : public Operation {
              PathSearchConfiguration config);
 
   std::vector<QueryExecutionTree*> getChildren() override;
-  const Id& getSource() const { return source_; }
-  const std::vector<Id>& getTargets() const { return targets_; }
+  const Id& getSource() const { return config_.source_; }
+  const std::vector<Id>& getTargets() const { return config_.targets_; }
 
   const PathSearchConfiguration& getConfig() const { return config_; }
 
@@ -84,13 +100,47 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
+  /**
+   * @brief Builds the graph from the given nodes and edge properties.
+   * @param startNodes A span of start nodes.
+   * @param endNodes A span of end nodes.
+   * @param edgePropertyLists A span of edge property lists.
+   */
   void buildGraph(std::span<const Id> startNodes, std::span<const Id> endNodes,
                   std::span<std::span<const Id>> edgePropertyLists);
+
+  /**
+   * @brief Builds the mapping from node IDs to indices.
+   * @param startNodes A span of start nodes.
+   * @param endNodes A span of end nodes.
+   */
   void buildMapping(std::span<const Id> startNodes,
                     std::span<const Id> endNodes);
+
+  /**
+   * @brief Finds paths based on the configured algorithm.
+   * @return A vector of paths.
+   */
   std::vector<Path> findPaths() const;
+
+  /**
+   * @brief Finds all paths in the graph.
+   * @return A vector of all paths.
+   */
   std::vector<Path> allPaths() const;
+
+  /**
+   * @brief Finds the shortest paths in the graph.
+   * @return A vector of the shortest paths.
+   */
   std::vector<Path> shortestPaths() const;
+
+  /**
+   * @brief Converts paths to a result table with a specified width.
+   * @tparam WIDTH The width of the result table.
+   * @param tableDyn The dynamic table to store the results.
+   * @param paths The vector of paths to convert.
+   */
   template <size_t WIDTH>
   void pathsToResultTable(IdTable& tableDyn, std::vector<Path>& paths) const;
 };
