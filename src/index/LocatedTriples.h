@@ -76,6 +76,10 @@ class LocatedTriplesPerBlock {
 
   FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
+  // Impl function to `mergeTriples`.
+  template <size_t numIndexColumns>
+  IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
+
  public:
   // Get upper limits for the number of located triples for the given block. The
   // return value is a pair of numbers: first, the number of existing triples
