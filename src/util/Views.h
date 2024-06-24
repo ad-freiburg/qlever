@@ -197,7 +197,7 @@ requires std::movable<UnderlyingRange> class OwningView
 namespace detail {
 template <typename Range>
 concept can_ref_view =
-    requires { std::ranges::ref_view{std::declval<Range>()}; };
+    requires(Range&& range) { std::ranges::ref_view{AD_FWD(range)}; };
 }
 
 // A simple drop-in replacement for `std::views::all` which is required because
