@@ -18,7 +18,7 @@ namespace {
 auto V = ad_utility::testing::VocabId;
 
 auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
-  return IdTriple{V(c1), V(c2), V(c3)};
+  return IdTriple{std::array<Id, 3>{V(c1), V(c2), V(c3)}};
 };
 
 }  // namespace
@@ -26,20 +26,20 @@ auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
 // TODO<qup42>: move to LocatedTriplesTestHelpers.h if more matchers collect,
 // otherwise move it to the anonymous namespace above
 namespace Matchers {
-inline auto numBlocks =
+auto numBlocks =
     [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
                      testing::Eq(numBlocks));
 };
 
-inline auto numTriplesTotal =
+auto numTriplesTotal =
     [](size_t numTriples) -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numTriples,
                      testing::Eq(numTriples));
 };
 
-inline auto numTriplesBlockwise = [](size_t blockIndex,
-                                     NumAddedAndDeleted insertsAndDeletes)
+auto numTriplesInBlock = [](size_t blockIndex,
+                            NumAddedAndDeleted insertsAndDeletes)
     -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return testing::ResultOf(
       absl::StrCat(".numTriplesTotal(", std::to_string(blockIndex), ")"),
@@ -49,20 +49,17 @@ inline auto numTriplesBlockwise = [](size_t blockIndex,
       testing::Eq(insertsAndDeletes));
 };
 
-// A Matcher to check `numBlocks`, `numTriplesTotal` and
-// `numTriplesTotal(blockIndex_)` for all blocks.
-auto allNums = [](size_t blocks, size_t triples,
-                  const ad_utility::HashMap<size_t, NumAddedAndDeleted>&
-                      numTriplesPerBlock)
+auto numTriplesBlockwise =
+    [](const ad_utility::HashMap<size_t, NumAddedAndDeleted>&
+           numTriplesBlockwise)
     -> testing::Matcher<const LocatedTriplesPerBlock&> {
   auto blockMatchers = ad_utility::transform(
-      numTriplesPerBlock,
+      numTriplesBlockwise,
       [](auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
         auto [blockIndex, insertsAndDeletes] = p;
-        return numTriplesBlockwise(blockIndex, insertsAndDeletes);
+        return numTriplesInBlock(blockIndex, insertsAndDeletes);
       });
-  return testing::AllOf(numBlocks(blocks), numTriplesTotal(triples),
-                        testing::AllOfArray(blockMatchers));
+  return testing::AllOfArray(blockMatchers);
 };
 }  // namespace Matchers
 namespace m = Matchers;
@@ -90,48 +87,48 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
        LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
        LT{4, IT(32, 7, 0), false}});
 
-  EXPECT_THAT(
-      locatedTriplesPerBlock,
-      m::allNums(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(7));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              m::numTriplesBlockwise(
+                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
   auto handles = locatedTriplesPerBlock.add(
       {LT{3, IT(25, 5, 0), true}, LT{4, IT(31, 6, 1), false}});
 
-  EXPECT_THAT(
-      locatedTriplesPerBlock,
-      m::allNums(4, 9, {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(4));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(9));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              m::numTriplesBlockwise(
+                  {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
 
   locatedTriplesPerBlock.erase(3, handles[0]);
 
-  EXPECT_THAT(
-      locatedTriplesPerBlock,
-      m::allNums(3, 8, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(8));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              m::numTriplesBlockwise(
+                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+
+  // Erasing in a block that does not exist, raises an exception.
+  EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
+               ad_utility::Exception);
 
   locatedTriplesPerBlock.erase(4, handles[1]);
 
-  EXPECT_THAT(
-      locatedTriplesPerBlock,
-      m::allNums(3, 7, {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(7));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              m::numTriplesBlockwise(
+                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
 
   locatedTriplesPerBlock.clear();
 
-  EXPECT_THAT(
-      locatedTriplesPerBlock,
-      m::allNums(0, 0, {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
-}
-
-TEST_F(LocatedTriplesTest, erase) {
-  using LT = LocatedTriple;
-  // Set up lists of located triples for three blocks.
-  auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-      {LT{1, IT(10, 1, 0), false}, LT{1, IT(10, 2, 1), false},
-       LT{1, IT(11, 3, 0), true}, LT{2, IT(20, 4, 0), true},
-       LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
-       LT{4, IT(32, 7, 0), false}});
-
-  auto handles = locatedTriplesPerBlock.add({LT{1, IT(15, 15, 15), false}});
-  EXPECT_THROW(locatedTriplesPerBlock.erase(5, handles[0]),
-               ad_utility::Exception);
+  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(0));
+  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(0));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              m::numTriplesBlockwise(
+                  {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into
@@ -391,6 +388,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                     << block.lastTriple_ << std::endl;
         }
       };
+  // TODO<qup42> this should go into `./util/IndexTestHelpers.h`
   auto createIndexFromIdTable = [](const IdTable& triplesInIndex,
                                    ad_utility::AllocatorWithLimit<Id> allocator,
                                    const std::string& indexBasename,
@@ -436,7 +434,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   auto testWithGivenBlockSizeAll =
       [&displayBlocks, &createIndexFromIdTable, &deletePermutation](
           const IdTable& triplesInIndex,
-          const std::vector<IdTriple>& triplesToLocate,
+          const std::vector<IdTriple<0>>& triplesToLocate,
           const ad_utility::MemorySize& blockSize,
           const ad_utility::HashMap<Permutation::Enum, std::vector<LT>>&
               expectedLocatedTriples) {
@@ -483,14 +481,15 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Locate the following triples, some of which exist in the relation and
     // some of which do not, and which cover a variety of positions, including
     // triples that are larger than all existing triples.
-    std::vector<IdTriple> triplesToLocate{IT(1, 5, 10),    // Before Row 0
-                                          IT(1, 15, 10),   // Before Row 1
-                                          IT(2, 10, 10),   // Equals Row 1
-                                          IT(2, 14, 20),   // Before Row 2
-                                          IT(2, 20, 10),   // Equals Row 4
-                                          IT(2, 30, 30),   // Equals Row 6
-                                          IT(2, 30, 31),   // Before Row 7
-                                          IT(9, 30, 32)};  // Larger than all.
+    std::vector<IdTriple<0>> triplesToLocate{
+        IT(1, 5, 10),    // Before Row 0
+        IT(1, 15, 10),   // Before Row 1
+        IT(2, 10, 10),   // Equals Row 1
+        IT(2, 14, 20),   // Before Row 2
+        IT(2, 20, 10),   // Equals Row 4
+        IT(2, 30, 30),   // Equals Row 6
+        IT(2, 30, 31),   // Before Row 7
+        IT(9, 30, 32)};  // Larger than all.
 
     // Now test for multiple block sizes (8 bytes is the minimum; number
     // determined experimentally).
@@ -564,7 +563,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                                                     {7, 30, 20},    // Row 12
                                                     {7, 30, 30}});  // Row 13
 
-    std::vector<IdTriple> triplesToLocate{
+    std::vector<IdTriple<0>> triplesToLocate{
         IT(1, 5, 20),    // Before Row 0
         IT(1, 10, 10),   // Equal Row 0 (a small relation)
         IT(2, 20, 10),   // Before Row 1

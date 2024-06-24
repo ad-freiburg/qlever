@@ -14,8 +14,8 @@
 class Permutation;
 
 struct NumAddedAndDeleted {
-  size_t numAdded;
-  size_t numDeleted;
+  size_t numAdded_;
+  size_t numDeleted_;
 
   bool operator<=>(const NumAddedAndDeleted&) const = default;
 };
@@ -29,7 +29,7 @@ struct LocatedTriple {
   // The `Id`s of the triple in the order of the permutation. For example,
   // for an object pertaining to the OPS permutation: `id1` is the object,
   // `id2` is the predicate, and `id3` is the subject.
-  IdTriple triple_;
+  IdTriple<0> triple_;
 
   // Flag that is true if the given triple is inserted and false if it
   // is deleted.
@@ -37,12 +37,16 @@ struct LocatedTriple {
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const std::vector<IdTriple>& triples, const Permutation& permutation,
+      const std::vector<IdTriple<0>>& triples, const Permutation& permutation,
       bool shouldExist);
 
   bool operator==(const LocatedTriple&) const = default;
 
-  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt);
+  friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
+    os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
+       << lt.shouldTripleExist_ << ")";
+    return os;
+  }
 };
 
 // A sorted set of located triples. In `LocatedTriplesPerBlock` below, we use
@@ -66,16 +70,12 @@ class LocatedTriplesPerBlock {
   // The total number of `LocatedTriple` objects stored (for all blocks).
   size_t numTriples_ = 0;
 
- public:
   // For each block with a non-empty set of located triples, the located triples
   // in that block.
   //
-  // NOTE: This is currently not private because we want access to
-  // `map_.size()`, `map_.clear()`, `map_.contains(...)`, and `map_.at(...)`.
-  // We could also make `LocatedTriplesPerBlock` a subclass of `HashMap<size_t,
-  // LocatedTriples>`, but not sure whether that is good style.
   ad_utility::HashMap<size_t, LocatedTriples> map_;
 
+ public:
   // Get upper limits for the number of located triples for the given block. The
   // return value is a pair of numbers: first, the number of existing triples
   // ("to be deleted") and second, the number of new triples ("to be inserted").
@@ -90,12 +90,15 @@ class LocatedTriplesPerBlock {
   //
   // PRECONDITIONS:
   //
-  // 1. The set of located triples for `blockIndex_` must be non-empty.
-  // Otherwise, there is no need for merging and this method shouldn't be
-  // called for efficiency reasons.
+  // 1. `mergeTriples` must always be called with all the index columns in the
+  // input. So the column indices must be `{0, 1, 2, ...}`.
   //
   // 2. It is the responsibility of the caller that there is enough space for
   // the result of the merge in `result` starting from `offsetInResult`.
+  //
+  // 3. The set of located triples for `blockIndex_` must be non-empty.
+  // Otherwise, there is no need for merging and this method shouldn't be
+  // called for efficiency reasons.
   IdTable mergeTriples(size_t blockIndex, const IdTable& block,
                        size_t numIndexColumns) const;
 
@@ -126,11 +129,22 @@ class LocatedTriplesPerBlock {
   }
 
   friend std::ostream& operator<<(std::ostream& os,
-                                  const LocatedTriplesPerBlock& ltpb);
+                                  const LocatedTriplesPerBlock& ltpb) {
+    // Get the block indices in sorted order.
+    std::vector<size_t> blockIndices;
+    std::ranges::copy(ltpb.map_ | std::views::keys,
+                      std::back_inserter(blockIndices));
+    std::ranges::sort(blockIndices);
+    for (auto blockIndex : blockIndices) {
+      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+         << std::endl;
+    }
+    return os;
+  }
 };
 
 // Human-readable representation , which are very useful for debugging.
-std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple>& v);
+std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v);
 
 // DEFINITION OF THE POSITION OF A LOCATED TRIPLE IN A PERMUTATION
 //

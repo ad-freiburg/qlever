@@ -64,8 +64,8 @@ class DeltaTriples {
   // triples are added that are not already contained in the original index and
   // that only triples are subtracted that are contained in the original index.
   // In particular, no triple can be in both of these sets.
-  ad_utility::HashMap<IdTriple, LocatedTripleHandles> triplesInserted_;
-  ad_utility::HashMap<IdTriple, LocatedTripleHandles> triplesDeleted_;
+  ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesInserted_;
+  ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesDeleted_;
 
  public:
   // Construct for given index.
@@ -88,11 +88,11 @@ class DeltaTriples {
 
   // Insert triple. Must not contain duplicates.
   void insertTriples(ad_utility::SharedCancellationHandle cancellationHandle,
-                     std::vector<IdTriple> triples);
+                     std::vector<IdTriple<0>> triples);
 
   // Delete triple. Must not contain duplicates.
   void deleteTriples(ad_utility::SharedCancellationHandle cancellationHandle,
-                     std::vector<IdTriple> triples);
+                     std::vector<IdTriple<0>> triples);
 
   // Get `TripleWithPosition` objects for given permutation.
   LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
@@ -107,7 +107,7 @@ class DeltaTriples {
   // again from these maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       ad_utility::SharedCancellationHandle cancellationHandle,
-      const std::vector<IdTriple>& idTriples, bool shouldExist);
+      const std::vector<IdTriple<0>>& idTriples, bool shouldExist);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method

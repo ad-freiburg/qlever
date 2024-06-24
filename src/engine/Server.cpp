@@ -645,8 +645,8 @@ nlohmann::json Server::executeUpdateQuery(
     }
   };
 
-  std::vector<IdTriple> toInsert;
-  std::vector<IdTriple> toDelete;
+  std::vector<IdTriple<0>> toInsert;
+  std::vector<IdTriple<0>> toDelete;
   toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
   toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
   // Result size is size(query result) x num template rows
@@ -663,8 +663,8 @@ nlohmann::json Server::executeUpdateQuery(
         continue;
       }
 
-      toInsert.push_back(
-          IdTriple(subject.value(), predicate.value(), object.value()));
+      toInsert.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
       cancellationHandle->throwIfCancelled();
     }
 
@@ -677,8 +677,8 @@ nlohmann::json Server::executeUpdateQuery(
         continue;
       }
 
-      toDelete.push_back(
-          IdTriple(subject.value(), predicate.value(), object.value()));
+      toDelete.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
       cancellationHandle->throwIfCancelled();
     }
   }

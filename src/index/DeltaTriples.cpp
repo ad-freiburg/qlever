@@ -49,7 +49,7 @@ void DeltaTriples::clear() {
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
-    const std::vector<IdTriple>& idTriples, bool shouldExist) {
+    const std::vector<IdTriple<0>>& idTriples, bool shouldExist) {
   ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -85,13 +85,13 @@ void DeltaTriples::eraseTripleInAllPermutations(
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
-    std::vector<IdTriple> triples) {
+    std::vector<IdTriple<0>> triples) {
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
-  std::erase_if(triples, [this](const IdTriple& triple) {
+  std::erase_if(triples, [this](const IdTriple<0>& triple) {
     return triplesInserted_.contains(triple);
   });
-  std::ranges::for_each(triples, [this](const IdTriple& triple) {
+  std::ranges::for_each(triples, [this](const IdTriple<0>& triple) {
     auto handle = triplesDeleted_.find(triple);
     if (handle != triplesDeleted_.end()) {
       eraseTripleInAllPermutations(handle->second);
@@ -114,13 +114,13 @@ void DeltaTriples::insertTriples(
 // ____________________________________________________________________________
 void DeltaTriples::deleteTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
-    std::vector<IdTriple> triples) {
+    std::vector<IdTriple<0>> triples) {
   // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
-  std::erase_if(triples, [this](const IdTriple& triple) {
+  std::erase_if(triples, [this](const IdTriple<0>& triple) {
     return triplesDeleted_.contains(triple);
   });
-  std::ranges::for_each(triples, [this](const IdTriple& triple) {
+  std::ranges::for_each(triples, [this](const IdTriple<0>& triple) {
     auto handle = triplesInserted_.find(triple);
     if (handle != triplesInserted_.end()) {
       eraseTripleInAllPermutations(handle->second);
