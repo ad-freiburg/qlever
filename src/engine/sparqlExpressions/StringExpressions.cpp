@@ -406,7 +406,7 @@ using EncodeForUriExpression =
   if (!optLanguageTag.has_value() || !optLanguageRange.has_value()) {
     return Id::makeUndefined();
   }
-  // For LANGMATCHES(), the order of the arguements matter.
+  // For LANGMATCHES(), the order of the arguments matter.
   // The language-range "*" will match any non empty string (Sparql-standard).
   const std::string& languageTag = optLanguageTag.value();
   const std::string& languageRange = optLanguageRange.value();
