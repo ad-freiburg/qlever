@@ -61,7 +61,7 @@ static void compareToColumn(
   // For generating better messages, when failing a test.
   auto trace{generateLocationTrace(l, "compareToColumn")};
 
-  // Compare every entry with the fitting comparsion function.
+  // Compare every entry with the fitting comparison function.
   AD_CONTRACT_CHECK(expectedContent.size() == tableToCompareAgainst.numRows());
   for (size_t i = 0; i < expectedContent.size(); i++) {
     if constexpr (std::floating_point<T>) {
@@ -333,7 +333,7 @@ TEST(ResultTableColumnOperations, calculateSpeedupOfColumn) {
         ad_utility::SlowRandomIntGenerator<size_t> rowGenerator(
             0, table.numRows() - 1);
 
-        // Test things trough for all possible input and output columns.
+        // Test things through for all possible input and output columns.
         for (size_t outputColumn = 0; outputColumn < table.numColumns();
              outputColumn++) {
           for (size_t firstInputColumn = 0;

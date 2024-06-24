@@ -192,7 +192,7 @@ class Date {
 
   /// Convert a `uint64_t` to a `Date`. This is only valid if the `uint64_t` was
   /// obtained via a call to `Date::toBits()`. This just casts the underlying
-  /// representaion.
+  /// representation.
   static constexpr Date fromBits(uint64_t bytes) {
     return std::bit_cast<Date>(bytes);
   }
@@ -396,6 +396,11 @@ class DateOrLargeYear {
   // Similar to `getMonth`, but get the day.
   std::optional<int> getDay() const;
 
+  // Get the timezone if there is an underlying complete `Date` w.r.t. this
+  // DateOrLargeYear object. This implementation is necessary for the
+  // `tz()`-function.
+  std::string getStrTimezone() const;
+
   Type getType() const {
     return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &
                              bits_);
@@ -408,7 +413,7 @@ class DateOrLargeYear {
   // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
 
-  // The bitwise comparison also correpsonds to the semantic ordering of years
+  // The bitwise comparison also corresponds to the semantic ordering of years
   // and dates.
   auto operator<=>(const DateOrLargeYear&) const = default;
 

@@ -82,7 +82,7 @@ template <class T>
 void MmapVector<T>::mapForReading() {
   // open to get valid file descriptor
   int orig_fd = ::open(_filename.c_str(), O_RDONLY);
-  // TODO: check if MAP_SHARED is necessary/usefule
+  // TODO: check if MAP_SHARED is necessary/useful
   void* ptr = mmap(nullptr, _bytesize, PROT_READ, MAP_SHARED, orig_fd, 0);
   AD_CONTRACT_CHECK(ptr != MAP_FAILED);
 

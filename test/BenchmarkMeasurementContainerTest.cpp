@@ -88,7 +88,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultGroup) {
 }
 
 /*
-Check the content of a `ResultTable` row.
+Check the content of a `Result` row.
 */
 static void checkResultTableRow(const ResultTable& table,
                                 const size_t& rowNumber,
@@ -157,7 +157,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTable) {
   Special case: A table with no columns. Should throw an exception
   on creation, because you can't add columns after creation and a table without
   columns is quite the stupid idea. Additionally, operations on such an empty
-  table can create segmentation faults. The string conversion of `ResultTable`
+  table can create segmentation faults. The string conversion of `Result`
   uses `std::ranges::max`, which really doesn't play well with empty vectors.
   */
   ASSERT_ANY_THROW(ResultTable("1 by 0 table", {"Test"}, {}));
@@ -308,7 +308,7 @@ TEST(BenchmarkMeasurementContainerTest, ResultTableEraseRow) {
 
 TEST(BenchmarkMeasurementContainerTest, ResultGroupDeleteMember) {
   /*
-  Add the given number of dummy `ResultEntry`s and dummy `ResultTable`s to the
+  Add the given number of dummy `ResultEntry`s and dummy `Result`s to the
   given group.
   */
   auto addDummyMembers = [](ResultGroup* group, const size_t numOfEntries) {

@@ -8,6 +8,7 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/Engine.h"
 #include "engine/QueryExecutionTree.h"
 #include "global/RuntimeParameters.h"
 #include "global/ValueIdComparators.h"
@@ -62,16 +63,16 @@ std::string OrderBy::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ResultTable OrderBy::computeResult() {
+Result OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for OrderBy result computation..." << endl;
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
   auto sortEstimateCancellationFactor =
       RuntimeParameters().get<"sort-estimate-cancellation-factor">();
   if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->size(), subRes->width()) >
+          subRes->idTable().size(), subRes->idTable().numColumns()) >
       remainingTime() * sortEstimateCancellationFactor) {
     // The estimated time for this sort is much larger than the actually
     // remaining time, cancel this operation

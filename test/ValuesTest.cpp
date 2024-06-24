@@ -9,7 +9,7 @@
 #include "./util/IdTableHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/Values.h"
 #include "engine/idTable/IdTable.h"
 #include "util/IndexTestHelpers.h"
@@ -74,7 +74,8 @@ TEST(Values, computeResult) {
   const auto& table = result->idTable();
   Id x = ad_utility::testing::makeGetId(testQec->getIndex())("<x>");
   auto I = ad_utility::testing::IntId;
-  auto l = result->localVocab().getIndexOrNullopt("<y>");
+  auto l = result->localVocab().getIndexOrNullopt(
+      ad_utility::triple_component::LiteralOrIri::iriref("<y>"));
   ASSERT_TRUE(l.has_value());
   auto U = Id::makeUndefined();
   ASSERT_EQ(table,

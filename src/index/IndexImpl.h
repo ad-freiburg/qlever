@@ -12,7 +12,7 @@
 #include <stxxl/vector>
 #include <vector>
 
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Pattern.h"
 #include "global/SpecialIds.h"
@@ -272,8 +272,8 @@ class IndexImpl {
 
   const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the Entites column (0) of the full has-relation
-   *         relation after unrolling the patterns.
+   * @return The multiplicity of the Entities column (0) of the full
+   * has-relation relation after unrolling the patterns.
    */
   double getAvgNumDistinctPredicatesPerSubject() const;
 
@@ -490,17 +490,20 @@ class IndexImpl {
   // OSP-OPS, SPO-SOP).  First creates the permutation and then exchanges the
   // multiplicities and also writes the MetaData to disk. So we end up with
   // fully functional permutations.
+  //
+  // TODO: The rest of this comment looks outdated.
+  //
   // performUnique must be set for the first pair created using vec to enforce
   // RDF standard (no duplicate triples).
   // createPatternsAfterFirst is only valid when  the pair is SPO-SOP because
   // the SPO permutation is also needed for patterns (see usage in
   // IndexImpl::createFromFile function)
 
-  [[nodiscard]] size_t createPermutationPair(size_t numColumns,
-                                             auto&& sortedTriples,
-                                             const Permutation& p1,
-                                             const Permutation& p2,
-                                             auto&&... perTripleCallbacks);
+  template <typename SortedTriplesType, typename... CallbackTypes>
+  [[nodiscard]] size_t createPermutationPair(
+      size_t numColumns, SortedTriplesType&& sortedTriples,
+      const Permutation& p1, const Permutation& p2,
+      CallbackTypes&&... perTripleCallbacks);
 
   // wrapper for createPermutation that saves a lot of code duplications
   // Writes the permutation that is specified by argument permutation
@@ -608,7 +611,7 @@ class IndexImpl {
  private:
   /**
    * @brief Throws an exception if no patterns are loaded. Should be called from
-   *        whithin any index method that returns data requiring the patterns
+   *        within any index method that returns data requiring the patterns
    *        file.
    */
   void throwExceptionIfNoPatterns() const;

@@ -6,8 +6,9 @@
 
 #include "engine/QueryPlanner.h"
 
+#include <absl/strings/str_split.h>
+
 #include <algorithm>
-#include <ctime>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -894,7 +895,7 @@ QueryPlanner::SubtreePlan QueryPlanner::getTextLeafPlan(
   if (node.triple_.p_._iri == CONTAINS_ENTITY_PREDICATE) {
     if (node._variables.size() == 2) {
       // TODO<joka921>: This is not nice, refactor the whole TripleGraph class
-      // to make these checks more explicity.
+      // to make these checks more explicitly.
       Variable evar = *(node._variables.begin()) == cvar
                           ? *(++node._variables.begin())
                           : *(node._variables.begin());
@@ -1162,8 +1163,8 @@ void QueryPlanner::applyTextLimitsIfPossible(
       if (((plan._idsOfIncludedNodes &
             textLimit.idsOfMustBeFinishedOperations_) ^
            textLimit.idsOfMustBeFinishedOperations_) != 0) {
-        // Ther is still an operation that needs to be finished before this text
-        // limit can be applied
+        // There is still an operation that needs to be finished before this
+        // text limit can be applied
         i++;
         continue;
       }
@@ -1533,7 +1534,7 @@ bool QueryPlanner::TripleGraph::isSimilar(
     LOG(INFO) << asString() << std::endl;
     LOG(INFO) << other.asString() << std::endl;
     LOG(INFO) << "Two nodes in this graph were matches to the same node in "
-                 "the other grap"
+                 "the other graph"
               << std::endl;
     return false;
   }
@@ -1641,6 +1642,13 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   if (b.type == SubtreePlan::OPTIONAL) {
     // Join the two optional columns using an optional join
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
+  }
+
+  // Check if one of the two Operations is a SERVICE. If so, we can try
+  // to simplify the Service Query using the result of the other operation.
+  if (auto opt = createJoinWithService(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
   }
 
   if (jcs.size() >= 2) {
@@ -1768,6 +1776,35 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
   auto plan = makeSubtreePlan<HasPredicateScan>(
       qec, std::move(otherTree), otherTreeJoinColumn, std::move(object));
   mergeSubtreePlanIds(plan, a, b);
+  return plan;
+}
+
+// _____________________________________________________________________
+auto QueryPlanner::createJoinWithService(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
+  auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
+
+  // Exactly one of the two Operations can be a service.
+  if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
+    return std::nullopt;
+  }
+
+  auto service = aRootOp ? aRootOp : bRootOp;
+  auto sibling = bRootOp ? a : b;
+
+  service->setSiblingTree(sibling._qet);
+
+  const auto& qec = service->getExecutionContext();
+
+  SubtreePlan plan =
+      jcs.size() == 1
+          ? makeSubtreePlan<Join>(qec, a._qet, b._qet, jcs[0][0], jcs[0][1])
+          : makeSubtreePlan<MultiColumnJoin>(qec, a._qet, b._qet);
+  mergeSubtreePlanIds(plan, a, b);
+
   return plan;
 }
 

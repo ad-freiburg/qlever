@@ -90,7 +90,7 @@ uint64_t CountAvailablePredicates::getSizeEstimateBeforeLimit() {
 size_t CountAvailablePredicates::getCostEstimate() {
   if (subtree_.get() != nullptr) {
     // Without knowing the ratio of elements that will have a pattern assuming
-    // constant cost per entry should be reasonable (altough non distinct
+    // constant cost per entry should be reasonable (although non distinct
     // entries are of course actually cheaper).
     return subtree_->getCostEstimate() + subtree_->getSizeEstimate();
   } else {
@@ -100,7 +100,8 @@ size_t CountAvailablePredicates::getCostEstimate() {
 }
 
 // _____________________________________________________________________________
-ResultTable CountAvailablePredicates::computeResult() {
+Result CountAvailablePredicates::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "CountAvailablePredicates result computation..." << std::endl;
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(2);
@@ -137,7 +138,7 @@ ResultTable CountAvailablePredicates::computeResult() {
                                                              patterns);
     return {std::move(idTable), resultSortedOn(), LocalVocab{}};
   } else {
-    std::shared_ptr<const ResultTable> subresult = subtree_->getResult();
+    std::shared_ptr<const Result> subresult = subtree_->getResult();
     LOG(DEBUG) << "CountAvailablePredicates subresult computation done."
                << std::endl;
 

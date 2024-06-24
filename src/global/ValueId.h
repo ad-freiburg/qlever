@@ -125,7 +125,7 @@ class ValueId {
   // NOTE: (Also for the operator<=> below: These comparisons only work
   // correctly if we only store entries in the local vocab that are NOT part of
   // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reaons). So a join with such
+  // GROUP BY and BIND operations (for performance reasons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
     if (getDatatype() == Datatype::LocalVocabIndex &&
@@ -326,10 +326,15 @@ class ValueId {
   /// This operator is only for debugging and testing. It returns a
   /// human-readable representation.
   friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
-    ostr << toString(id.getDatatype()) << ':';
+    ostr << toString(id.getDatatype())[0] << ':';
+    if (id.getDatatype() == Datatype::Undefined) {
+      return ostr << id.getBits();
+    }
+
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
-        ostr << "Undefined";
+        // already handled above
+        AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);
@@ -339,7 +344,7 @@ class ValueId {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
-        ostr << *value;
+        ostr << value->toStringRepresentation();
       } else {
         // T is `VocabIndex | TextRecordIndex`
         ostr << std::to_string(value.get());

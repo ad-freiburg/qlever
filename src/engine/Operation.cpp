@@ -70,12 +70,12 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // ________________________________________________________________________
-shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
-                                                   bool onlyReadFromCache) {
+std::shared_ptr<const Result> Operation::getResult(
+    bool isRoot, ComputationMode computationMode) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
 
   if (isRoot) {
-    // Reset runtime info, tests may re-use Operation objects.
+    // Reset runtime info, tests may reuse Operation objects.
     _runtimeInfo = std::make_shared<RuntimeInformation>();
     // Start with an estimated runtime info which will be updated as we go.
     createRuntimeInfoFromEstimates(getRuntimeInfoPointer());
@@ -120,11 +120,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer] {
+    auto computeLambda = [this, &timer, computationMode] {
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      ResultTable result = computeResult();
+      Result result =
+          computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
 
       checkCancellation();
       // Compute the datatypes that occur in each column of the result.
@@ -145,7 +146,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
                                         timer.msecs(), std::nullopt);
       // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
       // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables.
+      // the Limit is a full index scan with three variables. Note that the
+      // `QueryPlanner` does currently only set the limit for operations that
+      // support it natively, except for operations in subqueries. This means
+      // that a lot of the time the limit is only artificially applied during
+      // export, allowing the cache to reuse the same operation for different
+      // limits and offsets.
       if (!supportsLimit()) {
         ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
         // Note: both of the following calls have no effect and negligible
@@ -159,10 +165,12 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
       return CacheValue{std::move(result), runtimeInfo()};
     };
 
-    auto result = (pinResult) ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                        onlyReadFromCache)
-                              : cache.computeOnce(cacheKey, computeLambda,
-                                                  onlyReadFromCache);
+    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
+
+    auto result = pinResult ? cache.computeOncePinned(cacheKey, computeLambda,
+                                                      onlyReadFromCache)
+                            : cache.computeOnce(cacheKey, computeLambda,
+                                                onlyReadFromCache);
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
@@ -170,8 +178,9 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     }
 
     updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->size();
-    auto resultNumCols = result._resultPointer->resultTable()->width();
+    auto resultNumRows = result._resultPointer->resultTable()->idTable().size();
+    auto resultNumCols =
+        result._resultPointer->resultTable()->idTable().numColumns();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                << resultNumCols << std::endl;
     return result._resultPointer->resultTable();
@@ -207,7 +216,7 @@ shared_ptr<const ResultTable> Operation::getResult(bool isRoot,
     // Rethrow as QUERY_ABORTED allowing us to print the Operation
     // only at innermost failure of a recursive call
     throw ad_utility::AbortException(
-        "Unexpected expection that is not a subclass of std::exception");
+        "Unexpected exception that is not a subclass of std::exception");
   }
 }
 
@@ -221,10 +230,10 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+    const Result& resultTable, ad_utility::CacheStatus cacheStatus,
     Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.size();
+  _runtimeInfo->numRows_ = resultTable.idTable().size();
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;

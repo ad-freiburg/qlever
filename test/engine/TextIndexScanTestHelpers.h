@@ -9,7 +9,7 @@ namespace textIndexScanTestHelpers {
 // obtain the textRecord using idToOptionalString.
 // TODO: Implement a more elegant/stable version
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
-                                           const ResultTable& result,
+                                           const Result& result,
                                            const size_t& rowIndex) {
   return qec->getIndex()
       .idToOptionalString(
@@ -18,7 +18,7 @@ inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
 }
 
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
-                                       const ResultTable& result,
+                                       const Result& result,
                                        const size_t& rowIndex) {
   return qec->getIndex()
       .idToOptionalString(
@@ -27,7 +27,7 @@ inline string getEntityFromResultTable(const QueryExecutionContext* qec,
 }
 
 inline string getWordFromResultTable(const QueryExecutionContext* qec,
-                                     const ResultTable& result,
+                                     const Result& result,
                                      const size_t& rowIndex) {
   return qec->getIndex()
       .idToOptionalString(

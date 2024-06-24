@@ -516,6 +516,35 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromDouble(42.0)}, Ids{U});
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
+
+  // test makeTimezoneStrExpression
+  using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
+  auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  Timezone tz = -5;
+  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d1)},
+                   IdOrLiteralOrIriVec{lit("-05:00")});
+  tz = 23;
+  auto d2 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d2)},
+                   IdOrLiteralOrIriVec{lit("+23:00")});
+  tz = Date::TimeZoneZ{};
+  auto d3 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
+  tz = Date::NoTimeZone{};
+  DateOrLargeYear d4 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d5 = DateOrLargeYear(Date(2012, 1, 4, 14, 45));
+  checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
+  Id U = Id::makeUndefined();
+  checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
+                   IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
+  DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
+  DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
 }
 
 // _____________________________________________________________________________________
@@ -705,6 +734,54 @@ TEST(SparqlExpression, substr) {
 }
 
 // _____________________________________________________________________________________
+TEST(SparqlExpression, strIriDtTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrIriTag =
+      std::bind_front(testNaryExpression, &makeStrIriDtExpression);
+  checkStrIriTag(IdOrLiteralOrIriVec{lit(
+                     "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                 IdOrLiteralOrIriVec{lit("123")},
+                 IdOrLiteralOrIriVec{
+                     iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkStrIriTag(
+      IdOrLiteralOrIriVec{lit("iiii", "^^<http://example/romanNumeral>")},
+      IdOrLiteralOrIriVec{lit("iiii")},
+      IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")});
+  checkStrIriTag(IdOrLiteralOrIriVec{U},
+                 IdOrLiteralOrIriVec{iriref("<http://example/romanNumeral>")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("iiii")},
+                 IdOrLiteralOrIriVec{U});
+  checkStrIriTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("XVII")},
+                 IdOrLiteralOrIriVec{lit("<not/a/iriref>")});
+}
+
+// _____________________________________________________________________________________
+TEST(SparqlExpression, strLangTagged) {
+  auto U = Id::makeUndefined();
+  auto checkStrTag =
+      std::bind_front(testNaryExpression, &makeStrLangTagExpression);
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en")},
+              IdOrLiteralOrIriVec{lit("chat")}, IdOrLiteralOrIriVec{lit("en")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("chat", "@en-US")},
+              IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("en-US")});
+  checkStrTag(IdOrLiteralOrIriVec{lit("Sprachnachricht", "@de-Latn-de")},
+              IdOrLiteralOrIriVec{lit("Sprachnachricht")},
+              IdOrLiteralOrIriVec{lit("de-Latn-de")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("d1235")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("reporter")},
+              IdOrLiteralOrIriVec{lit("@")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{lit("chat")},
+              IdOrLiteralOrIriVec{lit("")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{lit("d")});
+  checkStrTag(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U},
+              IdOrLiteralOrIriVec{U});
+}
+
+// _____________________________________________________________________________________
 TEST(SparqlExpression, unaryNegate) {
   auto checkNegate = testUnaryExpression<&makeUnaryNegateExpression>;
   // Zero and NaN are considered to be false, so their negation is true
@@ -803,6 +880,173 @@ TEST(SparqlExpression, isSomethingFunctions) {
       testIdOrStrings, Ids{F, F, F, F, F, F, F, T, T, F});
   testUnaryExpression<makeBoundExpression>(testIdOrStrings,
                                            Ids{T, T, T, T, T, T, T, T, T, F});
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, DatatypeExpression) {
+  U = Id::makeUndefined();
+  auto d1 = DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z");
+  auto d2 = DateOrLargeYear::parseGYear("-10000");
+  auto d3 = DateOrLargeYear::parseGYear("1900");
+  auto d4 = DateOrLargeYear::parseXsdDate("2024-06-13");
+  auto d5 = DateOrLargeYear::parseGYearMonth("2024-06");
+  Id DateId1 = Id::makeFromDate(d1);
+  Id DateId2 = Id::makeFromDate(d2);
+  Id DateId3 = Id::makeFromDate(d3);
+  Id DateId4 = Id::makeFromDate(d4);
+  Id DateId5 = Id::makeFromDate(d5);
+  auto checkGetDatatype = testUnaryExpression<&makeDatatypeExpression>;
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().x},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().alpha},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().zz},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{testContext().notInVocabB},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{testContext().notInVocabD},
+                   IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{lit(
+                       "123", "^^<http://www.w3.org/2001/XMLSchema#integer>")},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#integer>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("Simple StrStr")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("english", "@en")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{U}, IdOrLiteralOrIriVec{U});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId1},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#dateTime>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId2},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId3},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#gYear>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{DateId4},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#date>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{DateId5},
+                   IdOrLiteralOrIriVec{iriref(
+                       "<http://www.w3.org/2001/XMLSchema#gYearMonth>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(212378233)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromDouble(2.3475)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#double>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{Id::makeFromBool(false)},
+                   IdOrLiteralOrIriVec{
+                       iriref("<http://www.w3.org/2001/XMLSchema#boolean>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{Id::makeFromInt(true)},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#int>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("")},
+      IdOrLiteralOrIriVec{iriref("<http://www.w3.org/2001/XMLSchema#string>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit(" ", "@de-LATN-de")},
+      IdOrLiteralOrIriVec{
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")});
+  checkGetDatatype(
+      IdOrLiteralOrIriVec{lit("testval", "^^<http://example/iri/test#test>")},
+      IdOrLiteralOrIriVec{iriref("<http://example/iri/test#test>")});
+  checkGetDatatype(IdOrLiteralOrIriVec{iriref("<http://example/iri/test>")},
+                   IdOrLiteralOrIriVec{U});
+
+  // test corner case DatatypeValueGetter
+  TestContext ctx;
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      sparqlExpression::detail::DatatypeValueGetter{}(Id::max(), &ctx.context),
+      ::testing::ContainsRegex("should be unreachable"));
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testStrToHashExpressions) {
+  auto checkGetMD5Expression = testUnaryExpression<&makeMD5Expression>;
+  auto checkGetSHA1Expression = testUnaryExpression<&makeSHA1Expression>;
+  auto checkGetSHA256Expression = testUnaryExpression<&makeSHA256Expression>;
+  auto checkGetSHA384Expression = testUnaryExpression<&makeSHA384Expression>;
+  auto checkGetSHA512Expression = testUnaryExpression<&makeSHA512Expression>;
+  std::string testStr1 = "";
+  std::string testStr2 = "Friburg23o";
+  std::string testStr3 = "abc";
+  checkGetMD5Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "d41d8cd98f00b204e9800998ecf8427e",
+                          "9d9a73f67e20835e516029541595c381",
+                          "900150983cd24fb0d6963f7d28e17f72"}));
+  checkGetSHA1Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U, "da39a3ee5e6b4b0d3255bfef95601890afd80709",
+                          "c3a77a6104fa091f590f594b3e2dba2668196d3c",
+                          "a9993e364706816aba3e25717850c26c9cd0d89d"}));
+  checkGetSHA256Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+           "af8d98f09845a700aea36b35e8cc3a35632e38d0f7be9c0ca508e53c578da900",
+           "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015a"
+           "d"}));
+  checkGetSHA384Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec({U,
+                          "38b060a751ac96384cd9327eb1b1e36a21fdb71114be07434c0c"
+                          "c7bf63f6e1da274edebfe76f65fbd51ad2f14898b95b",
+                          "72810006e3b418ebd179812522cafa486cd6c2a988378fac148a"
+                          "f1a9a098a01ce3373734c23978f7df68bf7e98955c02",
+                          "cb00753f45a35e8bb5a03d699ac65007272c32ab0eded1631a8b"
+                          "605a43ff5bed8086072ba1e7cc2358baeca134c825a7"}));
+  checkGetSHA512Expression(
+      idOrLitOrStringVec({U, testStr1, testStr2, testStr3}),
+      idOrLitOrStringVec(
+          {U,
+           "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d"
+           "0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e",
+           "be4422bfad59ee51e98dc51c540dc9d85333cb786333b152d13b2bebde1bdaa499e"
+           "9d4e1370a5bb2e831f4443b1358f2301fd5214ba80554ea0ff1d185c3b027",
+           "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a219"
+           "2992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"}));
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testToNumericExpression) {
+  Id T = Id::makeFromBool(true);
+  Id F = Id::makeFromBool(false);
+  auto checkGetInt = testUnaryExpression<&makeConvertToIntExpression>;
+  auto checkGetDouble = testUnaryExpression<&makeConvertToDoubleExpression>;
+
+  checkGetInt(
+      idOrLitOrStringVec({U, "  -1275", "5.97", "-78.97", "-5BoB6", "FreBurg1",
+                          "", " .", " 42\n", " 0.01 ", "", "@", "@?+1", "1"}),
+      Ids{U, I(-1275), U, U, U, U, U, U, I(42), U, U, U, U, I(1)});
+  checkGetDouble(
+      idOrLitOrStringVec({U, "-122.2", "19,96", " 128789334.345 ", "-0.f",
+                          "  0.007 ", " -14.75 ", "Q", "@!+?", "1"}),
+      Ids{U, D(-122.2), U, D(128789334.345), U, D(0.007), D(-14.75), U, U,
+          D(1.00)});
+  checkGetInt(idOrLitOrStringVec(
+                  {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+              Ids{U, I(-12475), I(42), I(0), I(-14), I(33), I(0)});
+  checkGetDouble(
+      idOrLitOrStringVec(
+          {U, I(-12475), I(42), I(0), D(-14.57), D(33.0), D(0.00001)}),
+      Ids{U, D(-12475.00), D(42.00), D(0.00), D(-14.57), D(33.00), D(0.00001)});
+  checkGetDouble(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F,
+                                     lit("0.003"), lit("1")},
+                 Ids{U, D(-12.745), D(1.00), D(0.00), D(0.003), D(1.00)});
+  checkGetInt(IdOrLiteralOrIriVec{lit("."), lit("-12.745"), T, F, lit(".03"),
+                                  lit("1"), lit("-33")},
+              Ids{U, U, I(1), I(0), U, I(1), I(-33)});
 }
 
 // ____________________________________________________________________________
@@ -926,7 +1170,7 @@ TEST(SparqlExpression, ReplaceExpression) {
                           IdOrLiteralOrIri{lit("(?i)[ei]")},
                           IdOrLiteralOrIri{lit("x")}});
 
-  // Multiple matches withing the same string
+  // Multiple matches within the same string
   checkReplace(
       IdOrLiteralOrIri{lit("wEeDEflE")},
       std::tuple{IdOrLiteralOrIri{lit("weeeDeeflee")},

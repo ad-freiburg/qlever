@@ -89,7 +89,7 @@ class GroupBy : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
@@ -142,7 +142,7 @@ class GroupBy : public Operation {
   //   } GROUP BY ?y
   //
   // NOTE: This is exactly what we need for a context-sensitive object AC query
-  // without connected triples. The GROUP BY variable can also be ommitted in
+  // without connected triples. The GROUP BY variable can also be omitted in
   // the SELECT clause.
   bool computeGroupByObjectWithCount(IdTable* result);
 

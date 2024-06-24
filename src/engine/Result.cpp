@@ -4,13 +4,13 @@
 //          Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 //          Hannah Bast <bast@cs.uni-freiburg.de>
 
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 
 #include "engine/LocalVocab.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
-string ResultTable::asDebugString() const {
+string Result::asDebugString() const {
   std::ostringstream os;
   os << "First (up to) 5 rows of result with size:\n";
   for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
@@ -23,26 +23,23 @@ string ResultTable::asDebugString() const {
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getMergedLocalVocab(const ResultTable& resultTable1,
-                                      const ResultTable& resultTable2)
+auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
     -> SharedLocalVocabWrapper {
   return getMergedLocalVocab(
-      std::array{std::cref(resultTable1), std::cref(resultTable2)});
+      std::array{std::cref(result1), std::cref(result2)});
 }
 
 // _____________________________________________________________________________
-LocalVocab ResultTable::getCopyOfLocalVocab() const {
-  return localVocab().clone();
-}
+LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
-                         SharedLocalVocabWrapper localVocab)
-    : _idTable{std::move(idTable)},
-      _sortedBy{std::move(sortedBy)},
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : idTable_{std::move(idTable)},
+      sortedBy_{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  AD_CONTRACT_CHECK(std::ranges::all_of(_sortedBy, [this](size_t numCols) {
+  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy_, [this](size_t numCols) {
     return numCols < this->idTable().numColumns();
   }));
 
@@ -60,40 +57,40 @@ ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
 }
 
 // _____________________________________________________________________________
-ResultTable::ResultTable(IdTable idTable, vector<ColumnIndex> sortedBy,
-                         LocalVocab&& localVocab)
-    : ResultTable(std::move(idTable), std::move(sortedBy),
-                  SharedLocalVocabWrapper{std::move(localVocab)}) {}
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result(std::move(idTable), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}) {}
 
 // _____________________________________________________________________________
-void ResultTable::applyLimitOffset(const LimitOffsetClause& limitOffset) {
+void Result::applyLimitOffset(const LimitOffsetClause& limitOffset) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
   std::ranges::for_each(
-      _idTable.getColumns(),
-      [offset = limitOffset.actualOffset(_idTable.numRows()),
+      idTable_.getColumns(),
+      [offset = limitOffset.actualOffset(idTable_.numRows()),
        upperBound =
-           limitOffset.upperBound(_idTable.numRows())](std::span<Id> column) {
+           limitOffset.upperBound(idTable_.numRows())](std::span<Id> column) {
         std::shift_left(column.begin(), column.begin() + upperBound, offset);
       });
   // Resize the `IdTable` if necessary.
-  size_t targetSize = limitOffset.actualSize(_idTable.numRows());
-  AD_CORRECTNESS_CHECK(targetSize <= _idTable.numRows());
-  _idTable.resize(targetSize);
-  _idTable.shrinkToFit();
+  size_t targetSize = limitOffset.actualSize(idTable_.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable_.numRows());
+  idTable_.resize(targetSize);
+  idTable_.shrinkToFit();
 }
 
 // _____________________________________________________________________________
-auto ResultTable::getOrComputeDatatypeCountsPerColumn()
+auto Result::getOrComputeDatatypeCountsPerColumn()
     -> const DatatypeCountsPerColumn& {
   if (datatypeCountsPerColumn_.has_value()) {
     return datatypeCountsPerColumn_.value();
   }
   auto& types = datatypeCountsPerColumn_.emplace();
-  types.resize(_idTable.numColumns());
-  for (size_t i = 0; i < _idTable.numColumns(); ++i) {
-    const auto& col = _idTable.getColumn(i);
+  types.resize(idTable_.numColumns());
+  for (size_t i = 0; i < idTable_.numColumns(); ++i) {
+    const auto& col = idTable_.getColumn(i);
     auto& datatypes = types.at(i);
     for (Id id : col) {
       ++datatypes[static_cast<size_t>(id.getDatatype())];
@@ -103,7 +100,7 @@ auto ResultTable::getOrComputeDatatypeCountsPerColumn()
 }
 
 // _____________________________________________________________
-bool ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
+bool Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
   return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
     const auto& [columnIndex, mightContainUndef] = varAndCol.second;
@@ -112,4 +109,13 @@ bool ResultTable::checkDefinedness(const VariableToColumnMap& varColMap) {
     return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
            !hasUndefined;
   });
+}
+
+// _____________________________________________________________________________
+const IdTable& Result::idTable() const { return idTable_; }
+
+// _____________________________________________________________________________
+void Result::logResultSize() const {
+  LOG(INFO) << "Result has size " << idTable().size() << " x "
+            << idTable().numColumns() << std::endl;
 }

@@ -507,5 +507,5 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
   auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
   std::stringstream str;
   str << tr;
-  ASSERT_EQ(str.str(), "Triple: VocabIndex:12 VocabIndex:13 VocabIndex:27\n");
+  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
 }

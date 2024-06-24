@@ -13,6 +13,11 @@
  */
 class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
  public:
+  virtual std::any visitQueryOrUpdate(
+      SparqlAutomaticParser::QueryOrUpdateContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
   virtual std::any visitQuery(
       SparqlAutomaticParser::QueryContext* ctx) override {
     return visitChildren(ctx);
@@ -160,6 +165,116 @@ class SparqlAutomaticBaseVisitor : public SparqlAutomaticVisitor {
 
   virtual std::any visitValuesClause(
       SparqlAutomaticParser::ValuesClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitUpdate(
+      SparqlAutomaticParser::UpdateContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitUpdate1(
+      SparqlAutomaticParser::Update1Context* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitLoad(SparqlAutomaticParser::LoadContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitClear(
+      SparqlAutomaticParser::ClearContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDrop(SparqlAutomaticParser::DropContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitCreate(
+      SparqlAutomaticParser::CreateContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitAdd(SparqlAutomaticParser::AddContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitMove(SparqlAutomaticParser::MoveContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitCopy(SparqlAutomaticParser::CopyContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitInsertData(
+      SparqlAutomaticParser::InsertDataContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDeleteData(
+      SparqlAutomaticParser::DeleteDataContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDeleteWhere(
+      SparqlAutomaticParser::DeleteWhereContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitModify(
+      SparqlAutomaticParser::ModifyContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitDeleteClause(
+      SparqlAutomaticParser::DeleteClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitInsertClause(
+      SparqlAutomaticParser::InsertClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitUsingClause(
+      SparqlAutomaticParser::UsingClauseContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitGraphOrDefault(
+      SparqlAutomaticParser::GraphOrDefaultContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitGraphRef(
+      SparqlAutomaticParser::GraphRefContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitGraphRefAll(
+      SparqlAutomaticParser::GraphRefAllContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitQuadPattern(
+      SparqlAutomaticParser::QuadPatternContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitQuadData(
+      SparqlAutomaticParser::QuadDataContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitQuads(
+      SparqlAutomaticParser::QuadsContext* ctx) override {
+    return visitChildren(ctx);
+  }
+
+  virtual std::any visitQuadsNotTriples(
+      SparqlAutomaticParser::QuadsNotTriplesContext* ctx) override {
     return visitChildren(ctx);
   }
 
