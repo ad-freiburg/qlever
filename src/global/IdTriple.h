@@ -1,6 +1,8 @@
 // Copyright 2024, University of Freiburg
 // Chair of Algorithms and Data Structures
-// Authors: Hannah Bast <bast@cs.uni-freiburg.de>
+// Authors:
+//    2023 Hannah Bast <bast@cs.uni-freiburg.de>
+//    2024 Julian Mundhahs <mundhahj@tf.uni-freiburg.de>
 
 #pragma once
 
@@ -10,22 +12,32 @@
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 
-// TODO<qup42>: add payload of arbitrary ids
+template <size_t N = 0>
 struct IdTriple {
+  // The three IDs that define the triple.
   std::array<Id, 3> ids_;
+  // Some additional payload of the triple, e.g. which graph it belongs to.
+  std::array<Id, N> payload_;
 
-  explicit IdTriple() : ids_(){};
+  explicit IdTriple() = default;
+  IdTriple(const IdTriple&) = default;
   explicit IdTriple(
       const CompressedBlockMetadata::PermutedTriple& permutedTriple)
       : ids_({permutedTriple.col0Id_, permutedTriple.col1Id_,
-              permutedTriple.col2Id_}){};
-  explicit IdTriple(const std::array<Id, 3> ids) : ids_(ids){};
-  explicit IdTriple(const Id& col0Id, const Id& col1Id, const Id& col2Id)
-      : ids_({col0Id, col1Id, col2Id}){};
+              permutedTriple.col2Id_}),
+        payload_(){};
+
+  explicit IdTriple(const std::array<Id, 3>& ids) requires(N == 0)
+      : ids_(ids), payload_(){};
+
+  explicit IdTriple(const std::array<Id, 3>& ids,
+                    const std::array<Id, N>& payload) requires(N != 0)
+      : ids_(ids), payload_(payload){};
 
   friend std::ostream& operator<<(std::ostream& os, const IdTriple& triple) {
     os << "IdTriple(";
     std::ranges::copy(triple.ids_, std::ostream_iterator<Id>(os, ", "));
+    std::ranges::copy(triple.payload_, std::ostream_iterator<Id>(os, ", "));
     os << ")";
     return os;
   }
@@ -38,7 +50,15 @@ struct IdTriple {
   }
 
   // TODO<qup42>: should this be a `PermutedTriple`?
-  IdTriple permute(const std::array<size_t, 3>& keyOrder) const {
-    return IdTriple{ids_[keyOrder[0]], ids_[keyOrder[1]], ids_[keyOrder[2]]};
+  // Permutes the ID of this triple according to the given permutation given by
+  // its keyOrder.
+  IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
+    std::array<Id, 3> newIds{ids_[keyOrder[0]], ids_[keyOrder[1]],
+                             ids_[keyOrder[2]]};
+    if constexpr (N == 0) {
+      return IdTriple<N>(newIds);
+    } else {
+      return IdTriple<N>(newIds, payload_);
+    }
   }
 };

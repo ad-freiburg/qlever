@@ -116,6 +116,8 @@ addLinkAndDiscoverTestSerial(IndexTest index)
 
 addLinkAndDiscoverTestSerial(LocatedTriplesTest index)
 
+addLinkAndDiscoverTestSerial(IdTripleTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)

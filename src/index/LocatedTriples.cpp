@@ -15,7 +15,7 @@
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
-    const std::vector<IdTriple>& triples, const Permutation& permutation,
+    const std::vector<IdTriple<0>>& triples, const Permutation& permutation,
     bool shouldExist) {
   const Permutation::MetaData& meta = permutation.metaData();
   const vector<CompressedBlockMetadata>& blocks = meta.blockData();
@@ -28,25 +28,17 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     currentBlockIndex =
         std::ranges::lower_bound(
             blocks, triple,
-            [&](const IdTriple& block, const IdTriple& triple) {
+            [&](const IdTriple<0>& block, const IdTriple<0>& triple) {
               return block < triple;
             },
             [](const CompressedBlockMetadata& block) {
-              const auto& perm = block.lastTriple_;
-              return IdTriple{perm.col0Id_, perm.col1Id_, perm.col2Id_};
+              return IdTriple(block.lastTriple_);
             }) -
         blocks.begin();
     out.emplace_back(currentBlockIndex, triple, shouldExist);
   }
 
   return out;
-}
-
-// ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
-  os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
-     << lt.shouldTripleExist_ << ")";
-  return os;
 }
 
 // ____________________________________________________________________________
@@ -77,7 +69,7 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
   auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
-  result.resize(block.numRows() + numInsertsAndDeletes.numAdded);
+  result.resize(block.numRows() + numInsertsAndDeletes.numAdded_);
 
   const auto& locatedTriples = map_.at(blockIndex);
 
@@ -192,20 +184,6 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
 }
 
 // ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
-  // Get the block indices in sorted order.
-  std::vector<size_t> blockIndices;
-  std::ranges::copy(ltpb.map_ | std::views::keys,
-                    std::back_inserter(blockIndices));
-  std::ranges::sort(blockIndices);
-  for (auto blockIndex : blockIndices) {
-    os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
-       << std::endl;
-  }
-  return os;
-}
-
-// ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";
   std::ranges::copy(lts, std::ostream_iterator<LocatedTriple>(os, " "));
@@ -214,7 +192,7 @@ std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
 }
 
 // ____________________________________________________________________________
-std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple>& v) {
-  std::ranges::copy(v, std::ostream_iterator<IdTriple>(os, ", "));
+std::ostream& operator<<(std::ostream& os, const std::vector<IdTriple<0>>& v) {
+  std::ranges::copy(v, std::ostream_iterator<IdTriple<0>>(os, ", "));
   return os;
 }
