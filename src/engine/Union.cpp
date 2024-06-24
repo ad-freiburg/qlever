@@ -75,7 +75,7 @@ VariableToColumnMap Union::computeVariableToColumnMap() const {
   // subtrees and if it is guaranteed to be bound in all the subtrees.
   auto mightContainUndef = [this](const Variable& var) {
     return std::ranges::any_of(
-        _subtrees, [&](const shared_ptr<QueryExecutionTree>& subtree) {
+        _subtrees, [&](const std::shared_ptr<QueryExecutionTree>& subtree) {
           const auto& varCols = subtree->getVariableColumns();
           return !varCols.contains(var) ||
                  (varCols.at(var).mightContainUndef_ ==
@@ -158,10 +158,10 @@ size_t Union::getCostEstimate() {
          getSizeEstimateBeforeLimit();
 }
 
-ResultTable Union::computeResult() {
+Result Union::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Union result computation..." << std::endl;
-  shared_ptr<const ResultTable> subRes1 = _subtrees[0]->getResult();
-  shared_ptr<const ResultTable> subRes2 = _subtrees[1]->getResult();
+  std::shared_ptr<const Result> subRes1 = _subtrees[0]->getResult();
+  std::shared_ptr<const Result> subRes2 = _subtrees[1]->getResult();
   LOG(DEBUG) << "Union subresult computation done." << std::endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -173,8 +173,8 @@ ResultTable Union::computeResult() {
   LOG(DEBUG) << "Union result computation done" << std::endl;
   // If only one of the two operands has a non-empty local vocabulary, share
   // with that one (otherwise, throws an exception).
-  return ResultTable{std::move(idTable), resultSortedOn(),
-                     ResultTable::getMergedLocalVocab(*subRes1, *subRes2)};
+  return Result{std::move(idTable), resultSortedOn(),
+                Result::getMergedLocalVocab(*subRes1, *subRes2)};
 }
 
 void Union::computeUnion(

@@ -13,7 +13,7 @@
 namespace ad_utility::httpUtils {
 
 // The regex for parsing the components of a URL. We need it also as a string
-// (for error messagin) and CTRE has no function for printing a regex as a
+// (for error messaging) and CTRE has no function for printing a regex as a
 // a string, hence the two variables.
 static constexpr char urlRegexString[] =
     "^(http|https)://([^:/]+)(:([0-9]+))?(/.*)?$";

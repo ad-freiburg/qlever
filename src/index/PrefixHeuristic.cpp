@@ -84,7 +84,7 @@ TreeNode* TreeNode::insert(string_view value) {
 
 // ___________________________________________________________________________
 std::pair<size_t, TreeNode*> TreeNode::getMaximum(size_t codelength) {
-  // _sharedCount = _ownCount + sum over childrens _sharedCount
+  // _sharedCount = _ownCount + sum over childrens' _sharedCount
   _sharedCount = _ownCount;
 
   // get Maximum score and node from all the children
@@ -118,7 +118,7 @@ std::pair<size_t, TreeNode*> TreeNode::getMaximum(size_t codelength) {
 
   _score = _sharedCount * relevantLength;
 
-  // Check if our own score is greater than any of the childrens
+  // Check if our own score is greater than the score any of the childrens'
   // we choose >= so we get a valid pointer when there is only the root with
   // score 0 left.
   if (_score >= maxScore) {

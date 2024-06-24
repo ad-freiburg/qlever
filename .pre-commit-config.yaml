@@ -14,3 +14,9 @@ repos:
     hooks:
       - id: clang-format
         'types_or': [ c++, c ]
+
+  - repo: https://github.com/codespell-project/codespell
+    # Configuration for codespell is in .codespellrc
+    rev: v2.2.6
+    hooks:
+    - id: codespell

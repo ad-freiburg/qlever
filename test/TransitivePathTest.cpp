@@ -476,9 +476,9 @@ TEST_P(TransitivePathTest, zeroLengthException) {
                       left, right, 0, std::numeric_limits<size_t>::max());
   AD_EXPECT_THROW_WITH_MESSAGE(
       T->computeResultOnlyForTesting(),
-      ::testing::ContainsRegex(
-          "This query might have to evalute the empty path, which is currently "
-          "not supported"));
+      ::testing::ContainsRegex("This query might have to evaluate the empty "
+                               "path, which is currently "
+                               "not supported"));
 }
 
 INSTANTIATE_TEST_SUITE_P(TransitivePathTestSuite, TransitivePathTest,

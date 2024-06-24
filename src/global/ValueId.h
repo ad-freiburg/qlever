@@ -8,7 +8,6 @@
 #include <absl/strings/str_cat.h>
 
 #include <bit>
-#include <boost/stacktrace.hpp>
 #include <cstdint>
 #include <functional>
 #include <limits>
@@ -16,7 +15,6 @@
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
 #include "util/Date.h"
-#include "util/Log.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
@@ -127,14 +125,9 @@ class ValueId {
   // NOTE: (Also for the operator<=> below: These comparisons only work
   // correctly if we only store entries in the local vocab that are NOT part of
   // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reaons). So a join with such
+  // GROUP BY and BIND operations (for performance reasons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
-    if !consteval {
-      LOG(ERROR) << "Exiting, stacktrace is \n "
-                 << boost::stacktrace::stacktrace() << std::endl;
-      throw std::system_error{};
-    }
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() == *other.getLocalVocabIndex();
@@ -151,12 +144,6 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    if !consteval {
-      LOG(ERROR) << "Exiting, stacktrace is \n "
-                 << boost::stacktrace::stacktrace() << std::endl;
-      throw std::system_error{};
-    }
-    // AD_FAIL();
     if (getDatatype() == Datatype::LocalVocabIndex &&
         other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
@@ -353,10 +340,15 @@ class ValueId {
   /// This operator is only for debugging and testing. It returns a
   /// human-readable representation.
   friend std::ostream& operator<<(std::ostream& ostr, const ValueId& id) {
-    ostr << toString(id.getDatatype()) << ':';
+    ostr << toString(id.getDatatype())[0] << ':';
+    if (id.getDatatype() == Datatype::Undefined) {
+      return ostr << id.getBits();
+    }
+
     auto visitor = [&ostr]<typename T>(T&& value) {
       if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
-        ostr << "Undefined";
+        // already handled above
+        AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
                            ad_utility::isSimilar<T, int64_t>) {
         ostr << std::to_string(value);

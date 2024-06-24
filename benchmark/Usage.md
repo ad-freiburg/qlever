@@ -68,7 +68,7 @@ BenchmarkResults runAllBenchmarks(){
   /*
   Create an empty table with a number of rows and columns. Doesn't measure anything.
   The number of columns can not be changed after creation, but the number of rows can.
-  Important: The row names aren't saved in a seperate container, but INSIDE the
+  Important: The row names aren't saved in a separate container, but INSIDE the
   first column of the table.
   */
   auto& table = results.addTable(identifier, {"rowName1", "rowName2", "etc."},

@@ -4,7 +4,7 @@ project(QLever C CXX)
 # C/C++ Versions
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_STANDARD 23)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if (CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
@@ -348,7 +348,7 @@ message(STATUS ---)
 include_directories(src)
 
 # Run the script `CompilationInfo.cmake` that creates the file `CompilationInfo.cpp`
-# with the current git hash and the curent time and date. When specifying
+# with the current git hash and the current time and date. When specifying
 # `-DDONT_UPDATE_COMPILATION_INFO=true` as an argument to `cmake`, the compilation info is
 # never updated. This is useful during development to avoid a relinking of the binaries for
 # every compilation.
@@ -394,11 +394,11 @@ endif ()
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
 
-add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE")
-add_compile_options("-g;-fno-inline")
-add_link_options( "-no-pie")
-link_libraries(dl)
-
+# TODO<joka921> Add an option to enable boost-stacktrace, every now and then it is very useful
+#add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE")
+#add_compile_options("-g;-fno-inline")
+#add_link_options( "-no-pie")
+#link_libraries(dl)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})
@@ -431,5 +431,3 @@ qlever_target_link_libraries(PermutationExporterMain index ${CMAKE_THREAD_LIBS_I
 
 add_executable(PrintIndexVersionMain src/PrintIndexVersionMain.cpp)
 qlever_target_link_libraries(PrintIndexVersionMain util)
-
-

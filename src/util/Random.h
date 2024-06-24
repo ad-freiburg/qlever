@@ -8,6 +8,8 @@
 
 #include <algorithm>
 #include <array>
+#include <boost/uuid/uuid_generators.hpp>
+#include <boost/uuid/uuid_io.hpp>
 #include <cstring>
 #include <random>
 #include <type_traits>
@@ -102,6 +104,20 @@ class RandomDoubleGenerator {
  private:
   std::mt19937_64 _randomEngine;
   std::uniform_real_distribution<double> _distribution;
+};
+
+// GENERATE UUID
+class UuidGenerator {
+ public:
+  explicit UuidGenerator(
+      RandomSeed seed = RandomSeed::make(std::random_device{}()))
+      : randomEngine_{seed.get()}, gen_(randomEngine_) {}
+
+  std::string operator()() { return boost::uuids::to_string(gen_()); }
+
+ private:
+  std::mt19937_64 randomEngine_;
+  boost::uuids::basic_random_generator<std::mt19937_64> gen_;
 };
 
 /// Randomly shuffle range denoted by `[begin, end)`

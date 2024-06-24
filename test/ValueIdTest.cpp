@@ -289,21 +289,27 @@ TEST(ValueId, toDebugString) {
     stream << id;
     ASSERT_EQ(stream.str(), expected);
   };
-  test(ValueId::makeUndefined(), "Undefined:Undefined");
-  test(ValueId::makeFromInt(-42), "Int:-42");
-  test(ValueId::makeFromDouble(42.0), "Double:42.000000");
-  test(ValueId::makeFromBool(false), "Bool:false");
-  test(ValueId::makeFromBool(true), "Bool:true");
-  test(makeVocabId(15), "VocabIndex:15");
+  test(ValueId::makeUndefined(), "U:0");
+  // Values with type undefined can usually only have one value (all data bits
+  // zero). Sometimes ValueIds with type undefined but non-zero data bits are
+  // used. The following test tests one of these internal ValueIds.
+  ValueId customUndefined = ValueId::fromBits(
+      ValueId::IntegerType::fromNBit(100) |
+      (static_cast<ValueId::T>(Datatype::Undefined) << ValueId::numDataBits));
+  test(customUndefined, "U:100");
+  test(ValueId::makeFromDouble(42.0), "D:42.000000");
+  test(ValueId::makeFromBool(false), "B:false");
+  test(ValueId::makeFromBool(true), "B:true");
+  test(makeVocabId(15), "V:15");
   auto str = ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
       "SomeValue");
-  test(ValueId::makeFromLocalVocabIndex(&str), "LocalVocabIndex:\"SomeValue\"");
-  test(makeTextRecordId(37), "TextRecordIndex:37");
-  test(makeWordVocabId(42), "WordVocabIndex:42");
-  test(makeBlankNodeId(27), "BlankNodeIndex:27");
+  test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
+  test(makeTextRecordId(37), "T:37");
+  test(makeWordVocabId(42), "W:42");
+  test(makeBlankNodeId(27), "B:27");
   test(ValueId::makeFromDate(
            DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
-       "Date:123456");
+       "D:123456");
   // make an ID with an invalid datatype
   ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
