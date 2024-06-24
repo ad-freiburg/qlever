@@ -95,6 +95,8 @@ class Row {
     return result;
   }
 
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow)
       requires(std::is_same_v<T, Id>) {
     os << "(";

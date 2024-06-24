@@ -42,6 +42,8 @@ struct LocatedTriple {
 
   bool operator==(const LocatedTriple&) const = default;
 
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os, const LocatedTriple& lt) {
     os << "LT(" << lt.blockIndex_ << " " << lt.triple_ << " "
        << lt.shouldTripleExist_ << ")";
@@ -61,6 +63,8 @@ struct LocatedTripleCompare {
 };
 using LocatedTriples = std::set<LocatedTriple, LocatedTripleCompare>;
 
+// This operator is only for debugging and testing. It returns a
+// human-readable representation.
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts);
 
 // Sorted sets of located triples, grouped by block. We use this to store all
@@ -133,6 +137,8 @@ class LocatedTriplesPerBlock {
     numTriples_ = 0;
   }
 
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,
                                   const LocatedTriplesPerBlock& ltpb) {
     // Get the block indices in sorted order.

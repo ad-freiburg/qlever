@@ -752,6 +752,8 @@ class IdTableStatic
     return *this;
   }
 
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,
                                   const IdTableStatic& idTable) {
     os << "{ ";
