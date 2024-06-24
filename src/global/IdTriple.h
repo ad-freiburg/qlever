@@ -20,7 +20,6 @@ struct IdTriple {
   std::array<Id, N> payload_;
 
   explicit IdTriple() = default;
-  IdTriple(const IdTriple&) = default;
   explicit IdTriple(
       const CompressedBlockMetadata::PermutedTriple& permutedTriple)
       : ids_({permutedTriple.col0Id_, permutedTriple.col1Id_,
