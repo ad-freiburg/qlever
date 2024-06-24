@@ -283,7 +283,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
   std::optional<std::string> operator()(ValueId id,
                                         const EvaluationContext* context) const;
   std::optional<std::string> operator()(
-      const LiteralOrIri litOrIri,
+      const LiteralOrIri& litOrIri,
       [[maybe_unused]] const EvaluationContext*) const {
     if (litOrIri.isLiteral()) {
       if (litOrIri.hasLanguageTag()) {

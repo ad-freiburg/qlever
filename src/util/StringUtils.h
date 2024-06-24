@@ -33,7 +33,7 @@ string getUppercase(const string& orig);
 bool strIsLangTag(const string& strLangTag);
 
 // Check if the two given strings, `language tag` and `language range` match.
-bool isLangMatch(const string& strLangTag, const string& strLangRange);
+bool isLangMatch(std::string_view strLangTag, std::string_view strLangRange);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale

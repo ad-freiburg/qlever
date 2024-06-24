@@ -402,23 +402,24 @@ using EncodeForUriExpression =
 // LANGMATCHES
 [[maybe_unused]] inline auto langMatching =
     [](std::optional<std::string> optLanguageTag,
-       std::optional<std::string> optLanguageRange) -> Id {
-  if (!optLanguageTag.has_value() || !optLanguageRange.has_value()) {
-    return Id::makeUndefined();
-  }
-  // For LANGMATCHES(), the order of the arguments matter.
-  // The language-range "*" will match any non empty string (Sparql-standard).
-  const std::string& languageTag = optLanguageTag.value();
-  const std::string& languageRange = optLanguageRange.value();
-  if ((languageTag == "" && languageRange == "*") || languageRange == "") {
-    return Id::makeFromBool(false);
-  } else if (languageRange == "*") {
-    return Id::makeFromBool(true);
-  } else {
-    return Id::makeFromBool(
-        ad_utility::isLangMatch(languageTag, languageRange));
-  }
-};
+       std::optional<std::string> optLanguageRange) {
+      if (!optLanguageTag.has_value() || !optLanguageRange.has_value()) {
+        return Id::makeUndefined();
+      }
+      // For LANGMATCHES(), the order of the arguments matter.
+      // The language-range "*" will match any non empty string
+      // (Sparql-standard).
+      const std::string& languageTag = optLanguageTag.value();
+      const std::string& languageRange = optLanguageRange.value();
+      if ((languageTag == "" && languageRange == "*") || languageRange == "") {
+        return Id::makeFromBool(false);
+      } else if (languageRange == "*") {
+        return Id::makeFromBool(true);
+      } else {
+        return Id::makeFromBool(
+            ad_utility::isLangMatch(languageTag, languageRange));
+      }
+    };
 
 using LangMatches =
     StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;

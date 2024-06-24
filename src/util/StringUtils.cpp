@@ -48,7 +48,7 @@ bool strIsLangTag(const string& input) {
 }
 
 // ____________________________________________________________________________
-bool isLangMatch(const string& strLangTag, const string& strLangRange) {
+bool isLangMatch(std::string_view strLangTag, std::string_view strLangRange) {
   return strLangTag.starts_with(strLangRange);
 }
 

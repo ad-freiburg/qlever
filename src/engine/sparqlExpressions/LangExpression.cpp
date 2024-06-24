@@ -32,7 +32,7 @@ ExpressionResult LangExpression::evaluate(EvaluationContext* context) const {
   result.reserve(resSize);
 
   using LitOrIri = ad_utility::triple_component::LiteralOrIri;
-  constexpr auto lit = [](const std::string& s) -> LitOrIri {
+  constexpr auto lit = [](const std::string& s) {
     return LitOrIri::fromStringRepresentation(absl::StrCat("\""sv, s, "\""sv));
   };
 
@@ -43,7 +43,7 @@ ExpressionResult LangExpression::evaluate(EvaluationContext* context) const {
   for (Id id : detail::makeGenerator(variable_, resSize, context)) {
     std::optional<std::string> optStr = langTagGetter(id, context);
     if (optStr.has_value()) {
-      result.push_back(lit(std::move(optStr.value())));
+      result.push_back(lit(optStr.value()));
     } else {
       result.push_back(Id::makeUndefined());
     }

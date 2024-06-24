@@ -139,17 +139,17 @@ auto assertLangTagValueGetter =
 auto getLangExpression =
     [](const std::string& variable) -> SparqlExpression::Ptr {
   // initialize with a child expression which has to be a VariableExpression!
-  return std::move(std::make_unique<LangExpression>(
-      std::make_unique<VariableExpression>(Variable{std::move(variable)})));
+  return std::make_unique<LangExpression>(
+      std::make_unique<VariableExpression>(Variable{std::move(variable)}));
 };
 
 // ____________________________________________________________________________
 auto getLangMatchesExpression =
     [](const std::string& variable,
        const std::string& langRange) -> SparqlExpression::Ptr {
-  return std::move(makeLangMatchesExpression(
-      std::move(getLangExpression(variable)),
-      std::move(std::make_unique<StringLiteralExpression>(lit(langRange)))));
+  return makeLangMatchesExpression(
+      getLangExpression(variable),
+      std::make_unique<StringLiteralExpression>(lit(langRange)));
 };
 
 // ____________________________________________________________________________
