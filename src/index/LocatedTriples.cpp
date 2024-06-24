@@ -55,9 +55,9 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 // ____________________________________________________________________________
-IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
-                                             const IdTable& block,
-                                             size_t numIndexColumns) const {
+template <size_t numIndexColumns>
+IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
+                                                 const IdTable& block) const {
   // This method should only be called if there are located triples in the
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
@@ -71,39 +71,37 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
   const auto& locatedTriples = map_.at(blockIndex);
 
-  auto cmpLt = [&numIndexColumns](auto lt, auto row) {
-    if (numIndexColumns == 3) {
-      return std::tie(row[0], row[1], row[2]) > std::tie(lt->triple_.ids_[0],
-                                                         lt->triple_.ids_[1],
-                                                         lt->triple_.ids_[2]);
-    } else if (numIndexColumns == 2) {
-      return std::tie(row[0], row[1]) >
-             std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
+  auto tieRow = [](auto& row) {
+    if constexpr (numIndexColumns == 3) {
+      return std::tie(row[0], row[1], row[2]);
+    } else if constexpr (numIndexColumns == 2) {
+      return std::tie(row[0], row[1]);
     } else {
-      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return std::tie(row[0]) > std::tie(lt->triple_.ids_[2]);
+      return std::tie(row[0]);
     }
   };
-  auto cmpEq = [&numIndexColumns](auto lt, auto row) {
-    if (numIndexColumns == 3) {
-      return std::tie(row[0], row[1], row[2]) == std::tie(lt->triple_.ids_[0],
-                                                          lt->triple_.ids_[1],
-                                                          lt->triple_.ids_[2]);
-    } else if (numIndexColumns == 2) {
-      return std::tie(row[0], row[1]) ==
-             std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
+  auto tieLT = [](auto lt) {
+    if constexpr (numIndexColumns == 3) {
+      return std::tie(lt->triple_.ids_[0], lt->triple_.ids_[1],
+                      lt->triple_.ids_[2]);
+    } else if constexpr (numIndexColumns == 2) {
+      return std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
     } else {
-      AD_CORRECTNESS_CHECK(numIndexColumns == 1);
-      return std::tie(row[0]) == std::tie(lt->triple_.ids_[2]);
+      return std::tie(lt->triple_.ids_[2]);
     }
+  };
+  auto cmpLt = [&tieRow, &tieLT](auto lt, auto row) {
+    return tieRow(row) > tieLT(lt);
+  };
+  auto cmpEq = [&tieRow, &tieLT](auto lt, auto row) {
+    return tieRow(row) == tieLT(lt);
   };
 
   auto row = block.begin();
   auto locatedTriple = locatedTriples.begin();
   auto resultEntry = result.begin();
 
-  auto writeTripleToResult = [&numIndexColumns, &result,
-                              &resultEntry](auto& locatedTriple) {
+  auto writeTripleToResult = [&result, &resultEntry](auto& locatedTriple) {
     for (size_t i = 0; i < numIndexColumns; i++) {
       (*resultEntry)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
@@ -149,6 +147,19 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
   result.resize(resultEntry - result.begin());
   return result;
+}
+
+IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
+                                             const IdTable& block,
+                                             size_t numIndexColumns) const {
+  if (numIndexColumns == 3) {
+    return mergeTriplesImpl<3>(blockIndex, block);
+  } else if (numIndexColumns == 2) {
+    return mergeTriplesImpl<2>(blockIndex, block);
+  } else {
+    AD_CORRECTNESS_CHECK(numIndexColumns == 1);
+    return mergeTriplesImpl<1>(blockIndex, block);
+  }
 }
 
 // ____________________________________________________________________________
