@@ -1,653 +1,397 @@
 include(GoogleTest)
 
-#Needed for creating the `testUil`- library.
-    add_subdirectory(util)
+# Needed for creating the `testUil`-library.
+add_subdirectory(util)
 
-#Link binary ${basename } against `gmock_main`, the threading library, the
-#general test utilities and all libraries that are specified as additional
-#arguments.
-        function(linkTest basename) qlever_target_link_libraries(${basename} ${
-            ARGN} GTest::gtest GTest::gmock_main testUtil ${
-            CMAKE_THREAD_LIBS_INIT}) endfunction()
+# Link binary ${basename} against `gmock_main`, the threading library, the
+# general test utilities and all libraries that are specified as additional
+# arguments.
+function (linkTest basename)
+    qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+endfunction()
 
-#Add the executable ${basename } that is compiled from the source file
-#"${basename}".cpp
-            function(addTest basename) add_executable($ {
-              basename
-            } "${basename}.cpp") endfunction()
+# Add the executable ${basename} that is compiled from the source file
+# "${basename}".cpp
+function (addTest basename)
+    add_executable(${basename} "${basename}.cpp")
+endfunction()
 
-#Usage : `linkAndDiscoverTest(basename, [additionalLibraries...]`
-#Link the executable `basename` against `gmock_main`, threading library,
-#and all `additionLibraries` which are passed as arguments.
-#Then run `gtest_discover_tests` to add the tests cases from the executable.
-#Typically you should use `addAndLinkTest` ( \
-    below)but this function can be used,
-#if a test binary requires multiple sources
-                function(linkAndDiscoverTest basename) linkTest(${basename} ${
-                    ARGN}) gtest_discover_tests(${basename} ${
-                    basename} DISCOVERY_TIMEOUT 600) endfunction()
+# Usage: `linkAndDiscoverTest(basename, [additionalLibraries...]`
+# Link the executable `basename` against `gmock_main`,threading library,
+# and all `additionLibraries` which are passed as arguments.
+# Then run `gtest_discover_tests` to add the tests cases from the executable.
+# Typically you should use `addAndLinkTest` (below) but this function can be used,
+# if a test binary requires multiple sources
+function(linkAndDiscoverTest basename)
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename} DISCOVERY_TIMEOUT 600)
+endfunction()
 
-#Usage : `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
-#Similar to `linkAndDiscoverTestSerial` but also requires that the test is run \
-    serially
-#(without any of the other test cases running in parallel).This can be
-#required e.g.if several tests cases write to the same file.
-                    function(linkAndDiscoverTestSerial basename) linkTest(${
-                        basename} ${ARGN}) gtest_discover_tests(${basename} ${
-                        basename} PROPERTIES RUN_SERIAL TRUE) endfunction()
+# Usage: `linkAndDiscoverTestSerial(basename, [additionalLibraries...]`
+# Similar to `linkAndDiscoverTestSerial` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
+function(linkAndDiscoverTestSerial basename)
+    linkTest(${basename} ${ARGN})
+    gtest_discover_tests(${basename} ${basename} PROPERTIES RUN_SERIAL
+            TRUE)
+endfunction()
 
-                        if (SINGLE_TEST_BINARY) message(
-                            STATUS
-                            "All tests are linked into a single executable "
-                            "`QLeverAllUnitTestsMain`") add_executable(QLeverAllUnitTestsMain)
-                            qlever_target_link_libraries(
-                                QLeverAllUnitTestsMain gtest gmock_main testUtil
-                                    ${CMAKE_THREAD_LIBS_INIT})
-                                gtest_discover_tests(
-                                    QLeverAllUnitTestsMain
-                                        QLeverAllUnitTestsMain PROPERTIES
-                                            RUN_SERIAL
-                                                TRUE) else() message(STATUS
-                                                                     "The "
-                                                                     "tests "
-                                                                     "are "
-                                                                     "split "
-                                                                     "over "
-                                                                     "multiple "
-                                                                     "binaries")
+if (SINGLE_TEST_BINARY)
+    message(STATUS "All tests are linked into a single executable `QLeverAllUnitTestsMain`")
+    add_executable(QLeverAllUnitTestsMain)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
+    gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
+            TRUE)
+else()
+    message(STATUS "The tests are split over multiple binaries")
 
-                                    endif()
-#Usage : `addAndLinkTest(basename, [additionalLibraries...]`
-#Add a GTest / \
-    GMock test case that is called `basename` and compiled from a file called
-# `basename.cpp` \
-    .All tests are linked against `gmock_main` and the threading library.
-#additional libraries against which the test case has to be linked can be \
-    specified as
-#additional arguments after the `basename`
-                                        function(addLinkAndDiscoverTest basename) if (SINGLE_TEST_BINARY) target_sources(
-                                            QLeverAllUnitTestsMain PUBLIC ${
-                                                basename}
-                                                .cpp) qlever_target_link_libraries(QLeverAllUnitTestsMain ${
-                                            ARGN}) else() addTest(${
-                                            basename}) linkAndDiscoverTest(${
-                                            basename} ${ARGN}) endif()
+endif()
+# Usage: `addAndLinkTest(basename, [additionalLibraries...]`
+# Add a GTest/GMock test case that is called `basename` and compiled from a file called
+# `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
+# additional libraries against which the test case has to be linked can be specified as
+# additional arguments after the `basename`
+function(addLinkAndDiscoverTest basename)
+  if (SINGLE_TEST_BINARY)
+      target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+      qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+  else()
+    addTest(${basename})
+    linkAndDiscoverTest(${basename} ${ARGN})
+  endif()
 
-                                            endfunction()
+endfunction()
 
-#Usage : `addAndLinkTestSerial(basename, [additionalLibraries...]`
-#Similar to `addAndLinkTest` but also requires that the test is run serially
-#(without any of the other test cases running in parallel).This can be
-#required e.g.if several tests cases write to the same file.
-                                                function(
-                                                    addLinkAndDiscoverTestSerial
-                                                        basename) if (SINGLE_TEST_BINARY)
-                                                    target_sources(
-                                                        QLeverAllUnitTestsMain
-                                                            PUBLIC ${basename}
-                                                                .cpp)
-                                                        qlever_target_link_libraries(
-                                                            QLeverAllUnitTestsMain
-                                                                ${ARGN}) else() addTest(${
-                                                            basename}) linkAndDiscoverTestSerial(${
-                                                            basename} ${
-                                                            ARGN}) endif() endfunction()
+# Usage: `addAndLinkTestSerial(basename, [additionalLibraries...]`
+# Similar to `addAndLinkTest` but also requires that the test is run serially
+# (without any of the other test cases running in parallel). This can be
+# required e.g. if several tests cases write to the same file.
+function(addLinkAndDiscoverTestSerial basename)
+  if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+  else()
+    addTest(${basename})
+    linkAndDiscoverTestSerial(${basename} ${ARGN})
+  endif()
+endfunction()
 
-#Only compile and link the test, but do not run it.
-#Usage : Same as for the two functions above.
-                                                            function(
-                                                                addAndLinkTest
-                                                                    basename)
-                                                                addTest(${
-                                                                    basename})
-                                                                    linkTest(${
-                                                                        basename} ${
-                                                                        ARGN})
-                                                                        endfunction()
+# Only compile and link the test, but do not run it.
+# Usage: Same as for the two functions above.
+function(addAndLinkTest basename)
+    addTest(${basename})
+    linkTest(${basename} ${ARGN})
+endfunction()
 
-                                                                            add_subdirectory(
-                                                                                engine)
-                                                                                add_subdirectory(
-                                                                                    parser)
-                                                                                    add_subdirectory(
-                                                                                        index)
+add_subdirectory(engine)
+add_subdirectory(parser)
+add_subdirectory(index)
 
-                                                                                        addLinkAndDiscoverTest(
-                                                                                            ValueIdComparatorsTest
-                                                                                                util)
+addLinkAndDiscoverTest(ValueIdComparatorsTest util)
 
-                                                                                            addLinkAndDiscoverTest(
-                                                                                                SparqlParserTest parser engine
-                                                                                                    sparqlExpressions)
+addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
-                                                                                                addLinkAndDiscoverTest(
-                                                                                                    StringUtilsTest util)
+addLinkAndDiscoverTest(StringUtilsTest util)
 
-                                                                                                    addLinkAndDiscoverTest(
-                                                                                                        CryptographicHashUtilsTest
-                                                                                                            util)
+addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
 
-                                                                                                        addLinkAndDiscoverTest(
-                                                                                                            CacheTest)
+addLinkAndDiscoverTest(CacheTest)
 
-                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                ConcurrentCacheTest)
+addLinkAndDiscoverTest(ConcurrentCacheTest)
 
-#This test also seems to use the same filenames and should be fixed.
-                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                    FileTest)
+# This test also seems to use the same filenames and should be fixed.
+addLinkAndDiscoverTestSerial(FileTest)
 
-                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                        Simple8bTest)
+addLinkAndDiscoverTest(Simple8bTest)
 
-                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                            ContextFileParserTest
-                                                                                                                                parser)
+addLinkAndDiscoverTest(ContextFileParserTest parser)
 
-                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                IndexMetaDataTest
-                                                                                                                                    index)
+addLinkAndDiscoverTest(IndexMetaDataTest index)
 
-#Stxxl currently always uses a file./ -stxxl.disk for all indices, which
-#makes it impossible to run the test cases for the Index class in parallel.
-#TODO < qup42, joka921> fix this
-                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                    IndexTest
-                                                                                                                                        index)
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(IndexTest index)
 
-                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                        EngineTest
-                                                                                                                                            engine)
+addLinkAndDiscoverTest(EngineTest engine)
 
-                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                            JoinTest
-                                                                                                                                                engine)
+addLinkAndDiscoverTest(JoinTest engine)
 
-                                                                                                                                            addLinkAndDiscoverTest(TextLimitOperationTest engine)
+addLinkAndDiscoverTest(TextLimitOperationTest engine)
 
-                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                    QueryPlannerTest
-                                                                                                                                                        engine)
+addLinkAndDiscoverTest(QueryPlannerTest engine)
 
-                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                        HashMapTest)
+addLinkAndDiscoverTest(HashMapTest)
 
-                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                            HashSetTest)
+addLinkAndDiscoverTest(HashSetTest)
 
-                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                GroupByTest engine)
+addLinkAndDiscoverTestSerial(GroupByTest engine)
 
-                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                    VocabularyGeneratorTest
-                                                                                                                                                                        index)
+addLinkAndDiscoverTest(VocabularyGeneratorTest index)
 
-                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                        HasPredicateScanTest
-                                                                                                                                                                            engine)
+addLinkAndDiscoverTest(HasPredicateScanTest engine)
 
-                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                            MmapVectorTest)
+addLinkAndDiscoverTest(MmapVectorTest)
 
-#BufferedVectorTest also uses conflicting filenames.
-                                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                BufferedVectorTest)
+# BufferedVectorTest also uses conflicting filenames.
+addLinkAndDiscoverTestSerial(BufferedVectorTest)
 
-                                                                                                                                                                                addLinkAndDiscoverTest(UnionTest
-                                                                                                                                                                                                           engine)
+addLinkAndDiscoverTest(UnionTest engine)
 
-                                                                                                                                                                                    if (SINGLE_TEST_BINARY)
-                                                                                                                                                                                        target_sources(
-                                                                                                                                                                                            QLeverAllUnitTestsMain
-                                                                                                                                                                                                PUBLIC
-                                                                                                                                                                                                    TokenTest
-                                                                                                                                                                                                        .cpp TokenTestCtreHelper
-                                                                                                                                                                                                        .cpp) qlever_target_link_libraries(QLeverAllUnitTestsMain parser
-                                                                                                                                                                                                                                               re2 util) else()
-                                                                                                                                                                                            add_executable(TokenTest TokenTest
-                                                                                                                                                                                                               .cpp
-                                                                                                                                                                                                                   TokenTestCtreHelper
-                                                                                                                                                                                                               .cpp)
-                                                                                                                                                                                                linkAndDiscoverTest(TokenTest parser re2 util)
-                                                                                                                                                                                                    endif()
+if (SINGLE_TEST_BINARY)
+    target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
+    qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
+else()
+    add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
+    linkAndDiscoverTest(TokenTest parser re2 util)
+endif()
 
-                                                                                                                                                                                                        addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                            TurtleParserTest
-                                                                                                                                                                                                                parser re2)
+addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
-                                                                                                                                                                                                            addLinkAndDiscoverTest(MultiColumnJoinTest
-                                                                                                                                                                                                                                       engine)
+addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
-                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                    IdTableTest util)
+addLinkAndDiscoverTest(IdTableTest util)
 
-                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                        TransitivePathTest
-                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTest(TransitivePathTest engine)
 
-                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                            PathSearchTest
-                                                                                                                                                                                                                                engine)
+addLinkAndDiscoverTest(PathSearchTest engine)
 
-                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                BatchedPipelineTest)
+addLinkAndDiscoverTest(BatchedPipelineTest)
 
-                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                    TupleHelpersTest)
+addLinkAndDiscoverTest(TupleHelpersTest)
 
-                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                        StringSortComparatorTest)
+addLinkAndDiscoverTest(StringSortComparatorTest)
 
-                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                            PriorityQueueTest)
+addLinkAndDiscoverTest(PriorityQueueTest)
 
-                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                SynchronizedTest)
+addLinkAndDiscoverTest(SynchronizedTest)
 
-                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                    AllocatorWithLimitTest)
+addLinkAndDiscoverTest(AllocatorWithLimitTest)
 
-                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                        MinusTest
-                                                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTest(MinusTest engine)
 
-#this test runs for quite some time and might have spurious failures !
-#Therefore it is compiled, but not run.If you want to run it,
-#change the following two lines.
-                                                                                                                                                                                                                                                        addAndLinkTest(
-                                                                                                                                                                                                                                                            SortPerformanceEstimatorTest
-                                                                                                                                                                                                                                                                SortPerformanceEstimator)
+# this test runs for quite some time and might have spurious failures!
+# Therefore it is compiled, but not run. If you want to run it,
+# change the following two lines.
+addAndLinkTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 #addLinkAndDiscoverTest(SortPerformanceEstimatorTest SortPerformanceEstimator)
 
-                                                                                                                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                SparqlAntlrParserTest
-                                                                                                                                                                                                                                                                    parser
-                                                                                                                                                                                                                                                                        sparqlExpressions
-                                                                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTestSerial(SparqlAntlrParserTest parser sparqlExpressions engine)
 
-#The SerializerTest uses temporary files.The tests fail when multiple test
-#cases are run in parallel.This should be fixed by using distinct filenames
-#for each test case.
-#TODO < qup42, joka921> fix this
-                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                    SerializerTest)
+# The SerializerTest uses temporary files. The tests fail when multiple test
+# cases are run in parallel. This should be fixed by using distinct filenames
+# for each test case.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(SerializerTest)
 
-                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                        ParametersTest)
+addLinkAndDiscoverTest(ParametersTest)
 
-                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(ZstdCompressionTest zstd ${
-                                                                                                                                                                                                                                                                            cmake_thread_libs_init})
+addLinkAndDiscoverTest(ZstdCompressionTest zstd ${cmake_thread_libs_init})
 
-                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                TaskQueueTest)
+addLinkAndDiscoverTest(TaskQueueTest)
 
-                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                    SetOfIntervalsTest
-                                                                                                                                                                                                                                                                                        sparqlExpressions)
+addLinkAndDiscoverTest(SetOfIntervalsTest sparqlExpressions)
 
-                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                        TypeTraitsTest)
+addLinkAndDiscoverTest(TypeTraitsTest)
 
-                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                            SparqlExpressionTest
-                                                                                                                                                                                                                                                                                                sparqlExpressions
-                                                                                                                                                                                                                                                                                                    index engine)
+addLinkAndDiscoverTestSerial(SparqlExpressionTest sparqlExpressions index engine)
 
-                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                StreamableBodyTest
-                                                                                                                                                                                                                                                                                                    http)
+addLinkAndDiscoverTest(StreamableBodyTest http)
 
-                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                    StreamableGeneratorTest)
+addLinkAndDiscoverTest(StreamableGeneratorTest)
 
-                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                        AcceptHeaderTest
-                                                                                                                                                                                                                                                                                                            mediaTypes
-                                                                                                                                                                                                                                                                                                                httpParser)
+addLinkAndDiscoverTest(AcceptHeaderTest mediaTypes httpParser)
 
-                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                            RdfEscapingTest
-                                                                                                                                                                                                                                                                                                                parser)
+addLinkAndDiscoverTest(RdfEscapingTest parser)
 
-                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                CompactStringVectorTest)
+addLinkAndDiscoverTest(CompactStringVectorTest)
 
-                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                    SparqlDataTypesTest
-                                                                                                                                                                                                                                                                                                                        engine)
+addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
-                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                        ContentEncodingHelperTest
-                                                                                                                                                                                                                                                                                                                            http)
+addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
-                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                            VocabularyInMemoryTest
-                                                                                                                                                                                                                                                                                                                                vocabulary)
+addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
 
-                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                CompressedVocabularyTest
-                                                                                                                                                                                                                                                                                                                                    vocabulary)
+addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
-                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                    UnicodeVocabularyTest
-                                                                                                                                                                                                                                                                                                                                        vocabulary)
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 
-                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
+addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
-                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                            PrefixCompressorTest)
+addLinkAndDiscoverTest(PrefixCompressorTest)
 
-                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                MilestoneIdTest)
+addLinkAndDiscoverTest(MilestoneIdTest)
 
-                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                    VocabularyOnDiskTest
-                                                                                                                                                                                                                                                                                                                                                        index)
+addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
-                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                        VocabularyTest
-                                                                                                                                                                                                                                                                                                                                                            index)
+addLinkAndDiscoverTest(VocabularyTest index)
 
-                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                            IteratorTest)
+addLinkAndDiscoverTest(IteratorTest)
 
-#Stxxl currently always uses a file./ -stxxl.disk for all indices, which
-#makes it impossible to run the test cases for the Index class in parallel.
-#TODO < qup42, joka921> fix this
-                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
+# Stxxl currently always uses a file ./-stxxl.disk for all indices, which
+# makes it impossible to run the test cases for the Index class in parallel.
+# TODO<qup42, joka921> fix this
+addLinkAndDiscoverTestSerial(BackgroundStxxlSorterTest ${STXXL_LIBRARIES})
 
-                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                    ViewsTest)
+addLinkAndDiscoverTest(ViewsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                        ForwardTest)
-
-                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(CompressorStreamTest
-                                                                                                                                                                                                                                                                                                                                                                                                   engine)
-
-                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                AsyncStreamTest)
+addLinkAndDiscoverTest(ForwardTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                    TriplesViewTest
-                                                                                                                                                                                                                                                                                                                                                                                        util
-                                                                                                                                                                                                                                                                                                                                                                                            OpenSSL::SSL OpenSSL::Crypto)
+addLinkAndDiscoverTest(CompressorStreamTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                        BitUtilsTest)
+addLinkAndDiscoverTest(AsyncStreamTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                            NBitIntegerTest)
+addLinkAndDiscoverTest(TriplesViewTest util OpenSSL::SSL OpenSSL::Crypto)
 
-                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                GeoSparqlHelpersTest
-                                                                                                                                                                                                                                                                                                                                                                                                    util)
+addLinkAndDiscoverTest(BitUtilsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                    HttpUtilsTest
-                                                                                                                                                                                                                                                                                                                                                                                                        util
-                                                                                                                                                                                                                                                                                                                                                                                                            http)
+addLinkAndDiscoverTest(NBitIntegerTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                        DateTest
-                                                                                                                                                                                                                                                                                                                                                                                                            util
-                                                                                                                                                                                                                                                                                                                                                                                                                parser)
+addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                            TripleComponentTest
-                                                                                                                                                                                                                                                                                                                                                                                                                parser)
+addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                ValueIdTest
-                                                                                                                                                                                                                                                                                                                                                                                                                    util)
+addLinkAndDiscoverTest(DateTest util parser)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                    LambdaHelpersTest)
+addLinkAndDiscoverTest(TripleComponentTest parser)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                        ParseExceptionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                            parser
-                                                                                                                                                                                                                                                                                                                                                                                                                                engine)
+addLinkAndDiscoverTest(ValueIdTest util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                            TransparentFunctorsTest)
+addLinkAndDiscoverTest(LambdaHelpersTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                SelectClauseTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                    parser
-                                                                                                                                                                                                                                                                                                                                                                                                                                        engine)
+addLinkAndDiscoverTest(ParseExceptionTest parser engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTest(TransparentFunctorsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                        CheckUsePatternTrickTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                            parser
-                                                                                                                                                                                                                                                                                                                                                                                                                                                engine)
+addLinkAndDiscoverTest(SelectClauseTest parser engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                            RegexExpressionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                parser
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    sparqlExpressions
-                                                                                                                                                                                                                                                                                                                                                                                                                                                        index
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            engine
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                parser)
+addLinkAndDiscoverTestSerial(RelationalExpressionTest parser sparqlExpressions index engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                LocalVocabTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    engine)
+addLinkAndDiscoverTest(CheckUsePatternTrickTest parser engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    ValuesTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                        engine)
+addLinkAndDiscoverTestSerial(RegexExpressionTest parser sparqlExpressions index engine parser)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                        ServiceTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTestSerial(LocalVocabTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            HttpTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                Boost::
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    iostreams
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        http)
+addLinkAndDiscoverTestSerial(ValuesTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                CallFixedSizeTest)
+addLinkAndDiscoverTestSerial(ServiceTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ConstexprUtilsTest)
+addLinkAndDiscoverTest(HttpTest Boost::iostreams http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ResetWhenMovedTest)
+addLinkAndDiscoverTest(CallFixedSizeTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            TimerTest)
+addLinkAndDiscoverTest(ConstexprUtilsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                AlgorithmTest)
+addLinkAndDiscoverTest(ResetWhenMovedTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CompressedRelationsTest index)
+addLinkAndDiscoverTest(TimerTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(ExceptionTest)
+addLinkAndDiscoverTest(AlgorithmTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            RandomExpressionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                index)
+addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                NowDatetimeExpressionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    index)
+addLinkAndDiscoverTest(ExceptionTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    SortTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        engine)
+addLinkAndDiscoverTestSerial(RandomExpressionTest index)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OrderByTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTestSerial(NowDatetimeExpressionTest index)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ValuesForTestingTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                index)
+addLinkAndDiscoverTestSerial(SortTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ExportQueryExecutionTreeTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    index
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        engine
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            parser)
+addLinkAndDiscoverTestSerial(OrderByTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTestSerial(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    AggregateExpressionTest parser sparqlExpressions index engine)
+addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OnDestructionDontThrowDuringStackUnwindingTest)
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ExceptionHandlingTest)
+addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                SparqlExpressionTypesTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    sparqlExpressions
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        util)
+addLinkAndDiscoverTest(OnDestructionDontThrowDuringStackUnwindingTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    LimitOffsetClauseTest)
+addLinkAndDiscoverTest(ExceptionHandlingTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        OperationTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            engine)
+addLinkAndDiscoverTest(SparqlExpressionTypesTest sparqlExpressions util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(RuntimeInformationTest engine index)
+addLinkAndDiscoverTest(LimitOffsetClauseTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                VariableToColumnMapTest parser)
+addLinkAndDiscoverTest(OperationTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(CopyableUniquePtrTest)
+addLinkAndDiscoverTest(RuntimeInformationTest engine index)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        JsonCustomConverterForThirdPartyTest)
+addLinkAndDiscoverTest(VariableToColumnMapTest parser)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ConfigManagerTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                configManager)
+addLinkAndDiscoverTest(CopyableUniquePtrTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ConfigOptionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    configManager)
+addLinkAndDiscoverTest(JsonCustomConverterForThirdPartyTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ValidatorTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        configManager)
+addLinkAndDiscoverTest(ConfigManagerTest configManager)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ConfigOptionProxyTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            configManager)
+addLinkAndDiscoverTest(ConfigOptionTest configManager)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ConfigUtilTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                configManager)
+addLinkAndDiscoverTest(ValidatorTest configManager)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                RandomTest)
+addLinkAndDiscoverTest(ConfigOptionProxyTest configManager)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    BenchmarkMeasurementContainerTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        benchmark
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            testUtil)
+addLinkAndDiscoverTest(ConfigUtilTest configManager)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ResultTableColumnOperationsTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            benchmark
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                testUtil)
+addLinkAndDiscoverTest(RandomTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            FindUndefRangesTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                engine)
+addLinkAndDiscoverTest(BenchmarkMeasurementContainerTest benchmark testUtil)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                AddCombinedRowToTableTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    engine
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        util)
+addLinkAndDiscoverTest(ResultTableColumnOperationsTest benchmark testUtil)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CtreHelpersTest)
+addLinkAndDiscoverTest(FindUndefRangesTest engine)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ComparisonWithNanTest)
+addLinkAndDiscoverTest(AddCombinedRowToTableTest engine util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            ThreadSafeQueueTest)
+addLinkAndDiscoverTest(CtreHelpersTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                IdTableHelpersTest)
+addLinkAndDiscoverTest(ComparisonWithNanTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    GeneratorTest)
+addLinkAndDiscoverTest(ThreadSafeQueueTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        MemorySizeTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            memorySize)
+addLinkAndDiscoverTest(IdTableHelpersTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            JsonUtilTest)
+addLinkAndDiscoverTest(GeneratorTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                JoinAlgorithmsTest)
+addLinkAndDiscoverTest(MemorySizeTest memorySize)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    AsioHelpersTest)
+addLinkAndDiscoverTest(JsonUtilTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        UniqueCleanupTest)
+addLinkAndDiscoverTest(JoinAlgorithmsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            WebSocketSessionTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                http)
+addLinkAndDiscoverTest(AsioHelpersTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                QueryIdTest)
+addLinkAndDiscoverTest(UniqueCleanupTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    QueryHubTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        http)
+addLinkAndDiscoverTest(WebSocketSessionTest http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        QueryToSocketDistributorTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            http)
+addLinkAndDiscoverTest(QueryIdTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            UpdateFetcherTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                http)
+addLinkAndDiscoverTest(QueryHubTest http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                MessageSenderTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    http)
+addLinkAndDiscoverTest(QueryToSocketDistributorTest http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    CancellationHandleTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        util)
+addLinkAndDiscoverTest(UpdateFetcherTest http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(ProgressBarTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               util)
+addLinkAndDiscoverTest(MessageSenderTest http)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            CachingMemoryResourceTest)
+addLinkAndDiscoverTest(CancellationHandleTest util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ParallelMultiwayMergeTest)
+addLinkAndDiscoverTest(ProgressBarTest util)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    ParseableDurationTest)
+addLinkAndDiscoverTest(CachingMemoryResourceTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        ConstantsTest)
+addLinkAndDiscoverTest(ParallelMultiwayMergeTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            JThreadTest)
+addLinkAndDiscoverTest(ParseableDurationTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                ChunkedForLoopTest)
+addLinkAndDiscoverTest(ConstantsTest)
 
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                addLinkAndDiscoverTest(
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    FsstCompressorTest
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        fsst)
+addLinkAndDiscoverTest(JThreadTest)
+
+addLinkAndDiscoverTest(ChunkedForLoopTest)
+
+addLinkAndDiscoverTest(FsstCompressorTest fsst)
