@@ -106,7 +106,8 @@ class MetaDataWrapperDense {
   // ____________________________________________________________
   void set(IdNoLocalVocab id, const value_type& value) {
     // Check that the `Id`s are added in strictly ascending order.
-    AD_CONTRACT_CHECK(_vec.size() == 0 || _vec.back().col0Id_ < id);
+    AD_CONTRACT_CHECK(_vec.size() == 0 ||
+                      IdNoLocalVocab(_vec.back().col0Id_) < id);
     _vec.push_back(value);
   }
 

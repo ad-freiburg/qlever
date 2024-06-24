@@ -47,8 +47,6 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
-  LOG(ERROR) << "Stacktrace: \n"
-             << boost::stacktrace::stacktrace() << std::endl;
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
   // first save the total number of words, this is needed to initialize the
