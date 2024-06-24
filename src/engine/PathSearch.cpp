@@ -87,8 +87,8 @@ bool PathSearch::knownEmptyResult() { return subtree_->knownEmptyResult(); };
 vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
 // _____________________________________________________________________________
-ResultTable PathSearch::computeResult() {
-  shared_ptr<const ResultTable> subRes = subtree_->getResult();
+Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
   IdTable idTable{allocator()};
   idTable.setNumColumns(getResultWidth());
 

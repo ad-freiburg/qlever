@@ -96,7 +96,7 @@ class PathSearch : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  ResultTable computeResult() override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:

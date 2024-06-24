@@ -6,7 +6,7 @@
 
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/ValuesForTesting.h"
 #include "gmock/gmock.h"
 #include "util/IdTableHelpers.h"
@@ -22,14 +22,14 @@ using Vars = std::vector<std::optional<Variable>>;
 
 }  // namespace
 
-ResultTable performPathSearch(PathSearchConfiguration config, IdTable input,
+Result performPathSearch(PathSearchConfiguration config, IdTable input,
                               Vars vars) {
   auto qec = getQec();
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input), vars);
   PathSearch p = PathSearch(qec, std::move(subtree), config);
 
-  return p.computeResult();
+  return p.computeResult(false);
 }
 
 TEST(PathSearchTest, constructor) {
