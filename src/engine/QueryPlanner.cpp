@@ -2124,22 +2124,22 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
   };
   auto source = tripleComponentToId(pathQuery.source_);
   std::vector<Id> targets;
-  for (auto comp: pathQuery.targets_) {
+  for (auto comp : pathQuery.targets_) {
     targets.push_back(tripleComponentToId(comp));
   }
-  auto config = PathSearchConfiguration{
-    pathQuery.algorithm_,
-    std::move(source),
-    std::move(targets),
-    std::move(pathQuery.start_.value()),
-    std::move(pathQuery.end_.value()),
-    std::move(pathQuery.pathColumn_.value()),
-    std::move(pathQuery.edgeColumn_.value()),
-    std::move(pathQuery.edgeProperties_)
-  };
+  auto config =
+      PathSearchConfiguration{pathQuery.algorithm_,
+                              std::move(source),
+                              std::move(targets),
+                              std::move(pathQuery.start_.value()),
+                              std::move(pathQuery.end_.value()),
+                              std::move(pathQuery.pathColumn_.value()),
+                              std::move(pathQuery.edgeColumn_.value()),
+                              std::move(pathQuery.edgeProperties_)};
 
   for (auto& sub : candidatesIn) {
-    auto pathSearch = std::make_shared<PathSearch>(PathSearch(qec_, std::move(sub._qet), config));
+    auto pathSearch = std::make_shared<PathSearch>(
+        PathSearch(qec_, std::move(sub._qet), config));
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }

@@ -146,5 +146,3 @@ I don't see a problem why it couldn't also be a parameter per context variable.
 HARDER THAN BROCCOLI:
 cross product with contexts
 cross product (not full) with co-occurring n-tuples of entities (?x ?y ?z - see graphs above).
-
-

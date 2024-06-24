@@ -4,14 +4,13 @@
 
 #pragma once
 
-#include <optional>
 #include <algorithm>
-
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/depth_first_search.hpp>
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/graph/graph_selectors.hpp>
 #include <boost/graph/graph_traits.hpp>
+#include <optional>
 
 /**
  * @brief Represents an edge in the graph.
@@ -143,7 +142,8 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
    */
   void examine_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
-    if (targets_.empty() || (currentPath_.ends_with(edge.start_) && targets_.find(edge.end_) != targets_.end())) {
+    if (targets_.empty() || (currentPath_.ends_with(edge.start_) &&
+                             targets_.find(edge.end_) != targets_.end())) {
       auto pathCopy = currentPath_;
       pathCopy.push_back(edge);
       allPaths_.push_back(pathCopy);
@@ -161,20 +161,23 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
   }
 
   /**
-   * @brief Called when a vertex has been finished during the depth-first search.
+   * @brief Called when a vertex has been finished during the depth-first
+   * search.
    * @param vertex The descriptor of the vertex being finished.
    * @param graph The graph being searched.
    */
   void finish_vertex(VertexDescriptor vertex, const Graph& graph) {
     (void)graph;
-    if (!currentPath_.empty() && Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
+    if (!currentPath_.empty() &&
+        Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
       currentPath_.edges_.pop_back();
     }
   }
 };
 
 /**
- * @brief Visitor for performing Dijkstra's algorithm to find all shortest paths.
+ * @brief Visitor for performing Dijkstra's algorithm to find all shortest
+ * paths.
  */
 class DijkstraAllPathsVisitor : public boost::default_dijkstra_visitor {
   // The source vertex descriptor.

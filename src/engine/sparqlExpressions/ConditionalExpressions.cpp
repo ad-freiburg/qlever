@@ -66,35 +66,36 @@ class CoalesceExpression : public VariadicExpression {
 
     auto visitConstantExpressionResult =
         [&nextUnboundIndices, &unboundIndices, &isUnbound, &result,
-         ctx ]<SingleExpressionResult T>(T && childResult)
+         ctx]<SingleExpressionResult T>(T&& childResult)
             requires isConstantResult<T> {
-      IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
-      if (isUnbound(constantResult)) {
-        nextUnboundIndices = std::move(unboundIndices);
-        return;
-      }
-      ad_utility::chunkedForLoop<CHUNK_SIZE>(
-          0, unboundIndices.size(),
-          [&unboundIndices, &result, &constantResult](size_t idx) {
-            // GCC 12 & 13 report this as potential uninitialized
-            // use of a variable when compiling with -O3, which seems to
-            // be a false positive, so we suppress the warning here. See
-            // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109561 for
-            // more information.
-            DISABLE_UNINITIALIZED_WARNINGS
-            result[unboundIndices[idx]] = constantResult;
-          },
-          [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
-    };
+              IdOrLiteralOrIri constantResult{AD_FWD(childResult)};
+              if (isUnbound(constantResult)) {
+                nextUnboundIndices = std::move(unboundIndices);
+                return;
+              }
+              ad_utility::chunkedForLoop<CHUNK_SIZE>(
+                  0, unboundIndices.size(),
+                  [&unboundIndices, &result, &constantResult](size_t idx) {
+                    // GCC 12 & 13 report this as potential uninitialized
+                    // use of a variable when compiling with -O3, which seems to
+                    // be a false positive, so we suppress the warning here. See
+                    // https://gcc.gnu.org/bugzilla/show_bug.cgi?id=109561 for
+                    // more information.
+                    DISABLE_UNINITIALIZED_WARNINGS
+                    result[unboundIndices[idx]] = constantResult;
+                  },
+                  [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
+            };
     ENABLE_UNINITIALIZED_WARNINGS
 
     // For a single child result, write the result at the indices where the
     // result so far is unbound, and the child result is bound. While doing so,
     // set up the `nextUnboundIndices` vector  for the next step.
     auto visitVectorExpressionResult =
-        [&result, &unboundIndices, &nextUnboundIndices, &ctx, &
-         isUnbound ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
+        [&result, &unboundIndices, &nextUnboundIndices, &ctx,
+         &isUnbound]<SingleExpressionResult T>(T&& childResult)
+            requires std::is_rvalue_reference_v<T&&>
+    {
       static_assert(!isConstantResult<T>);
       auto gen = detail::makeGenerator(AD_FWD(childResult), ctx->size(), ctx);
       // Iterator to the next index where the result so far is unbound.
@@ -126,18 +127,17 @@ class CoalesceExpression : public VariadicExpression {
           [ctx]() { ctx->cancellationHandle_->throwIfCancelled(); });
     };
     auto visitExpressionResult =
-        [
-          &visitConstantExpressionResult, &visitVectorExpressionResult
-        ]<SingleExpressionResult T>(T && childResult)
-            requires std::is_rvalue_reference_v<T&&> {
-      // If the previous expression result is a constant, we can skip the
-      // loop.
-      if constexpr (isConstantResult<T>) {
-        visitConstantExpressionResult(AD_FWD(childResult));
-      } else {
-        visitVectorExpressionResult(AD_FWD(childResult));
-      }
-    };
+        [&visitConstantExpressionResult,
+         &visitVectorExpressionResult]<SingleExpressionResult T>(
+            T&& childResult) requires std::is_rvalue_reference_v<T&&> {
+          // If the previous expression result is a constant, we can skip the
+          // loop.
+          if constexpr (isConstantResult<T>) {
+            visitConstantExpressionResult(AD_FWD(childResult));
+          } else {
+            visitVectorExpressionResult(AD_FWD(childResult));
+          }
+        };
 
     // Evaluate the children one by one, stopping as soon as all result are
     // bound.

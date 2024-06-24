@@ -245,7 +245,8 @@ class SparqlQleverVisitor {
   [[noreturn]] static parsedQuery::GraphPatternOperation visit(
       const Parser::GraphGraphPatternContext* ctx);
 
-  parsedQuery::GraphPatternOperation visit(Parser::ServiceGraphPatternContext* ctx);
+  parsedQuery::GraphPatternOperation visit(
+      Parser::ServiceGraphPatternContext* ctx);
 
   parsedQuery::GraphPatternOperation visit(Parser::BindContext* ctx);
 

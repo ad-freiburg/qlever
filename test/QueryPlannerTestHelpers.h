@@ -170,7 +170,8 @@ inline auto CountAvailablePredicates =
     [](size_t subjectColumnIdx, const Variable& predicateVar,
        const Variable& countVar,
        const std::same_as<QetMatcher> auto&... childMatchers)
-        requires(sizeof...(childMatchers) <= 1) {
+        requires(sizeof...(childMatchers) <= 1)
+{
   return RootOperation<::CountAvailablePredicates>(AllOf(
       AD_PROPERTY(::CountAvailablePredicates, subjectColumnIndex,
                   Eq(subjectColumnIdx)),
@@ -262,26 +263,26 @@ inline auto TransitivePath =
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
   return AllOf(
-    AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
-    AD_FIELD(PathSearchConfiguration, source_, Eq(config.source_)),
-    AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
-    AD_FIELD(PathSearchConfiguration, targets_, UnorderedElementsAreArray(config.targets_)),
-    AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
-    AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
-    AD_FIELD(PathSearchConfiguration, edgeColumn_, Eq(config.edgeColumn_)),
-    AD_FIELD(PathSearchConfiguration, edgeProperties_, UnorderedElementsAreArray(config.edgeProperties_))
-  );
+      AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
+      AD_FIELD(PathSearchConfiguration, source_, Eq(config.source_)),
+      AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
+      AD_FIELD(PathSearchConfiguration, targets_,
+               UnorderedElementsAreArray(config.targets_)),
+      AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
+      AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeColumn_, Eq(config.edgeColumn_)),
+      AD_FIELD(PathSearchConfiguration, edgeProperties_,
+               UnorderedElementsAreArray(config.edgeProperties_)));
 };
 
 // Match a PathSearch operation
 inline auto PathSearch =
-    [](PathSearchConfiguration config, const std::same_as<QetMatcher> auto&... childMatchers) {
-      return RootOperation<::PathSearch>(
-          AllOf(Property("getChildren", &Operation::getChildren,
-                         ElementsAre(Pointee(childMatchers)...)),
-                AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config))
-          )
-      );
+    [](PathSearchConfiguration config,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
+      return RootOperation<::PathSearch>(AllOf(
+          Property("getChildren", &Operation::getChildren,
+                   ElementsAre(Pointee(childMatchers)...)),
+          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

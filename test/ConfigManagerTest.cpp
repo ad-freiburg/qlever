@@ -1205,10 +1205,11 @@ void doValidatorTest(
   here.
   */
   auto addValidatorToConfigManager =
-      [&adjustVariantArgument, &addValidatorFunction ]<typename... Ts>(
-          size_t variant, ConfigManager & m,
+      [&adjustVariantArgument, &addValidatorFunction]<typename... Ts>(
+          size_t variant, ConfigManager& m,
           ConstConfigOptionProxy<Ts>... validatorArguments)
-          requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+          requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // Add the new validator
     addValidatorFunction(
         adjustVariantArgument.template operator()<Ts...>(variant),
@@ -1235,11 +1236,12 @@ void doValidatorTest(
   */
   auto testGeneratedValidatorsOfConfigManager =
       [&adjustVariantArgument]<typename... Ts>(
-          size_t variantStart, size_t variantEnd, ConfigManager & m,
+          size_t variantStart, size_t variantEnd, ConfigManager& m,
           const nlohmann::json& defaultValues,
           const std::same_as<
               nlohmann::json::json_pointer> auto&... configOptionPaths)
-          requires(sizeof...(Ts) == sizeof...(configOptionPaths)) {
+          requires(sizeof...(Ts) == sizeof...(configOptionPaths))
+  {
     // Using the invariant of our function generator, to create valid
     // and none valid values for all added validators.
     for (size_t validatorNumber = variantStart; validatorNumber < variantEnd;
@@ -1292,25 +1294,25 @@ void doValidatorTest(
   here.
   */
   auto doTestNoValidatorInSubManager =
-      [&addValidatorToConfigManager, &
-       testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
-          ConfigManager & m, const nlohmann::json& defaultValues,
+      [&addValidatorToConfigManager,
+       &testGeneratedValidatorsOfConfigManager]<typename... Ts>(
+          ConfigManager& m, const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
                           ConstConfigOptionProxy<Ts>>&... validatorArguments)
           requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
-    // How many validators are to be added?
-    constexpr size_t NUMBER_OF_VALIDATORS{5};
+            // How many validators are to be added?
+            constexpr size_t NUMBER_OF_VALIDATORS{5};
 
-    for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
-      // Add a new validator
-      addValidatorToConfigManager.template operator()<Ts...>(
-          i, m, validatorArguments.second...);
+            for (size_t i = 0; i < NUMBER_OF_VALIDATORS; i++) {
+              // Add a new validator
+              addValidatorToConfigManager.template operator()<Ts...>(
+                  i, m, validatorArguments.second...);
 
-      // Test all the added validators.
-      testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
-          0, i + 1, m, defaultValues, validatorArguments.first...);
-    }
-  };
+              // Test all the added validators.
+              testGeneratedValidatorsOfConfigManager.template operator()<Ts...>(
+                  0, i + 1, m, defaultValues, validatorArguments.first...);
+            }
+          };
 
   /*
   @brief Do the tests for config manager with one sub manager. The sub manager
@@ -1335,13 +1337,14 @@ void doValidatorTest(
   here.
   */
   auto doTestAlwaysValidatorInSubManager =
-      [&addValidatorToConfigManager, &
-       testGeneratedValidatorsOfConfigManager ]<typename... Ts>(
-          ConfigManager & m, ConfigManager & subM,
+      [&addValidatorToConfigManager,
+       &testGeneratedValidatorsOfConfigManager]<typename... Ts>(
+          ConfigManager& m, ConfigManager& subM,
           const nlohmann::json& defaultValues,
           const std::pair<nlohmann::json::json_pointer,
                           ConstConfigOptionProxy<Ts>>&... validatorArguments)
-          requires(sizeof...(Ts) == sizeof...(validatorArguments)) {
+          requires(sizeof...(Ts) == sizeof...(validatorArguments))
+  {
     // How many validators are to be added to each of the managers?
     constexpr size_t NUMBER_OF_VALIDATORS{5};
 

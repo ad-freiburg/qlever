@@ -777,34 +777,25 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{
-    ALL_PATHS,
-    getId("<x>"),
-    {getId("<z>")},
-    Variable("?start"),
-    Variable("?end"),
-    Variable("?path"),
-    Variable("?edge"),
-    {}
-  };
+  PathSearchConfiguration config{ALL_PATHS,         getId("<x>"),
+                                 {getId("<z>")},    Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {}};
   h::expect(
-    "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-    "SELECT ?start ?end ?path ?edge WHERE {"
-    "SERVICE pathSearch: {"
-        "_:path pathSearch:algorithm pathSearch:allPaths ;"
-                   "pathSearch:source <x> ;"
-                   "pathSearch:target <z> ;"
-                   "pathSearch:pathColumn ?path ;"
-                   "pathSearch:edgeColumn ?edge ;"
-                   "pathSearch:start ?start;"
-                   "pathSearch:end ?end;"
-        "{SELECT * WHERE {"
-            "?start <p> ?end."
-        "}}}}",
-      h::PathSearch(
-          config,
-          scan("?start", "<p>", "?end")),
-      qec);
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, scan("?start", "<p>", "?end")), qec);
 }
 
 TEST(QueryPlanner, PathSearchMultipleTargets) {
@@ -812,73 +803,61 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{
-    ALL_PATHS,
-    getId("<x>"),
-    {getId("<y>"), getId("<z>")},
-    Variable("?start"),
-    Variable("?end"),
-    Variable("?path"),
-    Variable("?edge"),
-    {}
-  };
+  PathSearchConfiguration config{ALL_PATHS,
+                                 getId("<x>"),
+                                 {getId("<y>"), getId("<z>")},
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
-    "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-    "SELECT ?start ?end ?path ?edge WHERE {"
-    "SERVICE pathSearch: {"
-        "_:path pathSearch:algorithm pathSearch:allPaths ;"
-                   "pathSearch:source <x> ;"
-                   "pathSearch:target <y> ;"
-                   "pathSearch:target <z> ;"
-                   "pathSearch:pathColumn ?path ;"
-                   "pathSearch:edgeColumn ?edge ;"
-                   "pathSearch:start ?start;"
-                   "pathSearch:end ?end;"
-        "{SELECT * WHERE {"
-            "?start <p> ?end."
-        "}}}}",
-      h::PathSearch(
-          config,
-          scan("?start", "<p>", "?end")),
-      qec);
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <y> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, scan("?start", "<p>", "?end")), qec);
 }
 
 TEST(QueryPlanner, PathSearchWithEdgeProperties) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
-  auto qec = ad_utility::testing::getQec("<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
+  auto qec = ad_utility::testing::getQec(
+      "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{
-    ALL_PATHS,
-    getId("<x>"),
-    {getId("<z>")},
-    Variable("?start"),
-    Variable("?end"),
-    Variable("?path"),
-    Variable("?edge"),
-    {Variable("?middle")}
-  };
+  PathSearchConfiguration config{ALL_PATHS,         getId("<x>"),
+                                 {getId("<z>")},    Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {Variable("?middle")}};
   h::expect(
-    "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-    "SELECT ?start ?end ?path ?edge WHERE {"
-    "SERVICE pathSearch: {"
-        "_:path pathSearch:algorithm pathSearch:allPaths ;"
-                   "pathSearch:source <x> ;"
-                   "pathSearch:target <z> ;"
-                   "pathSearch:pathColumn ?path ;"
-                   "pathSearch:edgeColumn ?edge ;"
-                   "pathSearch:start ?start;"
-                   "pathSearch:end ?end;"
-                   "pathSearch:edgeProperty ?middle;"
-        "{SELECT * WHERE {"
-            "?start <p1> ?middle."
-            "?middle <p2> ?end."
-        "}}}}",
-      h::PathSearch(
-          config,
-          join(scan("?start", "<p1>", "?middle"),
-               scan("?middle", "<p2>", "?end"))),
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:edgeProperty ?middle;"
+      "{SELECT * WHERE {"
+      "?start <p1> ?middle."
+      "?middle <p2> ?end."
+      "}}}}",
+      h::PathSearch(config, join(scan("?start", "<p1>", "?middle"),
+                                 scan("?middle", "<p2>", "?end"))),
       qec);
 }
 
@@ -886,49 +865,46 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   auto scan = h::IndexScanFromStrings;
   auto join = h::Join;
   auto qec = ad_utility::testing::getQec(
-    "<x> <p1> <m1>."
-    "<m1> <p3> <n1>."
-    "<m1> <p2> <y>."
-    "<y> <p1> <m2>."
-    "<m2> <p3> <n2>."
-    "<m2> <p2> <z>"
-  );
+      "<x> <p1> <m1>."
+      "<m1> <p3> <n1>."
+      "<m1> <p2> <y>."
+      "<y> <p1> <m2>."
+      "<m2> <p3> <n2>."
+      "<m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   PathSearchConfiguration config{
-    ALL_PATHS,
-    getId("<x>"),
-    {getId("<z>"), getId("<y>")},
-    Variable("?start"),
-    Variable("?end"),
-    Variable("?path"),
-    Variable("?edge"),
-    {Variable("?middle"), Variable("?middleAttribute")}
-  };
+      ALL_PATHS,
+      getId("<x>"),
+      {getId("<z>"), getId("<y>")},
+      Variable("?start"),
+      Variable("?end"),
+      Variable("?path"),
+      Variable("?edge"),
+      {Variable("?middle"), Variable("?middleAttribute")}};
   h::expect(
-    "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
-    "SELECT ?start ?end ?path ?edge WHERE {"
-    "SERVICE pathSearch: {"
-        "_:path pathSearch:algorithm pathSearch:allPaths ;"
-                   "pathSearch:source <x> ;"
-                   "pathSearch:target <z> ;"
-                   "pathSearch:target <y> ;"
-                   "pathSearch:pathColumn ?path ;"
-                   "pathSearch:edgeColumn ?edge ;"
-                   "pathSearch:start ?start;"
-                   "pathSearch:end ?end;"
-                   "pathSearch:edgeProperty ?middle;"
-                   "pathSearch:edgeProperty ?middleAttribute;"
-        "{SELECT * WHERE {"
-            "?start <p1> ?middle."
-            "?middle <p3> ?middleAttribute."
-            "?middle <p2> ?end."
-        "}}}}",
-      h::PathSearch(
-          config,
-          join(scan("?start", "<p1>", "?middle"),
-               join(scan("?middle", "<p3>", "?middleAttribute"),
-                    scan("?middle", "<p2>", "?end")))),
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:target <y> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:edgeProperty ?middle;"
+      "pathSearch:edgeProperty ?middleAttribute;"
+      "{SELECT * WHERE {"
+      "?start <p1> ?middle."
+      "?middle <p3> ?middleAttribute."
+      "?middle <p2> ?end."
+      "}}}}",
+      h::PathSearch(config,
+                    join(scan("?start", "<p1>", "?middle"),
+                         join(scan("?middle", "<p3>", "?middleAttribute"),
+                              scan("?middle", "<p2>", "?end")))),
       qec);
 }
 

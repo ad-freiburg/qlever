@@ -85,20 +85,25 @@ void PathQuery::addParameter(SparqlTriple& triple) {
   } else if (predicate.getIri().toStringRepresentation().ends_with("end>")) {
     AD_CORRECTNESS_CHECK(object.isVariable());
     end_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with("pathColumn>")) {
+  } else if (predicate.getIri().toStringRepresentation().ends_with(
+                 "pathColumn>")) {
     AD_CORRECTNESS_CHECK(object.isVariable());
     pathColumn_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with("edgeColumn>")) {
+  } else if (predicate.getIri().toStringRepresentation().ends_with(
+                 "edgeColumn>")) {
     AD_CORRECTNESS_CHECK(object.isVariable());
     edgeColumn_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with("edgeProperty>")) {
+  } else if (predicate.getIri().toStringRepresentation().ends_with(
+                 "edgeProperty>")) {
     AD_CORRECTNESS_CHECK(object.isVariable());
     edgeProperties_.push_back(object.getVariable());
-  } else if (predicate.getIri().toStringRepresentation().ends_with("algorithm>")) {
+  } else if (predicate.getIri().toStringRepresentation().ends_with(
+                 "algorithm>")) {
     AD_CORRECTNESS_CHECK(object.isIri());
     if (object.getIri().toStringRepresentation().ends_with("allPaths>")) {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
-    } else if (object.getIri().toStringRepresentation().ends_with("shortestPaths>")) {
+    } else if (object.getIri().toStringRepresentation().ends_with(
+                   "shortestPaths>")) {
       algorithm_ = PathSearchAlgorithm::SHORTEST_PATHS;
     } else {
       AD_THROW("Unsupported algorithm in PathSearch");
@@ -110,7 +115,7 @@ void PathQuery::addParameter(SparqlTriple& triple) {
 
 // ____________________________________________________________________________
 void PathQuery::fromBasicPattern(const BasicGraphPattern& pattern) {
-  for (SparqlTriple triple: pattern._triples) {
+  for (SparqlTriple triple : pattern._triples) {
     addParameter(triple);
   }
 }

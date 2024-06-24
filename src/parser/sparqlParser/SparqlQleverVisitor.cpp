@@ -725,10 +725,11 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   Iri serviceIri = std::get<Iri>(varOrIri);
   if (serviceIri.toSparql() ==
       "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
-
-    auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery, const parsedQuery::GraphPatternOperation& op){
+    auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
+                             const parsedQuery::GraphPatternOperation& op) {
       if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-        pathQuery.fromBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+        pathQuery.fromBasicPattern(
+            std::get<parsedQuery::BasicGraphPattern>(op));
       } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
         auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
         pathQuery.childGraphPattern_ = std::move(pattern._child);
@@ -739,7 +740,7 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
     parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
     parsedQuery::PathQuery pathQuery;
-    for (auto op: graphPattern._graphPatterns) {
+    for (auto op : graphPattern._graphPatterns) {
       parsePathQuery(pathQuery, op);
     }
 

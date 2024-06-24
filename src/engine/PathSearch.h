@@ -10,8 +10,8 @@
 #include <vector>
 
 #include "engine/Operation.h"
-#include "engine/VariableToColumnMap.h"
 #include "engine/PathSearchVisitors.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/Id.h"
 #include "index/Vocabulary.h"
 
@@ -36,15 +36,15 @@ struct PathSearchConfiguration {
   // The source node ID.
   Id source_;
   // A list of target node IDs.
-  std::vector<Id> targets_; 
+  std::vector<Id> targets_;
   // Variable representing the start column in the result.
-  Variable start_; 
+  Variable start_;
   // Variable representing the end column in the result.
-  Variable end_; 
+  Variable end_;
   // Variable representing the path column in the result.
-  Variable pathColumn_; 
+  Variable pathColumn_;
   // Variable representing the edge column in the result.
-  Variable edgeColumn_; 
+  Variable edgeColumn_;
   // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
 };
@@ -78,11 +78,18 @@ class PathSearch : public Operation {
 
   const PathSearchConfiguration& getConfig() const { return config_; }
 
-  ColumnIndex getStartIndex() const { return variableColumns_.at(config_.start_).columnIndex_; }
-  ColumnIndex getEndIndex() const { return variableColumns_.at(config_.end_).columnIndex_; }
-  ColumnIndex getPathIndex() const { return variableColumns_.at(config_.pathColumn_).columnIndex_; }
-  ColumnIndex getEdgeIndex() const { return variableColumns_.at(config_.edgeColumn_).columnIndex_; }
-
+  ColumnIndex getStartIndex() const {
+    return variableColumns_.at(config_.start_).columnIndex_;
+  }
+  ColumnIndex getEndIndex() const {
+    return variableColumns_.at(config_.end_).columnIndex_;
+  }
+  ColumnIndex getPathIndex() const {
+    return variableColumns_.at(config_.pathColumn_).columnIndex_;
+  }
+  ColumnIndex getEdgeIndex() const {
+    return variableColumns_.at(config_.edgeColumn_).columnIndex_;
+  }
 
   string getCacheKeyImpl() const override;
   string getDescriptor() const override;

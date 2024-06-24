@@ -316,8 +316,9 @@ class ConcatExpression : public detail::VariadicExpression {
     // were constants (see above).
     std::variant<std::string, StringVec> result{std::string{""}};
     auto visitSingleExpressionResult =
-        [&ctx, &result ]<SingleExpressionResult T>(T && s)
-            requires std::is_rvalue_reference_v<T&&> {
+        [&ctx, &result]<SingleExpressionResult T>(T&& s)
+            requires std::is_rvalue_reference_v<T&&>
+    {
       if constexpr (isConstantResult<T>) {
         std::string strFromConstant = StringValueGetter{}(s, ctx).value_or("");
         if (std::holds_alternative<std::string>(result)) {

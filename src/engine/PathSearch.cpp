@@ -31,9 +31,12 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
   variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(2);
   variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(3);
 
-  for (size_t edgePropertyIndex = 0; edgePropertyIndex < config_.edgeProperties_.size(); edgePropertyIndex++) {
+  for (size_t edgePropertyIndex = 0;
+       edgePropertyIndex < config_.edgeProperties_.size();
+       edgePropertyIndex++) {
     auto edgeProperty = config_.edgeProperties_[edgePropertyIndex];
-    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(4 + edgePropertyIndex);
+    variableColumns_[edgeProperty] =
+        makeAlwaysDefinedColumn(4 + edgePropertyIndex);
   }
 }
 
@@ -101,16 +104,15 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
       edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
     }
 
-
     auto subStartColumn = subtree_->getVariableColumn(config_.start_);
     auto subEndColumn = subtree_->getVariableColumn(config_.end_);
-    buildGraph(dynSub.getColumn(subStartColumn),
-               dynSub.getColumn(subEndColumn), edgePropertyLists);
+    buildGraph(dynSub.getColumn(subStartColumn), dynSub.getColumn(subEndColumn),
+               edgePropertyLists);
 
     auto paths = findPaths();
 
-    CALL_FIXED_SIZE(std::array{getResultWidth()}, &PathSearch::pathsToResultTable,
-                    this, idTable, paths);
+    CALL_FIXED_SIZE(std::array{getResultWidth()},
+                    &PathSearch::pathsToResultTable, this, idTable, paths);
   }
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
