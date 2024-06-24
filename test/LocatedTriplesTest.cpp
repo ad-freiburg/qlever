@@ -20,12 +20,6 @@ auto V = ad_utility::testing::VocabId;
 auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
   return IdTriple{std::array<Id, 3>{V(c1), V(c2), V(c3)}};
 };
-
-}  // namespace
-
-// TODO<qup42>: move to LocatedTriplesTestHelpers.h if more matchers collect,
-// otherwise move it to the anonymous namespace above
-namespace Matchers {
 auto numBlocks =
     [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
@@ -61,8 +55,7 @@ auto numTriplesBlockwise =
       });
   return testing::AllOfArray(blockMatchers);
 };
-}  // namespace Matchers
-namespace m = Matchers;
+}  // namespace
 
 // Fixture with helper functions.
 class LocatedTriplesTest : public ::testing::Test {
@@ -79,56 +72,118 @@ class LocatedTriplesTest : public ::testing::Test {
 
 // Test the method that counts the number of `LocatedTriple's in a block.
 TEST_F(LocatedTriplesTest, numTriplesInBlock) {
+  auto locatedTriplesInBlock = [](const size_t blockIndex,
+                                  const LocatedTriples& expectedLTs)
+      -> testing::Matcher<const LocatedTriplesPerBlock&> {
+    return testing::ResultOf(
+        absl::StrCat(".map_.at(", std::to_string(blockIndex), ")"),
+        [blockIndex](const LocatedTriplesPerBlock& ltpb) {
+          return ltpb.map_.at(blockIndex);
+        },
+        testing::Eq(expectedLTs));
+  };
+
+  auto locatedTriplesAre =
+      [&locatedTriplesInBlock](
+          const ad_utility::HashMap<size_t, LocatedTriples>&
+              locatedTriplesBlockwise) {
+        auto blockMatchers = ad_utility::transform(
+            locatedTriplesBlockwise,
+            [&locatedTriplesInBlock](
+                auto p) -> testing::Matcher<const LocatedTriplesPerBlock&> {
+              auto [blockIndex, expectedLTs] = p;
+              return locatedTriplesInBlock(blockIndex, expectedLTs);
+            });
+        // The macro does not work with templated types.
+        using HashMapType = ad_utility::HashMap<size_t, LocatedTriples>;
+        return testing::AllOf(
+            AD_FIELD(LocatedTriplesPerBlock, map_,
+                     AD_PROPERTY(HashMapType, size,
+                                 testing::Eq(locatedTriplesBlockwise.size()))),
+            testing::AllOfArray(blockMatchers));
+      };
   using LT = LocatedTriple;
   // Set up lists of located triples for three blocks.
-  auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-      {LT{1, IT(10, 1, 0), false}, LT{1, IT(10, 2, 1), false},
-       LT{1, IT(11, 3, 0), true}, LT{2, IT(20, 4, 0), true},
-       LT{2, IT(21, 5, 0), true}, LT{4, IT(30, 6, 0), true},
-       LT{4, IT(32, 7, 0), false}});
+  auto LT1 = LT{1, IT(10, 1, 0), false};
+  auto LT2 = LT{1, IT(10, 2, 1), false};
+  auto LT3 = LT{1, IT(11, 3, 0), true};
+  auto LT4 = LT{2, IT(20, 4, 0), true};
+  auto LT5 = LT{2, IT(21, 5, 0), true};
+  auto LT6 = LT{4, IT(30, 6, 0), true};
+  auto LT7 = LT{4, IT(32, 7, 0), false};
+  auto LT8 = LT{3, IT(25, 5, 0), true};
+  auto LT9 = LT{4, IT(31, 6, 1), false};
+  auto locatedTriplesPerBlock =
+      makeLocatedTriplesPerBlock({LT1, LT2, LT3, LT4, LT5, LT6, LT7});
 
-  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
-  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(7));
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
-              m::numTriplesBlockwise(
+              numTriplesBlockwise(
                   {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
-
-  auto handles = locatedTriplesPerBlock.add(
-      {LT{3, IT(25, 5, 0), true}, LT{4, IT(31, 6, 1), false}});
-
-  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(4));
-  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(9));
   EXPECT_THAT(locatedTriplesPerBlock,
-              m::numTriplesBlockwise(
+              locatedTriplesAre(
+                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
+
+  auto handles = locatedTriplesPerBlock.add({LT8, LT9});
+
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(4));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              numTriplesBlockwise(
                   {{1, {1, 2}}, {2, {2, 0}}, {3, {1, 0}}, {4, {1, 2}}}));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              locatedTriplesAre({{1, {LT1, LT2, LT3}},
+                                 {2, {LT4, LT5}},
+                                 {3, {LT8}},
+                                 {4, {LT6, LT7, LT9}}}));
 
   locatedTriplesPerBlock.erase(3, handles[0]);
 
-  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
-  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(8));
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
   EXPECT_THAT(locatedTriplesPerBlock,
-              m::numTriplesBlockwise(
+              numTriplesBlockwise(
                   {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      locatedTriplesAre(
+          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
 
   // Erasing in a block that does not exist, raises an exception.
   EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
                ad_utility::Exception);
 
+  // Nothing changed.
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              numTriplesBlockwise(
+                  {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 2}}}));
+  EXPECT_THAT(
+      locatedTriplesPerBlock,
+      locatedTriplesAre(
+          {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
+
   locatedTriplesPerBlock.erase(4, handles[1]);
 
-  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(3));
-  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(7));
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
   EXPECT_THAT(locatedTriplesPerBlock,
-              m::numTriplesBlockwise(
+              numTriplesBlockwise(
                   {{1, {1, 2}}, {2, {2, 0}}, {3, {0, 0}}, {4, {1, 1}}}));
+  EXPECT_THAT(locatedTriplesPerBlock,
+              locatedTriplesAre(
+                  {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
 
   locatedTriplesPerBlock.clear();
 
-  EXPECT_THAT(locatedTriplesPerBlock, m::numBlocks(0));
-  EXPECT_THAT(locatedTriplesPerBlock, m::numTriplesTotal(0));
+  EXPECT_THAT(locatedTriplesPerBlock, numBlocks(0));
+  EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(0));
   EXPECT_THAT(locatedTriplesPerBlock,
-              m::numTriplesBlockwise(
+              numTriplesBlockwise(
                   {{1, {0, 0}}, {2, {0, 0}}, {3, {0, 0}}, {4, {0, 0}}}));
+  EXPECT_THAT(locatedTriplesPerBlock, locatedTriplesAre({}));
 }
 
 // Test the method that merges the matching `LocatedTriple`s from a block into
