@@ -72,8 +72,9 @@ class LocatedTriplesPerBlock {
 
   // For each block with a non-empty set of located triples, the located triples
   // in that block.
-  //
   ad_utility::HashMap<size_t, LocatedTriples> map_;
+
+  FRIEND_TEST(LocatedTriplesTest, numTriplesInBlock);
 
  public:
   // Get upper limits for the number of located triples for the given block. The

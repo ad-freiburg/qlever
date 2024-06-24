@@ -62,8 +62,6 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
   // specified block.
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
-  // TODO<qup42>: We're assuming that the index columns are always {0, 1, 2},
-  // {1, 2} or {2}. Is this true?
   AD_CONTRACT_CHECK(numIndexColumns <= block.numColumns());
   AD_CONTRACT_CHECK(block.numColumns() >= 1);
 
