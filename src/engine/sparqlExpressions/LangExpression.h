@@ -2,18 +2,14 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-// Test file for the LangExpression class: LanguageExpressionTests.h
+// Test file for the LangExpression class: LanguageExpressionsTests.h
 
 #pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
 namespace sparqlExpression {
-// A dummy implementation for expressions of the form `LANG(?variable)`. This
-// expression cannot be evaluated (almost all methods will throw an assertion
-// failure), but is only used during parsing to recognize the special pattern
-// `FILTER (LANG(?variable) = "lang")` which is then transformed to QLever's
-// special language filter implementation using special predicates.
+
 class LangExpression : public SparqlExpression {
  private:
   // The stored variable.

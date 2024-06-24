@@ -275,8 +275,8 @@ struct IriValueGetter : Mixin<IriValueGetter> {
 
 // `LanguageTagValueGetter` returns an `std::optional<std::string>` object
 // which contains the language tag if previously set w.r.t. given
-// `Id`/`Literal`. This ValueGetter currently used within
-// `RdfTermExpression.cpp` for the (simple) implementation of the
+// `Id`/`Literal`. This ValueGetter is currently used within
+// `LangExpression.cpp` for the (simple) implementation of the
 // `LANG()`-expression.
 struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
   using Mixin<LanguageTagValueGetter>::operator();
@@ -289,7 +289,7 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
       if (litOrIri.hasLanguageTag()) {
         return std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
       }
-      // If we encounter a literal without a language tag we return a empty
+      // If we encounter a literal without a language tag, we return an empty
       // string by the definition of the Sparql-standard.
       return "";
     } else {

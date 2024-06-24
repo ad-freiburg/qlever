@@ -7,6 +7,7 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
@@ -20,6 +21,8 @@ using ad_utility::testing::IntId;
 using ad_utility::triple_component::LiteralOrIri;
 using strOpt = std::optional<std::string>;
 using LanguageTagGetter = sparqlExpression::detail::LanguageTagValueGetter;
+
+auto lit = ad_utility::testing::tripleComponentLiteral;
 
 // Define a test context like in SparqlExpressionTestHelpers.h (take a look for
 // better description/explanation of the context). This is necessary because the
@@ -95,7 +98,7 @@ struct TestContext {
 
     table.setNumColumns(2);
     // Order of the columns:
-    // ?only_lits, ?mixed
+    // ?literals, ?mixed
     table.push_back({litId1, DoubleId(0.1)});
     table.push_back({litId2, IntId(1)});
     table.push_back({litId3, locVocLit3});
@@ -133,24 +136,32 @@ auto assertLangTagValueGetter =
     };
 
 // ____________________________________________________________________________
-LangExpression getLangExpression(const std::string& variable) {
-  // initialize the child expression (must be a variable expression)
-  SparqlExpression::Ptr child =
-      std::make_unique<VariableExpression>(Variable{std::move(variable)});
-  return {std::move(child)};
-}
+auto getLangExpression =
+    [](const std::string& variable) -> SparqlExpression::Ptr {
+  // initialize with a child expression which has to be a VariableExpression!
+  return std::move(std::make_unique<LangExpression>(
+      std::make_unique<VariableExpression>(Variable{std::move(variable)})));
+};
 
 // ____________________________________________________________________________
-auto testLangExpression = [](const std::string& variable,
-                             const std::vector<IdOrLiteralOrIri>& expected,
-                             source_location l = source_location::current()) {
-  static TestContext context;
-  auto trace = generateLocationTrace(l, "testing LANG(?x)");
+auto getLangMatchesExpression =
+    [](const std::string& variable,
+       const std::string& langRange) -> SparqlExpression::Ptr {
+  return std::move(makeLangMatchesExpression(
+      std::move(getLangExpression(variable)),
+      std::move(std::make_unique<StringLiteralExpression>(lit(langRange)))));
+};
+
+// ____________________________________________________________________________
+template <auto GetExpr, typename T>
+auto testLanguageExpressions = [](const std::vector<T>& expected,
+                                  const std::string& variable,
+                                  const auto&... args) {
+  TestContext context;
   ASSERT_TRUE(context.isValidVariableStr(variable));
-  LangExpression langExpr = getLangExpression(variable);
-  auto resultAsVariant = langExpr.evaluate(&context.context);
-  const auto& result =
-      std::get<VectorWithMemoryLimit<IdOrLiteralOrIri>>(resultAsVariant);
+  SparqlExpression::Ptr expr = GetExpr(variable, args...);
+  auto resultAsVariant = expr->evaluate(&context.context);
+  const auto& result = std::get<VectorWithMemoryLimit<T>>(resultAsVariant);
   EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
 };
 
@@ -208,27 +219,52 @@ TEST(LanguageTagGetter, testLanguageTagValueGetterWithLocalVocab) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnLiteralColumn) {
-  testLangExpression("?literals",
-                     {litOrIri(""), litOrIri("es"), litOrIri("de-LATN-CH"),
-                      litOrIri("de-DE"), litOrIri("de-DE"), litOrIri("de-AT"),
-                      litOrIri("de"), litOrIri("de-AT")});
+  testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
+      {litOrIri(""), litOrIri("es"), litOrIri("de-LATN-CH"), litOrIri("de-DE"),
+       litOrIri("de-DE"), litOrIri("de-AT"), litOrIri("de"), litOrIri("de-AT")},
+      "?literals");
 }
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
   auto U = Id::makeUndefined();
-  testLangExpression("?mixed",
-                     {U, U, litOrIri("de"), U, U, U, U, litOrIri("")});
+  testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
+      {U, U, litOrIri("de"), U, U, U, U, litOrIri("")}, "?mixed");
 }
 
 // ____________________________________________________________________________
 TEST(LangExpression, testSimpleFunctionLangExpression) {
   TestContext context;
-  LangExpression langExpr = getLangExpression("?literals");
-  ASSERT_FALSE(langExpr.getUnaggregatedVariables().empty());
-  auto cacheKey = langExpr.getCacheKey(context.varToColMap);
+  SparqlExpression::Ptr langExpr = getLangExpression("?literals");
+  ASSERT_FALSE(langExpr->getUnaggregatedVariables().empty());
+  auto cacheKey = langExpr->getCacheKey(context.varToColMap);
   ASSERT_THAT(cacheKey, ::testing::StrEq("LANG #column_0#"));
   langExpr = getLangExpression("?mixed");
-  cacheKey = langExpr.getCacheKey(context.varToColMap);
+  cacheKey = langExpr->getCacheKey(context.varToColMap);
   ASSERT_THAT(cacheKey, ::testing::StrEq("LANG #column_1#"));
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
+  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false);
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, T, T, T, T, T, T}, "?literals", "de");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, T, T, T, T, T, T, T}, "?literals", "*");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, T, F, F, F, F, F}, "?literals", "de-LATN-CH");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, F, F, F, F, F, F}, "?literals", "en-US");
+}
+
+// ____________________________________________________________________________
+TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
+  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false),
+     U = Id::makeUndefined();
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {U, U, T, U, U, U, U, F}, "?mixed", "de");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {U, U, T, U, U, U, U, F}, "?mixed", "*");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {U, U, F, U, U, U, U, F}, "?mixed", "en-US");
 }

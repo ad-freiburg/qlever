@@ -1423,7 +1423,11 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+  expectFails("LANGMATCHES()");
+  expectFails("LANGMATCHES(?x)");
 
+  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
+                                                     Var{"?x"}, Var{"?y"}));
   expectFails("STRDT()");
   expectFails("STRDT(?x)");
   expectBuiltInCall("STRDT(?x, ?y)",

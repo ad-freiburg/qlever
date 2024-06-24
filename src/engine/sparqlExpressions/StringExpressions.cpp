@@ -399,6 +399,30 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+// LANGMATCHES
+[[maybe_unused]] inline auto langMatching =
+    [](std::optional<std::string> optLanguageTag,
+       std::optional<std::string> optLanguageRange) -> Id {
+  if (!optLanguageTag.has_value() || !optLanguageRange.has_value()) {
+    return Id::makeUndefined();
+  }
+  // For LANGMATCHES(), the order of the arguements matter.
+  // The language-range "*" will match any non empty string (Sparql-standard).
+  const std::string& languageTag = optLanguageTag.value();
+  const std::string& languageRange = optLanguageRange.value();
+  if ((languageTag == "" && languageRange == "*") || languageRange == "") {
+    return Id::makeFromBool(false);
+  } else if (languageRange == "*") {
+    return Id::makeFromBool(true);
+  } else {
+    return Id::makeFromBool(
+        ad_utility::isLangMatch(languageTag, languageRange));
+  }
+};
+
+using LangMatches =
+    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
     [](std::optional<std::string> input,
@@ -518,6 +542,10 @@ Expr makeStrLangTagExpression(Expr child1, Expr child2) {
 
 Expr makeStrIriDtExpression(Expr child1, Expr child2) {
   return make<StrIriTagged>(child1, child2);
+}
+
+Expr makeLangMatchesExpression(Expr child1, Expr child2) {
+  return make<LangMatches>(child1, child2);
 }
 
 Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
