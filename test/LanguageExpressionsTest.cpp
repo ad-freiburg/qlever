@@ -140,7 +140,7 @@ auto getLangExpression =
     [](const std::string& variable) -> SparqlExpression::Ptr {
   // initialize with a child expression which has to be a VariableExpression!
   return std::make_unique<LangExpression>(
-      std::make_unique<VariableExpression>(Variable{std::move(variable)}));
+      std::make_unique<VariableExpression>(Variable{variable}));
 };
 
 // ____________________________________________________________________________
@@ -246,7 +246,8 @@ TEST(LangExpression, testSimpleFunctionLangExpression) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
-  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false);
+  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false),
+     U = Id::makeUndefined();
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, T, T, T, T, T}, "?literals", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
@@ -255,6 +256,8 @@ TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
       {F, F, T, F, F, F, F, F}, "?literals", "de-LATN-CH");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, F, F, F, F, F, F}, "?literals", "en-US");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, F, F, F, F, F, F}, "?literals", "");
 }
 
 // ____________________________________________________________________________
@@ -267,4 +270,6 @@ TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
       {U, U, T, U, U, U, U, F}, "?mixed", "*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, F, U, U, U, U, F}, "?mixed", "en-US");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {U, U, F, U, U, U, U, F}, "?mixed", "");
 }
