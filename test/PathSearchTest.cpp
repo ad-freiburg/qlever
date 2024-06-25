@@ -440,7 +440,6 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
               ::testing::UnorderedElementsAreArray(expected));
 }
 
-
 /**
  * Graph:
  *       0
@@ -454,7 +453,8 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
  *       5
  */
 TEST(PathSearchTest, allPathsElongatedDiamond) {
-  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
+  auto sub =
+      makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
   auto expected = makeIdTableFromVector({
       {V(0), V(1), I(0), I(0)},
       {V(1), V(2), I(0), I(1)},
@@ -478,17 +478,16 @@ TEST(PathSearchTest, allPathsElongatedDiamond) {
 }
 
 TEST(PathSearchTest, shortestPathsElongatedDiamond) {
-  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
-  auto expected = makeIdTableFromVector({
-      {V(0), V(1), I(0), I(0)},
-      {V(1), V(2), I(0), I(1)},
-      {V(2), V(4), I(0), I(2)},
-      {V(4), V(5), I(0), I(3)}
-  });
+  auto sub =
+      makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
+  auto expected = makeIdTableFromVector({{V(0), V(1), I(0), I(0)},
+                                         {V(1), V(2), I(0), I(1)},
+                                         {V(2), V(4), I(0), I(2)},
+                                         {V(4), V(5), I(0), I(3)}});
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,         V(0),        {V(5)},
+      SHORTEST_PATHS,    V(0),        {V(5)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -496,5 +495,3 @@ TEST(PathSearchTest, shortestPathsElongatedDiamond) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
-
-

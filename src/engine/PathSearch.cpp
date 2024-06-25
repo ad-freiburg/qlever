@@ -189,7 +189,7 @@ std::vector<Path> PathSearch::allPaths() const {
   }
 
   if (targets.empty()) {
-    for (auto id: indexToId_) {
+    for (auto id : indexToId_) {
       targets.push_back(id.getBits());
     }
   }
@@ -200,11 +200,12 @@ std::vector<Path> PathSearch::allPaths() const {
   try {
     boost::depth_first_search(graph_,
                               boost::visitor(vis).root_vertex(startIndex));
-  } catch (const StopSearchException&e) {}
+  } catch (const StopSearchException& e) {
+  }
 
-  for (auto target: targets) {
+  for (auto target : targets) {
     auto pathsToTarget = reconstructPaths(target, predecessors);
-    for (auto path: pathsToTarget) {
+    for (auto path : pathsToTarget) {
       paths.push_back(std::move(path));
     }
   }
@@ -241,19 +242,20 @@ std::vector<Path> PathSearch::shortestPaths() const {
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::reconstructPaths(uint64_t target, PredecessorMap predecessors) const {
+std::vector<Path> PathSearch::reconstructPaths(
+    uint64_t target, PredecessorMap predecessors) const {
   auto edges = predecessors[target];
   std::vector<Path> paths;
 
-  for (auto edge: edges) {
+  for (auto edge : edges) {
     std::vector<Path> subPaths;
     if (edge.start_ == config_.source_.getBits()) {
       subPaths = {Path()};
     } else {
       subPaths = reconstructPaths(edge.start_, predecessors);
     }
-    
-    for (auto path: subPaths) {
+
+    for (auto path : subPaths) {
       path.push_back(edge);
       paths.push_back(path);
     }

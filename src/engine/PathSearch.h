@@ -142,7 +142,8 @@ class PathSearch : public Operation {
    */
   std::vector<Path> shortestPaths() const;
 
-  std::vector<Path> reconstructPaths(uint64_t target, PredecessorMap predecessors) const;
+  std::vector<Path> reconstructPaths(uint64_t target,
+                                     PredecessorMap predecessors) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

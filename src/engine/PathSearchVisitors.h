@@ -108,9 +108,7 @@ typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
 using PredecessorMap = std::unordered_map<VertexDescriptor, std::vector<Edge>>;
 
 struct StopSearchException : public std::exception {
-    const char* what() const noexcept override {
-        return "Stop DFS";
-    }
+  const char* what() const noexcept override { return "Stop DFS"; }
 };
 
 /**
@@ -130,8 +128,7 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
    * @param indexToId Mapping from indices to IDs.
    */
   AllPathsVisitor(VertexDescriptor start, PredecessorMap& predecessors)
-      : start_(start),
-        predecessors_(predecessors) {}
+      : start_(start), predecessors_(predecessors) {}
 
   /**
    * @brief Examines an edge during the depth-first search.
