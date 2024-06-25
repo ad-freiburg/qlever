@@ -8,9 +8,8 @@
 
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/IdTableHelpers.h"
-#include "./util/IdTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "index/CompressedRelation.h"
-#include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
 #include "index/Permutation.h"
 
@@ -407,33 +406,6 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 TEST_F(LocatedTriplesTest, locatedTriple) {
   using LT = LocatedTriple;
 
-  auto checkRelationsForPermutation =
-      [](const Permutation& permutation,
-         const std::vector<Id>& expectedRelations) {
-        auto cancellationHandle =
-            std::make_shared<ad_utility::CancellationHandle<>>();
-        // TODO<qup42,cpp23>: use zip
-        auto relationsAndCounts =
-            permutation.getDistinctCol0IdsAndCounts(cancellationHandle);
-        ASSERT_EQ(relationsAndCounts.numRows(), expectedRelations.size())
-            << "Expected and real number of relations differ";
-        for (size_t i = 0; i < expectedRelations.size(); i++) {
-          auto relationId = expectedRelations[i];
-          IdTable relationEntries =
-              permutation.scan(CompressedRelationReader::ScanSpecification(
-                                   relationId, std::nullopt, std::nullopt),
-                               {}, cancellationHandle);
-          // std::cout << "Relation: " << relationId << " -> " <<
-          // relationEntries << std::endl;
-          ASSERT_EQ(relationsAndCounts.at(i, 0), relationId);
-          // ASSERT_EQ(relationsAndCounts.at(i, 1), ??);
-          ASSERT_FALSE(relationEntries.empty())
-              << "Relation " << relationId << " is empty in Permutation "
-              << permutation.readableName();
-        }
-      };
-  // TODO<qup42> use or delete; keep for now
-  (void)checkRelationsForPermutation;
   auto displayBlocks =
       [](const vector<CompressedBlockMetadata>& blockMetadata) {
         for (size_t i = 0; i < blockMetadata.size(); i++) {
@@ -443,42 +415,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                     << block.lastTriple_ << std::endl;
         }
       };
-  // TODO<qup42> this should go into `./util/IndexTestHelpers.h`
-  auto createIndexFromIdTable = [](const IdTable& triplesInIndex,
-                                   ad_utility::AllocatorWithLimit<Id> allocator,
-                                   const std::string& indexBasename,
-                                   const ad_utility::MemorySize& blockSize) {
-    IndexImpl indexBuilder(allocator);
-    indexBuilder.setOnDiskBase(indexBasename);
-    indexBuilder.blocksizePermutationPerColumn() = blockSize;
-
-    // This is still not a complete index. `Index::createFromOnDiskIndex`
-    // cannot be used, because the vocabulary is not generated.
-    // `IndexImpl::readIndexBuilderSettingsFromFile` also has to be called
-    // before building the index in this case.
-    std::function<bool(const ValueId&)> isInternalId = [](const ValueId&) {
-      return false;
-    };
-    auto firstSorter = indexBuilder.makeSorter<FirstPermutation>("first");
-    ad_utility::CompressedExternalIdTableSorterTypeErased&
-        typeErasedFirstSorter = firstSorter;
-    firstSorter.pushBlock(triplesInIndex.clone());
-    auto firstSorterWithUnique =
-        ad_utility::uniqueBlockView(typeErasedFirstSorter.getSortedOutput());
-    auto secondSorter = indexBuilder.makeSorter<SecondPermutation>("second");
-    indexBuilder.createSPOAndSOP(3, isInternalId,
-                                 std::move(firstSorterWithUnique),
-                                 std::move(secondSorter));
-    typeErasedFirstSorter.clearUnderlying();
-    auto thirdSorter = indexBuilder.makeSorter<ThirdPermutation>("third");
-    indexBuilder.createOSPAndOPS(3, isInternalId,
-                                 secondSorter.getSortedBlocks<0>(),
-                                 std::move(thirdSorter));
-    secondSorter.clear();
-    indexBuilder.createPSOAndPOS(3, isInternalId,
-                                 thirdSorter.getSortedBlocks<0>());
-    thirdSorter.clear();
-  };
   auto deletePermutation = [](const std::string& indexBasename,
                               const Permutation& permutation) {
     std::string name = indexBasename + ".index" + permutation.fileSuffix();
@@ -487,7 +423,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   };
   // The actual test, for a given block size.
   auto testWithGivenBlockSizeAll =
-      [&displayBlocks, &createIndexFromIdTable, &deletePermutation](
+      [&displayBlocks, &deletePermutation](
           const IdTable& triplesInIndex,
           const std::vector<IdTriple<0>>& triplesToLocate,
           const ad_utility::MemorySize& blockSize,
@@ -496,8 +432,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         std::string testIndexBasename = "LocatedTriplesTest.locatedTriple";
 
         const auto& testAllocator = ad_utility::testing::makeAllocator();
-        createIndexFromIdTable(triplesInIndex, testAllocator, testIndexBasename,
-                               blockSize);
+        ad_utility::testing::makeTestPermutationsFromIds(
+            testIndexBasename, triplesInIndex, blockSize);
 
         using enum Permutation::Enum;
         for (auto& perm : {SPO, SOP, OSP, OPS, PSO, POS}) {
@@ -512,7 +448,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
                 triplesToLocate, permutation, false);
 
             EXPECT_THAT(locatedTriples, testing::ElementsAreArray(
-                                            expectedLocatedTriples.at(perm)));
+                                            expectedLocatedTriples.at(perm)))
+                << "in permutation " << permutation.readableName()
+                << " for block size " << blockSize.asString();
           } else {
             std::cout << "Skipping permutation " << Permutation::toString(perm)
                       << std::endl;
