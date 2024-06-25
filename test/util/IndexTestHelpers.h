@@ -46,6 +46,13 @@ Index makeTestIndex(const std::string& indexBasename,
                     ad_utility::MemorySize blocksizePermutations = 16_B,
                     bool createTextIndex = false);
 
+// Create an `Index` form the given `IdTable`. The individual permutations may
+// be loaded with `loadFromDisk`. This does not build a complete index. Loading
+// the index via `createFromOnDiskIndex` does not work.
+void makeTestPermutationsFromIds(
+    const std::string& indexBasename, const IdTable& tripleInput,
+    ad_utility::MemorySize blocksizePermutations = 16_B);
+
 // Return a static  `QueryExecutionContext` that refers to an index that was
 // build using `makeTestIndex` (see above). The index (most notably its
 // vocabulary) is the only part of the `QueryExecutionContext` that is actually
