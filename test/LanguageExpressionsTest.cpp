@@ -246,8 +246,7 @@ TEST(LangExpression, testSimpleFunctionLangExpression) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
-  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false),
-     U = Id::makeUndefined();
+  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false);
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, T, T, T, T, T}, "?literals", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
