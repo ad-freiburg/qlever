@@ -10,6 +10,7 @@
 #include <boost/graph/dijkstra_shortest_paths.hpp>
 #include <boost/graph/graph_selectors.hpp>
 #include <boost/graph/graph_traits.hpp>
+#include <exception>
 #include <optional>
 
 /**
@@ -104,21 +105,21 @@ typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
 typedef boost::graph_traits<Graph>::vertex_descriptor VertexDescriptor;
 typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
 
+using PredecessorMap = std::unordered_map<VertexDescriptor, std::vector<Edge>>;
+
+struct StopSearchException : public std::exception {
+    const char* what() const noexcept override {
+        return "Stop DFS";
+    }
+};
+
 /**
  * @brief Visitor for performing a depth-first search to find all paths.
  */
 class AllPathsVisitor : public boost::default_dfs_visitor {
-  // Set of target node IDs.
-  std::unordered_set<uint64_t> targets_;
+  VertexDescriptor start_;
 
-  // Reference to the current path being explored.
-  Path& currentPath_;
-
-  // Reference to the collection of all found paths.
-  std::vector<Path>& allPaths_;
-
-  // Mapping from indices to IDs.
-  const std::vector<Id>& indexToId_;
+  PredecessorMap& predecessors_;
 
  public:
   /**
@@ -128,12 +129,9 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
    * @param paths Reference to the collection of all found paths.
    * @param indexToId Mapping from indices to IDs.
    */
-  AllPathsVisitor(std::unordered_set<uint64_t> targets, Path& path,
-                  std::vector<Path>& paths, const std::vector<Id>& indexToId)
-      : targets_(std::move(targets)),
-        currentPath_(path),
-        allPaths_(paths),
-        indexToId_(indexToId) {}
+  AllPathsVisitor(VertexDescriptor start, PredecessorMap& predecessors)
+      : start_(start),
+        predecessors_(predecessors) {}
 
   /**
    * @brief Examines an edge during the depth-first search.
@@ -142,22 +140,13 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
    */
   void examine_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
-    if (targets_.empty() || (currentPath_.ends_with(edge.start_) &&
-                             targets_.find(edge.end_) != targets_.end())) {
-      auto pathCopy = currentPath_;
-      pathCopy.push_back(edge);
-      allPaths_.push_back(pathCopy);
-    }
-  }
 
-  /**
-   * @brief Processes a tree edge during the depth-first search.
-   * @param edgeDesc The descriptor of the edge being processed.
-   * @param graph The graph being searched.
-   */
-  void tree_edge(EdgeDescriptor edgeDesc, const Graph& graph) {
-    const Edge& edge = graph[edgeDesc];
-    currentPath_.edges_.push_back(edge);
+    if (!predecessors_.contains(edge.end_)) {
+      predecessors_[edge.end_] = {};
+    }
+
+    auto& predEdges = predecessors_[edge.end_];
+    predEdges.push_back(edge);
   }
 
   /**
@@ -168,9 +157,8 @@ class AllPathsVisitor : public boost::default_dfs_visitor {
    */
   void finish_vertex(VertexDescriptor vertex, const Graph& graph) {
     (void)graph;
-    if (!currentPath_.empty() &&
-        Id::fromBits(currentPath_.lastNode().value()) == indexToId_[vertex]) {
-      currentPath_.edges_.pop_back();
+    if (vertex == start_) {
+      throw StopSearchException();
     }
   }
 };

@@ -281,8 +281,8 @@ TEST(PathSearchTest, allPaths) {
       {V(0), V(1), I(1), I(0)},
       {V(1), V(3), I(1), I(1)},
       {V(0), V(2), I(2), I(0)},
+      {V(2), V(3), I(2), I(1)},
       {V(0), V(2), I(3), I(0)},
-      {V(2), V(3), I(3), I(1)},
       {V(0), V(2), I(4), I(0)},
       {V(2), V(4), I(4), I(1)},
   });
@@ -309,8 +309,8 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
       {V(0), V(1), I(1), I(0), V(11), V(10)},
       {V(1), V(3), I(1), I(1), V(21), V(20)},
       {V(0), V(2), I(2), I(0), V(31), V(30)},
+      {V(2), V(3), I(2), I(1), V(41), V(40)},
       {V(0), V(2), I(3), I(0), V(31), V(30)},
-      {V(2), V(3), I(3), I(1), V(41), V(40)},
       {V(0), V(2), I(4), I(0), V(31), V(30)},
       {V(2), V(4), I(4), I(1), V(51), V(50)},
   });
@@ -439,3 +439,62 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
+
+
+/**
+ * Graph:
+ *       0
+ *       |
+ *       1
+ *      / \
+ *     2   3
+ *      \ /
+ *       4
+ *       |
+ *       5
+ */
+TEST(PathSearchTest, allPathsElongatedDiamond) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0)},
+      {V(1), V(2), I(0), I(1)},
+      {V(2), V(4), I(0), I(2)},
+      {V(4), V(5), I(0), I(3)},
+      {V(0), V(1), I(1), I(0)},
+      {V(1), V(3), I(1), I(1)},
+      {V(3), V(4), I(1), I(2)},
+      {V(4), V(5), I(1), I(3)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{
+      ALL_PATHS,         V(0),        {V(5)},
+      Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
+      Var{"?pathIndex"}, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, shortestPathsElongatedDiamond) {
+  auto sub = makeIdTableFromVector({{0, 1}, {1, 2}, {1, 3}, {2, 4}, {3, 4}, {4, 5}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(1), I(0), I(0)},
+      {V(1), V(2), I(0), I(1)},
+      {V(2), V(4), I(0), I(2)},
+      {V(4), V(5), I(0), I(3)}
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{
+      SHORTEST_PATHS,         V(0),        {V(5)},
+      Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
+      Var{"?pathIndex"}, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+

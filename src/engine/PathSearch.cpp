@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
+#include "engine/PathSearchVisitors.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/GraphPatternOperation.h"
 #include "util/Exception.h"
@@ -182,14 +183,31 @@ std::vector<Path> PathSearch::allPaths() const {
 
   auto startIndex = idToIndex_.at(config_.source_);
 
-  std::unordered_set<uint64_t> targets;
+  std::vector<uint64_t> targets;
   for (auto target : config_.targets_) {
-    targets.insert(target.getBits());
+    targets.push_back(target.getBits());
   }
 
-  AllPathsVisitor vis(targets, path, paths, indexToId_);
-  boost::depth_first_search(graph_,
-                            boost::visitor(vis).root_vertex(startIndex));
+  if (targets.empty()) {
+    for (auto id: indexToId_) {
+      targets.push_back(id.getBits());
+    }
+  }
+
+  PredecessorMap predecessors;
+
+  AllPathsVisitor vis(startIndex, predecessors);
+  try {
+    boost::depth_first_search(graph_,
+                              boost::visitor(vis).root_vertex(startIndex));
+  } catch (const StopSearchException&e) {}
+
+  for (auto target: targets) {
+    auto pathsToTarget = reconstructPaths(target, predecessors);
+    for (auto path: pathsToTarget) {
+      paths.push_back(std::move(path));
+    }
+  }
   return paths;
 }
 
@@ -219,6 +237,27 @@ std::vector<Path> PathSearch::shortestPaths() const {
           .predecessor_map(predecessors.data())
           .distance_map(distances.data())
           .distance_compare(std::less_equal<double>()));
+  return paths;
+}
+
+// _____________________________________________________________________________
+std::vector<Path> PathSearch::reconstructPaths(uint64_t target, PredecessorMap predecessors) const {
+  auto edges = predecessors[target];
+  std::vector<Path> paths;
+
+  for (auto edge: edges) {
+    std::vector<Path> subPaths;
+    if (edge.start_ == config_.source_.getBits()) {
+      subPaths = {Path()};
+    } else {
+      subPaths = reconstructPaths(edge.start_, predecessors);
+    }
+    
+    for (auto path: subPaths) {
+      path.push_back(edge);
+      paths.push_back(path);
+    }
+  }
   return paths;
 }
 
