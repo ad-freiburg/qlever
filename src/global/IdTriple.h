@@ -62,4 +62,9 @@ struct IdTriple {
       return IdTriple<N>(newIds, payload_);
     }
   }
+
+  CompressedBlockMetadata::PermutedTriple toPermutedTriple() const
+      requires(N == 0) {
+    return {ids_[0], ids_[1], ids_[2]};
+  }
 };
