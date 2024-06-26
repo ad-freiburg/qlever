@@ -25,9 +25,10 @@ using MoveType =
 // copy elision. Using `AD_MOVE` in this case only moves if the
 // `genericFunction()` returns a reference.
 // Note: The double parentheses in `decltype((x))` are necessary, because
-// std::string x; // decltype(x) is string (which would not be moved by the
-// corresponding `MoveType`), but decltype((x)) is string&. For a temporary,
-// even e.g. `decltype((std::string{"hi"}))` is `std::string`.
+// for a normal lvalue `std::string x;`, `decltype(x)` is `std::string` (which
+// would not be moved by the corresponding `MoveType`), but `decltype((x))` is
+// `std::string&`. For a temporary, even e.g. `decltype((std::string{"hi"}))` is
+// `std::string`.
 #define AD_MOVE(x) static_cast<ad_utility::detail::MoveType<decltype((x))>>(x)
 
 #endif  // QLEVER_FORWARD_H
