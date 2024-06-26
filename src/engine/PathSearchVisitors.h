@@ -61,12 +61,12 @@ struct Path {
    * @brief Adds an edge to the end of the path.
    * @param edge The edge to add.
    */
-  void push_back(Edge edge) { edges_.push_back(edge); }
+  void push_back(const Edge& edge) { edges_.push_back(edge); }
 
   /**
    * @brief Reverses the order of the edges in the path.
    */
-  void reverse() { std::reverse(edges_.begin(), edges_.end()); }
+  void reverse() { std::ranges::reverse(edges_); }
 
   /**
    * @brief Returns the ID of the first node in the path, if it exists.
@@ -99,11 +99,10 @@ struct Path {
 /**
  * @brief Boost graph types and descriptors.
  */
-typedef boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
-                              boost::no_property, Edge>
-    Graph;
-typedef boost::graph_traits<Graph>::vertex_descriptor VertexDescriptor;
-typedef boost::graph_traits<Graph>::edge_descriptor EdgeDescriptor;
+using Graph = boost::adjacency_list<boost::vecS, boost::vecS, boost::directedS,
+                                    boost::no_property, Edge>;
+using VertexDescriptor = boost::graph_traits<Graph>::vertex_descriptor;
+using EdgeDescriptor = boost::graph_traits<Graph>::edge_descriptor;
 
 using PredecessorMap = std::unordered_map<VertexDescriptor, std::vector<Edge>>;
 
@@ -226,7 +225,7 @@ class DijkstraAllPathsVisitor : public boost::default_dijkstra_visitor {
    */
   void edge_relaxed(EdgeDescriptor edgeDesc, const Graph& graph) {
     const Edge& edge = graph[edgeDesc];
-    if (targets_.empty() || targets_.find(edge.end_) != targets_.end()) {
+    if (targets_.empty() || targets_.contains(edge.end_)) {
       rebuild_path(target(edgeDesc, graph), graph);
     }
   }

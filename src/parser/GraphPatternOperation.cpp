@@ -68,7 +68,7 @@ void BasicGraphPattern::appendTriples(BasicGraphPattern other) {
 }
 
 // ____________________________________________________________________________
-void PathQuery::addParameter(SparqlTriple& triple) {
+void PathQuery::addParameter(const SparqlTriple& triple) {
   auto simpleTriple = triple.getSimple();
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;

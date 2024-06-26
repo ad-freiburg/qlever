@@ -2114,7 +2114,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
   auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
   std::vector<SubtreePlan> candidatesOut;
-  auto tripleComponentToId = [this](TripleComponent& comp) -> Id {
+  auto tripleComponentToId = [this](const TripleComponent& comp) {
     auto opt = comp.toValueId(planner_._qec->getIndex().getVocab());
     if (opt.has_value()) {
       return opt.value();
@@ -2138,8 +2138,8 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
                               std::move(pathQuery.edgeProperties_)};
 
   for (auto& sub : candidatesIn) {
-    auto pathSearch = std::make_shared<PathSearch>(
-        PathSearch(qec_, std::move(sub._qet), config));
+    auto pathSearch =
+        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
     auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }

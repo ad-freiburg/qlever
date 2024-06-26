@@ -149,7 +149,7 @@ struct PathQuery {
 
   GraphPattern childGraphPattern_;
 
-  void addParameter(SparqlTriple& triple);
+  void addParameter(const SparqlTriple& triple);
   void fromBasicPattern(const BasicGraphPattern& pattern);
 };
 

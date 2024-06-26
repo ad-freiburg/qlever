@@ -740,12 +740,12 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
     parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
     parsedQuery::PathQuery pathQuery;
-    for (auto op : graphPattern._graphPatterns) {
+    for (const auto& op : graphPattern._graphPatterns) {
       parsePathQuery(pathQuery, op);
     }
 
     return pathQuery;
-  };
+  }
 
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them

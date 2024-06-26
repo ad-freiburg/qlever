@@ -12,7 +12,6 @@
 #include "engine/CallFixedSize.h"
 #include "engine/PathSearchVisitors.h"
 #include "engine/VariableToColumnMap.h"
-#include "parser/GraphPatternOperation.h"
 #include "util/Exception.h"
 
 // _____________________________________________________________________________
@@ -21,9 +20,7 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
                        PathSearchConfiguration config)
     : Operation(qec),
       subtree_(std::move(subtree)),
-      graph_(),
       config_(std::move(config)),
-      indexToId_(),
       idToIndex_(allocator()) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   resultWidth_ = 4 + config_.edgeProperties_.size();
@@ -98,9 +95,9 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
   const IdTable& dynSub = subRes->idTable();
 
-  if (dynSub.size() > 0) {
+  if (!dynSub.empty()) {
     std::vector<std::span<const Id>> edgePropertyLists;
-    for (auto edgeProperty : config_.edgeProperties_) {
+    for (const auto& edgeProperty : config_.edgeProperties_) {
       auto edgePropertyIndex = subtree_->getVariableColumn(edgeProperty);
       edgePropertyLists.push_back(dynSub.getColumn(edgePropertyIndex));
     }
@@ -128,7 +125,7 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 void PathSearch::buildMapping(std::span<const Id> startNodes,
                               std::span<const Id> endNodes) {
   auto addNode = [this](const Id node) {
-    if (idToIndex_.find(node) == idToIndex_.end()) {
+    if (!idToIndex_.contains(node)) {
       idToIndex_[node] = indexToId_.size();
       indexToId_.push_back(node);
     }
@@ -229,12 +226,12 @@ std::vector<Path> PathSearch::shortestPaths() const {
   DijkstraAllPathsVisitor vis(startIndex, targets, path, paths, predecessors,
                               distances);
 
-  auto weight_map = get(&Edge::weight_, graph_);
+  auto weightMap = get(&Edge::weight_, graph_);
 
   boost::dijkstra_shortest_paths(
       graph_, startIndex,
       boost::visitor(vis)
-          .weight_map(weight_map)
+          .weight_map(weightMap)
           .predecessor_map(predecessors.data())
           .distance_map(distances.data())
           .distance_compare(std::less_equal<double>()));
@@ -244,10 +241,10 @@ std::vector<Path> PathSearch::shortestPaths() const {
 // _____________________________________________________________________________
 std::vector<Path> PathSearch::reconstructPaths(
     uint64_t target, PredecessorMap predecessors) const {
-  auto edges = predecessors[target];
+  const auto& edges = predecessors[target];
   std::vector<Path> paths;
 
-  for (auto edge : edges) {
+  for (const auto& edge : edges) {
     std::vector<Path> subPaths;
     if (edge.start_ == config_.source_.getBits()) {
       subPaths = {Path()};
