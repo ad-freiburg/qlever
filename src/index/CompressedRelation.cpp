@@ -658,18 +658,51 @@ void CompressedRelationReader::decompressColumn(
 }
 
 // ____________________________________________________________________________
+std::pair<CompressedRelationReader::ColumnIndices,
+          CompressedRelationReader::ColumnIndices>
+CompressedRelationReader::completeColumnIndices(ColumnIndicesRef columnIndices,
+                                                size_t numIndexColumns) {
+  ColumnIndices amendedColumnIndices;
+  amendedColumnIndices.reserve(columnIndices.size() - numIndexColumns + 3);
+  std::ranges::copy(std::initializer_list<ColumnIndex>{0, 1, 2},
+                    std::back_inserter(amendedColumnIndices));
+  std::ranges::copy(columnIndices.subspan(numIndexColumns),
+                    std::back_inserter(amendedColumnIndices));
+
+  ColumnIndices columnFilterIndices;
+  columnFilterIndices.resize(columnIndices.size());
+  for (size_t i = 0; i < numIndexColumns; i++) {
+    columnFilterIndices[i] =
+        std::distance(amendedColumnIndices.begin(),
+                      std::find(amendedColumnIndices.begin(),
+                                amendedColumnIndices.end(), columnIndices[i]));
+  }
+  std::iota(columnFilterIndices.begin() + numIndexColumns,
+            columnFilterIndices.end(), 3);
+  return {amendedColumnIndices, columnFilterIndices};
+}
+
+// ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     ColumnIndicesRef columnIndices,
     const LocatedTriplesPerBlock& locatedTriples,
     DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
+  // TODO<qup42>: only load all index columns if updates are enabled and
+  // available for this block. To be able to add updates we have to have all
+  // column present. Complete the given column indices to contain all index
+  // columns and then remove the other columns after adding the updates.
+  auto [columnIndicesWithAllIndex, resultColumnSubset] =
+      completeColumnIndices(columnIndices, numIndexColumns);
   CompressedBlock compressedColumns =
-      readCompressedBlockFromFile(blockMetaData, columnIndices);
+      readCompressedBlockFromFile(blockMetaData, columnIndicesWithAllIndex);
   const auto numRowsToRead = blockMetaData.numRows_;
   DecompressedBlock decompressedBlock =
       decompressBlock(compressedColumns, numRowsToRead);
-  return addUpdateTriples(std::move(decompressedBlock), locatedTriples, offset,
-                          numIndexColumns);
+  DecompressedBlock blockWithUpdates =
+      addUpdateTriples(std::move(decompressedBlock), locatedTriples, offset, 3);
+  blockWithUpdates.setColumnSubset(resultColumnSubset);
+  return blockWithUpdates;
 }
 
 // ____________________________________________________________________________
