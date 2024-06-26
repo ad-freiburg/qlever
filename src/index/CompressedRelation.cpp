@@ -520,10 +520,10 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
     const auto& blockMetadata = relevantBlocksMetadata[i];
     Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
     Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
-    if (firstColId == lastColId) {
-      // The whole block has the same `colId` -> we get all the information
-      // from the metadata.
-      // TODO<qup42> e.g. the count of triples in the block should be updated
+    if (firstColId == lastColId &&
+        !locatedTriplesPerBlock.hasUpdates(beginBlockOffset + i)) {
+      // The whole block has the same `colId` and there are no updates in this
+      // block -> we get all the information from the metadata.
       processColId(firstColId, blockMetadata.numRows_);
     } else {
       // Multiple `colId`s -> we have to read the block.
