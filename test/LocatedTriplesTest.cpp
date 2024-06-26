@@ -298,6 +298,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
     EXPECT_THAT(merged, testing::ElementsAreArray(resultExpected));
   }
+
   // Inserting a Triple that already exists should have no effect.
   {
     IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
@@ -581,5 +582,26 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
            LT(0, IT(6, 10, 10), false), LT(0, IT(7, 20, 5), false),
            LT(0, IT(7, 30, 20), false), LT(0, IT(7, 30, 30), false),
            LT(1, IT(9, 30, 32), false)}}});
+  }
+}
+
+TEST_F(LocatedTriplesTest, debugPrints) {
+  using LT = LocatedTriple;
+
+  {
+    LocatedTriples lts;
+    EXPECT_THAT(lts, InsertIntoStream(testing::StrEq("{ }")));
+    lts.insert(LT(0, IT(1, 1, 1), true));
+    EXPECT_THAT(lts, InsertIntoStream(testing::StrEq(
+                         "{ LT(0 IdTriple(V:1, V:1, V:1, ) 1) }")));
+  }
+
+  {
+    LocatedTriplesPerBlock ltpb;
+    EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
+    ltpb.add({LT(0, IT(1, 1, 1), true)});
+    EXPECT_THAT(
+        ltpb, InsertIntoStream(testing::StrEq(
+                  "LTs in Block #0: { LT(0 IdTriple(V:1, V:1, V:1, ) 1) }\n")));
   }
 }

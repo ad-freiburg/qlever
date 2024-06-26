@@ -27,12 +27,13 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     triple = triple.permute(permutation.keyOrder());
     currentBlockIndex =
         std::ranges::lower_bound(
-            blocks, triple,
-            [&](const IdTriple<0>& block, const IdTriple<0>& triple) {
+            blocks, triple.toPermutedTriple(),
+            [&](const CompressedBlockMetadata::PermutedTriple& block,
+                const CompressedBlockMetadata::PermutedTriple& triple) {
               return block < triple;
             },
             [](const CompressedBlockMetadata& block) {
-              return IdTriple(block.lastTriple_);
+              return block.lastTriple_;
             }) -
         blocks.begin();
     out.emplace_back(currentBlockIndex, triple, shouldExist);
