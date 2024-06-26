@@ -31,21 +31,21 @@ class VectorWithMemoryLimit
   using Allocator = ad_utility::AllocatorWithLimit<T>;
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
 
-  // The `AllocatorWithMemoryLimit`is not default-constructible. Unfortunately
-  // the support for such allocators is not really great in the standard
-  // library. In particular, the type_traits
+  // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
+  // Unfortunately, the support for such allocators is not really great in the
+  // standard library. In particular, the type trait
   // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
-  // the `Alloc` is not default initializable, which leads to hard compile
+  // the `Alloc` is not default-initializable, which leads to hard compile
   // errors with the ranges library. For this reason we cannot simply inherit
   // all the constructors from `Base`, but explicitly have to forward all but
   // the default constructor. In particular, we only forward constructors that
   // have
   // * at least one argument
   // * the first argument must not be similar to `std::vector` or
-  // `VectorWithMemoryLimit` to not hide copy or move constructors.
+  // `VectorWithMemoryLimit` to not hide copy or move constructors
   // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
-  // `vector` take the allocator as a last parameter.
-  // * there must be a constructor of `std::vector` for the given arguments.
+  // `vector` take the allocator as a last parameter)
+  // * there must be a constructor of `Base` for the given arguments.
   template <typename... Args>
   requires(sizeof...(Args) > 0 &&
            !std::derived_from<std::remove_cvref_t<ad_utility::First<Args...>>,

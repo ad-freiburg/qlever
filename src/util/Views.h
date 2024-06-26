@@ -201,9 +201,8 @@ concept can_ref_view =
 }
 
 // A simple drop-in replacement for `std::views::all` which is required because
-// GCC11 doesn't support `std::owning_view` (see above).
-// As soon as we don't support GCC11 anymore, we can throw out those
-// implementations.
+// GCC 11 doesn't support `std::owning_view` (see above). As soon as we don't
+// support GCC 11 anymore, we can throw out those implementations.
 template <typename Range>
 constexpr auto allView(Range&& range) {
   if constexpr (std::ranges::view<std::decay_t<Range>>) {
@@ -310,6 +309,7 @@ inline cppcoro::generator<std::span<ElementType>> reChunkAtSeparator(
 
 }  // namespace ad_utility
 
+// Enabling of "borrowed" ranges for `OwningView`.
 template <typename T>
 inline constexpr bool
     std::ranges::enable_borrowed_range<ad_utility::OwningView<T>> =
