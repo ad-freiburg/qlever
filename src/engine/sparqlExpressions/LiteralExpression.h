@@ -179,8 +179,8 @@ class LiteralExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
 
-// A simple expression that just returns an explicit result.
-// It can only be used once as the result is moved out.
+// A simple expression that just returns an explicit result. It can only be used
+// once as the result is moved out.
 struct SingleUseExpression : public SparqlExpression {
   explicit SingleUseExpression(ExpressionResult result)
       : result_{std::move(result)} {}
