@@ -43,9 +43,14 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
 }
 
 // ____________________________________________________________________________
+bool LocatedTriplesPerBlock::hasUpdates(size_t blockIndex) const {
+  return map_.contains(blockIndex);
+}
+
+// ____________________________________________________________________________
 NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
   // If no located triples for `blockIndex_` exist, there is no entry in `map_`.
-  if (!map_.contains(blockIndex)) {
+  if (!hasUpdates(blockIndex)) {
     return {0, 0};
   }
 

@@ -93,6 +93,10 @@ class LocatedTriplesPerBlock {
   // triple).
   NumAddedAndDeleted numTriples(size_t blockIndex) const;
 
+  // Returns whether there are updates triples for the block with the index
+  // `blockIndex`.
+  bool hasUpdates(size_t blockIndex) const;
+
   // Merge located triples for `blockIndex_` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Return the
   // number of rows written to `result`.
