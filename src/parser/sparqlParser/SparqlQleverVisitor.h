@@ -9,26 +9,11 @@
 #include <antlr4-runtime.h>
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/GroupConcatExpression.h"
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
-#include "engine/sparqlExpressions/SampleExpression.h"
-#include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
-#include "parser/Alias.h"
-#include "parser/ConstructClause.h"
-#include "parser/ParsedQuery.h"
-#include "parser/RdfEscaping.h"
-#include "parser/data/BlankNode.h"
 #include "parser/data/GraphRef.h"
-#include "parser/data/Iri.h"
-#include "parser/data/SolutionModifiers.h"
-#include "parser/data/Types.h"
 #undef EOF
 #include "parser/sparqlParser/generated/SparqlAutomaticVisitor.h"
 #define EOF std::char_traits<char>::eof()
-#include "util/HashMap.h"
-#include "util/OverloadCallOperator.h"
-#include "util/StringUtils.h"
 
 template <typename T>
 class Reversed {
@@ -472,6 +457,14 @@ class SparqlQleverVisitor {
   string visit(Parser::PnameNsContext* ctx);
 
  private:
+  // Helper to assign variable `startTime_` a correctly formatted time string.
+  static std::string currentTimeAsXsdString();
+
+  // Member starTime_ is needed for the NOW expression. All calls within
+  // the query execution reference it. The underlying date time format is e.g.:
+  // 2011-01-10T14:45:13.815-05:00
+  std::string startTime_ = currentTimeAsXsdString();
+
   template <typename Visitor, typename Ctx>
   static constexpr bool voidWhenVisited =
       std::is_void_v<decltype(std::declval<Visitor&>().visit(

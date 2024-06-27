@@ -30,7 +30,12 @@ struct NotNumeric {};
 using NumericValue = std::variant<NotNumeric, double, int64_t>;
 using IntOrDouble = std::variant<double, int64_t>;
 
-// Used as return type for `IriValueGetter`
+// Return type for `DatatypeValueGetter`.
+using LiteralOrString =
+    std::variant<std::monostate, ad_utility::triple_component::Literal,
+                 std::string>;
+
+// Used as return type for `IriValueGetter` and `DatatypeValueGetter`
 using OptIri = std::optional<Iri>;
 
 // Used in `ConvertToNumericExpression.cpp` to allow for conversion of more
@@ -242,6 +247,16 @@ struct ToNumericValueGetter : Mixin<ToNumericValueGetter> {
   IntDoubleStr operator()(ValueId id, const EvaluationContext*) const;
   IntDoubleStr operator()(const LiteralOrIri& s,
                           const EvaluationContext*) const;
+};
+
+// ValueGetter for implementation of datatype() in RdfTermExpressions.cpp.
+// Returns an object of type std::variant<std::monostate,
+// ad_utility::triple_component::Literal, std::string> object.
+struct DatatypeValueGetter : Mixin<DatatypeValueGetter> {
+  using Mixin<DatatypeValueGetter>::operator();
+  OptIri operator()(ValueId id, const EvaluationContext* context) const;
+  OptIri operator()(const LiteralOrIri& litOrIri,
+                    const EvaluationContext* context) const;
 };
 
 // `IriValueGetter` returns an

@@ -1,8 +1,6 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-//
-// Created by johannes on 15.09.21.
 // Several templated helper functions that are used for the Expression module
 
 #ifndef QLEVER_SPARQLEXPRESSIONGENERATORS_H
@@ -91,7 +89,7 @@ auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* cont
     auto inputWithVariableResolved = getIdsFromVariable(std::forward<Input>(input), context);
     return resultGenerator(std::move(inputWithVariableResolved), numItems, transformation);
   } else {
-    return resultGenerator(std::forward<Input>(input), numItems, transformation);
+    return resultGenerator(AD_FWD(input), numItems, transformation);
   }
 }
 
@@ -119,7 +117,7 @@ inline auto applyFunction = []<typename Function, typename... Generators>(
   std::tuple iterators{generators.begin()...};
 
   auto functionOnIterators = [&function](auto&&... iterators) {
-    return function(std::move(*iterators)...);
+    return function(AD_MOVE(*iterators)...);
   };
 
   for (size_t i = 0; i < numItems; ++i) {
