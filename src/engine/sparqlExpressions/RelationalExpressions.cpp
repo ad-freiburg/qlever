@@ -16,6 +16,10 @@ using namespace sparqlExpression;
 
 namespace {
 
+static constexpr int reductionFactorEquals = 1000;
+static constexpr int reductionFactorNotEquals = 1;
+static constexpr int reductionFactorDefault = 50;
+
 using valueIdComparators::Comparison;
 
 // Several concepts used to choose the proper evaluation methods for different
@@ -311,28 +315,40 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
     uint64_t inputSizeEstimate, uint64_t reductionFactor, const auto& children,
     const std::optional<Variable>& firstSortedVariable) {
   AD_CORRECTNESS_CHECK(children.size() >= 1);
+  // For the binary expressions `=` `<=`, etc., we have exactly two children, so
+  // the following line is a noop. For the `IN` expression we expect to have
+  // more results if we have more arguments on the right side that can possibly
+  // match, so we reduce the `reductionFactor`.
   reductionFactor /= children.size() - 1;
   auto sizeEstimate = inputSizeEstimate / reductionFactor;
 
-  size_t costEstimate = inputSizeEstimate;
+  // By default, we have to linearly scan over the input and write the output.
+  size_t costEstimate = inputSizeEstimate + sizeEstimate;
 
+  // Returns true iff `left` is a variable by which the input is sorted, and
+  // `right` is a constant.
   auto canBeEvaluatedWithBinarySearch =
       [&firstSortedVariable](const SparqlExpression::Ptr& left,
                              const SparqlExpression::Ptr& right) {
         auto varPtr = dynamic_cast<const VariableExpression*>(left.get());
-        if (!varPtr || varPtr->value() != firstSortedVariable) {
-          return false;
-        }
-        return right->isConstantExpression();
+        return varPtr && varPtr->value() == firstSortedVariable &&
+               right->isConstantExpression();
       };
   // TODO<joka921> This check has to be more complex once we support proper
   // filtering on the `LocalVocab`.
+  // Check iff all the pairs `(children[0], someOtherChild)` can be evaluated
+  // using binary search.
   if (std::ranges::all_of(children | std::views::drop(1),
                           [&lhs = children.at(0),
                            &canBeEvaluatedWithBinarySearch](const auto& child) {
+                            // The implementation automatically chooses the
+                            // cheaper direction, so we can do the same when
+                            // estimating the cost.
                             return canBeEvaluatedWithBinarySearch(lhs, child) ||
                                    canBeEvaluatedWithBinarySearch(child, lhs);
                           })) {
+    // When evaluating via binary search, the only cost that occurs is that of
+    // writing the output.
     costEstimate = sizeEstimate;
   }
   return {sizeEstimate, costEstimate};
@@ -348,11 +364,11 @@ RelationalExpression<comp>::getEstimatesForFilterExpression(
   uint64_t reductionFactor = 0;
 
   if (comp == valueIdComparators::Comparison::EQ) {
-    reductionFactor = 1000;
+    reductionFactor = reductionFactorEquals;
   } else if (comp == valueIdComparators::Comparison::NE) {
-    reductionFactor = 1;
+    reductionFactor = reductionFactorNotEquals;
   } else {
-    reductionFactor = 50;
+    reductionFactor = reductionFactorDefault;
   }
 
   return getEstimatesForFilterExpressionImpl(inputSizeEstimate, reductionFactor,
@@ -367,23 +383,27 @@ ExpressionResult InExpression::evaluate(
   bool firstChild = true;
   for (const auto& child : children_ | std::views::drop(1)) {
     auto rhs = child->evaluate(context);
-    // `resA` and `resB` are variants, so we need `std::visit`.
-    auto visitor = [context](const auto& a, auto b) -> ExpressionResult {
+    auto evaluateEqualsExpression = [context](const auto& a,
+                                              auto b) -> ExpressionResult {
       return evaluateRelationalExpression<Comparison::EQ>(a, std::move(b),
                                                           context);
     };
-    auto subRes = std::visit(visitor, lhs, std::move(rhs));
+    auto subRes = std::visit(evaluateEqualsExpression, lhs, std::move(rhs));
     if (firstChild) {
       firstChild = false;
       result = std::move(subRes);
       continue;
     }
-    auto dummyExpression1 =
+    // TODO We could implement early stopping for entries which are already
+    // true, This could be especially beneficial if some of the `==` expressions
+    // are more expensive than others. Same goes for the `logical or` and
+    // `logical and` expressions.
+    auto expressionForSubRes =
         std::make_unique<SingleUseExpression>(std::move(subRes));
-    auto dummyExpression2 =
+    auto expressionForPreviousResult =
         std::make_unique<SingleUseExpression>(std::move(result));
-    result = makeOrExpression(std::move(dummyExpression1),
-                              std::move(dummyExpression2))
+    result = makeOrExpression(std::move(expressionForSubRes),
+                              std::move(expressionForPreviousResult))
                  ->evaluate(context);
   }
   return result;
@@ -397,10 +417,11 @@ std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
 // _____________________________________________________________________________
 string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
   std::stringstream result;
-  result << "IN Expression with";
+  result << "IN Expression with (";
   for (const auto& child : children_) {
     result << ' ' << child->getCacheKey(varColMap);
   }
+  result << ')';
   return std::move(result).str();
 }
 
@@ -408,8 +429,8 @@ string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
 auto InExpression::getEstimatesForFilterExpression(
     uint64_t inputSizeEstimate,
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
-  return getEstimatesForFilterExpressionImpl(inputSizeEstimate, 1000, children_,
-                                             firstSortedVariable);
+  return getEstimatesForFilterExpressionImpl(
+      inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
 }
 
 // Explicit instantiations

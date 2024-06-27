@@ -1300,11 +1300,16 @@ auto matchPtr(Matcher matcher = Matcher{})
       testing::WhenDynamicCastTo<const Expression&>(matcher));
 }
 
-auto variableExpressionMatcher = [](const Variable& var) {
+// Return a matcher that matches a `SparqlExpression::Ptr` that stores a
+// `VariableExpression` with the given  `variable`.
+auto variableExpressionMatcher = [](const Variable& variable) {
   return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
+      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
 };
 
+// Return a matcher that matches a `SparqlExpression::Ptr`that stores an
+// `Expression` (template argument), the children of which match the
+// `childrenMatchers`.
 template <typename Expression>
 auto matchPtrWithChildren(auto&&... childrenMatchers)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
@@ -1313,6 +1318,7 @@ auto matchPtrWithChildren(auto&&... childrenMatchers)
                   testing::ElementsAre(childrenMatchers...)));
 }
 
+// Same as `matchPtrWithChildren` above, but the children are all variables.
 template <typename Expression>
 auto matchPtrWithVariables(const std::same_as<Variable> auto&... children)
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {

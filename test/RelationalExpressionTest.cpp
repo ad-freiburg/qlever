@@ -885,7 +885,7 @@ TEST(RelationalExpression, InExpressionFilterEstimates) {
   EXPECT_EQ(x.costEstimate, 400);
   EXPECT_EQ(x.sizeEstimate, 400);
   x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
-  EXPECT_EQ(x.costEstimate, 200'000);
+  EXPECT_EQ(x.costEstimate, 200'400);
   EXPECT_EQ(x.sizeEstimate, 400);
 }
 
@@ -921,7 +921,7 @@ TEST(RelationalExpression, FilterEstimates) {
     EXPECT_EQ(x.sizeEstimate, expectedSize);
     // This case cannot be solved via binary search.
     x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
-    EXPECT_EQ(x.costEstimate, 200'000);
+    EXPECT_EQ(x.costEstimate, 200'000 + expectedSize);
     EXPECT_EQ(x.sizeEstimate, expectedSize);
   };
 

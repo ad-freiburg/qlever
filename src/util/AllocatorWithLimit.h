@@ -172,7 +172,6 @@ class AllocatorWithLimit {
   AllocatorWithLimit<U> as() {
     return AllocatorWithLimit<U>(memoryLeft_);
   }
-
   AllocatorWithLimit() = delete;
 
   template <typename U>
