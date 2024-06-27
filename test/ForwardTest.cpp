@@ -40,3 +40,61 @@ TEST(Forward, ExpectedTypes) {
   tester<int&&>(AD_FWD(movedIntRef));
   tester<int&&>(42);
 }
+
+namespace {
+struct WasMoved {
+  static inline size_t numCopies = 0;
+  static inline size_t numMoves = 0;
+  WasMoved() = default;
+  WasMoved(const WasMoved&) { numCopies++; }
+  WasMoved& operator=(const WasMoved&) {
+    numCopies++;
+    return *this;
+  }
+
+  WasMoved(WasMoved&&) noexcept { numMoves++; }
+  WasMoved& operator=(WasMoved&&) noexcept {
+    numMoves++;
+    return *this;
+  }
+};
+}  // namespace
+// _________________________________________________________________________
+TEST(Forward, AD_MOVE) {
+  const size_t& numMoves = WasMoved::numMoves;
+  const size_t& numCopies = WasMoved::numCopies;
+  ASSERT_EQ(numMoves, 0u);
+  auto temp = []() { return WasMoved{}; };
+  {
+    [[maybe_unused]] auto x = temp();
+    ASSERT_EQ(numMoves, 0u);
+  }
+  // The following code would emit a warning because of the redundant move.
+  /*
+  {
+    auto x = std::move(temp());
+    ASSERT_EQ(numMoves, 1u);
+  }
+   */
+  {
+    [[maybe_unused]] auto x = AD_MOVE(temp());
+    ASSERT_EQ(numMoves, 0u);
+  }
+  {
+    WasMoved x;
+    [[maybe_unused]] auto y = std::move(x);
+    ASSERT_EQ(numMoves, 1u);
+  }
+  {
+    WasMoved x;
+    [[maybe_unused]] auto y = AD_MOVE(x);
+    ASSERT_EQ(numMoves, 2u);
+  }
+  ASSERT_EQ(numCopies, 0u);
+  {
+    const WasMoved x;
+    [[maybe_unused]] auto y = AD_MOVE(x);
+    ASSERT_EQ(numMoves, 2u);
+    ASSERT_EQ(numCopies, 1u);
+  }
+}

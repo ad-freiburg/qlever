@@ -32,8 +32,9 @@ inline auto getUniqueElements = []<typename OperandGenerator>(
                                     const EvaluationContext* context,
                                     size_t inputSize,
                                     OperandGenerator operandGenerator)
-    -> cppcoro::generator<typename OperandGenerator::value_type> {
-  ad_utility::HashSetWithMemoryLimit<typename OperandGenerator::value_type>
+    -> cppcoro::generator<std::ranges::range_value_t<OperandGenerator>> {
+  ad_utility::HashSetWithMemoryLimit<
+      std::ranges::range_value_t<OperandGenerator>>
       uniqueHashSet(inputSize, context->_allocator);
   for (auto& operand : operandGenerator) {
     if (uniqueHashSet.insert(operand).second) {
