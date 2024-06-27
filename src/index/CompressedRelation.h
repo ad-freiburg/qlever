@@ -94,6 +94,9 @@ struct CompressedBlockMetadata {
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
+  // Keep track of block borders that changed at run-time through updates.
+  std::optional<PermutedTriple> firstUpdateTriple_ = std::nullopt;
+  std::optional<PermutedTriple> lastUpdateTriple_ = std::nullopt;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
@@ -613,7 +616,7 @@ class CompressedRelationReader {
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      size_t numIndexColumns) const;
+      size_t numIndexColumns, DisableUpdatesOrBlockOffset offset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

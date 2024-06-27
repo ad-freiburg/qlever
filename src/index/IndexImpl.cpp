@@ -1427,10 +1427,12 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
+  std::optional<Id> col0Id =
+      col0String.toValueIdNoAdd(getVocab(), deltaTriples_->localVocab());
+  std::optional<Id> col1Id = col1String.has_value()
+                                 ? col1String.value().get().toValueIdNoAdd(
+                                       getVocab(), deltaTriples_->localVocab())
+                                 : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
