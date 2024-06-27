@@ -1,39 +1,61 @@
-//  Copyright 2022, University of Freiburg,
+//  Copyright 2022-2024 University of Freiburg,
 //                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de> (2022)
+//  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de> (2024)
 
-// Test file for the LangExpression class: LanguageExpressionsTests.h
+// Unit tests for the functionality from this file can be
+// found in LanguageExpressionsTest.h
 
 #pragma once
 
-#include "engine/sparqlExpressions/SparqlExpression.h"
+#include "./engine/sparqlExpressions/LiteralExpression.h"
+#include "./engine/sparqlExpressions/NaryExpressionImpl.h"
+#include "./engine/sparqlExpressions/SparqlExpressionTypes.h"
 
 namespace sparqlExpression {
+namespace detail::langImpl {
 
-class LangExpression : public SparqlExpression {
- private:
-  // The stored variable.
-  Variable variable_;
-  SparqlExpression::Ptr child_;
+using Lit = ad_utility::triple_component::Literal;
+using OptValue = std::optional<std::string>;
 
+//______________________________________________________________________________
+// `LangExpressionImpl` extends the `NaryExpression` class with the methods
+// `containsLangExpression()` and `variable()`, which are required for the
+// usage within the `Filter()`.
+template <typename NaryOperation>
+requires(isOperation<NaryOperation>)
+class LangExpressionImpl : public NaryExpression<NaryOperation> {
  public:
-  // Construct from a child expression. The child must be a single variable,
-  // otherwise an exception will be thrown.
-  LangExpression(SparqlExpression::Ptr child);
-
-  const Variable& variable() const { return variable_; }
+  using NaryExpression<NaryOperation>::NaryExpression;
 
   bool containsLangExpression() const override { return true; }
 
-  ExpressionResult evaluate(EvaluationContext* context) const override;
-
-  std::string getCacheKey(const VariableToColumnMap&) const override;
-
- private:
-  std::span<SparqlExpression::Ptr> childrenImpl() override;
-  static void checkCancellation(
-      const sparqlExpression::EvaluationContext* context,
-      ad_utility::source_location location =
-          ad_utility::source_location::current());
+  const Variable& variable() const {
+    if (auto stringPtr =
+            dynamic_cast<const VariableExpression*>(this->children_[0].get())) {
+      return stringPtr->value();
+    } else {
+      throw std::runtime_error{
+          "use LANG() with ?var as an argument within a Filter-expression"};
+    }
+  }
 };
+
+//______________________________________________________________________________
+inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
+  if (!optLangTag.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return LiteralOrIri{Lit::literalWithNormalizedContent(
+        asNormalizedStringViewUnsafe(std::move(optLangTag.value())))};
+  }
+};
+
+}  //  namespace detail::langImpl
+
+// Expression that implements the `LANG(...)` function.
+using LangExpression = detail::langImpl::LangExpressionImpl<
+    detail::Operation<1, detail::FV<decltype(detail::langImpl::getLanguageTag),
+                                    detail::LanguageTagValueGetter>>>;
+
 }  // namespace sparqlExpression

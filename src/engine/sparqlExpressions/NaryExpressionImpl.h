@@ -21,7 +21,7 @@ class NaryExpression : public SparqlExpression {
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
- private:
+ protected:
   Children children_;
 
  public:

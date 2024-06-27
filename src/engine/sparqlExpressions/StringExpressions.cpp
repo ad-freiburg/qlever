@@ -410,14 +410,14 @@ using EncodeForUriExpression =
       // The language-range "*" will match any non empty string
       // (Sparql-standard).
       const std::string& languageTag = optLanguageTag.value();
-      const std::string& languageRange = optLanguageRange.value();
-      if ((languageTag == "" && languageRange == "*") || languageRange == "") {
+      std::string& languageRange = optLanguageRange.value();
+      if (languageTag.empty() || languageRange.empty()) {
         return Id::makeFromBool(false);
-      } else if (languageRange == "*") {
-        return Id::makeFromBool(true);
       } else {
-        return Id::makeFromBool(
-            ad_utility::isLangMatch(languageTag, languageRange));
+        if (languageRange.ends_with("*")) {
+          languageRange.pop_back();
+        }
+        return Id::makeFromBool(languageTag.starts_with(languageRange));
       }
     };
 

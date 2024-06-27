@@ -16,6 +16,7 @@
 
 using namespace sparqlExpression;
 using ad_utility::source_location;
+using ad_utility::testing::DateId;
 using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
 using ad_utility::triple_component::LiteralOrIri;
@@ -23,6 +24,10 @@ using strOpt = std::optional<std::string>;
 using LanguageTagGetter = sparqlExpression::detail::LanguageTagValueGetter;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
+auto T = ad_utility::testing::BoolId(true);
+auto F = ad_utility::testing::BoolId(false);
+auto U = ad_utility::testing::UndefId();
+auto maxId = Id::max();
 
 // Define a test context like in SparqlExpressionTestHelpers.h (take a look for
 // better description/explanation of the context). This is necessary because the
@@ -169,16 +174,14 @@ auto testLanguageExpressions = [](const std::vector<T>& expected,
 TEST(LanguageTagGetter, testLanguageTagValueGetterWithoutVocabId) {
   TestContext testContext{};
   LanguageTagGetter langTagGetter{};
-  Id dateId1 = Id::makeFromDate(
-         DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z")),
-     dateId2 = Id::makeFromDate(DateOrLargeYear::parseXsdDate("2025-01-01")),
-     boolId1 = Id::makeFromBool(false), boolId2 = Id::makeFromBool(true),
-     intId = Id::makeFromInt(323), doubleId = Id::makeFromDouble(234.23);
-  Id maxId = Id::max(), U = Id::makeUndefined();
+  Id dateId1 =
+         DateId(DateOrLargeYear::parseXsdDatetime, "1900-12-13T03:12:00.33Z"),
+     dateId2 = DateId(DateOrLargeYear::parseXsdDate, "2025-01-01");
 
   // define the input containing IDs (non literal) and corresponding expected
   // return values w.r.t. LanguageTagValueGetter
-  std::vector<Id> in = {dateId1, dateId2, boolId1, boolId2, intId, doubleId, U};
+  std::vector<Id> in = {dateId1,    dateId2,          F, T,
+                        IntId(323), DoubleId(234.23), U};
   std::vector<strOpt> expected(7, std::nullopt);
 
   assertLangTagValueGetter(in, expected, langTagGetter, testContext);
@@ -227,26 +230,12 @@ TEST(LangExpression, testLangExpressionOnLiteralColumn) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testLangExpressionOnMixedColumn) {
-  auto U = Id::makeUndefined();
   testLanguageExpressions<getLangExpression, IdOrLiteralOrIri>(
       {U, U, litOrIri("de"), U, U, U, U, litOrIri("")}, "?mixed");
 }
 
 // ____________________________________________________________________________
-TEST(LangExpression, testSimpleFunctionLangExpression) {
-  TestContext context;
-  SparqlExpression::Ptr langExpr = getLangExpression("?literals");
-  ASSERT_FALSE(langExpr->getUnaggregatedVariables().empty());
-  auto cacheKey = langExpr->getCacheKey(context.varToColMap);
-  ASSERT_THAT(cacheKey, ::testing::StrEq("LANG #column_0#"));
-  langExpr = getLangExpression("?mixed");
-  cacheKey = langExpr->getCacheKey(context.varToColMap);
-  ASSERT_THAT(cacheKey, ::testing::StrEq("LANG #column_1#"));
-}
-
-// ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
-  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false);
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, T, T, T, T, T}, "?literals", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
@@ -257,12 +246,12 @@ TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
       {F, F, F, F, F, F, F, F}, "?literals", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, F, F, F, F, F, F}, "?literals", "");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, T, T, T, T, F, T}, "?literals", "de-*");
 }
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
-  Id T = Id::makeFromBool(true), F = Id::makeFromBool(false),
-     U = Id::makeUndefined();
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, T, U, U, U, U, F}, "?mixed", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
