@@ -21,7 +21,7 @@ class NaryExpression : public SparqlExpression {
   static constexpr size_t N = NaryOperation::N;
   using Children = std::array<SparqlExpression::Ptr, N>;
 
- protected:
+ private:
   Children children_;
 
  public:
@@ -41,6 +41,11 @@ class NaryExpression : public SparqlExpression {
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
+
+  // _________________________________________________________________________
+  const std::optional<SparqlExpression*> getNthChild(size_t pos) const {
+    return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
+  }
 
  private:
   // _________________________________________________________________________
