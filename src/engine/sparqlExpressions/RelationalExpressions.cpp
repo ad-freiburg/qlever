@@ -347,8 +347,8 @@ SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
                             return canBeEvaluatedWithBinarySearch(lhs, child) ||
                                    canBeEvaluatedWithBinarySearch(child, lhs);
                           })) {
-    // When evaluating via binary search, the only cost that occurs is that of
-    // writing the output.
+    // When evaluating via binary search, the only significant cost that occurs
+    // is that of writing the output.
     costEstimate = sizeEstimate;
   }
   return {sizeEstimate, costEstimate};
