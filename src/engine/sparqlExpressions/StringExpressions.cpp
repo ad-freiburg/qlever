@@ -409,7 +409,7 @@ using EncodeForUriExpression =
       // For LANGMATCHES(), the order of the arguments matter.
       // The language-range "*" will match any non empty string
       // (Sparql-standard).
-      const std::string& languageTag = optLanguageTag.value();
+      std::string& languageTag = optLanguageTag.value();
       std::string& languageRange = optLanguageRange.value();
       if (languageTag.empty() || languageRange.empty()) {
         return Id::makeFromBool(false);
@@ -417,7 +417,14 @@ using EncodeForUriExpression =
         if (languageRange.ends_with("*")) {
           languageRange.pop_back();
         }
-        return Id::makeFromBool(languageTag.starts_with(languageRange));
+        std::string& lowerLangTag = languageTag;
+        std::string& lowerLangRange = languageRange;
+        std::transform(lowerLangTag.begin(), lowerLangTag.end(),
+                       lowerLangTag.begin(), ::tolower);
+        std::transform(lowerLangRange.begin(), lowerLangRange.end(),
+                       lowerLangRange.begin(), ::tolower);
+        return Id::makeFromBool(lowerLangTag.compare(0, lowerLangRange.length(),
+                                                     lowerLangRange) == 0);
       }
     };
 

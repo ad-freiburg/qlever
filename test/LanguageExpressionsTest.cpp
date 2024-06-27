@@ -243,11 +243,15 @@ TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, F, F, F, F, F}, "?literals", "de-LATN-CH");
   testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, T, F, F, F, F, F}, "?literals", "DE-LATN-CH");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, F, F, F, F, F, F}, "?literals", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, F, F, F, F, F, F}, "?literals", "");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, T, T, T, F, T}, "?literals", "de-*");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
+      {F, F, T, T, T, T, F, T}, "?literals", "De-*");
 }
 
 // ____________________________________________________________________________
@@ -255,9 +259,30 @@ TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, T, U, U, U, U, F}, "?mixed", "de");
   testLanguageExpressions<getLangMatchesExpression, Id>(
+      {U, U, T, U, U, U, U, F}, "?mixed", "dE");
+  testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, T, U, U, U, U, F}, "?mixed", "*");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, F, U, U, U, U, F}, "?mixed", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, F, U, U, U, U, F}, "?mixed", "");
+}
+
+// ____________________________________________________________________________
+TEST(LangExpression, testSimpleMethods) {
+  auto langExpr = std::make_unique<LangExpression>(
+      std::make_unique<VariableExpression>(Variable{"?x"}));
+  ASSERT_TRUE(langExpr->containsLangExpression());
+  auto var = langExpr->variable();
+  ASSERT_EQ(var.name(), "?x");
+  langExpr = std::make_unique<LangExpression>(
+      std::make_unique<IdExpression>(IntId(1)));
+  ASSERT_TRUE(langExpr->containsLangExpression());
+  ASSERT_THROW(
+      {
+        langExpr->variable();
+        throw std::runtime_error{
+            "use LANG() with ?var as an argument within a Filter-expression"};
+      },
+      std::runtime_error);
 }
