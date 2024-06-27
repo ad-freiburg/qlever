@@ -9,6 +9,7 @@
 #include "./util/AllocatorTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
@@ -42,8 +43,9 @@ const auto NaN = std::numeric_limits<double>::quiet_NaN();
 template <Comparison comp>
 auto makeExpression(SingleExpressionResult auto leftValue,
                     SingleExpressionResult auto rightValue) {
-  auto leftChild = std::make_unique<DummyExpression>(std::move(leftValue));
-  auto rightChild = std::make_unique<DummyExpression>(std::move(rightValue));
+  auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
+  auto rightChild =
+      std::make_unique<SingleUseExpression>(std::move(rightValue));
 
   return relational::RelationalExpression<comp>(
       {std::move(leftChild), std::move(rightChild)});

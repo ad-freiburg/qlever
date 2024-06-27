@@ -4,6 +4,7 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "global/ValueIdComparators.h"
 #include "gtest/gtest.h"
@@ -13,23 +14,6 @@
 #pragma once
 
 namespace sparqlExpression {
-// Dummy expression for testing, that for `evaluate` returns the `result` that
-// is specified in the constructor.
-struct DummyExpression : public SparqlExpression {
-  explicit DummyExpression(ExpressionResult result)
-      : _result{std::move(result)} {}
-  mutable ExpressionResult _result;
-  ExpressionResult evaluate(EvaluationContext*) const override {
-    return std::move(_result);
-  }
-  vector<Variable> getUnaggregatedVariables() override { return {}; }
-  string getCacheKey(
-      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
-    return "DummyDummyDummDumm";
-  }
-
-  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
-};
 
 // Make a `ValueId` from an int/ a double. Shorter name, as it will be used
 // often.

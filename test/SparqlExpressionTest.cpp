@@ -208,7 +208,7 @@ auto testNaryExpressionImpl =
       context._endIndex = resultSize;
 
       std::array<SparqlExpression::Ptr, sizeof...(operands)> children{
-          std::make_unique<DummyExpression>(
+          std::make_unique<SingleUseExpression>(
               ExpressionResult{clone(operands)})...};
 
       auto expressionPtr = std::apply(makeExpression, std::move(children));
@@ -1285,4 +1285,16 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
 
   ASSERT_TRUE(groupConcatDistinctExpression.isAggregate());
   ASSERT_TRUE(groupConcatDistinctExpression.isDistinct());
+}
+
+// ___________________________________________________________________________
+TEST(SingleUseExpression, simpleMembersForTestCoverage) {
+  SingleUseExpression expression(Id::makeUndefined());
+  using namespace ::testing;
+  EXPECT_THAT(expression.evaluate(nullptr),
+              VariantWith<Id>(Eq(Id::makeUndefined())));
+  EXPECT_ANY_THROW(expression.evaluate(nullptr));
+  EXPECT_THAT(expression.childrenForTesting(), IsEmpty());
+  EXPECT_ANY_THROW(expression.getUnaggregatedVariables());
+  EXPECT_ANY_THROW(expression.getCacheKey({}));
 }
