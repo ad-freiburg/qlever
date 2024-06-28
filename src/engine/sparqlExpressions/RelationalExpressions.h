@@ -48,6 +48,38 @@ class RelationalExpression : public SparqlExpression {
   std::span<SparqlExpression::Ptr> childrenImpl() override;
 };
 
+// Implementation of the `IN` expression
+class InExpression : public SparqlExpression {
+ public:
+  using Children = std::vector<SparqlExpression::Ptr>;
+
+ private:
+  // The first child implicitly is the left hand side.
+  Children children_;
+
+ public:
+  // Construct from the two children.
+  explicit InExpression(SparqlExpression::Ptr lhs, Children children) {
+    children_.reserve(children.size() + 1);
+    children_.push_back(std::move(lhs));
+    std::ranges::move(children, std::back_inserter(children_));
+  }
+
+  ExpressionResult evaluate(EvaluationContext* context) const override;
+
+  [[nodiscard]] string getCacheKey(
+      const VariableToColumnMap& varColMap) const override;
+
+  // These expressions are typically used inside `FILTER` clauses, so we need
+  // proper estimates.
+  Estimates getEstimatesForFilterExpression(
+      uint64_t inputSizeEstimate,
+      const std::optional<Variable>& firstSortedVariable) const override;
+
+ private:
+  std::span<SparqlExpression::Ptr> childrenImpl() override;
+};
+
 }  // namespace sparqlExpression::relational
 
 namespace sparqlExpression {
@@ -64,4 +96,6 @@ using GreaterThanExpression =
     relational::RelationalExpression<valueIdComparators::Comparison::GT>;
 using GreaterEqualExpression =
     relational::RelationalExpression<valueIdComparators::Comparison::GE>;
+
+using InExpression = relational::InExpression;
 }  // namespace sparqlExpression
