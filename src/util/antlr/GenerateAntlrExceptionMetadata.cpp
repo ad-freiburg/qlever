@@ -27,9 +27,11 @@ ExceptionMetadata generateAntlrExceptionMetadataWithParser(
 ExceptionMetadata generateAntlrExceptionMetadata(
     const antlr4::ParserRuleContext* ctx) {
   auto start = ctx->getStart();
-  return {start->getInputStream()->toString(), ctx->getStart()->getStartIndex(),
-          ctx->getStop()->getStopIndex(), start->getLine(),
-          start->getCharPositionInLine()};
+  AD_CORRECTNESS_CHECK(start != nullptr);
+  auto stopIndex =
+      ctx->getStop() ? ctx->getStop()->getStopIndex() : start->getStopIndex();
+  return {start->getInputStream()->toString(), start->getStartIndex(),
+          stopIndex, start->getLine(), start->getCharPositionInLine()};
 }
 
 // _____________________________________________________________________________
