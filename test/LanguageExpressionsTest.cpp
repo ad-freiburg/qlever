@@ -248,7 +248,10 @@ TEST(LangExpression, testSimpleMethods) {
       {
         langExpr->variable();
         throw std::runtime_error{
-            "use LANG() with ?var as an argument within a Filter-expression"};
+            "Use the LANG() function within a FILTER() expression only with a "
+            "variable as its argument. Valid example: "
+            "FILTER(LANG(?example_var) "
+            "= \"en\")"};
       },
       std::runtime_error);
 }

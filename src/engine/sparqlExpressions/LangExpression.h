@@ -38,7 +38,10 @@ class LangExpressionImpl : public NaryExpression<NaryOperation> {
       return stringPtr->value();
     } else {
       throw std::runtime_error{
-          "use LANG() with ?var as an argument within a Filter-expression"};
+          "Use the LANG() function within a FILTER() expression only with a "
+          "variable as its argument. Valid example: "
+          "FILTER(LANG(?example_var) "
+          "= \"en\")"};
     }
   }
 };
@@ -55,6 +58,8 @@ inline auto getLanguageTag = [](OptValue optLangTag) -> IdOrLiteralOrIri {
 
 }  //  namespace detail::langImpl
 
+// TODO: Directly implement this in a .cpp file and make it
+// available as makeLangExpression.
 // Expression that implements the `LANG(...)` function.
 using LangExpression = detail::langImpl::LangExpressionImpl<
     detail::Operation<1, detail::FV<decltype(detail::langImpl::getLanguageTag),

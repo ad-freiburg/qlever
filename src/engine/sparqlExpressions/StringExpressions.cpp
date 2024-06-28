@@ -401,18 +401,13 @@ using EncodeForUriExpression =
 
 // LANGMATCHES
 [[maybe_unused]] inline auto langMatching =
-    [](std::optional<std::string> optLanguageTag,
-       std::optional<std::string> optLanguageRange) {
-      if (!optLanguageTag.has_value() || !optLanguageRange.has_value()) {
+    [](std::optional<std::string> languageTag,
+       std::optional<std::string> languageRange) {
+      if (!languageTag.has_value() || !languageRange.has_value()) {
         return Id::makeUndefined();
-      }
-      std::string& languageTag = optLanguageTag.value();
-      std::string& languageRange = optLanguageRange.value();
-      if (languageTag.empty() || languageRange.empty()) {
-        return Id::makeFromBool(false);
       } else {
-        return Id::makeFromBool(
-            ad_utility::isLanguageMatch(languageTag, languageRange));
+        return Id::makeFromBool(ad_utility::isLanguageMatch(
+            languageTag.value(), languageRange.value()));
       }
     };
 

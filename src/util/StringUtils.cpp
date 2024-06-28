@@ -48,15 +48,19 @@ bool strIsLangTag(const string& input) {
 }
 
 // ____________________________________________________________________________
-bool isLanguageMatch(string& langTag, string& langRange) {
-  if (langRange.ends_with("*")) {
-    langRange.pop_back();
+bool isLanguageMatch(string& languageTag, string& languageRange) {
+  if (languageRange.empty() || languageTag.empty()) {
+    return false;
+  } else {
+    if (languageRange.ends_with("*")) {
+      languageRange.pop_back();
+    }
+    std::ranges::transform(languageTag, std::begin(languageTag),
+                           [](unsigned char c) { return std::tolower(c); });
+    std::ranges::transform(languageRange, std::begin(languageRange),
+                           [](unsigned char c) { return std::tolower(c); });
+    return languageTag.compare(0, languageRange.length(), languageRange) == 0;
   }
-  std::ranges::transform(langTag, std::begin(langTag),
-                         [](unsigned char c) { return std::tolower(c); });
-  std::ranges::transform(langRange, std::begin(langRange),
-                         [](unsigned char c) { return std::tolower(c); });
-  return langTag.compare(0, langRange.length(), langRange) == 0;
 }
 
 // ___________________________________________________________________________

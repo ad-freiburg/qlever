@@ -33,7 +33,7 @@ string getUppercase(const string& orig);
 bool strIsLangTag(const string& strLangTag);
 
 // Implements a case insensitive `language-range` to `language-tag`comparison.
-bool isLanguageMatch(string& langTag, string& langRange);
+bool isLanguageMatch(string& languageTag, string& languageRange);
 
 /*
  * @brief convert a UTF-8 String to lowercase according to the held locale
