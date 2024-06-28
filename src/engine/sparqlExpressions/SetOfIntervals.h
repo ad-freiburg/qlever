@@ -77,7 +77,7 @@ struct SetOfIntervals {
   inline static std::vector<bool> toBitVector(const SetOfIntervals& a,
                                               size_t targetSize) {
     std::vector<bool> result(targetSize, false);
-    toBitVector(a, targetSize, begin(result));
+    toBitVector(a, targetSize, std::ranges::begin(result));
     return result;
   }
 };
