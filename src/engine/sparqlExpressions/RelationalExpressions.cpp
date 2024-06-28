@@ -16,9 +16,9 @@ using namespace sparqlExpression;
 
 namespace {
 
-static constexpr int reductionFactorEquals = 1000;
-static constexpr int reductionFactorNotEquals = 1;
-static constexpr int reductionFactorDefault = 50;
+constexpr int reductionFactorEquals = 1000;
+constexpr int reductionFactorNotEquals = 1;
+constexpr int reductionFactorDefault = 50;
 
 using valueIdComparators::Comparison;
 
