@@ -86,6 +86,14 @@ class ExportQueryExecutionTrees {
   static std::optional<std::pair<std::string, const char*>>
   idToStringAndTypeForEncodedValue(Id id);
 
+  // Acts as a helper to retrieve an LiteralOrIri object
+  // from an Id, where the Id is of type `VocabIndex` or `LocalVocabIndex`.
+  // This function should only be called with suitable `Datatype` Id's,
+  // otherwise `AD_FAIL()` is called.
+  static ad_utility::triple_component::LiteralOrIri
+  getLiteralOrIriFromVocabIndex(const Index& index, Id id,
+                                const LocalVocab& localVocab);
+
  private:
   // TODO<joka921> The following functions are all internally called by the
   // two public functions above. All the code has been inside QLever for a long

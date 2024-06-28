@@ -178,6 +178,34 @@ class LiteralExpression : public SparqlExpression {
   // Literal expressions don't have children
   std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
 };
+
+// A simple expression that just returns an explicit result. It can only be used
+// once as the result is moved out.
+struct SingleUseExpression : public SparqlExpression {
+  explicit SingleUseExpression(ExpressionResult result)
+      : result_{std::move(result)} {}
+  mutable ExpressionResult result_;
+  mutable std::atomic<bool> resultWasMoved_ = false;
+  ExpressionResult evaluate(EvaluationContext*) const override {
+    AD_CONTRACT_CHECK(!resultWasMoved_);
+    resultWasMoved_ = true;
+    return std::move(result_);
+  }
+
+  vector<Variable> getUnaggregatedVariables() override {
+    // This class should only be used as an implementation of other expressions,
+    // not as a "normal" part of an expression tree.
+    AD_FAIL();
+  }
+  string getCacheKey(
+      [[maybe_unused]] const VariableToColumnMap& varColMap) const override {
+    // This class should only be used as an implementation of other expressions,
+    // not as a "normal" part of an expression tree.
+    AD_FAIL();
+  }
+
+  std::span<SparqlExpression::Ptr> childrenImpl() override { return {}; }
+};
 }  // namespace detail
 
 ///  The actual instantiations and aliases of LiteralExpressions.
@@ -188,4 +216,5 @@ using StringLiteralExpression =
 using IdExpression = detail::LiteralExpression<ValueId>;
 using VectorIdExpression =
     detail::LiteralExpression<VectorWithMemoryLimit<ValueId>>;
+using SingleUseExpression = detail::SingleUseExpression;
 }  // namespace sparqlExpression
