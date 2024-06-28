@@ -235,6 +235,25 @@ TEST(LangExpression, testLangExpressionOnMixedColumn) {
 }
 
 // ____________________________________________________________________________
+TEST(LangExpression, testSimpleMethods) {
+  auto langExpr = std::make_unique<LangExpression>(
+      std::make_unique<VariableExpression>(Variable{"?x"}));
+  ASSERT_TRUE(langExpr->containsLangExpression());
+  auto var = langExpr->variable();
+  ASSERT_EQ(var.name(), "?x");
+  langExpr = std::make_unique<LangExpression>(
+      std::make_unique<IdExpression>(IntId(1)));
+  ASSERT_TRUE(langExpr->containsLangExpression());
+  ASSERT_THROW(
+      {
+        langExpr->variable();
+        throw std::runtime_error{
+            "use LANG() with ?var as an argument within a Filter-expression"};
+      },
+      std::runtime_error);
+}
+
+// ____________________________________________________________________________
 TEST(SparqlExpression, testLangMatchesOnLiteralColumn) {
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {F, F, T, T, T, T, T, T}, "?literals", "de");
@@ -266,23 +285,4 @@ TEST(SparqlExpression, testLangMatchesOnMixedColumn) {
       {U, U, F, U, U, U, U, F}, "?mixed", "en-US");
   testLanguageExpressions<getLangMatchesExpression, Id>(
       {U, U, F, U, U, U, U, F}, "?mixed", "");
-}
-
-// ____________________________________________________________________________
-TEST(LangExpression, testSimpleMethods) {
-  auto langExpr = std::make_unique<LangExpression>(
-      std::make_unique<VariableExpression>(Variable{"?x"}));
-  ASSERT_TRUE(langExpr->containsLangExpression());
-  auto var = langExpr->variable();
-  ASSERT_EQ(var.name(), "?x");
-  langExpr = std::make_unique<LangExpression>(
-      std::make_unique<IdExpression>(IntId(1)));
-  ASSERT_TRUE(langExpr->containsLangExpression());
-  ASSERT_THROW(
-      {
-        langExpr->variable();
-        throw std::runtime_error{
-            "use LANG() with ?var as an argument within a Filter-expression"};
-      },
-      std::runtime_error);
 }

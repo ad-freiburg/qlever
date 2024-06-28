@@ -411,15 +411,8 @@ using EncodeForUriExpression =
       if (languageTag.empty() || languageRange.empty()) {
         return Id::makeFromBool(false);
       } else {
-        if (languageRange.ends_with("*")) {
-          languageRange.pop_back();
-        }
-        std::ranges::transform(languageTag, std::begin(languageTag),
-                               [](unsigned char c) { return std::tolower(c); });
-        std::ranges::transform(languageRange, std::begin(languageRange),
-                               [](unsigned char c) { return std::tolower(c); });
         return Id::makeFromBool(
-            languageTag.compare(0, languageRange.length(), languageRange) == 0);
+            ad_utility::isLanguageMatch(languageTag, languageRange));
       }
     };
 

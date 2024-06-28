@@ -43,7 +43,7 @@ class NaryExpression : public SparqlExpression {
       const VariableToColumnMap& varColMap) const override;
 
   // _________________________________________________________________________
-  const std::optional<SparqlExpression*> getNthChild(size_t pos) const {
+  std::optional<SparqlExpression*> getNthChild(size_t pos) const {
     return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
   }
 

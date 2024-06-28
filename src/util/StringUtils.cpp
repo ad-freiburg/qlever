@@ -47,6 +47,18 @@ bool strIsLangTag(const string& input) {
   return ctre::match<"[a-zA-Z]+(-[a-zA-Z0-9]+)*">(input);
 }
 
+// ____________________________________________________________________________
+bool isLanguageMatch(string& langTag, string& langRange) {
+  if (langRange.ends_with("*")) {
+    langRange.pop_back();
+  }
+  std::ranges::transform(langTag, std::begin(langTag),
+                         [](unsigned char c) { return std::tolower(c); });
+  std::ranges::transform(langRange, std::begin(langRange),
+                         [](unsigned char c) { return std::tolower(c); });
+  return langTag.compare(0, langRange.length(), langRange) == 0;
+}
+
 // ___________________________________________________________________________
 std::pair<size_t, std::string_view> getUTF8Prefix(std::string_view sv,
                                                   size_t prefixLength) {
