@@ -63,30 +63,14 @@ DeltaTriples::locateAndAddTriples(
     cancellationHandle->throwIfCancelled();
 
     // Update blocks firstUpdateTriple_ and lastUpdateTriple_.
-    auto block_meta =
-        index_.getImpl().getPermutation(permutation).metaData().blockData();
-    auto ltpb = getLocatedTriplesPerBlock(permutation);
-    // TODO<qup42>: What to do with triples that are behind all index blocks in
-    // `block_meta.size()+1`?
-    for (size_t i = 0; i < block_meta.size(); i++) {
-      if (ltpb.map_.contains(i)) {
-        auto first = *ltpb.map_.at(i).cbegin();
-        auto last = *ltpb.map_.at(i).crbegin();
-
-        if (first.triple_.toPermutedTriple() < block_meta.at(i).firstTriple_) {
-          block_meta.at(i).firstUpdateTriple_ =
-              first.triple_.toPermutedTriple();
-        }
-
-        if (last.triple_.toPermutedTriple() > block_meta.at(i).lastTriple_) {
-          block_meta.at(i).lastUpdateTriple_ = last.triple_.toPermutedTriple();
-        }
-
-      } else {
-        block_meta.at(i).firstUpdateTriple_ = std::nullopt;
-        block_meta.at(i).lastUpdateTriple_ = std::nullopt;
-      }
-    }
+    auto& perm = index_.getImpl().getPermutation(permutation);
+    auto block_meta = perm.augmentedBlockData();
+    LOG(INFO) << "Permutation: " << perm.readableName() << " with "
+              << block_meta.size() << " blocks" << std::endl;
+    LOG(INFO) << "LocatedTriplesPerBlock "
+              << getLocatedTriplesPerBlock(permutation);
+    LOG(INFO) << "Triples (" << block_meta.begin()->firstTriple_ << ", "
+              << block_meta.rbegin()->lastTriple_ << ")" << std::endl;
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
