@@ -382,6 +382,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForId(
       return detail::simplifyRanges(detail::getRangesForIntsAndDoubles(
           begin, end, valueId.getInt(), comparison));
     case Datatype::Undefined:
+    case Datatype::Sentinel:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::WordVocabIndex:
@@ -416,6 +417,7 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
     case Datatype::Int:
     case Datatype::Bool:
     case Datatype::Undefined:
+    case Datatype::Sentinel:
     case Datatype::Date:
     case Datatype::BlankNodeIndex:
       AD_FAIL();

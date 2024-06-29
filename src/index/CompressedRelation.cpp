@@ -1172,6 +1172,18 @@ auto CompressedRelationWriter::createPermutationPair(
     finishRelation();
   }
 
+  // TODO<qup42> dont hardcode the 3 columns
+  writer1.blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
+      {{0, 0}, {0, 0}, {0, 0}},
+      0,
+      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()},
+      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()}});
+  writer2.blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
+      {{0, 0}, {0, 0}, {0, 0}},
+      0,
+      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()},
+      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()}});
+
   writer1.finish();
   writer2.finish();
   blockCallbackTimer.cont();
