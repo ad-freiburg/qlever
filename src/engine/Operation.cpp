@@ -210,6 +210,8 @@ std::shared_ptr<const Result> Operation::getResult(
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
+    // TODO<RobinTF> fix case where non-lazy request fetches cached lazy result
+    // and doesn't aggregate as this might break operations.
     auto result =
         pinResult
             ? cache.computeOncePinned(cacheKey, cacheSetup, onlyReadFromCache)

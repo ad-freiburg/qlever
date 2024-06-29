@@ -397,3 +397,5 @@ addLinkAndDiscoverTest(FsstCompressorTest fsst)
 addLinkAndDiscoverTest(IteratorWrapperTest)
 
 addLinkAndDiscoverTest(CacheableGeneratorTest)
+
+addLinkAndDiscoverTest(FilterTest)
