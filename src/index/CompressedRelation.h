@@ -74,9 +74,9 @@ struct CompressedBlockMetadata {
   // and around 5M blocks with block size 80K; even the latter takes only half
   // a GB in total.
   struct PermutedTriple {
-    Id col0Id_;
-    Id col1Id_;
-    Id col2Id_;
+    IdNoLocalVocab col0Id_;
+    IdNoLocalVocab col1Id_;
+    IdNoLocalVocab col2Id_;
     auto operator<=>(const PermutedTriple&) const = default;
 
     // Formatted output for debugging.
