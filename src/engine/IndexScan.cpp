@@ -133,10 +133,10 @@ Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   const auto permutedTriple = getPermutedTriple();
   if (numVariables_ == 2) {
     idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         additionalColumns(), cancellationHandle_);
+                         additionalColumns(), cancellationHandle_, getLimit());
   } else if (numVariables_ == 1) {
     idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
-                         additionalColumns(), cancellationHandle_);
+                         additionalColumns(), cancellationHandle_, getLimit());
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
@@ -192,7 +192,11 @@ size_t IndexScan::computeSizeEstimate() const {
 }
 
 // _____________________________________________________________________________
-size_t IndexScan::getCostEstimate() { return getSizeEstimateBeforeLimit(); }
+size_t IndexScan::getCostEstimate() {
+  // If we have a limit present, we only have to read the first
+  // `limit + offset` elements.
+  return getLimit().upperBound(getSizeEstimateBeforeLimit());
+}
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
@@ -285,9 +289,18 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   if (s.numVariables_ < 2) {
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
+
+  // If there is a LIMIT or OFFSET clause that constrains the scan
+  // (which can happen with an explicit subquery), we cannot use the prefiltered
+  // blocks, as we currently have no mechanism to include limits and offsets
+  // into the prefiltering (`std::nullopt` means `scan all blocks`).
+  auto actualBlocks = s.getLimit().isUnconstrained()
+                          ? std::optional{std::move(blocks)}
+                          : std::nullopt;
+
   return index.getPermutation(s.permutation())
-      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(blocks),
-                s.additionalColumns(), s.cancellationHandle_);
+      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
+                s.additionalColumns(), s.cancellationHandle_, s.getLimit());
 };
 
 // ________________________________________________________________

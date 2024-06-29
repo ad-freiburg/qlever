@@ -120,6 +120,13 @@ class RuntimeInformation {
     details_[key] = value.count();
   }
 
+  // Erase the detail with the `key`, do nothing if no such detail exists.
+  void eraseDetail(const std::string& key) {
+    if (details_.contains(key)) {
+      details_.erase(key);
+    }
+  }
+
   // Set the runtime information for a LIMIT or OFFSET operation as the new root
   // of the tree and make the old root the only child of the LIMIT operation.
   // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing

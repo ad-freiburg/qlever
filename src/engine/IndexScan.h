@@ -10,7 +10,7 @@
 class SparqlTriple;
 class SparqlTripleSimple;
 
-class IndexScan : public Operation {
+class IndexScan final : public Operation {
  private:
   Permutation::Enum permutation_;
   TripleComponent subject_;
@@ -91,10 +91,8 @@ class IndexScan : public Operation {
     return numVariables() == target;
   }
 
-  // Currently only the full scans support a limit clause.
-  [[nodiscard]] bool supportsLimit() const override {
-    return getResultWidth() == 3;
-  }
+  // An index scan can directly and efficiently support LIMIT and OFFSET
+  [[nodiscard]] bool supportsLimit() const override { return true; }
 
   Permutation::Enum permutation() const { return permutation_; }
 

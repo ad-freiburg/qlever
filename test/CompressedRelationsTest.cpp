@@ -59,7 +59,9 @@ size_t getNumColumns(const std::vector<RelationInput>& vec) {
 void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
                              source_location l = source_location::current()) {
   auto trace = generateLocationTrace(l);
-  ASSERT_EQ(getNumColumns(expected), actual.numColumns());
+  if (!expected.empty()) {
+    ASSERT_EQ(getNumColumns(expected), actual.numColumns());
+  }
   if (actual.numRows() != expected.size()) {
     LOG(WARN) << actual.numRows() << "vs " << expected.size() << std::endl;
     LOG(WARN) << "mismatch" << std::endl;
@@ -178,8 +180,20 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
         reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
-
     table.clear();
+    // Check that the scans also work with various values for LIMIT and OFFSET.
+    std::vector<LimitOffsetClause> limitOffsetClauses{
+        {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
+    for (const auto& limitOffset : limitOffsetClauses) {
+      IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+                                  cancellationHandle, limitOffset);
+      auto col1And2 = inputs[i].col1And2_;
+      col1And2.resize(limitOffset.upperBound(col1And2.size()));
+      col1And2.erase(
+          col1And2.begin(),
+          col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
+      checkThatTablesAreEqual(col1And2, table);
+    }
     for (const auto& block : reader.lazyScan(
              scanSpec, blocks, additionalColumns, cancellationHandle)) {
       table.insertAtEnd(block.begin(), block.end());

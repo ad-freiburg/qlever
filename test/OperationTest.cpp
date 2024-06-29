@@ -212,3 +212,12 @@ TEST(OperationTest, estimatesForCachedResults) {
     EXPECT_EQ(qet->getCostEstimate(), 0u);
   }
 }
+
+// ________________________________________________
+TEST(Operation, createRuntimInfoFromEstimates) {
+  NeutralElementOperation operation{getQec()};
+  operation.setLimit({12, 3});
+  operation.createRuntimeInfoFromEstimates(nullptr);
+  EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
+  EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
+}
