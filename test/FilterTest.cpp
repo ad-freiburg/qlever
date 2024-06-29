@@ -14,7 +14,6 @@ using ::testing::ElementsAre;
 class LazyValueOperation : public Operation {
  public:
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { return "Cache Key"; }
   string getDescriptor() const override { return "Descriptor"; }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
@@ -36,6 +35,20 @@ class LazyValueOperation : public Operation {
                               std::vector<IdTable> idTables)
       : Operation{qec}, idTables_{std::move(idTables)} {
     AD_CONTRACT_CHECK(!idTables_.empty());
+  }
+
+  string getCacheKeyImpl() const override {
+    std::ostringstream stream;
+    for (const IdTable& idTable : idTables_) {
+      for (const auto& row : idTable) {
+        stream << "{ ";
+        for (const auto& cell : row) {
+          stream << cell << ' ';
+        }
+        stream << "}\n";
+      }
+    }
+    return std::move(stream).str();
   }
 
   Result computeResult(bool requestLaziness) override {
@@ -78,7 +91,7 @@ columnBasedIdTable::Row<Id> makeRow(bool b) {
 // _____________________________________________________________________________
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
-  qec->getQueryTreeCache();
+  qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTable({true, true, false, false, true}));
   idTables.push_back(makeIdTable({true, false}));
@@ -127,7 +140,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 // _____________________________________________________________________________
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
-  qec->getQueryTreeCache();
+  qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTable({true, true, false, false, true}));
   idTables.push_back(makeIdTable({true, false}));
