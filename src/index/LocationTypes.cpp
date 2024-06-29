@@ -12,3 +12,12 @@ DisableUpdatesOrBlockOffset addOffset(DisableUpdatesOrBlockOffset blockOffset,
     return std::get<size_t>(blockOffset) + delta;
   }
 }
+
+std::ostream& operator<<(
+    std::ostream& os, const DisableUpdatesOrBlockOffset& updatesOrBlockOffset) {
+  if (holds_alternative<DisableUpdates>(updatesOrBlockOffset)) {
+    return os << "Updates disabled";
+  } else {
+    return os << "Offset(" << get<size_t>(updatesOrBlockOffset) << ")";
+  }
+}

@@ -341,6 +341,10 @@ IdTable CompressedRelationReader::scan(
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
     DisableUpdatesOrBlockOffset offset) const {
+  LOG(INFO) << "CompressedRelation::scan scanspec: " << scanSpec << std::endl;
+  LOG(INFO) << "CompressedRelation::scan looking at blocks from "
+            << blocks.begin()->firstTriple_ << " to "
+            << blocks.rbegin()->lastTriple_ << std::endl;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
@@ -643,6 +647,8 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 DecompressedBlock CompressedRelationReader::addUpdateTriples(
     DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
     DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
+  LOG(INFO) << "CompressedRelationReader::addUpdateTriples " << offset
+            << std::endl;
   if (!useUpdates_ || std::holds_alternative<DisableUpdates>(offset)) {
     // updates are not enabled or not possible for this block
     return block;
@@ -1247,3 +1253,19 @@ void CompressedRelationReader::enableUpdateUse() { useUpdates_ = true; }
 
 // ____________________________________________________________________________
 void CompressedRelationReader::disableUpdateUse() { useUpdates_ = false; }
+
+std::ostream& operator<<(
+    std::ostream& os,
+    const CompressedRelationReader::ScanSpecification& scanSpec) {
+  return os << "ScanSpec(" << scanSpec.col0Id_ << ", " << scanSpec.col1Id_
+            << ", " << scanSpec.col2Id_ << ")";
+}
+
+std::ostream& operator<<(std::ostream& os,
+                         const std::optional<ValueId>& scanSpec) {
+  if (scanSpec.has_value()) {
+    return os << scanSpec.value();
+  } else {
+    return os << "None";
+  }
+}

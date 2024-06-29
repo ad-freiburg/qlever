@@ -329,6 +329,9 @@ class CompressedRelationWriter {
 
 using namespace std::string_view_literals;
 
+std::ostream& operator<<(std::ostream& os,
+                         const std::optional<ValueId>& scanSpec);
+
 /// Manage the reading of relations from disk that have been previously written
 /// using the `CompressedRelationWriter`.
 class CompressedRelationReader {
@@ -381,6 +384,9 @@ class CompressedRelationReader {
       col1Id_ = col1Id;
       validate();
     }
+
+    friend std::ostream& operator<<(std::ostream& os,
+                                    const ScanSpecification& scanSpec);
   };
 
   // The metadata of a single relation together with a subset of its

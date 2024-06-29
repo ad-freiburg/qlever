@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 
+#include <ostream>
 #include <variant>
 
 // TODO<qup42, cpp23> Replace with `std::optional<size_t>` and use `transform`.
@@ -18,3 +19,6 @@ using DisableUpdatesOrBlockOffset = std::variant<DisableUpdates, size_t>;
 
 DisableUpdatesOrBlockOffset addOffset(DisableUpdatesOrBlockOffset blockOffset,
                                       size_t delta);
+
+std::ostream& operator<<(
+    std::ostream& os, const DisableUpdatesOrBlockOffset& updatesOrBlockOffset);
