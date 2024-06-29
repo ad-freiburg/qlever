@@ -96,8 +96,10 @@ void DeltaTriples::eraseTripleInAllPermutations(
 void DeltaTriples::insertTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple<0>> triples) {
-  // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
+  std::ranges::sort(triples);
+  auto [first, last] = std::ranges::unique(triples);
+  triples.erase(first, last);
   std::erase_if(triples, [this](const IdTriple<0>& triple) {
     return triplesInserted_.contains(triple);
   });
@@ -125,8 +127,10 @@ void DeltaTriples::insertTriples(
 void DeltaTriples::deleteTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple<0>> triples) {
-  // TODO<qup42> add elimination of duplicate triples?
   LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
+  std::ranges::sort(triples);
+  auto [first, last] = std::ranges::unique(triples);
+  triples.erase(first, last);
   std::erase_if(triples, [this](const IdTriple<0>& triple) {
     return triplesDeleted_.contains(triple);
   });
