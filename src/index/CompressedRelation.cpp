@@ -57,8 +57,6 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     // Note: The order of the following two lines is important: The index
     // of the current block depends on the current value of `blockIterator`,
     // so we have to compute it before incrementing the iterator.
-    // TODO: the index is only w.r.t. to beginBlock and endBlock, we want the
-    // absolute blockIndex
     auto myIndex = static_cast<size_t>(blockIterator - beginBlock);
     ++blockIterator;
     // Note: the reading of the block could also happen without holding the

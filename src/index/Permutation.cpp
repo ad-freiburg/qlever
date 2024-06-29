@@ -52,29 +52,30 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(scanSpec, meta_.blockData(), additionalColumns,
+  return reader().scan(scanSpec, augmentedBlockData(), additionalColumns,
                        cancellationHandle, locatedTriplesPerBlock_, 0UL);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec) const {
-  return reader().getResultSizeOfScan(scanSpec, meta_.blockData(),
+  return reader().getResultSizeOfScan(scanSpec, augmentedBlockData(),
                                       locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(
-      col0Id, meta_.blockData(), cancellationHandle, locatedTriplesPerBlock_);
+  return reader().getDistinctCol1IdsAndCounts(col0Id, augmentedBlockData(),
+                                              cancellationHandle,
+                                              locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle) const {
   return reader().getDistinctCol0IdsAndCounts(
-      meta_.blockData(), cancellationHandle, locatedTriplesPerBlock_);
+      augmentedBlockData(), cancellationHandle, locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
@@ -123,7 +124,7 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
   if (meta_.col0IdExists(col0Id)) {
     return meta_.getMetaData(col0Id);
   }
-  return reader().getMetadataForSmallRelation(meta_.blockData(), col0Id,
+  return reader().getMetadataForSmallRelation(augmentedBlockData(), col0Id,
                                               locatedTriplesPerBlock_);
 }
 
@@ -133,7 +134,7 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
   MetadataAndBlocks result{scanSpec,
                            std::get<std::span<const CompressedBlockMetadata>>(
                                CompressedRelationReader::getRelevantBlocks(
-                                   scanSpec, meta_.blockData())),
+                                   scanSpec, augmentedBlockData())),
                            std::nullopt};
 
   result.firstAndLastTriple_ =
@@ -154,7 +155,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   if (!blocks.has_value()) {
     auto [blockSpan, beginBlockOffset] =
         CompressedRelationReader::getRelevantBlocks(scanSpec,
-                                                    meta_.blockData());
+                                                    augmentedBlockData());
     offset = beginBlockOffset;
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   } else {
@@ -164,4 +165,19 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   return reader().lazyScan(scanSpec, std::move(blocks.value()),
                            std::move(columns), std::move(cancellationHandle),
                            locatedTriplesPerBlock_, offset);
+}
+vector<CompressedBlockMetadata> Permutation::augmentedBlockData() const {
+  // Copy block metadata to augment it with updated triples.
+  IndexMetaDataMmap::BlocksType allBlocks = meta_.blockData();
+  for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
+    size_t blockIndex = it - allBlocks.begin();
+    if (locatedTriplesPerBlock_.hasUpdates(blockIndex)) {
+      auto updateLimits = locatedTriplesPerBlock_.getLimits(blockIndex);
+      it->firstTriple_ =
+          std::min(it->firstTriple_, updateLimits.firstTriple_.value());
+      it->lastTriple_ =
+          std::max(it->lastTriple_, updateLimits.lastTriple_.value());
+    }
+  }
+  return allBlocks;
 }

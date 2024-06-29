@@ -131,7 +131,11 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
+  // _______________________________________________________
   const MetaData& metaData() const { return meta_; }
+
+  // _______________________________________________________
+  vector<CompressedBlockMetadata> augmentedBlockData() const;
 
  private:
   // for Log output, e.g. "POS"
