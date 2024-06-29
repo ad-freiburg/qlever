@@ -61,6 +61,17 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 // ____________________________________________________________________________
+BlockLimits LocatedTriplesPerBlock::getLimits(size_t blockIndex) const {
+  if (!hasUpdates(blockIndex)) {
+    return {};
+  } else {
+    auto& block = map_.at(blockIndex);
+    return {block.begin()->triple_.toPermutedTriple(),
+            block.rbegin()->triple_.toPermutedTriple()};
+  }
+}
+
+// ____________________________________________________________________________
 template <size_t numIndexColumns>
 IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
                                                  const IdTable& block) const {
