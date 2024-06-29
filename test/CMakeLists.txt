@@ -395,3 +395,5 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(IteratorWrapperTest)
+
+addLinkAndDiscoverTest(CacheableGeneratorTest)

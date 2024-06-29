@@ -169,7 +169,7 @@ class CacheableGenerator {
           if (onSizeChanged_) {
             bool isShrinkable = i < maxBound - 1;
             if (onSizeChanged_(isShrinkable)) {
-              AD_CONTRACT_CHECK(!isShrinkable);
+              AD_CONTRACT_CHECK(isShrinkable);
             } else {
               break;
             }
