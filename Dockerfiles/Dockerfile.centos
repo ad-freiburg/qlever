@@ -1,0 +1,65 @@
+FROM centos:7.9.2009
+LABEL maintainer="Hannah Bast <bast@cs.uni-freiburg.de>"
+
+# General prerequisites
+RUN yum update -y && yum clean all
+RUN yum install -y git gcc gcc-c++ make wget bzip2 epel-release python3-pip 
+RUN pip3 install conan
+RUN pip3 install scikit-build
+RUN pip3 install "cmake<3.23"
+RUN echo $PATH && echo $LD_LIBRARY_PATH
+RUN conan --version
+RUN cmake --version
+RUN gcc --version
+
+# Compile g++ 11.3.0
+RUN wget https://ftp.gnu.org/gnu/gcc/gcc-11.3.0/gcc-11.3.0.tar.gz
+RUN tar -xf gcc-11.3.0.tar.gz
+WORKDIR /gcc-11.3.0
+RUN ./contrib/download_prerequisites
+WORKDIR /gcc-11.3.0/build
+RUN ls -ltr .. && ../configure --enable-languages=c,c++ --disable-multilib
+RUN make -j
+RUN make install
+ENV PATH=/usr/local/bin:$PATH
+ENV LD_LIBRARY_PATH=/usr/local/lib64:$LD_LIBRARY_PATH
+
+# Compile binutils 2.36 (contains ld)
+WORKDIR /
+RUN wget https://ftp.gnu.org/gnu/binutils/binutils-2.36.tar.gz
+RUN tar -xf binutils-2.36.tar.gz
+WORKDIR /binutils-2.36
+RUN ./configure --prefix=/usr/local
+RUN make -j && make install
+RUN ld --version
+RUN ls -ltr /usr/local/bin
+
+# Compile mold linker.
+ RUN yum groupinstall -y "Development Tools"
+ RUN yum install -y libzstd-devel # zlib zlib-devel
+ RUN git clone https://github.com/rui314/mold.git
+ WORKDIR mold/build
+ RUN git checkout v2.2.0
+ RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=gcc  -DCMAKE_CXX_COMPILER=g++
+ RUN make -j && make install
+
+# Compile QLever
+COPY . /qlever
+WORKDIR /qlever
+WORKDIR /qlever/build
+RUN conan profile detect
+RUN ls -l .. && conan install .. -of=.
+RUN /usr/local/libexec/mold/ld --version
+RUN cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="conan_toolchain.cmake" -DUSE_PARALLEL=true -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_FLAGS="-B/usr/local/libexec/mold" -DCMAKE_EXE_LINKER_FLAGS="-B/usr/local/libexec/mold" -DCMAKE_SHARED_LINKER_FLAGS="-B/usr/local/libexec/mold"..
+RUN make -j engine 
+RUN make -j index 
+RUN make -j parser
+RUN make ServerMain IndexBuilderMain VERBOSE=1
+
+# Run the e2e/e2e.sh script (which calls `querit.py`, hence the Python libraries).
+WORKDIR /qlever
+RUN yum install -y which libicu libicu-devel python3-devel
+RUN pip3 install pyaml pyicu
+RUN source build/conanrun.sh && e2e/e2e.sh
+
+ENTRYPOINT bash
