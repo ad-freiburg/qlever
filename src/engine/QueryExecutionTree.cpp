@@ -119,7 +119,7 @@ void QueryExecutionTree::readFromCache() {
   auto& cache = qec_->getQueryTreeCache();
   auto res = cache.getIfContained(getCacheKey());
   if (res.has_value()) {
-    auto resultTable = res->_resultPointer->resultTable();
+    auto resultTable = res->_resultPointer->resultTablePtr();
     if (resultTable->isDataEvaluated()) {
       cachedResult_ = std::move(resultTable);
     }

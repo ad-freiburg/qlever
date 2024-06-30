@@ -158,7 +158,7 @@ class Result {
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
 
-  bool isDataEvaluated() const;
+  bool isDataEvaluated() const noexcept;
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one

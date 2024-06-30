@@ -22,26 +22,36 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<const Result> _resultTable;
+  std::shared_ptr<Result> _resultTable;
   RuntimeInformation _runtimeInfo;
 
  public:
   explicit CacheValue(Result resultTable, RuntimeInformation runtimeInfo)
-      : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
+      : _resultTable(std::make_shared<Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const std::shared_ptr<const Result>& resultTable() const {
+  const Result& resultTable() const noexcept { return *_resultTable; }
+
+  std::shared_ptr<const Result> resultTablePtr() const noexcept {
     return _resultTable;
   }
 
-  const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
+  const RuntimeInformation& runtimeInfo() const noexcept {
+    return _runtimeInfo;
+  }
 
   ~CacheValue() {
     if (!_resultTable->isDataEvaluated()) {
       // Clear listeners
-      const_cast<Result&>(*_resultTable).setOnSizeChanged({});
-      const_cast<Result&>(*_resultTable).setOnGeneratorFinished({});
-      const_cast<Result&>(*_resultTable).setOnNextChunkComputed({});
+      try {
+        _resultTable->setOnSizeChanged({});
+        _resultTable->setOnGeneratorFinished({});
+        _resultTable->setOnNextChunkComputed({});
+      } catch (...) {
+        // Should never happen. The listeners only throw assertion errors
+        // if the result is evaluated.
+        std::exit(1);
+      }
     }
   }
 

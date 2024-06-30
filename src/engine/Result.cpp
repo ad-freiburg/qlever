@@ -233,8 +233,8 @@ const IdTable& Result::idTable() const {
 cppcoro::generator<const IdTable> Result::idTables() const {
   AD_CONTRACT_CHECK(!isDataEvaluated());
   return std::visit(
-      [](auto& generator) -> cppcoro::generator<const IdTable> {
-        if constexpr (!std::is_same_v<decltype(generator), IdTable&>) {
+      []<typename T>(T& generator) -> cppcoro::generator<const IdTable> {
+        if constexpr (!std::is_same_v<T, IdTable>) {
           for (auto&& idTable : generator) {
             co_yield idTable;
           }
@@ -247,7 +247,7 @@ cppcoro::generator<const IdTable> Result::idTables() const {
 }
 
 // _____________________________________________________________________________
-bool Result::isDataEvaluated() const {
+bool Result::isDataEvaluated() const noexcept {
   return std::holds_alternative<IdTable>(data_);
 }
 

@@ -17,7 +17,7 @@
 
 namespace ad_utility {
 
-class IteratorExpired : std::exception {};
+class IteratorExpired : public std::exception {};
 
 template <typename T>
 class CacheableGenerator {
@@ -71,15 +71,13 @@ class CacheableGenerator {
           generatorIterator_.value() == generator_.end()) {
         return;
       }
-      if (masterState_ == MasterIteratorState::MASTER_STARTED) {
-        if (!isMaster) {
-          conditionVariable_.wait(lock, [this, index]() {
-            return (generatorIterator_.has_value() &&
-                    generatorIterator_.value() == generator_.end()) ||
-                   index < cachedValues_.size();
-          });
-          return;
-        }
+      if (masterState_ == MasterIteratorState::MASTER_STARTED && !isMaster) {
+        conditionVariable_.wait(lock, [this, index]() {
+          return (generatorIterator_.has_value() &&
+                  generatorIterator_.value() == generator_.end()) ||
+                 index < cachedValues_.size();
+        });
+        return;
       }
       auto start = std::chrono::steady_clock::now();
       if (generatorIterator_.has_value()) {
@@ -96,10 +94,8 @@ class CacheableGenerator {
       }
       if (generatorIterator_.value() != generator_.end()) {
         cachedValues_.emplace_back(std::move(*generatorIterator_.value()));
-        if (onSizeChanged_) {
-          if (onSizeChanged_(true)) {
-            tryShrinkCache();
-          }
+        if (onSizeChanged_ && onSizeChanged_(true)) {
+          tryShrinkCache();
         }
       } else if (onGeneratorFinished_) {
         onGeneratorFinished_(cachedValues_.empty() ||
@@ -135,18 +131,19 @@ class CacheableGenerator {
       conditionVariable_.notify_all();
     }
 
-    void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
+    void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) noexcept {
       std::lock_guard lock{mutex_};
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
-    void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
+    void setOnGeneratorFinished(
+        std::function<void(bool)> onGeneratorFinished) noexcept {
       std::lock_guard lock{mutex_};
       onGeneratorFinished_ = std::move(onGeneratorFinished);
     }
 
-    void setOnNextChunkComputed(
-        std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
+    void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
+                                    onNextChunkComputed) noexcept {
       std::lock_guard lock{mutex_};
       onNextChunkComputed_ = std::move(onNextChunkComputed);
     }
@@ -185,10 +182,11 @@ class CacheableGenerator {
       : computationStorage_{
             std::make_shared<ComputationStorage>(std::move(generator))} {}
 
-  CacheableGenerator(CacheableGenerator&& other) = default;
-  CacheableGenerator(const CacheableGenerator& other) = delete;
-  CacheableGenerator& operator=(CacheableGenerator&& other) = default;
-  CacheableGenerator& operator=(const CacheableGenerator& other) = delete;
+  CacheableGenerator(CacheableGenerator&& other) noexcept = default;
+  CacheableGenerator(const CacheableGenerator& other) noexcept = delete;
+  CacheableGenerator& operator=(CacheableGenerator&& other) noexcept = default;
+  CacheableGenerator& operator=(const CacheableGenerator& other) noexcept =
+      delete;
 
   class IteratorSentinel {};
 
@@ -221,16 +219,8 @@ class CacheableGenerator {
       return it.storage()->isDone(it.currentIndex_);
     }
 
-    friend bool operator!=(const Iterator& it, IteratorSentinel s) noexcept {
-      return !(it == s);
-    }
-
     friend bool operator==(IteratorSentinel s, const Iterator& it) noexcept {
       return (it == s);
-    }
-
-    friend bool operator!=(IteratorSentinel s, const Iterator& it) noexcept {
-      return it != s;
     }
 
     Iterator& operator++() {
@@ -268,16 +258,17 @@ class CacheableGenerator {
     computationStorage_->forEachCachedValue(function);
   }
 
-  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) {
+  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) noexcept {
     computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
   }
 
-  void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished) {
+  void setOnGeneratorFinished(
+      std::function<void(bool)> onGeneratorFinished) noexcept {
     computationStorage_->setOnGeneratorFinished(std::move(onGeneratorFinished));
   }
 
-  void setOnNextChunkComputed(
-      std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
+  void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
+                                  onNextChunkComputed) noexcept {
     computationStorage_->setOnNextChunkComputed(std::move(onNextChunkComputed));
   }
 };

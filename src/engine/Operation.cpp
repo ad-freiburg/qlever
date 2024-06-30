@@ -195,7 +195,7 @@ std::shared_ptr<const Result> Operation::getResult(
             [&cache, cacheKey](bool isComplete) mutable {
               if (isComplete) {
                 cache.transformValue(cacheKey, [](const CacheValue& oldValue) {
-                  return CacheValue{oldValue.resultTable()->aggregateTable(),
+                  return CacheValue{oldValue.resultTable().aggregateTable(),
                                     oldValue.runtimeInfo()};
                 });
               }
@@ -223,30 +223,30 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     updateRuntimeInformationOnSuccess(
-        result, result._resultPointer->resultTable()->isDataEvaluated()
+        result, result._resultPointer->resultTable().isDataEvaluated()
                     ? timer.msecs()
                     : result._resultPointer->runtimeInfo().totalTime_);
 
-    if (result._resultPointer->resultTable()->isDataEvaluated()) {
+    if (result._resultPointer->resultTable().isDataEvaluated()) {
       auto resultNumRows =
-          result._resultPointer->resultTable()->idTable().size();
+          result._resultPointer->resultTable().idTable().size();
       auto resultNumCols =
-          result._resultPointer->resultTable()->idTable().numColumns();
+          result._resultPointer->resultTable().idTable().numColumns();
       LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
                  << resultNumCols << std::endl;
     }
 
-    if (result._resultPointer->resultTable()->isDataEvaluated()) {
-      return result._resultPointer->resultTable();
+    if (result._resultPointer->resultTable().isDataEvaluated()) {
+      return result._resultPointer->resultTablePtr();
     } else if (actuallyComputed) {
       return std::make_shared<const Result>(
           Result::createResultAsMasterConsumer(
-              result._resultPointer->resultTable(),
+              result._resultPointer->resultTablePtr(),
               isRoot ? std::function{[this]() { signalQueryUpdate(); }}
                      : std::function<void()>{}));
     }
     return std::make_shared<const Result>(Result::createResultWithFallback(
-        result._resultPointer->resultTable(), std::move(computeLambda),
+        result._resultPointer->resultTablePtr(), std::move(computeLambda),
         [this, isRoot](auto duration) {
           runtimeInfo().totalTime_ += duration;
           if (isRoot) {
@@ -342,7 +342,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->resultTable(),
+      resultAndCacheStatus._resultPointer->resultTable(),
       resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
