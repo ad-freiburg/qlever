@@ -125,36 +125,35 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
-  auto interResult = [](auto byteResult) -> cppcoro::generator<std::string> {
-    for (std::span<std::byte> bytes : byteResult) {
-      co_yield std::string{reinterpret_cast<const char*>(bytes.data()),
-                           bytes.size()};
-    }
-  }(std::move(jsonByteResult));
-
   std::string jsonStr;
-  for (const auto& s : interResult) {
-    absl::StrAppend(&jsonStr, s);
-  }
-  const auto jsonResult = nlohmann::json::parse(jsonStr);
-
-  if (jsonResult.empty()) {
-    throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
-                                          serviceUrl.host(), " is empty"));
+  for (std::span<std::byte> bytes : jsonByteResult) {
+    absl::StrAppend(&jsonStr, reinterpret_cast<const char*>(bytes.data()));
   }
 
-  if (!jsonResult.contains("head") || !jsonResult["head"].contains("vars") ||
-      !jsonResult["head"]["vars"].is_array() ||
-      !jsonResult.contains("results") ||
-      !jsonResult["results"].contains("bindings") ||
-      !jsonResult["results"]["bindings"].is_array()) {
+  // Parse the received result.
+  std::vector<std::string> resVariables;
+  std::vector<nlohmann::json> resBindings;
+  try {
+    auto jsonResult = nlohmann::json::parse(jsonStr);
+
+    if (jsonResult.empty()) {
+      throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
+                                            serviceUrl.host(), " is empty"));
+    }
+
+    resVariables = jsonResult["head"]["vars"].get<std::vector<std::string>>();
+    resBindings =
+        jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
+  } catch (const nlohmann::json::parse_error& e) {
+    throw std::runtime_error(absl::StrCat(
+        "Failed to parse the Service result as JSON. First 100 bytes: ",
+        jsonStr.substr(0, std::min(100, static_cast<int>(jsonStr.size())))));
+  } catch (const nlohmann::json::type_error& e) {
     throw std::runtime_error(
         "JSON result does not have the expected structure");
   }
 
-  const auto vars = jsonResult["head"]["vars"].get<std::vector<std::string>>();
-  std::string headerRow = absl::StrCat("?", absl::StrJoin(vars, " ?"));
-
+  std::string headerRow = absl::StrCat("?", absl::StrJoin(resVariables, " ?"));
   std::string expectedHeaderRow = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
   if (headerRow != expectedHeaderRow) {
@@ -169,24 +168,20 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
   LocalVocab localVocab{};
   // Fill the result table using the `writeJsonResult` method below.
   size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Service::writeJsonResult, this, jsonResult,
-                  &idTable, &localVocab);
+  CALL_FIXED_SIZE(resWidth, &Service::writeJsonResult, this, resVariables,
+                  resBindings, &idTable, &localVocab);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // ____________________________________________________________________________
 template <size_t I>
-void Service::writeJsonResult(const nlohmann::json& jsonResult,
+void Service::writeJsonResult(const std::vector<std::string>& vars,
+                              const std::vector<nlohmann::json>& bindings,
                               IdTable* idTablePtr, LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
-
-  const auto& vars =
-      jsonResult["head"]["vars"].get<std::vector<std::string_view>>();
-  const auto& bindings =
-      jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
 
   size_t rowIdx = 0;
   for (const auto& binding : bindings) {
@@ -297,9 +292,11 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
     }
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
-  } else if (type == "blank") {
+  } else if (type == "bnode") {
     throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not supported.");
+        "Blank nodes in the result of a SERVICE are currently not supported. "
+        "For now, consider filtering them out using the ISBLANK function or "
+        "converting them via the STR function.");
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
   }

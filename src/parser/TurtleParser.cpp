@@ -397,15 +397,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   try {
-    // TODO<joka921> clean this up by moving the check for the types to a
-    // separate module.
-    if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
-        type == XSD_NON_POSITIVE_INTEGER_TYPE ||
-        type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
-        type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
-        type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
-        type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
-        type == XSD_UNSIGNED_SHORT_TYPE || type == XSD_POSITIVE_INTEGER_TYPE) {
+    if (ad_utility::contains(integerDatatypes_, type)) {
       parser->parseIntegerConstant(normalizedLiteralContent);
     } else if (type == XSD_BOOLEAN_TYPE) {
       if (normalizedLiteralContent == "true") {
@@ -421,8 +413,7 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
             << std::endl;
         parser->lastParseResult_ = std::move(literal);
       }
-    } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
-               type == XSD_FLOAT_TYPE) {
+    } else if (ad_utility::contains(floatDatatypes_, type)) {
       parser->parseDoubleConstant(normalizedLiteralContent);
     } else if (type == XSD_DATETIME_TYPE) {
       parser->lastParseResult_ =

@@ -3,6 +3,7 @@
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <ctre-unicode.hpp>
 #include <regex>
@@ -44,7 +45,7 @@ class ServiceTest : public ::testing::Test {
   // The code can be found in the history of this PR.
   static auto constexpr getResultFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         nlohmann::json predefinedResult) -> Service::GetResultFunction {
+         std::string predefinedResult) -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -68,45 +69,44 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-      return [](nlohmann::json result)
-                 -> cppcoro::generator<std::span<std::byte>> {
-        // Randomly slice the string to make tests more robust.
-        std::mt19937 rng{std::random_device{}()};
+      return
+          [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
+            // Randomly slice the string to make tests more robust.
+            std::mt19937 rng{std::random_device{}()};
 
-        const std::string resultStr = result.dump();
-        std::uniform_int_distribution<size_t> distribution{
-            0, resultStr.length() / 2};
+            const std::string resultStr = result;
+            std::uniform_int_distribution<size_t> distribution{
+                0, resultStr.length() / 2};
 
-        for (size_t start = 0; start < resultStr.length();) {
-          size_t size = distribution(rng);
-          std::string resultCopy{resultStr.substr(start, size)};
-          co_yield std::as_writable_bytes(std::span{resultCopy});
-          start += size;
-        }
-      }(predefinedResult);
+            for (size_t start = 0; start < resultStr.length();) {
+              size_t size = distribution(rng);
+              std::string resultCopy{resultStr.substr(start, size)};
+              co_yield std::as_writable_bytes(std::span{resultCopy});
+              start += size;
+            }
+          }(predefinedResult);
     };
   };
 
-  // The following methods generate a JSON result from variables and rows for
+  // The following method generates a JSON result from variables and rows for
   // Testing.
   // Passing more values per row than variables are given isn't supported.
   // Generates all cells with the given values and type uri.
-  static nlohmann::json genJsonResult(
+  static std::string genJsonResult(
       std::vector<std::string_view> vars,
       std::vector<std::vector<std::string_view>> rows) {
     nlohmann::json res;
     res["head"]["vars"] = vars;
     res["results"]["bindings"] = nlohmann::json::array();
-    auto& bindings = res["results"]["bindings"];
 
     for (size_t i = 0; i < rows.size(); ++i) {
       nlohmann::json binding;
       for (size_t j = 0; j < std::min(rows[i].size(), vars.size()); ++j) {
         binding[vars[j]] = {{"type", "uri"}, {"value", rows[i][j]}};
       }
-      bindings.push_back(binding);
+      res["results"]["bindings"].push_back(binding);
     }
-    return res;
+    return res.dump();
   }
 };
 
@@ -159,17 +159,23 @@ TEST_F(ServiceTest, computeResult) {
 
   // Shorthand to run computeResult with the test parameters given above.
   auto runComputeResult =
-      [&](const nlohmann::json& result) -> std::shared_ptr<const Result> {
+      [&](const std::string& result) -> std::shared_ptr<const Result> {
     Service s{
         testQec, parsedServiceClause,
         getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
     return s.getResult();
   };
 
-  // CHECK 1: Returned JSON is empty or has invalid structure
+  // CHECK 1: Returned Result is no JSON, is empty or has invalid structure
   // -> an exception should be thrown.
-  ASSERT_ANY_THROW(runComputeResult({}));
-  ASSERT_ANY_THROW(runComputeResult({{"invalid", "result"}}));
+  ASSERT_ANY_THROW(
+      runComputeResult("<?xml version=\"1.0\"?><sparql "
+                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"));
+  ASSERT_ANY_THROW(runComputeResult("{}"));
+  ASSERT_ANY_THROW(runComputeResult("{\"invalid\": \"structure\"}"));
+  ASSERT_ANY_THROW(
+      runComputeResult("{\"head\": {\"vars\": [1, 2, 3]},"
+                       "\"results\": {\"bindings\": {}}}"));
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
@@ -354,7 +360,7 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
 
   // Blank Node not supported yet.
   EXPECT_ANY_THROW(
-      Service::bindingToTripleComponent({{"type", "blank"}, {"value", "b"}}));
+      Service::bindingToTripleComponent({{"type", "bnode"}, {"value", "b"}}));
 
   EXPECT_ANY_THROW(Service::bindingToTripleComponent(
       {{"type", "INVALID_TYPE"}, {"value", "v"}}));

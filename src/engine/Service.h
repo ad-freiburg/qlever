@@ -108,6 +108,7 @@ class Service : public Operation {
   // NOTE: This is similar to `Values::writeValues`, except that we have to
   // parse JSON here and not a VALUES clause.
   template <size_t I>
-  void writeJsonResult(const nlohmann::json& jsonResult, IdTable* idTable,
-                       LocalVocab* localVocab);
+  void writeJsonResult(const std::vector<std::string>& vars,
+                       const std::vector<nlohmann::json>& bindings,
+                       IdTable* idTable, LocalVocab* localVocab);
 };
