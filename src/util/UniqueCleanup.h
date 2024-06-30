@@ -7,7 +7,6 @@
 
 #include <concepts>
 #include <functional>
-#include <memory>
 
 #include "util/ResetWhenMoved.h"
 

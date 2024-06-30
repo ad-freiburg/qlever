@@ -173,8 +173,12 @@ class Operation {
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
 
-  // True iff this operation directly implement a `LIMIT` clause on its result.
-  [[nodiscard]] virtual bool supportsLimit() const { return false; }
+  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
+  // its result.
+  [[nodiscard]] virtual bool supportsLimit(
+      [[maybe_unused]] bool lazyResult) const {
+    return false;
+  }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
   // this operation.

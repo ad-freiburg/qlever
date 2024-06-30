@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <string>
-#include <string_view>
 
 #include "util/Cache.h"
 #include "util/DefaultValueSizeGetter.h"
@@ -13,6 +12,12 @@
 
 using std::string;
 using namespace ad_utility::memory_literals;
+using enum ad_utility::ResizeResult;
+
+using Vec = std::vector<int>;
+[[maybe_unused]] auto vectorSizeGetter = [](const auto& pointer) {
+  return pointer->size() * sizeof(int) * 1_B;
+};
 
 // first some simple Tests for the general cache interface
 TEST(FlexibleCacheTest, Simple) {
@@ -138,5 +143,435 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   ASSERT_FALSE(cache["2"]);
   ASSERT_FALSE(cache["3"]);
   ASSERT_FALSE(cache["4"]);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyTransformValueWorksForNonPinnedValues) {
+  LRUCache<string, string, StringSizeGetter<string>> cache{2, 3_B};
+  cache.insert("1", "x");
+
+  ASSERT_EQ(cache.nonPinnedSize(), 1_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+
+  cache.transformValue("1",
+                       [](const std::string& value) { return value + "a"; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 2_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+  ASSERT_TRUE(cache.contains("1"));
+  ASSERT_EQ(*cache["1"], "xa");
+
+  cache.insert("2", "y");
+
+  ASSERT_EQ(cache.nonPinnedSize(), 3_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+
+  cache.transformValue("1",
+                       [](const std::string& value) { return value + "b"; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 3_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+
+  ASSERT_TRUE(cache.contains("1"));
+  ASSERT_FALSE(cache.contains("2"));
+  ASSERT_EQ(*cache["1"], "xab");
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyTransformValueWorksForPinnedValues) {
+  LRUCache<string, string, StringSizeGetter<string>> cache{1};
+  cache.insertPinned("1", "x");
+
+  ASSERT_EQ(cache.nonPinnedSize(), 0_B);
+  ASSERT_EQ(cache.pinnedSize(), 1_B);
+
+  cache.transformValue("1",
+                       [](const std::string& value) { return value + "a"; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 0_B);
+  ASSERT_EQ(cache.pinnedSize(), 2_B);
+  ASSERT_TRUE(cache.contains("1"));
+  ASSERT_EQ(*cache["1"], "xa");
+
+  cache.insert("2", "y");
+
+  ASSERT_EQ(cache.nonPinnedSize(), 1_B);
+  ASSERT_EQ(cache.pinnedSize(), 2_B);
+  ASSERT_TRUE(cache.contains("1"));
+  ASSERT_TRUE(cache.contains("2"));
+
+  cache.transformValue("1",
+                       [](const std::string& value) { return value + "b"; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 0_B);
+  ASSERT_EQ(cache.pinnedSize(), 3_B);
+  ASSERT_TRUE(cache.contains("1"));
+  ASSERT_FALSE(cache.contains("2"));
+
+  ASSERT_EQ(*cache["1"], "xab");
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyTransformValueWorksIsNoOpForNonExistantValues) {
+  LRUCache<string, string, StringSizeGetter<string>> cache{1};
+
+  ASSERT_EQ(cache.nonPinnedSize(), 0_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+
+  cache.transformValue("1",
+                       [](const std::string&) { return std::string{"a"}; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 0_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+  ASSERT_FALSE(cache.contains("1"));
+
+  cache.insert("2", "y");
+
+  ASSERT_EQ(cache.nonPinnedSize(), 1_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+  ASSERT_TRUE(cache.contains("2"));
+
+  cache.transformValue("1",
+                       [](const std::string&) { return std::string{"a"}; });
+
+  ASSERT_EQ(cache.nonPinnedSize(), 1_B);
+  ASSERT_EQ(cache.pinnedSize(), 0_B);
+  ASSERT_FALSE(cache.contains("1"));
+  ASSERT_TRUE(cache.contains("2"));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{1};
+
+  auto vecA = std::make_shared<Vec>();
+
+  cache.insert(0, vecA);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+  vecA->push_back(0);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+
+  cache.erase(0);
+
+  // Cache should not underflow
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+
+  cache.insert(0, vecA);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+  vecA->clear();
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  cache.erase(0);
+
+  // Cache correctly remove size, even though the vector is empty by now.
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest,
+     verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{1};
+
+  auto vecA = std::make_shared<Vec>();
+
+  cache.insertPinned(0, vecA);
+
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+  vecA->push_back(0);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+
+  cache.erase(0);
+
+  // Cache should not underflow
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+
+  cache.insertPinned(0, vecA);
+
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+  vecA->clear();
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+
+  cache.erase(0);
+
+  // Cache correctly remove size, even though the vector is empty by now.
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 8_B, 4_B};
+
+  auto vecA = std::make_shared<Vec>();
+  auto vecB = std::make_shared<Vec>(1);
+
+  cache.insert(0, vecA);
+  cache.insert(1, vecB);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  vecA->resize(1);
+  vecB->resize(2);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(0, false));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecA->resize(2);
+
+  ASSERT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(0, false));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 12_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecA->resize(1);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(0, false));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  auto vecC = std::make_shared<Vec>(0);
+  cache.insert(2, vecC);
+  vecB->resize(1);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(1, false));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_TRUE(cache.contains(2));
+
+  // Set to high value to avoid getting limited by this.
+  cache.setMaxSizeSingleEntry(64_B);
+  vecC->resize(3);
+  ASSERT_EQ(EXCEEDS_MAX_SIZE, cache.recomputeSize(2, false));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_FALSE(cache.contains(2));
+
+  cache.setMaxSizeSingleEntry(4_B);
+  vecA->resize(2);
+
+  ASSERT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(0, true));
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+  ASSERT_FALSE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_FALSE(cache.contains(2));
+
+  vecB->clear();
+  cache.erase(1);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+  ASSERT_FALSE(cache.contains(0));
+  ASSERT_FALSE(cache.contains(1));
+  ASSERT_FALSE(cache.contains(2));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 8_B, 4_B};
+
+  auto vecA = std::make_shared<Vec>();
+  auto vecB = std::make_shared<Vec>(1);
+
+  cache.insertPinned(0, vecA);
+  cache.insertPinned(1, vecB);
+
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+
+  vecA->resize(1);
+  vecB->resize(2);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(0, false));
+
+  ASSERT_EQ(cache._totalSizePinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecA->resize(2);
+
+  ASSERT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(0, false));
+  ASSERT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(0, true));
+
+  ASSERT_EQ(cache._totalSizePinned, 12_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecA->resize(1);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(0, false));
+
+  ASSERT_EQ(cache._totalSizePinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  auto vecC = std::make_shared<Vec>(0);
+  cache.insertPinned(2, vecC);
+  vecB->resize(1);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(1, false));
+
+  ASSERT_EQ(cache._totalSizePinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_TRUE(cache.contains(2));
+
+  // Set to high value to avoid getting limited by this.
+  cache.setMaxSizeSingleEntry(64_B);
+  vecC->resize(3);
+  ASSERT_EQ(EXCEEDS_MAX_SIZE, cache.recomputeSize(2, true));
+
+  ASSERT_EQ(cache._totalSizePinned, 20_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_TRUE(cache.contains(2));
+  cache.erase(2);
+
+  cache.setMaxSizeSingleEntry(4_B);
+  vecA->resize(2);
+
+  ASSERT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(0, true));
+
+  ASSERT_EQ(cache._totalSizePinned, 12_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+  ASSERT_FALSE(cache.contains(2));
+  cache.erase(0);
+
+  vecB->clear();
+  cache.erase(1);
+
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+  ASSERT_FALSE(cache.contains(0));
+  ASSERT_FALSE(cache.contains(1));
+  ASSERT_FALSE(cache.contains(2));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyNonPinnedEntriesAreRemovedToMakeRoomForResize) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 8_B, 4_B};
+
+  auto vecA = std::make_shared<Vec>(1);
+  auto vecB = std::make_shared<Vec>(1);
+  auto vecC = std::make_shared<Vec>(0);
+
+  cache.insertPinned(0, vecA);
+  cache.insert(1, vecB);
+  cache.insert(2, vecC);
+
+  vecC->resize(1);
+
+  ASSERT_EQ(FITS_IN_CACHE, cache.recomputeSize(2, true));
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_FALSE(cache.contains(1));
+  ASSERT_TRUE(cache.contains(2));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement) {
+  LRUCache<string, string, StringSizeGetter<string>> cache{1};
+  cache.insert("1", "a");
+
+  EXPECT_EQ(FITS_IN_CACHE, cache.recomputeSize("2", false));
+
+  EXPECT_TRUE(cache.contains("1"));
+  EXPECT_FALSE(cache.contains("2"));
+
+  EXPECT_EQ(FITS_IN_CACHE, cache.recomputeSize("2", true));
+
+  EXPECT_TRUE(cache.contains("1"));
+  EXPECT_FALSE(cache.contains("2"));
+}
+
+TEST(LRUCacheTest, verifyRecomputeDoesNoticeExceedingSizeOnShrink) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 12_B, 8_B};
+
+  auto vecA = std::make_shared<Vec>(2);
+  auto vecB = std::make_shared<Vec>(1);
+  auto vecC = std::make_shared<Vec>(0);
+
+  cache.insert(0, vecA);
+  cache.insert(1, vecB);
+  cache.insert(2, vecC);
+
+  vecC->resize(4);
+
+  EXPECT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(2, false));
+
+  EXPECT_TRUE(cache.contains(0));
+  EXPECT_TRUE(cache.contains(1));
+  EXPECT_TRUE(cache.contains(2));
+
+  vecC->resize(3);
+
+  EXPECT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(2, false));
+
+  EXPECT_TRUE(cache.contains(0));
+  EXPECT_TRUE(cache.contains(1));
+  EXPECT_TRUE(cache.contains(2));
+
+  vecC->resize(2);
+
+  EXPECT_EQ(FITS_IN_CACHE, cache.recomputeSize(2, false));
+
+  EXPECT_FALSE(cache.contains(0));
+  EXPECT_TRUE(cache.contains(1));
+  EXPECT_TRUE(cache.contains(2));
+
+  vecC->resize(5);
+  EXPECT_EQ(EXCEEDS_SINGLE_ENTRY_SIZE, cache.recomputeSize(2, false));
+
+  vecC->resize(4);
+  cache.setMaxSizeSingleEntry(16_B);
+
+  EXPECT_EQ(EXCEEDS_MAX_SIZE, cache.recomputeSize(2, false));
+
+  EXPECT_FALSE(cache.contains(0));
+  EXPECT_TRUE(cache.contains(1));
+  EXPECT_FALSE(cache.contains(2));
+}
+
+TEST(LRUCacheTest, verifyRecomputeDoesConsiderPinnedSizeForMaxSize) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 8_B, 8_B};
+
+  auto vecA = std::make_shared<Vec>(2);
+  auto vecB = std::make_shared<Vec>(0);
+
+  cache.insertPinned(0, vecA);
+  cache.insert(1, vecB);
+
+  vecB->resize(1);
+
+  EXPECT_EQ(EXCEEDS_MAX_SIZE, cache.recomputeSize(1, false));
 }
 }  // namespace ad_utility

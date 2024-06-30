@@ -92,8 +92,8 @@ class IndexScan : public Operation {
   }
 
   // Currently only the full scans support a limit clause.
-  [[nodiscard]] bool supportsLimit() const override {
-    return getResultWidth() == 3;
+  [[nodiscard]] bool supportsLimit(bool lazyResult) const override {
+    return !lazyResult && getResultWidth() == 3;
   }
 
   Permutation::Enum permutation() const { return permutation_; }
@@ -104,7 +104,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
  private:
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -115,6 +115,8 @@ class IndexScan : public Operation {
   std::string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  cppcoro::generator<IdTable> scanInChunks() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
   static Permutation::IdTableGenerator getLazyScan(

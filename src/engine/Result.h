@@ -7,6 +7,7 @@
 #pragma once
 
 #include <ranges>
+#include <variant>
 #include <vector>
 
 #include "engine/LocalVocab.h"
@@ -14,14 +15,19 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
+#include "util/CacheableGenerator.h"
+#include "util/MemorySize/MemorySize.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is always a table and contained in the member `idTable()`.
 class Result {
  private:
-  // The actual entries.
-  IdTable idTable_;
+  using Data = std::variant<IdTable, ad_utility::CacheableGenerator<IdTable>,
+                            cppcoro::generator<const IdTable>>;
+  // The actual entries. Since generators need to be modified
+  // in order to be consumed, this needs to be mutable.
+  mutable Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
@@ -67,6 +73,11 @@ class Result {
   using DatatypeCountsPerColumn = std::vector<
       std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
   std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn_;
+  Result(cppcoro::generator<const IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
+
+  static void validateIdTable(const IdTable& idTable,
+                              const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -82,6 +93,10 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
 
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
@@ -96,6 +111,9 @@ class Result {
 
   // Const access to the underlying `IdTable`.
   const IdTable& idTable() const;
+
+  // Access to the underlying `IdTable`s.
+  cppcoro::generator<const IdTable> idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
@@ -140,6 +158,8 @@ class Result {
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
 
+  bool isDataEvaluated() const noexcept;
+
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
   // place, but for now, this method at least makes sure that these log
@@ -153,7 +173,11 @@ class Result {
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those are still correct after performing this operation.
-  void applyLimitOffset(const LimitOffsetClause& limitOffset);
+  void applyLimitOffset(
+      const LimitOffsetClause& limitOffset,
+      std::function<void(std::chrono::milliseconds)> limitTimeCallback);
+
+  void enforceLimitOffset(const LimitOffsetClause& limitOffset);
 
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function
@@ -162,7 +186,26 @@ class Result {
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no
-  // undefined values in the `_idTable` of this result. Return `true` iff the
+  // undefined values in the `data_` of this result. Return `true` iff the
   // check is successful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
+
+  ad_utility::MemorySize getCurrentSize() const;
+
+  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged);
+
+  void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished);
+
+  void setOnNextChunkComputed(
+      std::function<void(std::chrono::milliseconds)> onNextChunkComputed);
+
+  Result aggregateTable() const;
+
+  static Result createResultWithFallback(
+      std::shared_ptr<const Result> original, std::function<Result()> fallback,
+      std::function<void(std::chrono::milliseconds)> onIteration);
+
+  static Result createResultAsMasterConsumer(
+      std::shared_ptr<const Result> original,
+      std::function<void()> onIteration);
 };

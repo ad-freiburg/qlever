@@ -5,6 +5,7 @@
 #pragma once
 
 #include "engine/Operation.h"
+#include "engine/QueryExecutionTree.h"
 
 // This class implements the TextLimit operation. It limits the number of texts
 // that are returned for each unique entity combination. The texts are selected

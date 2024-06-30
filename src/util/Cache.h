@@ -6,30 +6,33 @@
 
 #pragma once
 
-#include <assert.h>
+#include <gtest/gtest_prod.h>
 
+#include <cassert>
 #include <concepts>
 #include <limits>
 #include <memory>
-#include <mutex>
 #include <type_traits>
 #include <utility>
 
-#include "./HashMap.h"
-#include "PriorityQueue.h"
-#include "util/ConstexprUtils.h"
+#include "util/HashMap.h"
 #include "util/MemorySize/MemorySize.h"
+#include "util/PriorityQueue.h"
 #include "util/TypeTraits.h"
 #include "util/ValueSizeGetters.h"
 
 namespace ad_utility {
 
-using std::make_shared;
-using std::pair;
 using std::shared_ptr;
 using namespace ad_utility::memory_literals;
 
 static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
+
+enum class ResizeResult {
+  FITS_IN_CACHE,
+  EXCEEDS_SINGLE_ENTRY_SIZE,
+  EXCEEDS_MAX_SIZE
+};
 
 /*
  @brief Associative array for almost arbitrary keys and values that acts as a
@@ -95,13 +98,13 @@ class FlexibleCache {
   };
 
   using EmplacedValue = shared_ptr<Value>;
-  // using Entry = pair<Key, ValuePtr>;
   using EntryList = PriorityQueue<Score, Entry, ScoreComparator>;
 
   using AccessMap = MapType<Key, typename EntryList::Handle>;
   using PinnedMap = MapType<Key, ValuePtr>;
+  using SizeMap = MapType<Key, MemorySize>;
 
-  using TryEmplaceResult = pair<EmplacedValue, ValuePtr>;
+  using TryEmplaceResult = std::pair<EmplacedValue, ValuePtr>;
 
  public:
   //! Typical constructor. A default value may be added in time.
@@ -143,7 +146,7 @@ class FlexibleCache {
   /// Insert a key-value pair to the cache. Throws an exception if the key is
   /// already present. If the value is too big for the cache, nothing happens.
   ValuePtr insert(const Key& key, Value value) {
-    auto ptr = make_shared<Value>(std::move(value));
+    auto ptr = std::make_shared<Value>(std::move(value));
     return insert(key, std::move(ptr));
   }
 
@@ -151,7 +154,7 @@ class FlexibleCache {
   // is already present. If the value is too big for the cache, an exception is
   // thrown.
   ValuePtr insertPinned(const Key& key, Value value) {
-    auto ptr = make_shared<Value>(std::move(value));
+    auto ptr = std::make_shared<Value>(std::move(value));
     return insertPinned(key, std::move(ptr));
   }
 
@@ -173,7 +176,8 @@ class FlexibleCache {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
-    _totalSizeNonPinned += _valueSizeGetter(*valPtr);
+    _totalSizeNonPinned += sizeOfNewEntry;
+    _sizeMap.emplace(key, sizeOfNewEntry);
     auto handle = _entries.insert(std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
     // The first value is the value part of the key-value pair in the priority
@@ -203,7 +207,8 @@ class FlexibleCache {
     // Make room for the new entry.
     makeRoomIfFits(sizeOfNewEntry);
     _pinnedMap[key] = valPtr;
-    _totalSizePinned += _valueSizeGetter(*valPtr);
+    _totalSizePinned += sizeOfNewEntry;
+    _sizeMap.emplace(key, sizeOfNewEntry);
     return valPtr;
   }
 
@@ -225,6 +230,70 @@ class FlexibleCache {
     // We currently do not delete entries that are now too big
     // after the update.
     // TODO<joka921>:: implement this functionality
+  }
+
+  ResizeResult recomputeSize(const Key& key, bool removeIfEntryGrewTooBig) {
+    ResizeResult result = ResizeResult::FITS_IN_CACHE;
+    auto applySizeDifference = [this, &key, &result, removeIfEntryGrewTooBig](
+                                   MemorySize& variable, bool pinned) {
+      auto newSize = _valueSizeGetter(*(*this)[key]);
+      auto& oldSize = _sizeMap.at(key);
+      bool needsShrinking = true;
+      MemorySize pinnedOffset = pinned ? 0_B : _totalSizePinned;
+      if (_maxSizeSingleEntry < newSize) {
+        result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
+        if (removeIfEntryGrewTooBig && !pinned) {
+          erase(key);
+          return;
+        }
+        // We don't know how to shrink the size here, so if
+        // `removeIfEntryGrewTooBig` is false, this needs to be handled by the
+        // caller.
+        needsShrinking = false;
+      } else if (_maxSize - std::min(pinnedOffset, _maxSize) < newSize) {
+        result = ResizeResult::EXCEEDS_MAX_SIZE;
+        // We can't fit it in the cache, so remove if not pinned
+        if (!pinned) {
+          erase(key);
+          return;
+        }
+      }
+
+      if (newSize >= oldSize) {
+        variable += newSize - oldSize;
+      } else {
+        variable -= oldSize - newSize;
+      }
+      oldSize = newSize;
+      if (needsShrinking && _totalSizePinned <= _maxSize) {
+        makeRoomIfFits(0_B);
+      }
+    };
+    if (containsPinned(key)) {
+      applySizeDifference(_totalSizePinned, true);
+    } else if (containsNonPinned(key)) {
+      applySizeDifference(_totalSizeNonPinned, false);
+    }
+    return result;
+  }
+
+  void transformValue(
+      const Key& key,
+      const InvocableWithExactReturnType<Value, const Value&> auto&
+          transformer) {
+    bool pinned = false;
+    if (containsPinned(key)) {
+      pinned = true;
+    } else if (!containsNonPinned(key)) {
+      return;
+    }
+    auto transformedValue = transformer(*(*this)[key]);
+    erase(key);
+    if (pinned) {
+      insertPinned(key, std::move(transformedValue));
+    } else {
+      insert(key, std::move(transformedValue));
+    }
   }
 
   //! Checks if there is an entry with the given key.
@@ -251,7 +320,7 @@ class FlexibleCache {
     const ValuePtr valuePtr = handle.value().value();
 
     // adapt the sizes of the pinned and non-pinned part of the cache
-    auto sz = _valueSizeGetter(*valuePtr);
+    auto sz = _sizeMap.at(key);
     _totalSizeNonPinned -= sz;
     _totalSizePinned += sz;
     // Move the entry to the _pinnedMap and remove it from the non-pinned data
@@ -267,7 +336,8 @@ class FlexibleCache {
   void erase(const Key& key) {
     const auto pinnedIt = _pinnedMap.find(key);
     if (pinnedIt != _pinnedMap.end()) {
-      _totalSizePinned -= _valueSizeGetter(*pinnedIt->second);
+      _totalSizePinned -= _sizeMap.at(key);
+      _sizeMap.erase(key);
       _pinnedMap.erase(pinnedIt);
       return;
     }
@@ -278,7 +348,8 @@ class FlexibleCache {
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
+    _totalSizeNonPinned -= _sizeMap.at(key);
+    _sizeMap.erase(key);
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
@@ -385,8 +456,8 @@ class FlexibleCache {
   void removeOneEntry() {
     AD_CONTRACT_CHECK(!_entries.empty());
     auto handle = _entries.pop();
-    _totalSizeNonPinned =
-        _totalSizeNonPinned - _valueSizeGetter(*handle.value().value());
+    _totalSizeNonPinned -= _sizeMap.at(handle.value().key());
+    _sizeMap.erase(handle.value().key());
     _accessMap.erase(handle.value().key());
   }
   size_t _maxNumEntries;
@@ -402,6 +473,18 @@ class FlexibleCache {
   ValueSizeGetter _valueSizeGetter;
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
+  SizeMap _sizeMap;
+
+  FRIEND_TEST(LRUCacheTest,
+              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased);
+
+  FRIEND_TEST(LRUCacheTest,
+              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned);
+  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed);
+  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned);
+  FRIEND_TEST(LRUCacheTest,
+              verifyNonPinnedEntriesAreRemovedToMakeRoomForResize);
+  FRIEND_TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement);
 };
 
 // Partial instantiation of FlexibleCache using the heap-based priority queue

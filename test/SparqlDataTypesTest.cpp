@@ -22,7 +22,8 @@ struct ContextWrapper {
   VariableToColumnMap _hashMap{};
 
   ConstructQueryExportContext createContextForRow(size_t row) const {
-    return {row, _resultTable, _hashMap, _index};
+    return {row, _resultTable.idTable(), _resultTable.localVocab(), _hashMap,
+            _index};
   }
 
   void setIdTable(IdTable&& table) {

@@ -22,27 +22,44 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<const Result> _resultTable;
+  std::shared_ptr<Result> _resultTable;
   RuntimeInformation _runtimeInfo;
 
  public:
   explicit CacheValue(Result resultTable, RuntimeInformation runtimeInfo)
-      : _resultTable(std::make_shared<const Result>(std::move(resultTable))),
+      : _resultTable(std::make_shared<Result>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const std::shared_ptr<const Result>& resultTable() const {
+  const Result& resultTable() const noexcept { return *_resultTable; }
+
+  std::shared_ptr<const Result> resultTablePtr() const noexcept {
     return _resultTable;
   }
 
-  const RuntimeInformation& runtimeInfo() const { return _runtimeInfo; }
+  const RuntimeInformation& runtimeInfo() const noexcept {
+    return _runtimeInfo;
+  }
+
+  ~CacheValue() {
+    if (!_resultTable->isDataEvaluated()) {
+      // Clear listeners
+      try {
+        _resultTable->setOnSizeChanged({});
+        _resultTable->setOnGeneratorFinished({});
+        _resultTable->setOnNextChunkComputed({});
+      } catch (...) {
+        // Should never happen. The listeners only throw assertion errors
+        // if the result is evaluated.
+        std::exit(1);
+      }
+    }
+  }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
-        return ad_utility::MemorySize::bytes(tablePtr->idTable().size() *
-                                             tablePtr->idTable().numColumns() *
-                                             sizeof(Id));
+        return tablePtr->getCurrentSize();
       } else {
         return 0_B;
       }
@@ -54,7 +71,7 @@ class CacheValue {
 // checks on insertion, if the result is currently being computed
 // by another query.
 using ConcurrentLruCache = ad_utility::ConcurrentCache<
-    ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
+    ad_utility::LRUCache<std::string, CacheValue, CacheValue::SizeGetter>>;
 using PinnedSizes =
     ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
                              std::shared_mutex>;
@@ -116,7 +133,7 @@ class QueryExecutionContext {
     return _sortPerformanceEstimator;
   }
 
-  [[nodiscard]] double getCostFactor(const string& key) const {
+  [[nodiscard]] double getCostFactor(const std::string& key) const {
     return _costFactors.getCostFactor(key);
   };
 
