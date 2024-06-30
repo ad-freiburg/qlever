@@ -11,7 +11,7 @@
 
 #include "util/Log.h"
 
-// ____________________________________________________________________________________________________
+// _____________________________________________________________________________
 std::string Date::formatTimeZone() const {
   auto impl = []<typename T>(const T& value) -> std::string {
     if constexpr (std::is_same_v<T, NoTimeZone>) {
@@ -27,7 +27,7 @@ std::string Date::formatTimeZone() const {
   return std::visit(impl, getTimeZone());
 }
 
-// ____________________________________________________________________________________________________
+// _____________________________________________________________________________
 std::pair<std::string, const char*> Date::toStringAndType() const {
   std::string dateString;
   const char* type = nullptr;
@@ -64,10 +64,24 @@ std::pair<std::string, const char*> Date::toStringAndType() const {
   return {absl::StrCat(dateString, formatTimeZone()), type};
 }
 
-// _________________________________________________________________
+// _____________________________________________________________________________
 std::pair<std::string, const char*> DateOrLargeYear::toStringAndType() const {
   if (isDate()) {
     return getDateUnchecked().toStringAndType();
+  }
+
+  // If a Date::TimeZone is contained it will be exported as a
+  // `xsd:dayTimeDuration` type.
+  if (isTimezone()) {
+    const auto& optDurationStr = formatTimezoneAsDaytimeDuration(getTimezone());
+    if (optDurationStr.has_value()) {
+      return std::pair{optDurationStr.value(), XSD_DAYTIME_DURATION_TYPE};
+    } else {
+      // When no timezone was set (Date::NoTimeZone), instead of raising an
+      // error, just return an empty string as a kind of default for undefined
+      // xsd:dayTimeDuration.
+      return std::pair{"", XSD_DAYTIME_DURATION_TYPE};
+    }
   }
 
   using F = absl::ParsedFormat<'d'>;
@@ -174,7 +188,7 @@ static DateOrLargeYear makeDateOrLargeYear(std::string_view fullInput,
       Date{static_cast<int>(year), month, day, hour, minute, second, timeZone}};
 }
 
-// __________________________________________________________________________________
+// _____________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + "T" + timeRegex + grp(timeZoneRegex) + "?";
@@ -193,7 +207,7 @@ DateOrLargeYear DateOrLargeYear::parseXsdDatetime(std::string_view dateString) {
                              parseTimeZone(match));
 }
 
-// __________________________________________________________________________________
+// _____________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
   constexpr static ctll::fixed_string dateTime =
       dateRegex + grp(timeZoneRegex) + "?";
@@ -209,7 +223,7 @@ DateOrLargeYear DateOrLargeYear::parseXsdDate(std::string_view dateString) {
                              parseTimeZone(match));
 }
 
-// __________________________________________________________________________________
+// _____________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex = "(?<year>-?\\d{4,})";
   constexpr static ctll::fixed_string dateTime =
@@ -224,7 +238,7 @@ DateOrLargeYear DateOrLargeYear::parseGYear(std::string_view dateString) {
                              parseTimeZone(match));
 }
 
-// __________________________________________________________________________________
+// _____________________________________________________________________________
 DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   constexpr static ctll::fixed_string yearRegex =
       "(?<year>-?\\d{4,})-(?<month>\\d{2})";
@@ -239,6 +253,23 @@ DateOrLargeYear DateOrLargeYear::parseGYearMonth(std::string_view dateString) {
   int month = match.template get<"month">().to_number();
   return makeDateOrLargeYear(dateString, year, month, 0, -1, 0, 0.0,
                              parseTimeZone(match));
+}
+
+// _____________________________________________________________________________
+std::optional<std::string> DateOrLargeYear::formatTimezoneAsDaytimeDuration(
+    Date::TimeZone timezone) const {
+  auto impl = []<typename T>(const T& value) -> std::optional<std::string> {
+    if constexpr (std::is_same_v<T, Date::NoTimeZone>) {
+      return std::nullopt;
+    } else if constexpr (std::is_same_v<T, Date::TimeZoneZ>) {
+      return "PT0S";
+    } else {
+      static_assert(std::is_same_v<T, int>);
+      std::string_view sign = value < 0 ? "-" : "+";
+      return absl::StrCat(sign, "PT", std::abs(value), "H");
+    }
+  };
+  return std::visit(impl, timezone);
 }
 
 // _____________________________________________________________________-
@@ -288,5 +319,15 @@ std::string DateOrLargeYear::getStrTimezone() const {
     return getDateUnchecked().formatTimeZone();
   } else {
     return "";
+  }
+}
+
+// _____________________________________________________________________-
+std::optional<std::string> DateOrLargeYear::getTimezoneAsDurationFromDate()
+    const {
+  if (isDate()) {
+    return formatTimezoneAsDaytimeDuration(getDateUnchecked().getTimeZone());
+  } else {
+    return std::nullopt;
   }
 }

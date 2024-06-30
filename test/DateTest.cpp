@@ -522,11 +522,44 @@ TEST(DateOrLargeYear, Order) {
   DateOrLargeYear d1{-12345, DateOrLargeYear::Type::Year};
   DateOrLargeYear d2{Date{2022, 7, 16}};
   DateOrLargeYear d3{12345, DateOrLargeYear::Type::Year};
+  DateOrLargeYear d4{Date::NoTimeZone{}};
+  DateOrLargeYear d5{Date::TimeZoneZ{}};
+  DateOrLargeYear d6{Date::TimeZone{5}};
+  DateOrLargeYear d7{Date::TimeZone{-12}};
 
   ASSERT_EQ(d1, d1);
   ASSERT_EQ(d2, d2);
   ASSERT_EQ(d3, d3);
+  ASSERT_EQ(d4, d4);
+  ASSERT_EQ(d5, d5);
+  ASSERT_EQ(d6, d6);
+  ASSERT_EQ(d7, d7);
   ASSERT_LT(d1, d2);
   ASSERT_LT(d2, d3);
   ASSERT_LT(d1, d3);
+  ASSERT_LT(d6, d1);
+  ASSERT_LT(d4, d1);
+  ASSERT_LT(d6, d2);
+  ASSERT_LT(d5, d6);
+  ASSERT_LT(d4, d6);
+  ASSERT_LT(d4, d5);
+  ASSERT_LT(d5, d6);
+  ASSERT_LT(d7, d6);
+  ASSERT_LT(d7, d5);
+  ASSERT_LT(d7, d4);
+}
+
+TEST(DateOrLargeYear, testStringAndType) {
+  const auto& p1 = DateOrLargeYear{Date::NoTimeZone{}}.toStringAndType();
+  const auto& p2 = DateOrLargeYear{Date::TimeZoneZ{}}.toStringAndType();
+  const auto& p3 = DateOrLargeYear{Date::TimeZone{5}}.toStringAndType();
+  const auto& p4 = DateOrLargeYear{Date::TimeZone{-12}}.toStringAndType();
+  ASSERT_EQ(p1.first, "");
+  EXPECT_STREQ(p1.second, XSD_DAYTIME_DURATION_TYPE);
+  ASSERT_EQ(p2.first, "PT0S");
+  EXPECT_STREQ(p2.second, XSD_DAYTIME_DURATION_TYPE);
+  ASSERT_EQ(p3.first, "+PT5H");
+  EXPECT_STREQ(p3.second, XSD_DAYTIME_DURATION_TYPE);
+  ASSERT_EQ(p4.first, "-PT12H");
+  EXPECT_STREQ(p4.second, XSD_DAYTIME_DURATION_TYPE);
 }

@@ -320,17 +320,18 @@ class Date {
 // can be currently represented by the year class [-9999, 9999]. The underlying
 // format is as follows (starting from the most significant bit):
 // - 5 bits that are always zero and ignored by the representation.
-// - 2 bits that store 0 (negative year), 1 (datetime with a year in [-9999,
-// 9999]), or 2 (positive year).
+// - 2 bits that store 1 (negative year), 2 (datetime with a year in [-9999,
+// 9999]), 3 (positive year), or 0 (timezone).
 //   These values are chosen s.t. that the order of the bits is correct.
 // - 57 bits that either encode the `Date`, or a year as a signed integer via
 // the `ad_utility::NBitInteger` class.
 class DateOrLargeYear {
  private:
   // The tags to discriminate between the stored formats.
-  static constexpr uint64_t negativeYear = 0;
-  static constexpr uint64_t datetime = 1;
-  static constexpr uint64_t positiveYear = 2;
+  static constexpr uint64_t timezone = 0;
+  static constexpr uint64_t negativeYear = 1;
+  static constexpr uint64_t datetime = 2;
+  static constexpr uint64_t positiveYear = 3;
   // The number of bits for the actual value.
   static constexpr uint8_t numPayloadBits = 64 - Date::numUnusedBits;
 
@@ -354,6 +355,22 @@ class DateOrLargeYear {
     bits_ = std::bit_cast<uint64_t>(d) | (datetime << numPayloadBits);
   }
 
+  // Construct a `DateOrLargeYear` given a `Timezone` object from the `Date`
+  // class. This Constructor sets the value of `timezone` (0) as the
+  // most significant bit. Thus compared with other underlying values a
+  // `DateOrLargeYear` can hold (`(large) positive year`, `(large) negative
+  // year` and `dateTime`), the here constructed value will always be smaller.
+  // (`DateOrLargeYear` compares w.r.t. year, we assume a duration constructed
+  // from a `TimeZone` doesn't hold a year)
+  // When comparing two `DateOrLargeYear` objects with two underlying
+  // (Date)TimeZone as duration values, we implicitly compare only w.r.t. the
+  // `Date::TimeZone` values, because all values except the timezone get some
+  // default values.
+  explicit DateOrLargeYear(Date::TimeZone tz) {
+    bits_ = std::bit_cast<uint64_t>(Date{0, 0, 0, -1, 0, 0.0, tz}) |
+            (timezone << numPayloadBits);
+  }
+
   // Construct from a `year`. Only valid if the year is outside the legal range
   // for a year in the `Date` class.
   explicit DateOrLargeYear(int64_t year, Type type) {
@@ -372,6 +389,9 @@ class DateOrLargeYear {
   // True iff a complete `Date` is stored and not only a large year.
   bool isDate() const { return bits_ >> numPayloadBits == datetime; }
 
+  // True iff constructed with `Date::TimeZone`.
+  bool isTimezone() const { return bits_ >> numPayloadBits == timezone; };
+
   // Return the underlying `Date` object. The behavior is undefined if
   // `isDate()` is `false`.
   Date getDateUnchecked() const { return std::bit_cast<Date>(bits_); }
@@ -381,6 +401,19 @@ class DateOrLargeYear {
   Date getDate() const {
     AD_CONTRACT_CHECK(bits_ >> numPayloadBits == datetime);
     return getDateUnchecked();
+  }
+
+  // Return the underlying `Date::TimeZone` object. The behavior is undefined if
+  // `isTimeZone()` is `false`.
+  Date::TimeZone getTimezoneUnchecked() const {
+    return std::bit_cast<Date>(bits_).getTimeZone();
+  }
+
+  // Return the underlying `Date::TimeZone` object. An asserstion fails if
+  // `isTimezone()` is `false`
+  Date::TimeZone getTimezone() const {
+    AD_CONTRACT_CHECK(bits_ >> numPayloadBits == timezone);
+    return getTimezoneUnchecked();
   }
 
   // Get the stored year, no matter if it's stored inside a `Date` object or
@@ -401,6 +434,16 @@ class DateOrLargeYear {
   // `tz()`-function.
   std::string getStrTimezone() const;
 
+  // Correctly format a `xsd:dayTimeDuration` for the underlying `TimeZone`.
+  // (if a value w.r.t. `TimeZone` was given).
+  std::optional<std::string> formatTimezoneAsDaytimeDuration(
+      Date::TimeZone tz) const;
+
+  // If a Date is contained w.r.t. this `DateOrLargeYear`, retrieve the
+  // contained timezone as a suitable string for `xsd:dayTimeDuration`. In case
+  // no `Date` is contained, return `std::nullopt`.
+  std::optional<std::string> getTimezoneAsDurationFromDate() const;
+
   Type getType() const {
     return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &
                              bits_);
@@ -410,7 +453,8 @@ class DateOrLargeYear {
   // pointer to the IRI of the corresponding datatype (currently always
   // `xsd:dateTime`). Large years are currently always exported as
   // `xsd:dateTime` with January 1, 00:00 hours (This is the
-  // format used by Wikidata).
+  // format used by Wikidata). If a timezone (significant bit set to 0) is
+  // contained, the exported value will be a `xsd:dayTimeDuration` value.
   std::pair<std::string, const char*> toStringAndType() const;
 
   // The bitwise comparison also corresponds to the semantic ordering of years
