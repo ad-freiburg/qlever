@@ -510,6 +510,32 @@ TEST(CacheableGenerator, verifyShrinkStopsShrinking) {
   EXPECT_EQ(*slaveIterator, 2);
 }
 
+TEST(CacheableGenerator, verifySlavesCantBlockMasterIterator) {
+  CacheableGenerator generator{testGenerator(3)};
+  generator.setOnSizeChanged(std::identity{});
+
+  auto masterIterator = generator.begin(true);
+  ASSERT_NE(masterIterator, generator.end());
+  EXPECT_EQ(*masterIterator, 0);
+
+  auto slaveIterator = generator.begin(false);
+  ASSERT_NE(slaveIterator, generator.end());
+  EXPECT_EQ(*slaveIterator, 0);
+
+  ++masterIterator;
+  ASSERT_NE(masterIterator, generator.end());
+  EXPECT_EQ(*masterIterator, 1);
+
+  ++masterIterator;
+  ASSERT_NE(masterIterator, generator.end());
+  EXPECT_EQ(*masterIterator, 2);
+
+  EXPECT_THROW(*slaveIterator, ad_utility::IteratorExpired);
+
+  ++masterIterator;
+  EXPECT_EQ(masterIterator, generator.end());
+}
+
 // _____________________________________________________________________________
 TEST(CacheableGenerator, testForEachCachedValueIteratesCorrectly) {
   CacheableGenerator generator{testGenerator(3)};
