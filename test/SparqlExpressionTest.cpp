@@ -517,34 +517,57 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
 
-  // test makeTimezoneStrExpression
+  // test makeTimezoneStrExpression / makeTimezoneExpression
   using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
   auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  auto checkTimezone = testUnaryExpression<&makeTimezoneExpression>;
+  Id U = Id::makeUndefined();
   Timezone tz = -5;
   auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
   checkStrTimezone(Ids{Id::makeFromDate(d1)},
                    IdOrLiteralOrIriVec{lit("-05:00")});
+  checkTimezone(
+      Ids{Id::makeFromDate(d1)},
+      IdOrLiteralOrIriVec{lit(
+          "-PT5H", "^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>")});
+  ;
   tz = 23;
   auto d2 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkTimezone(
+      Ids{Id::makeFromDate(d2)},
+      IdOrLiteralOrIriVec{lit(
+          "+PT23H", "^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>")});
+  ;
   checkStrTimezone(Ids{Id::makeFromDate(d2)},
                    IdOrLiteralOrIriVec{lit("+23:00")});
   tz = Date::TimeZoneZ{};
   auto d3 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  checkTimezone(
+      Ids{Id::makeFromDate(d3)},
+      IdOrLiteralOrIriVec{
+          lit("PT0S", "^^<http://www.w3.org/2001/XMLSchema#dayTimeDuration>")});
   checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
   tz = Date::NoTimeZone{};
   DateOrLargeYear d4 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
   checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{U});
   DateOrLargeYear d5 = DateOrLargeYear(Date(2012, 1, 4, 14, 45));
   checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
-  Id U = Id::makeUndefined();
+  checkTimezone(Ids{Id::makeFromDate(d5)},
+                IdOrLiteralOrIriVec{Id::makeUndefined()});
   checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
                    IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkTimezone(Ids{Id::makeFromDouble(2.34)}, IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
   DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  checkTimezone(Ids{Id::makeFromDate(DateOrLargeYear{tz})},
+                IdOrLiteralOrIriVec{U});
+  checkTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
   DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
   checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{U});
 }
 
 // _____________________________________________________________________________________

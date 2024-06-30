@@ -84,6 +84,8 @@ static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
 static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
 static const char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
+static const char XSD_DAYTIME_DURATION_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 
 constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
