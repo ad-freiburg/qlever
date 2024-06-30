@@ -178,32 +178,34 @@ std::vector<Path> PathSearch::allPaths() const {
   std::vector<Path> paths;
   Path path;
 
-  auto startIndex = idToIndex_.at(config_.source_);
+  for (auto source: config_.sources_) {
+    auto startIndex = idToIndex_.at(source);
 
-  std::vector<uint64_t> targets;
-  for (auto target : config_.targets_) {
-    targets.push_back(target.getBits());
-  }
-
-  if (targets.empty()) {
-    for (auto id : indexToId_) {
-      targets.push_back(id.getBits());
+    std::vector<uint64_t> targets;
+    for (auto target : config_.targets_) {
+      targets.push_back(target.getBits());
     }
-  }
 
-  PredecessorMap predecessors;
+    if (targets.empty()) {
+      for (auto id : indexToId_) {
+        targets.push_back(id.getBits());
+      }
+    }
 
-  AllPathsVisitor vis(startIndex, predecessors);
-  try {
-    boost::depth_first_search(graph_,
-                              boost::visitor(vis).root_vertex(startIndex));
-  } catch (const StopSearchException& e) {
-  }
+    PredecessorMap predecessors;
 
-  for (auto target : targets) {
-    auto pathsToTarget = reconstructPaths(target, predecessors);
-    for (auto path : pathsToTarget) {
-      paths.push_back(std::move(path));
+    AllPathsVisitor vis(startIndex, predecessors);
+    try {
+      boost::depth_first_search(graph_,
+                                boost::visitor(vis).root_vertex(startIndex));
+    } catch (const StopSearchException& e) {
+    }
+
+    for (auto target : targets) {
+      auto pathsToTarget = reconstructPaths(source.getBits(), target, predecessors);
+      for (auto path : pathsToTarget) {
+        paths.push_back(std::move(path));
+      }
     }
   }
   return paths;
@@ -213,43 +215,45 @@ std::vector<Path> PathSearch::allPaths() const {
 std::vector<Path> PathSearch::shortestPaths() const {
   std::vector<Path> paths;
   Path path;
-  auto startIndex = idToIndex_.at(config_.source_);
+  for (auto source: config_.sources_) {
+    auto startIndex = idToIndex_.at(source);
 
-  std::unordered_set<uint64_t> targets;
-  for (auto target : config_.targets_) {
-    targets.insert(target.getBits());
+    std::unordered_set<uint64_t> targets;
+    for (auto target : config_.targets_) {
+      targets.insert(target.getBits());
+    }
+    std::vector<VertexDescriptor> predecessors(indexToId_.size());
+    std::vector<double> distances(indexToId_.size(),
+                                  std::numeric_limits<double>::max());
+
+    DijkstraAllPathsVisitor vis(startIndex, targets, path, paths, predecessors,
+                                distances);
+
+    auto weightMap = get(&Edge::weight_, graph_);
+
+    boost::dijkstra_shortest_paths(
+        graph_, startIndex,
+        boost::visitor(vis)
+            .weight_map(weightMap)
+            .predecessor_map(predecessors.data())
+            .distance_map(distances.data())
+            .distance_compare(std::less_equal<double>()));
   }
-  std::vector<VertexDescriptor> predecessors(indexToId_.size());
-  std::vector<double> distances(indexToId_.size(),
-                                std::numeric_limits<double>::max());
-
-  DijkstraAllPathsVisitor vis(startIndex, targets, path, paths, predecessors,
-                              distances);
-
-  auto weightMap = get(&Edge::weight_, graph_);
-
-  boost::dijkstra_shortest_paths(
-      graph_, startIndex,
-      boost::visitor(vis)
-          .weight_map(weightMap)
-          .predecessor_map(predecessors.data())
-          .distance_map(distances.data())
-          .distance_compare(std::less_equal<double>()));
   return paths;
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::reconstructPaths(
+std::vector<Path> PathSearch::reconstructPaths(uint64_t source,
     uint64_t target, PredecessorMap predecessors) const {
   const auto& edges = predecessors[target];
   std::vector<Path> paths;
 
   for (const auto& edge : edges) {
     std::vector<Path> subPaths;
-    if (edge.start_ == config_.source_.getBits()) {
+    if (edge.start_ == source) {
       subPaths = {Path()};
     } else {
-      subPaths = reconstructPaths(edge.start_, predecessors);
+      subPaths = reconstructPaths(source, edge.start_, predecessors);
     }
 
     for (auto path : subPaths) {

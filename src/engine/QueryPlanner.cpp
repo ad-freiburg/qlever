@@ -2122,14 +2122,17 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
       AD_THROW("No vocabulary entry for " + comp.toString());
     }
   };
-  auto source = tripleComponentToId(pathQuery.source_);
+  std::vector<Id> sources;
+  for (auto comp: pathQuery.sources_) {
+    sources.push_back(tripleComponentToId(comp));
+  }
   std::vector<Id> targets;
   for (auto comp : pathQuery.targets_) {
     targets.push_back(tripleComponentToId(comp));
   }
   auto config =
       PathSearchConfiguration{pathQuery.algorithm_,
-                              std::move(source),
+                              std::move(sources),
                               std::move(targets),
                               std::move(pathQuery.start_.value()),
                               std::move(pathQuery.end_.value()),

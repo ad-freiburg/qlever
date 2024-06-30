@@ -34,7 +34,7 @@ struct PathSearchConfiguration {
   // The path search algorithm to use.
   PathSearchAlgorithm algorithm_;
   // The source node ID.
-  Id source_;
+  std::vector<Id> sources_;
   // A list of target node IDs.
   std::vector<Id> targets_;
   // Variable representing the start column in the result.
@@ -73,8 +73,6 @@ class PathSearch : public Operation {
              PathSearchConfiguration config);
 
   std::vector<QueryExecutionTree*> getChildren() override;
-  const Id& getSource() const { return config_.source_; }
-  const std::vector<Id>& getTargets() const { return config_.targets_; }
 
   const PathSearchConfiguration& getConfig() const { return config_; }
 
@@ -142,7 +140,7 @@ class PathSearch : public Operation {
    */
   std::vector<Path> shortestPaths() const;
 
-  std::vector<Path> reconstructPaths(uint64_t target,
+  std::vector<Path> reconstructPaths(uint64_t source, uint64_t target,
                                      PredecessorMap predecessors) const;
 
   /**

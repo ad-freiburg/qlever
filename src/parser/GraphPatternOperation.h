@@ -138,7 +138,7 @@ struct TransPath {
 };
 
 struct PathQuery {
-  TripleComponent source_;
+  std::vector<TripleComponent> sources_;
   std::vector<TripleComponent> targets_;
   std::optional<Variable> start_;
   std::optional<Variable> end_;

@@ -777,7 +777,7 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{ALL_PATHS,         getId("<x>"),
+  PathSearchConfiguration config{ALL_PATHS,         {getId("<x>")},
                                  {getId("<z>")},    Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {}};
@@ -804,7 +804,7 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   PathSearchConfiguration config{ALL_PATHS,
-                                 getId("<x>"),
+    {getId("<x>")},
                                  {getId("<y>"), getId("<z>")},
                                  Variable("?start"),
                                  Variable("?end"),
@@ -836,7 +836,7 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{ALL_PATHS,         getId("<x>"),
+  PathSearchConfiguration config{ALL_PATHS,         {getId("<x>")},
                                  {getId("<z>")},    Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {Variable("?middle")}};
@@ -875,7 +875,7 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
 
   PathSearchConfiguration config{
       ALL_PATHS,
-      getId("<x>"),
+    {getId("<x>")},
       {getId("<z>"), getId("<y>")},
       Variable("?start"),
       Variable("?end"),

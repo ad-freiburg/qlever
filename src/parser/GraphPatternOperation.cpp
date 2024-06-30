@@ -75,7 +75,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   AD_CORRECTNESS_CHECK(predicate.isIri());
   if (predicate.getIri().toStringRepresentation().ends_with("source>")) {
     AD_CORRECTNESS_CHECK(object.isIri());
-    source_ = std::move(object);
+    sources_.push_back(std::move(object));
   } else if (predicate.getIri().toStringRepresentation().ends_with("target>")) {
     AD_CORRECTNESS_CHECK(object.isIri());
     targets_.push_back(std::move(object));
