@@ -2123,7 +2123,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     }
   };
   std::vector<Id> sources;
-  for (auto comp: pathQuery.sources_) {
+  for (auto comp : pathQuery.sources_) {
     sources.push_back(tripleComponentToId(comp));
   }
   std::vector<Id> targets;

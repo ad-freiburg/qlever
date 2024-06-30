@@ -178,7 +178,7 @@ std::vector<Path> PathSearch::allPaths() const {
   std::vector<Path> paths;
   Path path;
 
-  for (auto source: config_.sources_) {
+  for (auto source : config_.sources_) {
     auto startIndex = idToIndex_.at(source);
 
     std::vector<uint64_t> targets;
@@ -202,7 +202,8 @@ std::vector<Path> PathSearch::allPaths() const {
     }
 
     for (auto target : targets) {
-      auto pathsToTarget = reconstructPaths(source.getBits(), target, predecessors);
+      auto pathsToTarget =
+          reconstructPaths(source.getBits(), target, predecessors);
       for (auto path : pathsToTarget) {
         paths.push_back(std::move(path));
       }
@@ -215,7 +216,7 @@ std::vector<Path> PathSearch::allPaths() const {
 std::vector<Path> PathSearch::shortestPaths() const {
   std::vector<Path> paths;
   Path path;
-  for (auto source: config_.sources_) {
+  for (auto source : config_.sources_) {
     auto startIndex = idToIndex_.at(source);
 
     std::unordered_set<uint64_t> targets;
@@ -243,8 +244,8 @@ std::vector<Path> PathSearch::shortestPaths() const {
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::reconstructPaths(uint64_t source,
-    uint64_t target, PredecessorMap predecessors) const {
+std::vector<Path> PathSearch::reconstructPaths(
+    uint64_t source, uint64_t target, PredecessorMap predecessors) const {
   const auto& edges = predecessors[target];
   std::vector<Path> paths;
 

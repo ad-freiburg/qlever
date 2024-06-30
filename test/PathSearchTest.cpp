@@ -35,7 +35,7 @@ Result performPathSearch(PathSearchConfiguration config, IdTable input,
 TEST(PathSearchTest, constructor) {
   auto qec = getQec();
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(1)},
+      ALL_PATHS,         {V(0)},      {V(1)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
   PathSearch p = PathSearch(qec, nullptr, config);
@@ -49,7 +49,7 @@ TEST(PathSearchTest, emptyGraph) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(4)},
+      ALL_PATHS,         {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -73,7 +73,7 @@ TEST(PathSearchTest, singlePath) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(4)},
+      ALL_PATHS,         {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -94,7 +94,7 @@ TEST(PathSearchTest, singlePathWithProperties) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
   PathSearchConfiguration config{ALL_PATHS,
-    {V(0)},
+                                 {V(0)},
                                  {V(4)},
                                  Var{"?start"},
                                  Var{"?end"},
@@ -118,7 +118,7 @@ TEST(PathSearchTest, singlePathWithDijkstra) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},        {V(4)},
+      SHORTEST_PATHS,    {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -139,7 +139,7 @@ TEST(PathSearchTest, singlePathWithDijkstraAndProperties) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
   PathSearchConfiguration config{SHORTEST_PATHS,
-    {V(0)},
+                                 {V(0)},
                                  {V(4)},
                                  Var{"?start"},
                                  Var{"?end"},
@@ -171,7 +171,7 @@ TEST(PathSearchTest, twoPathsOneTarget) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(2)},
+      ALL_PATHS,         {V(0)},      {V(2)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -226,7 +226,7 @@ TEST(PathSearchTest, cycle) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(0)},
+      ALL_PATHS,         {V(0)},      {V(0)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -256,7 +256,7 @@ TEST(PathSearchTest, twoCycle) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(0)},
+      ALL_PATHS,         {V(0)},      {V(0)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -289,7 +289,7 @@ TEST(PathSearchTest, allPaths) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {},
+      ALL_PATHS,         {V(0)},      {},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -319,7 +319,7 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
                Variable{"?edgeProperty2"}};
   PathSearchConfiguration config{
       ALL_PATHS,
-    {V(0)},
+      {V(0)},
       {},
       Var{"?start"},
       Var{"?end"},
@@ -352,7 +352,7 @@ TEST(PathSearchTest, singleShortestPath) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},        {V(4)},
+      SHORTEST_PATHS,    {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -384,7 +384,7 @@ TEST(PathSearchTest, twoShortestPaths) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},        {V(5)},
+      SHORTEST_PATHS,    {V(0)},      {V(5)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -411,7 +411,7 @@ TEST(PathSearchTest, singlePathWithIrrelevantNode) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(4)},
+      ALL_PATHS,         {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -431,7 +431,7 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},        {V(4)},
+      SHORTEST_PATHS,    {V(0)},      {V(4)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -468,7 +468,7 @@ TEST(PathSearchTest, allPathsElongatedDiamond) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},        {V(5)},
+      ALL_PATHS,         {V(0)},      {V(5)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -487,7 +487,7 @@ TEST(PathSearchTest, shortestPathsElongatedDiamond) {
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},        {V(5)},
+      SHORTEST_PATHS,    {V(0)},      {V(5)},
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
