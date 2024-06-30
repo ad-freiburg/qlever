@@ -13,14 +13,9 @@
 #include "util/http/MediaTypes.h"
 
 // __________________________________________________________________________
-namespace {
 
-struct IndexWithTable {
-  size_t index_;
-  const IdTable& idTable_;
-};
-
-cppcoro::generator<const IdTable&> getIdTables(const Result& result) {
+cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
+    const Result& result) {
   if (result.isDataEvaluated()) {
     co_yield result.idTable();
   } else {
@@ -29,11 +24,13 @@ cppcoro::generator<const IdTable&> getIdTables(const Result& result) {
     }
   }
 }
+
 // Return a range that contains the indices of the rows that have to be exported
 // from the `idTable` given the `LimitOffsetClause`. It takes into account the
 // LIMIT, the OFFSET, and the actual size of the `idTable`
-cppcoro::generator<IndexWithTable> getRowIndices(LimitOffsetClause limitOffset,
-                                                 const Result& result) {
+cppcoro::generator<ExportQueryExecutionTrees::IndexWithTable>
+ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
+                                         const Result& result) {
   for (const IdTable& idTable : getIdTables(result)) {
     uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
     uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
@@ -47,7 +44,6 @@ cppcoro::generator<IndexWithTable> getRowIndices(LimitOffsetClause limitOffset,
     }
   }
 }
-}  // namespace
 
 // _____________________________________________________________________________
 cppcoro::generator<QueryExecutionTree::StringTriple>

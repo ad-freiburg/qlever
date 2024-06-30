@@ -302,7 +302,7 @@ addLinkAndDiscoverTestSerial(OrderByTest engine)
 
 addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
 
-addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreesTest index engine parser)
 
 addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 

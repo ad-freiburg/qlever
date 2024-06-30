@@ -210,7 +210,7 @@ static std::string makeXMLHeader(
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Integers) {
+TEST(ExportQueryExecutionTrees, Integers) {
   std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
@@ -276,7 +276,7 @@ TEST(ExportQueryExecutionTree, Integers) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Bool) {
+TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
@@ -330,7 +330,7 @@ TEST(ExportQueryExecutionTree, Bool) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UnusedVariable) {
+TEST(ExportQueryExecutionTrees, UnusedVariable) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?x} ORDER BY ?s";
   std::string expectedXml = makeXMLHeader({"o"}) + R"(
@@ -366,7 +366,7 @@ TEST(ExportQueryExecutionTree, UnusedVariable) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Floats) {
+TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
       "4.012934858173560e-12";
@@ -434,7 +434,7 @@ TEST(ExportQueryExecutionTree, Floats) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Dates) {
+TEST(ExportQueryExecutionTrees, Dates) {
   std::string kg =
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.";
@@ -493,7 +493,7 @@ TEST(ExportQueryExecutionTree, Dates) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Entities) {
+TEST(ExportQueryExecutionTrees, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -540,7 +540,7 @@ TEST(ExportQueryExecutionTree, Entities) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
+TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
   std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -589,7 +589,7 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
+TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
   std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -637,7 +637,7 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UndefinedValues) {
+TEST(ExportQueryExecutionTrees, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
@@ -676,7 +676,7 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BlankNode) {
+TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -702,7 +702,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TextIndex) {
+TEST(ExportQueryExecutionTrees, TextIndex) {
   std::string kg = "<s> <p> \"alpha beta\". <s2> <p2> \"alphax betax\". ";
   std::string objectQuery =
       "SELECT ?o WHERE {<s> <p> ?t. ?text ql:contains-entity ?t .?text "
@@ -728,7 +728,7 @@ TEST(ExportQueryExecutionTree, TextIndex) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, MultipleVariables) {
+TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string expectedXml = makeXMLHeader({"p", "o"}) +
@@ -765,7 +765,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BinaryExport) {
+TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string result =
@@ -790,7 +790,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, CornerCases) {
+TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string constructQuery =
@@ -907,3 +907,264 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 
 // TODO<joka921> Unit tests that also test for the export of text records from
 // the text index and thus systematically fill the coverage gaps.
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
+  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  idTable.push_back({Id::makeFromInt(42)});
+  idTable.push_back({Id::makeFromInt(1337)});
+
+  Result result{std::move(idTable), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 2);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(42)});
+    idTable2.push_back({Id::makeFromInt(1337)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 3);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(1));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(2));
+  EXPECT_EQ(iterator->at(2)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 2);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(1));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+
+    IdTable idTable3{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable3.push_back({Id::makeFromInt(6)});
+    idTable3.push_back({Id::makeFromInt(7)});
+    idTable3.push_back({Id::makeFromInt(8)});
+    idTable3.push_back({Id::makeFromInt(9)});
+
+    co_yield std::move(idTable3);
+  }();
+
+  Result result = Result::createResultAsMasterConsumer(
+      std::make_shared<const Result>(
+          Result{std::move(tableGenerator), {}, LocalVocab{}}),
+      []() {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(6));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(7));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
