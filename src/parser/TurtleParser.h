@@ -134,6 +134,38 @@ class TurtleParser : public TurtleParserBase {
   // Get the currently buffered triples. Used for testing.
   const std::vector<TurtleTriple>& getTriples() const { return triples_; }
 
+  // Convert the content of a literal and its datatype to TripleComponent. In
+  // particular this also handles the cases where the datatype indicates that
+  // the value can be encoded directly into the ID (for example a `typeIri` of
+  // `xsd:integer` will cause the `normalizedLiteralContent` to be parsed as an
+  // integer).
+  static TripleComponent literalAndDatatypeToTripleComponent(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri);
+
+ private:
+  // Impl of the method above, also used in rdfLiteral parsing.
+  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
+
+  static constexpr std::array<const char*, 12> integerDatatypes_ = {
+      XSD_INT_TYPE,
+      XSD_INTEGER_TYPE,
+      XSD_NON_POSITIVE_INTEGER_TYPE,
+      XSD_NEGATIVE_INTEGER_TYPE,
+      XSD_LONG_TYPE,
+      XSD_SHORT_TYPE,
+      XSD_BYTE_TYPE,
+      XSD_NON_NEGATIVE_INTEGER_TYPE,
+      XSD_UNSIGNED_LONG_TYPE,
+      XSD_UNSIGNED_INT_TYPE,
+      XSD_UNSIGNED_SHORT_TYPE,
+      XSD_POSITIVE_INTEGER_TYPE};
+
+  static constexpr std::array<const char*, 3> floatDatatypes_ = {
+      XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
+
  protected:
   // Data members.
 
