@@ -495,3 +495,65 @@ TEST(PathSearchTest, shortestPathsElongatedDiamond) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
+
+/**
+ * Graph:
+ *  0       4
+ *   \     /
+ *    2-->3
+ *   /     \
+ *  1       5
+ */
+TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
+  auto sub = makeIdTableFromVector({{0, 2}, {1, 2}, {2, 3}, {3, 4}, {3, 5}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2), I(0), I(0)},
+      {V(2), V(3), I(0), I(1)},
+      {V(3), V(4), I(0), I(2)},
+      {V(0), V(2), I(1), I(0)},
+      {V(2), V(3), I(1), I(1)},
+      {V(3), V(5), I(1), I(2)},
+      {V(1), V(2), I(2), I(0)},
+      {V(2), V(3), I(2), I(1)},
+      {V(3), V(4), I(2), I(2)},
+      {V(1), V(2), I(3), I(0)},
+      {V(2), V(3), I(3), I(1)},
+      {V(3), V(5), I(3), I(2)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{
+      ALL_PATHS,   {V(0), V(1)},      {V(4), V(5)},      Var{"?start"},
+      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
+
+TEST(PathSearchTest, multiSourceMultiTargetshortestPaths) {
+  auto sub = makeIdTableFromVector({{0, 2}, {1, 2}, {2, 3}, {3, 4}, {3, 5}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2), I(0), I(0)},
+      {V(2), V(3), I(0), I(1)},
+      {V(3), V(4), I(0), I(2)},
+      {V(0), V(2), I(1), I(0)},
+      {V(2), V(3), I(1), I(1)},
+      {V(3), V(5), I(1), I(2)},
+      {V(1), V(2), I(2), I(0)},
+      {V(2), V(3), I(2), I(1)},
+      {V(3), V(4), I(2), I(2)},
+      {V(1), V(2), I(3), I(0)},
+      {V(2), V(3), I(3), I(1)},
+      {V(3), V(5), I(3), I(2)},
+  });
+
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{
+      SHORTEST_PATHS, {V(0), V(1)},      {V(4), V(5)},      Var{"?start"},
+      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}
