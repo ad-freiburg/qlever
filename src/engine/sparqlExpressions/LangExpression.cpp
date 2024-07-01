@@ -30,7 +30,7 @@ class LangExpressionImpl : public NaryExpression<NaryOperation> {
 
   bool containsLangExpression() const override { return true; }
 
-  const std::optional<Variable> variable() const {
+  std::optional<Variable> variable() const {
     std::optional<SparqlExpression*> optChild = this->getNthChild(0);
     if (auto stringPtr =
             dynamic_cast<const VariableExpression*>(optChild.value())) {
