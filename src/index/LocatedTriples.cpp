@@ -149,10 +149,13 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
     }
   }
 
-  std::ranges::for_each(
-      std::ranges::subrange(locatedTriple, locatedTriples.end()) |
-          std::views::filter(&LocatedTriple::shouldTripleExist_),
-      writeTripleToResult);
+  if (locatedTriple != locatedTriples.end()) {
+    AD_CORRECTNESS_CHECK(row == block.end());
+    std::ranges::for_each(
+        std::ranges::subrange(locatedTriple, locatedTriples.end()) |
+            std::views::filter(&LocatedTriple::shouldTripleExist_),
+        writeTripleToResult);
+  }
   if (row != block.end()) {
     AD_CORRECTNESS_CHECK(locatedTriple == locatedTriples.end());
     while (row != block.end()) {
