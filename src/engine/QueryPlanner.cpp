@@ -25,6 +25,7 @@
 #include "engine/NeutralElementOperation.h"
 #include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
+#include "engine/PathSearch.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
 #include "engine/TextIndexScanForEntity.h"
@@ -35,6 +36,7 @@
 #include "engine/Values.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
+#include "util/Exception.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -1998,6 +2000,8 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
       c.type = SubtreePlan::MINUS;
     }
     visitGroupOptionalOrMinus(std::move(candidates));
+  } else if constexpr (std::is_same_v<T, p::PathQuery>) {
+    visitPathSearch(arg);
   } else {
     static_assert(std::is_same_v<T, p::BasicGraphPattern>);
     visitBasicGraphPattern(arg);
@@ -2100,6 +2104,46 @@ void QueryPlanner::GraphPatternPlanner::visitTransitivePath(
     auto transitivePath = TransitivePathBase::makeTransitivePath(
         qec_, std::move(sub._qet), std::move(left), std::move(right), min, max);
     auto plan = makeSubtreePlan<TransitivePathBase>(std::move(transitivePath));
+    candidatesOut.push_back(std::move(plan));
+  }
+  visitGroupOptionalOrMinus(std::move(candidatesOut));
+}
+
+// _______________________________________________________________
+void QueryPlanner::GraphPatternPlanner::visitPathSearch(
+    parsedQuery::PathQuery& pathQuery) {
+  auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
+  std::vector<SubtreePlan> candidatesOut;
+  auto tripleComponentToId = [this](const TripleComponent& comp) {
+    auto opt = comp.toValueId(planner_._qec->getIndex().getVocab());
+    if (opt.has_value()) {
+      return opt.value();
+    } else {
+      AD_THROW("No vocabulary entry for " + comp.toString());
+    }
+  };
+  std::vector<Id> sources;
+  for (auto comp : pathQuery.sources_) {
+    sources.push_back(tripleComponentToId(comp));
+  }
+  std::vector<Id> targets;
+  for (auto comp : pathQuery.targets_) {
+    targets.push_back(tripleComponentToId(comp));
+  }
+  auto config =
+      PathSearchConfiguration{pathQuery.algorithm_,
+                              std::move(sources),
+                              std::move(targets),
+                              std::move(pathQuery.start_.value()),
+                              std::move(pathQuery.end_.value()),
+                              std::move(pathQuery.pathColumn_.value()),
+                              std::move(pathQuery.edgeColumn_.value()),
+                              std::move(pathQuery.edgeProperties_)};
+
+  for (auto& sub : candidatesIn) {
+    auto pathSearch =
+        std::make_shared<PathSearch>(qec_, std::move(sub._qet), config);
+    auto plan = makeSubtreePlan<PathSearch>(std::move(pathSearch));
     candidatesOut.push_back(std::move(plan));
   }
   visitGroupOptionalOrMinus(std::move(candidatesOut));
