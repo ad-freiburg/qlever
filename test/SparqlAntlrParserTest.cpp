@@ -16,7 +16,6 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -861,7 +860,8 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?height > 1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
-  expectHavingConditionFails("(LANG(?x) = \"en\")");
+  expectHavingCondition("(LANG(?x) = \"en\")",
+                        m::stringMatchesFilter("(LANG(?x) = \"en\")"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
@@ -1445,7 +1445,12 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+  expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
+  expectFails("LANGMATCHES()");
+  expectFails("LANGMATCHES(?x)");
 
+  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
+                                                     Var{"?x"}, Var{"?y"}));
   expectFails("STRDT()");
   expectFails("STRDT(?x)");
   expectBuiltInCall("STRDT(?x, ?y)",
@@ -1470,7 +1475,6 @@ TEST(SparqlParser, builtInCall) {
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
-  expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));

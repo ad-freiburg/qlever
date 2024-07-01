@@ -399,6 +399,21 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+// LANGMATCHES
+[[maybe_unused]] inline auto langMatching =
+    [](std::optional<std::string> languageTag,
+       std::optional<std::string> languageRange) {
+      if (!languageTag.has_value() || !languageRange.has_value()) {
+        return Id::makeUndefined();
+      } else {
+        return Id::makeFromBool(ad_utility::isLanguageMatch(
+            languageTag.value(), languageRange.value()));
+      }
+    };
+
+using LangMatches =
+    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
     [](std::optional<std::string> input,
@@ -518,6 +533,10 @@ Expr makeStrLangTagExpression(Expr child1, Expr child2) {
 
 Expr makeStrIriDtExpression(Expr child1, Expr child2) {
   return make<StrIriTagged>(child1, child2);
+}
+
+Expr makeLangMatchesExpression(Expr child1, Expr child2) {
+  return make<LangMatches>(child1, child2);
 }
 
 Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }

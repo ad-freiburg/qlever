@@ -233,3 +233,26 @@ OptIri IriValueGetter::operator()(
     return std::nullopt;
   }
 }
+
+// _____________________________________________________________________________
+std::optional<std::string> LanguageTagValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  using enum Datatype;
+  switch (id.getDatatype()) {
+    case LocalVocabIndex:
+    case VocabIndex:
+      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+                         context->_qec.getIndex(), id, context->_localVocab),
+                     context);
+    case TextRecordIndex:
+    case WordVocabIndex:
+    case BlankNodeIndex:
+    case Bool:
+    case Int:
+    case Double:
+    case Date:
+    case Undefined:
+      return std::nullopt;
+  }
+  AD_FAIL();
+}

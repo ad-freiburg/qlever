@@ -42,6 +42,11 @@ class NaryExpression : public SparqlExpression {
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
 
+  // _________________________________________________________________________
+  std::optional<SparqlExpression*> getNthChild(size_t pos) const {
+    return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
+  }
+
  private:
   // _________________________________________________________________________
   std::span<SparqlExpression::Ptr> childrenImpl() override;
