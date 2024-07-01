@@ -15,7 +15,6 @@
 
 #include "absl/time/time.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -2090,10 +2089,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   }
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
-  return std::make_unique<sparqlExpression::LangExpression>(
-      visit(ctx->expression()));
+  // The number of children for expression LANG() is fixed to one by the
+  // grammar (or definition of the parser).
+  return makeLangExpression(std::move(visit(ctx->expression())));
 }
 
 // ____________________________________________________________________________________

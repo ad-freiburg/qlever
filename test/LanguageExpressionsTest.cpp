@@ -5,7 +5,6 @@
 #include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
@@ -144,7 +143,7 @@ auto assertLangTagValueGetter =
 auto getLangExpression =
     [](const std::string& variable) -> SparqlExpression::Ptr {
   // initialize with a child expression which has to be a VariableExpression!
-  return std::make_unique<LangExpression>(
+  return makeLangExpression(
       std::make_unique<VariableExpression>(Variable{variable}));
 };
 
@@ -236,24 +235,16 @@ TEST(LangExpression, testLangExpressionOnMixedColumn) {
 
 // ____________________________________________________________________________
 TEST(LangExpression, testSimpleMethods) {
-  auto langExpr = std::make_unique<LangExpression>(
-      std::make_unique<VariableExpression>(Variable{"?x"}));
+  auto langExpr =
+      makeLangExpression(std::make_unique<VariableExpression>(Variable{"?x"}));
   ASSERT_TRUE(langExpr->containsLangExpression());
-  auto var = langExpr->variable();
-  ASSERT_EQ(var.name(), "?x");
-  langExpr = std::make_unique<LangExpression>(
-      std::make_unique<IdExpression>(IntId(1)));
+  auto optVar = getVariableFromLangExpression(langExpr.get());
+  ASSERT_TRUE(optVar.has_value());
+  ASSERT_EQ(optVar.value().name(), "?x");
+  langExpr = makeLangExpression(std::make_unique<IdExpression>(IntId(1)));
   ASSERT_TRUE(langExpr->containsLangExpression());
-  ASSERT_THROW(
-      {
-        langExpr->variable();
-        throw std::runtime_error{
-            "Use the LANG() function within a FILTER() expression only with a "
-            "variable as its argument. Valid example: "
-            "FILTER(LANG(?example_var) "
-            "= \"en\")"};
-      },
-      std::runtime_error);
+  optVar = getVariableFromLangExpression(langExpr.get());
+  ASSERT_TRUE(!optVar.has_value());
 }
 
 // ____________________________________________________________________________
