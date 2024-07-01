@@ -2093,7 +2093,7 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
   // The number of children for expression LANG() is fixed to one by the
   // grammar (or definition of the parser).
-  return makeLangExpression(std::move(visit(ctx->expression())));
+  return sparqlExpression::makeLangExpression(visit(ctx->expression()));
 }
 
 // ____________________________________________________________________________________
