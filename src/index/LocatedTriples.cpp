@@ -15,19 +15,19 @@
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
-    const std::vector<IdTriple<0>>& triples, const Permutation& permutation,
-    bool shouldExist) {
-  const Permutation::MetaData& meta = permutation.metaData();
-  const vector<CompressedBlockMetadata>& blocks = meta.blockData();
-
+    const std::vector<IdTriple<0>>& triples,
+    const std::vector<CompressedBlockMetadata>& blockMetadata,
+    const std::array<size_t, 3>& keyOrder, bool shouldExist) {
+  // TODO<qup42> using IdTable as an input here would make it easy to have the
+  // input already be permuted.
   vector<LocatedTriple> out;
   out.reserve(triples.size());
   size_t currentBlockIndex;
   for (auto triple : triples) {
-    triple = triple.permute(permutation.keyOrder());
+    triple = triple.permute(keyOrder);
     currentBlockIndex =
         std::ranges::lower_bound(
-            blocks, triple.toPermutedTriple(),
+            blockMetadata, triple.toPermutedTriple(),
             [&](const CompressedBlockMetadata::PermutedTriple& block,
                 const CompressedBlockMetadata::PermutedTriple& triple) {
               return block < triple;
@@ -35,7 +35,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
             [](const CompressedBlockMetadata& block) {
               return block.lastTriple_;
             }) -
-        blocks.begin();
+        blockMetadata.begin();
     out.emplace_back(currentBlockIndex, triple, shouldExist);
   }
 

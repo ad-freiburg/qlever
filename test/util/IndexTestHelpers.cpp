@@ -192,40 +192,6 @@ Index makeTestIndex(const std::string& indexBasename,
   return index;
 }
 
-// ______________________________________________________________
-void makeTestPermutationsFromIds(const std::string& indexBasename,
-                                 const IdTable& tripleInput,
-                                 ad_utility::MemorySize blocksizePermutations) {
-  Index index = makeIndexWithTestSettings();
-  index.setOnDiskBase(indexBasename);
-  index.blocksizePermutationsPerColumn() = blocksizePermutations;
-  auto& indexImpl = index.getImpl();
-
-  // This is still not a complete index. `Index::createFromOnDiskIndex`
-  // cannot be used, because the vocabulary is not generated.
-  // `IndexImpl::readIndexBuilderSettingsFromFile` also has to be called
-  // before building the index in this case.
-  std::function<bool(const ValueId&)> isInternalId = [](const ValueId&) {
-    return false;
-  };
-  auto firstSorter = indexImpl.makeSorter<FirstPermutation>("first");
-  ad_utility::CompressedExternalIdTableSorterTypeErased& typeErasedFirstSorter =
-      firstSorter;
-  firstSorter.pushBlock(tripleInput.clone());
-  auto firstSorterWithUnique =
-      ad_utility::uniqueBlockView(typeErasedFirstSorter.getSortedOutput());
-  auto secondSorter = indexImpl.makeSorter<SecondPermutation>("second");
-  indexImpl.createSPOAndSOP(3, isInternalId, std::move(firstSorterWithUnique),
-                            std::move(secondSorter));
-  typeErasedFirstSorter.clearUnderlying();
-  auto thirdSorter = indexImpl.makeSorter<ThirdPermutation>("third");
-  indexImpl.createOSPAndOPS(3, isInternalId, secondSorter.getSortedBlocks<0>(),
-                            std::move(thirdSorter));
-  secondSorter.clear();
-  indexImpl.createPSOAndPOS(3, isInternalId, thirdSorter.getSortedBlocks<0>());
-  thirdSorter.clear();
-}
-
 // ________________________________________________________________________________
 QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                               bool loadAllPermutations, bool usePatterns,

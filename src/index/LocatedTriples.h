@@ -34,6 +34,7 @@ struct LocatedTriple {
   // The `Id`s of the triple in the order of the permutation. For example,
   // for an object pertaining to the OPS permutation: `id1` is the object,
   // `id2` is the predicate, and `id3` is the subject.
+  // TODO<qup42> this is not an `IdTriple` but a `PermutedTriple`.
   IdTriple<0> triple_;
 
   // Flag that is true if the given triple is inserted and false if it
@@ -42,8 +43,9 @@ struct LocatedTriple {
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const std::vector<IdTriple<0>>& triples, const Permutation& permutation,
-      bool shouldExist);
+      const std::vector<IdTriple<0>>& triples,
+      const std::vector<CompressedBlockMetadata>& blockMetadata,
+      const std::array<size_t, 3>& keyOrder, bool shouldExist);
 
   bool operator==(const LocatedTriple&) const = default;
 

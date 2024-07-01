@@ -19,6 +19,14 @@ auto V = ad_utility::testing::VocabId;
 auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
   return IdTriple{std::array<Id, 3>{V(c1), V(c2), V(c3)}};
 };
+auto PT = [](const auto& c1, const auto& c2, const auto& c3) {
+  return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3)};
+};
+auto CBM = [](const auto firstTriple, const auto lastTriple) {
+  return CompressedBlockMetadata{
+      {}, 0, firstTriple, lastTriple, std::nullopt, std::nullopt};
+};
+
 auto numBlocks =
     [](size_t numBlocks) -> testing::Matcher<const LocatedTriplesPerBlock&> {
   return AD_PROPERTY(LocatedTriplesPerBlock, LocatedTriplesPerBlock::numBlocks,
@@ -407,181 +415,96 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
 TEST_F(LocatedTriplesTest, locatedTriple) {
   using LT = LocatedTriple;
 
-  auto displayBlocks =
-      [](const vector<CompressedBlockMetadata>& blockMetadata) {
-        for (size_t i = 0; i < blockMetadata.size(); i++) {
-          const auto& block = blockMetadata[i];
-          std::cout << "Block #" << i << "(n=" << block.numRows_
-                    << "): " << block.firstTriple_ << " -> "
-                    << block.lastTriple_ << std::endl;
-        }
-      };
-  auto deletePermutation = [](const std::string& indexBasename,
-                              const Permutation& permutation) {
-    std::string name = indexBasename + ".index" + permutation.fileSuffix();
-    ad_utility::deleteFile(name);
-    ad_utility::deleteFile(name + MMAP_FILE_SUFFIX);
-  };
-  // The actual test, for a given block size.
-  auto testWithGivenBlockSizeAll =
-      [&displayBlocks, &deletePermutation](
-          const IdTable& triplesInIndex,
-          const std::vector<IdTriple<0>>& triplesToLocate,
-          const ad_utility::MemorySize& blockSize,
-          const ad_utility::HashMap<Permutation::Enum, std::vector<LT>>&
-              expectedLocatedTriples) {
-        std::string testIndexBasename = "LocatedTriplesTest.locatedTriple";
+  // Locate the following triples, some of which exist in the relation and
+  // some of which do not, and which cover a variety of positions, including
+  // triples that are larger than all existing triples.
+  auto T1 = IT(1, 5, 10);   // Before PT1
+  auto T2 = IT(1, 15, 10);  // Before PT2
+  auto T3 = IT(2, 10, 10);  // Equals PT2
+  auto T4 = IT(2, 14, 20);  // Before PT3
+  auto T5 = IT(2, 20, 10);  // Equals PT5
+  auto T6 = IT(2, 30, 30);  // Equals PT7
+  auto T7 = IT(2, 30, 31);  // Before PT8
+  auto T8 = IT(9, 30, 32);  // Larger than all
+  std::vector<IdTriple<0>> triplesToLocate{T1, T2, T3, T4, T5, T6, T7, T8};
+  std::vector<IdTriple<0>> triplesToLocateReverse{T8, T7, T6, T5,
+                                                  T4, T3, T2, T1};
 
-        const auto& testAllocator = ad_utility::testing::makeAllocator();
-        ad_utility::testing::makeTestPermutationsFromIds(
-            testIndexBasename, triplesInIndex, blockSize);
-
-        using enum Permutation::Enum;
-        for (auto& perm : {SPO, SOP, OSP, OPS, PSO, POS}) {
-          Permutation permutation{perm, {}, testAllocator};
-          permutation.loadFromDisk(testIndexBasename);
-
-          if (expectedLocatedTriples.contains(perm)) {
-            displayBlocks(permutation.metaData().blockData());
-
-            // TODO<qup42> test for adding/deleting (and not only deletion)
-            auto locatedTriples = LT::locateTriplesInPermutation(
-                triplesToLocate, permutation, false);
-
-            EXPECT_THAT(locatedTriples, testing::ElementsAreArray(
-                                            expectedLocatedTriples.at(perm)))
-                << "in permutation " << permutation.readableName()
-                << " for block size " << blockSize.asString();
-          } else {
-            std::cout << "Skipping permutation " << Permutation::toString(perm)
-                      << std::endl;
-          }
-
-          deletePermutation(testIndexBasename, permutation);
-        }
-      };
+  auto PT1 = PT(1, 10, 10);
+  auto PT2 = PT(2, 10, 10);
+  auto PT3 = PT(2, 15, 20);
+  auto PT4 = PT(2, 15, 30);
+  auto PT5 = PT(2, 20, 10);
+  auto PT6 = PT(2, 30, 20);
+  auto PT7 = PT(2, 30, 30);
+  auto PT8 = PT(3, 10, 10);
 
   {
-    // Triples in the index.
-    IdTable triplesInIndex = makeIdTableFromVector({{1, 10, 10},    // Row 0
-                                                    {2, 10, 10},    // Row 1
-                                                    {2, 15, 20},    // Row 2
-                                                    {2, 15, 30},    // Row 3
-                                                    {2, 20, 10},    // Row 4
-                                                    {2, 30, 20},    // Row 5
-                                                    {2, 30, 30},    // Row 6
-                                                    {3, 10, 10}});  // Row 7
-
-    // Locate the following triples, some of which exist in the relation and
-    // some of which do not, and which cover a variety of positions, including
-    // triples that are larger than all existing triples.
-    std::vector<IdTriple<0>> triplesToLocate{
-        IT(1, 5, 10),    // Before Row 0
-        IT(1, 15, 10),   // Before Row 1
-        IT(2, 10, 10),   // Equals Row 1
-        IT(2, 14, 20),   // Before Row 2
-        IT(2, 20, 10),   // Equals Row 4
-        IT(2, 30, 30),   // Equals Row 6
-        IT(2, 30, 31),   // Before Row 7
-        IT(9, 30, 32)};  // Larger than all.
-
-    // Now test for multiple block sizes (8 bytes is the minimum; number
-    // determined experimentally).
-    std::cout << "Index triples: " << triplesInIndex << std::endl;
-    std::cout << "Delta triples: " << triplesToLocate << std::endl;
-
-    // With block size 8, we have each triple in its own block.
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 8_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 10), false), LT(1, IT(1, 15, 10), false),
-           LT(1, IT(2, 10, 10), false), LT(2, IT(2, 14, 20), false),
-           LT(4, IT(2, 20, 10), false), LT(6, IT(2, 30, 30), false),
-           LT(7, IT(2, 30, 31), false), LT(8, IT(9, 30, 32), false)}}});
-
-    // With block size 16, we have five blocks (Block 0 = Row 0, Block 1 = Row
-    // 1+2, Block 2 = Row 3+4, Block 3 = Row 5+6, Block 4 = Row 7).
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 16_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 10), false), LT(1, IT(1, 15, 10), false),
-           LT(1, IT(2, 10, 10), false), LT(1, IT(2, 14, 20), false),
-           LT(2, IT(2, 20, 10), false), LT(3, IT(2, 30, 30), false),
-           LT(4, IT(2, 30, 31), false), LT(5, IT(9, 30, 32), false)}}});
-
-    // With block size 32, we have four blocks (Block 0 = Row 0, Block 1 = Row
-    // 1+2+3+4, Block 2 = Row 5+6, Block 3 = Row 7). Note that a
-    // relation that spans multiple blocks has these blocks on its own.
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 32_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 10), false), LT(1, IT(1, 15, 10), false),
-           LT(1, IT(2, 10, 10), false), LT(1, IT(2, 14, 20), false),
-           LT(1, IT(2, 20, 10), false), LT(2, IT(2, 30, 30), false),
-           LT(3, IT(2, 30, 31), false), LT(4, IT(9, 30, 32), false)}}});
-
-    // With block size 48, we have three blocks (Block 0 = Row 0, Block 1 = Row
-    // 1+2+3+4+5+6, Block 2 = Row 7).
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 48_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 10), false), LT(1, IT(1, 15, 10), false),
-           LT(1, IT(2, 10, 10), false), LT(1, IT(2, 14, 20), false),
-           LT(1, IT(2, 20, 10), false), LT(1, IT(2, 30, 30), false),
-           LT(2, IT(2, 30, 31), false), LT(3, IT(9, 30, 32), false)}}});
-
-    // With block size 100'000, we have one block.
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 100'000_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 10), false), LT(0, IT(1, 15, 10), false),
-           LT(0, IT(2, 10, 10), false), LT(0, IT(2, 14, 20), false),
-           LT(0, IT(2, 20, 10), false), LT(0, IT(2, 30, 30), false),
-           LT(0, IT(2, 30, 31), false), LT(1, IT(9, 30, 32), false)}}});
+    // Each PTn defines a block with only a single triple.
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        triplesToLocate,
+        {CBM(PT1, PT1), CBM(PT2, PT2), CBM(PT3, PT3), CBM(PT4, PT4),
+         CBM(PT5, PT5), CBM(PT6, PT6), CBM(PT7, PT7), CBM(PT8, PT8)},
+        {0, 1, 2}, false);
+    EXPECT_THAT(locatedTriples,
+                testing::ElementsAreArray(
+                    {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
+                     LT(2, T4, false), LT(4, T5, false), LT(6, T6, false),
+                     LT(7, T7, false), LT(8, T8, false)}));
+  }
+  {
+    // Block 1: PT1
+    // Block 2: PT2 - PT3
+    // Block 3: PT4 - PT5
+    // Block 4: PT6 - PT7
+    // Block 8: PT8
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        triplesToLocate,
+        {CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
+         CBM(PT8, PT8)},
+        {0, 1, 2}, true);
+    EXPECT_THAT(locatedTriples,
+                testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
+                                           LT(1, T3, true), LT(1, T4, true),
+                                           LT(2, T5, true), LT(3, T6, true),
+                                           LT(4, T7, true), LT(5, T8, true)}));
   }
 
   {
-    // Test more thoroughly in an index that consists of a single block.
-    IdTable triplesInIndex = makeIdTableFromVector({{1, 10, 10},    // Row 0
-                                                    {3, 10, 10},    // Row 1
-                                                    {3, 15, 20},    // Row 2
-                                                    {3, 15, 30},    // Row 3
-                                                    {3, 20, 10},    // Row 4
-                                                    {3, 30, 20},    // Row 5
-                                                    {3, 30, 30},    // Row 6
-                                                    {5, 10, 10},    // Row 7
-                                                    {7, 10, 10},    // Row 8
-                                                    {7, 15, 20},    // Row 9
-                                                    {7, 15, 30},    // Row 10
-                                                    {7, 20, 10},    // Row 11
-                                                    {7, 30, 20},    // Row 12
-                                                    {7, 30, 30}});  // Row 13
+    // The relations (identical first column) are in a block each.
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        triplesToLocate, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
+        {0, 1, 2}, false);
+    EXPECT_THAT(locatedTriples,
+                testing::ElementsAreArray(
+                    {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
+                     LT(1, T4, false), LT(1, T5, false), LT(1, T6, false),
+                     LT(2, T7, false), LT(3, T8, false)}));
+  }
 
-    std::vector<IdTriple<0>> triplesToLocate{
-        IT(1, 5, 20),    // Before Row 0
-        IT(1, 10, 10),   // Equal Row 0 (a small relation)
-        IT(2, 20, 10),   // Before Row 1
-        IT(3, 15, 30),   // Equal Row 3
-        IT(3, 20, 15),   // Before Row 5
-        IT(4, 30, 30),   // Before Row 7
-        IT(5, 5, 10),    // Before Row 7
-        IT(5, 10, 10),   // Equal Row 7
-        IT(6, 10, 10),   // Before Row 8
-        IT(7, 20, 5),    // Before Row 11
-        IT(7, 30, 20),   // Equal Row 12
-        IT(7, 30, 30),   // Equal Row 13
-        IT(9, 30, 32)};  // Larger than all.
+  {
+    // Blocks are identical to previous test, but the triples to locate are not
+    // sorted. We will probably require a sorted input later, but for now this
+    // is supported.
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        triplesToLocateReverse, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
+        {0, 1, 2}, false);
+    EXPECT_THAT(locatedTriples,
+                testing::ElementsAreArray(
+                    {LT(3, T8, false), LT(2, T7, false), LT(1, T6, false),
+                     LT(1, T5, false), LT(1, T4, false), LT(1, T3, false),
+                     LT(1, T2, false), LT(0, T1, false)}));
+  }
 
-    testWithGivenBlockSizeAll(
-        triplesInIndex, triplesToLocate, 100'000_B,
-        {{Permutation::SPO,
-          {LT(0, IT(1, 5, 20), false), LT(0, IT(1, 10, 10), false),
-           LT(0, IT(2, 20, 10), false), LT(0, IT(3, 15, 30), false),
-           LT(0, IT(3, 20, 15), false), LT(0, IT(4, 30, 30), false),
-           LT(0, IT(5, 5, 10), false), LT(0, IT(5, 10, 10), false),
-           LT(0, IT(6, 10, 10), false), LT(0, IT(7, 20, 5), false),
-           LT(0, IT(7, 30, 20), false), LT(0, IT(7, 30, 30), false),
-           LT(1, IT(9, 30, 32), false)}}});
+  {
+    // All triples are in one block.
+    auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
+        triplesToLocate, {CBM(PT1, PT8)}, {0, 1, 2}, false);
+    EXPECT_THAT(locatedTriples,
+                testing::ElementsAreArray(
+                    {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
+                     LT(0, T4, false), LT(0, T5, false), LT(0, T6, false),
+                     LT(0, T7, false), LT(1, T8, false)}));
   }
 }
 

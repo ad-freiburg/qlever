@@ -55,15 +55,15 @@ DeltaTriples::locateAndAddTriples(
   for (auto permutation : Permutation::ALL) {
     // TODO<qup42> also move the CancellationHandle into
     // locateTriplesInPermutation
+    auto& perm = index_.getImpl().getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        idTriples, index_.getImpl().getPermutation(permutation), shouldExist);
+        idTriples, perm.augmentedBlockData(), perm.keyOrder(), shouldExist);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[permutation] =
         getLocatedTriplesPerBlock(permutation).add(locatedTriples);
     cancellationHandle->throwIfCancelled();
 
     // Update blocks firstUpdateTriple_ and lastUpdateTriple_.
-    auto& perm = index_.getImpl().getPermutation(permutation);
     auto block_meta = perm.augmentedBlockData();
     LOG(INFO) << "Permutation: " << perm.readableName() << " with "
               << block_meta.size() << " blocks" << std::endl;
