@@ -42,8 +42,9 @@ struct LocatedTriple {
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const std::vector<IdTriple<0>>& triples, const Permutation& permutation,
-      bool shouldExist);
+      const std::vector<IdTriple<0>>& triples,
+      const std::vector<CompressedBlockMetadata>& blockMetadata,
+      const std::array<size_t, 3>& keyOrder, bool shouldExist);
 
   bool operator==(const LocatedTriple&) const = default;
 
