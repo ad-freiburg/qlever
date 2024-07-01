@@ -125,9 +125,12 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
-  std::string jsonStr;
+  std::basic_string<char, std::char_traits<char>,
+                    ad_utility::AllocatorWithLimit<char>>
+      jsonStr(_executionContext->getAllocator());
   for (std::span<std::byte> bytes : jsonByteResult) {
-    absl::StrAppend(&jsonStr, reinterpret_cast<const char*>(bytes.data()));
+    jsonStr += reinterpret_cast<const char*>(bytes.data());
+    checkCancellation();
   }
 
   // Parse the received result.
@@ -144,15 +147,19 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
     resVariables = jsonResult["head"]["vars"].get<std::vector<std::string>>();
     resBindings =
         jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
-  } catch (const nlohmann::json::parse_error& e) {
+  } catch (nlohmann::json::parse_error&) {
     throw std::runtime_error(absl::StrCat(
         "Failed to parse the Service result as JSON. First 100 bytes: ",
-        jsonStr.substr(0, std::min(100, static_cast<int>(jsonStr.size())))));
-  } catch (const nlohmann::json::type_error& e) {
-    throw std::runtime_error(
-        "JSON result does not have the expected structure");
+        std::string(jsonStr.data(),
+                    std::min(100, static_cast<int>(jsonStr.size())))));
+  } catch (nlohmann::json::type_error&) {
+    throw std::runtime_error(absl::StrCat(
+        "JSON result does not have the expected structure. First 100 bytes: ",
+        std::string(jsonStr.data(),
+                    std::min(100, static_cast<int>(jsonStr.size())))));
   }
 
+  // Check if result header row is expected.
   std::string headerRow = absl::StrCat("?", absl::StrJoin(resVariables, " ?"));
   std::string expectedHeaderRow = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
