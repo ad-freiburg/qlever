@@ -174,14 +174,15 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     // Scan for all distinct `col0` and check that we get the expected result.
     CompressedRelationReader::ScanSpecification scanSpec{
         metaData[i].col0Id_, std::nullopt, std::nullopt};
-    IdTable table =
-        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
+    IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+                                cancellationHandle, {}, 0ul);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, {}, 0ul)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -195,17 +196,17 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       CompressedRelationReader::ScanSpecification scanSpec{
           metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      auto size = reader.getResultSizeOfScan(scanSpec, blocks, {});
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle);
+                      cancellationHandle, {}, 0ul);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle)) {
+                           cancellationHandle, {}, 0ul)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -507,5 +508,66 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
   auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
   std::stringstream str;
   str << tr;
-  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
+  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27");
+}
+
+TEST(CompressedRelationReader, completeColumnIndices) {
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 2};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 3);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray(originalColumns));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray(originalColumns));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 2, 4, 5};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 3);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4, 5}));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray({0, 1, 2, 3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 4};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 2);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({0, 1, 3}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 5, 6};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 1);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 5, 6}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({0, 3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{1, 4};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 1);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({1, 3}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{3, 6};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 0);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 3, 6}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 0);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2}));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray(originalColumns));
+  }
 }

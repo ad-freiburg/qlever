@@ -8,6 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "index/LocatedTriples.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
@@ -30,6 +31,8 @@ class Permutation {
   static constexpr auto SOP = Enum::SOP;
   static constexpr auto OPS = Enum::OPS;
   static constexpr auto OSP = Enum::OSP;
+  static constexpr auto ALL = {Enum::PSO, Enum::POS, Enum::SPO,
+                               Enum::SOP, Enum::OPS, Enum::OSP};
 
   using MetaData = IndexMetaDataMmapView;
   using Allocator = ad_utility::AllocatorWithLimit<Id>;
@@ -47,7 +50,9 @@ class Permutation {
   // `PSO` is converted to [1, 0, 2].
   static std::array<size_t, 3> toKeyOrder(Enum permutation);
 
-  explicit Permutation(Enum permutation, Allocator allocator);
+  explicit Permutation(Enum permutation,
+                       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+                       Allocator allocator);
 
   // everything that has to be done when reading an index from disk
   void loadFromDisk(const std::string& onDiskBase);
@@ -126,6 +131,12 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
+  // _______________________________________________________
+  const MetaData& metaData() const { return meta_; }
+
+  // _______________________________________________________
+  vector<CompressedBlockMetadata> augmentedBlockData() const;
+
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;
@@ -135,13 +146,15 @@ class Permutation {
   // sorted, for example {1, 0, 2} for PSO.
   array<size_t, 3> keyOrder_;
 
-  const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the
   // `loadFromDisk` method.
   std::optional<CompressedRelationReader> reader_;
   Allocator allocator_;
+
+  // The delta triples and their positions in this permutation.
+  const LocatedTriplesPerBlock& locatedTriplesPerBlock_;
 
   bool isLoaded_ = false;
 };

@@ -40,8 +40,10 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     std::unique_ptr<DeltaTriples> deltaTriples)
+    : deltaTriples_(std::move(deltaTriples)),
+      allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
@@ -1372,10 +1374,13 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
+  LOG(INFO) << "IndexImpl::scan-1" << std::endl;
+  std::optional<Id> col0Id =
+      col0String.toValueIdNoAdd(getVocab(), deltaTriples_->localVocab());
+  std::optional<Id> col1Id = col1String.has_value()
+                                 ? col1String.value().get().toValueIdNoAdd(
+                                       getVocab(), deltaTriples_->localVocab())
+                                 : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
@@ -1389,6 +1394,7 @@ IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+  LOG(INFO) << "IndexImpl::scan-2" << std::endl;
   return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
                                 additionalColumns, cancellationHandle);
 }

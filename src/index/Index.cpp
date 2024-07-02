@@ -11,13 +11,22 @@
 
 // ____________________________________________________________________________
 Index::Index(ad_utility::AllocatorWithLimit<Id> allocator)
-    : pimpl_{std::make_unique<IndexImpl>(std::move(allocator))} {}
+    : pimpl_{std::make_unique<IndexImpl>(
+          std::move(allocator), std::make_unique<DeltaTriples>(*this))} {}
 Index::Index(Index&&) noexcept = default;
 
 // Needs to be in the .cpp file because of the unique_ptr to a forwarded class.
 // See
 // https://stackoverflow.com/questions/13414652/forward-declaration-with-unique-ptr
 Index::~Index() = default;
+
+// _____________________________________________________________________________
+[[nodiscard]] DeltaTriples& Index::deltaTriples() {
+  return pimpl_->deltaTriples();
+}
+[[nodiscard]] const DeltaTriples& Index::deltaTriples() const {
+  return pimpl_->deltaTriples();
+}
 
 // ____________________________________________________________________________
 void Index::createFromFile(const std::string& filename) {

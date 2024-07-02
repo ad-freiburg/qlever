@@ -31,7 +31,8 @@ enum struct Datatype {
   Date,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  Sentinel,
+  MaxValue = Sentinel,
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -61,6 +62,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Date";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
+    case Datatype::Sentinel:
+      return "Sentinel";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -111,6 +114,10 @@ class ValueId {
   /// A struct that represents the single undefined value. This is required for
   /// generic code like in the `visit` method.
   struct UndefinedType {};
+
+  // A struct that represent the single sentinel value. See above for why this
+  // is required.
+  struct SentinelType {};
 
  private:
   // The actual bits.
@@ -173,6 +180,13 @@ class ValueId {
   /// like the `visit` member function.
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
   bool isUndefined() const noexcept { return *this == makeUndefined(); }
+
+  constexpr static ValueId makeSentinel() noexcept {
+    return addDatatypeBits(std::bit_cast<uint64_t>(0UL), Datatype::Sentinel);
+  }
+
+  [[nodiscard]] SentinelType getSentinel() const noexcept { return {}; }
+  bool isSentinel() const noexcept { return *this == makeSentinel(); }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point
@@ -319,6 +333,8 @@ class ValueId {
         return std::invoke(visitor, getDate());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
+      case Datatype::Sentinel:
+        return std::invoke(visitor, getSentinel());
     }
     AD_FAIL();
   }
@@ -329,10 +345,13 @@ class ValueId {
     ostr << toString(id.getDatatype())[0] << ':';
     if (id.getDatatype() == Datatype::Undefined) {
       return ostr << id.getBits();
+    } else if (id.getDatatype() == Datatype::Sentinel) {
+      return ostr << "Sentinel";
     }
 
     auto visitor = [&ostr]<typename T>(T&& value) {
-      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType>) {
+      if constexpr (ad_utility::isSimilar<T, ValueId::UndefinedType> ||
+                    ad_utility::isSimilar<T, ValueId::SentinelType>) {
         // already handled above
         AD_FAIL();
       } else if constexpr (ad_utility::isSimilar<T, double> ||
