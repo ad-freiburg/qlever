@@ -9,6 +9,7 @@
 #include <absl/strings/str_split.h>
 
 #include <algorithm>
+#include <optional>
 
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -1644,6 +1645,11 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return {makeSubtreePlan<OptionalJoin>(_qec, a._qet, b._qet)};
   }
 
+  if (auto opt = createJoinWithPathSearch(a, b, jcs)) {
+    candidates.push_back(std::move(opt.value()));
+    return candidates;
+  }
+
   // Check if one of the two Operations is a SERVICE. If so, we can try
   // to simplify the Service Query using the result of the other operation.
   if (auto opt = createJoinWithService(a, b, jcs)) {
@@ -1805,6 +1811,45 @@ auto QueryPlanner::createJoinWithService(
           : makeSubtreePlan<MultiColumnJoin>(qec, a._qet, b._qet);
   mergeSubtreePlanIds(plan, a, b);
 
+  return plan;
+}
+
+// _____________________________________________________________________
+auto QueryPlanner::createJoinWithPathSearch(
+    SubtreePlan a, SubtreePlan b,
+    const std::vector<std::array<ColumnIndex, 2>>& jcs)
+    -> std::optional<SubtreePlan> {
+  auto aRootOp = std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
+  auto bRootOp = std::dynamic_pointer_cast<PathSearch>(b._qet->getRootOperation());
+
+  // Exactly one of the two Operations can be a path search.
+  if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
+    return std::nullopt;
+  }
+
+  auto pathSearch = aRootOp ? aRootOp : bRootOp;
+  auto sibling = bRootOp ? a : b;
+
+  // Only source and target may be bound directly
+  if (jcs.size() > 2) {
+    return std::nullopt;
+  }
+
+  auto sourceColumn = pathSearch->getSourceColumn();
+  auto targetColumn = pathSearch->getTargetColumn();
+  for (auto jc : jcs) {
+    const size_t thisCol = aRootOp ? jc[0] : jc[1];
+    const size_t otherCol = aRootOp ? jc[1] : jc[0];
+
+    if (sourceColumn && sourceColumn == thisCol && !pathSearch->isSourceBound()) {
+      pathSearch->bindSourceSide(sibling._qet, otherCol);
+    } else if (targetColumn && targetColumn == thisCol && !pathSearch->isTargetBound()) {
+      pathSearch->bindTargetSide(sibling._qet, otherCol);
+    }
+  }
+  
+  SubtreePlan plan = makeSubtreePlan(pathSearch);
+  mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
 

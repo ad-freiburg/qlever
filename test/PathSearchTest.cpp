@@ -34,8 +34,10 @@ Result performPathSearch(PathSearchConfiguration config, IdTable input,
 
 TEST(PathSearchTest, constructor) {
   auto qec = getQec();
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(1)};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(1)},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
   PathSearch p = PathSearch(qec, nullptr, config);
@@ -47,9 +49,11 @@ TEST(PathSearchTest, emptyGraph) {
   auto expected = makeIdTableFromVector({});
   expected.setNumColumns(4);
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(4)},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -71,9 +75,11 @@ TEST(PathSearchTest, singlePath) {
       {V(3), V(4), I(0), I(3)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(4)},
+      ALL_PATHS,         sources, targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -92,10 +98,12 @@ TEST(PathSearchTest, singlePathWithProperties) {
       {V(3), V(4), I(0), I(3), V(40)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
   PathSearchConfiguration config{ALL_PATHS,
-                                 {V(0)},
-                                 {V(4)},
+                                 sources,
+                                 targets,
                                  Var{"?start"},
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
@@ -116,9 +124,11 @@ TEST(PathSearchTest, singlePathWithDijkstra) {
       {V(3), V(4), I(0), I(3)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},      {V(4)},
+      SHORTEST_PATHS,    sources, targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -137,10 +147,11 @@ TEST(PathSearchTest, singlePathWithDijkstraAndProperties) {
       {V(3), V(4), I(0), I(3), V(40)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
   PathSearchConfiguration config{SHORTEST_PATHS,
-                                 {V(0)},
-                                 {V(4)},
+                                 sources, targets,
                                  Var{"?start"},
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
@@ -169,9 +180,11 @@ TEST(PathSearchTest, twoPathsOneTarget) {
       {V(3), V(2), I(1), I(1)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(2)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(2)},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -197,9 +210,10 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
       {V(3), V(4), I(1), I(1)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(2), V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{ALL_PATHS,         {V(0)},
-                                 {V(2), V(4)},      Var{"?start"},
+  PathSearchConfiguration config{ALL_PATHS,         sources, targets,      Var{"?start"},
                                  Var{"?end"},       Var{"?edgeIndex"},
                                  Var{"?pathIndex"}, {}};
 
@@ -224,9 +238,10 @@ TEST(PathSearchTest, cycle) {
       {V(2), V(0), I(0), I(2)},
   });
 
+  std::vector<Id> sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(0)},
+      ALL_PATHS,         sources,      sources,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -254,9 +269,10 @@ TEST(PathSearchTest, twoCycle) {
       {V(3), V(0), I(1), I(2)},
   });
 
+  std::vector<Id> sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(0)},
+      ALL_PATHS,         sources,      sources,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -287,9 +303,11 @@ TEST(PathSearchTest, allPaths) {
       {V(2), V(4), I(4), I(1)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -315,12 +333,14 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
       {V(2), V(4), I(4), I(1), V(51), V(50)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty1"},
                Variable{"?edgeProperty2"}};
   PathSearchConfiguration config{
       ALL_PATHS,
-      {V(0)},
-      {},
+      sources,
+      targets,
       Var{"?start"},
       Var{"?end"},
       Var{"?edgeIndex"},
@@ -350,9 +370,11 @@ TEST(PathSearchTest, singleShortestPath) {
       {V(1), V(4), I(0), I(1)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},      {V(4)},
+      SHORTEST_PATHS,    sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -382,9 +404,11 @@ TEST(PathSearchTest, twoShortestPaths) {
       {V(1), V(5), I(1), I(1)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},      {V(5)},
+      SHORTEST_PATHS,    sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -409,9 +433,11 @@ TEST(PathSearchTest, singlePathWithIrrelevantNode) {
       {V(3), V(4), I(0), I(3)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(4)},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -429,9 +455,11 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
       {V(3), V(4), I(0), I(3)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},      {V(4)},
+      SHORTEST_PATHS,    sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -466,9 +494,11 @@ TEST(PathSearchTest, allPathsElongatedDiamond) {
       {V(4), V(5), I(1), I(3)},
   });
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         {V(0)},      {V(5)},
+      ALL_PATHS,         sources,      targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -485,9 +515,11 @@ TEST(PathSearchTest, shortestPathsElongatedDiamond) {
                                          {V(2), V(4), I(0), I(2)},
                                          {V(4), V(5), I(0), I(3)}});
 
+  std::vector<Id> sources{V(0)};
+  std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      SHORTEST_PATHS,    {V(0)},      {V(5)},
+      SHORTEST_PATHS,    sources, targets,
       Var{"?start"},     Var{"?end"}, Var{"?edgeIndex"},
       Var{"?pathIndex"}, {}};
 
@@ -521,9 +553,11 @@ TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
       {V(3), V(5), I(3), I(2)},
   });
 
+  std::vector<Id> sources{V(0), V(1)};
+  std::vector<Id> targets{V(4), V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   PathSearchConfiguration config{
-      ALL_PATHS,   {V(0), V(1)},      {V(4), V(5)},      Var{"?start"},
+      ALL_PATHS,   sources,      targets,      Var{"?start"},
       Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
@@ -549,8 +583,10 @@ TEST(PathSearchTest, multiSourceMultiTargetshortestPaths) {
   });
 
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  std::vector<Id> sources{V(0), V(1)};
+  std::vector<Id> targets{V(4), V(5)};
   PathSearchConfiguration config{
-      SHORTEST_PATHS, {V(0), V(1)},      {V(4), V(5)},      Var{"?start"},
+      SHORTEST_PATHS, sources,      targets,      Var{"?start"},
       Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);

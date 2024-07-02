@@ -5,9 +5,9 @@
 #include "PathSearch.h"
 
 #include <boost/graph/detail/adjacency_list.hpp>
-#include <functional>
 #include <memory>
 #include <sstream>
+#include <variant>
 
 #include "engine/CallFixedSize.h"
 #include "engine/PathSearchVisitors.h"
@@ -24,17 +24,28 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
       idToIndex_(allocator()) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
   resultWidth_ = 4 + config_.edgeProperties_.size();
-  variableColumns_[config_.start_] = makeAlwaysDefinedColumn(0);
-  variableColumns_[config_.end_] = makeAlwaysDefinedColumn(1);
-  variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(2);
-  variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(3);
 
-  for (size_t edgePropertyIndex = 0;
-       edgePropertyIndex < config_.edgeProperties_.size();
-       edgePropertyIndex++) {
-    auto edgeProperty = config_.edgeProperties_[edgePropertyIndex];
-    variableColumns_[edgeProperty] =
-        makeAlwaysDefinedColumn(4 + edgePropertyIndex);
+  size_t colIndex = 0;
+
+  variableColumns_[config_.start_] = makeAlwaysDefinedColumn(colIndex++);
+  variableColumns_[config_.end_] = makeAlwaysDefinedColumn(colIndex++);
+  variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(colIndex++);
+  variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(colIndex++);
+
+  if (std::holds_alternative<Variable>(config_.sources_)) {
+    resultWidth_++;
+    const auto& sourceColumn = std::get<Variable>(config_.sources_);
+    variableColumns_[sourceColumn] = makeAlwaysDefinedColumn(colIndex++);
+  }
+
+  if (std::holds_alternative<Variable>(config_.targets_)) {
+    resultWidth_++;
+    const auto& targetColumn = std::get<Variable>(config_.targets_);
+    variableColumns_[targetColumn] = makeAlwaysDefinedColumn(colIndex++);
+  }
+
+  for (auto edgeProperty: config_.edgeProperties_) {
+    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(colIndex++);
   }
 }
 
@@ -87,6 +98,17 @@ bool PathSearch::knownEmptyResult() { return subtree_->knownEmptyResult(); };
 // _____________________________________________________________________________
 vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 
+
+// _____________________________________________________________________________
+void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp, size_t inputCol) {
+  boundSources_ = {sourcesOp, inputCol};
+}
+
+// _____________________________________________________________________________
+void PathSearch::bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp, size_t inputCol) {
+  boundTargets_ = {targetsOp, inputCol};
+}
+
 // _____________________________________________________________________________
 Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
@@ -94,7 +116,6 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
   idTable.setNumColumns(getResultWidth());
 
   const IdTable& dynSub = subRes->idTable();
-
   if (!dynSub.empty()) {
     std::vector<std::span<const Id>> edgePropertyLists;
     for (const auto& edgeProperty : config_.edgeProperties_) {
@@ -107,7 +128,10 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     buildGraph(dynSub.getColumn(subStartColumn), dynSub.getColumn(subEndColumn),
                edgePropertyLists);
 
-    auto paths = findPaths();
+    std::span<const Id> sources = handleSearchSide(config_.sources_, boundSources_);
+    std::span<const Id> targets = handleSearchSide(config_.targets_, boundTargets_);
+
+    auto paths = findPaths(sources, targets);
 
     CALL_FIXED_SIZE(std::array{getResultWidth()},
                     &PathSearch::pathsToResultTable, this, idTable, paths);
@@ -136,6 +160,23 @@ void PathSearch::buildMapping(std::span<const Id> startNodes,
   }
 }
 
+std::span<const Id> PathSearch::handleSearchSide(const SearchSide& side, const std::optional<TreeAndCol>& binding) const {
+  std::span<const Id> ids;
+  bool isVariable = std::holds_alternative<Variable>(side);
+  if (isVariable && binding.has_value()) {
+    ids = binding->first->getResult()->idTable().getColumn(binding->second);
+  } else if (isVariable || std::get<std::vector<Id>>(side).empty()) {
+    std::vector<Id> idVec;
+    for (auto id: indexToId_) {
+      idVec.push_back(id);
+    }
+    ids = idVec;
+  } else {
+    ids = std::get<std::vector<Id>>(side);
+  }
+  return ids;
+}
+
 // _____________________________________________________________________________
 void PathSearch::buildGraph(std::span<const Id> startNodes,
                             std::span<const Id> endNodes,
@@ -162,34 +203,28 @@ void PathSearch::buildGraph(std::span<const Id> startNodes,
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::findPaths() const {
+std::vector<Path> PathSearch::findPaths(std::span<const Id> sources, std::span<const Id> targets) const {
   switch (config_.algorithm_) {
     case ALL_PATHS:
-      return allPaths();
+      return allPaths(sources, targets);
     case SHORTEST_PATHS:
-      return shortestPaths();
+      return shortestPaths(sources, targets);
     default:
       AD_FAIL();
   }
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::allPaths() const {
+std::vector<Path> PathSearch::allPaths(std::span<const Id> sources, std::span<const Id> targets) const {
   std::vector<Path> paths;
   Path path;
 
-  for (auto source : config_.sources_) {
+  for (auto source : sources) {
     auto startIndex = idToIndex_.at(source);
 
-    std::vector<uint64_t> targets;
-    for (auto target : config_.targets_) {
-      targets.push_back(target.getBits());
-    }
-
-    if (targets.empty()) {
-      for (auto id : indexToId_) {
-        targets.push_back(id.getBits());
-      }
+    std::vector<uint64_t> targetIndices;
+    for (auto target : targets) {
+      targetIndices.push_back(target.getBits());
     }
 
     PredecessorMap predecessors;
@@ -201,7 +236,7 @@ std::vector<Path> PathSearch::allPaths() const {
     } catch (const StopSearchException& e) {
     }
 
-    for (auto target : targets) {
+    for (auto target : targetIndices) {
       auto pathsToTarget =
           reconstructPaths(source.getBits(), target, predecessors);
       for (auto path : pathsToTarget) {
@@ -213,21 +248,21 @@ std::vector<Path> PathSearch::allPaths() const {
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::shortestPaths() const {
+std::vector<Path> PathSearch::shortestPaths(std::span<const Id> sources, std::span<const Id> targets) const {
   std::vector<Path> paths;
   Path path;
-  for (auto source : config_.sources_) {
+  for (auto source : sources) {
     auto startIndex = idToIndex_.at(source);
 
-    std::unordered_set<uint64_t> targets;
-    for (auto target : config_.targets_) {
-      targets.insert(target.getBits());
+    std::unordered_set<uint64_t> targetIndices;
+    for (auto target : targets) {
+      targetIndices.insert(target.getBits());
     }
     std::vector<VertexDescriptor> predecessors(indexToId_.size());
     std::vector<double> distances(indexToId_.size(),
                                   std::numeric_limits<double>::max());
 
-    DijkstraAllPathsVisitor vis(startIndex, targets, path, paths, predecessors,
+    DijkstraAllPathsVisitor vis(startIndex, targetIndices, path, paths, predecessors,
                                 distances);
 
     auto weightMap = get(&Edge::weight_, graph_);

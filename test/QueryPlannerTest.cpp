@@ -777,8 +777,10 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{ALL_PATHS,         {getId("<x>")},
-                                 {getId("<z>")},    Variable("?start"),
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,    Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {}};
   h::expect(
@@ -803,9 +805,10 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{ALL_PATHS,
-                                 {getId("<x>")},
-                                 {getId("<y>"), getId("<z>")},
+                                 sources, targets,
                                  Variable("?start"),
                                  Variable("?end"),
                                  Variable("?path"),
@@ -836,8 +839,9 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
-  PathSearchConfiguration config{ALL_PATHS,         {getId("<x>")},
-                                 {getId("<z>")},    Variable("?start"),
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
+  PathSearchConfiguration config{ALL_PATHS,         sources, targets,    Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {Variable("?middle")}};
   h::expect(
@@ -873,10 +877,11 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       "<m2> <p2> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{
       ALL_PATHS,
-      {getId("<x>")},
-      {getId("<z>"), getId("<y>")},
+      sources, targets,
       Variable("?start"),
       Variable("?end"),
       Variable("?path"),

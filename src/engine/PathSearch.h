@@ -5,8 +5,10 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "engine/Operation.h"
@@ -27,6 +29,9 @@ using IdToNodeMap = std::unordered_map<
 
 enum PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
 
+using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
+using SearchSide = std::variant<Variable, std::vector<Id>>;
+
 /**
  * @brief Struct to hold configuration parameters for the path search.
  */
@@ -34,9 +39,9 @@ struct PathSearchConfiguration {
   // The path search algorithm to use.
   PathSearchAlgorithm algorithm_;
   // The source node ID.
-  std::vector<Id> sources_;
+  SearchSide sources_;
   // A list of target node IDs.
-  std::vector<Id> targets_;
+  SearchSide targets_;
   // Variable representing the start column in the result.
   Variable start_;
   // Variable representing the end column in the result.
@@ -47,6 +52,9 @@ struct PathSearchConfiguration {
   Variable edgeColumn_;
   // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
+
+  bool sourceIsVariable() const {return std::holds_alternative<Variable>(sources_);}
+  bool targetIsVariable() const {return std::holds_alternative<Variable>(targets_);}
 };
 
 /**
@@ -66,6 +74,9 @@ class PathSearch : public Operation {
 
   std::vector<Id> indexToId_;
   IdToNodeMap idToIndex_;
+
+  std::optional<TreeAndCol> boundSources_;
+  std::optional<TreeAndCol> boundTargets_;
 
  public:
   PathSearch(QueryExecutionContext* qec,
@@ -101,6 +112,33 @@ class PathSearch : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
+  void bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp, size_t inputCol);
+  void bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp, size_t inputCol);
+
+  bool isSourceBound() const {
+    return boundSources_.has_value() || !config_.sourceIsVariable();
+  }
+
+  bool isTargetBound() const {
+    return boundTargets_.has_value() || !config_.targetIsVariable();
+  }
+
+  std::optional<size_t> getSourceColumn() const {
+    if (!config_.sourceIsVariable()) {
+      return std::nullopt;
+    }
+
+    return variableColumns_.at(std::get<Variable>(config_.sources_)).columnIndex_;
+  }
+
+  std::optional<size_t> getTargetColumn() const {
+    if (!config_.targetIsVariable()) {
+      return std::nullopt;
+    }
+
+    return variableColumns_.at(std::get<Variable>(config_.targets_)).columnIndex_;
+  }
+
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
   VariableToColumnMap computeVariableToColumnMap() const override;
 
@@ -122,23 +160,25 @@ class PathSearch : public Operation {
   void buildMapping(std::span<const Id> startNodes,
                     std::span<const Id> endNodes);
 
+  std::span<const Id> handleSearchSide(const SearchSide& side, const std::optional<TreeAndCol>& binding) const;
+
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<Path> findPaths() const;
+  std::vector<Path> findPaths(std::span<const Id> sources, std::span<const Id> targets) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
-  std::vector<Path> allPaths() const;
+  std::vector<Path> allPaths(std::span<const Id> sources, std::span<const Id> targets) const;
 
   /**
    * @brief Finds the shortest paths in the graph.
    * @return A vector of the shortest paths.
    */
-  std::vector<Path> shortestPaths() const;
+  std::vector<Path> shortestPaths(std::span<const Id> sources, std::span<const Id> targets) const;
 
   std::vector<Path> reconstructPaths(uint64_t source, uint64_t target,
                                      PredecessorMap predecessors) const;
