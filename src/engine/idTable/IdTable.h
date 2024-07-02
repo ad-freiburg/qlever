@@ -751,6 +751,17 @@ class IdTableStatic
     *(static_cast<Base*>(this)) = std::move(b);
     return *this;
   }
+
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const IdTableStatic& idTable) {
+    os << "{ ";
+    std::ranges::copy(
+        idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
+    os << "}";
+    return os;
+  }
 };
 
 // This was previously implemented as an alias (`using IdTable =

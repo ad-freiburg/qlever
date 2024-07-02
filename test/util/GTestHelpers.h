@@ -111,3 +111,15 @@ MATCHER_P2(HasKeyMatching, key, matcher,
                    << arg[key] << ' ';
   return testing::ExplainMatchResult(matcher, arg[key], result_listener);
 }
+
+// Matcher that can be used the make assertions about objects `<<` (insert into
+// stream) operator.
+MATCHER_P(InsertIntoStream, matcher,
+          (negation ? "does not yield " : "yields ") +
+              testing::DescribeMatcher<std::string>(matcher, negation)) {
+  std::stringstream outStream;
+  outStream << arg;
+  std::string output = outStream.str();
+  *result_listener << "that yields \"" << output << "\"";
+  return testing::ExplainMatchResult(matcher, output, result_listener);
+}

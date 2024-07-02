@@ -114,6 +114,10 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)
 
+addLinkAndDiscoverTestSerial(LocatedTriplesTest index)
+
+addLinkAndDiscoverTestSerial(IdTripleTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)

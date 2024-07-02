@@ -8,6 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "index/LocatedTriples.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
@@ -126,6 +127,8 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
+  const MetaData& metaData() const { return meta_; }
+
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;
@@ -135,7 +138,6 @@ class Permutation {
   // sorted, for example {1, 0, 2} for PSO.
   array<size_t, 3> keyOrder_;
 
-  const MetaData& metaData() const { return meta_; }
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the
