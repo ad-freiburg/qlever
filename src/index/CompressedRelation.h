@@ -386,7 +386,10 @@ class CompressedRelationReader {
     }
 
     friend std::ostream& operator<<(std::ostream& os,
-                                    const ScanSpecification& scanSpec);
+                                    const ScanSpecification& scanSpec) {
+      return os << "ScanSpec(" << scanSpec.col0Id_ << ", " << scanSpec.col1Id_
+                << ", " << scanSpec.col2Id_ << ")";
+    }
   };
 
   // The metadata of a single relation together with a subset of its

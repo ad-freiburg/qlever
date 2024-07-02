@@ -53,24 +53,23 @@ DeltaTriples::locateAndAddTriples(
   ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
-    // TODO<qup42> also move the CancellationHandle into
-    // locateTriplesInPermutation
     auto& perm = index_.getImpl().getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        idTriples, perm.augmentedBlockData(), perm.keyOrder(), shouldExist);
+        idTriples, perm.augmentedBlockData(), perm.keyOrder(), shouldExist,
+        cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[permutation] =
         getLocatedTriplesPerBlock(permutation).add(locatedTriples);
     cancellationHandle->throwIfCancelled();
 
     // Update blocks firstUpdateTriple_ and lastUpdateTriple_.
-    auto block_meta = perm.augmentedBlockData();
+    auto blockMetadata = perm.augmentedBlockData();
     LOG(INFO) << "Permutation: " << perm.readableName() << " with "
-              << block_meta.size() << " blocks" << std::endl;
+              << blockMetadata.size() << " blocks" << std::endl;
     LOG(INFO) << "LocatedTriplesPerBlock "
               << getLocatedTriplesPerBlock(permutation);
-    LOG(INFO) << "Triples (" << block_meta.begin()->firstTriple_ << ", "
-              << block_meta.rbegin()->lastTriple_ << ")" << std::endl;
+    LOG(INFO) << "Triples (" << blockMetadata.begin()->firstTriple_ << ", "
+              << blockMetadata.rbegin()->lastTriple_ << ")" << std::endl;
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
@@ -87,8 +86,8 @@ void DeltaTriples::eraseTripleInAllPermutations(
     DeltaTriples::LocatedTripleHandles& handles) {
   // Erase for all permutations.
   for (auto permutation : Permutation::ALL) {
-    auto lt_iter = handles.forPermutation(permutation);
-    getLocatedTriplesPerBlock(permutation).erase(lt_iter->blockIndex_, lt_iter);
+    auto ltIter = handles.forPermutation(permutation);
+    getLocatedTriplesPerBlock(permutation).erase(ltIter->blockIndex_, ltIter);
   }
 };
 

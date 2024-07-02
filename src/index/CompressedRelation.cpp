@@ -688,10 +688,9 @@ CompressedRelationReader::completeColumnIndices(ColumnIndicesRef columnIndices,
   ColumnIndices columnFilterIndices;
   columnFilterIndices.resize(columnIndices.size());
   for (size_t i = 0; i < numIndexColumns; i++) {
-    columnFilterIndices[i] =
-        std::distance(amendedColumnIndices.begin(),
-                      std::find(amendedColumnIndices.begin(),
-                                amendedColumnIndices.end(), columnIndices[i]));
+    columnFilterIndices[i] = std::distance(
+        amendedColumnIndices.begin(),
+        std::ranges::find(amendedColumnIndices, columnIndices[i]));
   }
   std::iota(columnFilterIndices.begin() + numIndexColumns,
             columnFilterIndices.end(), 3);
@@ -1253,13 +1252,6 @@ void CompressedRelationReader::enableUpdateUse() { useUpdates_ = true; }
 
 // ____________________________________________________________________________
 void CompressedRelationReader::disableUpdateUse() { useUpdates_ = false; }
-
-std::ostream& operator<<(
-    std::ostream& os,
-    const CompressedRelationReader::ScanSpecification& scanSpec) {
-  return os << "ScanSpec(" << scanSpec.col0Id_ << ", " << scanSpec.col1Id_
-            << ", " << scanSpec.col2Id_ << ")";
-}
 
 std::ostream& operator<<(std::ostream& os,
                          const std::optional<ValueId>& scanSpec) {
