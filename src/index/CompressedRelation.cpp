@@ -1177,17 +1177,21 @@ auto CompressedRelationWriter::createPermutationPair(
     finishRelation();
   }
 
-  // TODO<qup42> dont hardcode the 3 columns
-  writer1.blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
-      {{0, 0}, {0, 0}, {0, 0}},
-      0,
-      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()},
-      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()}});
-  writer2.blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
-      {{0, 0}, {0, 0}, {0, 0}},
-      0,
-      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()},
-      {Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()}});
+  // TODO<qup42>: write offsets to the end into sentinel block?
+  auto sentinelBlockMetadata = [](size_t numColumns) {
+    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>
+        offsetsAndCompressedSize{{0, 0}, {0, 0}, {0, 0}};
+    CompressedBlockMetadata::PermutedTriple blockBorders{
+        Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()};
+    AD_CORRECTNESS_CHECK(numColumns >= 3);
+    for (size_t i = 3; i < numColumns; i++) {
+      offsetsAndCompressedSize.emplace_back(0, 0);
+    }
+    return CompressedBlockMetadata{offsetsAndCompressedSize, 0, blockBorders,
+                                   blockBorders};
+  };
+  writer1.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));
+  writer2.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));
 
   writer1.finish();
   writer2.finish();
