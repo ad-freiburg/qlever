@@ -46,36 +46,37 @@ int main(int argc, char** argv) {
   IndexImpl& impl = i.getImpl();
   std::string indexName{argv[1]};
   std::string p{argv[2]};
+  LocatedTriplesPerBlock locatedTriplesPerBlock;
 
   if (p == "sop") {
-    impl.SOP().loadFromDisk(indexName);
+    impl.SOP().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.SOP());
     return EXIT_SUCCESS;
   }
   if (p == "spo") {
-    impl.SPO().loadFromDisk(indexName);
+    impl.SPO().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.SPO());
     return EXIT_SUCCESS;
   }
   if (p == "osp") {
-    impl.OSP().loadFromDisk(indexName);
+    impl.OSP().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.OSP());
     return EXIT_SUCCESS;
   }
   if (p == "ops") {
-    impl.OPS().loadFromDisk(indexName);
+    impl.OPS().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.OPS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pos") {
-    impl.POS().loadFromDisk(indexName);
+    impl.POS().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.POS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pso") {
-    impl.PSO().loadFromDisk(indexName);
+    impl.PSO().loadFromDisk(indexName, locatedTriplesPerBlock);
     dumpToStdout(impl.PSO());
     return EXIT_SUCCESS;
   }

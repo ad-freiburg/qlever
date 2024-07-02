@@ -717,14 +717,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
+  pso_.loadFromDisk(onDiskBase_,
+                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::PSO));
+  pos_.loadFromDisk(onDiskBase_,
+                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::POS));
 
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
+    ops_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::OPS));
+    osp_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::OSP));
+    spo_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::SPO));
+    sop_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::SOP));
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"

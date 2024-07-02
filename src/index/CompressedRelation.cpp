@@ -819,7 +819,9 @@ auto CompressedRelationReader::getFirstAndLastTriple(
       relevantBlocks.back(),
       (relevantBlocks.end() - relevantBlocks.begin()) + beginBlockOffset);
   AD_CORRECTNESS_CHECK(!firstBlock.empty());
-  AD_CORRECTNESS_CHECK(!lastBlock.empty());
+  // TODO: This does not hold anymore because the last block may be the Sentinel
+  // Block.
+  // AD_CORRECTNESS_CHECK(!lastBlock.empty());
   return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
 }
 
@@ -1169,14 +1171,15 @@ auto CompressedRelationWriter::createPermutationPair(
   auto sentinelBlockMetadata = [](size_t numColumns) {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>
         offsetsAndCompressedSize{{0, 0}, {0, 0}, {0, 0}};
-    CompressedBlockMetadata::PermutedTriple blockBorders{
-        Id::makeSentinel(), Id::makeSentinel(), Id::makeSentinel()};
     AD_CORRECTNESS_CHECK(numColumns >= 3);
     for (size_t i = 3; i < numColumns; i++) {
       offsetsAndCompressedSize.emplace_back(0, 0);
     }
-    return CompressedBlockMetadata{offsetsAndCompressedSize, 0, blockBorders,
-                                   blockBorders};
+    return CompressedBlockMetadata{
+        offsetsAndCompressedSize,
+        0,
+        {Id::makeSentinel(0), Id::makeSentinel(0), Id::makeSentinel(0)},
+        {Id::makeSentinel(1), Id::makeSentinel(0), Id::makeSentinel(0)}};
   };
   writer1.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));
   writer2.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));

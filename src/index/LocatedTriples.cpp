@@ -214,6 +214,23 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
   }
 }
 
+void LocatedTriplesPerBlock::updateAugmentedMetadata(
+    const std::vector<CompressedBlockMetadata>& metadata) {
+  // Copy block metadata to augment it with updated triples.
+  IndexMetaDataMmap::BlocksType allBlocks{metadata};
+  for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
+    size_t blockIndex = it - allBlocks.begin();
+    if (hasUpdates(blockIndex)) {
+      auto updateLimits = getLimits(blockIndex);
+      it->firstTriple_ =
+          std::min(it->firstTriple_, updateLimits.firstTriple_.value());
+      it->lastTriple_ =
+          std::max(it->lastTriple_, updateLimits.lastTriple_.value());
+    }
+  }
+  augmentedMetadata_ = allBlocks;
+}
+
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& os, const LocatedTriples& lts) {
   os << "{ ";

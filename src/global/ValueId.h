@@ -181,12 +181,11 @@ class ValueId {
   [[nodiscard]] UndefinedType getUndefined() const noexcept { return {}; }
   bool isUndefined() const noexcept { return *this == makeUndefined(); }
 
-  constexpr static ValueId makeSentinel() noexcept {
-    return addDatatypeBits(std::bit_cast<uint64_t>(0UL), Datatype::Sentinel);
+  constexpr static ValueId makeSentinel(uint32_t i) noexcept {
+    return addDatatypeBits(IntegerType::toNBit(i), Datatype::Sentinel);
   }
 
   [[nodiscard]] SentinelType getSentinel() const noexcept { return {}; }
-  bool isSentinel() const noexcept { return *this == makeSentinel(); }
 
   /// Create a `ValueId` for a double value. The conversion will reduce the
   /// precision of the mantissa of an IEEE double precision floating point

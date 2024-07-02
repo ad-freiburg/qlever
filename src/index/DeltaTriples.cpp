@@ -62,8 +62,9 @@ DeltaTriples::locateAndAddTriples(
         getLocatedTriplesPerBlock(permutation).add(locatedTriples);
     cancellationHandle->throwIfCancelled();
 
-    // Update blocks firstUpdateTriple_ and lastUpdateTriple_.
-    auto blockMetadata = perm.augmentedBlockData();
+    auto blockMetadata = perm.metaData().blockData();
+    getLocatedTriplesPerBlock(permutation)
+        .updateAugmentedMetadata(blockMetadata);
     LOG(INFO) << "Permutation: " << perm.readableName() << " with "
               << blockMetadata.size() << " blocks" << std::endl;
     LOG(INFO) << "LocatedTriplesPerBlock "

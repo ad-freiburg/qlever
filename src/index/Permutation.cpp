@@ -19,7 +19,8 @@ Permutation::Permutation(Enum permutation,
       locatedTriplesPerBlock_{locatedTriplesPerBlock} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase) {
+void Permutation::loadFromDisk(const std::string& onDiskBase,
+                               LocatedTriplesPerBlock& locatedTriplesPerBlock) {
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
@@ -38,6 +39,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase) {
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
   reader_.value().enableUpdateUse();
+  locatedTriplesPerBlock.updateAugmentedMetadata(meta_.blockData());
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
@@ -52,30 +54,33 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
                              readableName_ + ", which was not loaded");
   }
 
-  return reader().scan(scanSpec, augmentedBlockData(), additionalColumns,
-                       cancellationHandle, locatedTriplesPerBlock_, 0UL);
+  return reader().scan(scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
+                       additionalColumns, cancellationHandle,
+                       locatedTriplesPerBlock_, 0UL);
 }
 
 // _____________________________________________________________________
 size_t Permutation::getResultSizeOfScan(
     const ScanSpecification& scanSpec) const {
-  return reader().getResultSizeOfScan(scanSpec, augmentedBlockData(),
-                                      locatedTriplesPerBlock_);
+  return reader().getResultSizeOfScan(
+      scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
+      locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol1IdsAndCounts(
     Id col0Id, const CancellationHandle& cancellationHandle) const {
-  return reader().getDistinctCol1IdsAndCounts(col0Id, augmentedBlockData(),
-                                              cancellationHandle,
-                                              locatedTriplesPerBlock_);
+  return reader().getDistinctCol1IdsAndCounts(
+      col0Id, locatedTriplesPerBlock_.getAugmentedMetadata(),
+      cancellationHandle, locatedTriplesPerBlock_);
 }
 
 // ____________________________________________________________________________
 IdTable Permutation::getDistinctCol0IdsAndCounts(
     const CancellationHandle& cancellationHandle) const {
   return reader().getDistinctCol0IdsAndCounts(
-      augmentedBlockData(), cancellationHandle, locatedTriplesPerBlock_);
+      locatedTriplesPerBlock_.getAugmentedMetadata(), cancellationHandle,
+      locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
@@ -124,18 +129,20 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
   if (meta_.col0IdExists(col0Id)) {
     return meta_.getMetaData(col0Id);
   }
-  return reader().getMetadataForSmallRelation(augmentedBlockData(), col0Id,
-                                              locatedTriplesPerBlock_);
+  return reader().getMetadataForSmallRelation(
+      locatedTriplesPerBlock_.getAugmentedMetadata(), col0Id,
+      locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
-  MetadataAndBlocks result{scanSpec,
-                           std::get<std::span<const CompressedBlockMetadata>>(
-                               CompressedRelationReader::getRelevantBlocks(
-                                   scanSpec, augmentedBlockData())),
-                           std::nullopt};
+  MetadataAndBlocks result{
+      scanSpec,
+      std::get<std::span<const CompressedBlockMetadata>>(
+          CompressedRelationReader::getRelevantBlocks(
+              scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata())),
+      std::nullopt};
 
   result.firstAndLastTriple_ =
       reader().getFirstAndLastTriple(result, locatedTriplesPerBlock_);
@@ -154,8 +161,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   //  also handle the other case
   if (!blocks.has_value()) {
     auto [blockSpan, beginBlockOffset] =
-        CompressedRelationReader::getRelevantBlocks(scanSpec,
-                                                    augmentedBlockData());
+        CompressedRelationReader::getRelevantBlocks(
+            scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
     offset = beginBlockOffset;
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   } else {
@@ -166,18 +173,6 @@ Permutation::IdTableGenerator Permutation::lazyScan(
                            std::move(columns), std::move(cancellationHandle),
                            locatedTriplesPerBlock_, offset);
 }
-vector<CompressedBlockMetadata> Permutation::augmentedBlockData() const {
-  // Copy block metadata to augment it with updated triples.
-  IndexMetaDataMmap::BlocksType allBlocks = meta_.blockData();
-  for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
-    size_t blockIndex = it - allBlocks.begin();
-    if (locatedTriplesPerBlock_.hasUpdates(blockIndex)) {
-      auto updateLimits = locatedTriplesPerBlock_.getLimits(blockIndex);
-      it->firstTriple_ =
-          std::min(it->firstTriple_, updateLimits.firstTriple_.value());
-      it->lastTriple_ =
-          std::max(it->lastTriple_, updateLimits.lastTriple_.value());
-    }
-  }
-  return allBlocks;
+const vector<CompressedBlockMetadata>& Permutation::augmentedBlockData() const {
+  return locatedTriplesPerBlock_.getAugmentedMetadata();
 }

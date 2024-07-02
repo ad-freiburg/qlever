@@ -55,7 +55,8 @@ class Permutation {
                        Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase);
+  void loadFromDisk(const std::string& onDiskBase,
+                    LocatedTriplesPerBlock& locatedTriplesPerBlock);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that
@@ -135,7 +136,7 @@ class Permutation {
   const MetaData& metaData() const { return meta_; }
 
   // _______________________________________________________
-  vector<CompressedBlockMetadata> augmentedBlockData() const;
+  const vector<CompressedBlockMetadata>& augmentedBlockData() const;
 
  private:
   // for Log output, e.g. "POS"

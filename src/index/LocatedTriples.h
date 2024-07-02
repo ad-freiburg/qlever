@@ -91,7 +91,12 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
+  std::vector<CompressedBlockMetadata> augmentedMetadata_;
+
  public:
+  void updateAugmentedMetadata(
+      const std::vector<CompressedBlockMetadata>& metadata);
+
   // Get upper limits for the number of located triples for the given block. The
   // return value is a pair of numbers: first, the number of existing triples
   // ("to be deleted") and second, the number of new triples ("to be inserted").
@@ -147,6 +152,10 @@ class LocatedTriplesPerBlock {
 
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
+
+  const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
+    return augmentedMetadata_;
+  };
 
   // Remove all located triples.
   void clear() {
