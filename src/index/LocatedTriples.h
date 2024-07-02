@@ -44,8 +44,8 @@ struct LocatedTriple {
   static std::vector<LocatedTriple> locateTriplesInPermutation(
       const std::vector<IdTriple<0>>& triples,
       const std::vector<CompressedBlockMetadata>& blockMetadata,
-      const std::array<size_t, 3>& keyOrder, bool shouldExist);
-
+      const std::array<size_t, 3>& keyOrder, bool shouldExist,
+      ad_utility::SharedCancellationHandle cancellationHandle);
   bool operator==(const LocatedTriple&) const = default;
 
   // This operator is only for debugging and testing. It returns a

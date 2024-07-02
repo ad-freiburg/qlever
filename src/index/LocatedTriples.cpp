@@ -17,7 +17,8 @@
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     const std::vector<IdTriple<0>>& triples,
     const std::vector<CompressedBlockMetadata>& blockMetadata,
-    const std::array<size_t, 3>& keyOrder, bool shouldExist) {
+    const std::array<size_t, 3>& keyOrder, bool shouldExist,
+    ad_utility::SharedCancellationHandle cancellationHandle) {
   vector<LocatedTriple> out;
   out.reserve(triples.size());
   size_t currentBlockIndex;
@@ -35,6 +36,7 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
             }) -
         blockMetadata.begin();
     out.emplace_back(currentBlockIndex, triple, shouldExist);
+    cancellationHandle->throwIfCancelled();
   }
 
   return out;

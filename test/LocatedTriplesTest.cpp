@@ -438,19 +438,23 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   auto PT7 = PT(2, 30, 30);
   auto PT8 = PT(3, 10, 10);
 
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
   {
     // Each PTn defines a block with only a single triple.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
         {CBM(PT1, PT1), CBM(PT2, PT2), CBM(PT3, PT3), CBM(PT4, PT4),
          CBM(PT5, PT5), CBM(PT6, PT6), CBM(PT7, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false);
+        {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
                      LT(2, T4, false), LT(4, T5, false), LT(6, T6, false),
                      LT(7, T7, false), LT(8, T8, false)}));
   }
+
   {
     // Block 1: PT1
     // Block 2: PT2 - PT3
@@ -461,7 +465,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
         triplesToLocate,
         {CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
          CBM(PT8, PT8)},
-        {0, 1, 2}, true);
+        {0, 1, 2}, true, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
                                            LT(1, T3, true), LT(1, T4, true),
@@ -473,7 +477,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // The relations (identical first column) are in a block each.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false);
+        {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(1, T2, false), LT(1, T3, false),
@@ -487,7 +491,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // is supported.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocateReverse, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false);
+        {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(3, T8, false), LT(2, T7, false), LT(1, T6, false),
@@ -498,7 +502,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   {
     // All triples are in one block.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        triplesToLocate, {CBM(PT1, PT8)}, {0, 1, 2}, false);
+        triplesToLocate, {CBM(PT1, PT8)}, {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
