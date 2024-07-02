@@ -223,16 +223,12 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](
                              Id id, const CompressedBlockMetadata& block) {
-    return id < getRelevantIdFromTriple(
-                    block.firstUpdateTriple_.value_or(block.firstTriple_),
-                    metadataAndBlocks);
+    return id < getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks);
   };
 
   auto blockLessThanId = [&metadataAndBlocks](
                              const CompressedBlockMetadata& block, Id id) {
-    return getRelevantIdFromTriple(
-               block.lastUpdateTriple_.value_or(block.lastTriple_),
-               metadataAndBlocks) < id;
+    return getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks) < id;
   };
 
   // `blockLessThanBlock` (a dummy) and `std::less<Id>` are only needed to
@@ -288,13 +284,10 @@ CompressedRelationReader::getBlocksForJoin(
         auto getSingleBlock =
             [&metadataAndBlocks](const CompressedBlockMetadata& block)
             -> BlockWithFirstAndLastId {
-          return {block,
-                  getRelevantIdFromTriple(
-                      block.firstUpdateTriple_.value_or(block.firstTriple_),
-                      metadataAndBlocks),
-                  getRelevantIdFromTriple(
-                      block.lastUpdateTriple_.value_or(block.lastTriple_),
-                      metadataAndBlocks)};
+          return {
+              block,
+              getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
+              getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
         };
         auto result = std::views::transform(
             std::get<std::span<const CompressedBlockMetadata>>(
@@ -528,12 +521,8 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   // count from the metadata.
   for (size_t i = 0; i < relevantBlocksMetadata.size(); ++i) {
     const auto& blockMetadata = relevantBlocksMetadata[i];
-    Id firstColId = std::invoke(
-        idGetter,
-        blockMetadata.firstUpdateTriple_.value_or(blockMetadata.firstTriple_));
-    Id lastColId = std::invoke(
-        idGetter,
-        blockMetadata.lastUpdateTriple_.value_or(blockMetadata.lastTriple_));
+    Id firstColId = std::invoke(idGetter, blockMetadata.firstTriple_);
+    Id lastColId = std::invoke(idGetter, blockMetadata.lastTriple_);
     if (firstColId == lastColId &&
         !locatedTriplesPerBlock.hasUpdates(beginBlockOffset + i)) {
       // The whole block has the same `colId` and there are no updates in this
@@ -783,8 +772,7 @@ CompressedRelationReader::getRelevantBlocks(
   // another block without any overlap. In other words, the last triple of `a`
   // must be smaller than the first triple of `b` to return true.
   auto comp = [](const auto& blockA, const auto& blockB) {
-    return blockA.lastUpdateTriple_.value_or(blockA.lastTriple_) <
-           blockB.firstUpdateTriple_.value_or(blockB.firstTriple_);
+    return blockA.lastTriple_ < blockB.firstTriple_;
   };
 
   auto relevantBlocks = std::ranges::equal_range(blockMetadata, key, comp);

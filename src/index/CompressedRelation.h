@@ -94,9 +94,6 @@ struct CompressedBlockMetadata {
   };
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
-  // Keep track of block borders that changed at run-time through updates.
-  std::optional<PermutedTriple> firstUpdateTriple_ = std::nullopt;
-  std::optional<PermutedTriple> lastUpdateTriple_ = std::nullopt;
 
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
