@@ -619,4 +619,11 @@ TEST_F(LocatedTriplesTest, debugPrints) {
         ltpb, InsertIntoStream(testing::StrEq(
                   "LTs in Block #0: { LT(0 IdTriple(V:1, V:1, V:1, ) 1) }\n")));
   }
+
+  {
+    std::vector<IdTriple<0>> idts{IT(0, 0, 0), IT(1, 2, 3)};
+    EXPECT_THAT(idts,
+                InsertIntoStream(testing::StrEq(
+                    "IdTriple(V:0, V:0, V:0, ), IdTriple(V:1, V:2, V:3, )")));
+  }
 }
