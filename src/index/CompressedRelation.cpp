@@ -814,14 +814,20 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     return {row[0], row[1], row[2]};
   };
 
+  // TODO<qup42> this all might fail, because blocks can become completely empty
   auto firstBlock = scanBlock(relevantBlocks.front(), beginBlockOffset);
+  AD_CORRECTNESS_CHECK(!firstBlock.empty());
   auto lastBlock = scanBlock(
       relevantBlocks.back(),
       (relevantBlocks.end() - relevantBlocks.begin()) + beginBlockOffset);
-  AD_CORRECTNESS_CHECK(!firstBlock.empty());
-  // TODO: This does not hold anymore because the last block may be the Sentinel
-  // Block.
-  // AD_CORRECTNESS_CHECK(!lastBlock.empty());
+  if (lastBlock.empty() && relevantBlocks.size() != 1) {
+    // If the last block is empty, then it was the empty sentinel block. In that
+    // case scan the second-to-last block.
+    lastBlock = scanBlock(
+        *(relevantBlocks.rbegin() + 1),
+        (relevantBlocks.end() - relevantBlocks.begin()) + beginBlockOffset - 1);
+  }
+  AD_CORRECTNESS_CHECK(!lastBlock.empty());
   return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
 }
 
