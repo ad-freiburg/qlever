@@ -190,6 +190,7 @@ void PathSearch::buildMapping(std::span<const Id> startNodes,
     }
   };
   for (size_t i = 0; i < startNodes.size(); i++) {
+    checkCancellation();
     addNode(startNodes[i]);
     addNode(endNodes[i]);
   }
@@ -225,6 +226,7 @@ void PathSearch::buildGraph(std::span<const Id> startNodes,
   }
 
   for (size_t i = 0; i < startNodes.size(); i++) {
+    checkCancellation();
     auto startIndex = idToIndex_[startNodes[i]];
     auto endIndex = idToIndex_[endNodes[i]];
 
