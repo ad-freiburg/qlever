@@ -1819,8 +1819,10 @@ auto QueryPlanner::createJoinWithPathSearch(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
-  auto aRootOp = std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
-  auto bRootOp = std::dynamic_pointer_cast<PathSearch>(b._qet->getRootOperation());
+  auto aRootOp =
+      std::dynamic_pointer_cast<PathSearch>(a._qet->getRootOperation());
+  auto bRootOp =
+      std::dynamic_pointer_cast<PathSearch>(b._qet->getRootOperation());
 
   // Exactly one of the two Operations can be a path search.
   if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
@@ -1841,13 +1843,15 @@ auto QueryPlanner::createJoinWithPathSearch(
     const size_t thisCol = aRootOp ? jc[0] : jc[1];
     const size_t otherCol = aRootOp ? jc[1] : jc[0];
 
-    if (sourceColumn && sourceColumn == thisCol && !pathSearch->isSourceBound()) {
+    if (sourceColumn && sourceColumn == thisCol &&
+        !pathSearch->isSourceBound()) {
       pathSearch->bindSourceSide(sibling._qet, otherCol);
-    } else if (targetColumn && targetColumn == thisCol && !pathSearch->isTargetBound()) {
+    } else if (targetColumn && targetColumn == thisCol &&
+               !pathSearch->isTargetBound()) {
       pathSearch->bindTargetSide(sibling._qet, otherCol);
     }
   }
-  
+
   SubtreePlan plan = makeSubtreePlan(pathSearch);
   mergeSubtreePlanIds(plan, a, b);
   return plan;
@@ -2159,22 +2163,11 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
     parsedQuery::PathQuery& pathQuery) {
   auto candidatesIn = planner_.optimize(&pathQuery.childGraphPattern_);
   std::vector<SubtreePlan> candidatesOut;
-  auto tripleComponentToId = [this](const TripleComponent& comp) {
-    auto opt = comp.toValueId(planner_._qec->getIndex().getVocab());
-    if (opt.has_value()) {
-      return opt.value();
-    } else {
-      AD_THROW("No vocabulary entry for " + comp.toString());
-    }
-  };
-  std::vector<Id> sources;
-  for (auto comp : pathQuery.sources_) {
-    sources.push_back(tripleComponentToId(comp));
-  }
-  std::vector<Id> targets;
-  for (auto comp : pathQuery.targets_) {
-    targets.push_back(tripleComponentToId(comp));
-  }
+
+  const auto& vocab = planner_._qec->getIndex().getVocab();
+  auto sources = pathQuery.toSearchSide(pathQuery.sources_, vocab);
+  auto targets = pathQuery.toSearchSide(pathQuery.targets_, vocab);
+
   auto config =
       PathSearchConfiguration{pathQuery.algorithm_,
                               std::move(sources),

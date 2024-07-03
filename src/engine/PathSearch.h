@@ -53,8 +53,12 @@ struct PathSearchConfiguration {
   // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
 
-  bool sourceIsVariable() const {return std::holds_alternative<Variable>(sources_);}
-  bool targetIsVariable() const {return std::holds_alternative<Variable>(targets_);}
+  bool sourceIsVariable() const {
+    return std::holds_alternative<Variable>(sources_);
+  }
+  bool targetIsVariable() const {
+    return std::holds_alternative<Variable>(targets_);
+  }
 };
 
 /**
@@ -112,8 +116,10 @@ class PathSearch : public Operation {
 
   vector<ColumnIndex> resultSortedOn() const override;
 
-  void bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp, size_t inputCol);
-  void bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp, size_t inputCol);
+  void bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
+                      size_t inputCol);
+  void bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp,
+                      size_t inputCol);
 
   bool isSourceBound() const {
     return boundSources_.has_value() || !config_.sourceIsVariable();
@@ -128,7 +134,8 @@ class PathSearch : public Operation {
       return std::nullopt;
     }
 
-    return variableColumns_.at(std::get<Variable>(config_.sources_)).columnIndex_;
+    return variableColumns_.at(std::get<Variable>(config_.sources_))
+        .columnIndex_;
   }
 
   std::optional<size_t> getTargetColumn() const {
@@ -136,7 +143,8 @@ class PathSearch : public Operation {
       return std::nullopt;
     }
 
-    return variableColumns_.at(std::get<Variable>(config_.targets_)).columnIndex_;
+    return variableColumns_.at(std::get<Variable>(config_.targets_))
+        .columnIndex_;
   }
 
   Result computeResult([[maybe_unused]] bool requestLaziness) override;
@@ -160,25 +168,29 @@ class PathSearch : public Operation {
   void buildMapping(std::span<const Id> startNodes,
                     std::span<const Id> endNodes);
 
-  std::span<const Id> handleSearchSide(const SearchSide& side, const std::optional<TreeAndCol>& binding) const;
+  std::span<const Id> handleSearchSide(
+      const SearchSide& side, const std::optional<TreeAndCol>& binding) const;
 
   /**
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<Path> findPaths(std::span<const Id> sources, std::span<const Id> targets) const;
+  std::vector<Path> findPaths(std::span<const Id> sources,
+                              std::span<const Id> targets) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
-  std::vector<Path> allPaths(std::span<const Id> sources, std::span<const Id> targets) const;
+  std::vector<Path> allPaths(std::span<const Id> sources,
+                             std::span<const Id> targets) const;
 
   /**
    * @brief Finds the shortest paths in the graph.
    * @return A vector of the shortest paths.
    */
-  std::vector<Path> shortestPaths(std::span<const Id> sources, std::span<const Id> targets) const;
+  std::vector<Path> shortestPaths(std::span<const Id> sources,
+                                  std::span<const Id> targets) const;
 
   std::vector<Path> reconstructPaths(uint64_t source, uint64_t target,
                                      PredecessorMap predecessors) const;

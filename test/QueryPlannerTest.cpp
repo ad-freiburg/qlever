@@ -8,6 +8,7 @@
 #include "engine/QueryPlanner.h"
 #include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParser.h"
+#include "parser/data/Variable.h"
 #include "util/TripleComponentTestHelpers.h"
 
 namespace h = queryPlannerTestHelpers;
@@ -780,7 +781,7 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<z>")};
   PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,    Variable("?start"),
+                                 targets,           Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {}};
   h::expect(
@@ -797,7 +798,7 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
-      h::PathSearch(config, scan("?start", "<p>", "?end")), qec);
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
 TEST(QueryPlanner, PathSearchMultipleTargets) {
@@ -807,13 +808,10 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
 
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<y>"), getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,
-                                 sources, targets,
-                                 Variable("?start"),
-                                 Variable("?end"),
-                                 Variable("?path"),
-                                 Variable("?edge"),
-                                 {}};
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,           Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -829,7 +827,7 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
-      h::PathSearch(config, scan("?start", "<p>", "?end")), qec);
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
 TEST(QueryPlanner, PathSearchWithEdgeProperties) {
@@ -841,7 +839,8 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
 
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,         sources, targets,    Variable("?start"),
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,           Variable("?start"),
                                  Variable("?end"),  Variable("?path"),
                                  Variable("?edge"), {Variable("?middle")}};
   h::expect(
@@ -860,8 +859,9 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "?start <p1> ?middle."
       "?middle <p2> ?end."
       "}}}}",
-      h::PathSearch(config, join(scan("?start", "<p1>", "?middle"),
-                                 scan("?middle", "<p2>", "?end"))),
+      h::PathSearch(config, true, true,
+                    join(scan("?start", "<p1>", "?middle"),
+                         scan("?middle", "<p2>", "?end"))),
       qec);
 }
 
@@ -880,13 +880,10 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{
-      ALL_PATHS,
-      sources, targets,
-      Variable("?start"),
-      Variable("?end"),
-      Variable("?path"),
-      Variable("?edge"),
-      {Variable("?middle"), Variable("?middleAttribute")}};
+      ALL_PATHS,         sources,
+      targets,           Variable("?start"),
+      Variable("?end"),  Variable("?path"),
+      Variable("?edge"), {Variable("?middle"), Variable("?middleAttribute")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -906,11 +903,98 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       "?middle <p3> ?middleAttribute."
       "?middle <p2> ?end."
       "}}}}",
-      h::PathSearch(config,
+      h::PathSearch(config, true, true,
                     join(scan("?start", "<p1>", "?middle"),
                          join(scan("?middle", "<p3>", "?middleAttribute"),
                               scan("?middle", "<p2>", "?end")))),
       qec);
+}
+
+TEST(QueryPlanner, PathSearchSourceBound) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  Variable sources{"?source"};
+  std::vector<Id> targets{getId("<z>")};
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,           Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "VALUES ?source {<x>}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
+TEST(QueryPlanner, PathSearchTargetBound) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x>")};
+  Variable targets{"?target"};
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,           Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "VALUES ?target {<z>}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target ?target ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+}
+
+TEST(QueryPlanner, PathSearchBothBound) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  Variable sources{"?source"};
+  Variable targets{"?target"};
+  PathSearchConfiguration config{ALL_PATHS,         sources,
+                                 targets,           Variable("?start"),
+                                 Variable("?end"),  Variable("?path"),
+                                 Variable("?edge"), {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "VALUES (?source ?target) {(<x> <z>)}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target ?target ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
 }
 
 // __________________________________________________________________________

@@ -7,6 +7,8 @@
 #include <gmock/gmock-matchers.h>
 #include <gmock/gmock.h>
 
+#include <variant>
+
 #include "./util/GTestHelpers.h"
 #include "engine/Bind.h"
 #include "engine/CartesianProductJoin.h"
@@ -261,12 +263,27 @@ inline auto TransitivePath =
     };
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
+  auto sourceMatcher =
+      std::holds_alternative<Variable>(config.sources_)
+          ? AD_FIELD(
+                PathSearchConfiguration, sources_,
+                VariantWith<Variable>(Eq(std::get<Variable>(config.sources_))))
+          : AD_FIELD(
+                PathSearchConfiguration, sources_,
+                VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(
+                    std::get<std::vector<ValueId>>(config.sources_))));
+  auto targetMatcher =
+      std::holds_alternative<Variable>(config.targets_)
+          ? AD_FIELD(
+                PathSearchConfiguration, targets_,
+                VariantWith<Variable>(Eq(std::get<Variable>(config.targets_))))
+          : AD_FIELD(
+                PathSearchConfiguration, targets_,
+                VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(
+                    std::get<std::vector<ValueId>>(config.targets_))));
   return AllOf(
       AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
-      AD_FIELD(PathSearchConfiguration, sources_,
-               VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(std::get<std::vector<ValueId>>(config.sources_)))),
-      AD_FIELD(PathSearchConfiguration, targets_,
-               VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(std::get<std::vector<ValueId>>(config.targets_)))),
+      sourceMatcher, targetMatcher,
       AD_FIELD(PathSearchConfiguration, start_, Eq(config.start_)),
       AD_FIELD(PathSearchConfiguration, end_, Eq(config.end_)),
       AD_FIELD(PathSearchConfiguration, pathColumn_, Eq(config.pathColumn_)),
@@ -277,12 +294,14 @@ inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
 
 // Match a PathSearch operation
 inline auto PathSearch =
-    [](PathSearchConfiguration config,
+    [](PathSearchConfiguration config, bool sourceBound, bool targetBound,
        const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::PathSearch>(AllOf(
           Property("getChildren", &Operation::getChildren,
                    ElementsAre(Pointee(childMatchers)...)),
-          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config))));
+          AD_PROPERTY(PathSearch, getConfig, PathSearchConfigMatcher(config)),
+          AD_PROPERTY(PathSearch, isSourceBound, Eq(sourceBound)),
+          AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
     };
 
 // Match a sort operation. Currently, this is only required by the binary search

@@ -8,6 +8,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "parser/ParsedQuery.h"
+#include "util/Exception.h"
 #include "util/Forward.h"
 
 namespace parsedQuery {
@@ -74,10 +75,8 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   TripleComponent object = simpleTriple.o_;
   AD_CORRECTNESS_CHECK(predicate.isIri());
   if (predicate.getIri().toStringRepresentation().ends_with("source>")) {
-    AD_CORRECTNESS_CHECK(object.isIri());
     sources_.push_back(std::move(object));
   } else if (predicate.getIri().toStringRepresentation().ends_with("target>")) {
-    AD_CORRECTNESS_CHECK(object.isIri());
     targets_.push_back(std::move(object));
   } else if (predicate.getIri().toStringRepresentation().ends_with("start>")) {
     AD_CORRECTNESS_CHECK(object.isVariable());
@@ -110,6 +109,27 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     }
   } else {
     AD_THROW("Unsupported argument in PathSearch");
+  }
+}
+
+std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
+    std::vector<TripleComponent> side, const Index::Vocab& vocab) const {
+  if (side.size() == 1 && side[0].isVariable()) {
+    return side[0].getVariable();
+  } else {
+    std::vector<Id> sideIds;
+    for (auto comp : side) {
+      if (comp.isVariable()) {
+        AD_THROW("Only one variable is allowed per search side");
+      }
+      auto opt = comp.toValueId(vocab);
+      if (opt.has_value()) {
+        sideIds.push_back(opt.value());
+      } else {
+        AD_THROW("No vocabulary entry for " + comp.toString());
+      }
+    }
+    return sideIds;
   }
 }
 
