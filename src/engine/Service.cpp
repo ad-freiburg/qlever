@@ -129,7 +129,7 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
   for (std::span<std::byte> bytes : jsonByteResult) {
-    jsonStr.append(reinterpret_cast<const char*>(bytes.data()));
+    jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     checkCancellation();
   }
 
