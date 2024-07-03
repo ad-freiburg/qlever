@@ -624,6 +624,6 @@ TEST_F(LocatedTriplesTest, debugPrints) {
     std::vector<IdTriple<0>> idts{IT(0, 0, 0), IT(1, 2, 3)};
     EXPECT_THAT(idts,
                 InsertIntoStream(testing::StrEq(
-                    "IdTriple(V:0, V:0, V:0, ), IdTriple(V:1, V:2, V:3, )")));
+                    "IdTriple(V:0, V:0, V:0, ), IdTriple(V:1, V:2, V:3, ), ")));
   }
 }

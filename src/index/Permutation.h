@@ -127,8 +127,6 @@ class Permutation {
   // _______________________________________________________
   const bool& isLoaded() const { return isLoaded_; }
 
-  const MetaData& metaData() const { return meta_; }
-
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;
@@ -137,6 +135,8 @@ class Permutation {
   // order of the 3 keys S(0), P(1), and O(2) for which this permutation is
   // sorted, for example {1, 0, 2} for PSO.
   array<size_t, 3> keyOrder_;
+
+  const MetaData& metaData() const { return meta_; }
 
   MetaData meta_;
 
