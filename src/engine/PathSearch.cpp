@@ -118,6 +118,9 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
   const IdTable& dynSub = subRes->idTable();
   if (!dynSub.empty()) {
+    auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
+    timer.start();
+
     std::vector<std::span<const Id>> edgePropertyLists;
     for (const auto& edgeProperty : config_.edgeProperties_) {
       auto edgePropertyIndex = subtree_->getVariableColumn(edgeProperty);
@@ -126,18 +129,47 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
     auto subStartColumn = subtree_->getVariableColumn(config_.start_);
     auto subEndColumn = subtree_->getVariableColumn(config_.end_);
+
+    timer.stop();
+    auto prepTime = timer.msecs();
+    timer.start();
+
     buildGraph(dynSub.getColumn(subStartColumn), dynSub.getColumn(subEndColumn),
                edgePropertyLists);
+
+    timer.stop();
+    auto buildingTime = timer.msecs();
+    timer.start();
 
     std::span<const Id> sources =
         handleSearchSide(config_.sources_, boundSources_);
     std::span<const Id> targets =
         handleSearchSide(config_.targets_, boundTargets_);
 
+    timer.stop();
+    auto sideTime = timer.msecs();
+    timer.start();
+
     auto paths = findPaths(sources, targets);
+
+
+    timer.stop();
+    auto searchTime = timer.msecs();
+    timer.start();
 
     CALL_FIXED_SIZE(std::array{getResultWidth()},
                     &PathSearch::pathsToResultTable, this, idTable, paths);
+
+    timer.stop();
+    auto fillTime = timer.msecs();
+    timer.start();
+
+    auto& info = runtimeInfo();
+    info.addDetail("Time to read subcols", prepTime.count());
+    info.addDetail("Time to build graph & mapping", buildingTime.count());
+    info.addDetail("Time to prepare search sides", sideTime.count());
+    info.addDetail("Time to search paths", searchTime.count());
+    info.addDetail("Time to fill result table", fillTime.count());
   }
 
   return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
