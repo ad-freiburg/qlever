@@ -61,17 +61,6 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 // ____________________________________________________________________________
-BlockLimits LocatedTriplesPerBlock::getLimits(size_t blockIndex) const {
-  if (!hasUpdates(blockIndex)) {
-    return {};
-  } else {
-    auto& block = map_.at(blockIndex);
-    return {block.begin()->triple_.toPermutedTriple(),
-            block.rbegin()->triple_.toPermutedTriple()};
-  }
-}
-
-// ____________________________________________________________________________
 template <size_t numIndexColumns>
 IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
                                                  const IdTable& block) const {
@@ -219,11 +208,11 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata(
   for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
     size_t blockIndex = it - allBlocks.begin();
     if (hasUpdates(blockIndex)) {
-      auto updateLimits = getLimits(blockIndex);
+      auto& block = map_.at(blockIndex);
       it->firstTriple_ =
-          std::min(it->firstTriple_, updateLimits.firstTriple_.value());
+          std::min(it->firstTriple_, block.begin()->triple_.toPermutedTriple());
       it->lastTriple_ =
-          std::max(it->lastTriple_, updateLimits.lastTriple_.value());
+          std::max(it->lastTriple_, block.rbegin()->triple_.toPermutedTriple());
     }
   }
   augmentedMetadata_ = allBlocks;

@@ -20,11 +20,6 @@ struct NumAddedAndDeleted {
   bool operator<=>(const NumAddedAndDeleted&) const = default;
 };
 
-struct BlockLimits {
-  std::optional<CompressedBlockMetadata::PermutedTriple> firstTriple_;
-  std::optional<CompressedBlockMetadata::PermutedTriple> lastTriple_;
-};
-
 // A triple and its block in a particular permutation.
 // For a detailed definition of all border cases, see the definition at
 // the end of this file.
@@ -107,12 +102,6 @@ class LocatedTriplesPerBlock {
   // `blockIndex`.
   bool hasUpdates(size_t blockIndex) const;
 
-  // Returns the limits of the update triples for this block. `BlockLimits`
-  // indicate the first and last triple assigned to this block that was updated.
-  // This is regardless of insert/update and whether the triple is contained in
-  // the block's borders.
-  BlockLimits getLimits(size_t blockIndex) const;
-
   // Merge located triples for `blockIndex_` with the given index `block` and
   // write to `result`, starting from position `offsetInResult`. Return the
   // number of rows written to `result`.
@@ -157,7 +146,8 @@ class LocatedTriplesPerBlock {
       const std::vector<CompressedBlockMetadata>& metadata);
 
   // Returns the block metadata where the block borders have been updated to
-  // account for the update triples.
+  // account for the update triples. All triples (both insert and delete) will
+  // enlarge the block borders.
   const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
     return augmentedMetadata_;
   };

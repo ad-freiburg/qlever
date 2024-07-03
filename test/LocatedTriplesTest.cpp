@@ -511,6 +511,95 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   }
 }
 
+TEST_F(LocatedTriplesTest, augmentedMetadata) {
+  auto PT1 = PT(1, 10, 10);
+  auto PT2 = PT(2, 10, 10);
+  auto PT3 = PT(2, 15, 20);
+  auto PT4 = PT(2, 15, 30);
+  auto PT5 = PT(2, 20, 10);
+  auto PT6 = PT(2, 30, 20);
+  auto PT7 = PT(2, 30, 30);
+  auto PT8 = PT(3, 10, 10);
+  const std::vector<CompressedBlockMetadata> metadata = {
+      CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
+      CBM(PT8, PT8)};
+  std::vector<CompressedBlockMetadata> expectedAugmentedMetadata{metadata};
+
+  auto T1 = IT(1, 5, 10);   // Before block 0
+  auto T2 = IT(2, 12, 10);  // Inside block 1
+  auto T3 = IT(2, 15, 30);  // Equal PT4, beginning of block 2
+  auto T4 = IT(2, 40, 30);  // Before block 4
+
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // At the beginning the augmented metadata is equal to the block metadata.
+  LocatedTriplesPerBlock locatedTriplesPerBlock;
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // Adding no triples does no changed the augmented metadata.
+  locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+      {}, metadata, {0, 1, 2}, true, handle));
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // T1 is before block 0. The beginning of block 0 changes.
+  locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+      {T1}, metadata, {0, 1, 2}, false, handle));
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // T2 is inside block 1. Borders don't change.
+  locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+      {T2}, metadata, {0, 1, 2}, true, handle));
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // T3 is equal to PT4, the beginning of block 2. All update (update and
+  // delete) add to the block borders. Borders don't change.
+  locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+      {T3}, metadata, {0, 1, 2}, false, handle));
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // T4 is before block 4. The beginning of block 4 changes.
+  auto handles =
+      locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+          {T4}, metadata, {0, 1, 2}, true, handle));
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // Erasing the update of T4 restores the beginning of block 4.
+  locatedTriplesPerBlock.erase(4, handles[0]);
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  expectedAugmentedMetadata[4] = CBM(PT8, PT8);
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(expectedAugmentedMetadata));
+
+  // Clearing the updates restores the original block borders.
+  locatedTriplesPerBlock.clear();
+  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+
+  EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
+              testing::ElementsAreArray(metadata));
+}
+
 TEST_F(LocatedTriplesTest, debugPrints) {
   using LT = LocatedTriple;
 
