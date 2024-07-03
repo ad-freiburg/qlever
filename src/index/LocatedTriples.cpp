@@ -210,7 +210,7 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata(
   for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
     size_t blockIndex = it - allBlocks.begin();
     if (hasUpdates(blockIndex)) {
-      auto& block = map_.at(blockIndex);
+      const auto& block = map_.at(blockIndex);
       it->firstTriple_ =
           std::min(it->firstTriple_, block.begin()->triple_.toPermutedTriple());
       it->lastTriple_ =
