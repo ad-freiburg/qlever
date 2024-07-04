@@ -585,7 +585,6 @@ boost::asio::awaitable<void> Server::processQuery(
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson =
       [&request, &send](
