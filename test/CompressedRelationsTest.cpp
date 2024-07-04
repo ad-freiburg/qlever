@@ -390,7 +390,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, 0, blocks, std::nullopt};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -436,7 +436,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, 0, blocks, std::nullopt};
 
   CompressedBlockMetadata blockB1{
       0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
@@ -457,7 +457,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
+      {V(47), std::nullopt, std::nullopt}, 0, blocksB, std::nullopt};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&

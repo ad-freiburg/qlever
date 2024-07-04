@@ -217,8 +217,7 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColumn,
     const MetadataAndBlocks& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
-  auto relevantBlocks = std::get<std::span<const CompressedBlockMetadata>>(
-      getBlocksFromMetadata(metadataAndBlocks));
+  auto [relevantBlocks, blockOffset] = getBlocksFromMetadata(metadataAndBlocks);
 
   // We need symmetric comparisons between Ids and blocks.
   auto idLessThanBlock = [&metadataAndBlocks](

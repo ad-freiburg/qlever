@@ -405,6 +405,7 @@ class CompressedRelationReader {
   // the input to several functions below that take such an input.
   struct MetadataAndBlocks {
     ScanSpecification scanSpec_;
+    const size_t blockOffset_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
 
     // If set, `firstAndLastTriple_` contains the first and the last triple
