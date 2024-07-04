@@ -51,6 +51,8 @@ using CompressedBlock = std::vector<std::vector<char>>;
 
 // The metadata of a compressed block of ID triples in an index permutation.
 struct CompressedBlockMetadata {
+  // Index of the block in the permutation.
+  size_t blockIndex_;
   // Since we have column-based indices, the two columns of each block are
   // stored separately (but adjacently).
   struct OffsetAndCompressedSize {
@@ -107,6 +109,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata::OffsetAndCompressedSize) {
 
 // Serialization of the block metadata.
 AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
+  serializer | arg.blockIndex_;
   serializer | arg.offsetsAndCompressedSize_;
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
@@ -239,6 +242,9 @@ class CompressedRelationWriter {
       return std::tie(bl.firstTriple_.col0Id_, bl.firstTriple_.col1Id_,
                       bl.firstTriple_.col2Id_);
     });
+    for (size_t i = 0; i < blocks.size(); i++) {
+      blocks[i].blockIndex_ = i;
+    }
     return blocks;
   }
 
@@ -316,6 +322,11 @@ class CompressedRelationWriter {
   // directly.
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
                                                       auto&& sortedBlocks);
+
+  // Generates the `CompressedBlockMetadata` for an empty sentinel block that is
+  // after all normal index blocks. All that would otherwise not belong to an
+  // index block will belong to this block.
+  CompressedBlockMetadata generateSentinelBlockMetadata(size_t numColumns);
 
   // This is the function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.

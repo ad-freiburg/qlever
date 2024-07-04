@@ -737,11 +737,14 @@ void CompressedRelationWriter::compressAndWriteBlock(
         AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
         AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-        blockBuffer_.wlock()->push_back(
-            CompressedBlockMetadata{std::move(offsets),
-                                    numRows,
-                                    {first[0], first[1], first[2]},
-                                    {last[0], last[1], last[2]}});
+        // TODO<qup42>: are the blocks generated in order? (the sort in
+        // `getFinishedBlocks` suggests not)
+        blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
+            0,  // Will be set later by `getFinishedBlocks`
+            std::move(offsets),
+            numRows,
+            {first[0], first[1], first[2]},
+            {last[0], last[1], last[2]}});
       });
 }
 
@@ -1173,22 +1176,10 @@ auto CompressedRelationWriter::createPermutationPair(
     finishRelation();
   }
 
-  // TODO<qup42>: write offsets to the end into sentinel block?
-  auto sentinelBlockMetadata = [](size_t numColumns) {
-    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>
-        offsetsAndCompressedSize{{0, 0}, {0, 0}, {0, 0}};
-    AD_CORRECTNESS_CHECK(numColumns >= 3);
-    for (size_t i = 3; i < numColumns; i++) {
-      offsetsAndCompressedSize.emplace_back(0, 0);
-    }
-    return CompressedBlockMetadata{
-        offsetsAndCompressedSize,
-        0,
-        {Id::makeSentinel(0), Id::makeSentinel(0), Id::makeSentinel(0)},
-        {Id::makeSentinel(1), Id::makeSentinel(0), Id::makeSentinel(0)}};
-  };
-  writer1.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));
-  writer2.blockBuffer_.wlock()->push_back(sentinelBlockMetadata(numColumns));
+  writer1.blockBuffer_.wlock()->push_back(
+      writer1.generateSentinelBlockMetadata(numColumns));
+  writer2.blockBuffer_.wlock()->push_back(
+      writer2.generateSentinelBlockMetadata(numColumns));
 
   writer1.finish();
   writer2.finish();
@@ -1207,6 +1198,24 @@ auto CompressedRelationWriter::createPermutationPair(
       << std::endl;
   return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
           std::move(writer2).getFinishedBlocks()};
+}
+
+// ____________________________________________________________________________
+// TODO<qup42>: write offsets to the end of the file into the sentinel block?
+CompressedBlockMetadata CompressedRelationWriter::generateSentinelBlockMetadata(
+    size_t numColumns) {
+  std::vector<CompressedBlockMetadata::OffsetAndCompressedSize>
+      offsetsAndCompressedSize{{0, 0}, {0, 0}, {0, 0}};
+  AD_CORRECTNESS_CHECK(numColumns >= 3);
+  for (size_t i = 3; i < numColumns; i++) {
+    offsetsAndCompressedSize.emplace_back(0, 0);
+  }
+  return CompressedBlockMetadata{
+      0,  // Will be set later by `getFinishedBlocks`
+      offsetsAndCompressedSize,
+      0,
+      {Id::makeSentinel(0), Id::makeSentinel(0), Id::makeSentinel(0)},
+      {Id::makeSentinel(1), Id::makeSentinel(0), Id::makeSentinel(0)}};
 }
 
 // _____________________________________________________________________________

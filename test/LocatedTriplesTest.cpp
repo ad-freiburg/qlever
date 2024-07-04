@@ -22,8 +22,9 @@ auto IT = [](const auto& c1, const auto& c2, const auto& c3) {
 auto PT = [](const auto& c1, const auto& c2, const auto& c3) {
   return CompressedBlockMetadata::PermutedTriple{V(c1), V(c2), V(c3)};
 };
-auto CBM = [](const auto firstTriple, const auto lastTriple) {
-  return CompressedBlockMetadata{{}, 0, firstTriple, lastTriple};
+auto CBM = [](size_t blockIndex, const auto firstTriple,
+              const auto lastTriple) {
+  return CompressedBlockMetadata{blockIndex, {}, 0, firstTriple, lastTriple};
 };
 
 auto numBlocks =
@@ -445,8 +446,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Each PTn defines a block with only a single triple.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
-        {CBM(PT1, PT1), CBM(PT2, PT2), CBM(PT3, PT3), CBM(PT4, PT4),
-         CBM(PT5, PT5), CBM(PT6, PT6), CBM(PT7, PT7), CBM(PT8, PT8)},
+        {CBM(0, PT1, PT1), CBM(1, PT2, PT2), CBM(2, PT3, PT3), CBM(3, PT4, PT4),
+         CBM(4, PT5, PT5), CBM(5, PT6, PT6), CBM(6, PT7, PT7),
+         CBM(7, PT8, PT8)},
         {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
@@ -463,8 +465,8 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Block 8: PT8
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
-        {CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
-         CBM(PT8, PT8)},
+        {CBM(0, PT1, PT1), CBM(1, PT2, PT3), CBM(2, PT4, PT5), CBM(3, PT6, PT7),
+         CBM(4, PT8, PT8)},
         {0, 1, 2}, true, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray({LT(0, T1, true), LT(1, T2, true),
@@ -476,7 +478,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   {
     // The relations (identical first column) are in a block each.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        triplesToLocate, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
+        triplesToLocate, {CBM(0, PT1, PT1), CBM(1, PT2, PT7), CBM(2, PT8, PT8)},
         {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
@@ -490,8 +492,9 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // sorted. We will probably require a sorted input later, but for now this
     // is supported.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        triplesToLocateReverse, {CBM(PT1, PT1), CBM(PT2, PT7), CBM(PT8, PT8)},
-        {0, 1, 2}, false, handle);
+        triplesToLocateReverse,
+        {CBM(0, PT1, PT1), CBM(1, PT2, PT7), CBM(2, PT8, PT8)}, {0, 1, 2},
+        false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(3, T8, false), LT(2, T7, false), LT(1, T6, false),
@@ -502,7 +505,7 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
   {
     // All triples are in one block.
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        triplesToLocate, {CBM(PT1, PT8)}, {0, 1, 2}, false, handle);
+        triplesToLocate, {CBM(0, PT1, PT8)}, {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
                 testing::ElementsAreArray(
                     {LT(0, T1, false), LT(0, T2, false), LT(0, T3, false),
@@ -521,8 +524,8 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   auto PT7 = PT(2, 30, 30);
   auto PT8 = PT(3, 10, 10);
   const std::vector<CompressedBlockMetadata> metadata = {
-      CBM(PT1, PT1), CBM(PT2, PT3), CBM(PT4, PT5), CBM(PT6, PT7),
-      CBM(PT8, PT8)};
+      CBM(0, PT1, PT1), CBM(1, PT2, PT3), CBM(2, PT4, PT5), CBM(3, PT6, PT7),
+      CBM(4, PT8, PT8)};
   std::vector<CompressedBlockMetadata> expectedAugmentedMetadata{metadata};
 
   auto T1 = IT(1, 5, 10);   // Before block 0
@@ -553,7 +556,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
       {T1}, metadata, {0, 1, 2}, false, handle));
   locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
 
-  expectedAugmentedMetadata[0] = CBM(T1.toPermutedTriple(), PT1);
+  expectedAugmentedMetadata[0] = CBM(0, T1.toPermutedTriple(), PT1);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -580,7 +583,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
           {T4}, metadata, {0, 1, 2}, true, handle));
   locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
 
-  expectedAugmentedMetadata[4] = CBM(T4.toPermutedTriple(), PT8);
+  expectedAugmentedMetadata[4] = CBM(4, T4.toPermutedTriple(), PT8);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
@@ -588,7 +591,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   locatedTriplesPerBlock.erase(4, handles[0]);
   locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
 
-  expectedAugmentedMetadata[4] = CBM(PT8, PT8);
+  expectedAugmentedMetadata[4] = CBM(4, PT8, PT8);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
