@@ -32,7 +32,7 @@ class IndexScan final : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple);
 
-  virtual ~IndexScan() = default;
+  ~IndexScan() override = default;
 
   const TripleComponent& getPredicate() const { return predicate_; }
   const TripleComponent& getSubject() const { return subject_; }
