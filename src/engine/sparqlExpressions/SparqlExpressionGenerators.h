@@ -86,9 +86,7 @@ template <SingleExpressionResult Input, typename Transformation = std::identity>
 auto makeGenerator(Input&& input, size_t numItems, const EvaluationContext* context,
                    Transformation transformation = {}) {
   if constexpr (ad_utility::isSimilar<::Variable, Input>) {
-    std::span<const ValueId> inputWithVariableResolved{
-        getIdsFromVariable(std::forward<Input>(input), context)};
-    return resultGenerator(inputWithVariableResolved, numItems, transformation);
+    return resultGenerator(getIdsFromVariable(AD_FWD(input), context), numItems, transformation);
   } else {
     return resultGenerator(AD_FWD(input), numItems, transformation);
   }

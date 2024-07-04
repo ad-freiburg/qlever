@@ -16,11 +16,11 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -860,7 +860,8 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?height > 1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
-  expectHavingConditionFails("(LANG(?x) = \"en\")");
+  expectHavingCondition("(LANG(?x) = \"en\")",
+                        m::stringMatchesFilter("(LANG(?x) = \"en\")"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
@@ -1288,6 +1289,7 @@ TEST(SparqlParser, Query) {
 // Some helper matchers for the `builtInCall` test below.
 namespace builtInCallTestHelpers {
 using namespace sparqlExpression;
+
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
 // `Expression` matches the `matcher`.
@@ -1296,6 +1298,32 @@ auto matchPtr(Matcher matcher = Matcher{})
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   return testing::Pointee(
       testing::WhenDynamicCastTo<const Expression&>(matcher));
+}
+
+// Return a matcher that matches a `SparqlExpression::Ptr` that stores a
+// `VariableExpression` with the given  `variable`.
+auto variableExpressionMatcher = [](const Variable& variable) {
+  return matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
+};
+
+// Return a matcher that matches a `SparqlExpression::Ptr`that stores an
+// `Expression` (template argument), the children of which match the
+// `childrenMatchers`.
+template <typename Expression>
+auto matchPtrWithChildren(auto&&... childrenMatchers)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtr<Expression>(
+      AD_PROPERTY(SparqlExpression, childrenForTesting,
+                  testing::ElementsAre(childrenMatchers...)));
+}
+
+// Same as `matchPtrWithChildren` above, but the children are all variables.
+template <typename Expression>
+auto matchPtrWithVariables(const std::same_as<Variable> auto&... children)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtrWithChildren<Expression>(
+      variableExpressionMatcher(children)...);
 }
 
 // Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
@@ -1322,11 +1350,6 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
                               SparqlExpression, childrenForTesting,
                               ::testing::ElementsAre(childrenMatchers...))));
 }
-
-auto variableExpressionMatcher = [](const Variable& var) {
-  return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
-};
 
 auto idExpressionMatcher = [](Id id) {
   return matchPtr<IdExpression>(
@@ -1422,7 +1445,12 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+  expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
+  expectFails("LANGMATCHES()");
+  expectFails("LANGMATCHES(?x)");
 
+  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
+                                                     Var{"?x"}, Var{"?y"}));
   expectFails("STRDT()");
   expectFails("STRDT(?x)");
   expectBuiltInCall("STRDT(?x, ?y)",
@@ -1447,7 +1475,6 @@ TEST(SparqlParser, builtInCall) {
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
-  expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
@@ -1488,6 +1515,23 @@ TEST(SparqlParser, multiplicativeExpression) {
       matchNaryWithChildrenMatchers(&makeMultiplyExpression,
                                     matchNary(&makeDivideExpression, y, z),
                                     matchUnary(&makeAbsExpression)));
+}
+
+TEST(SparqlParser, relationalExpression) {
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
+  expectRelational("?x IN (?y, ?z)",
+                   matchPtrWithVariables<InExpression>(x, y, z));
+  expectRelational("?x NOT IN (?y, ?z)",
+                   matchNaryWithChildrenMatchers(
+                       &makeUnaryNegateExpression,
+                       matchPtrWithVariables<InExpression>(x, y, z)));
+  // TODO<joka921> Technically the other relational expressions (=, <, >, etc.)
+  // are also untested.
 }
 
 // Return a matcher for an `OperatorAndExpression`.

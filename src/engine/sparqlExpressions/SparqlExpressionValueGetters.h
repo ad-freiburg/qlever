@@ -272,4 +272,29 @@ struct IriValueGetter : Mixin<IriValueGetter> {
   }
   OptIri operator()(const LiteralOrIri& s, const EvaluationContext*) const;
 };
+
+// `LanguageTagValueGetter` returns an `std::optional<std::string>` object
+// which contains the language tag if previously set w.r.t. given
+// `Id`/`Literal`. This ValueGetter is currently used within
+// `LangExpression.cpp` for the (simple) implementation of the
+// `LANG()`-expression.
+struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
+  using Mixin<LanguageTagValueGetter>::operator();
+  std::optional<std::string> operator()(ValueId id,
+                                        const EvaluationContext* context) const;
+  std::optional<std::string> operator()(
+      const LiteralOrIri& litOrIri,
+      [[maybe_unused]] const EvaluationContext*) const {
+    if (litOrIri.isLiteral()) {
+      if (litOrIri.hasLanguageTag()) {
+        return std::string(asStringViewUnsafe(litOrIri.getLanguageTag()));
+      }
+      // If we encounter a literal without a language tag, we return an empty
+      // string by the definition of the Sparql-standard.
+      return "";
+    } else {
+      return std::nullopt;
+    }
+  }
+};
 }  // namespace sparqlExpression::detail

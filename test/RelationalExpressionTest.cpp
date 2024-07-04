@@ -51,6 +51,16 @@ auto makeExpression(SingleExpressionResult auto leftValue,
       {std::move(leftChild), std::move(rightChild)});
 }
 
+auto makeInExpression(SingleExpressionResult auto leftValue,
+                      SingleExpressionResult auto... rightValues) {
+  auto leftChild = std::make_unique<SingleUseExpression>(std::move(leftValue));
+  std::vector<SparqlExpression::Ptr> rightChildren;
+  (..., (rightChildren.push_back(
+            std::make_unique<SingleUseExpression>(std::move(rightValues)))));
+  return relational::InExpression{std::move(leftChild),
+                                  std::move(rightChildren)};
+}
+
 // Evaluate the given `expression` on a `TestContext` (see above).
 auto evaluateOnTestContext = [](const SparqlExpression& expression) {
   TestContext context{};
@@ -617,6 +627,28 @@ TEST(RelationalExpression, StringVectorAndStringVector) {
   // is actually supported.
 }
 
+void testInExpressionVector(auto leftValue, auto rightValue, auto& ctx,
+                            const auto& expected) {
+  auto expression =
+      makeInExpression(liftToValueId(leftValue), liftToValueId(rightValue));
+  auto check = [&]() {
+    auto resultAsVariant = expression.evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                    ::testing::ElementsAreArray(expected)));
+  };
+
+  check();
+  expression =
+      makeInExpression(liftToValueId(leftValue), liftToValueId(rightValue),
+                       liftToValueId(rightValue));
+  check();
+  expression =
+      makeInExpression(liftToValueId(leftValue), liftToValueId(rightValue),
+                       liftToValueId(rightValue), liftToValueId(rightValue));
+  check();
+}
+
 // Assert that the expression `leftValue Comparator rightValue`, when evaluated
 // on the `TestContext` (see above), yields the `expected` result.
 
@@ -625,12 +657,16 @@ void testWithExplicitIdResult(auto leftValue, auto rightValue,
                               std::vector<Id> expected,
                               source_location l = source_location::current()) {
   static TestContext ctx;
-  auto expression = makeExpression<Comp>(liftToValueId(std::move(leftValue)),
-                                         liftToValueId(std::move(rightValue)));
+  auto expression =
+      makeExpression<Comp>(liftToValueId(leftValue), liftToValueId(rightValue));
   auto trace = generateLocationTrace(l, "test lambda was called here");
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<VectorWithMemoryLimit<Id>>(resultAsVariant);
-  EXPECT_THAT(result, ::testing::ElementsAreArray(expected));
+  EXPECT_THAT(resultAsVariant,
+              ::testing::VariantWith<VectorWithMemoryLimit<Id>>(
+                  ::testing::ElementsAreArray(expected)));
+  if constexpr (Comp == EQ) {
+    testInExpressionVector(leftValue, rightValue, ctx, expected);
+  }
 }
 
 template <Comparison Comp>
@@ -744,11 +780,20 @@ void testSortedVariableAndConstant(
   auto trace = generateLocationTrace(
       l, "test between sorted variable and constant was called here");
   TestContext ctx = TestContext::sortedBy(leftValue);
-  auto expression =
-      makeExpression<Comp>(leftValue, liftToValueId(std::move(rightValue)));
+  auto expression = makeExpression<Comp>(leftValue, liftToValueId(rightValue));
   auto resultAsVariant = expression.evaluate(&ctx.context);
-  const auto& result = std::get<ad_utility::SetOfIntervals>(resultAsVariant);
-  ASSERT_EQ(result, expected);
+  EXPECT_THAT(resultAsVariant,
+              ::testing::VariantWith<ad_utility::SetOfIntervals>(
+                  ::testing::Eq(expected)));
+
+  if constexpr (Comp == EQ) {
+    auto expression =
+        makeInExpression(leftValue, liftToValueId(std::move(rightValue)));
+    auto resultAsVariant = expression.evaluate(&ctx.context);
+    EXPECT_THAT(resultAsVariant,
+                ::testing::VariantWith<ad_utility::SetOfIntervals>(
+                    ::testing::Eq(expected)));
+  }
 }
 
 TEST(RelationalExpression, VariableAndConstantBinarySearch) {
@@ -798,6 +843,95 @@ TEST(RelationalExpression, VariableAndConstantBinarySearch) {
   testSortedVariableAndConstant<GT>(mixed, -inf, {{{0, 2}}});
   testSortedVariableAndConstant<LE>(mixed, IdOrLiteralOrIri{iriref("<z>")},
                                     {{{2, 3}}});
+}
+
+TEST(RelationalExpression, InExpression) {}
+
+TEST(RelationalExpression, InExpressionSimpleMemberVariables) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+  std::vector<std::unique_ptr<SparqlExpression>> children;
+  children.push_back(makeInt(30));
+  children.push_back(makeInt(27));
+  auto first = makeInt(42);
+  using namespace ::testing;
+  std::vector matchers{HasSubstr(children[0]->getCacheKey({})),
+                       HasSubstr(children[1]->getCacheKey({})),
+                       HasSubstr(first->getCacheKey({}))};
+  auto expression = InExpression(std::move(first), std::move(children));
+
+  EXPECT_THAT(expression.getCacheKey({}), AllOfArray(matchers));
+}
+
+TEST(RelationalExpression, InExpressionFilterEstimates) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+
+  auto makeVar = [](std::string v) {
+    return std::make_unique<sparqlExpression::VariableExpression>(
+        Variable{std::move(v)});
+  };
+  std::vector<std::unique_ptr<SparqlExpression>> children;
+  children.push_back(makeInt(30));
+  children.push_back(makeInt(27));
+  auto first = makeVar("?x");
+  using namespace ::testing;
+  auto expression = InExpression(std::move(first), std::move(children));
+  auto x = expression.getEstimatesForFilterExpression(200'000, Variable{"?x"});
+  EXPECT_EQ(x.costEstimate, 400);
+  EXPECT_EQ(x.sizeEstimate, 400);
+  x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
+  EXPECT_EQ(x.costEstimate, 200'400);
+  EXPECT_EQ(x.sizeEstimate, 400);
+}
+
+namespace {
+template <typename T>
+constexpr std::type_identity<T> TI{};
+}
+TEST(RelationalExpression, FilterEstimates) {
+  auto makeInt = [](int i) {
+    return std::make_unique<sparqlExpression::IdExpression>(
+        ValueId::makeFromInt(i));
+  };
+
+  auto makeVar = [](std::string v) {
+    return std::make_unique<sparqlExpression::VariableExpression>(
+        Variable{std::move(v)});
+  };
+  // Implementation for testing the size estimates of different relational
+  // expressions.
+  auto testImpl = [&]<typename T>(std::type_identity<T>, size_t expectedSize,
+                                  ad_utility::source_location l =
+                                      source_location::current()) {
+    auto tr = generateLocationTrace(l);
+
+    auto first = makeVar("?x");
+    using namespace ::testing;
+    auto expression =
+        T{std::array<SparqlExpression::Ptr, 2>{std::move(first), makeInt(30)}};
+    // This case can be solved via binary search.
+    auto x =
+        expression.getEstimatesForFilterExpression(200'000, Variable{"?x"});
+    EXPECT_EQ(x.costEstimate, expectedSize);
+    EXPECT_EQ(x.sizeEstimate, expectedSize);
+    // This case cannot be solved via binary search.
+    x = expression.getEstimatesForFilterExpression(200'000, Variable{"?y"});
+    EXPECT_EQ(x.costEstimate, 200'000 + expectedSize);
+    EXPECT_EQ(x.sizeEstimate, expectedSize);
+  };
+
+  using std::type_identity;
+  // Less is estimated to leave 1/50 of the initial 200'000 values.
+  testImpl(TI<LessThanExpression>, 4000);
+  // Equal is estimated to leave 1/1000 of the initial 200'000 values.
+  testImpl(TI<EqualExpression>, 200);
+  // NotEqual is estimated to leave all of the initial 200'000 values.
+  testImpl(TI<NotEqualExpression>, 200'000);
 }
 
 // TODO<joka921> We currently do not have tests for the `LocalVocab` case,
