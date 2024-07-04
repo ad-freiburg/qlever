@@ -372,11 +372,6 @@ Awaitable<void> Server::process(
 
   // If "query" parameter is given, process query.
   if (auto query = checkParameter("query", std::nullopt)) {
-    if (query.value().empty()) {
-      throw std::runtime_error(
-          "Parameter \"query\" must not have an empty value");
-    }
-
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
