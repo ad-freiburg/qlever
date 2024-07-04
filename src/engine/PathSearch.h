@@ -63,9 +63,9 @@ struct PathSearchConfiguration {
   std::string searchSideToString(const SearchSide& side) const {
     if (std::holds_alternative<Variable>(side)) {
       return std::get<Variable>(side).toSparql();
-    } 
+    }
     std::ostringstream os;
-    for (auto id: std::get<std::vector<Id>>(side)) {
+    for (auto id : std::get<std::vector<Id>>(side)) {
       os << id << ", ";
     }
     return std::move(os).str();
@@ -74,11 +74,11 @@ struct PathSearchConfiguration {
   std::string toString() const {
     std::ostringstream os;
     switch (algorithm_) {
-      case ALL_PATHS: 
-        os << "Algorthm: All paths" << '\n';
+      case ALL_PATHS:
+        os << "Algorithm: All paths" << '\n';
         break;
-      case SHORTEST_PATHS: 
-        os << "Algorthm: Shortest paths" << '\n';
+      case SHORTEST_PATHS:
+        os << "Algorithm: Shortest paths" << '\n';
         break;
     }
 
@@ -91,10 +91,10 @@ struct PathSearchConfiguration {
     os << "EdgeColumn: " << edgeColumn_.toSparql() << '\n';
 
     os << "EdgeProperties:" << '\n';
-    for (auto edgeProperty: edgeProperties_) {
+    for (auto edgeProperty : edgeProperties_) {
       os << "  " << edgeProperty.toSparql() << '\n';
     }
-    
+
     return std::move(os).str();
   }
 };

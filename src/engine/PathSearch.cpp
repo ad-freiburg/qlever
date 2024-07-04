@@ -154,7 +154,6 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
     auto paths = findPaths(sources, targets);
 
-
     timer.stop();
     auto searchTime = timer.msecs();
     timer.start();
