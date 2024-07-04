@@ -59,6 +59,44 @@ struct PathSearchConfiguration {
   bool targetIsVariable() const {
     return std::holds_alternative<Variable>(targets_);
   }
+
+  std::string searchSideToString(const SearchSide& side) const {
+    if (std::holds_alternative<Variable>(side)) {
+      return std::get<Variable>(side).toSparql();
+    } 
+    std::ostringstream os;
+    for (auto id: std::get<std::vector<Id>>(side)) {
+      os << id << ", ";
+    }
+    return std::move(os).str();
+  }
+
+  std::string toString() const {
+    std::ostringstream os;
+    switch (algorithm_) {
+      case ALL_PATHS: 
+        os << "Algorthm: All paths" << '\n';
+        break;
+      case SHORTEST_PATHS: 
+        os << "Algorthm: Shortest paths" << '\n';
+        break;
+    }
+
+    os << "Source: " << searchSideToString(sources_) << '\n';
+    os << "Target: " << searchSideToString(targets_) << '\n';
+
+    os << "Start: " << start_.toSparql() << '\n';
+    os << "End: " << end_.toSparql() << '\n';
+    os << "PathColumn: " << pathColumn_.toSparql() << '\n';
+    os << "EdgeColumn: " << edgeColumn_.toSparql() << '\n';
+
+    os << "EdgeProperties:" << '\n';
+    for (auto edgeProperty: edgeProperties_) {
+      os << "  " << edgeProperty.toSparql() << '\n';
+    }
+    
+    return std::move(os).str();
+  }
 };
 
 /**
