@@ -190,9 +190,9 @@ ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
     // has not actual content, see the grammar in `SparqlAutomatic.g4` for
     // details.
     if (!ctx->update()->update1()) {
-      reportNotSupported(ctx->update(),
-                         "Empty queries (including queries that only consist "
-                         "of comments or prefix declarations) are");
+      reportError(ctx->update(),
+                  "Empty query (This includes queries that only consist "
+                  "of comments or prefix declarations).");
     }
     reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
   } else {
