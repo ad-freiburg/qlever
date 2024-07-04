@@ -111,8 +111,6 @@ class PathSearch : public Operation {
   Graph graph_;
   // Configuration for the path search.
   PathSearchConfiguration config_;
-  Id source_;
-  std::vector<Id> targets_;
 
   std::vector<Id> indexToId_;
   IdToNodeMap idToIndex_;
