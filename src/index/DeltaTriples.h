@@ -17,14 +17,15 @@
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
 //
-// 1. For each delta triple, find the location in each permutation (block index
-// and index within that block, see `index/LocatedTriples.h`).
+// 1. For each delta triple, find the block index in each permutation (see
+// `LocatedTriple` in `index/LocatedTriples.h`).
 //
 // 2. For each permutation and each block, store a sorted list of the positions
-// of the delta triples within that block.
+// of the delta triples within that block (see `LocatedTriplesPerBlock` in
+// `index/LocatedTriples.h`).
 //
 // 3. In the call of `PermutationImpl::scan`, use the respective lists to merge
-// the relevant delta tripless into the index scan result.
+// the relevant delta triples into the index scan result.
 //
 // NOTE: The delta triples currently do not go well together with CACHING. See
 // the discussion at the end of this file.
@@ -58,12 +59,8 @@ class DeltaTriples {
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
 
-  // The sets of triples added to and subtracted from the original index
-  //
-  // NOTE: The methods `insertTriple` and `deleteTriple` make sure that only
-  // triples are added that are not already contained in the original index and
-  // that only triples are subtracted that are contained in the original index.
-  // In particular, no triple can be in both of these sets.
+  // The sets of triples added to and subtracted from the original index. In
+  // particular, no triple can be in both of these sets.
   ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesInserted_;
   ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles> triplesDeleted_;
 
@@ -113,7 +110,7 @@ class DeltaTriples {
   // argument are iterators for each list, as returned by the method
   // `locateTripleInAllPermutations` above.
   //
-  // NOTE: The iterators are invalid afterwards. That is OK, as long as we also
+  // NOTE: The iterators are invalid afterward. That is OK, as long as we also
   // delete the respective entry in `triplesInserted_` or `triplesDeleted_`,
   // which stores these iterators.
   void eraseTripleInAllPermutations(LocatedTripleHandles& handles);
