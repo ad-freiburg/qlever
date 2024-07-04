@@ -5,7 +5,6 @@
 #include "index/Permutation.h"
 
 #include "absl/strings/str_cat.h"
-#include "index/LocationTypes.h"
 #include "util/StringUtils.h"
 
 // _____________________________________________________________________
@@ -56,7 +55,7 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
 
   return reader().scan(scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
                        additionalColumns, cancellationHandle,
-                       locatedTriplesPerBlock_, 0UL);
+                       locatedTriplesPerBlock_);
 }
 
 // _____________________________________________________________________
@@ -153,24 +152,17 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
     ad_utility::SharedCancellationHandle cancellationHandle) const {
-  DisableUpdatesOrBlockOffset offset;
-  // TODO<qup42> assumption: block is None <=> the index is scanned;
-  //  otherwise virtual/intermediate blocks are scanned
-  //  also handle the other case
   if (!blocks.has_value()) {
     auto [blockSpan, beginBlockOffset] =
         CompressedRelationReader::getRelevantBlocks(
             scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
-    offset = beginBlockOffset;
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
-  } else {
-    offset = DisableUpdates{};
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};
   LOG(INFO) << "scanning " << readableName() << std::endl;
   return reader().lazyScan(scanSpec, std::move(blocks.value()),
                            std::move(columns), std::move(cancellationHandle),
-                           locatedTriplesPerBlock_, offset);
+                           locatedTriplesPerBlock_);
 }
 const vector<CompressedBlockMetadata>& Permutation::augmentedBlockData() const {
   return locatedTriplesPerBlock_.getAugmentedMetadata();

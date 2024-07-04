@@ -34,7 +34,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
     CancellationHandle cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    size_t numIndexColumns, DisableUpdatesOrBlockOffset offset) const {
+    size_t numIndexColumns) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -70,7 +70,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         decompressBlock(compressedBlock, block.numRows_);
     decompressedBlock =
         addUpdateTriples(std::move(decompressedBlock), locatedTriplesPerBlock,
-                         addOffset(offset, myIndex), numIndexColumns);
+                         block.blockIndex_, numIndexColumns);
     return std::pair{myIndex, std::move(decompressedBlock)};
   };
   const size_t numThreads =
@@ -103,12 +103,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
     std::vector<CompressedBlockMetadata> blockMetadata,
     ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    DisableUpdatesOrBlockOffset offset) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   AD_CONTRACT_CHECK(cancellationHandle);
-  if (!additionalColumns.empty()) {
-    offset = DisableUpdates{};
-  }
   auto [relevantBlocks, beginBlockOffset] =
       getRelevantBlocks(scanSpec, blockMetadata);
   auto [beginBlock, endBlock] = getBeginAndEnd(relevantBlocks);
@@ -124,10 +120,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   auto numIndexColumns = columnIndices.size() - additionalColumns.size();
 
   auto getIncompleteBlock = [&](auto it) {
-    auto blockOffset = addOffset(offset, beginBlockOffset + (it - beginBlock));
-    auto result = readPossiblyIncompleteBlock(
-        scanSpec, *it, std::ref(details), columnIndices, locatedTriplesPerBlock,
-        blockOffset);
+    auto result =
+        readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),
+                                    columnIndices, locatedTriplesPerBlock);
     cancellationHandle->throwIfCancelled();
     return result;
   };
@@ -142,8 +137,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     // inside the `getIncompleteBlock` lambda.
     auto blockGenerator = asyncParallelBlockGenerator(
         beginBlock + 1, endBlock - 1, columnIndices, cancellationHandle,
-        locatedTriplesPerBlock, numIndexColumns,
-        addOffset(offset, beginBlockOffset + 1));
+        locatedTriplesPerBlock, numIndexColumns);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -331,8 +325,7 @@ IdTable CompressedRelationReader::scan(
     std::span<const CompressedBlockMetadata> blocks,
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
-    const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-    DisableUpdatesOrBlockOffset offset) const {
+    const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
   LOG(INFO) << "CompressedRelation::scan scanspec: " << scanSpec << std::endl;
   LOG(INFO) << "CompressedRelation::scan looking at blocks from "
             << blocks.begin()->firstTriple_ << " to "
@@ -342,7 +335,6 @@ IdTable CompressedRelationReader::scan(
 
   // Compute an upper bound for the size and reserve enough space in the result.
   auto [relevantBlocks, beginBlockOffset] = getRelevantBlocks(scanSpec, blocks);
-  offset = addOffset(offset, beginBlockOffset);
   auto sizes = relevantBlocks |
                std::views::transform(&CompressedBlockMetadata::numRows_);
   auto upperBoundSize = std::accumulate(sizes.begin(), sizes.end(), 0ULL);
@@ -351,7 +343,7 @@ IdTable CompressedRelationReader::scan(
   for (const auto& block :
        lazyScan(scanSpec, {relevantBlocks.begin(), relevantBlocks.end()},
                 {additionalColumns.begin(), additionalColumns.end()},
-                cancellationHandle, locatedTriplesPerBlock, offset)) {
+                cancellationHandle, locatedTriplesPerBlock)) {
     result.insertAtEnd(block);
   }
   cancellationHandle->throwIfCancelled();
@@ -364,8 +356,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
     const CompressedBlockMetadata& blockMetadata,
     std::optional<std::reference_wrapper<LazyScanMetadata>> scanMetadata,
     ColumnIndicesRef columnIndices,
-    const LocatedTriplesPerBlock& locatedTriples,
-    DisableUpdatesOrBlockOffset offset) const {
+    const LocatedTriplesPerBlock& locatedTriples) const {
   std::vector<ColumnIndex> allColumns;
   std::ranges::copy(
       ad_utility::integerRange(blockMetadata.offsetsAndCompressedSize_.size()),
@@ -385,7 +376,7 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   //                     })
   //        ._resultPointer;
   const DecompressedBlock& block = readAndDecompressBlock(
-      blockMetadata, allColumns, locatedTriples, offset, numIndexColumns);
+      blockMetadata, allColumns, locatedTriples, numIndexColumns);
 
   // Find the range in the blockMetadata, that belongs to the same relation
   // `col0Id`
@@ -442,11 +433,9 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // a part of these blocks is actually part of the result,
   // set up a lambda which allows us to read these blocks, and returns
   // the size of the result.
-  auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block,
-                                               size_t blockIndex) {
+  auto readSizeOfPossiblyIncompleteBlock = [&](const auto& block) {
     return readPossiblyIncompleteBlock(scanSpec, block, std::nullopt,
-                                       columnIndices, locatedTriplesPerBlock,
-                                       blockIndex)
+                                       columnIndices, locatedTriplesPerBlock)
         .numRows();
   };
 
@@ -454,13 +443,11 @@ size_t CompressedRelationReader::getResultSizeOfScan(
   // The first and the last block might be incomplete, compute
   // and store the partial results from them.
   if (beginBlock < endBlock) {
-    numResults +=
-        readSizeOfPossiblyIncompleteBlock(*beginBlock, beginBlockOffset);
+    numResults += readSizeOfPossiblyIncompleteBlock(*beginBlock);
     ++beginBlock;
   }
   if (beginBlock < endBlock) {
-    numResults += readSizeOfPossiblyIncompleteBlock(
-        *(endBlock - 1), (endBlock - beginBlock) + beginBlockOffset);
+    numResults += readSizeOfPossiblyIncompleteBlock(*(endBlock - 1));
     --endBlock;
   }
 
@@ -531,12 +518,11 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
       // Multiple `colId`s -> we have to read the block.
       const auto& block =
           i == 0
-              ? readPossiblyIncompleteBlock(
-                    scanSpec, blockMetadata, std::nullopt, relevantColumnIndex,
-                    locatedTriplesPerBlock, beginBlockOffset + i)
+              ? readPossiblyIncompleteBlock(scanSpec, blockMetadata,
+                                            std::nullopt, relevantColumnIndex,
+                                            locatedTriplesPerBlock)
               : readAndDecompressBlock(blockMetadata, relevantColumnIndex,
-                                       locatedTriplesPerBlock,
-                                       beginBlockOffset + i, numIndexColumns);
+                                       locatedTriplesPerBlock, numIndexColumns);
       cancellationHandle->throwIfCancelled();
       // TODO<C++23>: use `std::views::chunk_by`.
       for (size_t j = 0; j < block.numRows(); ++j) {
@@ -634,17 +620,18 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 // ____________________________________________________________________________
 DecompressedBlock CompressedRelationReader::addUpdateTriples(
     DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
-    DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
-  LOG(INFO) << "CompressedRelationReader::addUpdateTriples " << offset
+    size_t blockIndex, size_t numIndexColumns) const {
+  LOG(INFO) << "CompressedRelationReader::addUpdateTriples " << blockIndex
             << std::endl;
-  if (!useUpdates_ || std::holds_alternative<DisableUpdates>(offset)) {
+  if (!useUpdates_ || !locatedTriples.hasUpdates(blockIndex)) {
     // updates are not enabled or not possible for this block
     return block;
   }
-  auto blockIndex = std::get<size_t>(offset);
-  auto [numInserts, numDeletes] = locatedTriples.numTriples(blockIndex);
-  if (numInserts == 0 && numDeletes == 0) {
-    return block;
+  AD_CONTRACT_CHECK(numIndexColumns == 3);
+  if (block.numColumns() != 3) {
+    LOG(WARN)
+        << "Non index columns requested. Will be filled with UNDEF values."
+        << std::endl;
   }
   return locatedTriples.mergeTriples(blockIndex, block, numIndexColumns);
 }
@@ -690,7 +677,7 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
     const CompressedBlockMetadata& blockMetaData,
     ColumnIndicesRef columnIndices,
     const LocatedTriplesPerBlock& locatedTriples,
-    DisableUpdatesOrBlockOffset offset, size_t numIndexColumns) const {
+    size_t numIndexColumns) const {
   // TODO<qup42>: only load all index columns if updates are enabled and
   // available for this block. To be able to add updates we have to have all
   // column present. Complete the given column indices to contain all index
@@ -703,7 +690,8 @@ DecompressedBlock CompressedRelationReader::readAndDecompressBlock(
   DecompressedBlock decompressedBlock =
       decompressBlock(compressedColumns, numRowsToRead);
   DecompressedBlock blockWithUpdates =
-      addUpdateTriples(std::move(decompressedBlock), locatedTriples, offset, 3);
+      addUpdateTriples(std::move(decompressedBlock), locatedTriples,
+                       blockMetaData.blockIndex_, 3);
   blockWithUpdates.setColumnSubset(resultColumnSubset);
   return blockWithUpdates;
 }
@@ -800,13 +788,11 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
-  auto scanBlock = [&](const CompressedBlockMetadata& block,
-                       size_t blockIndex) {
+  auto scanBlock = [&](const CompressedBlockMetadata& block) {
     // Note: the following call only returns the part of the block that
     // actually matches the col0 and col1.
     return readPossiblyIncompleteBlock(scanSpec, block, std::nullopt,
-                                       {{0, 1, 2}}, locatedTriplesPerBlock,
-                                       blockIndex);
+                                       {{0, 1, 2}}, locatedTriplesPerBlock);
   };
 
   auto rowToTriple =
@@ -817,17 +803,13 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   };
 
   // TODO<qup42> this all might fail, because blocks can become completely empty
-  auto firstBlock = scanBlock(relevantBlocks.front(), beginBlockOffset);
+  auto firstBlock = scanBlock(relevantBlocks.front());
   AD_CORRECTNESS_CHECK(!firstBlock.empty());
-  auto lastBlock = scanBlock(
-      relevantBlocks.back(),
-      (relevantBlocks.end() - relevantBlocks.begin()) + beginBlockOffset);
+  auto lastBlock = scanBlock(relevantBlocks.back());
   if (lastBlock.empty() && relevantBlocks.size() != 1) {
     // If the last block is empty, then it was the empty sentinel block. In that
     // case scan the second-to-last block.
-    lastBlock = scanBlock(
-        *(relevantBlocks.rbegin() + 1),
-        (relevantBlocks.end() - relevantBlocks.begin()) + beginBlockOffset - 1);
+    lastBlock = scanBlock(*(relevantBlocks.rbegin() + 1));
   }
   AD_CORRECTNESS_CHECK(!lastBlock.empty());
   return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
@@ -1234,8 +1216,7 @@ CompressedRelationReader::getMetadataForSmallRelation(
     return std::nullopt;
   }
   auto block = readPossiblyIncompleteBlock(
-      scanSpec, blocks.front(), std::nullopt, {{1, 2}}, locatedTriplesPerBlock,
-      beginBlockOffset);
+      scanSpec, blocks.front(), std::nullopt, {{1, 2}}, locatedTriplesPerBlock);
   if (block.empty()) {
     return std::nullopt;
   }

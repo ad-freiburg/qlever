@@ -175,14 +175,13 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     CompressedRelationReader::ScanSpecification scanSpec{
         metaData[i].col0Id_, std::nullopt, std::nullopt};
     IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                cancellationHandle, {}, 0ul);
+                                cancellationHandle, {});
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block :
-         reader.lazyScan(scanSpec, blocks, additionalColumns,
-                         cancellationHandle, {}, 0ul)) {
+    for (const auto& block : reader.lazyScan(
+             scanSpec, blocks, additionalColumns, cancellationHandle, {})) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -199,14 +198,14 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
       auto size = reader.getResultSizeOfScan(scanSpec, blocks, {});
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle, {}, 0ul);
+                      cancellationHandle, {});
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle, {}, 0ul)) {
+                           cancellationHandle, {})) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
