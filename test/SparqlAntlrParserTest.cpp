@@ -1786,9 +1786,11 @@ TEST(SparqlParser, UpdateQuery) {
 
 TEST(SparqlParser, EmptyQuery) {
   auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  expectQueryFails("", ::testing::HasSubstr("Empty queries"));
-  expectQueryFails("### Some comment \n \n #someMoreComments",
-                   ::testing::HasSubstr("Empty queries"));
+  auto emptyMatcher = ::testing::HasSubstr("Empty queries");
+  expectQueryFails("", emptyMatcher);
+  expectQueryFails(" ", emptyMatcher);
+  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
+  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
 }
 
 TEST(SparqlParser, GraphOrDefault) {

@@ -185,11 +185,14 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update()) {
     // An empty query currently matches the `update()` rule. We handle this
-    // case manually to get a better error message.
+    // case manually to get a better error message. If an update query doesn't
+    // have an `update1()`, then it consists of a (possibly empty) prologue, but
+    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
+    // details.
     if (!ctx->update()->update1()) {
       reportNotSupported(ctx->update(),
                          "Empty queries (including queries that only consist "
-                         "of comments) are");
+                         "of comments or prefix declarations) are");
     }
     reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
   } else {
