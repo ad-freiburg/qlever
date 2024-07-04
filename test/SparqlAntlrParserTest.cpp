@@ -1659,7 +1659,7 @@ TEST(SparqlParser, updateQueryUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto updateUnsupported =
-      contains("SPARQL 1.1 Update currently not supported by QLever.");
+      contains("SPARQL 1.1 Update is currently not supported by QLever.");
 
   // Test all the cases because some functionality will be enabled shortly.
   expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
@@ -1738,6 +1738,13 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }");
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
+}
+
+TEST(SparqlParser, EmptyQuery) {
+  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  expectQueryFails("", ::testing::HasSubstr("Empty queries"));
+  expectQueryFails("### Some comment \n \n #someMoreComments",
+                   ::testing::HasSubstr("Empty queries"));
 }
 
 TEST(SparqlParser, GraphOrDefault) {
