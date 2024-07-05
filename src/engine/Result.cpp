@@ -113,50 +113,71 @@ void ProtoResult::applyLimitOffset(
 // _____________________________________________________________________________
 void ProtoResult::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
   if (storage_.isDataEvaluated()) {
-    auto numRows = idTable().numRows();
+    uint64_t numRows = idTable().numRows();
     auto limit = limitOffset._limit;
-    AD_CONTRACT_CHECK(!limit.has_value() ||
-                      numRows <= static_cast<size_t>(limit.value()));
+    AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
   } else {
     auto generator =
         [](cppcoro::generator<IdTable> original,
            LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
       auto limit = limitOffset._limit;
-      size_t elementCount = 0;
+      uint64_t elementCount = 0;
       for (auto&& idTable : original) {
         elementCount += idTable.numRows();
-        AD_CONTRACT_CHECK(!limit.has_value() ||
-                          elementCount <= static_cast<size_t>(limit.value()));
+        AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
         co_yield std::move(idTable);
       }
-      AD_CONTRACT_CHECK(!limit.has_value() ||
-                        elementCount <= static_cast<size_t>(limit.value()));
+      AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
     }(std::move(storage_.idTables()), limitOffset);
     storage_.idTables() = std::move(generator);
   }
 }
 
 // _____________________________________________________________
-bool ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
-  AD_CONTRACT_CHECK(storage_.isDataEvaluated());
-  const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn();
-  return std::ranges::all_of(varColMap, [&](const auto& varAndCol) {
-    const auto& [columnIndex, mightContainUndef] = varAndCol.second;
-    bool hasUndefined = datatypesPerColumn.at(columnIndex)
-                            .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-    return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
-           !hasUndefined;
-  });
+void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
+  auto performCheck =
+      [](const auto& map,
+         std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
+         IdTable& idTable) {
+        const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn(
+            datatypeCountsPerColumn, idTable);
+        return std::ranges::all_of(map, [&](const auto& varAndCol) {
+          const auto& [columnIndex, mightContainUndef] = varAndCol.second;
+          bool hasUndefined =
+              datatypesPerColumn.at(columnIndex)
+                  .at(static_cast<size_t>(Datatype::Undefined)) != 0;
+          return mightContainUndef ==
+                     ColumnIndexAndTypeInfo::PossiblyUndefined ||
+                 !hasUndefined;
+        });
+      };
+  if (isDataEvaluated()) {
+    std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn;
+    AD_EXPENSIVE_CHECK(
+        performCheck(varColMap, datatypeCountsPerColumn, storage_.idTable()));
+  } else {
+    auto generator = [](cppcoro::generator<IdTable> original,
+                        VariableToColumnMap varColMap,
+                        auto performCheck) -> cppcoro::generator<IdTable> {
+      std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn;
+      for (auto&& idTable : original) {
+        AD_EXPENSIVE_CHECK(
+            performCheck(varColMap, datatypeCountsPerColumn, idTable));
+        co_yield std::move(idTable);
+      }
+    }(std::move(storage_.idTables()), varColMap, std::move(performCheck));
+    storage_.idTables() = std::move(generator);
+  }
 }
 
 // _____________________________________________________________________________
-auto ProtoResult::getOrComputeDatatypeCountsPerColumn()
-    -> const DatatypeCountsPerColumn& {
-  if (datatypeCountsPerColumn_.has_value()) {
-    return datatypeCountsPerColumn_.value();
+auto ProtoResult::getOrComputeDatatypeCountsPerColumn(
+    std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
+    IdTable& idTable) -> const DatatypeCountsPerColumn& {
+  if (datatypeCountsPerColumn.has_value()) {
+    return datatypeCountsPerColumn.value();
   }
-  auto& idTable = storage_.idTable();
-  auto& types = datatypeCountsPerColumn_.emplace();
+  auto& types = datatypeCountsPerColumn.emplace();
   types.resize(idTable.numColumns());
   for (size_t i = 0; i < idTable.numColumns(); ++i) {
     const auto& col = idTable.getColumn(i);

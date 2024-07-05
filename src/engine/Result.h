@@ -139,7 +139,6 @@ class ProtoResult {
   // how many entries of that datatype are stored in the column.
   using DatatypeCountsPerColumn = std::vector<
       std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
-  std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn_;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
   // Note: If additional members and invariants are added to the class (for
@@ -155,16 +154,20 @@ class ProtoResult {
   // (i.e. that is contains no single undefined value) that there are indeed no
   // undefined values in the `data_` of this result. Return `true` iff the
   // check is successful.
-  bool checkDefinedness(const VariableToColumnMap& varColMap);
+  void checkDefinedness(const VariableToColumnMap& varColMap);
 
+ private:
   // Get the information, which columns stores how many entries of each
   // datatype. This information is computed on the first call to this function
   // `O(num-entries-in-table)` and then cached for subsequent usages.
-  const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn();
+  static const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn(
+      std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
+      IdTable& idTable);
 
   static void validateIdTable(const IdTable& idTable,
                               const std::vector<ColumnIndex>& sortedBy);
 
+ public:
   const IdTable& idTable() const;
 
   bool isDataEvaluated() const noexcept;
