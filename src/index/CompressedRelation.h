@@ -11,6 +11,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
@@ -423,7 +424,10 @@ class CompressedRelationReader {
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
+    // If a LIMIT or OFFSET is present we possibly read more rows than we
+    // actually yield.
     size_t numElementsRead_ = 0;
+    size_t numElementsYielded_ = 0;
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
   };
 
@@ -496,7 +500,8 @@ class CompressedRelationReader {
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
                const CancellationHandle& cancellationHandle,
-               const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+               const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -505,7 +510,8 @@ class CompressedRelationReader {
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
       ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
-      const LocatedTriplesPerBlock& locatedTriplesPerBlock) const;
+      const LocatedTriplesPerBlock& locatedTriplesPerBlock,
+      LimitOffsetClause limitOffset = {}) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -630,7 +636,7 @@ class CompressedRelationReader {
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle,
       const LocatedTriplesPerBlock& locatedTriplesPerBlock,
-      size_t numIndexColumns) const;
+      size_t numIndexColumns, LimitOffsetClause& limitOffset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

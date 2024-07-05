@@ -47,7 +47,8 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
 // _____________________________________________________________________
 IdTable Permutation::scan(const ScanSpecification& scanSpec,
                           ColumnIndicesRef additionalColumns,
-                          const CancellationHandle& cancellationHandle) const {
+                          const CancellationHandle& cancellationHandle,
+                          const LimitOffsetClause& limitOffset) const {
   if (!isLoaded_) {
     throw std::runtime_error("This query requires the permutation " +
                              readableName_ + ", which was not loaded");
@@ -55,7 +56,7 @@ IdTable Permutation::scan(const ScanSpecification& scanSpec,
 
   return reader().scan(scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata(),
                        additionalColumns, cancellationHandle,
-                       locatedTriplesPerBlock_);
+                       locatedTriplesPerBlock_, limitOffset);
 }
 
 // _____________________________________________________________________
@@ -151,7 +152,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     const ScanSpecification& scanSpec,
     std::optional<std::vector<CompressedBlockMetadata>> blocks,
     ColumnIndicesRef additionalColumns,
-    ad_utility::SharedCancellationHandle cancellationHandle) const {
+    ad_utility::SharedCancellationHandle cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   if (!blocks.has_value()) {
     auto [blockSpan, beginBlockOffset] =
         CompressedRelationReader::getRelevantBlocks(
@@ -162,7 +164,7 @@ Permutation::IdTableGenerator Permutation::lazyScan(
   LOG(INFO) << "scanning " << readableName() << std::endl;
   return reader().lazyScan(scanSpec, std::move(blocks.value()),
                            std::move(columns), std::move(cancellationHandle),
-                           locatedTriplesPerBlock_);
+                           locatedTriplesPerBlock_, limitOffset);
 }
 const vector<CompressedBlockMetadata>& Permutation::augmentedBlockData() const {
   return locatedTriplesPerBlock_.getAugmentedMetadata();
