@@ -196,6 +196,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
     case Undefined:
+    case Sentinel:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -252,6 +253,7 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case Double:
     case Date:
     case Undefined:
+    case Sentinel:
       return std::nullopt;
   }
   AD_FAIL();
