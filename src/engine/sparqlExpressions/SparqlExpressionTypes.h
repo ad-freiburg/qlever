@@ -28,8 +28,38 @@ template <typename T>
 class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
  public:
+  using Allocator = ad_utility::AllocatorWithLimit<T>;
   using Base = std::vector<T, ad_utility::AllocatorWithLimit<T>>;
-  using Base::Base;
+
+  // The `AllocatorWithMemoryLimit` is not default-constructible (on purpose).
+  // Unfortunately, the support for such allocators is not really great in the
+  // standard library. In particular, the type trait
+  // `std::default_initializable<std::vector<T, Alloc>>` will be true, even if
+  // the `Alloc` is not default-initializable, which leads to hard compile
+  // errors with the ranges library. For this reason we cannot simply inherit
+  // all the constructors from `Base`, but explicitly have to forward all but
+  // the default constructor. In particular, we only forward constructors that
+  // have
+  // * at least one argument
+  // * the first argument must not be similar to `std::vector` or
+  // `VectorWithMemoryLimit` to not hide copy or move constructors
+  // * the last argument must be `AllocatorWithMemoryLimit` (all constructors to
+  // `vector` take the allocator as a last parameter)
+  // * there must be a constructor of `Base` for the given arguments.
+  template <typename... Args>
+  requires(sizeof...(Args) > 0 &&
+           !std::derived_from<std::remove_cvref_t<ad_utility::First<Args...>>,
+                              Base> &&
+           std::convertible_to<ad_utility::Last<Args...>, Allocator> &&
+           std::constructible_from<Base, Args && ...>)
+  explicit(sizeof...(Args) == 1) VectorWithMemoryLimit(Args&&... args)
+      : Base{AD_FWD(args)...} {}
+
+  // We have to explicitly forward the `initializer_list` constructor because it
+  // for some reason is not covered by the above generic mechanism.
+  VectorWithMemoryLimit(std::initializer_list<T> init, const Allocator& alloc)
+      : Base(init, alloc){};
+
   // Disable copy constructor and copy assignment operator (copying is too
   // expensive in the setting where we want to use this class and not
   // necessary).
@@ -50,6 +80,7 @@ class VectorWithMemoryLimit
     return VectorWithMemoryLimit(*this);
   }
 };
+static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
 
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions

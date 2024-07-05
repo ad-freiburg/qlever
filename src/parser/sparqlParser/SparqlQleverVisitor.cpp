@@ -13,16 +13,19 @@
 #include <string>
 #include <vector>
 
-#include "engine/sparqlExpressions/LangExpression.h"
+#include "absl/time/time.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
@@ -53,6 +56,12 @@ std::string Visitor::getOriginalInputForContext(
   // exists when the result of this call is used. Not performance-critical.
   return std::string{
       ad_utility::getUTF8Substring(fullInput, posBeg, posEnd - posBeg + 1)};
+}
+
+// _____________________________________________________________________________
+std::string Visitor::currentTimeAsXsdString() {
+  return absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
+                          absl::LocalTimeZone());
 }
 
 // ___________________________________________________________________________
@@ -153,15 +162,9 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
-                                                    bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
-  if (allowLanguageFilters) {
-    checkUnsupportedLangOperationAllowFilters(ctx, result);
-  } else {
-    checkUnsupportedLangOperation(ctx, result);
-  }
-  return result;
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(
+    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -583,7 +586,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable, language);
       } else {
-        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -1708,7 +1710,16 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportNotSupported(ctx, "IN or NOT IN in an expression is ");
+    auto lhs = visitVector(ctx->numericExpression());
+    AD_CORRECTNESS_CHECK(lhs.size() == 1);
+    auto expressions = visit(ctx->expressionList());
+    auto inExpression = std::make_unique<InExpression>(std::move(lhs.at(0)),
+                                                       std::move(expressions));
+    if (ctx->notToken) {
+      return makeUnaryNegateExpression(std::move(inExpression));
+    } else {
+      return inExpression;
+    }
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
@@ -1997,6 +2008,9 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDayExpression);
   } else if (functionName == "tz") {
     return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "now") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<NowDatetimeExpression>(startTime_);
   } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
   } else if (functionName == "minutes") {
@@ -2048,6 +2062,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsLiteralExpression);
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
+  } else if (functionName == "datatype") {
+    return createUnary(&makeDatatypeExpression);
+  } else if (functionName == "langmatches") {
+    return createBinary(&makeLangMatchesExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
@@ -2076,16 +2094,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   }
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
-  // The constructor of `LangExpression` throws if the subexpression is not a
-  // single variable.
-  try {
-    return std::make_unique<sparqlExpression::LangExpression>(
-        visit(ctx->expression()));
-  } catch (const std::exception& e) {
-    reportError(ctx, e.what());
-  }
+  // The number of children for expression LANG() is fixed to one by the
+  // grammar (or definition of the parser).
+  return sparqlExpression::makeLangExpression(visit(ctx->expression()));
 }
 
 // ____________________________________________________________________________________
@@ -2362,31 +2375,6 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
   throw NotSupportedException{
       feature + " currently not supported by QLever.",
       ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperation(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression()) {
-    throw NotSupportedException{
-        "The LANG function is currently only supported in the construct "
-        "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-  }
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperationAllowFilters(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression() &&
-      !expression.getLanguageFilterExpression()) {
-    throw NotSupportedException(
-        "The LANG() function is only supported by QLever in the construct "
-        "FILTER(LANG(?variable) = \"langtag\"",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
-  }
 }
 
 // _____________________________________________________________________________
