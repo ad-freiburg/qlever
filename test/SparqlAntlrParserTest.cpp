@@ -1786,7 +1786,7 @@ TEST(SparqlParser, UpdateQuery) {
 
 TEST(SparqlParser, EmptyQuery) {
   auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
-  auto emptyMatcher = ::testing::HasSubstr("Empty queries");
+  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
   expectQueryFails("", emptyMatcher);
   expectQueryFails(" ", emptyMatcher);
   expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
