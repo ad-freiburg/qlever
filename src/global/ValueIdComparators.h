@@ -438,10 +438,15 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
   auto isNumeric = [](Datatype type) {
     return type == Datatype::Double || type == Datatype::Int;
   };
+  // TODO<joka921> Make this work for the WordIndex also.
+  auto isString = [](Datatype type) {
+    return type == Datatype::VocabIndex || type == Datatype::LocalVocabIndex;
+  };
   auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
   // Note: Undefined values cannot be compared to other undefined values.
   return (!isUndefined(typeA)) &&
-         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)));
+         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)) ||
+          (isString(typeA) && isString(typeB)));
 }
 
 // This function is part of the implementation of `compareIds` (see below).
@@ -459,6 +464,13 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
       static_assert(comparisonForIncompatibleTypes == AlwaysUndef);
       return ComparisonResult::Undef;
     }
+  }
+
+  // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
+  // on ValueIds already does the right thing.
+  if (a.getDatatype() == Datatype::LocalVocabIndex ||
+      b.getDatatype() == Datatype::LocalVocabIndex) {
+    return fromBool(std::invoke(comparator, a, b));
   }
 
   auto visitor = [comparator]<typename A, typename B>(
