@@ -664,6 +664,7 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
   std::shared_ptr<const Result> result =
       qet.getResult(query._limitOffset._limit.has_value());
   result->logResultSize();
+  // TODO<RobinTF> this timer only makes sense for non lazy results.
   auto timeResultComputation = requestTimer.msecs();
 
   std::optional<size_t> resultSize =
