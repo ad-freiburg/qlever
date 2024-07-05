@@ -34,12 +34,20 @@ class alignas(16) LocalVocabEntry
  private:
   using Base = ad_utility::triple_component::LiteralOrIri;
   mutable CopyableAtomic<VocabIndex> lowerBoundInIndex_;
+  mutable CopyableAtomic<VocabIndex> upperBoundInIndex_;
+  mutable CopyableAtomic<VocabIndex> exactMatchInIndex_;
   enum IndexStatus { NOT_LOOKED_UP, GREATER, EQUAL };
   mutable CopyableAtomic<IndexStatus> indexStatus = NOT_LOOKED_UP;
 
  public:
+  struct BoundsInIndex {
+    VocabIndex lowerBound_;
+    VocabIndex upperBound_;
+    VocabIndex exactMatch_;
+    bool isContained_;
+  };
   using Base::Base;
-  std::pair<VocabIndex, bool> lowerBoundInIndex() const;
+  BoundsInIndex lowerBoundInIndex() const;
 
   LocalVocabEntry(const Base& base) : Base{base} {}
   LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}

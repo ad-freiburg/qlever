@@ -100,8 +100,8 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
   // check that none of the results equals all previous results
   std::unordered_set<std::string> strUuids;
   for (auto uuid : resultVector) {
-    ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(uuid));
-    LiteralOrIri litUuid = std::get<LiteralOrIri>(uuid);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(uuid));
+    LiteralOrIri litUuid = std::get<LocalVocabEntry>(uuid);
     ASSERT_TRUE(litUuid.isLiteral());
     std::string_view strUuid =
         asStringViewUnsafe(litUuid.getLiteral().getContent());
@@ -113,8 +113,8 @@ TEST(UuidExpression, evaluateStrUuidExpression) {
   auto resultAsVariant2 = StrUuidExpression{}.evaluate(&evaluationContext);
   ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
   IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
-  ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(litOrIriUuid));
-  ASSERT_TRUE(std::get<LiteralOrIri>(litOrIriUuid).isLiteral());
+  ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
+  ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isLiteral());
 }
 
 TEST(UuidExpression, evaluateUuidExpression) {
@@ -132,8 +132,8 @@ TEST(UuidExpression, evaluateUuidExpression) {
   // check that none of the results equals all of the other results
   std::unordered_set<std::string> strUuids;
   for (auto uuid : resultVector) {
-    ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(uuid));
-    LiteralOrIri litUuid = std::get<LiteralOrIri>(uuid);
+    ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(uuid));
+    LiteralOrIri litUuid = std::get<LocalVocabEntry>(uuid);
     ASSERT_TRUE(litUuid.isIri());
     std::string_view iriUuid =
         asStringViewUnsafe(litUuid.getIri().getContent());
@@ -145,6 +145,6 @@ TEST(UuidExpression, evaluateUuidExpression) {
   auto resultAsVariant2 = UuidExpression{}.evaluate(&evaluationContext);
   ASSERT_TRUE(std::holds_alternative<IdOrLiteralOrIri>(resultAsVariant2));
   IdOrLiteralOrIri litOrIriUuid = std::get<IdOrLiteralOrIri>(resultAsVariant2);
-  ASSERT_TRUE(std::holds_alternative<LiteralOrIri>(litOrIriUuid));
-  ASSERT_TRUE(std::get<LiteralOrIri>(litOrIriUuid).isIri());
+  ASSERT_TRUE(std::holds_alternative<LocalVocabEntry>(litOrIriUuid));
+  ASSERT_TRUE(std::get<LocalVocabEntry>(litOrIriUuid).isIri());
 }

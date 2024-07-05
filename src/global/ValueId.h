@@ -137,14 +137,12 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() == *other.getLocalVocabIndex();
     } else if (type == VocabIndex) {
-      auto [lowerBound, isContained] =
-          (other.getLocalVocabIndex())->lowerBoundInIndex();
-      return isContained && lowerBound == getVocabIndex();
+      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
+      return x.isContained_ && x.exactMatch_ == getVocabIndex();
     } else if (otherType == VocabIndex) {
       // TODO<joka921> Code duplication.
-      auto [lowerBound, isContained] =
-          (getLocalVocabIndex())->lowerBoundInIndex();
-      return isContained && lowerBound == other.getVocabIndex();
+      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
+      return x.isContained_ && x.lowerBound_ == other.getVocabIndex();
     }
     return _bits == other._bits;
   }
@@ -167,23 +165,61 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     } else if (type == VocabIndex) {
-      auto [lowerBound, isContained] =
-          (other.getLocalVocabIndex())->lowerBoundInIndex();
+      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
+      auto lowerBound = x.exactMatch_;
       if (lowerBound == getVocabIndex()) {
-        return isContained ? std::strong_ordering::equal
-                           : std::strong_ordering::less;
+        return x.isContained_ ? std::strong_ordering::equal
+                              : std::strong_ordering::less;
       } else {
         return getVocabIndex() <=> lowerBound;
       }
     } else if (otherType == VocabIndex) {
       // TODO<joka921> Code duplication.
-      auto [lowerBound, isContained] =
-          (getLocalVocabIndex())->lowerBoundInIndex();
+      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
+      auto lowerBound = x.exactMatch_;
       if (lowerBound == other.getVocabIndex()) {
-        return isContained ? std::strong_ordering::equal
-                           : std::strong_ordering::greater;
+        return x.isContained_ ? std::strong_ordering::equal
+                              : std::strong_ordering::greater;
       } else {
         return lowerBound <=> other.getVocabIndex();
+      }
+    }
+    return _bits <=> other._bits;
+  }
+
+  constexpr std::strong_ordering compareQuarternary(
+      const ValueId& other) const {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return _bits <=> other._bits;
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
+      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
+    } else if (type == VocabIndex) {
+      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
+      auto lowerBound = x.lowerBound_;
+      auto upperBound = x.upperBound_;
+      auto idx = getVocabIndex();
+      if (idx < lowerBound) {
+        return std::strong_ordering::less;
+      } else if (idx >= upperBound) {
+        return std::strong_ordering::greater;
+      } else {
+        return std::strong_ordering::equal;
+      }
+    } else if (otherType == VocabIndex) {
+      // TODO<joka921> Code duplication.
+      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
+      auto lowerBound = x.lowerBound_;
+      auto upperBound = x.upperBound_;
+      if (upperBound <= other.getVocabIndex()) {
+        return std::strong_ordering::less;
+      } else if (lowerBound > other.getVocabIndex()) {
+        return std::strong_ordering::greater;
+      } else {
+        return std::strong_ordering::equal;
       }
     }
     return _bits <=> other._bits;

@@ -160,10 +160,7 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
 
   } else {
     static_assert(ad_utility::isSimilar<S, LocalVocabEntry>);
-    // TODO<joka921> We have to reinstate the correct handling of the equal
-    // ranges.
     return Id::makeFromLocalVocabIndex(&value);
-    // return getRangeFromVocab(value, context);
   }
 };
 

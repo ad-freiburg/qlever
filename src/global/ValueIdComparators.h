@@ -16,6 +16,15 @@ namespace valueIdComparators {
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 
+inline int orderingToInt(std::strong_ordering o) {
+  if (o == std::strong_ordering::less) {
+    return -1;
+  } else if (o == std::strong_ordering::greater) {
+    return 1;
+  }
+  return 0;
+}
+
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
 // `VocabIndex` and a numeric type, or `Undefined` and any other type).
@@ -470,7 +479,8 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   // on ValueIds already does the right thing.
   if (a.getDatatype() == Datatype::LocalVocabIndex ||
       b.getDatatype() == Datatype::LocalVocabIndex) {
-    return fromBool(std::invoke(comparator, a, b));
+    return fromBool(
+        std::invoke(comparator, orderingToInt(a.compareQuarternary(b)), 0));
   }
 
   auto visitor = [comparator]<typename A, typename B>(

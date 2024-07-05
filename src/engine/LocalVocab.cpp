@@ -81,15 +81,20 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
 
 // TODO<joka921> Consider moving the cheap case (if precomputed) into the
 // header.
-std::pair<VocabIndex, bool> LocalVocabEntry::lowerBoundInIndex() const {
+auto LocalVocabEntry::lowerBoundInIndex() const -> BoundsInIndex {
   if (indexStatus != IndexStatus::NOT_LOOKED_UP) {
-    return {lowerBoundInIndex_, indexStatus == EQUAL};
+    return {lowerBoundInIndex_, upperBoundInIndex_, exactMatchInIndex_,
+            indexStatus == EQUAL};
   }
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
-  std::pair<VocabIndex, bool> result;
-  auto& [vocabIndex, isContained] = result;
-  isContained = index.getVocab().getId(toStringRepresentation(), &vocabIndex);
-  indexStatus = isContained ? IndexStatus::EQUAL : IndexStatus::GREATER;
-  lowerBoundInIndex_ = vocabIndex;
+  BoundsInIndex result;
+  const auto& vocab = index.getVocab();
+  result.lowerBound_ = vocab.lower_bound(toStringRepresentation());
+  result.upperBound_ = vocab.upper_bound(toStringRepresentation());
+  result.isContained_ =
+      index.getVocab().getId(toStringRepresentation(), &result.exactMatch_);
+  indexStatus = result.isContained_ ? IndexStatus::EQUAL : IndexStatus::GREATER;
+  lowerBoundInIndex_ = result.lowerBound_;
+  upperBoundInIndex_ = result.upperBound_;
   return result;
 }

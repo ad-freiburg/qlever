@@ -472,9 +472,12 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   LocalVocab localVocab;
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{
-      *getQec(),  map,
-      table,      alloc,
-      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
+      *TestContext{}.qec,
+      map,
+      table,
+      alloc,
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>()};
   AD_CONTRACT_CHECK(rightValue.size() == 5);
   context._beginIndex = 0;
   context._endIndex = 5;
