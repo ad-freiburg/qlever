@@ -59,9 +59,7 @@ class ValuesForTesting : public Operation {
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
-  bool supportsLimit([[maybe_unused]] bool lazyResult) const override {
-    return supportsLimit_;
-  }
+  bool supportsLimit() const override { return supportsLimit_; }
 
  private:
   // ___________________________________________________________________________

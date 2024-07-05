@@ -92,8 +92,7 @@ class IndexScan final : public Operation {
   }
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimit(
-      [[maybe_unused]] bool lazyResult) const override {
+  [[nodiscard]] bool supportsLimit() const override {
     return true;
   }
 

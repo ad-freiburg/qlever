@@ -153,8 +153,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
   vector<SubtreePlan>& lastRow = plans.back();
 
   for (auto& plan : lastRow) {
-    if (plan._qet->getRootOperation()->supportsLimit(false) ||
-        plan._qet->getRootOperation()->supportsLimit(true)) {
+    if (plan._qet->getRootOperation()->supportsLimit()) {
       plan._qet->getRootOperation()->setLimit(pq._limitOffset);
     }
   }

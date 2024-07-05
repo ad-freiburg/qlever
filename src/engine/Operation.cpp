@@ -165,7 +165,7 @@ std::shared_ptr<const Result> Operation::getResult(
       // that a lot of the time the limit is only artificially applied during
       // export, allowing the cache to reuse the same operation for different
       // limits and offsets.
-      if (!supportsLimit(!result.isDataEvaluated())) {
+      if (!supportsLimit()) {
         runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0},
                                         true);
         result.applyLimitOffset(_limit,
