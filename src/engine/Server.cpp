@@ -375,11 +375,6 @@ Awaitable<void> Server::process(
 
   // If "query" parameter is given, process query.
   if (auto query = checkParameter("query", std::nullopt)) {
-    if (query.value().empty()) {
-      throw std::runtime_error(
-          "Parameter \"query\" must not have an empty value");
-    }
-
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -728,7 +723,6 @@ boost::asio::awaitable<void> Server::processQuery(
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson =
       [&request, &send](

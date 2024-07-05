@@ -1784,6 +1784,15 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
 }
 
+TEST(SparqlParser, EmptyQuery) {
+  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
+  expectQueryFails("", emptyMatcher);
+  expectQueryFails(" ", emptyMatcher);
+  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
+  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
+}
+
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
