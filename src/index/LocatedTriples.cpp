@@ -61,6 +61,33 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 }
 
 // ____________________________________________________________________________
+// Collect the relevant entries of a LocatedTriple into a triple.
+template <size_t numIndexColumns>
+auto tieIdTableRow(auto& row) {
+  if constexpr (numIndexColumns == 3) {
+    return std::tie(row[0], row[1], row[2]);
+  } else if constexpr (numIndexColumns == 2) {
+    return std::tie(row[0], row[1]);
+  } else {
+    return std::tie(row[0]);
+  }
+}
+
+// ____________________________________________________________________________
+// Collect the relevant entries of a LocatedTriple into a triple.
+template <size_t numIndexColumns>
+auto tieLocatedTriple(auto lt) {
+  if constexpr (numIndexColumns == 3) {
+    return std::tie(lt->triple_.ids_[0], lt->triple_.ids_[1],
+                    lt->triple_.ids_[2]);
+  } else if constexpr (numIndexColumns == 2) {
+    return std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
+  } else {
+    return std::tie(lt->triple_.ids_[2]);
+  }
+}
+
+// ____________________________________________________________________________
 template <size_t numIndexColumns>
 IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
                                                  const IdTable& block) const {
@@ -77,30 +104,13 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   const auto& locatedTriples = map_.at(blockIndex);
 
-  auto tieRow = [](auto& row) {
-    if constexpr (numIndexColumns == 3) {
-      return std::tie(row[0], row[1], row[2]);
-    } else if constexpr (numIndexColumns == 2) {
-      return std::tie(row[0], row[1]);
-    } else {
-      return std::tie(row[0]);
-    }
+  auto cmpLt = [](auto lt, auto row) {
+    return tieIdTableRow<numIndexColumns>(row) >
+           tieLocatedTriple<numIndexColumns>(lt);
   };
-  auto tieLT = [](auto lt) {
-    if constexpr (numIndexColumns == 3) {
-      return std::tie(lt->triple_.ids_[0], lt->triple_.ids_[1],
-                      lt->triple_.ids_[2]);
-    } else if constexpr (numIndexColumns == 2) {
-      return std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
-    } else {
-      return std::tie(lt->triple_.ids_[2]);
-    }
-  };
-  auto cmpLt = [&tieRow, &tieLT](auto lt, auto row) {
-    return tieRow(row) > tieLT(lt);
-  };
-  auto cmpEq = [&tieRow, &tieLT](auto lt, auto row) {
-    return tieRow(row) == tieLT(lt);
+  auto cmpEq = [](auto lt, auto row) {
+    return tieIdTableRow<numIndexColumns>(row) ==
+           tieLocatedTriple<numIndexColumns>(lt);
   };
 
   auto row = block.begin();

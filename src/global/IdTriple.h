@@ -48,7 +48,6 @@ struct IdTriple {
     return H::combine(std::move(h), c.ids_);
   }
 
-  // TODO<qup42>: should this be a `PermutedTriple`?
   // Permutes the ID of this triple according to the given permutation given by
   // its keyOrder.
   IdTriple<N> permute(const std::array<size_t, 3>& keyOrder) const {
