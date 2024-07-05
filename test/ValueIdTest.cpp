@@ -301,8 +301,9 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
   test(makeVocabId(15), "V:15");
-  auto str = ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-      "SomeValue");
+  auto str = LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "SomeValue")};
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");

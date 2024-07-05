@@ -148,6 +148,7 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+  static inline const IndexImpl* globalSingletonIndex_ = nullptr;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -187,6 +188,11 @@ class IndexImpl {
   auto& OPS() { return ops_; }
   const auto& OSP() const { return osp_; }
   auto& OSP() { return osp_; }
+
+  static const IndexImpl& staticGlobalSingletonIndex() {
+    AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
+    return *globalSingletonIndex_;
+  }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference (`pso_`).

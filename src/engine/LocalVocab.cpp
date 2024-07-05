@@ -7,6 +7,7 @@
 #include "absl/strings/str_cat.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
+#include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
@@ -75,5 +76,20 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
   for (const auto& previous : otherWordSets_) {
     std::ranges::copy(*previous, std::back_inserter(result));
   }
+  return result;
+}
+
+// TODO<joka921> Consider moving the cheap case (if precomputed) into the
+// header.
+std::pair<VocabIndex, bool> LocalVocabEntry::lowerBoundInIndex() const {
+  if (indexStatus != IndexStatus::NOT_LOOKED_UP) {
+    return {lowerBoundInIndex_, indexStatus == EQUAL};
+  }
+  const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
+  std::pair<VocabIndex, bool> result;
+  auto& [vocabIndex, isContained] = result;
+  isContained = index.getVocab().getId(toStringRepresentation(), &vocabIndex);
+  indexStatus = isContained ? IndexStatus::EQUAL : IndexStatus::GREATER;
+  lowerBoundInIndex_ = vocabIndex;
   return result;
 }

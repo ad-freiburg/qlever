@@ -15,7 +15,45 @@
 // requests.
 using VocabIndex = ad_utility::TypedIndex<uint64_t, "VocabIndex">;
 
-using LocalVocabIndex = const ad_utility::triple_component::LiteralOrIri*;
+// TODO<joka921> Move to util library
+template <typename T>
+class CopyableAtomic : public std::atomic<T> {
+  using Base = std::atomic<T>;
+
+ public:
+  using Base::Base;
+  CopyableAtomic(const CopyableAtomic& rhs) : Base{rhs.load()} {}
+  CopyableAtomic& operator=(const CopyableAtomic& rhs) {
+    static_cast<Base&>(*this) = rhs.load();
+    return *this;
+  }
+};
+
+class alignas(16) LocalVocabEntry
+    : public ad_utility::triple_component::LiteralOrIri {
+ private:
+  using Base = ad_utility::triple_component::LiteralOrIri;
+  mutable CopyableAtomic<VocabIndex> lowerBoundInIndex_;
+  enum IndexStatus { NOT_LOOKED_UP, GREATER, EQUAL };
+  mutable CopyableAtomic<IndexStatus> indexStatus = NOT_LOOKED_UP;
+
+ public:
+  using Base::Base;
+  std::pair<VocabIndex, bool> lowerBoundInIndex() const;
+
+  LocalVocabEntry(const Base& base) : Base{base} {}
+  LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}
+
+  template <typename H>
+  friend H AbslHashValue(H h, const std::same_as<LocalVocabEntry> auto& entry) {
+    return AbslHashValue(std::move(h), static_cast<const Base&>(entry));
+  }
+
+  auto operator<=>(const LocalVocabEntry& rhs) const {
+    return static_cast<const Base&>(*this) <=> static_cast<const Base&>(rhs);
+  }
+};
+using LocalVocabIndex = const LocalVocabEntry*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, "BlankNodeIndex">;

@@ -128,9 +128,23 @@ class ValueId {
   // GROUP BY and BIND operations (for performance reasons). So a join with such
   // results will currently lead to wrong results.
   constexpr bool operator==(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return _bits == other._bits;
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() == *other.getLocalVocabIndex();
+    } else if (type == VocabIndex) {
+      auto [lowerBound, isContained] =
+          (other.getLocalVocabIndex())->lowerBoundInIndex();
+      return isContained && lowerBound == getVocabIndex();
+    } else if (otherType == VocabIndex) {
+      // TODO<joka921> Code duplication.
+      auto [lowerBound, isContained] =
+          (getLocalVocabIndex())->lowerBoundInIndex();
+      return isContained && lowerBound == other.getVocabIndex();
     }
     return _bits == other._bits;
   }
@@ -144,9 +158,33 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return _bits <=> other._bits;
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
+    } else if (type == VocabIndex) {
+      auto [lowerBound, isContained] =
+          (other.getLocalVocabIndex())->lowerBoundInIndex();
+      if (lowerBound == getVocabIndex()) {
+        return isContained ? std::strong_ordering::equal
+                           : std::strong_ordering::less;
+      } else {
+        return getVocabIndex() <=> lowerBound;
+      }
+    } else if (otherType == VocabIndex) {
+      // TODO<joka921> Code duplication.
+      auto [lowerBound, isContained] =
+          (getLocalVocabIndex())->lowerBoundInIndex();
+      if (lowerBound == other.getVocabIndex()) {
+        return isContained ? std::strong_ordering::equal
+                           : std::strong_ordering::greater;
+      } else {
+        return lowerBound <=> other.getVocabIndex();
+      }
     }
     return _bits <=> other._bits;
   }
