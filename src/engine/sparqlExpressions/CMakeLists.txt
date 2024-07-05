@@ -7,7 +7,6 @@ add_library(sparqlExpressions
         RelationalExpressions.cpp
         AggregateExpression.cpp
         RegexExpression.cpp
-        LangExpression.cpp
         NumericUnaryExpressions.cpp
         NumericBinaryExpressions.cpp
         DateExpressions.cpp
@@ -16,6 +15,8 @@ add_library(sparqlExpressions
         ConditionalExpressions.cpp
         SparqlExpressionTypes.cpp
         SparqlExpression.cpp
-        ConvertToNumericExpression.cpp)
+        ConvertToNumericExpression.cpp
+        RdfTermExpressions.cpp
+        LangExpression.cpp)
 
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

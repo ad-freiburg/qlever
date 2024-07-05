@@ -298,6 +298,10 @@ addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
 
+addLinkAndDiscoverTestSerial(NowDatetimeExpressionTest index)
+
+addLinkAndDiscoverTestSerial(LanguageExpressionsTest index)
+
 addLinkAndDiscoverTestSerial(SortTest engine)
 
 addLinkAndDiscoverTestSerial(OrderByTest engine)

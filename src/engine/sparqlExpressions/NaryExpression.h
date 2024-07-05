@@ -83,6 +83,8 @@ SparqlExpression::Ptr makeReplaceExpression(SparqlExpression::Ptr input,
                                             SparqlExpression::Ptr replacement);
 SparqlExpression::Ptr makeStrBeforeExpression(SparqlExpression::Ptr child1,
                                               SparqlExpression::Ptr child2);
+SparqlExpression::Ptr makeLangMatchesExpression(SparqlExpression::Ptr child1,
+                                                SparqlExpression::Ptr child2);
 
 SparqlExpression::Ptr makeMD5Expression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeSHA1Expression(SparqlExpression::Ptr child);
@@ -98,6 +100,14 @@ SparqlExpression::Ptr makeIfExpression(SparqlExpression::Ptr child1,
 SparqlExpression::Ptr makeConvertToIntExpression(SparqlExpression::Ptr child);
 SparqlExpression::Ptr makeConvertToDoubleExpression(
     SparqlExpression::Ptr child);
+
+// Implemented in RdfTermExpressions.cpp
+SparqlExpression::Ptr makeDatatypeExpression(SparqlExpression::Ptr child);
+
+// Implemented in LangExpression.cpp
+SparqlExpression::Ptr makeLangExpression(SparqlExpression::Ptr child);
+std::optional<Variable> getVariableFromLangExpression(
+    const SparqlExpression* child);
 
 SparqlExpression::Ptr makeEncodeForUriExpression(SparqlExpression::Ptr child);
 
