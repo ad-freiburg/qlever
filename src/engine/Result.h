@@ -158,10 +158,8 @@ class ProtoResult {
 
  private:
   // Get the information, which columns stores how many entries of each
-  // datatype. This information is computed on the first call to this function
-  // `O(num-entries-in-table)` and then cached for subsequent usages.
-  static const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn(
-      std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
+  // datatype.
+  static DatatypeCountsPerColumn computeDatatypeCountsPerColumn(
       IdTable& idTable);
 
   static void validateIdTable(const IdTable& idTable,

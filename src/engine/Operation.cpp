@@ -132,14 +132,16 @@ std::shared_ptr<const Result> Operation::getResult(
                         result.isDataEvaluated());
 
       checkCancellation();
-      // Compute the datatypes that occur in each column of the result.
-      // Also assert, that if a column contains UNDEF values, then the
-      // `mightContainUndef` flag for that columns is set.
-      // TODO<joka921> It is cheaper to move this calculation into the
-      // individual results, but that requires changes in each individual
-      // operation, therefore we currently only perform this expensive
-      // change in the DEBUG builds.
-      result.checkDefinedness(getExternallyVisibleVariableColumns());
+      if constexpr (ad_utility::areExpensiveChecksEnabled) {
+        // Compute the datatypes that occur in each column of the result.
+        // Also assert, that if a column contains UNDEF values, then the
+        // `mightContainUndef` flag for that columns is set.
+        // TODO<joka921> It is cheaper to move this calculation into the
+        // individual results, but that requires changes in each individual
+        // operation, therefore we currently only perform this expensive
+        // change in the DEBUG builds.
+        result.checkDefinedness(getExternallyVisibleVariableColumns());
+      }
       // Make sure that the results that are written to the cache have the
       // correct runtimeInfo. The children of the runtime info are already set
       // correctly because the result was computed, so we can pass `nullopt` as

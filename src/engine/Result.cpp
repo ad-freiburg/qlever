@@ -135,34 +135,32 @@ void ProtoResult::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
 
 // _____________________________________________________________
 void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
-  auto performCheck =
-      [](const auto& map,
-         std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
-         IdTable& idTable) {
-        const auto& datatypesPerColumn = getOrComputeDatatypeCountsPerColumn(
-            datatypeCountsPerColumn, idTable);
-        return std::ranges::all_of(map, [&](const auto& varAndCol) {
-          const auto& [columnIndex, mightContainUndef] = varAndCol.second;
-          bool hasUndefined =
-              datatypesPerColumn.at(columnIndex)
-                  .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-          return mightContainUndef ==
-                     ColumnIndexAndTypeInfo::PossiblyUndefined ||
-                 !hasUndefined;
-        });
-      };
+  auto performCheck = [](const auto& map, IdTable& idTable) {
+    DatatypeCountsPerColumn datatypeCountsPerColumn =
+        computeDatatypeCountsPerColumn(idTable);
+    return std::ranges::all_of(map, [&](const auto& varAndCol) {
+      const auto& [columnIndex, mightContainUndef] = varAndCol.second;
+      bool hasUndefined =
+          datatypeCountsPerColumn.at(columnIndex)
+              .at(static_cast<size_t>(Datatype::Undefined)) != 0;
+      return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
+             !hasUndefined;
+    });
+  };
   if (isDataEvaluated()) {
-    std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn;
-    AD_EXPENSIVE_CHECK(
-        performCheck(varColMap, datatypeCountsPerColumn, storage_.idTable()));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, storage_.idTable()));
   } else {
     auto generator = [](cppcoro::generator<IdTable> original,
                         VariableToColumnMap varColMap,
                         auto performCheck) -> cppcoro::generator<IdTable> {
-      std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn;
+      bool first = true;
       for (auto&& idTable : original) {
-        AD_EXPENSIVE_CHECK(
-            performCheck(varColMap, datatypeCountsPerColumn, idTable));
+        if (first) {
+          first = false;
+          // No need to check subsequent idTables assuming the datatypes
+          // don't change mid result.
+          AD_EXPENSIVE_CHECK(performCheck(varColMap, idTable));
+        }
         co_yield std::move(idTable);
       }
     }(std::move(storage_.idTables()), varColMap, std::move(performCheck));
@@ -171,13 +169,9 @@ void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
 }
 
 // _____________________________________________________________________________
-auto ProtoResult::getOrComputeDatatypeCountsPerColumn(
-    std::optional<DatatypeCountsPerColumn>& datatypeCountsPerColumn,
-    IdTable& idTable) -> const DatatypeCountsPerColumn& {
-  if (datatypeCountsPerColumn.has_value()) {
-    return datatypeCountsPerColumn.value();
-  }
-  auto& types = datatypeCountsPerColumn.emplace();
+auto ProtoResult::computeDatatypeCountsPerColumn(IdTable& idTable)
+    -> DatatypeCountsPerColumn {
+  DatatypeCountsPerColumn types;
   types.resize(idTable.numColumns());
   for (size_t i = 0; i < idTable.numColumns(); ++i) {
     const auto& col = idTable.getColumn(i);
