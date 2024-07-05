@@ -93,6 +93,8 @@ void DeltaTriples::insertTriples(
   LOG(DEBUG) << "Inserting " << triples.size()
              << " triples (including idempotent triples)." << std::endl;
   std::ranges::sort(triples);
+  // Unique moves all duplicate items to the end and returns iterators for that
+  // subrange.
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);
   std::erase_if(triples, [this](const IdTriple<0>& triple) {

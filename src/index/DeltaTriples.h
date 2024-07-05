@@ -46,6 +46,8 @@ class DeltaTriples {
   LocatedTriplesPerBlock locatedTriplesPerBlockInOSP_;
   LocatedTriplesPerBlock locatedTriplesPerBlockInOPS_;
 
+  FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
+
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
   struct LocatedTripleHandles {
@@ -83,11 +85,11 @@ class DeltaTriples {
   size_t numInserted() const { return triplesInserted_.size(); }
   size_t numDeleted() const { return triplesDeleted_.size(); }
 
-  // Insert triple. Must not contain duplicates.
+  // Insert triples.
   void insertTriples(ad_utility::SharedCancellationHandle cancellationHandle,
                      std::vector<IdTriple<0>> triples);
 
-  // Delete triple. Must not contain duplicates.
+  // Delete triples.
   void deleteTriples(ad_utility::SharedCancellationHandle cancellationHandle,
                      std::vector<IdTriple<0>> triples);
 

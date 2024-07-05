@@ -118,6 +118,8 @@ addLinkAndDiscoverTest(LocatedTriplesTest index)
 
 addLinkAndDiscoverTestSerial(IdTripleTest index)
 
+addLinkAndDiscoverTestSerial(DeltaTriplesTest index)
+
 addLinkAndDiscoverTest(EngineTest engine)
 
 addLinkAndDiscoverTest(JoinTest engine)
