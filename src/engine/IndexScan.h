@@ -92,9 +92,7 @@ class IndexScan final : public Operation {
   }
 
   // An index scan can directly and efficiently support LIMIT and OFFSET
-  [[nodiscard]] bool supportsLimit() const override {
-    return true;
-  }
+  [[nodiscard]] bool supportsLimit() const override { return true; }
 
   Permutation::Enum permutation() const { return permutation_; }
 
