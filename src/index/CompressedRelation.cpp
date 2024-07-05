@@ -39,6 +39,8 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   if (beginBlock == endBlock) {
     co_return;
   }
+  auto [columnIndicesWithAllIndex, resultColumnSubset] =
+      completeColumnIndices(columnIndices, numIndexColumns);
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
   auto blockIterator = beginBlock;
@@ -64,13 +66,14 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     // file. On a fast SSD we could possibly change this, but this has to be
     // investigated.
     CompressedBlock compressedBlock =
-        readCompressedBlockFromFile(block, columnIndices);
+        readCompressedBlockFromFile(block, columnIndicesWithAllIndex);
     lock.unlock();
     DecompressedBlock decompressedBlock =
         decompressBlock(compressedBlock, block.numRows_);
     decompressedBlock =
         addUpdateTriples(std::move(decompressedBlock), locatedTriplesPerBlock,
-                         block.blockIndex_, numIndexColumns);
+                         block.blockIndex_, 3);
+    decompressedBlock.setColumnSubset(resultColumnSubset);
     return std::pair{myIndex, std::move(decompressedBlock)};
   };
   const size_t numThreads =
