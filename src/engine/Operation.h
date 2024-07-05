@@ -208,7 +208,7 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual Result computeResultOnlyForTesting(
+  virtual ProtoResult computeResultOnlyForTesting(
       bool requestLaziness = false) final {
     return computeResult(requestLaziness);
   }
@@ -260,7 +260,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual Result computeResult(bool requestLaziness) = 0;
+  virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
@@ -274,7 +274,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t numRows, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 

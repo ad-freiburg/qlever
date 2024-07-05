@@ -139,7 +139,7 @@ cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
 }
 
 // _____________________________________________________________________________
-Result IndexScan::computeResult(bool requestLaziness) {
+ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
   if (requestLaziness) {
     return {scanInChunks(), resultSortedOn(), LocalVocab{}};

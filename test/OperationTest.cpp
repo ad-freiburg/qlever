@@ -58,7 +58,8 @@ TEST(OperationTest, getResultOnlyCached) {
   // When we now request to only return the result if it is cached, we should
   // get exactly the same `shared_ptr` as with the previous call.
   NeutralElementOperation n3{qec};
-  EXPECT_EQ(n3.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
+  EXPECT_EQ(&n3.getResult(true, ComputationMode::ONLY_IF_CACHED)->idTable(),
+            &result->idTable());
   EXPECT_EQ(n3.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedNotPinned);
 
@@ -67,7 +68,8 @@ TEST(OperationTest, getResultOnlyCached) {
   QueryExecutionContext qecCopy{*qec};
   qecCopy._pinResult = true;
   NeutralElementOperation n4{&qecCopy};
-  EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
+  EXPECT_EQ(&n4.getResult(true, ComputationMode::ONLY_IF_CACHED)->idTable(),
+            &result->idTable());
 
   // The cache status is `cachedNotPinned` because we found the element cached
   // but not pinned (it does reflect the status BEFORE the operation).
@@ -79,7 +81,8 @@ TEST(OperationTest, getResultOnlyCached) {
   // We have pinned the result, so requesting it again should return a pinned
   // result.
   qecCopy._pinResult = false;
-  EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
+  EXPECT_EQ(&n4.getResult(true, ComputationMode::ONLY_IF_CACHED)->idTable(),
+            &result->idTable());
   EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
             ad_utility::CacheStatus::cachedPinned);
 

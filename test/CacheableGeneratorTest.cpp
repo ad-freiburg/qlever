@@ -205,25 +205,6 @@ TEST(CacheableGenerator, verifyExhaustedMasterCausesFreeForAll) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, verifyExtractGeneratorGivesBackOriginal) {
-  CacheableGenerator generator{testGenerator(2)};
-
-  {
-    auto iterator = generator.begin(true);
-    ASSERT_NE(iterator, generator.end());
-    EXPECT_EQ(*iterator, 0);
-  }
-
-  auto innerGenerator = std::move(generator).extractGenerator();
-  auto iterator = innerGenerator.begin();
-  ASSERT_NE(iterator, innerGenerator.end());
-  EXPECT_EQ(*iterator, 1);
-
-  ++iterator;
-  EXPECT_EQ(iterator, innerGenerator.end());
-}
-
-// _____________________________________________________________________________
 TEST(CacheableGenerator, verifyOnGeneratorFinishedIsCalled) {
   CacheableGenerator generator{testGenerator(1)};
 

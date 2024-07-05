@@ -245,15 +245,6 @@ class CacheableGenerator {
 
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
-  cppcoro::generator<T> extractGenerator() && {
-    auto pointerCopy = computationStorage_;
-    AD_CORRECTNESS_CHECK(pointerCopy);
-    std::unique_lock lock{pointerCopy->mutex_};
-    cppcoro::generator<T> result{std::move(pointerCopy->generator_)};
-    computationStorage_.reset();
-    return result;
-  }
-
   void forEachCachedValue(const std::invocable<const T&> auto& function) const {
     computationStorage_->forEachCachedValue(function);
   }

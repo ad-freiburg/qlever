@@ -121,7 +121,9 @@ void QueryExecutionTree::readFromCache() {
   if (res.has_value()) {
     auto resultTable = res->_resultPointer->resultTablePtr();
     if (resultTable->isDataEvaluated()) {
-      cachedResult_ = std::move(resultTable);
+      cachedResult_ = std::make_shared<const Result>(
+          Result::createResultWithFullyEvaluatedIdTable(
+              std::move(resultTable)));
     }
   }
 }

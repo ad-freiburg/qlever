@@ -51,7 +51,7 @@ class LazyValueOperation : public Operation {
     return std::move(stream).str();
   }
 
-  Result computeResult(bool requestLaziness) override {
+  ProtoResult computeResult(bool requestLaziness) override {
     if (requestLaziness) {
       std::vector<IdTable> clones;
       clones.reserve(idTables_.size());
@@ -110,7 +110,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 
   auto result = filter.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
   ASSERT_FALSE(result->isDataEvaluated());
-  auto generator = result->idTables();
+  auto& generator = result->idTables();
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());

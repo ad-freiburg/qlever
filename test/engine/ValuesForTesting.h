@@ -49,7 +49,7 @@ class ValuesForTesting : public Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto table = table_.clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),

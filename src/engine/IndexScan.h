@@ -104,7 +104,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
  private:
-  Result computeResult(bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

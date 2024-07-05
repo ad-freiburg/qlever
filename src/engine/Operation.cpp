@@ -125,7 +125,7 @@ std::shared_ptr<const Result> Operation::getResult(
       checkCancellation();
       runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
       signalQueryUpdate();
-      Result result =
+      ProtoResult result =
           computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
       actuallyComputed = true;
       AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
@@ -149,7 +149,7 @@ std::shared_ptr<const Result> Operation::getResult(
       // correctly because the result was computed, so we can pass `nullopt` as
       // the last argument.
       if (result.isDataEvaluated()) {
-        updateRuntimeInformationOnSuccess(result,
+        updateRuntimeInformationOnSuccess(result.idTable().size(),
                                           ad_utility::CacheStatus::computed,
                                           timer.msecs(), std::nullopt);
       } else {
@@ -180,7 +180,7 @@ std::shared_ptr<const Result> Operation::getResult(
     };
 
     auto cacheSetup = [this, &computeLambda, &cache, &cacheKey]() {
-      auto result = computeLambda();
+      auto result = CacheableResult{computeLambda()};
       if (!result.isDataEvaluated()) {
         result.setOnSizeChanged([&cache, cacheKey](bool isShrinkable) {
           // TODO<RobinTF> find out how to handle pinned entries properly.
@@ -195,8 +195,9 @@ std::shared_ptr<const Result> Operation::getResult(
             [&cache, cacheKey](bool isComplete) mutable {
               if (isComplete) {
                 cache.transformValue(cacheKey, [](const CacheValue& oldValue) {
-                  return CacheValue{oldValue.resultTable().aggregateTable(),
-                                    oldValue.runtimeInfo()};
+                  return CacheValue{
+                      CacheableResult{oldValue.resultTable().aggregateTable()},
+                      oldValue.runtimeInfo()};
                 });
               }
             });
@@ -237,7 +238,9 @@ std::shared_ptr<const Result> Operation::getResult(
     }
 
     if (result._resultPointer->resultTable().isDataEvaluated()) {
-      return result._resultPointer->resultTablePtr();
+      return std::make_shared<const Result>(
+          Result::createResultWithFullyEvaluatedIdTable(
+              result._resultPointer->resultTablePtr()));
     } else if (actuallyComputed) {
       return std::make_shared<const Result>(
           Result::createResultAsMasterConsumer(
@@ -299,12 +302,10 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const Result& resultTable, ad_utility::CacheStatus cacheStatus,
-    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
+    size_t numRows, ad_utility::CacheStatus cacheStatus, Milliseconds duration,
+    std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  // TODO<RobinTF> find a better representation for "unknown" than 0.
-  _runtimeInfo->numRows_ =
-      resultTable.isDataEvaluated() ? resultTable.idTable().size() : 0;
+  _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
@@ -341,8 +342,10 @@ void Operation::updateRuntimeInformationOnSuccess(
 void Operation::updateRuntimeInformationOnSuccess(
     const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
+  const auto& result = resultAndCacheStatus._resultPointer->resultTable();
   updateRuntimeInformationOnSuccess(
-      resultAndCacheStatus._resultPointer->resultTable(),
+      // TODO<RobinTF> find a better representation for "unknown" than 0.
+      result.isDataEvaluated() ? result.idTable().size() : 0,
       resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }

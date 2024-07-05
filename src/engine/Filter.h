@@ -58,7 +58,7 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  Result computeResult(bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   template <size_t WIDTH>
   IdTable computeFilterImpl(

@@ -22,17 +22,18 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<Result> _resultTable;
+  std::shared_ptr<CacheableResult> _resultTable;
   RuntimeInformation _runtimeInfo;
 
  public:
-  explicit CacheValue(Result resultTable, RuntimeInformation runtimeInfo)
-      : _resultTable(std::make_shared<Result>(std::move(resultTable))),
+  explicit CacheValue(CacheableResult resultTable,
+                      RuntimeInformation runtimeInfo)
+      : _resultTable(std::make_shared<CacheableResult>(std::move(resultTable))),
         _runtimeInfo(std::move(runtimeInfo)) {}
 
-  const Result& resultTable() const noexcept { return *_resultTable; }
+  const CacheableResult& resultTable() const noexcept { return *_resultTable; }
 
-  std::shared_ptr<const Result> resultTablePtr() const noexcept {
+  std::shared_ptr<const CacheableResult> resultTablePtr() const noexcept {
     return _resultTable;
   }
 
