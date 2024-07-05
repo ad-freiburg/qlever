@@ -204,11 +204,7 @@ std::span<const Id> PathSearch::handleSearchSide(
   if (isVariable && binding.has_value()) {
     ids = binding->first->getResult()->idTable().getColumn(binding->second);
   } else if (isVariable || std::get<std::vector<Id>>(side).empty()) {
-    std::vector<Id> idVec;
-    for (auto id : indexToId_) {
-      idVec.push_back(id);
-    }
-    ids = idVec;
+    return indexToId_;
   } else {
     ids = std::get<std::vector<Id>>(side);
   }
