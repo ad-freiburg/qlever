@@ -174,14 +174,16 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     // Scan for all distinct `col0` and check that we get the expected result.
     CompressedRelationReader::ScanSpecification scanSpec{
         metaData[i].col0Id_, std::nullopt, std::nullopt};
+    LocatedTriplesPerBlock locatedTriplesPerBlock{};
     IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                cancellationHandle, {});
+                                cancellationHandle, locatedTriplesPerBlock);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
 
     table.clear();
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle, {})) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, locatedTriplesPerBlock)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -195,17 +197,18 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       CompressedRelationReader::ScanSpecification scanSpec{
           metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks, {});
+      auto size =
+          reader.getResultSizeOfScan(scanSpec, blocks, locatedTriplesPerBlock);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle, {});
+                      cancellationHandle, locatedTriplesPerBlock);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle, {})) {
+                           cancellationHandle, locatedTriplesPerBlock)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
