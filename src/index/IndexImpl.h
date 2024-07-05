@@ -149,6 +149,8 @@ class IndexImpl {
   NumNormalAndInternal numTriples_;
   string indexId_;
   static inline const IndexImpl* globalSingletonIndex_ = nullptr;
+  static inline const TripleComponentComparator* globalSingletonComparator_ =
+      nullptr;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -192,6 +194,11 @@ class IndexImpl {
   static const IndexImpl& staticGlobalSingletonIndex() {
     AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
     return *globalSingletonIndex_;
+  }
+
+  static const TripleComponentComparator& staticGlobalSingletonComparator() {
+    AD_CORRECTNESS_CHECK(globalSingletonComparator_ != nullptr);
+    return *globalSingletonComparator_;
   }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding

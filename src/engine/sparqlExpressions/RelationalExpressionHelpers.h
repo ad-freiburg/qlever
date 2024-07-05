@@ -130,9 +130,8 @@ inline std::pair<ValueId, ValueId> getRangeFromVocab(
 // consecutive range of IDs. For its usage see below.
 template <typename S>
 concept StoresStringOrId =
-    ad_utility::SimilarToAny<S, ValueId,
-                             ad_utility::triple_component::LiteralOrIri,
-                             IdOrLiteralOrIri, std::pair<Id, Id>>;
+    ad_utility::SimilarToAny<S, ValueId, LocalVocabEntry, IdOrLiteralOrIri,
+                             std::pair<Id, Id>>;
 // Convert a string or `IdOrLiteralOrIri` value into the (possibly empty) range
 // of corresponding `ValueIds` (denoted by a `std::pair<Id, Id>`, see
 // `getRangeFromVocab` above for details). This function also takes `ValueId`s
@@ -140,13 +139,13 @@ concept StoresStringOrId =
 // the usage of this function easier.
 template <StoresStringOrId S>
 auto makeValueId(const S& value, const EvaluationContext* context) {
-  if constexpr (ad_utility::isSimilar<S, ValueId>) {
-    return value;
-  } else if constexpr (ad_utility::isSimilar<S, std::pair<Id, Id>>) {
+  if constexpr (ad_utility::SimilarToAny<S, ValueId, std::pair<Id, Id>>) {
     return value;
   } else if constexpr (ad_utility::isSimilar<S, IdOrLiteralOrIri>) {
     auto visitor = [context](const auto& x) {
       auto res = makeValueId(x, context);
+      return res;
+      /*
       if constexpr (ad_utility::isSimilar<decltype(res), Id>) {
         // We need the same return type on all cases when visiting a variant, so
         // we need to return a pair here. As the second element is an upper
@@ -155,13 +154,16 @@ auto makeValueId(const S& value, const EvaluationContext* context) {
       } else {
         return res;
       }
+       */
     };
     return std::visit(visitor, value);
 
   } else {
-    static_assert(
-        ad_utility::isSimilar<S, ad_utility::triple_component::LiteralOrIri>);
-    return getRangeFromVocab(value, context);
+    static_assert(ad_utility::isSimilar<S, LocalVocabEntry>);
+    // TODO<joka921> We have to reinstate the correct handling of the equal
+    // ranges.
+    return Id::makeFromLocalVocabIndex(&value);
+    // return getRangeFromVocab(value, context);
   }
 };
 
@@ -176,13 +178,12 @@ inline const auto compareIdsOrStrings =
     []<StoresStringOrId T, StoresStringOrId U>(
         const T& a, const U& b,
         const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
-  if constexpr (ad_utility::isSimilar<LiteralOrIri, T> &&
-                ad_utility::isSimilar<LiteralOrIri, U>) {
+  if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&
+                ad_utility::isSimilar<LocalVocabEntry, U>) {
     // TODO<joka921> integrate comparison via ICU and proper handling for
     // IRIs/ Literals/etc.
-    return valueIdComparators::fromBool(applyComparison<Comp>(
-        a.toStringRepresentation(), b.toStringRepresentation()));
+    // TODO<joka921> This is now the place to fix it....
+    return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
     auto x = makeValueId(a, ctx);
     auto y = makeValueId(b, ctx);

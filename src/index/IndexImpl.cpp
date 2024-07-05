@@ -712,6 +712,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
                       onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "

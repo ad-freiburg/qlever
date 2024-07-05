@@ -477,10 +477,8 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
                      const A& aValue, const B& bValue) -> ComparisonResult {
     if constexpr (std::is_same_v<A, LocalVocabIndex> &&
                   std::is_same_v<B, LocalVocabIndex>) {
-      // TODO<joka921> This is one of the places that has to be changed once
-      // we want to implement correct comparisons for the local vocab that use
-      // ICU collation.
-      return fromBool(std::invoke(comparator, *aValue, *bValue));
+      // We have handled this case outside the visitor.
+      AD_FAIL();
     } else if constexpr (requires() {
                            std::invoke(comparator, aValue, bValue);
                          }) {
