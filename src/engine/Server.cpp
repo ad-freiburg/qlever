@@ -688,10 +688,13 @@ nlohmann::json Server::executeUpdateQuery(
 
   nlohmann::json j;
   j["query"] = query._originalString;
-  j["status"] = "ERROR";
-  j["exception"] =
-      "Not supported: SPARQL 1.1 Update currently not supported by QLever.";
-  j["warnings"] = qet.collectWarnings();
+  j["status"] = "OK";
+  j["res"] = nlohmann::json::array();
+  j["selected"] = nlohmann::json::array();
+  j["resultsize"] = 0;
+  auto warnings = qet.collectWarnings();
+  warnings.emplace_back("SPARQL 1.1 Update for QLever is highly experimental.");
+  j["warnings"] = warnings;
 
   j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
