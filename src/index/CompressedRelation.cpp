@@ -333,10 +333,6 @@ IdTable CompressedRelationReader::scan(
     ColumnIndicesRef additionalColumns,
     const CancellationHandle& cancellationHandle,
     const LocatedTriplesPerBlock& locatedTriplesPerBlock) const {
-  LOG(INFO) << "CompressedRelation::scan scanspec: " << scanSpec << std::endl;
-  LOG(INFO) << "CompressedRelation::scan looking at blocks from "
-            << blocks.begin()->firstTriple_ << " to "
-            << blocks.rbegin()->lastTriple_ << std::endl;
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
   IdTable result(columnIndices.size(), allocator_);
 
@@ -628,8 +624,6 @@ DecompressedBlock CompressedRelationReader::decompressBlock(
 DecompressedBlock CompressedRelationReader::addUpdateTriples(
     DecompressedBlock block, const LocatedTriplesPerBlock& locatedTriples,
     size_t blockIndex, size_t numIndexColumns) const {
-  LOG(INFO) << "CompressedRelationReader::addUpdateTriples " << blockIndex
-            << std::endl;
   if (!useUpdates_ || !locatedTriples.hasUpdates(blockIndex)) {
     // updates are not enabled or not possible for this block
     return block;

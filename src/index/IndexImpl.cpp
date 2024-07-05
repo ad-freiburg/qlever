@@ -1380,7 +1380,6 @@ IdTable IndexImpl::scan(
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  LOG(INFO) << "IndexImpl::scan-1" << std::endl;
   std::optional<Id> col0Id =
       col0String.toValueIdNoAdd(getVocab(), deltaTriples_->localVocab());
   std::optional<Id> col1Id = col1String.has_value()
@@ -1400,7 +1399,6 @@ IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  LOG(INFO) << "IndexImpl::scan-2" << std::endl;
   return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
                                 additionalColumns, cancellationHandle);
 }

@@ -65,12 +65,6 @@ DeltaTriples::locateAndAddTriples(
     auto blockMetadata = perm.metaData().blockData();
     getLocatedTriplesPerBlock(permutation)
         .updateAugmentedMetadata(blockMetadata);
-    LOG(INFO) << "Permutation: " << perm.readableName() << " with "
-              << blockMetadata.size() << " blocks" << std::endl;
-    LOG(INFO) << "LocatedTriplesPerBlock "
-              << getLocatedTriplesPerBlock(permutation);
-    LOG(INFO) << "Triples (" << blockMetadata.begin()->firstTriple_ << ", "
-              << blockMetadata.rbegin()->lastTriple_ << ")" << std::endl;
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
@@ -96,7 +90,8 @@ void DeltaTriples::eraseTripleInAllPermutations(
 void DeltaTriples::insertTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple<0>> triples) {
-  LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
+  LOG(DEBUG) << "Inserting " << triples.size()
+             << " triples (including idempotent triples)." << std::endl;
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);
@@ -110,8 +105,6 @@ void DeltaTriples::insertTriples(
       triplesDeleted_.erase(triple);
     }
   });
-
-  LOG(INFO) << "Inserting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, true);
@@ -127,7 +120,8 @@ void DeltaTriples::insertTriples(
 void DeltaTriples::deleteTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
     std::vector<IdTriple<0>> triples) {
-  LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
+  LOG(DEBUG) << "Deleting " << triples.size()
+             << " triples (including idempotent triples)." << std::endl;
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);
@@ -141,8 +135,6 @@ void DeltaTriples::deleteTriples(
       triplesInserted_.erase(triple);
     }
   });
-
-  LOG(INFO) << "Deleting " << triples.size() << " triples." << std::endl;
 
   std::vector<LocatedTripleHandles> handles =
       locateAndAddTriples(std::move(cancellationHandle), triples, false);
