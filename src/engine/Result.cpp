@@ -113,19 +113,24 @@ void ProtoResult::applyLimitOffset(
 // _____________________________________________________________________________
 void ProtoResult::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
   if (storage_.isDataEvaluated()) {
-    AD_CONTRACT_CHECK(storage_.idTable().numRows() ==
-                      limitOffset.actualSize(storage_.idTable().numRows()));
+    auto numRows = idTable().numRows();
+    auto limit = limitOffset._limit;
+    AD_CONTRACT_CHECK(!limit.has_value() ||
+                      numRows <= static_cast<size_t>(limit.value()));
   } else {
     auto generator =
         [](cppcoro::generator<IdTable> original,
            LimitOffsetClause limitOffset) -> cppcoro::generator<IdTable> {
+      auto limit = limitOffset._limit;
       size_t elementCount = 0;
       for (auto&& idTable : original) {
         elementCount += idTable.numRows();
-        AD_CONTRACT_CHECK(elementCount <= limitOffset.actualSize(elementCount));
+        AD_CONTRACT_CHECK(!limit.has_value() ||
+                          elementCount <= static_cast<size_t>(limit.value()));
         co_yield std::move(idTable);
       }
-      AD_CONTRACT_CHECK(elementCount == limitOffset.actualSize(elementCount));
+      AD_CONTRACT_CHECK(!limit.has_value() ||
+                        elementCount <= static_cast<size_t>(limit.value()));
     }(std::move(storage_.idTables()), limitOffset);
     storage_.idTables() = std::move(generator);
   }

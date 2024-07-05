@@ -560,10 +560,11 @@ void updateRuntimeInfoForLazyScan(
   scanTree.updateRuntimeInformationWhenOptimizedOut(
       RuntimeInformation::Status::lazilyMaterialized);
   auto& rti = scanTree.runtimeInfo();
-  rti.numRows_ = metadata.numElementsRead_;
+  rti.numRows_ = metadata.numElementsYielded_;
   rti.totalTime_ = metadata.blockingTime_;
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
+  rti.addDetail("num-elements-read", metadata.numElementsRead_);
 }
 }  // namespace
 

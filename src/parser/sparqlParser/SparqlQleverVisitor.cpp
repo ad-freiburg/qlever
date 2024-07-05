@@ -15,7 +15,6 @@
 
 #include "absl/time/time.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -163,15 +162,9 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
-                                                    bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
-  if (allowLanguageFilters) {
-    checkUnsupportedLangOperationAllowFilters(ctx, result);
-  } else {
-    checkUnsupportedLangOperation(ctx, result);
-  }
-  return result;
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(
+    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -191,7 +184,17 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update()) {
-    reportNotSupported(ctx->update(), "SPARQL 1.1 Update");
+    // An empty query currently matches the `update()` rule. We handle this
+    // case manually to get a better error message. If an update query doesn't
+    // have an `update1()`, then it consists of a (possibly empty) prologue, but
+    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
+    // details.
+    if (!ctx->update()->update1()) {
+      reportError(ctx->update(),
+                  "Empty query (this includes queries that only consist "
+                  "of comments or prefix declarations).");
+    }
+    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
   } else {
     return visit(ctx->query());
   }
@@ -597,7 +600,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable, language);
       } else {
-        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -2076,6 +2078,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsNumericExpression);
   } else if (functionName == "datatype") {
     return createUnary(&makeDatatypeExpression);
+  } else if (functionName == "langmatches") {
+    return createBinary(&makeLangMatchesExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
@@ -2104,16 +2108,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   }
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
-  // The constructor of `LangExpression` throws if the subexpression is not a
-  // single variable.
-  try {
-    return std::make_unique<sparqlExpression::LangExpression>(
-        visit(ctx->expression()));
-  } catch (const std::exception& e) {
-    reportError(ctx, e.what());
-  }
+  // The number of children for expression LANG() is fixed to one by the
+  // grammar (or definition of the parser).
+  return sparqlExpression::makeLangExpression(visit(ctx->expression()));
 }
 
 // ____________________________________________________________________________________
@@ -2390,31 +2389,6 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
   throw NotSupportedException{
       feature + " currently not supported by QLever.",
       ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperation(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression()) {
-    throw NotSupportedException{
-        "The LANG function is currently only supported in the construct "
-        "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-  }
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperationAllowFilters(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression() &&
-      !expression.getLanguageFilterExpression()) {
-    throw NotSupportedException(
-        "The LANG() function is only supported by QLever in the construct "
-        "FILTER(LANG(?variable) = \"langtag\"",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
-  }
 }
 
 // _____________________________________________________________________________
