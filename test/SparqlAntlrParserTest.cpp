@@ -616,17 +616,17 @@ TEST(SparqlParser, SolutionModifier) {
   // has to appear before LIMIT.
   expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
   expectSolutionModifier("TEXTLIMIT 1 LIMIT 10",
-                         m::SolutionModifier({}, {}, {}, {10, 1, 0}));
+                         m::SolutionModifier({}, {}, {}, {10, 0, 1}));
   expectSolutionModifier(
       "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var TEXTLIMIT 1 "
       "LIMIT 10 OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b - 10"}, {{"(?var != 10)"}},
-                          {VOK{Var{"?var"}, false}}, {10, 1, 2}));
+                          {VOK{Var{"?var"}, false}}, {10, 2, 1}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",
       m::SolutionModifier({Var{"?var"}}, {{"(?foo < ?bar)"}},
-                          {std::pair{"(5 - ?var)", false}}, {2, 21, 0}));
+                          {std::pair{"(5 - ?var)", false}}, {2, 0, 21}));
   expectSolutionModifier(
       "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
       m::SolutionModifier({"?var - ?bar"}, {}, {std::pair{"(5 - ?var)", false}},
@@ -1037,7 +1037,7 @@ TEST(SparqlParser, SelectQuery) {
               m::Select({Var{"?x"}}),
               m::GraphPattern(false, {"(?x != <foo>)"},
                               m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
-          m::pq::LimitOffset({10, 5})));
+          m::pq::LimitOffset({10, 0, 5})));
 
   // ORDER BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
