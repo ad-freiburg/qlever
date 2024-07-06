@@ -126,8 +126,8 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   }
 };
 
-/// This class can be used as the `ValueGetter` argument of Expression
-/// templates. It produces a string value.
+// This class can be used as the `ValueGetter` argument of Expression
+// templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;

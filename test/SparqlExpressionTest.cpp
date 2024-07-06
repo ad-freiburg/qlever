@@ -550,6 +550,7 @@ TEST(SparqlExpression, dateOperators) {
 // _____________________________________________________________________________________
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
+auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
 static auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
@@ -578,6 +579,10 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+
+  // Test `iriOrUriExpression`.
+  checkIriOrUri(IdOrLiteralOrIriVec{lit("bim"), lit("bam")},
+                IdOrLiteralOrIriVec{iriref("<bim>"), iriref("<bam>")});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))

@@ -112,6 +112,28 @@ struct LiftStringFunction {
   }
 };
 
+// IRI or URI
+//
+// TODOs:
+//
+// 1. Check for `BASE` URL and if it exists, prepend it.
+// 2. What's the correct behavior for non-strings, like `1` or `true`?
+//
+// @1: Ignored by the implementation below.
+// @2: The implementation below converts all this to a string and then to an
+// IRI.
+[[maybe_unused]] auto iriOrUri =
+    [](std::optional<std::string> s) -> IdOrLiteralOrIri {
+  if (!s.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    return IdOrLiteralOrIri{
+        LiteralOrIri{Iri::fromIrirefWithoutBrackets(s.value())}};
+  }
+};
+
+using IriOrUriExpression = NARY<1, FV<decltype(iriOrUri), StringValueGetter>>;
+
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
@@ -485,6 +507,9 @@ Expr make(std::same_as<Expr> auto&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+Expr makeIriOrUriExpression(Expr child) {
+  return make<IriOrUriExpression>(child);
+}
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
 
 Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
