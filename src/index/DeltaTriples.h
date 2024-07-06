@@ -106,7 +106,7 @@ class DeltaTriples {
   // again from these maps later).
   std::vector<LocatedTripleHandles> locateAndAddTriples(
       ad_utility::SharedCancellationHandle cancellationHandle,
-      const std::vector<IdTriple<0>>& idTriples, bool shouldExist);
+      std::span<const IdTriple<0>> idTriples, bool shouldExist);
 
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method

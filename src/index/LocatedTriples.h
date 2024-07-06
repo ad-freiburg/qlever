@@ -38,8 +38,8 @@ struct LocatedTriple {
 
   // Locate the given triples in the given permutation.
   static std::vector<LocatedTriple> locateTriplesInPermutation(
-      const std::vector<IdTriple<0>>& triples,
-      const std::vector<CompressedBlockMetadata>& blockMetadata,
+      std::span<const IdTriple<0>> triples,
+      std::span<const CompressedBlockMetadata> blockMetadata,
       const std::array<size_t, 3>& keyOrder, bool shouldExist,
       ad_utility::SharedCancellationHandle cancellationHandle);
   bool operator==(const LocatedTriple&) const = default;
@@ -129,9 +129,11 @@ class LocatedTriplesPerBlock {
   // 1. The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      const std::vector<LocatedTriple>& locatedTriples);
+      std::span<const LocatedTriple> locatedTriples,
+      std::vector<CompressedBlockMetadata> originalMetadata);
 
-  void erase(size_t blockIndex, LocatedTriples::iterator iter);
+  void erase(size_t blockIndex, LocatedTriples::iterator iter,
+             std::vector<CompressedBlockMetadata> originalMetadata);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }
@@ -139,10 +141,9 @@ class LocatedTriplesPerBlock {
   // Get the number of blocks with a non-empty set of located triples.
   size_t numBlocks() const { return map_.size(); }
 
-  // Update the augmented block metadata. Must be called after adding/removing
-  // triples.
-  void updateAugmentedMetadata(
-      const std::vector<CompressedBlockMetadata>& metadata);
+  // Must be called initially before using the `LocatedTriplesPerBlock` to
+  // initialize the block metadata that is augmented for updated triples.
+  void updateAugmentedMetadata(std::vector<CompressedBlockMetadata> metadata);
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
@@ -152,26 +153,16 @@ class LocatedTriplesPerBlock {
   };
 
   // Remove all located triples.
-  void clear() {
+  void clear(std::vector<CompressedBlockMetadata> metadata) {
     map_.clear();
     numTriples_ = 0;
+    augmentedMetadata_ = std::move(metadata);
   }
 
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,
-                                  const LocatedTriplesPerBlock& ltpb) {
-    // Get the block indices in sorted order.
-    std::vector<size_t> blockIndices;
-    std::ranges::copy(ltpb.map_ | std::views::keys,
-                      std::back_inserter(blockIndices));
-    std::ranges::sort(blockIndices);
-    for (auto blockIndex : blockIndices) {
-      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
-         << std::endl;
-    }
-    return os;
-  }
+                                  const LocatedTriplesPerBlock& ltpb);
 };
 
 // Human-readable representation , which are very useful for debugging.

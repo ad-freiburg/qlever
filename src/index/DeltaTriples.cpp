@@ -37,19 +37,37 @@ LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  locatedTriplesPerBlockInPSO_.clear();
-  locatedTriplesPerBlockInPOS_.clear();
-  locatedTriplesPerBlockInSPO_.clear();
-  locatedTriplesPerBlockInSOP_.clear();
-  locatedTriplesPerBlockInOSP_.clear();
-  locatedTriplesPerBlockInOPS_.clear();
+  locatedTriplesPerBlockInPSO_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::PSO)
+                                         .metaData()
+                                         .blockData());
+  locatedTriplesPerBlockInPOS_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::POS)
+                                         .metaData()
+                                         .blockData());
+  locatedTriplesPerBlockInSPO_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::SPO)
+                                         .metaData()
+                                         .blockData());
+  locatedTriplesPerBlockInSOP_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::SOP)
+                                         .metaData()
+                                         .blockData());
+  locatedTriplesPerBlockInOSP_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::OSP)
+                                         .metaData()
+                                         .blockData());
+  locatedTriplesPerBlockInOPS_.clear(index_.getImpl()
+                                         .getPermutation(Permutation::Enum::OPS)
+                                         .metaData()
+                                         .blockData());
 }
 
 // ____________________________________________________________________________
 std::vector<DeltaTriples::LocatedTripleHandles>
 DeltaTriples::locateAndAddTriples(
     ad_utility::SharedCancellationHandle cancellationHandle,
-    const std::vector<IdTriple<0>>& idTriples, bool shouldExist) {
+    std::span<const IdTriple<0>> idTriples, bool shouldExist) {
   ad_utility::HashMap<Permutation::Enum, std::vector<LocatedTriples::iterator>>
       intermediateHandles;
   for (auto permutation : Permutation::ALL) {
@@ -59,12 +77,9 @@ DeltaTriples::locateAndAddTriples(
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[permutation] =
-        getLocatedTriplesPerBlock(permutation).add(locatedTriples);
+        getLocatedTriplesPerBlock(permutation)
+            .add(locatedTriples, perm.metaData().blockData());
     cancellationHandle->throwIfCancelled();
-
-    auto blockMetadata = perm.metaData().blockData();
-    getLocatedTriplesPerBlock(permutation)
-        .updateAugmentedMetadata(blockMetadata);
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
   for (auto permutation : Permutation::ALL) {
@@ -82,7 +97,12 @@ void DeltaTriples::eraseTripleInAllPermutations(
   // Erase for all permutations.
   for (auto permutation : Permutation::ALL) {
     auto ltIter = handles.forPermutation(permutation);
-    getLocatedTriplesPerBlock(permutation).erase(ltIter->blockIndex_, ltIter);
+    getLocatedTriplesPerBlock(permutation)
+        .erase(ltIter->blockIndex_, ltIter,
+               index_.getImpl()
+                   .getPermutation(permutation)
+                   .metaData()
+                   .blockData());
   }
 };
 

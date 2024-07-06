@@ -196,8 +196,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
       checkThatTablesAreEqual(col1And2, table);
     }
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, locatedTriplesPerBlock)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);

@@ -10,36 +10,33 @@
 
 #include "absl/strings/str_join.h"
 #include "index/CompressedRelation.h"
-#include "index/IndexMetaData.h"
-#include "index/Permutation.h"
+#include "util/ChunkedForLoop.h"
 
 // ____________________________________________________________________________
 std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
-    const std::vector<IdTriple<0>>& triples,
-    const std::vector<CompressedBlockMetadata>& blockMetadata,
+    std::span<const IdTriple<0>> triples,
+    std::span<const CompressedBlockMetadata> blockMetadata,
     const std::array<size_t, 3>& keyOrder, bool shouldExist,
     ad_utility::SharedCancellationHandle cancellationHandle) {
   // TODO<qup42> using IdTable as an input here would make it easy to have the
   // input already be permuted.
-  vector<LocatedTriple> out;
+  std::vector<LocatedTriple> out;
   out.reserve(triples.size());
-  size_t currentBlockIndex;
-  for (auto triple : triples) {
-    triple = triple.permute(keyOrder);
-    currentBlockIndex =
-        std::ranges::lower_bound(
-            blockMetadata, triple.toPermutedTriple(),
-            [&](const CompressedBlockMetadata::PermutedTriple& block,
-                const CompressedBlockMetadata::PermutedTriple& triple) {
-              return block < triple;
-            },
-            [](const CompressedBlockMetadata& block) {
-              return block.lastTriple_;
-            }) -
-        blockMetadata.begin();
-    out.emplace_back(currentBlockIndex, triple, shouldExist);
-    cancellationHandle->throwIfCancelled();
-  }
+  ad_utility::chunkedForLoop<10'000>(
+      0, triples.size(),
+      [&triples, &out, &blockMetadata, &keyOrder, &shouldExist](size_t i) {
+        auto triple = triples[i].permute(keyOrder);
+        // A triple belongs to the first block that contains at least one triple
+        // that larger than or equal to the triple. See `LocatedTriples.h` for a
+        // discussion of the corner cases.
+        size_t blockIndex =
+            std::ranges::lower_bound(blockMetadata, triple.toPermutedTriple(),
+                                     std::less<>{},
+                                     &CompressedBlockMetadata::lastTriple_) -
+            blockMetadata.begin();
+        out.emplace_back(blockIndex, triple, shouldExist);
+      },
+      [&cancellationHandle]() { cancellationHandle->throwIfCancelled(); });
 
   return out;
 }
@@ -65,28 +62,22 @@ NumAddedAndDeleted LocatedTriplesPerBlock::numTriples(size_t blockIndex) const {
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
 template <size_t numIndexColumns>
+requires(numIndexColumns >= 1 && numIndexColumns <= 3)
 auto tieIdTableRow(auto& row) {
-  if constexpr (numIndexColumns == 3) {
-    return std::tie(row[0], row[1], row[2]);
-  } else if constexpr (numIndexColumns == 2) {
-    return std::tie(row[0], row[1]);
-  } else {
-    return std::tie(row[0]);
-  }
+  return [&row]<size_t... I>(std::index_sequence<I...>) {
+    return std::tie(row[I]...);
+  }(std::make_index_sequence<numIndexColumns>{});
 }
 
 // ____________________________________________________________________________
 // Collect the relevant entries of a LocatedTriple into a triple.
 template <size_t numIndexColumns>
-auto tieLocatedTriple(auto lt) {
-  if constexpr (numIndexColumns == 3) {
-    return std::tie(lt->triple_.ids_[0], lt->triple_.ids_[1],
-                    lt->triple_.ids_[2]);
-  } else if constexpr (numIndexColumns == 2) {
-    return std::tie(lt->triple_.ids_[1], lt->triple_.ids_[2]);
-  } else {
-    return std::tie(lt->triple_.ids_[2]);
-  }
+requires(numIndexColumns >= 1 && numIndexColumns <= 3)
+auto tieLocatedTriple(auto& lt) {
+  auto& ids = lt->triple_.ids_;
+  return [&ids]<size_t... I>(std::index_sequence<I...>) {
+    return std::tie(ids[3 - numIndexColumns + I]...);
+  }(std::make_index_sequence<numIndexColumns>{});
 }
 
 // ____________________________________________________________________________
@@ -106,70 +97,71 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   const auto& locatedTriples = map_.at(blockIndex);
 
-  auto cmpLt = [](auto lt, auto row) {
-    return tieIdTableRow<numIndexColumns>(row) >
-           tieLocatedTriple<numIndexColumns>(lt);
+  auto cmpLt = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<numIndexColumns>(lt) <
+           tieIdTableRow<numIndexColumns>(row);
   };
-  auto cmpEq = [](auto lt, auto row) {
-    return tieIdTableRow<numIndexColumns>(row) ==
-           tieLocatedTriple<numIndexColumns>(lt);
+  auto cmpEq = [](const auto& lt, const auto& row) {
+    return tieLocatedTriple<numIndexColumns>(lt) ==
+           tieIdTableRow<numIndexColumns>(row);
   };
 
-  auto row = block.begin();
-  auto locatedTriple = locatedTriples.begin();
-  auto resultEntry = result.begin();
+  auto rowIt = block.begin();
+  auto locatedTripleIt = locatedTriples.begin();
+  auto resultIt = result.begin();
 
-  auto writeTripleToResult = [&result, &resultEntry](auto& locatedTriple) {
+  auto writeTripleToResult = [&result, &resultIt](auto& locatedTriple) {
     for (size_t i = 0; i < numIndexColumns; i++) {
-      (*resultEntry)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
+      (*resultIt)[i] = locatedTriple.triple_.ids_[3 - numIndexColumns + i];
     }
     // Write UNDEF to any additional columns.
     for (size_t i = numIndexColumns; i < result.numColumns(); i++) {
-      (*resultEntry)[i] = ValueId::makeUndefined();
+      (*resultIt)[i] = ValueId::makeUndefined();
     }
-    resultEntry++;
+    resultIt++;
   };
 
-  while (row != block.end() && locatedTriple != locatedTriples.end()) {
-    if (cmpLt(locatedTriple, *row)) {
-      // locateTriple < row
-      if (locatedTriple->shouldTripleExist_) {
+  while (rowIt != block.end() && locatedTripleIt != locatedTriples.end()) {
+    if (cmpLt(locatedTripleIt, *rowIt)) {
+      // locateTriple < rowIt
+      if (locatedTripleIt->shouldTripleExist_) {
         // Insertion of a non-existent triple.
-        writeTripleToResult(*locatedTriple);
+        writeTripleToResult(*locatedTripleIt);
       }
-      locatedTriple++;
-    } else if (cmpEq(locatedTriple, *row)) {
-      // locateTriple == row
-      if (!locatedTriple->shouldTripleExist_) {
+      locatedTripleIt++;
+    } else if (cmpEq(locatedTripleIt, *rowIt)) {
+      // locateTriple == rowIt
+      if (!locatedTripleIt->shouldTripleExist_) {
         // Deletion of an existing triple.
-        row++;
+        rowIt++;
       }
-      locatedTriple++;
+      locatedTripleIt++;
     } else {
-      // locateTriple > row
-      // The row is not deleted - copy it
-      *resultEntry++ = *row++;
+      // locateTriple > rowIt
+      // The rowIt is not deleted - copy it
+      *resultIt++ = *rowIt++;
     }
   }
 
-  if (locatedTriple != locatedTriples.end()) {
-    AD_CORRECTNESS_CHECK(row == block.end());
+  if (locatedTripleIt != locatedTriples.end()) {
+    AD_CORRECTNESS_CHECK(rowIt == block.end());
     std::ranges::for_each(
-        std::ranges::subrange(locatedTriple, locatedTriples.end()) |
+        std::ranges::subrange(locatedTripleIt, locatedTriples.end()) |
             std::views::filter(&LocatedTriple::shouldTripleExist_),
         writeTripleToResult);
   }
-  if (row != block.end()) {
-    AD_CORRECTNESS_CHECK(locatedTriple == locatedTriples.end());
-    while (row != block.end()) {
-      *resultEntry++ = *row++;
+  if (rowIt != block.end()) {
+    AD_CORRECTNESS_CHECK(locatedTripleIt == locatedTriples.end());
+    while (rowIt != block.end()) {
+      *resultIt++ = *rowIt++;
     }
   }
 
-  result.resize(resultEntry - result.begin());
+  result.resize(resultIt - result.begin());
   return result;
 }
 
+// ____________________________________________________________________________
 IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
                                              const IdTable& block,
                                              size_t numIndexColumns) const {
@@ -185,7 +177,8 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    const std::vector<LocatedTriple>& locatedTriples) {
+    std::span<const LocatedTriple> locatedTriples,
+    std::vector<CompressedBlockMetadata> originalMetadata) {
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
@@ -196,12 +189,16 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     ++numTriples_;
     handles.emplace_back(handle);
   }
+
+  updateAugmentedMetadata(std::move(originalMetadata));
+
   return handles;
-};
+}
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::erase(size_t blockIndex,
-                                   LocatedTriples::iterator iter) {
+void LocatedTriplesPerBlock::erase(
+    size_t blockIndex, LocatedTriples::iterator iter,
+    std::vector<CompressedBlockMetadata> originalMetadata) {
   auto blockIter = map_.find(blockIndex);
   AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                     " is not contained.");
@@ -211,23 +208,41 @@ void LocatedTriplesPerBlock::erase(size_t blockIndex,
   if (block.empty()) {
     map_.erase(blockIndex);
   }
+  updateAugmentedMetadata(std::move(originalMetadata));
 }
 
+// ____________________________________________________________________________
 void LocatedTriplesPerBlock::updateAugmentedMetadata(
-    const std::vector<CompressedBlockMetadata>& metadata) {
+    std::vector<CompressedBlockMetadata> metadata) {
   // Copy block metadata to augment it with updated triples.
-  IndexMetaDataMmap::BlocksType allBlocks{metadata};
-  for (auto it = allBlocks.begin(); it != allBlocks.end(); ++it) {
-    size_t blockIndex = it - allBlocks.begin();
+  // TODO<C++23> use view::enumerate
+  size_t blockIndex = 0;
+  for (auto& blockMetadata : metadata) {
     if (hasUpdates(blockIndex)) {
-      const auto& block = map_.at(blockIndex);
-      it->firstTriple_ =
-          std::min(it->firstTriple_, block.begin()->triple_.toPermutedTriple());
-      it->lastTriple_ =
-          std::max(it->lastTriple_, block.rbegin()->triple_.toPermutedTriple());
+      const auto& blockUpdates = map_.at(blockIndex);
+      blockMetadata.firstTriple_ =
+          std::min(blockMetadata.firstTriple_,
+                   blockUpdates.begin()->triple_.toPermutedTriple());
+      blockMetadata.lastTriple_ =
+          std::max(blockMetadata.lastTriple_,
+                   blockUpdates.rbegin()->triple_.toPermutedTriple());
     }
+    blockIndex++;
   }
-  augmentedMetadata_ = allBlocks;
+  augmentedMetadata_ = std::move(metadata);
+}
+
+std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
+  // Get the block indices in sorted order.
+  std::vector<size_t> blockIndices;
+  std::ranges::copy(ltpb.map_ | std::views::keys,
+                    std::back_inserter(blockIndices));
+  std::ranges::sort(blockIndices);
+  for (auto blockIndex : blockIndices) {
+    os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+       << std::endl;
+  }
+  return os;
 }
 
 // ____________________________________________________________________________
