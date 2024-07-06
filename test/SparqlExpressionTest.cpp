@@ -581,8 +581,8 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
 
   // Test `iriOrUriExpression`.
-  checkIriOrUri(IdOrLiteralOrIriVec{lit("bim"), lit("bam")},
-                IdOrLiteralOrIriVec{iriref("<bim>"), iriref("<bam>")});
+  checkIriOrUri(IdOrLiteralOrIriVec{lit("bim"), lit("bam"), U},
+                IdOrLiteralOrIriVec{iriref("<bim>"), iriref("<bam>"), U});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
