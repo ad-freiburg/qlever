@@ -141,7 +141,14 @@ CacheValue Operation::runComputationAndTransformToCache(
     });
     result.setOnGeneratorFinished([&cache, cacheKey](bool isComplete) mutable {
       if (isComplete) {
-        cache.transformValue(cacheKey, [](const CacheValue& oldValue) {
+        // Move key onto the stack, because transformValue indirectly clears
+        // this listener causing `cacheKey` to be erased from the heap. `cache`
+        // does not need to be stored on the stack because it is passed via
+        // reference, so the original object where `this` will be pointing to
+        // when calling `transformValue` will continue to exist even if this
+        // lambda doesn't anymore.
+        std::string key = std::move(cacheKey);
+        cache.transformValue(key, [](const CacheValue& oldValue) {
           return CacheValue{
               CacheableResult{oldValue.resultTable().aggregateTable()},
               oldValue.runtimeInfo()};
