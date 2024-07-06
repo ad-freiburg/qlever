@@ -29,7 +29,7 @@ class CacheableGenerator {
 
   class ComputationStorage {
     friend CacheableGenerator;
-    mutable std::shared_mutex mutex_;
+    mutable std::recursive_mutex mutex_;
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
     std::optional<GenIterator> generatorIterator_{};
@@ -106,8 +106,10 @@ class CacheableGenerator {
       }
     }
 
+    // TODO<RobinTF> return shared pointer instead of reference for thread
+    // safety
     Reference getCachedValue(size_t index) const {
-      std::shared_lock lock{mutex_};
+      std::lock_guard lock{mutex_};
       if (!cachedValues_.at(index).has_value()) {
         throw IteratorExpired{};
       }
@@ -117,7 +119,7 @@ class CacheableGenerator {
     // Needs to be public in order to compile with gcc 11 & 12
    public:
     bool isDone(size_t index) noexcept {
-      std::shared_lock lock{mutex_};
+      std::lock_guard lock{mutex_};
       return index >= cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
@@ -150,7 +152,7 @@ class CacheableGenerator {
 
     void forEachCachedValue(
         const std::invocable<const T&> auto& function) const {
-      std::shared_lock lock{mutex_};
+      std::lock_guard lock{mutex_};
       for (const auto& optional : cachedValues_) {
         if (optional.has_value()) {
           function(optional.value());
