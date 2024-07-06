@@ -22,32 +22,37 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<CacheableResult> _resultTable;
-  RuntimeInformation _runtimeInfo;
+  std::shared_ptr<CacheableResult> resultTable_;
+  RuntimeInformation runtimeInfo_;
 
  public:
   explicit CacheValue(CacheableResult resultTable,
                       RuntimeInformation runtimeInfo)
-      : _resultTable(std::make_shared<CacheableResult>(std::move(resultTable))),
-        _runtimeInfo(std::move(runtimeInfo)) {}
+      : resultTable_{std::make_shared<CacheableResult>(std::move(resultTable))},
+        runtimeInfo_{std::move(runtimeInfo)} {}
 
-  const CacheableResult& resultTable() const noexcept { return *_resultTable; }
+  CacheValue(CacheValue&&) = default;
+  CacheValue(const CacheValue&) = delete;
+  CacheValue& operator=(CacheValue&&) = default;
+  CacheValue& operator=(const CacheValue&) = delete;
+
+  const CacheableResult& resultTable() const noexcept { return *resultTable_; }
 
   std::shared_ptr<const CacheableResult> resultTablePtr() const noexcept {
-    return _resultTable;
+    return resultTable_;
   }
 
   const RuntimeInformation& runtimeInfo() const noexcept {
-    return _runtimeInfo;
+    return runtimeInfo_;
   }
 
   ~CacheValue() {
-    if (!_resultTable->isDataEvaluated()) {
+    if (resultTable_ && !resultTable_->isDataEvaluated()) {
       // Clear listeners
       try {
-        _resultTable->setOnSizeChanged({});
-        _resultTable->setOnGeneratorFinished({});
-        _resultTable->setOnNextChunkComputed({});
+        resultTable_->setOnSizeChanged({});
+        resultTable_->setOnGeneratorFinished({});
+        resultTable_->setOnNextChunkComputed({});
       } catch (...) {
         // Should never happen. The listeners only throw assertion errors
         // if the result is evaluated.
@@ -59,7 +64,7 @@ class CacheValue {
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      if (const auto& tablePtr = cacheValue._resultTable; tablePtr) {
+      if (const auto& tablePtr = cacheValue.resultTable_; tablePtr) {
         return tablePtr->getCurrentSize();
       } else {
         return 0_B;
