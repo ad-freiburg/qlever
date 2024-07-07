@@ -8,7 +8,6 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
-#include "index/LocatedTriples.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -139,7 +138,6 @@ class Permutation {
   array<size_t, 3> keyOrder_;
 
   const MetaData& metaData() const { return meta_; }
-
   MetaData meta_;
 
   // This member is `optional` because we initialize it in a deferred way in the
