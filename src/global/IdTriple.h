@@ -21,8 +21,6 @@ struct IdTriple {
   // Some additional payload of the triple, e.g. which graph it belongs to.
   std::array<Id, N> payload_;
 
-  IdTriple() = delete;
-
   explicit IdTriple(const std::array<Id, 3>& ids) requires(N == 0)
       : ids_(ids), payload_(){};
 
