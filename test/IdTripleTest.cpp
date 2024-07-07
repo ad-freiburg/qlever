@@ -13,16 +13,10 @@
 using namespace ad_utility::testing;
 
 TEST(IdTripleTest, constructors) {
-  const std::array<Id, 3> undefIds{Id::makeUndefined(), Id::makeUndefined(),
-                                   Id::makeUndefined()};
   const std::array<Id, 3> ids{Id::makeFromInt(42), VocabId(10),
                               Id::makeFromBool(false)};
-
-  {
-    auto idTriple = IdTriple();
-    EXPECT_THAT(idTriple, AD_FIELD(IdTriple<>, ids_,
-                                   testing::ElementsAreArray(undefIds)));
-  }
+  const std::array<Id, 2> payload{Id::makeFromDouble(3.14),
+                                  Id::makeFromBool(true)};
 
   {
     auto idTriple = IdTriple(ids);
@@ -31,11 +25,11 @@ TEST(IdTripleTest, constructors) {
   }
 
   {
-    auto permutedTriple =
-        CompressedBlockMetadata::PermutedTriple{ids[0], ids[1], ids[2]};
-    auto idTriple = IdTriple(permutedTriple);
+    auto idTriple = IdTriple(ids, payload);
     EXPECT_THAT(idTriple,
-                AD_FIELD(IdTriple<>, ids_, testing::ElementsAreArray(ids)));
+                AD_FIELD(IdTriple<2>, ids_, testing::ElementsAreArray(ids)));
+    EXPECT_THAT(idTriple, AD_FIELD(IdTriple<2>, payload_,
+                                   testing::ElementsAreArray(payload)));
   }
 }
 
@@ -55,5 +49,14 @@ TEST(IdTripleTest, permute) {
     EXPECT_THAT(idTriple.permute({1, 0, 2}),
                 testing::Eq(IdTriple<2>({VocabId(1), VocabId(0), VocabId(2)},
                                         {IntId(10), IntId(5)})));
+  }
+}
+
+TEST(IdTripleTest, toPermutedTriple) {
+  {
+    IdTriple<0> idTriple({VocabId(0), VocabId(10), VocabId(5)});
+    EXPECT_THAT(idTriple.toPermutedTriple(),
+                testing::Eq(CompressedBlockMetadata::PermutedTriple{
+                    VocabId(0), VocabId(10), VocabId(5)}));
   }
 }

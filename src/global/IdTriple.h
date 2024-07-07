@@ -19,12 +19,7 @@ struct IdTriple {
   // Some additional payload of the triple, e.g. which graph it belongs to.
   std::array<Id, N> payload_;
 
-  explicit IdTriple() = default;
-  explicit IdTriple(
-      const CompressedBlockMetadata::PermutedTriple& permutedTriple)
-      : ids_({permutedTriple.col0Id_, permutedTriple.col1Id_,
-              permutedTriple.col2Id_}),
-        payload_(){};
+  IdTriple() = delete;
 
   explicit IdTriple(const std::array<Id, 3>& ids) requires(N == 0)
       : ids_(ids), payload_(){};
@@ -45,7 +40,7 @@ struct IdTriple {
 
   template <typename H>
   friend H AbslHashValue(H h, const IdTriple& c) {
-    return H::combine(std::move(h), c.ids_);
+    return H::combine(std::move(h), c.ids_, c.payload_);
   }
 
   // Permutes the ID of this triple according to the given permutation given by
