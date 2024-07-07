@@ -5,9 +5,13 @@
 #ifndef CACHEABLEGENERATOR_H
 #define CACHEABLEGENERATOR_H
 
+#include <absl/cleanup/cleanup.h>
+
+#include <atomic>
 #include <chrono>
 #include <optional>
 #include <shared_mutex>
+#include <thread>
 #include <vector>
 
 #include "util/Exception.h"
@@ -29,12 +33,13 @@ class CacheableGenerator {
 
   class ComputationStorage {
     friend CacheableGenerator;
-    mutable std::recursive_mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
     std::optional<GenIterator> generatorIterator_{};
     std::vector<std::optional<T>> cachedValues_{};
     MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
+    std::atomic<std::thread::id> currentOwningThread{};
     // Returns true if cache needs to shrink, accepts a parameter that tells the
     // callback if we actually can shrink
     std::function<bool(bool)> onSizeChanged_{};
@@ -52,6 +57,9 @@ class CacheableGenerator {
    private:
     void advanceTo(size_t index, bool isMaster) {
       std::unique_lock lock{mutex_};
+      currentOwningThread = std::this_thread::get_id();
+      absl::Cleanup cleanup{
+          [this]() { currentOwningThread = std::thread::id{}; }};
       AD_CONTRACT_CHECK(index <= cachedValues_.size());
       // Make sure master iterator does exist and we're not blocking
       // indefinitely
@@ -109,7 +117,7 @@ class CacheableGenerator {
     // TODO<RobinTF> return shared pointer instead of reference for thread
     // safety
     Reference getCachedValue(size_t index) const {
-      std::lock_guard lock{mutex_};
+      std::shared_lock lock{mutex_};
       if (!cachedValues_.at(index).has_value()) {
         throw IteratorExpired{};
       }
@@ -119,7 +127,7 @@ class CacheableGenerator {
     // Needs to be public in order to compile with gcc 11 & 12
    public:
     bool isDone(size_t index) noexcept {
-      std::lock_guard lock{mutex_};
+      std::shared_lock lock{mutex_};
       return index >= cachedValues_.size() && generatorIterator_.has_value() &&
              generatorIterator_.value() == generator_.end();
     }
@@ -134,25 +142,38 @@ class CacheableGenerator {
     }
 
     void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) noexcept {
-      std::lock_guard lock{mutex_};
+      std::unique_lock lock{mutex_, std::defer_lock};
+      if (currentOwningThread != std::this_thread::get_id()) {
+        lock.lock();
+      }
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
     void setOnGeneratorFinished(
         std::function<void(bool)> onGeneratorFinished) noexcept {
-      std::lock_guard lock{mutex_};
+      std::unique_lock lock{mutex_, std::defer_lock};
+      if (currentOwningThread != std::this_thread::get_id()) {
+        lock.lock();
+      }
       onGeneratorFinished_ = std::move(onGeneratorFinished);
     }
 
     void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
                                     onNextChunkComputed) noexcept {
-      std::lock_guard lock{mutex_};
+      std::unique_lock lock{mutex_, std::defer_lock};
+      if (currentOwningThread != std::this_thread::get_id()) {
+        lock.lock();
+      }
       onNextChunkComputed_ = std::move(onNextChunkComputed);
     }
 
     void forEachCachedValue(
         const std::invocable<const T&> auto& function) const {
-      std::lock_guard lock{mutex_};
+      // Don't lock again if we're calling this within a listener.
+      std::shared_lock lock{mutex_, std::defer_lock};
+      if (currentOwningThread != std::this_thread::get_id()) {
+        lock.lock();
+      }
       for (const auto& optional : cachedValues_) {
         if (optional.has_value()) {
           function(optional.value());
