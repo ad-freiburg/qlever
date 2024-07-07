@@ -157,7 +157,7 @@ class AggregateExpression : public SparqlExpression {
     // Lambda to compute the aggregate of the given operands. This requires
     // that `inputs` is not empty.
     auto computeAggregate = [&valueGetter, context, &finalOperation,
-                             &aggregateOperation, &aggregateTwoValues,
+                             &aggregateTwoValues,
                              &checkCancellation](auto&& inputs) {
       auto it = inputs.begin();
       AD_CORRECTNESS_CHECK(it != inputs.end());
