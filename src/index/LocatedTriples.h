@@ -86,7 +86,7 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
-  std::vector<CompressedBlockMetadata> augmentedMetadata_;
+  std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
 
  public:
   // Get upper limits for the number of located triples for the given block. The
@@ -142,14 +142,16 @@ class LocatedTriplesPerBlock {
   size_t numBlocks() const { return map_.size(); }
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to
-  // initialize the block metadata that is augmented for updated triples.
+  // initialize the block metadata that is augmented for updated triples. This
+  // is currently done in `Permutation::loadFromDisk`.
   void updateAugmentedMetadata(std::vector<CompressedBlockMetadata> metadata);
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
   // enlarge the block borders.
   const std::vector<CompressedBlockMetadata>& getAugmentedMetadata() const {
-    return augmentedMetadata_;
+    AD_CONTRACT_CHECK(augmentedMetadata_.has_value());
+    return augmentedMetadata_.value();
   };
 
   // Remove all located triples.
