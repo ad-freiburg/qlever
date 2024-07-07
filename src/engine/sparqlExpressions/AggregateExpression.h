@@ -45,7 +45,7 @@ inline auto getUniqueElements = []<typename OperandGenerator>(
 // Class for a SPARQL expression that aggregates a given set of values to a
 // single value using `AggregateOperation`, and then applies `FinalOperation`.
 //
-// NOTE: The `FinalOperation` is typically the `identiy` from above. One
+// NOTE: The `FinalOperation` is typically the `identity` from above. One
 // exception is the `AvgExpression`, where the `FinalOperation` divides the
 // aggregated value (sum) by the number of elements.
 template <typename AggregateOperation,
