@@ -24,6 +24,8 @@ class CacheValue {
  private:
   std::shared_ptr<CacheableResult> resultTable_;
   RuntimeInformation runtimeInfo_;
+  std::unique_ptr<std::atomic_bool> newlyCreated =
+      std::make_unique<std::atomic_bool>(true);
 
  public:
   explicit CacheValue(CacheableResult resultTable,
@@ -65,6 +67,15 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue.resultTable_; tablePtr) {
+        // Avoid holding lock on initial computation (where the result will be 0
+        // anyways) to prevent thread sanitizer warning of potential deadlocks
+        // because later in the execution the cache lock is acquired after
+        // acquiring the lock of the cached generator, whereas here we would do
+        // it in the opposite order otherwise.
+        if (cacheValue.newlyCreated->exchange(false) &&
+            !tablePtr->isDataEvaluated()) {
+          return 0_B;
+        }
         return tablePtr->getCurrentSize();
       } else {
         return 0_B;
