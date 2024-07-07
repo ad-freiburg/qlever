@@ -10,11 +10,9 @@ namespace sparqlExpression {
 namespace detail {
 
 // __________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
-AggregateExpression<AggregateOperation, NeutralElement, FinalOperation>::
-    AggregateExpression(bool distinct, Ptr&& child,
-                        AggregateOperation aggregateOp)
+template <typename AggregateOperation, typename FinalOperation>
+AggregateExpression<AggregateOperation, FinalOperation>::AggregateExpression(
+    bool distinct, Ptr&& child, AggregateOperation aggregateOp)
     : _distinct(distinct),
       _child{std::move(child)},
       _aggregateOp{std::move(aggregateOp)} {
@@ -22,16 +20,15 @@ AggregateExpression<AggregateOperation, NeutralElement, FinalOperation>::
 }
 
 // __________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
-ExpressionResult AggregateExpression<
-    AggregateOperation, NeutralElement,
-    FinalOperation>::evaluate(EvaluationContext* context) const {
+template <typename AggregateOperation, typename FinalOperation>
+ExpressionResult
+AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
+    EvaluationContext* context) const {
   auto childResult = _child->evaluate(context);
 
   return std::visit(
       [this, context](auto&& arg) {
-        return evaluateOnChildOperand(_aggregateOp, this->getNeutralElement(),
+        return evaluateOnChildOperand(_aggregateOp, this->resultForEmptyGroup(),
                                       FinalOperation{}, context, _distinct,
                                       AD_FWD(arg));
       },
@@ -39,39 +36,34 @@ ExpressionResult AggregateExpression<
 }
 
 // _________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
-std::span<SparqlExpression::Ptr> AggregateExpression<
-    AggregateOperation, NeutralElement, FinalOperation>::childrenImpl() {
+template <typename AggregateOperation, typename FinalOperation>
+std::span<SparqlExpression::Ptr>
+AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
   return {&_child, 1};
 }
 
 // _________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
-vector<Variable>
-AggregateExpression<AggregateOperation, NeutralElement,
-                    FinalOperation>::getUnaggregatedVariables() {
+template <typename AggregateOperation, typename FinalOperation>
+vector<Variable> AggregateExpression<
+    AggregateOperation, FinalOperation>::getUnaggregatedVariables() {
   // This is an aggregate, so it never leaves any unaggregated variables.
   return {};
 }
 
 // __________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
-[[nodiscard]] string AggregateExpression<
-    AggregateOperation, NeutralElement,
-    FinalOperation>::getCacheKey(const VariableToColumnMap& varColMap) const {
+template <typename AggregateOperation, typename FinalOperation>
+[[nodiscard]] string
+AggregateExpression<AggregateOperation, FinalOperation>::getCacheKey(
+    const VariableToColumnMap& varColMap) const {
   return std::string(typeid(*this).name()) + std::to_string(_distinct) + "(" +
          _child->getCacheKey(varColMap) + ")";
 }
 
 // __________________________________________________________________________
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation>
+template <typename AggregateOperation, typename FinalOperation>
 [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
-AggregateExpression<AggregateOperation, NeutralElement,
-                    FinalOperation>::getVariableForCount() const {
+AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
+    const {
   // This behavior is not correct for the `COUNT` aggregate. The count is
   // therefore implemented in a separate `CountExpression` class, which
   // overrides this function.
@@ -79,18 +71,15 @@ AggregateExpression<AggregateOperation, NeutralElement,
 }
 
 // Explicit instantiatio for the AVG expression.
-template class AggregateExpression<AvgOperation, NumericValue,
-                                   decltype(avgFinalOperation)>;
+template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
 
 // Explicit instantiations for the other aggregate expressions.
-#define INSTANTIATE_AGG_EXP(F, V, N)  \
-  template class AggregateExpression< \
-      Operation<2, FunctionAndValueGetters<F, V>>, N>;
-INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter, NumericValue);
-INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter, long int);
-INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter,
-                    ValueId);
-INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter,
-                    ValueId);
+#define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
+  template class AggregateExpression<              \
+      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
+INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
+INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
+INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
+INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
 }  // namespace detail
 }  // namespace sparqlExpression

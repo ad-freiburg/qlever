@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-#ifndef QLEVER_AGGREGATEEXPRESSION_H
-#define QLEVER_AGGREGATEEXPRESSION_H
+#pragma once
 
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
@@ -17,7 +16,7 @@ namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
 // `AggregateExpression` if there is nothing to be done on the final result.
-inline auto noop = []<typename T>(T&& result, size_t) {
+inline auto identity = []<typename T>(T&& result, size_t) {
   return std::forward<T>(result);
 };
 
@@ -46,11 +45,11 @@ inline auto getUniqueElements = []<typename OperandGenerator>(
 // Class for a SPARQL expression that aggregates a given set of values to a
 // single value using `AggregateOperation`, and then applies `FinalOperation`.
 //
-// NOTE: The `FinalOperation` is typically the `noop` from above. One exception
-// is the `AvgExpression`, where the `FinalOperation` divides the aggregated
-// value (sum) by the number of elements.
-template <typename AggregateOperation, typename NeutralElement,
-          typename FinalOperation = decltype(noop)>
+// NOTE: The `FinalOperation` is typically the `identiy` from above. One
+// exception is the `AvgExpression`, where the `FinalOperation` divides the
+// aggregated value (sum) by the number of elements.
+template <typename AggregateOperation,
+          typename FinalOperation = decltype(identity)>
 class AggregateExpression : public SparqlExpression {
  public:
   // Create an aggregate expression, where `child` is the expression to be
@@ -62,11 +61,12 @@ class AggregateExpression : public SparqlExpression {
   AggregateExpression(bool distinct, Ptr&& child,
                       AggregateOperation aggregateOp = AggregateOperation{});
 
-  // Return the neutral element of this expression.
-  NeutralElement getNeutralElement() const { return NeutralElement{}; }
-
   // Evaluate this aggregate expression.
   ExpressionResult evaluate(EvaluationContext* context) const override;
+
+  // Each aggregate expression has to say what its result for an empty group is
+  // (needed only for implicit GROUP BYs).
+  virtual ValueId resultForEmptyGroup() const = 0;
 
   // Get the unaggregated variables of the expression (can be empty).
   vector<Variable> getUnaggregatedVariables() override;
@@ -94,7 +94,7 @@ class AggregateExpression : public SparqlExpression {
   inline static const auto evaluateOnChildOperand =
       []<SingleExpressionResult Operand>(
           const AggregateOperation& aggregateOperation,
-          const NeutralElement& neutralElement,
+          const ValueId resultForEmptyGroup,
           const FinalOperation& finalOperation, EvaluationContext* context,
           bool distinct, Operand&& operand) -> ExpressionResult {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
@@ -110,6 +110,13 @@ class AggregateExpression : public SparqlExpression {
 
     // The number of values we aggregate.
     auto inputSize = getResultSize(*context, operand);
+
+    // If there are no values, return the neutral element. It is important to
+    // handle this case separately, because the following code only words if
+    // there is at least one value.
+    if (inputSize == 0) {
+      return resultForEmptyGroup;
+    }
 
     // All aggregate operations are binary, with the same value getter for each
     // operand.
@@ -147,20 +154,13 @@ class AggregateExpression : public SparqlExpression {
           context->cancellationHandle_->throwIfCancelled(location);
         };
 
-    // Lambda to compute the aggregate of the given operands.
+    // Lambda to compute the aggregate of the given operands. This requires
+    // that `inputs` is not empty.
     auto computeAggregate = [&valueGetter, context, &finalOperation,
-                             &neutralElement, &aggregateOperation,
-                             &aggregateTwoValues,
+                             &aggregateOperation, &aggregateTwoValues,
                              &checkCancellation](auto&& inputs) {
       auto it = inputs.begin();
-      // NOTE: If the GROUP BY is implicit and we have a single group, that
-      // group can be empty. Then we cannot start with the first value and
-      // successively aggregate the others. Instead, we have to return the
-      // "neutral element" of that aggregation operation.
-      if (it == inputs.end()) {
-        return neutralElement;
-      }
-      // AD_CORRECTNESS_CHECK(it != inputs.end());
+      AD_CORRECTNESS_CHECK(it != inputs.end());
 
       using ResultType = std::decay_t<decltype(aggregateTwoValues(
           std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
@@ -181,6 +181,11 @@ class AggregateExpression : public SparqlExpression {
 
     // Compute the aggregate (over all values or, if this is a DISTINCT
     // aggregate, only over the distinct values).
+    //
+    // NOTE: If the GROUP BY is implicit and we have a single group, that
+    // group can be empty. Then we cannot start with the first value and
+    // successively aggregate the others. Instead, we have to return the
+    // "neutral element" of that aggregation operation.
     auto result = [&]() {
       if (distinct) {
         auto uniqueValues =
@@ -216,10 +221,9 @@ class AggregateExpression : public SparqlExpression {
 // Instantiations of `AggregateExpression` for COUNT, SUM, AVG, MIN, and MAX.
 
 // Shortcut for a binary `AggregateExpression` (all of them are binary).
-template <typename Function, typename ValueGetter, typename NeutralElement>
+template <typename Function, typename ValueGetter>
 using AGG_EXP = AggregateExpression<
-    Operation<2, FunctionAndValueGetters<Function, ValueGetter>>,
-    NeutralElement>;
+    Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
 // Helper function that for a given `NumericOperation` with numeric arguments
 // and result (integer or floating points), returns the corresponding function
@@ -245,8 +249,7 @@ inline auto makeNumericExpressionForAggregate() {
 inline auto count = [](const auto& a, const auto& b) -> int64_t {
   return a + b;
 };
-using CountExpressionBase =
-    AGG_EXP<decltype(count), IsValidValueGetter, long int>;
+using CountExpressionBase = AGG_EXP<decltype(count), IsValidValueGetter>;
 class CountExpression : public CountExpressionBase {
   using CountExpressionBase::CountExpressionBase;
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
@@ -259,12 +262,16 @@ class CountExpression : public CountExpressionBase {
       return std::nullopt;
     }
   }
+  ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
 };
 
 // Aggregate expression for SUM.
 inline auto addForSum = makeNumericExpressionForAggregate<std::plus<>>();
-using SumExpression =
-    AGG_EXP<decltype(addForSum), NumericValueGetter, NumericValue>;
+using SumExpressionBase = AGG_EXP<decltype(addForSum), NumericValueGetter>;
+class SumExpression : public AGG_EXP<decltype(addForSum), NumericValueGetter> {
+  using SumExpressionBase::SumExpressionBase;
+  ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
+};
 
 // Aggregate expression for AVG.
 inline auto avgFinalOperation = [](const NumericValue& aggregation,
@@ -275,10 +282,17 @@ inline auto avgFinalOperation = [](const NumericValue& aggregation,
 using AvgOperation =
     Operation<2,
               FunctionAndValueGetters<decltype(addForSum), NumericValueGetter>>;
-using AvgExpression = detail::AggregateExpression<AvgOperation, NumericValue,
-                                                  decltype(avgFinalOperation)>;
+using AvgExpressionBase =
+    AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+class AvgExpression : public AvgExpressionBase {
+  using AvgExpressionBase::AvgExpressionBase;
+  ValueId resultForEmptyGroup() const override {
+    return Id::makeFromDouble(0.0);
+  }
+};
 
-// TODO<joka921> Comment
+// Compare two arbitrary values (each of which can be an ID, a literal, or an
+// IRI). This always returns a `bool`, see `ValueIdComparators.h` for details.
 template <valueIdComparators::Comparison Comp>
 inline const auto compareIdsOrStrings =
     []<typename T, typename U>(
@@ -312,10 +326,18 @@ constexpr inline auto minLambdaForAllTypes =
     minMaxLambdaForAllTypes<valueIdComparators::Comparison::LT>;
 constexpr inline auto maxLambdaForAllTypes =
     minMaxLambdaForAllTypes<valueIdComparators::Comparison::GT>;
-using MinExpression =
-    AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter, NumericValue>;
-using MaxExpression =
-    AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter, NumericValue>;
+using MinExpressionBase =
+    AGG_EXP<decltype(minLambdaForAllTypes), ActualValueGetter>;
+using MaxExpressionBase =
+    AGG_EXP<decltype(maxLambdaForAllTypes), ActualValueGetter>;
+class MinExpression : public MinExpressionBase {
+  using MinExpressionBase::MinExpressionBase;
+  ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
+};
+class MaxExpression : public MaxExpressionBase {
+  using MaxExpressionBase::MaxExpressionBase;
+  ValueId resultForEmptyGroup() const override { return Id::makeUndefined(); }
+};
 
 }  // namespace detail
 
@@ -325,5 +347,3 @@ using detail::MaxExpression;
 using detail::MinExpression;
 using detail::SumExpression;
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_AGGREGATEEXPRESSION_H

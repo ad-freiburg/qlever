@@ -238,11 +238,13 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
                         IdTable* dynResult, const IdTable* inTable,
                         LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
-  // TODO: This is not correct if we have an implicit `GROUP BY` with a single
-  // group. Then the result should always be a single row.
+  // For an implicit GROUP BY (`groupByCols.empty()`), we have to produce
+  // a result row even when the input (`dynInput`) is empty. Otherwise, the
+  // result is also empty and we can just return.
   if (dynInput.empty() && !groupByCols.empty()) {
     return;
   }
+
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
@@ -270,14 +272,9 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     for (size_t i = 0; i < groupByCols.size(); ++i) {
       result(rowIdx, i) = input(blockStart, groupByCols[i]);
     }
-    // TODO: This does not work for empty groups (because it always starts the
-    // aggregation with the first element, and then successively aggregates the
-    // following elements using pairwise aggregation).
     for (const GroupBy::Aggregate& a : aggregates) {
-      if (blockEnd > blockStart) {
-        processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
-                                &result, rowIdx, a._outCol, outLocalVocab);
-      }
+      processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
+                              &result, rowIdx, a._outCol, outLocalVocab);
     }
   };
 
