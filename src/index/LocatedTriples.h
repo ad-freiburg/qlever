@@ -165,7 +165,18 @@ class LocatedTriplesPerBlock {
   // This operator is only for debugging and testing. It returns a
   // human-readable representation.
   friend std::ostream& operator<<(std::ostream& os,
-                                  const LocatedTriplesPerBlock& ltpb);
+                                  const LocatedTriplesPerBlock& ltpb) {
+    // Get the block indices in sorted order.
+    std::vector<size_t> blockIndices;
+    std::ranges::copy(ltpb.map_ | std::views::keys,
+                      std::back_inserter(blockIndices));
+    std::ranges::sort(blockIndices);
+    for (auto blockIndex : blockIndices) {
+      os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
+         << std::endl;
+    }
+    return os;
+  };
 };
 
 // Human-readable representation , which are very useful for debugging.

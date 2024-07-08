@@ -34,7 +34,12 @@ struct IdTriple {
     return os;
   }
 
-  auto operator<=>(const IdTriple&) const = default;
+  // TODO: default once we drop clang16 with libc++16
+  std::strong_ordering operator<=>(const IdTriple& other) const {
+    return std::lexicographical_compare_three_way(
+        ids_.begin(), ids_.end(), other.ids_.begin(), other.ids_.end());
+  }
+  bool operator==(const IdTriple& other) const = default;
 
   template <typename H>
   friend H AbslHashValue(H h, const IdTriple& c) {
