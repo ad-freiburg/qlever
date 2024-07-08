@@ -413,13 +413,17 @@ bool TurtleParser<T>::rdfLiteral() {
                  type == XSD_FLOAT_TYPE) {
         parseDoubleConstant(strippedLiteral);
       } else if (type == XSD_DATETIME_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseXsdDatetime(strippedLiteral);
+        lastParseResult_ =
+            DateYearOrDuration::parseXsdDatetime(strippedLiteral);
       } else if (type == XSD_DATE_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseXsdDate(strippedLiteral);
+        lastParseResult_ = DateYearOrDuration::parseXsdDate(strippedLiteral);
       } else if (type == XSD_GYEARMONTH_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseGYearMonth(strippedLiteral);
+        lastParseResult_ = DateYearOrDuration::parseGYearMonth(strippedLiteral);
       } else if (type == XSD_GYEAR_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
+        lastParseResult_ = DateYearOrDuration::parseGYear(strippedLiteral);
+      } else if (type == XSD_DAYTIME_DURATION_TYPE) {
+        lastParseResult_ =
+            DateYearOrDuration::parseXsdDayTimeDuration(strippedLiteral);
       } else {
         previous.addDatatype(typeIri);
         lastParseResult_ = std::move(previous);
@@ -438,6 +442,26 @@ bool TurtleParser<T>::rdfLiteral() {
       LOG(DEBUG)
           << strippedLiteral
           << " could not be parsed as a date object for the following reason: "
+          << ex.what()
+          << ". It is treated as a plain string literal without datatype "
+             "instead"
+          << std::endl;
+      lastParseResult_ = std::move(previous);
+      return true;
+    } catch (const DurationParseException&) {
+      LOG(DEBUG)
+          << strippedLiteral
+          << " could not be parsed as a duration object of type " << type
+          << ". It is treated as a plain string literal without datatype "
+             "instead"
+          << std::endl;
+      lastParseResult_ = std::move(previous);
+      return true;
+    } catch (const DurationOverflowException& ex) {
+      LOG(DEBUG)
+          << strippedLiteral
+          << " could not be parsed as duration object for the following "
+             "reason: "
           << ex.what()
           << ". It is treated as a plain string literal without datatype "
              "instead"

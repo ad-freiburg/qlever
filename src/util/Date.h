@@ -6,14 +6,10 @@
 #define QLEVER_DATE_H
 
 #include <bit>
-#include <charconv>
 #include <cmath>
 #include <exception>
 #include <sstream>
-
-#include "global/Constants.h"
-#include "util/CtreHelpers.h"
-#include "util/NBitInteger.h"
+#include <variant>
 
 // Exception that is thrown when a value for a component of the `Date`, `Time`
 // or `Datetime` classes below is out of range (e.g. the month 13, or the hour
@@ -308,182 +304,15 @@ class Date {
   // helper function for `toStringAndType` below.
   std::string formatTimeZone() const;
 
+  // Get the correct `TimeZone` from a regex match for the `timeZoneRegex`.
+  static TimeZone parseTimeZone(const auto& match);
+
   // Convert to a string (without quotes) that represents the stored date, and a
   // pointer to the IRI of the corresponding datatype (currently always
   // `xsd:dateTime`). Large years are currently always exported as
   // `xsd:dateTime` pointing to the January 1st, 00:00 hours. (This is the
   // format used by Wikidata).
   std::pair<std::string, const char*> toStringAndType() const;
-};
-
-// This class either encodes a `Date` or a year that is outside the range that
-// can be currently represented by the year class [-9999, 9999]. The underlying
-// format is as follows (starting from the most significant bit):
-// - 5 bits that are always zero and ignored by the representation.
-// - 2 bits that store 1 (negative year), 2 (datetime with a year in [-9999,
-// 9999]), 3 (positive year), or 0 (timezone).
-//   These values are chosen s.t. that the order of the bits is correct.
-// - 57 bits that either encode the `Date`, or a year as a signed integer via
-// the `ad_utility::NBitInteger` class.
-class DateOrLargeYear {
- private:
-  // The tags to discriminate between the stored formats.
-  static constexpr uint64_t timezone = 0;
-  static constexpr uint64_t negativeYear = 1;
-  static constexpr uint64_t datetime = 2;
-  static constexpr uint64_t positiveYear = 3;
-  // The number of bits for the actual value.
-  static constexpr uint8_t numPayloadBits = 64 - Date::numUnusedBits;
-
-  // The number of bits used to distinguish the different XSD types.
-  static constexpr uint8_t numTypeBits = 2;
-  // The integer type for the case of a large year.
-  using NBit = ad_utility::NBitInteger<numPayloadBits - numTypeBits>;
-  // The bits.
-  uint64_t bits_;
-
- public:
-  enum struct Type { Year = 0, YearMonth, Date, DateTime };
-
-  // The number of high bits that are unused by this class (currently 5).
-  static constexpr uint64_t numUnusedBits = Date::numUnusedBits - 2;
-  static constexpr int64_t maxYear = NBit::max();
-  static constexpr int64_t minYear = NBit::min();
-
-  // Construct from a `Date`.
-  explicit DateOrLargeYear(Date d) {
-    bits_ = std::bit_cast<uint64_t>(d) | (datetime << numPayloadBits);
-  }
-
-  // Construct a `DateOrLargeYear` given a `Timezone` object from the `Date`
-  // class. This Constructor sets the value of `timezone` (0) as the
-  // most significant bit. Thus compared with other underlying values a
-  // `DateOrLargeYear` can hold (`(large) positive year`, `(large) negative
-  // year` and `dateTime`), the here constructed value will always be smaller.
-  // (`DateOrLargeYear` compares w.r.t. year, we assume a duration constructed
-  // from a `TimeZone` doesn't hold a year)
-  // When comparing two `DateOrLargeYear` objects with two underlying
-  // (Date)TimeZone as duration values, we implicitly compare only w.r.t. the
-  // `Date::TimeZone` values, because all values except the timezone get some
-  // default values.
-  explicit DateOrLargeYear(Date::TimeZone tz) {
-    bits_ = std::bit_cast<uint64_t>(Date{0, 0, 0, -1, 0, 0.0, tz}) |
-            (timezone << numPayloadBits);
-  }
-
-  // Construct from a `year`. Only valid if the year is outside the legal range
-  // for a year in the `Date` class.
-  explicit DateOrLargeYear(int64_t year, Type type) {
-    AD_CONTRACT_CHECK(year < Date::minYear || year > Date::maxYear);
-    AD_CONTRACT_CHECK(year >= DateOrLargeYear::minYear &&
-                      year <= DateOrLargeYear::maxYear);
-    auto flag = year < 0 ? negativeYear : positiveYear;
-    bits_ = NBit::toNBit(year) << numTypeBits;
-    bits_ |= flag << numPayloadBits;
-    bits_ |= static_cast<uint64_t>(type);
-  }
-
-  // Return the underlying bit representation.
-  uint64_t toBits() const { return bits_; }
-
-  // True iff a complete `Date` is stored and not only a large year.
-  bool isDate() const { return bits_ >> numPayloadBits == datetime; }
-
-  // True iff constructed with `Date::TimeZone`.
-  bool isTimezone() const { return bits_ >> numPayloadBits == timezone; };
-
-  // Return the underlying `Date` object. The behavior is undefined if
-  // `isDate()` is `false`.
-  Date getDateUnchecked() const { return std::bit_cast<Date>(bits_); }
-
-  // Return the underlying `Date` object. An assertion fails if `isDate()` is
-  // `false`.
-  Date getDate() const {
-    AD_CONTRACT_CHECK(bits_ >> numPayloadBits == datetime);
-    return getDateUnchecked();
-  }
-
-  // Return the underlying `Date::TimeZone` object. The behavior is undefined if
-  // `isTimeZone()` is `false`.
-  Date::TimeZone getTimezoneUnchecked() const {
-    return std::bit_cast<Date>(bits_).getTimeZone();
-  }
-
-  // Return the underlying `Date::TimeZone` object. An asserstion fails if
-  // `isTimezone()` is `false`
-  Date::TimeZone getTimezone() const {
-    AD_CONTRACT_CHECK(bits_ >> numPayloadBits == timezone);
-    return getTimezoneUnchecked();
-  }
-
-  // Get the stored year, no matter if it's stored inside a `Date` object or
-  // directly.
-  int64_t getYear() const;
-
-  // Get the stored month. If the datatype actually stores a month (all the
-  // types except for `xsd:gYear` do), then the month is returned, else
-  // `std::nullopt` is returned. In the case of a large year with a datatype
-  // that stores a month, the month will always be `1`.
-  std::optional<int> getMonth() const;
-
-  // Similar to `getMonth`, but get the day.
-  std::optional<int> getDay() const;
-
-  // Get the timezone if there is an underlying complete `Date` w.r.t. this
-  // DateOrLargeYear object. This implementation is necessary for the
-  // `tz()`-function.
-  std::string getStrTimezone() const;
-
-  // Correctly format a `xsd:dayTimeDuration` for the underlying `TimeZone`.
-  // (if a value w.r.t. `TimeZone` was given).
-  std::optional<std::string> formatTimezoneAsDaytimeDuration(
-      Date::TimeZone tz) const;
-
-  // If a Date is contained w.r.t. this `DateOrLargeYear`, retrieve the
-  // contained timezone as a suitable string for `xsd:dayTimeDuration`. In case
-  // no `Date` is contained, return `std::nullopt`.
-  std::optional<std::string> getTimezoneAsDurationFromDate() const;
-
-  Type getType() const {
-    return static_cast<Type>(ad_utility::bitMaskForLowerBits(numTypeBits) &
-                             bits_);
-  }
-
-  // Convert to a string (without quotes) that represents the stored date, and a
-  // pointer to the IRI of the corresponding datatype (currently always
-  // `xsd:dateTime`). Large years are currently always exported as
-  // `xsd:dateTime` with January 1, 00:00 hours (This is the
-  // format used by Wikidata). If a timezone (significant bit set to 0) is
-  // contained, the exported value will be a `xsd:dayTimeDuration` value.
-  std::pair<std::string, const char*> toStringAndType() const;
-
-  // The bitwise comparison also corresponds to the semantic ordering of years
-  // and dates.
-  auto operator<=>(const DateOrLargeYear&) const = default;
-
-  // Bitwise hashing.
-  template <typename H>
-  friend H AbslHashValue(H h, const DateOrLargeYear& d) {
-    return H::combine(std::move(h), d.bits_);
-  }
-
-  // Parsing functions. They all have the following properties:
-  // 1. The input is not contained in quotes (for example 1900-12-13 for a date,
-  // not "1900-12-13").
-  // 2. If the year is outside the range [-9999, 9999], then the date must be
-  // January 1, 00:00 hours.
-
-  // Parse from xsd:dateTime (e.g. 1900-12-13T03:12:00.33Z)
-  static DateOrLargeYear parseXsdDatetime(std::string_view dateString);
-
-  // Parse from xsd:date (e.g. 1900-12-13)
-  static DateOrLargeYear parseXsdDate(std::string_view dateString);
-
-  // Parse from xsd:gYearMonth (e.g. 1900-03)
-  static DateOrLargeYear parseGYearMonth(std::string_view dateString);
-
-  // Parse from xsd:gYear (e.g. 1900)
-  static DateOrLargeYear parseGYear(std::string_view dateString);
 };
 
 #endif  // QLEVER_DATE_H

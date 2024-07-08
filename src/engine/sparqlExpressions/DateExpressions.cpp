@@ -14,7 +14,7 @@ using Literal = ad_utility::triple_component::Literal;
 // The input is `std::nullopt` if the argument to the expression is not a date.
 
 //______________________________________________________________________________
-inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
+inline auto extractYear = [](std::optional<DateYearOrDuration> d) {
   if (!d.has_value()) {
     return Id::makeUndefined();
   } else {
@@ -23,7 +23,7 @@ inline auto extractYear = [](std::optional<DateOrLargeYear> d) {
 };
 
 //______________________________________________________________________________
-inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
+inline auto extractMonth = [](std::optional<DateYearOrDuration> d) {
   // TODO<C++23> Use the monadic operations for std::optional
   if (!d.has_value()) {
     return Id::makeUndefined();
@@ -36,7 +36,7 @@ inline auto extractMonth = [](std::optional<DateOrLargeYear> d) {
 };
 
 //______________________________________________________________________________
-inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
+inline auto extractDay = [](std::optional<DateYearOrDuration> d) {
   // TODO<C++23> Use the monadic operations for `std::optional`.
   if (!d.has_value()) {
     return Id::makeUndefined();
@@ -50,7 +50,7 @@ inline auto extractDay = [](std::optional<DateOrLargeYear> d) {
 
 //______________________________________________________________________________
 inline auto extractStrTimezone =
-    [](std::optional<DateOrLargeYear> d) -> IdOrLiteralOrIri {
+    [](std::optional<DateYearOrDuration> d) -> IdOrLiteralOrIri {
   if (d.has_value()) {
     auto timezoneStr = d.value().getStrTimezone();
     return LiteralOrIri{Literal::literalWithNormalizedContent(
@@ -61,23 +61,20 @@ inline auto extractStrTimezone =
 
 //______________________________________________________________________________
 inline auto extractTimezoneDurationFormat =
-    [](std::optional<DateOrLargeYear> d) -> IdOrLiteralOrIri {
+    [](std::optional<DateYearOrDuration> d) -> Id {
   if (d.has_value()) {
-    const auto& optTimezoneDuration = d.value().getTimezoneAsDurationFromDate();
-    if (!optTimezoneDuration.has_value()) {
-      return Id::makeUndefined();
-    } else {
-      return LiteralOrIri{Literal::fromStringRepresentation(
-          absl::StrCat("\""sv, optTimezoneDuration.value(), "\"^^<"sv,
-                       XSD_DAYTIME_DURATION_TYPE, ">"))};
-    }
+    const auto& optDayTimeDuration =
+        DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
+    return optDayTimeDuration.has_value()
+               ? Id::makeFromDate(std::move(optDayTimeDuration.value()))
+               : Id::makeUndefined();
   }
   return Id::makeUndefined();
 };
 
 //______________________________________________________________________________
 template <auto dateMember, auto makeId>
-inline auto extractTimeComponentImpl = [](std::optional<DateOrLargeYear> d) {
+inline auto extractTimeComponentImpl = [](std::optional<DateYearOrDuration> d) {
   if (!d.has_value() || !d->isDate()) {
     return Id::makeUndefined();
   }

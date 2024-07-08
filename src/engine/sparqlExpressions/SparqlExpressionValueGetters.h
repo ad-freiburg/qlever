@@ -190,10 +190,10 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
-/// templates. It produces a `std::optional<DateOrLargeYear>`.
+/// templates. It produces a `std::optional<DateYearOrDuration>`.
 struct DateValueGetter : Mixin<DateValueGetter> {
   using Mixin<DateValueGetter>::operator();
-  using Opt = std::optional<DateOrLargeYear>;
+  using Opt = std::optional<DateYearOrDuration>;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
