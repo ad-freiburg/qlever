@@ -535,7 +535,7 @@ IdTable CompressedRelationReader::getDistinctColIdsAndCountsImpl(
   auto processColId = [&table, &currentColId, &currentCount](
                           std::optional<Id> colId, size_t colIdCount) {
     if (colId != currentColId) {
-      if (currentColId.has_value()) {
+      if (currentColId.has_value() && currentCount > 0) {
         table.push_back({currentColId.value(), Id::makeFromInt(currentCount)});
       }
       currentColId = colId;
