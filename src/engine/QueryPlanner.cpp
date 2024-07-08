@@ -2165,18 +2165,7 @@ void QueryPlanner::GraphPatternPlanner::visitPathSearch(
   std::vector<SubtreePlan> candidatesOut;
 
   const auto& vocab = planner_._qec->getIndex().getVocab();
-  auto sources = pathQuery.toSearchSide(pathQuery.sources_, vocab);
-  auto targets = pathQuery.toSearchSide(pathQuery.targets_, vocab);
-
-  auto config =
-      PathSearchConfiguration{pathQuery.algorithm_,
-                              std::move(sources),
-                              std::move(targets),
-                              std::move(pathQuery.start_.value()),
-                              std::move(pathQuery.end_.value()),
-                              std::move(pathQuery.pathColumn_.value()),
-                              std::move(pathQuery.edgeColumn_.value()),
-                              std::move(pathQuery.edgeProperties_)};
+  auto config = pathQuery.toPathSearchConfiguration(vocab);
 
   for (auto& sub : candidatesIn) {
     auto pathSearch =

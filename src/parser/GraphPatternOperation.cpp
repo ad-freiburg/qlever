@@ -141,6 +141,21 @@ void PathQuery::fromBasicPattern(const BasicGraphPattern& pattern) {
 }
 
 // ____________________________________________________________________________
+PathSearchConfiguration PathQuery::toPathSearchConfiguration(
+    const Index::Vocab& vocab) const {
+  auto sources = toSearchSide(sources_, vocab);
+  auto targets = toSearchSide(targets_, vocab);
+  return PathSearchConfiguration{algorithm_,
+                                 std::move(sources),
+                                 std::move(targets),
+                                 std::move(start_.value()),
+                                 std::move(end_.value()),
+                                 std::move(pathColumn_.value()),
+                                 std::move(edgeColumn_.value()),
+                                 std::move(edgeProperties_)};
+}
+
+// ____________________________________________________________________________
 cppcoro::generator<const Variable> Bind::containedVariables() const {
   for (const auto* ptr : _expression.containedVariables()) {
     co_yield *ptr;

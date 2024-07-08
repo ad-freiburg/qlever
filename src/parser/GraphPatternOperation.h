@@ -153,6 +153,8 @@ struct PathQuery {
   void fromBasicPattern(const BasicGraphPattern& pattern);
   std::variant<Variable, std::vector<Id>> toSearchSide(
       std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+  PathSearchConfiguration toPathSearchConfiguration(
+      const Index::Vocab& vocab) const;
 };
 
 // A SPARQL Bind construct.

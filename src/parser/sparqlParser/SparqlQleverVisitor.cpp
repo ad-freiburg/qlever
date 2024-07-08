@@ -697,12 +697,12 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
-GraphPatternOperation Visitor::visitPathQuery(Parser::ServiceGraphPatternContext* ctx) {
+GraphPatternOperation Visitor::visitPathQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
   auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
                            const parsedQuery::GraphPatternOperation& op) {
     if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      pathQuery.fromBasicPattern(
-          std::get<parsedQuery::BasicGraphPattern>(op));
+      pathQuery.fromBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
     } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
       auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
       pathQuery.childGraphPattern_ = std::move(pattern._child);
