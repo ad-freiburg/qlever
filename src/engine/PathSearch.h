@@ -8,6 +8,7 @@
 #include <optional>
 #include <span>
 #include <unordered_map>
+#include <unordered_set>
 #include <variant>
 #include <vector>
 
@@ -97,6 +98,26 @@ struct PathSearchConfiguration {
 
     return std::move(os).str();
   }
+};
+
+class BinSearchWrapper {
+  const IdTable& table_;
+  size_t startCol_;
+  size_t endCol_;
+  std::vector<size_t> edgeCols_;
+  std::unordered_map<uint64_t, std::vector<Path>> pathCache_;
+
+ public:
+  BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol, std::vector<size_t> edgeCols);
+
+  std::vector<Edge> outgoingEdes(const Id node) const;
+
+  std::vector<Path> findPaths(const Id& source, const std::unordered_set<uint64_t>& targets);
+
+  bool isTarget(const Id node) const;
+
+private:
+  const Edge makeEdgeFromRow(size_t row) const;
 };
 
 /**
@@ -212,14 +233,14 @@ class PathSearch : public Operation {
    * @return A vector of paths.
    */
   std::vector<Path> findPaths(std::span<const Id> sources,
-                              std::span<const Id> targets) const;
+                              std::span<const Id> targets, BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds all paths in the graph.
    * @return A vector of all paths.
    */
   std::vector<Path> allPaths(std::span<const Id> sources,
-                             std::span<const Id> targets) const;
+                             std::span<const Id> targets, BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds the shortest paths in the graph.

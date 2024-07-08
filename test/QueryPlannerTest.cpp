@@ -860,8 +860,8 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
       "?middle <p2> ?end."
       "}}}}",
       h::PathSearch(config, true, true,
-                    join(scan("?start", "<p1>", "?middle"),
-                         scan("?middle", "<p2>", "?end"))),
+                    h::Sort(join(scan("?start", "<p1>", "?middle"),
+                            scan("?middle", "<p2>", "?end")))),
       qec);
 }
 
@@ -904,9 +904,9 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       "?middle <p2> ?end."
       "}}}}",
       h::PathSearch(config, true, true,
-                    join(scan("?start", "<p1>", "?middle"),
-                         join(scan("?middle", "<p3>", "?middleAttribute"),
-                              scan("?middle", "<p2>", "?end")))),
+                    h::Sort(join(scan("?start", "<p1>", "?middle"),
+                            join(scan("?middle", "<p3>", "?middleAttribute"),
+                                 scan("?middle", "<p2>", "?end"))))),
       qec);
 }
 

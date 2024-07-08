@@ -27,19 +27,25 @@ Result performPathSearch(PathSearchConfiguration config, IdTable input,
   auto qec = getQec();
   auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
       qec, std::move(input), vars);
-  PathSearch p = PathSearch(qec, std::move(subtree), config);
+  PathSearch p = PathSearch(qec, std::move(subtree), std::move(config));
 
   return p.computeResult(false);
 }
 
 TEST(PathSearchTest, constructor) {
   auto qec = getQec();
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  auto sub = makeIdTableFromVector({});
+  sub.setNumColumns(2);
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, std::move(sub), vars);
+
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(1)};
   PathSearchConfiguration config{
       ALL_PATHS,   sources,           targets,           Var{"?start"},
       Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
-  PathSearch p = PathSearch(qec, nullptr, config);
+  PathSearch p = PathSearch(qec, std::move(subtree), config);
 }
 
 TEST(PathSearchTest, emptyGraph) {
@@ -277,14 +283,14 @@ TEST(PathSearchTest, twoCycle) {
  *     3   4
  */
 TEST(PathSearchTest, allPaths) {
-  auto sub = makeIdTableFromVector({{0, 1}, {1, 3}, {0, 2}, {2, 3}, {2, 4}});
+  auto sub = makeIdTableFromVector({{0, 1}, {0, 2}, {1, 3}, {2, 3}, {2, 4}});
   auto expected = makeIdTableFromVector({
       {V(0), V(1), I(0), I(0)},
       {V(0), V(1), I(1), I(0)},
       {V(1), V(3), I(1), I(1)},
       {V(0), V(2), I(2), I(0)},
-      {V(2), V(3), I(2), I(1)},
       {V(0), V(2), I(3), I(0)},
+      {V(2), V(3), I(3), I(1)},
       {V(0), V(2), I(4), I(0)},
       {V(2), V(4), I(4), I(1)},
   });
@@ -312,8 +318,8 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
       {V(0), V(1), I(1), I(0), V(11), V(10)},
       {V(1), V(3), I(1), I(1), V(21), V(20)},
       {V(0), V(2), I(2), I(0), V(31), V(30)},
-      {V(2), V(3), I(2), I(1), V(41), V(40)},
       {V(0), V(2), I(3), I(0), V(31), V(30)},
+      {V(2), V(3), I(3), I(1), V(41), V(40)},
       {V(0), V(2), I(4), I(0), V(31), V(30)},
       {V(2), V(4), I(4), I(1), V(51), V(50)},
   });
