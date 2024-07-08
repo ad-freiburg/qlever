@@ -10,6 +10,7 @@
 #include <bit>
 #include <cstdint>
 #include <functional>
+#include <iostream>
 #include <limits>
 
 #include "global/IndexTypes.h"
@@ -169,7 +170,7 @@ class ValueId {
       auto lowerBound = x.exactMatch_;
       if (lowerBound == getVocabIndex()) {
         return x.isContained_ ? std::strong_ordering::equal
-                              : std::strong_ordering::less;
+                              : std::strong_ordering::greater;
       } else {
         return getVocabIndex() <=> lowerBound;
       }
@@ -179,7 +180,7 @@ class ValueId {
       auto lowerBound = x.exactMatch_;
       if (lowerBound == other.getVocabIndex()) {
         return x.isContained_ ? std::strong_ordering::equal
-                              : std::strong_ordering::greater;
+                              : std::strong_ordering::less;
       } else {
         return lowerBound <=> other.getVocabIndex();
       }

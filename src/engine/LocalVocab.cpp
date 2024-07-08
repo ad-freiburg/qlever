@@ -93,8 +93,9 @@ auto LocalVocabEntry::lowerBoundInIndex() const -> BoundsInIndex {
   result.upperBound_ = vocab.upper_bound(toStringRepresentation());
   result.isContained_ =
       index.getVocab().getId(toStringRepresentation(), &result.exactMatch_);
-  indexStatus = result.isContained_ ? IndexStatus::EQUAL : IndexStatus::GREATER;
   lowerBoundInIndex_ = result.lowerBound_;
   upperBoundInIndex_ = result.upperBound_;
+  exactMatchInIndex_ = result.exactMatch_;
+  indexStatus = result.isContained_ ? IndexStatus::EQUAL : IndexStatus::GREATER;
   return result;
 }

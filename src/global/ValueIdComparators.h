@@ -115,9 +115,25 @@ template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
                                                          Datatype datatype) {
-  return std::equal_range(
-      begin, end, datatype,
-      detail::makeSymmetricComparator(&ValueId::getDatatype));
+  auto comparator = detail::makeSymmetricComparator(&ValueId::getDatatype);
+  // In a sorted input, `VocabIndex` and `LocalVocabIndex` IDs might be
+  // interleaved because they logically both store strings. We therefore
+  // need the range where any of those Datatypes match.
+
+  // Binary search on the `Datatype` can only work in the string case, if the
+  // involved datatypes are directly adjacent.
+  static_assert(static_cast<int>(Datatype::LocalVocabIndex) ==
+                static_cast<int>(Datatype::VocabIndex) + 1);
+  if (ad_utility::contains(
+          std::array{Datatype::LocalVocabIndex, Datatype::VocabIndex},
+          datatype)) {
+    auto lower_bound =
+        std::lower_bound(begin, end, Datatype::VocabIndex, comparator);
+    auto upper_bound =
+        std::upper_bound(begin, end, Datatype::LocalVocabIndex, comparator);
+    return {lower_bound, upper_bound};
+  }
+  return std::equal_range(begin, end, datatype, comparator);
 }
 
 namespace detail {
