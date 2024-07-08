@@ -4,7 +4,6 @@
 
 #include "RelationalExpressions.h"
 
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
@@ -284,11 +283,11 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
   // We support both directions: LANG(?x) = "en" and "en" = LANG(?x).
   auto getLangFilterData =
       [](const auto& left, const auto& right) -> std::optional<LangFilterData> {
-    const auto* varPtr = dynamic_cast<const LangExpression*>(left.get());
+    std::optional<Variable> optVar = getVariableFromLangExpression(left.get());
     const auto* langPtr =
         dynamic_cast<const StringLiteralExpression*>(right.get());
 
-    if (!varPtr || !langPtr) {
+    if (!optVar.has_value() || !langPtr) {
       return std::nullopt;
     }
 
@@ -296,7 +295,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     // etc.
     // TODO<joka921> Is this even allowed by the grammar?
     return LangFilterData{
-        varPtr->variable(),
+        std::move(optVar.value()),
         std::string{asStringViewUnsafe(langPtr->value().getContent())}};
   };
 

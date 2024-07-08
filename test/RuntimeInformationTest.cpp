@@ -28,7 +28,7 @@ TEST(RuntimeInformation, addLimitOffsetRow) {
   EXPECT_FALSE(
       rti.details_.contains("executed-implicitly-during-query-export"));
 
-  rti.addLimitOffsetRow(LimitOffsetClause{23, 1, 4}, 20ms, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{23, 4, 1}, 20ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 23 OFFSET 4");
   EXPECT_EQ(rti.totalTime_, 24ms);
   EXPECT_EQ(rti.getOperationTime(), 20ms);
@@ -41,13 +41,13 @@ TEST(RuntimeInformation, addLimitOffsetRow) {
   EXPECT_TRUE(child.details_.at("not-written-to-cache-because-child-of-limit"));
   EXPECT_FALSE(rti.details_.at("executed-implicitly-during-query-export"));
 
-  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 1, 17}, 15ms, false);
+  rti.addLimitOffsetRow(LimitOffsetClause{std::nullopt, 17, 1}, 15ms, false);
   EXPECT_FALSE(rti.children_.at(0)->details_.at(
       "not-written-to-cache-because-child-of-limit"));
   EXPECT_TRUE(rti.details_.at("executed-implicitly-during-query-export"));
   EXPECT_EQ(rti.descriptor_, "OFFSET 17");
 
-  rti.addLimitOffsetRow(LimitOffsetClause{42, 1, 0}, 15ms, true);
+  rti.addLimitOffsetRow(LimitOffsetClause{42, 0, 1}, 15ms, true);
   EXPECT_EQ(rti.descriptor_, "LIMIT 42");
 }
 
