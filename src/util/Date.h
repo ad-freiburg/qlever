@@ -7,6 +7,7 @@
 
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <exception>
 #include <sstream>
 #include <variant>

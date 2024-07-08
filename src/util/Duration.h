@@ -12,6 +12,7 @@
 
 #include <bit>
 #include <cmath>
+#include <cstdint>
 #include <exception>
 #include <optional>
 #include <sstream>
@@ -48,12 +49,12 @@ class DurationParseException : public std::runtime_error {
 // `DateYearOrDuration` is constructed with the given `DayTimeDuration` object
 // as an argument, and passed to Id::makeFromDate(). The provided values to this
 // class (days, hours, minutes, seconds) will be factorized to a total
-// millisecond value, which is then stored in the reseved bits (48 bits). The
-// operations == and <=> will be performed directly on the underlying bit, which
-// is highly efficient. If the provided values for hours, minutes and seconds
-// are larger than their typical limits given by a daytime (hence hours > 23,
-// minutes > 59 or seconds >59.999), they will be internally normalized over the
-// conversion procedure.
+// millisecond value, which is then stored in the reserved bits (48 bits). The
+// operations == and <=> will be performed directly on the underlying bit
+// representation, which is highly efficient. If the provided values for hours,
+// minutes and seconds are larger than their typical limits given by a daytime
+// (hence hours > 23, minutes > 59 or seconds > 59.999), they will be internally
+// normalized over the conversion procedure.
 class DayTimeDuration {
  public:
   // seconds, minutes, hours (multiplier for conversion to milliseconds)
