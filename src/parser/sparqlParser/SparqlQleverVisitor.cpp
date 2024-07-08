@@ -697,6 +697,29 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
+GraphPatternOperation Visitor::visitPathQuery(Parser::ServiceGraphPatternContext* ctx) {
+  auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
+                           const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      pathQuery.fromBasicPattern(
+          std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
+      pathQuery.childGraphPattern_ = std::move(pattern._child);
+    } else {
+      AD_THROW("Unsupported argument in PathSearch");
+    }
+  };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::PathQuery pathQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parsePathQuery(pathQuery, op);
+  }
+
+  return pathQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // If SILENT is specified, report that we do not support it yet.
@@ -725,26 +748,7 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   Iri serviceIri = std::get<Iri>(varOrIri);
   if (serviceIri.toSparql() ==
       "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
-    auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
-                             const parsedQuery::GraphPatternOperation& op) {
-      if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-        pathQuery.fromBasicPattern(
-            std::get<parsedQuery::BasicGraphPattern>(op));
-      } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-        auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
-        pathQuery.childGraphPattern_ = std::move(pattern._child);
-      } else {
-        AD_THROW("Unsupported argument in PathSearch");
-      }
-    };
-
-    parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
-    parsedQuery::PathQuery pathQuery;
-    for (const auto& op : graphPattern._graphPatterns) {
-      parsePathQuery(pathQuery, op);
-    }
-
-    return pathQuery;
+    return visitPathQuery(ctx);
   }
 
   // Parse the body of the SERVICE query. Add the visible variables from the
