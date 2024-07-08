@@ -97,11 +97,11 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
 
   const auto& locatedTriples = map_.at(blockIndex);
 
-  auto cmpLt = [](const auto& lt, const auto& row) {
+  auto lessThan = [](const auto& lt, const auto& row) {
     return tieLocatedTriple<numIndexColumns>(lt) <
            tieIdTableRow<numIndexColumns>(row);
   };
-  auto cmpEq = [](const auto& lt, const auto& row) {
+  auto equal = [](const auto& lt, const auto& row) {
     return tieLocatedTriple<numIndexColumns>(lt) ==
            tieIdTableRow<numIndexColumns>(row);
   };
@@ -122,22 +122,19 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   };
 
   while (rowIt != block.end() && locatedTripleIt != locatedTriples.end()) {
-    if (cmpLt(locatedTripleIt, *rowIt)) {
-      // locateTriple < rowIt
+    if (lessThan(locatedTripleIt, *rowIt)) {
       if (locatedTripleIt->shouldTripleExist_) {
         // Insertion of a non-existent triple.
         writeTripleToResult(*locatedTripleIt);
       }
       locatedTripleIt++;
-    } else if (cmpEq(locatedTripleIt, *rowIt)) {
-      // locateTriple == rowIt
+    } else if (equal(locatedTripleIt, *rowIt)) {
       if (!locatedTripleIt->shouldTripleExist_) {
         // Deletion of an existing triple.
         rowIt++;
       }
       locatedTripleIt++;
     } else {
-      // locateTriple > rowIt
       // The rowIt is not deleted - copy it
       *resultIt++ = *rowIt++;
     }
@@ -230,19 +227,6 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata(
     blockIndex++;
   }
   augmentedMetadata_ = std::move(metadata);
-}
-
-std::ostream& operator<<(std::ostream& os, const LocatedTriplesPerBlock& ltpb) {
-  // Get the block indices in sorted order.
-  std::vector<size_t> blockIndices;
-  std::ranges::copy(ltpb.map_ | std::views::keys,
-                    std::back_inserter(blockIndices));
-  std::ranges::sort(blockIndices);
-  for (auto blockIndex : blockIndices) {
-    os << "LTs in Block #" << blockIndex << ": " << ltpb.map_.at(blockIndex)
-       << std::endl;
-  }
-  return os;
 }
 
 // ____________________________________________________________________________
