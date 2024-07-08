@@ -66,7 +66,7 @@ inline auto extractTimezoneDurationFormat =
     const auto& optDayTimeDuration =
         DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
     return optDayTimeDuration.has_value()
-               ? Id::makeFromDate(std::move(optDayTimeDuration.value()))
+               ? Id::makeFromDate(optDayTimeDuration.value())
                : Id::makeUndefined();
   }
   return Id::makeUndefined();
