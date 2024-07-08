@@ -638,6 +638,41 @@ TEST(DayTimeDuration, checkParseAndGetStringForSpecialValues) {
 }
 
 //______________________________________________________________________________
+TEST(DayTimeDuration, checkToAndFromBits) {
+  auto d1 = DayTimeDuration(DayTimeDuration::Type::Positive, 1, 23, 23, 59.99);
+  auto bits = d1.toBits();
+  d1 = DayTimeDuration::fromBits(bits);
+  DayTimeDuration::DurationValue dv = d1.getValues();
+  ASSERT_EQ(dv.days, 1);
+  ASSERT_EQ(dv.hours, 23);
+  ASSERT_EQ(dv.minutes, 23);
+  EXPECT_NEAR(dv.seconds, 59.99, 0.001);
+
+  auto d2 =
+      DayTimeDuration(DayTimeDuration::Type::Negative, 1048574, 3, 0, 0.99);
+  bits = d2.toBits();
+  d2 = DayTimeDuration::fromBits(bits);
+  dv = d2.getValues();
+  ASSERT_EQ(dv.days, 1048574);
+  ASSERT_EQ(dv.hours, 3);
+  ASSERT_EQ(dv.minutes, 0);
+  EXPECT_NEAR(dv.seconds, 0.99, 0.001);
+}
+
+//______________________________________________________________________________
+TEST(DayTimeDuration, DurationOverflowException) {
+  try {
+    [[maybe_unused]] auto d1 =
+        DayTimeDuration(DayTimeDuration::Type::Positive, 643917423, 4, 7, 1);
+    FAIL() << "DurationOverflowException was expected.";
+  } catch (const DurationOverflowException& e) {
+    EXPECT_STREQ(e.what(),
+                 "Overflow exception raised by DayTimeDuration, please provide "
+                 "smaller values for xsd:dayTimeDuration.");
+  }
+}
+
+//______________________________________________________________________________
 DayTimeDuration::DurationValue toAndFromMilliseconds(int days, int hours,
                                                      int minutes,
                                                      double seconds) {
@@ -711,13 +746,22 @@ TEST(DayTimeDuration, checkParseAndGetString) {
       "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
       "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
 
+  // Helper which adjusts the random seconds (decimal places) before string
+  // concatenation.
+  const auto handleSecondsStr = [](double seconds) {
+    std::ostringstream strStream;
+    strStream << std::fixed << std::setprecision(5) << seconds;
+    return strStream.str();
+  };
+
   size_t i = 0, max = 256;
   while (i < max) {
     int randDay = randomDay(), randHour = randomHour(),
         randMinute = randomMinute();
     double randSec = randomSecond();
-    auto xsdDuration = absl::StrCat("P", randDay, "DT", randHour, "H",
-                                    randMinute, "M", randSec, "S");
+    auto xsdDuration =
+        absl::StrCat("P", randDay, "DT", randHour, "H", randMinute, "M",
+                     handleSecondsStr(randSec), "S");
     DayTimeDuration d = DayTimeDuration::parseXsdDayTimeDuration(xsdDuration);
     // Given that the seconds value is object to a rounding procedure, we have
     // to test over matching, and thus test with EXPECT_NEAR.
@@ -733,7 +777,8 @@ TEST(DayTimeDuration, checkParseAndGetString) {
   i = 0, max = 256;
   while (i < max) {
     auto randSec = randomSecond();
-    auto xsdDuration = absl::StrCat("-P0DT0H0M", randSec, "S");
+    auto xsdDuration =
+        absl::StrCat("-P0DT0H0M", handleSecondsStr(randSec), "S");
     DayTimeDuration d = DayTimeDuration::parseXsdDayTimeDuration(xsdDuration);
     auto match = ctre::match<dayTimePattern>(d.toStringAndType().first);
     ASSERT_TRUE(match);

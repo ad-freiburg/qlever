@@ -29,7 +29,7 @@ class DurationOverflowException : public std::exception {
                             std::string_view datatype) {
     std::stringstream s;
     s << "Overflow exception raised by " << className
-      << ", please provide smaller values for" << datatype << ".";
+      << ", please provide smaller values for " << datatype << ".";
     message_ = std::move(s).str();
   }
   [[nodiscard]] const char* what() const noexcept override {
@@ -142,7 +142,7 @@ class DayTimeDuration {
         static_cast<long long>(minutes) * minuteMultiplier +
         static_cast<long long>(std::round(seconds * secondMultiplier));
     if (totalMilliSeconds >= static_cast<long long>(totalMilliSecsBound)) {
-      throw DurationOverflowException("DayTimeDuration", "xsd:dayTimeDuration");
+      throw DurationOverflowException{"DayTimeDuration", "xsd:dayTimeDuration"};
     }
     totalMilliSeconds_ =
         totalMilliSeconds * sign + static_cast<long long>(totalMilliSecsBound);
