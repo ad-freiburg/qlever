@@ -4,23 +4,10 @@
 
 #include "PathSearch.h"
 
-#include <bits/ranges_algo.h>
-
-#include <algorithm>
-#include <boost/graph/detail/adjacency_list.hpp>
-#include <cstdint>
-#include <functional>
-#include <iterator>
-#include <memory>
-#include <sstream>
-#include <unordered_set>
-#include <variant>
-
 #include "engine/CallFixedSize.h"
 #include "engine/PathSearchVisitors.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
-#include "util/Exception.h"
 
 // _____________________________________________________________________________
 BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
@@ -102,25 +89,32 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 
   size_t colIndex = 0;
 
-  variableColumns_[config_.start_] = makeAlwaysDefinedColumn(colIndex++);
-  variableColumns_[config_.end_] = makeAlwaysDefinedColumn(colIndex++);
-  variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(colIndex++);
-  variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(colIndex++);
+  variableColumns_[config_.start_] = makeAlwaysDefinedColumn(colIndex);
+  colIndex++;
+  variableColumns_[config_.end_] = makeAlwaysDefinedColumn(colIndex);
+  colIndex++;
+  variableColumns_[config_.pathColumn_] = makeAlwaysDefinedColumn(colIndex);
+  colIndex++;
+  variableColumns_[config_.edgeColumn_] = makeAlwaysDefinedColumn(colIndex);
+  colIndex++;
 
   if (std::holds_alternative<Variable>(config_.sources_)) {
     resultWidth_++;
     const auto& sourceColumn = std::get<Variable>(config_.sources_);
-    variableColumns_[sourceColumn] = makeAlwaysDefinedColumn(colIndex++);
+    variableColumns_[sourceColumn] = makeAlwaysDefinedColumn(colIndex);
+    colIndex++;
   }
 
   if (std::holds_alternative<Variable>(config_.targets_)) {
     resultWidth_++;
     const auto& targetColumn = std::get<Variable>(config_.targets_);
-    variableColumns_[targetColumn] = makeAlwaysDefinedColumn(colIndex++);
+    variableColumns_[targetColumn] = makeAlwaysDefinedColumn(colIndex);
+    colIndex++;
   }
 
-  for (auto edgeProperty : config_.edgeProperties_) {
-    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(colIndex++);
+  for (const auto& edgeProperty : config_.edgeProperties_) {
+    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(colIndex);
+    colIndex++;
   }
 }
 
@@ -198,7 +192,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
     timer.start();
 
-    if (config_.algorithm_ == SHORTEST_PATHS) {
+    if (config_.algorithm_ == PathSearchAlgorithm::SHORTEST_PATHS) {
       std::vector<std::span<const Id>> edgePropertyLists;
       for (const auto& edgeProperty : config_.edgeProperties_) {
         auto edgePropertyIndex = subtree_->getVariableColumn(edgeProperty);
@@ -323,9 +317,9 @@ std::vector<Path> PathSearch::findPaths(std::span<const Id> sources,
                                         std::span<const Id> targets,
                                         BinSearchWrapper& binSearch) const {
   switch (config_.algorithm_) {
-    case ALL_PATHS:
+    case PathSearchAlgorithm::ALL_PATHS:
       return allPaths(sources, targets, binSearch);
-    case SHORTEST_PATHS:
+    case PathSearchAlgorithm::SHORTEST_PATHS:
       return shortestPaths(sources, targets);
     default:
       AD_FAIL();

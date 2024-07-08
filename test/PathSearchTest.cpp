@@ -42,9 +42,14 @@ TEST(PathSearchTest, constructor) {
 
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(1)};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
   PathSearch p = PathSearch(qec, std::move(subtree), config);
 }
 
@@ -57,9 +62,14 @@ TEST(PathSearchTest, emptyGraph) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -82,9 +92,14 @@ TEST(PathSearchTest, singlePath) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -104,10 +119,14 @@ TEST(PathSearchTest, singlePathWithProperties) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Var{"?start"},
-                                 Var{"?end"},       Var{"?edgeIndex"},
-                                 Var{"?pathIndex"}, {Var{"?edgeProperty"}}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {Var{"?edgeProperty"}}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -126,9 +145,14 @@ TEST(PathSearchTest, singlePathWithDijkstra) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -148,10 +172,14 @@ TEST(PathSearchTest, singlePathWithDijkstraAndProperties) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty"}};
-  PathSearchConfiguration config{SHORTEST_PATHS,    sources,
-                                 targets,           Var{"?start"},
-                                 Var{"?end"},       Var{"?edgeIndex"},
-                                 Var{"?pathIndex"}, {Var{"?edgeProperty"}}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {Var{"?edgeProperty"}}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -178,9 +206,14 @@ TEST(PathSearchTest, twoPathsOneTarget) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(2)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -207,9 +240,14 @@ TEST(PathSearchTest, twoPathsTwoTargets) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(2), V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -234,9 +272,14 @@ TEST(PathSearchTest, cycle) {
 
   std::vector<Id> sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           sources,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 sources,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -264,9 +307,14 @@ TEST(PathSearchTest, twoCycle) {
 
   std::vector<Id> sources{V(0)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           sources,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 sources,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -298,9 +346,14 @@ TEST(PathSearchTest, allPaths) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -329,10 +382,14 @@ TEST(PathSearchTest, allPathsWithPropertiesSwitched) {
   Vars vars = {Variable{"?start"}, Variable{"?end"}, Variable{"?edgeProperty1"},
                Variable{"?edgeProperty2"}};
   PathSearchConfiguration config{
-      ALL_PATHS,         sources,
-      targets,           Var{"?start"},
-      Var{"?end"},       Var{"?edgeIndex"},
-      Var{"?pathIndex"}, {Var{"?edgeProperty2"}, Var{"?edgeProperty1"}}};
+      PathSearchAlgorithm::ALL_PATHS,
+      sources,
+      targets,
+      Var{"?start"},
+      Var{"?end"},
+      Var{"?edgeIndex"},
+      Var{"?pathIndex"},
+      {Var{"?edgeProperty2"}, Var{"?edgeProperty1"}}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -360,9 +417,14 @@ TEST(PathSearchTest, singleShortestPath) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -393,9 +455,14 @@ TEST(PathSearchTest, twoShortestPaths) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -421,9 +488,14 @@ TEST(PathSearchTest, singlePathWithIrrelevantNode) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -442,9 +514,14 @@ TEST(PathSearchTest, shortestPathWithIrrelevantNode) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(4)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -480,9 +557,14 @@ TEST(PathSearchTest, allPathsElongatedDiamond) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -500,9 +582,14 @@ TEST(PathSearchTest, shortestPathsElongatedDiamond) {
   std::vector<Id> sources{V(0)};
   std::vector<Id> targets{V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -537,9 +624,14 @@ TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
   std::vector<Id> sources{V(0), V(1)};
   std::vector<Id> targets{V(4), V(5)};
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
-  PathSearchConfiguration config{
-      ALL_PATHS,   sources,           targets,           Var{"?start"},
-      Var{"?end"}, Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),
@@ -566,9 +658,14 @@ TEST(PathSearchTest, multiSourceMultiTargetshortestPaths) {
   Vars vars = {Variable{"?start"}, Variable{"?end"}};
   std::vector<Id> sources{V(0), V(1)};
   std::vector<Id> targets{V(4), V(5)};
-  PathSearchConfiguration config{
-      SHORTEST_PATHS, sources,           targets,           Var{"?start"},
-      Var{"?end"},    Var{"?edgeIndex"}, Var{"?pathIndex"}, {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::SHORTEST_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),

@@ -28,7 +28,7 @@ using IdToNodeMap = std::unordered_map<
     Id, size_t, IdHash, std::equal_to<Id>,
     ad_utility::AllocatorWithLimit<std::pair<const Id, size_t>>>;
 
-enum PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
+enum class PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 using SearchSide = std::variant<Variable, std::vector<Id>>;
@@ -75,10 +75,10 @@ struct PathSearchConfiguration {
   std::string toString() const {
     std::ostringstream os;
     switch (algorithm_) {
-      case ALL_PATHS:
+      case PathSearchAlgorithm::ALL_PATHS:
         os << "Algorithm: All paths" << '\n';
         break;
-      case SHORTEST_PATHS:
+      case PathSearchAlgorithm::SHORTEST_PATHS:
         os << "Algorithm: Shortest paths" << '\n';
         break;
     }
@@ -92,7 +92,7 @@ struct PathSearchConfiguration {
     os << "EdgeColumn: " << edgeColumn_.toSparql() << '\n';
 
     os << "EdgeProperties:" << '\n';
-    for (auto edgeProperty : edgeProperties_) {
+    for (const auto& edgeProperty : edgeProperties_) {
       os << "  " << edgeProperty.toSparql() << '\n';
     }
 

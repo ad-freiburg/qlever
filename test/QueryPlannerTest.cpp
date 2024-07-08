@@ -780,10 +780,14 @@ TEST(QueryPlanner, PathSearchSingleTarget) {
 
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -808,10 +812,14 @@ TEST(QueryPlanner, PathSearchMultipleTargets) {
 
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<y>"), getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -839,10 +847,14 @@ TEST(QueryPlanner, PathSearchWithEdgeProperties) {
 
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {Variable("?middle")}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {Variable("?middle")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -880,10 +892,14 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   std::vector<Id> sources{getId("<x>")};
   std::vector<Id> targets{getId("<y>"), getId("<z>")};
   PathSearchConfiguration config{
-      ALL_PATHS,         sources,
-      targets,           Variable("?start"),
-      Variable("?end"),  Variable("?path"),
-      Variable("?edge"), {Variable("?middle"), Variable("?middleAttribute")}};
+      PathSearchAlgorithm::ALL_PATHS,
+      sources,
+      targets,
+      Variable("?start"),
+      Variable("?end"),
+      Variable("?path"),
+      Variable("?edge"),
+      {Variable("?middle"), Variable("?middleAttribute")}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -918,10 +934,14 @@ TEST(QueryPlanner, PathSearchSourceBound) {
 
   Variable sources{"?source"};
   std::vector<Id> targets{getId("<z>")};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -947,10 +967,14 @@ TEST(QueryPlanner, PathSearchTargetBound) {
 
   std::vector<Id> sources{getId("<x>")};
   Variable targets{"?target"};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"
@@ -976,10 +1000,14 @@ TEST(QueryPlanner, PathSearchBothBound) {
 
   Variable sources{"?source"};
   Variable targets{"?target"};
-  PathSearchConfiguration config{ALL_PATHS,         sources,
-                                 targets,           Variable("?start"),
-                                 Variable("?end"),  Variable("?path"),
-                                 Variable("?edge"), {}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
   h::expect(
       "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
       "SELECT ?start ?end ?path ?edge WHERE {"

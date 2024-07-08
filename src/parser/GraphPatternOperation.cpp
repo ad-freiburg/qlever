@@ -118,7 +118,7 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
     return side[0].getVariable();
   } else {
     std::vector<Id> sideIds;
-    for (auto comp : side) {
+    for (const auto& comp : side) {
       if (comp.isVariable()) {
         AD_THROW("Only one variable is allowed per search side");
       }

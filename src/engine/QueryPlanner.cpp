@@ -1816,7 +1816,7 @@ auto QueryPlanner::createJoinWithService(
 
 // _____________________________________________________________________
 auto QueryPlanner::createJoinWithPathSearch(
-    SubtreePlan a, SubtreePlan b,
+    const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   auto aRootOp =
