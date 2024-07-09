@@ -625,12 +625,15 @@ TEST(TurtleParserTest, DayTimeDurationLiterals) {
       R"("PH-33.33S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
       R"("P2001693"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
       R"("-98D59M59.99S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
-      R"("-PDTS"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
+      R"("-PDTS"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P200000032DT4H3M4S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P1048576DT4H3M4.23S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
 
   std::vector<TripleComponent::Literal> expectedInvalidDayTimeDurationLiterals{
-      lit("\"PinvalidDH2.53S\""), lit("\"P234D23H23M23.55S\""),
-      lit("\"PH-33.33S\""),       lit("\"P2001693\""),
-      lit("\"-98D59M59.99S\""),   lit("\"-PDTS\"")};
+      lit("\"PinvalidDH2.53S\""),    lit("\"P234D23H23M23.55S\""),
+      lit("\"PH-33.33S\""),          lit("\"P2001693\""),
+      lit("\"-98D59M59.99S\""),      lit("\"-PDTS\""),
+      lit("\"P200000032DT4H3M4S\""), lit("\"-P1048576DT4H3M4.23S\"")};
 
   for (size_t i = 0; i < invalidDayTimeDurationLiterals.size(); ++i) {
     checkParseResult<Re2Parser, &Re2Parser::object>(

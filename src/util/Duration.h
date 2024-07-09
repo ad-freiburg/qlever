@@ -38,6 +38,17 @@ class DurationOverflowException : public std::exception {
 };
 
 //______________________________________________________________________________
+namespace detail {
+constexpr void checkBoundDuration(const auto& value, const auto& max,
+                                  std::string_view className,
+                                  std::string_view xsdDatatype) {
+  if (value >= max) {
+    throw DurationOverflowException{className, xsdDatatype};
+  }
+}
+}  //  namespace detail
+
+//______________________________________________________________________________
 class DurationParseException : public std::runtime_error {
  public:
   using std::runtime_error::runtime_error;
@@ -142,9 +153,9 @@ class DayTimeDuration {
         static_cast<long long>(hours) * hourMultiplier +
         static_cast<long long>(minutes) * minuteMultiplier +
         static_cast<long long>(std::round(seconds * secondMultiplier));
-    if (totalMilliseconds >= static_cast<long long>(boundTotalMilliseconds)) {
-      throw DurationOverflowException{"DayTimeDuration", "xsd:dayTimeDuration"};
-    }
+    detail::checkBoundDuration(totalMilliseconds,
+                               static_cast<long long>(boundTotalMilliseconds),
+                               "DayTimeDuration", "xsd:dayTimeDuration");
     totalMilliseconds_ = totalMilliseconds * sign +
                          static_cast<long long>(boundTotalMilliseconds);
   }
