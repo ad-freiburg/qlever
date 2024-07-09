@@ -145,14 +145,10 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
     const Index::Vocab& vocab) const {
   auto sources = toSearchSide(sources_, vocab);
   auto targets = toSearchSide(targets_, vocab);
-  return PathSearchConfiguration{algorithm_,
-                                 std::move(sources),
-                                 std::move(targets),
-                                 std::move(start_.value()),
-                                 std::move(end_.value()),
-                                 std::move(pathColumn_.value()),
-                                 std::move(edgeColumn_.value()),
-                                 std::move(edgeProperties_)};
+  return PathSearchConfiguration{
+      algorithm_,          sources,        targets,
+      start_.value(),      end_.value(),   pathColumn_.value(),
+      edgeColumn_.value(), edgeProperties_};
 }
 
 // ____________________________________________________________________________

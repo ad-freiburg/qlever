@@ -119,7 +119,7 @@ class BinSearchWrapper {
   bool isTarget(const Id node) const;
 
  private:
-  const Edge makeEdgeFromRow(size_t row) const;
+  Edge makeEdgeFromRow(size_t row) const;
 };
 
 /**

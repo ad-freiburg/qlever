@@ -41,7 +41,7 @@ std::vector<Path> BinSearchWrapper::findPaths(
   std::vector<Path> paths;
 
   auto edges = outgoingEdes(source);
-  for (auto edge : edges) {
+  for (const auto& edge : edges) {
     if (targets.contains(edge.end_) || targets.empty()) {
       Path path;
       path.push_back(edge);
@@ -60,7 +60,7 @@ std::vector<Path> BinSearchWrapper::findPaths(
 }
 
 // _____________________________________________________________________________
-const Edge BinSearchWrapper::makeEdgeFromRow(size_t row) const {
+Edge BinSearchWrapper::makeEdgeFromRow(size_t row) const {
   Edge edge;
   edge.start_ = table_(row, startCol_).getBits();
   edge.end_ = table_(row, endCol_).getBits();
@@ -209,7 +209,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto subStartColumn = subtree_->getVariableColumn(config_.start_);
     auto subEndColumn = subtree_->getVariableColumn(config_.end_);
     std::vector<size_t> edgeColumns;
-    for (auto edgeProp : config_.edgeProperties_) {
+    for (const auto& edgeProp : config_.edgeProperties_) {
       edgeColumns.push_back(subtree_->getVariableColumn(edgeProp));
     }
     BinSearchWrapper binSearch{dynSub, subStartColumn, subEndColumn,
