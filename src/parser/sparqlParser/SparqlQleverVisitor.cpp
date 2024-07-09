@@ -23,6 +23,7 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -707,7 +708,9 @@ GraphPatternOperation Visitor::visitPathQuery(
       auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
       pathQuery.childGraphPattern_ = std::move(pattern._child);
     } else {
-      AD_THROW("Unsupported argument in PathSearch");
+      throw parsedQuery::PathSearchException("Unsupported subquery in pathSearch."
+                                             "PathQuery may only consist of triples for configuration"
+                                             "And a subquery specifiying edges.");
     }
   };
 

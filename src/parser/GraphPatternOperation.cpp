@@ -73,42 +73,75 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   auto simpleTriple = triple.getSimple();
   TripleComponent predicate = simpleTriple.p_;
   TripleComponent object = simpleTriple.o_;
-  AD_CORRECTNESS_CHECK(predicate.isIri());
-  if (predicate.getIri().toStringRepresentation().ends_with("source>")) {
+
+  if (!predicate.isIri()) {
+    throw PathSearchException("Predicates must be IRIs");
+  }
+
+  std::string predString = predicate.getIri().toStringRepresentation();
+  if (predString.ends_with("source>")) {
     sources_.push_back(std::move(object));
-  } else if (predicate.getIri().toStringRepresentation().ends_with("target>")) {
+  } else if (predString.ends_with("target>")) {
     targets_.push_back(std::move(object));
-  } else if (predicate.getIri().toStringRepresentation().ends_with("start>")) {
-    AD_CORRECTNESS_CHECK(object.isVariable());
+  } else if (predString.ends_with("start>")) {
+
+    if (!object.isVariable()) {
+      throw PathSearchException("The 'start' value has to be a variable");
+    }
+
     start_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with("end>")) {
-    AD_CORRECTNESS_CHECK(object.isVariable());
+  } else if (predString.ends_with("end>")) {
+
+    if (!object.isVariable()) {
+      throw PathSearchException("The 'end' value has to be a variable");
+    }
+
     end_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with(
+  } else if (predString.ends_with(
                  "pathColumn>")) {
-    AD_CORRECTNESS_CHECK(object.isVariable());
+
+    if (!object.isVariable()) {
+      throw PathSearchException("The 'pathColumn' value has to be a variable");
+    }
+
     pathColumn_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with(
+  } else if (predString.ends_with(
                  "edgeColumn>")) {
-    AD_CORRECTNESS_CHECK(object.isVariable());
+
+    if (!object.isVariable()) {
+      throw PathSearchException("The 'edgeColumn' value has to be a variable");
+    }
+
     edgeColumn_ = object.getVariable();
-  } else if (predicate.getIri().toStringRepresentation().ends_with(
+  } else if (predString.ends_with(
                  "edgeProperty>")) {
-    AD_CORRECTNESS_CHECK(object.isVariable());
+
+    if (!object.isVariable()) {
+      throw PathSearchException("The 'edgeProperty' values have to be variables");
+    }
+
     edgeProperties_.push_back(object.getVariable());
-  } else if (predicate.getIri().toStringRepresentation().ends_with(
+  } else if (predString.ends_with(
                  "algorithm>")) {
-    AD_CORRECTNESS_CHECK(object.isIri());
-    if (object.getIri().toStringRepresentation().ends_with("allPaths>")) {
+
+    if (!object.isIri()) {
+      throw PathSearchException("The 'algorithm' value has to be an Iri");
+    }
+    auto objString = object.getIri().toStringRepresentation();
+
+    if (objString.ends_with("allPaths>")) {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
-    } else if (object.getIri().toStringRepresentation().ends_with(
+    } else if (objString.ends_with(
                    "shortestPaths>")) {
       algorithm_ = PathSearchAlgorithm::SHORTEST_PATHS;
     } else {
-      AD_THROW("Unsupported algorithm in PathSearch");
+      throw PathSearchException("Unsupported algorithm in pathSearch: " + objString + ". Supported Algorithms: "
+                                "allPaths, shortestPaths.");
     }
   } else {
-    AD_THROW("Unsupported argument in PathSearch");
+    PathSearchException("Unsupported argument " + predString + " in PathSearch."
+                        "Supported Arguments: source, target, start, end, pathColumn, edgeColumn,"
+                        "edgeProperty, algorithm.");
   }
 }
 
@@ -120,13 +153,13 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
     std::vector<Id> sideIds;
     for (const auto& comp : side) {
       if (comp.isVariable()) {
-        AD_THROW("Only one variable is allowed per search side");
+        throw PathSearchException("Only one variable is allowed per search side");
       }
       auto opt = comp.toValueId(vocab);
       if (opt.has_value()) {
         sideIds.push_back(opt.value());
       } else {
-        AD_THROW("No vocabulary entry for " + comp.toString());
+        throw PathSearchException("No vocabulary entry for " + comp.toString());
       }
     }
     return sideIds;

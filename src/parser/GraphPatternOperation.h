@@ -137,6 +137,13 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
+class PathSearchException : public std::exception {
+  std::string message_;
+public:
+  PathSearchException(std::string message) : message_(message) {}
+  const char* what() const noexcept override { return message_.data(); }
+};
+
 struct PathQuery {
   std::vector<TripleComponent> sources_;
   std::vector<TripleComponent> targets_;
