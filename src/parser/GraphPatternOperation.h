@@ -145,6 +145,15 @@ class PathSearchException : public std::exception {
   const char* what() const noexcept override { return message_.data(); }
 };
 
+// The PathQuery object holds intermediate information for the PathSearch.
+// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
+// QueryPlanner is needed to translate the TripleComponents to ValueIds.
+// Also, the members of the PathQuery have defaults and can be set after
+// the object creation, simplifying the parsing process. If a required
+// value has not been set during parsing, the method 'toPathSearchConfiguration'
+// will throw an exception.
+// All the error handling for the PathSearch happens in the PathQuery object.
+// Thus, if a PathSearchConfiguration can be constructed, it is valid.
 struct PathQuery {
   std::vector<TripleComponent> sources_;
   std::vector<TripleComponent> targets_;
