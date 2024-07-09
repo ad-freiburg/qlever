@@ -94,9 +94,8 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
       throw PathSearchException("The parameter '" + parameter +
                                 "' has already been set to variable: '" +
                                 existingValue.value().toSparql() +
-                                "'."
-                                "New variable: '" +
-                                object.toString() + "'.");
+                                "'. New variable: '" + object.toString() +
+                                "'.");
     }
 
     return object.getVariable();
@@ -135,11 +134,12 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
           "allPaths, shortestPaths.");
     }
   } else {
-    PathSearchException("Unsupported argument " + predString +
-                        " in PathSearch."
-                        "Supported Arguments: source, target, start, end, "
-                        "pathColumn, edgeColumn,"
-                        "edgeProperty, algorithm.");
+    throw PathSearchException(
+        "Unsupported argument " + predString +
+        " in PathSearch. "
+        "Supported Arguments: source, target, start, end, "
+        "pathColumn, edgeColumn, "
+        "edgeProperty, algorithm.");
   }
 }
 
