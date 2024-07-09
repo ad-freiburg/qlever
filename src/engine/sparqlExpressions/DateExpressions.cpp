@@ -61,29 +61,30 @@ inline auto extractStrTimezone =
 
 //______________________________________________________________________________
 inline auto extractTimezoneDurationFormat =
-    [](std::optional<DateYearOrDuration> d) -> Id {
-  if (d.has_value()) {
-    const auto& optDayTimeDuration =
-        DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
-    return optDayTimeDuration.has_value()
-               ? Id::makeFromDate(optDayTimeDuration.value())
-               : Id::makeUndefined();
-  }
-  return Id::makeUndefined();
-};
+    [](std::optional<DateYearOrDuration> d) {
+      if (d.has_value()) {
+        const auto& optDayTimeDuration =
+            DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
+        return optDayTimeDuration.has_value()
+                   ? Id::makeFromDate(optDayTimeDuration.value())
+                   : Id::makeUndefined();
+      }
+      return Id::makeUndefined();
+    };
 
 //______________________________________________________________________________
 template <auto dateMember, auto makeId>
-inline auto extractTimeComponentImpl = [](std::optional<DateYearOrDuration> d) {
-  if (!d.has_value() || !d->isDate()) {
-    return Id::makeUndefined();
-  }
-  Date date = d.value().getDate();
-  if (!date.hasTime()) {
-    return Id::makeUndefined();
-  }
-  return std::invoke(makeId, std::invoke(dateMember, date));
-};
+inline const auto extractTimeComponentImpl =
+    [](std::optional<DateYearOrDuration> d) {
+      if (!d.has_value() || !d->isDate()) {
+        return Id::makeUndefined();
+      }
+      Date date = d.value().getDate();
+      if (!date.hasTime()) {
+        return Id::makeUndefined();
+      }
+      return std::invoke(makeId, std::invoke(dateMember, date));
+    };
 
 //______________________________________________________________________________
 constexpr auto extractHours =

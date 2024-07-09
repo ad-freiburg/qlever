@@ -70,23 +70,24 @@ class DayTimeDuration {
   // With the given specifications above, the total number of milliseconds we
   // have to store at the limit (days -> milliseconds) + (hours -> milliseconds)
   // + (minutes -> silliseconds) + (seconds -> milliseconds).
-  static constexpr unsigned long totalMilliSecsBound =
+  static constexpr unsigned long boundTotalMilliseconds =
       (maxDays + 1) * dayMultiplier;
 
   // The number of bits reserved to store the total number of milliseconds.
-  // numMilliSecBits amounts to 48 under the specifications given above.
+  // numMillisecondBits amounts to 48 under the specifications given above.
   // Multiply by 2 because xsd:dayTimeDuration can be negative, hence
-  // we have to shift the total milliseconds value by totalMilliSecsBound into
-  // the positive value range to store an unsigned value in totalMilliSeconds_.
-  static constexpr uint8_t numMilliSecBits =
-      std::bit_width(totalMilliSecsBound * 2);
+  // we have to shift the total milliseconds value by boundTotalMilliseconds
+  // into the positive value range to store an unsigned value in
+  // totalMilliseconds_.
+  static constexpr uint8_t numMillisecondBits =
+      std::bit_width(boundTotalMilliseconds * 2);
 
   // numUnusedBits is 16
-  static constexpr uint8_t numUnusedBits = 64 - numMilliSecBits;
+  static constexpr uint8_t numUnusedBits = 64 - numMillisecondBits;
 
  private:
   // The actual duration in milliseconds is stored here.
-  uint64_t totalMilliSeconds_ : numMilliSecBits = 0;
+  uint64_t totalMilliseconds_ : numMillisecondBits = 0;
 
   // The value of unusedBits_ is relevant w.r.t. to the DateYearOrDuration class
   // for properly shifting a given input value of type dayTimeDuration and
@@ -98,10 +99,10 @@ class DayTimeDuration {
   // `DurationValue` is used to return all xsd:dayTimeDuration components over
   // `getValues()`.
   struct DurationValue {
-    int days;
-    int hours;
-    int minutes;
-    double seconds;
+    int days_;
+    int hours_;
+    int minutes_;
+    double seconds_;
   };
 
   // make the handling of positive and negative durations more intuitive
@@ -128,24 +129,24 @@ class DayTimeDuration {
   // ___________________________________________________________________________
   // Returns `true` if `DayTimeDuration` w.r.t. this object is `Type::Positive`.
   constexpr bool isPositive() const {
-    return static_cast<long long>(totalMilliSeconds_) >=
-           static_cast<long long>(totalMilliSecsBound);
+    return static_cast<long long>(totalMilliseconds_) >=
+           static_cast<long long>(boundTotalMilliseconds);
   }
 
   //____________________________________________________________________________
   constexpr void setValues(int days, int hours, int minutes, double seconds,
                            int sign) {
     AD_CONTRACT_CHECK(sign == 1 || sign == -1);
-    auto totalMilliSeconds =
+    auto totalMilliseconds =
         static_cast<long long>(days) * dayMultiplier +
         static_cast<long long>(hours) * hourMultiplier +
         static_cast<long long>(minutes) * minuteMultiplier +
         static_cast<long long>(std::round(seconds * secondMultiplier));
-    if (totalMilliSeconds >= static_cast<long long>(totalMilliSecsBound)) {
+    if (totalMilliseconds >= static_cast<long long>(boundTotalMilliseconds)) {
       throw DurationOverflowException{"DayTimeDuration", "xsd:dayTimeDuration"};
     }
-    totalMilliSeconds_ =
-        totalMilliSeconds * sign + static_cast<long long>(totalMilliSecsBound);
+    totalMilliseconds_ = totalMilliseconds * sign +
+                         static_cast<long long>(boundTotalMilliseconds);
   }
 
   //____________________________________________________________________________
@@ -153,19 +154,19 @@ class DayTimeDuration {
   // seconds}`.
   [[nodiscard]] constexpr DurationValue getValues() const {
     // It is more efficient to extract all values at once from
-    // totalMilliSeconds_ w.r.t. days, hours, minutes and seconds because we can
-    // reuse the remainder (updated totalMilliSeconds).
-    auto totalMilliSeconds = static_cast<long long>(totalMilliSeconds_) -
-                             static_cast<long long>(totalMilliSecsBound);
+    // totalMilliseconds_ w.r.t. days, hours, minutes and seconds because we can
+    // reuse the remainder (updated totalMilliseconds).
+    auto totalMilliseconds = static_cast<long long>(totalMilliseconds_) -
+                             static_cast<long long>(boundTotalMilliseconds);
     if (!isPositive()) {
-      totalMilliSeconds = -totalMilliSeconds;
+      totalMilliseconds = -totalMilliseconds;
     }
-    auto numDays = totalMilliSeconds / dayMultiplier;
-    totalMilliSeconds -= numDays * dayMultiplier;
-    auto numHours = totalMilliSeconds / hourMultiplier;
-    totalMilliSeconds -= numHours * hourMultiplier;
-    auto numMinutes = totalMilliSeconds / minuteMultiplier;
-    auto numSeconds = totalMilliSeconds - numMinutes * minuteMultiplier;
+    auto numDays = totalMilliseconds / dayMultiplier;
+    totalMilliseconds -= numDays * dayMultiplier;
+    auto numHours = totalMilliseconds / hourMultiplier;
+    totalMilliseconds -= numHours * hourMultiplier;
+    auto numMinutes = totalMilliseconds / minuteMultiplier;
+    auto numSeconds = totalMilliseconds - numMinutes * minuteMultiplier;
     return {static_cast<int>(numDays), static_cast<int>(numHours),
             static_cast<int>(numMinutes),
             static_cast<double>(numSeconds) / secondMultiplier};
@@ -221,16 +222,16 @@ class DayTimeDuration {
   // DayTimeDuration object. Usage of getValues() should be mostly considered.
 
   // get days over getValues()
-  constexpr int getDays() { return getValues().days; }
+  constexpr int getDays() const { return getValues().days_; }
 
   // get hours over getValues()
-  constexpr int getHours() { return getValues().hours; }
+  constexpr int getHours() const { return getValues().hours_; }
 
   // get minutes over getValues()
-  constexpr int getMinutes() { return getValues().minutes; }
+  constexpr int getMinutes() const { return getValues().minutes_; }
 
   // get seconds over getValues()
-  constexpr double getSeconds() { return getValues().seconds; }
+  constexpr double getSeconds() const { return getValues().seconds_; }
 };
 
 #endif  // QLEVER_DURATION_H

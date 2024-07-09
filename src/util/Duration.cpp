@@ -19,8 +19,10 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
   // Get the underlying values of DayTimeDuration object as DurationValue
   // struct. {days, hours, minutes, seconds, fractionalSeconds}
   const auto& dv = getValues();
-  int days = dv.days, hours = dv.hours, minutes = dv.minutes;
-  double seconds = dv.seconds;
+  int days = dv.days_;
+  int hours = dv.hours_;
+  int minutes = dv.minutes_;
+  double seconds = dv.seconds_;
 
   // handle days
   if (days != 0) {
@@ -52,9 +54,8 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
   if (std::modf(seconds, &dIntPart) == 0.0) {
     absl::StrAppend(&str, static_cast<int>(seconds), std::string_view("S"));
   } else {
-    std::ostringstream stream;
-    stream << std::fixed << std::setprecision(3) << seconds;
-    absl::StrAppend(&str, stream.str(), std::string_view("S"));
+    absl::StrAppend(&str, absl::StrFormat("%.3f", seconds),
+                    std::string_view("S"));
   }
   return {str, XSD_DAYTIME_DURATION_TYPE};
 }
@@ -76,7 +77,9 @@ DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
   } else {
     Type negation = match.get<"negation">().to_string() == "-" ? Type::Negative
                                                                : Type::Positive;
-    int days = 0, hours = 0, minutes = 0;
+    int days = 0;
+    int hours = 0;
+    int minutes = 0;
     double seconds = 0.00;
 
     // Certain duration strings could trigger segmentations faults, thus a

@@ -643,20 +643,20 @@ TEST(DayTimeDuration, checkToAndFromBits) {
   auto bits = d1.toBits();
   d1 = DayTimeDuration::fromBits(bits);
   DayTimeDuration::DurationValue dv = d1.getValues();
-  ASSERT_EQ(dv.days, 1);
-  ASSERT_EQ(dv.hours, 23);
-  ASSERT_EQ(dv.minutes, 23);
-  EXPECT_NEAR(dv.seconds, 59.99, 0.001);
+  ASSERT_EQ(dv.days_, 1);
+  ASSERT_EQ(dv.hours_, 23);
+  ASSERT_EQ(dv.minutes_, 23);
+  EXPECT_NEAR(dv.seconds_, 59.99, 0.001);
 
   auto d2 =
       DayTimeDuration(DayTimeDuration::Type::Negative, 1048574, 3, 0, 0.99);
   bits = d2.toBits();
   d2 = DayTimeDuration::fromBits(bits);
   dv = d2.getValues();
-  ASSERT_EQ(dv.days, 1048574);
-  ASSERT_EQ(dv.hours, 3);
-  ASSERT_EQ(dv.minutes, 0);
-  EXPECT_NEAR(dv.seconds, 0.99, 0.001);
+  ASSERT_EQ(dv.days_, 1048574);
+  ASSERT_EQ(dv.hours_, 3);
+  ASSERT_EQ(dv.minutes_, 0);
+  EXPECT_NEAR(dv.seconds_, 0.99, 0.001);
 }
 
 //______________________________________________________________________________
@@ -702,7 +702,7 @@ TEST(DayTimeDuration, checkInternalConversionForLargeValues) {
   ad_utility::SlowRandomIntGenerator randomDay{1000000, maxDays};
   ad_utility::SlowRandomIntGenerator randomHour{22, 1000000};
   ad_utility::SlowRandomIntGenerator randomMinute{55, 1000000};
-  ad_utility::RandomDoubleGenerator randomSecond{60.000, 99999.999};
+  ad_utility::RandomDoubleGenerator randomSecond{60.000, 99999.9990};
 
   size_t i = 0, max = 1024;
   while (i < max) {
@@ -714,7 +714,7 @@ TEST(DayTimeDuration, checkInternalConversionForLargeValues) {
     DayTimeDuration::DurationValue dv1 =
         toAndFromMilliseconds(randDay, randHour, randMinute, randSeconds);
 
-    if (dv1.days > maxDays) {
+    if (dv1.days_ > maxDays) {
       ASSERT_THROW(DayTimeDuration(DayTimeDuration::Type::Positive, randDay,
                                    randHour, randMinute, randSeconds),
                    DurationOverflowException);
@@ -723,10 +723,10 @@ TEST(DayTimeDuration, checkInternalConversionForLargeValues) {
           DayTimeDuration(DayTimeDuration::Type::Positive, randDay, randHour,
                           randMinute, randSeconds)
               .getValues();
-      ASSERT_EQ(dv1.days, dv2.days);
-      ASSERT_EQ(dv1.hours, dv2.hours);
-      ASSERT_EQ(dv1.minutes, dv2.minutes);
-      EXPECT_NEAR(dv1.seconds, dv2.seconds, 0.001);
+      ASSERT_EQ(dv1.days_, dv2.days_);
+      ASSERT_EQ(dv1.hours_, dv2.hours_);
+      ASSERT_EQ(dv1.minutes_, dv2.minutes_);
+      EXPECT_NEAR(dv1.seconds_, dv2.seconds_, 0.001);
     }
     i++;
   }
@@ -746,14 +746,6 @@ TEST(DayTimeDuration, checkParseAndGetString) {
       "(?<negation>-?)P((?<days>\\d+)D)?(T((?<hours>\\d+)H)?((?<"
       "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
 
-  // Helper which adjusts the random seconds (decimal places) before string
-  // concatenation.
-  const auto handleSecondsStr = [](double seconds) {
-    std::ostringstream strStream;
-    strStream << std::fixed << std::setprecision(5) << seconds;
-    return strStream.str();
-  };
-
   size_t max = 256;
   for (size_t i = 0; i < max; ++i) {
     int randDay = randomDay(), randHour = randomHour(),
@@ -761,7 +753,7 @@ TEST(DayTimeDuration, checkParseAndGetString) {
     double randSec = randomSecond();
     std::string xsdDuration =
         absl::StrCat("P", randDay, "DT", randHour, "H", randMinute, "M",
-                     handleSecondsStr(randSec), "S");
+                     absl::StrFormat("%.5f", randSec), "S");
     DayTimeDuration d = DayTimeDuration::parseXsdDayTimeDuration(xsdDuration);
     auto [durationStr, durationType] = d.toStringAndType();
     auto match = ctre::match<dayTimePattern>(durationStr);
@@ -776,7 +768,7 @@ TEST(DayTimeDuration, checkParseAndGetString) {
   for (size_t i = 0; i < max; ++i) {
     double randSec = randomSecond();
     std::string xsdDuration =
-        absl::StrCat("-P0DT0H0M", handleSecondsStr(randSec), "S");
+        absl::StrCat("-P0DT0H0M", absl::StrFormat("%.5f", randSec), "S");
     DayTimeDuration d = DayTimeDuration::parseXsdDayTimeDuration(xsdDuration);
     auto [durationStr, durationType] = d.toStringAndType();
     auto match = ctre::match<dayTimePattern>(durationStr);
@@ -834,7 +826,7 @@ ad_utility::SlowRandomIntGenerator randomSign{0, 1};
 ad_utility::SlowRandomIntGenerator randomDay{0, 1048575};
 ad_utility::SlowRandomIntGenerator randomHour{0, 23};
 ad_utility::SlowRandomIntGenerator randomMinute{0, 59};
-ad_utility::RandomDoubleGenerator randomSecond{0, 59.9999};
+ad_utility::RandomDoubleGenerator randomSecond{0, 59.9990};
 
 DayTimeDuration getRandomDayTimeDuration() {
   return randomSign() == 0
