@@ -139,7 +139,8 @@ struct TransPath {
 
 class PathSearchException : public std::exception {
   std::string message_;
-public:
+
+ public:
   PathSearchException(std::string message) : message_(message) {}
   const char* what() const noexcept override { return message_.data(); }
 };

@@ -5,9 +5,12 @@
 
 #include "parser/GraphPatternOperation.h"
 
+#include <optional>
+
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "parser/ParsedQuery.h"
+#include "parser/TripleComponent.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 
@@ -78,52 +81,44 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
+  auto setVariable =
+      [](std::string parameter, const TripleComponent& object,
+         const std::optional<Variable>& existingValue) -> Variable {
+    if (!object.isVariable()) {
+      throw PathSearchException("The value " + object.toString() +
+                                " for parameter '" + parameter +
+                                "' has to be a variable");
+    }
+
+    if (existingValue.has_value()) {
+      throw PathSearchException("The parameter '" + parameter +
+                                "' has already been set to variable: '" +
+                                existingValue.value().toSparql() +
+                                "'."
+                                "New variable: '" +
+                                object.toString() + "'.");
+    }
+
+    return object.getVariable();
+  };
+
   std::string predString = predicate.getIri().toStringRepresentation();
   if (predString.ends_with("source>")) {
     sources_.push_back(std::move(object));
   } else if (predString.ends_with("target>")) {
     targets_.push_back(std::move(object));
   } else if (predString.ends_with("start>")) {
-
-    if (!object.isVariable()) {
-      throw PathSearchException("The 'start' value has to be a variable");
-    }
-
-    start_ = object.getVariable();
+    start_ = setVariable("start", object, start_);
   } else if (predString.ends_with("end>")) {
-
-    if (!object.isVariable()) {
-      throw PathSearchException("The 'end' value has to be a variable");
-    }
-
-    end_ = object.getVariable();
-  } else if (predString.ends_with(
-                 "pathColumn>")) {
-
-    if (!object.isVariable()) {
-      throw PathSearchException("The 'pathColumn' value has to be a variable");
-    }
-
-    pathColumn_ = object.getVariable();
-  } else if (predString.ends_with(
-                 "edgeColumn>")) {
-
-    if (!object.isVariable()) {
-      throw PathSearchException("The 'edgeColumn' value has to be a variable");
-    }
-
-    edgeColumn_ = object.getVariable();
-  } else if (predString.ends_with(
-                 "edgeProperty>")) {
-
-    if (!object.isVariable()) {
-      throw PathSearchException("The 'edgeProperty' values have to be variables");
-    }
-
-    edgeProperties_.push_back(object.getVariable());
-  } else if (predString.ends_with(
-                 "algorithm>")) {
-
+    end_ = setVariable("end", object, end_);
+  } else if (predString.ends_with("pathColumn>")) {
+    pathColumn_ = setVariable("pathColumn", object, pathColumn_);
+  } else if (predString.ends_with("edgeColumn>")) {
+    edgeColumn_ = setVariable("edgeColumn", object, edgeColumn_);
+  } else if (predString.ends_with("edgeProperty>")) {
+    edgeProperties_.push_back(
+        setVariable("edgeProperty", object, std::nullopt));
+  } else if (predString.ends_with("algorithm>")) {
     if (!object.isIri()) {
       throw PathSearchException("The 'algorithm' value has to be an Iri");
     }
@@ -131,16 +126,19 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
 
     if (objString.ends_with("allPaths>")) {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
-    } else if (objString.ends_with(
-                   "shortestPaths>")) {
+    } else if (objString.ends_with("shortestPaths>")) {
       algorithm_ = PathSearchAlgorithm::SHORTEST_PATHS;
     } else {
-      throw PathSearchException("Unsupported algorithm in pathSearch: " + objString + ". Supported Algorithms: "
-                                "allPaths, shortestPaths.");
+      throw PathSearchException(
+          "Unsupported algorithm in pathSearch: " + objString +
+          ". Supported Algorithms: "
+          "allPaths, shortestPaths.");
     }
   } else {
-    PathSearchException("Unsupported argument " + predString + " in PathSearch."
-                        "Supported Arguments: source, target, start, end, pathColumn, edgeColumn,"
+    PathSearchException("Unsupported argument " + predString +
+                        " in PathSearch."
+                        "Supported Arguments: source, target, start, end, "
+                        "pathColumn, edgeColumn,"
                         "edgeProperty, algorithm.");
   }
 }
@@ -153,7 +151,8 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
     std::vector<Id> sideIds;
     for (const auto& comp : side) {
       if (comp.isVariable()) {
-        throw PathSearchException("Only one variable is allowed per search side");
+        throw PathSearchException(
+            "Only one variable is allowed per search side");
       }
       auto opt = comp.toValueId(vocab);
       if (opt.has_value()) {
@@ -178,6 +177,17 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
     const Index::Vocab& vocab) const {
   auto sources = toSearchSide(sources_, vocab);
   auto targets = toSearchSide(targets_, vocab);
+
+  if (!start_.has_value()) {
+    throw PathSearchException("Missing parameter 'start' in path search.");
+  } else if (!end_.has_value()) {
+    throw PathSearchException("Missing parameter 'end' in path search.");
+  } else if (!pathColumn_.has_value()) {
+    throw PathSearchException("Missing parameter 'pathColumn' in path search.");
+  } else if (!edgeColumn_.has_value()) {
+    throw PathSearchException("Missing parameter 'edgeColumn' in path search.");
+  }
+
   return PathSearchConfiguration{
       algorithm_,          sources,        targets,
       start_.value(),      end_.value(),   pathColumn_.value(),
