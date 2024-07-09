@@ -711,7 +711,7 @@ GraphPatternOperation Visitor::visitPathQuery(
       throw parsedQuery::PathSearchException(
           "Unsupported subquery in pathSearch."
           "PathQuery may only consist of triples for configuration"
-          "And a subquery specifiying edges.");
+          "And a subquery specifying edges.");
     }
   };
 
