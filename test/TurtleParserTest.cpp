@@ -235,6 +235,20 @@ TEST(TurtleParserTest, rdfLiteral) {
   runCommonTests(CtreParser{});
 }
 
+TEST(TurtleParserTest, literalAndDatatypeToTripleComponent) {
+  auto ladttc =
+      TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent;
+  auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
+
+  ASSERT_EQ(ladttc("42.1234", fromIri(XSD_DOUBLE_TYPE)), 42.1234);
+  ASSERT_EQ(ladttc("+42.2345", fromIri(XSD_DOUBLE_TYPE)), +42.2345);
+  ASSERT_EQ(ladttc("-142.321", fromIri(XSD_DECIMAL_TYPE)), -142.321);
+  ASSERT_EQ(ladttc("-142321", fromIri(XSD_INT_TYPE)), -142321);
+  ASSERT_EQ(ladttc("+144321", fromIri(XSD_INTEGER_TYPE)), +144321);
+  ASSERT_EQ(ladttc("true", fromIri(XSD_BOOLEAN_TYPE)), true);
+  ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
+}
+
 TEST(TurtleParserTest, blankNode) {
   auto runCommonTests = [](const auto& checker) {
     checker(" _:blank1", "_:u_blank1", 9);

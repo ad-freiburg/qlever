@@ -16,11 +16,11 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
+#include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -616,17 +616,17 @@ TEST(SparqlParser, SolutionModifier) {
   // has to appear before LIMIT.
   expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
   expectSolutionModifier("TEXTLIMIT 1 LIMIT 10",
-                         m::SolutionModifier({}, {}, {}, {10, 1, 0}));
+                         m::SolutionModifier({}, {}, {}, {10, 0, 1}));
   expectSolutionModifier(
       "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var TEXTLIMIT 1 "
       "LIMIT 10 OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b - 10"}, {{"(?var != 10)"}},
-                          {VOK{Var{"?var"}, false}}, {10, 1, 2}));
+                          {VOK{Var{"?var"}, false}}, {10, 2, 1}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",
       m::SolutionModifier({Var{"?var"}}, {{"(?foo < ?bar)"}},
-                          {std::pair{"(5 - ?var)", false}}, {2, 21, 0}));
+                          {std::pair{"(5 - ?var)", false}}, {2, 0, 21}));
   expectSolutionModifier(
       "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
       m::SolutionModifier({"?var - ?bar"}, {}, {std::pair{"(5 - ?var)", false}},
@@ -860,7 +860,8 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?height > 1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
-  expectHavingConditionFails("(LANG(?x) = \"en\")");
+  expectHavingCondition("(LANG(?x) = \"en\")",
+                        m::stringMatchesFilter("(LANG(?x) = \"en\")"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
@@ -1036,7 +1037,7 @@ TEST(SparqlParser, SelectQuery) {
               m::Select({Var{"?x"}}),
               m::GraphPattern(false, {"(?x != <foo>)"},
                               m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
-          m::pq::LimitOffset({10, 5})));
+          m::pq::LimitOffset({10, 0, 5})));
 
   // ORDER BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
@@ -1288,6 +1289,7 @@ TEST(SparqlParser, Query) {
 // Some helper matchers for the `builtInCall` test below.
 namespace builtInCallTestHelpers {
 using namespace sparqlExpression;
+
 // Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
 // (via `dynamic_cast`) points to an object of type `Expression`, and that this
 // `Expression` matches the `matcher`.
@@ -1296,6 +1298,32 @@ auto matchPtr(Matcher matcher = Matcher{})
     -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
   return testing::Pointee(
       testing::WhenDynamicCastTo<const Expression&>(matcher));
+}
+
+// Return a matcher that matches a `SparqlExpression::Ptr` that stores a
+// `VariableExpression` with the given  `variable`.
+auto variableExpressionMatcher = [](const Variable& variable) {
+  return matchPtr<VariableExpression>(
+      AD_PROPERTY(VariableExpression, value, testing::Eq(variable)));
+};
+
+// Return a matcher that matches a `SparqlExpression::Ptr`that stores an
+// `Expression` (template argument), the children of which match the
+// `childrenMatchers`.
+template <typename Expression>
+auto matchPtrWithChildren(auto&&... childrenMatchers)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtr<Expression>(
+      AD_PROPERTY(SparqlExpression, childrenForTesting,
+                  testing::ElementsAre(childrenMatchers...)));
+}
+
+// Same as `matchPtrWithChildren` above, but the children are all variables.
+template <typename Expression>
+auto matchPtrWithVariables(const std::same_as<Variable> auto&... children)
+    -> ::testing::Matcher<const sparqlExpression::SparqlExpression::Ptr&> {
+  return matchPtrWithChildren<Expression>(
+      variableExpressionMatcher(children)...);
 }
 
 // Return a matcher  that checks whether a given `SparqlExpression::Ptr` points
@@ -1322,11 +1350,6 @@ auto matchNaryWithChildrenMatchers(auto makeFunction,
                               SparqlExpression, childrenForTesting,
                               ::testing::ElementsAre(childrenMatchers...))));
 }
-
-auto variableExpressionMatcher = [](const Variable& var) {
-  return matchPtr<VariableExpression>(
-      AD_PROPERTY(VariableExpression, value, testing::Eq(var)));
-};
 
 auto idExpressionMatcher = [](Id id) {
   return matchPtr<IdExpression>(
@@ -1422,7 +1445,12 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+  expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
+  expectFails("LANGMATCHES()");
+  expectFails("LANGMATCHES(?x)");
 
+  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
+                                                     Var{"?x"}, Var{"?y"}));
   expectFails("STRDT()");
   expectFails("STRDT(?x)");
   expectBuiltInCall("STRDT(?x, ?y)",
@@ -1447,7 +1475,6 @@ TEST(SparqlParser, builtInCall) {
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
-  expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
@@ -1488,6 +1515,23 @@ TEST(SparqlParser, multiplicativeExpression) {
       matchNaryWithChildrenMatchers(&makeMultiplyExpression,
                                     matchNary(&makeDivideExpression, y, z),
                                     matchUnary(&makeAbsExpression)));
+}
+
+TEST(SparqlParser, relationalExpression) {
+  Variable x{"?x"};
+  Variable y{"?y"};
+  Variable z{"?z"};
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  auto expectRelational = ExpectCompleteParse<&Parser::relationalExpression>{};
+  expectRelational("?x IN (?y, ?z)",
+                   matchPtrWithVariables<InExpression>(x, y, z));
+  expectRelational("?x NOT IN (?y, ?z)",
+                   matchNaryWithChildrenMatchers(
+                       &makeUnaryNegateExpression,
+                       matchPtrWithVariables<InExpression>(x, y, z)));
+  // TODO<joka921> Technically the other relational expressions (=, <, >, etc.)
+  // are also untested.
 }
 
 // Return a matcher for an `OperatorAndExpression`.
@@ -1659,7 +1703,7 @@ TEST(SparqlParser, updateQueryUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto updateUnsupported =
-      contains("SPARQL 1.1 Update currently not supported by QLever.");
+      contains("SPARQL 1.1 Update is currently not supported by QLever.");
 
   // Test all the cases because some functionality will be enabled shortly.
   expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
@@ -1738,6 +1782,15 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails(
       "DELETE { ?a <b> <c> } USING NAMED <foo> WHERE { <d> <e> ?a }");
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
+}
+
+TEST(SparqlParser, EmptyQuery) {
+  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
+  expectQueryFails("", emptyMatcher);
+  expectQueryFails(" ", emptyMatcher);
+  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
+  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
 }
 
 TEST(SparqlParser, GraphOrDefault) {
