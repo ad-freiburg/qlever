@@ -861,7 +861,37 @@ boost::asio::awaitable<void> Server::processQuery(
       nlohmann::basic_json resp = Server::executeUpdateQuery(
           plannedQuery.value().parsedQuery_, qet, requestTimer,
           std::move(cancellationHandle), index_);
-      co_return co_await sendJson(std::move(resp), responseStatus);
+      switch (mediaType.value()) {
+        using enum MediaType;
+        case csv:
+        case tsv:
+        case octetStream:
+        case sparqlXml:
+        case turtle: {
+          auto response = ad_utility::httpUtils::createOkResponse(
+              "id", request, mediaType.value());
+          try {
+            co_await send(std::move(response));
+            co_return;
+          } catch (const boost::system::system_error& e) {
+            if (e.code().value() == EPIPE) {
+              co_return;
+            }
+            LOG(ERROR) << "Unexpected error while sending response: "
+                       << e.what() << std::endl;
+          } catch (const std::exception& e) {
+            LOG(ERROR) << e.what() << std::endl;
+          }
+        } break;
+        case qleverJson:
+        case sparqlJson: {
+          co_return co_await sendJson(std::move(resp), responseStatus);
+        } break;
+        default:
+          // This should never happen, because we have carefully restricted the
+          // subset of mediaTypes that can occur here.
+          AD_FAIL();
+      }
     }
 
     // This actually processes the query and sends the result in the requested
