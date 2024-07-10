@@ -16,18 +16,6 @@ namespace valueIdComparators {
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 
-static constexpr std::array stringTypes{Datatype::VocabIndex,
-                                        Datatype::LocalVocabIndex};
-
-inline int orderingToInt(std::strong_ordering o) {
-  if (o == std::strong_ordering::less) {
-    return -1;
-  } else if (o == std::strong_ordering::greater) {
-    return 1;
-  }
-  return 0;
-}
-
 // This enum can be used to configure the behavior of the `compareIds` method
 // below in the case when two `Id`s have incompatible datatypes (e.g.
 // `VocabIndex` and a numeric type, or `Undefined` and any other type).
@@ -441,8 +429,8 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   auto typeA = valueIdBegin.getDatatype();
   auto typeB = valueIdEnd.getDatatype();
   AD_CONTRACT_CHECK(typeA == typeB ||
-                    (ad_utility::contains(stringTypes, typeA) &&
-                     ad_utility::contains(stringTypes, typeB)));
+                    (ad_utility::contains(Id::stringTypes_, typeA) &&
+                     ad_utility::contains(Id::stringTypes_, typeB)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
@@ -502,8 +490,7 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
   // on ValueIds already does the right thing.
   if (a.getDatatype() == Datatype::LocalVocabIndex ||
       b.getDatatype() == Datatype::LocalVocabIndex) {
-    return fromBool(
-        std::invoke(comparator, orderingToInt(a.compareQuarternary(b)), 0));
+    return fromBool(std::invoke(comparator, a, b));
   }
 
   auto visitor = [comparator]<typename A, typename B>(

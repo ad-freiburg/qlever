@@ -246,6 +246,13 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
+  IndexType lower_bound_external(
+      std::string_view word,
+      const SortLevel level = SortLevel::QUARTERNARY) const;
+
+  // _______________________________________________________________
+  IndexType upper_bound_external(
+      const string& word, const SortLevel level = SortLevel::QUARTERNARY) const;
 
   const ExternalVocabulary& getExternalVocab() const {
     return externalVocabulary_;

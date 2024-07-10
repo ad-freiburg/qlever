@@ -127,33 +127,6 @@ class ValueId {
   /// Default construction of an uninitialized id.
   ValueId() = default;
 
-  /// Equality comparison is performed directly on the underlying
-  /// representation.
-  // NOTE: (Also for the operator<=> below: These comparisons only work
-  // correctly if we only store entries in the local vocab that are NOT part of
-  // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reasons). So a join with such
-  // results will currently lead to wrong results.
-  constexpr bool operator==(const ValueId& other) const {
-    using enum Datatype;
-    auto type = getDatatype();
-    auto otherType = other.getDatatype();
-    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
-      return _bits == other._bits;
-    }
-    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() == *other.getLocalVocabIndex();
-    } else if (type == VocabIndex) {
-      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
-      return x.isContained_ && x.exactMatch_ == getVocabIndex();
-    } else if (otherType == VocabIndex) {
-      // TODO<joka921> Code duplication.
-      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
-      return x.isContained_ && x.lowerBound_ == other.getVocabIndex();
-    }
-    return _bits == other._bits;
-  }
-
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
   /// the same `Datatype` will be adjacent to each other. Unsigned index types
@@ -171,65 +144,33 @@ class ValueId {
     }
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
-    } else if (type == VocabIndex) {
-      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
-      auto lowerBound = x.exactMatch_;
-      if (lowerBound == getVocabIndex()) {
-        return x.isContained_ ? std::strong_ordering::equal
-                              : std::strong_ordering::greater;
+    }
+    auto compareVocabAndLocalVocab = [](::VocabIndex vocabIndex,
+                                        ::LocalVocabIndex localVocabIndex) {
+      auto [lowerBound, upperBound] = localVocabIndex->lowerBoundInIndex();
+      if (vocabIndex < lowerBound) {
+        return std::strong_ordering::less;
+      } else if (vocabIndex >= upperBound) {
+        return std::strong_ordering::greater;
       } else {
-        return getVocabIndex() <=> lowerBound;
+        return std::strong_ordering::equal;
       }
+    };
+    if (type == VocabIndex) {
+      return compareVocabAndLocalVocab(getVocabIndex(),
+                                       other.getLocalVocabIndex());
     } else if (otherType == VocabIndex) {
-      // TODO<joka921> Code duplication.
-      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
-      auto lowerBound = x.exactMatch_;
-      if (lowerBound == other.getVocabIndex()) {
-        return x.isContained_ ? std::strong_ordering::equal
-                              : std::strong_ordering::less;
-      } else {
-        return lowerBound <=> other.getVocabIndex();
-      }
+      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
+                                                    getLocalVocabIndex());
+      return 0 <=> inverseOrder;
     }
     return _bits <=> other._bits;
   }
 
-  constexpr std::strong_ordering compareQuarternary(
-      const ValueId& other) const {
-    using enum Datatype;
-    auto type = getDatatype();
-    auto otherType = other.getDatatype();
-    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
-      return _bits <=> other._bits;
-    }
-    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
-    } else if (type == VocabIndex) {
-      auto x = (other.getLocalVocabIndex())->lowerBoundInIndex();
-      auto lowerBound = x.lowerBound_;
-      auto upperBound = x.upperBound_;
-      auto idx = getVocabIndex();
-      if (idx < lowerBound) {
-        return std::strong_ordering::less;
-      } else if (idx >= upperBound) {
-        return std::strong_ordering::greater;
-      } else {
-        return std::strong_ordering::equal;
-      }
-    } else if (otherType == VocabIndex) {
-      // TODO<joka921> Code duplication.
-      auto x = (getLocalVocabIndex())->lowerBoundInIndex();
-      auto lowerBound = x.lowerBound_;
-      auto upperBound = x.upperBound_;
-      if (upperBound <= other.getVocabIndex()) {
-        return std::strong_ordering::less;
-      } else if (lowerBound > other.getVocabIndex()) {
-        return std::strong_ordering::greater;
-      } else {
-        return std::strong_ordering::equal;
-      }
-    }
-    return _bits <=> other._bits;
+  // For some reason which I (joka921) don't understand, we still need
+  // operator== although we already have operator <=>.
+  constexpr bool operator==(const ValueId& other) const {
+    return (*this <=> other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
