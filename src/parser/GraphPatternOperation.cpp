@@ -81,14 +81,20 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
-  auto setVariable =
-      [](std::string parameter, const TripleComponent& object,
-         const std::optional<Variable>& existingValue) -> Variable {
+  auto getVariable = [](std::string parameter, const TripleComponent& object){
     if (!object.isVariable()) {
       throw PathSearchException("The value " + object.toString() +
                                 " for parameter '" + parameter +
                                 "' has to be a variable");
     }
+    
+    return object.getVariable();
+  };
+
+  auto setVariable =
+      [&](std::string parameter, const TripleComponent& object,
+         std::optional<Variable>& existingValue) {
+    auto variable = getVariable(parameter, object);
 
     if (existingValue.has_value()) {
       throw PathSearchException("The parameter '" + parameter +
@@ -98,7 +104,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
                                 "'.");
     }
 
-    return object.getVariable();
+    existingValue = object.getVariable();
   };
 
   std::string predString = predicate.getIri().toStringRepresentation();
@@ -107,16 +113,16 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString.ends_with("target>")) {
     targets_.push_back(std::move(object));
   } else if (predString.ends_with("start>")) {
-    start_ = setVariable("start", object, start_);
+    setVariable("start", object, start_);
   } else if (predString.ends_with("end>")) {
-    end_ = setVariable("end", object, end_);
+    setVariable("end", object, end_);
   } else if (predString.ends_with("pathColumn>")) {
-    pathColumn_ = setVariable("pathColumn", object, pathColumn_);
+    setVariable("pathColumn", object, pathColumn_);
   } else if (predString.ends_with("edgeColumn>")) {
-    edgeColumn_ = setVariable("edgeColumn", object, edgeColumn_);
+    setVariable("edgeColumn", object, edgeColumn_);
   } else if (predString.ends_with("edgeProperty>")) {
     edgeProperties_.push_back(
-        setVariable("edgeProperty", object, std::nullopt));
+        getVariable("edgeProperty", object));
   } else if (predString.ends_with("algorithm>")) {
     if (!object.isIri()) {
       throw PathSearchException("The 'algorithm' value has to be an Iri");
