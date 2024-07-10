@@ -150,6 +150,12 @@ TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   std::sort(ids.begin(), ids.end());
 
   auto compareByDatatypeAndIndexTypes = [](ValueId a, ValueId b) {
+    auto typeA = a.getDatatype();
+    auto typeB = b.getDatatype();
+    if (ad_utility::contains(ValueId::stringTypes_, typeA) &&
+        ad_utility::contains(ValueId::stringTypes_, typeB)) {
+      return false;
+    }
     return a.getDatatype() < b.getDatatype();
   };
   ASSERT_TRUE(

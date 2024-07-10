@@ -53,12 +53,11 @@ TEST(AggregateExpression, max) {
   auto testMaxId = testAggregate<MaxExpression, Id>;
   testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
   testMaxId({V(7), U, V(2), V(4)}, V(7));
-  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
+  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, V(0));
 
   auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
-  // TODO<joka921> Implement correct comparison on strings
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("äpfel"));
+                lit("unfug"));
 }
 
 // ______________________________________________________________________________
@@ -72,7 +71,7 @@ TEST(AggregateExpression, min) {
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   // TODO<joka921> Implement correct comparison on strings
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("Beta"));
+                lit("alpha"));
 }
 
 // ______________________________________________________________________________

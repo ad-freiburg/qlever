@@ -132,9 +132,6 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
         ++it;
       }
       while (it != rangeEnd) {
-        if (!isMatching(*it, id)) {
-          auto x = isMatching(*it, id);
-        }
         ASSERT_TRUE(isMatching(*it, id)) << *it << ' ' << id << comparison;
         ASSERT_EQ(compareIds(*it, id, comparison), True) << *it << ' ' << id;
         ++it;
@@ -287,6 +284,10 @@ TEST_F(ValueIdComparators, IndexTypes) {
     };
 
     auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
+      if (a.getDatatype() == Datatype::LocalVocabIndex ||
+          a.getDatatype() == Datatype::VocabIndex) {
+        return comparator(a, b);
+      }
       return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
     };
 
@@ -308,9 +309,9 @@ TEST_F(ValueIdComparators, IndexTypes) {
 
   // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
   // complex....
-  // testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
+  testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
   testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
-  // testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
+  testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
   testImpl.operator()<Datatype::WordVocabIndex>(&getWordVocabIndex);
 }
 

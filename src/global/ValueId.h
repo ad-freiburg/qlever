@@ -89,6 +89,12 @@ class ValueId {
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
+  // These types store strings. When sorting IDs, then these types are still
+  // interleaved (meaning that there is a consecutive range of IDs that contains
+  // VocabIndex and LocalVocabIndex, but those two datatypes do not necessarily
+  // form contiguous ranges).
+  static constexpr std::array<Datatype, 2> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex};
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than

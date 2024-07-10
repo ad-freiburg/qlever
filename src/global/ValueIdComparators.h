@@ -16,6 +16,9 @@ namespace valueIdComparators {
 // Equal, NotEqual, GreaterEqual, GreaterThan.
 enum struct Comparison { LT, LE, EQ, NE, GE, GT };
 
+static constexpr std::array stringTypes{Datatype::VocabIndex,
+                                        Datatype::LocalVocabIndex};
+
 inline int orderingToInt(std::strong_ordering o) {
   if (o == std::strong_ordering::less) {
     return -1;
@@ -435,7 +438,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  AD_CONTRACT_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  auto typeA = valueIdBegin.getDatatype();
+  auto typeB = valueIdEnd.getDatatype();
+  AD_CONTRACT_CHECK(typeA == typeB ||
+                    (ad_utility::contains(stringTypes, typeA) &&
+                     ad_utility::contains(stringTypes, typeB)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
