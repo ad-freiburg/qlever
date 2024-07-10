@@ -201,6 +201,11 @@ class IndexImpl {
     return *globalSingletonComparator_;
   }
 
+  void setGlobalIndexAndComparatorOnlyForTesting() const {
+    globalSingletonIndex_ = this;
+    globalSingletonComparator_ = &vocab_.getCaseComparator();
+  }
+
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference (`pso_`).
   Permutation& getPermutation(Permutation::Enum p);

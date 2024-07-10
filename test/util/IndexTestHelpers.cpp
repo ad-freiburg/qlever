@@ -146,9 +146,19 @@ Index makeTestIndex(const std::string& indexBasename,
 
   FILE_BUFFER_SIZE = 1000;
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
-  std::fstream f(inputFilename, std::ios_base::out);
-  f << turtleInput.value();
-  f.close();
+  {
+    std::fstream f(inputFilename, std::ios_base::out);
+    f << turtleInput.value();
+    f.close();
+  }
+  {
+    std::fstream settingsFile(inputFilename + ".settings.json",
+                              std::ios_base::out);
+    nlohmann::json settingsJson;
+    settingsJson["prefixes-external"] = std::vector<std::string>{""};
+    settingsJson["languages-internal"] = std::vector<std::string>{""};
+    settingsFile << settingsJson.dump();
+  }
   {
     Index index = makeIndexWithTestSettings();
     // This is enough for 2 triples per block. This is deliberately chosen as a
@@ -159,6 +169,7 @@ Index makeTestIndex(const std::string& indexBasename,
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = usePatterns;
+    index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {
@@ -259,7 +270,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                          blocksizePermutations, createTextIndex)),
                      std::make_unique<QueryResultCache>()});
   }
-  return contextMap.at(key).qec_.get();
+  auto* qec = contextMap.at(key).qec_.get();
+  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  return qec;
 }
 
 // ___________________________________________________________
