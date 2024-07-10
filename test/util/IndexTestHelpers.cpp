@@ -141,7 +141,7 @@ Index makeTestIndex(const std::string& indexBasename,
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en";
+        "\"zz\"@en . <zz> <label> <zz>";
   }
 
   FILE_BUFFER_SIZE = 1000;

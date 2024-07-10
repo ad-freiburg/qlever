@@ -11,20 +11,22 @@ static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple,
                                    bool ignoreForPatterns) {
-  if (ignoreForPatterns) {
-    tripleBuffer_.emplace_back(triple, ignoreForPatterns);
-    return;
-  }
   if (!currentSubject_.has_value()) {
     // This is the first triple.
     currentSubject_ = triple[0];
+    currentSubjectCompletelyIgnored_ = ignoreForPatterns;
   } else if (triple[0] != currentSubject_) {
     // New subject.
     finishSubject(currentSubject_.value(), currentPattern_);
     currentSubject_ = triple[0];
     currentPattern_.clear();
+    currentSubjectCompletelyIgnored_ = true;
   }
   tripleBuffer_.emplace_back(triple, ignoreForPatterns);
+  if (ignoreForPatterns) {
+    return;
+  }
+  currentSubjectCompletelyIgnored_ = false;
   // Don't list predicates twice in the same pattern.
   if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
     currentPattern_.push_back(triple[1]);
@@ -54,17 +56,20 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
     it->second.count_++;
   }
 
-  auto additionalTriple =
-      std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
-  tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
+  if (!currentSubjectCompletelyIgnored_) {
+    auto additionalTriple =
+        std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
+    tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
+  }
   auto curSubject = currentSubject_.value();
   std::ranges::for_each(tripleBuffer_, [this, patternId,
                                         &curSubject](const auto& t) {
     const auto& [s, p, o] = t.triple_;
+    AD_CORRECTNESS_CHECK(s == curSubject);
     // It might happen that the `tripleBuffer_` contains different subjects
     // which are purely internal and therefore have no pattern.
-    auto actualPatternId =
-        Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId);
+    auto actualPatternId = Id::makeFromInt(
+        currentSubjectCompletelyIgnored_ ? NO_PATTERN : patternId);
     AD_CORRECTNESS_CHECK(curSubject == s || t.isInternal_);
     ospSorterTriplesWithPattern().push(std::array{s, p, o, actualPatternId});
   });
