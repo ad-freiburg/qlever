@@ -243,7 +243,8 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound_external(const string& word,
                                                const SortLevel level) const
     -> IndexType {
-  return IndexType::make(externalVocabulary_.upper_bound(word, level)._index);
+  return IndexType::make(externalVocabulary_.upper_bound(word, level)._index +
+                         internalVocabulary_.size());
 }
 
 // _____________________________________________________________________________
@@ -251,7 +252,8 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound_external(std::string_view word,
                                                const SortLevel level) const
     -> IndexType {
-  return IndexType::make(externalVocabulary_.lower_bound(word, level)._index);
+  return IndexType::make(externalVocabulary_.lower_bound(word, level)._index +
+                         internalVocabulary_.size());
 }
 
 // _____________________________________________________________________________
