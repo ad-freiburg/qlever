@@ -41,12 +41,12 @@ std::vector<Path> BinSearchWrapper::findPaths(
 
   auto edges = outgoingEdes(source);
   for (const auto& edge : edges) {
-    if (targets.contains(edge.end_) || targets.empty()) {
+    if (targets.contains(edge.end_.getBits()) || targets.empty()) {
       Path path;
       path.push_back(edge);
       paths.push_back(std::move(path));
     }
-    auto partialPaths = findPaths(Id::fromBits(edge.end_), targets);
+    auto partialPaths = findPaths(edge.end_, targets);
     for (auto path : partialPaths) {
       path.push_back(edge);
       paths.push_back(std::move(path));
@@ -77,8 +77,8 @@ std::span<const Id> BinSearchWrapper::getSources() const {
 // _____________________________________________________________________________
 Edge BinSearchWrapper::makeEdgeFromRow(size_t row) const {
   Edge edge;
-  edge.start_ = table_(row, startCol_).getBits();
-  edge.end_ = table_(row, endCol_).getBits();
+  edge.start_ = table_(row, startCol_);
+  edge.end_ = table_(row, endCol_);
 
   for (auto edgeCol : edgeCols_) {
     edge.edgeProperties_.push_back(table_(row, edgeCol));
@@ -317,10 +317,9 @@ void PathSearch::pathsToResultTable(IdTable& tableDyn,
     auto path = paths[pathIndex];
     for (size_t edgeIndex = 0; edgeIndex < path.size(); edgeIndex++) {
       auto edge = path.edges_[edgeIndex];
-      auto [start, end] = edge.toIds();
       table.emplace_back();
-      table(rowIndex, getStartIndex()) = start;
-      table(rowIndex, getEndIndex()) = end;
+      table(rowIndex, getStartIndex()) = edge.start_;
+      table(rowIndex, getEndIndex()) = edge.end_;
       table(rowIndex, getPathIndex()) = Id::makeFromInt(pathIndex);
       table(rowIndex, getEdgeIndex()) = Id::makeFromInt(edgeIndex);
 

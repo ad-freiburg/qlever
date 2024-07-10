@@ -27,24 +27,13 @@ using SearchSide = std::variant<Variable, std::vector<Id>>;
  */
 struct Edge {
   // The starting node ID.
-  uint64_t start_;
+  Id start_;
 
   // The ending node ID.
-  uint64_t end_;
+  Id end_;
 
   // Properties associated with the edge.
   std::vector<Id> edgeProperties_;
-
-  // The weight of the edge.
-  double weight_ = 1;
-
-  /**
-   * @brief Converts the edge to a pair of IDs.
-   * @return A pair of IDs representing the start and end of the edge.
-   */
-  std::pair<Id, Id> toIds() const {
-    return {Id::fromBits(start_), Id::fromBits(end_)};
-  }
 };
 
 /**
@@ -76,33 +65,6 @@ struct Path {
    * @brief Reverses the order of the edges in the path.
    */
   void reverse() { std::ranges::reverse(edges_); }
-
-  /**
-   * @brief Returns the ID of the first node in the path, if it exists.
-   * @return The ID of the first node, or std::nullopt if the path is empty.
-   */
-  std::optional<uint64_t> firstNode() const {
-    return !empty() ? std::optional<uint64_t>{edges_.front().start_}
-                    : std::nullopt;
-  }
-
-  /**
-   * @brief Returns the ID of the last node in the path, if it exists.
-   * @return The ID of the last node, or std::nullopt if the path is empty.
-   */
-  std::optional<uint64_t> lastNode() const {
-    return !empty() ? std::optional<uint64_t>{edges_.back().end_}
-                    : std::nullopt;
-  }
-
-  /**
-   * @brief Checks if the path ends with the given node ID.
-   * @param node The node ID to check.
-   * @return True if the path ends with the given node ID, false otherwise.
-   */
-  bool ends_with(uint64_t node) const {
-    return (!empty() && node == lastNode().value());
-  }
 };
 
 /**
