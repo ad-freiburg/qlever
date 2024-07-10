@@ -13,25 +13,97 @@
 #include <vector>
 
 #include "engine/Operation.h"
-#include "engine/PathSearchVisitors.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/Id.h"
 #include "index/Vocabulary.h"
 
-// We deliberately use the `std::` variants of a hash set and hash map because
-// `absl`s types are not exception safe.
-struct IdHash {
-  auto operator()(Id id) const { return std::hash<uint64_t>{}(id.getBits()); }
-};
-
-using IdToNodeMap = std::unordered_map<
-    Id, size_t, IdHash, std::equal_to<Id>,
-    ad_utility::AllocatorWithLimit<std::pair<const Id, size_t>>>;
-
-enum class PathSearchAlgorithm { ALL_PATHS, SHORTEST_PATHS };
+enum class PathSearchAlgorithm { ALL_PATHS };
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 using SearchSide = std::variant<Variable, std::vector<Id>>;
+
+/**
+ * @brief Represents an edge in the graph.
+ */
+struct Edge {
+  // The starting node ID.
+  uint64_t start_;
+
+  // The ending node ID.
+  uint64_t end_;
+
+  // Properties associated with the edge.
+  std::vector<Id> edgeProperties_;
+
+  // The weight of the edge.
+  double weight_ = 1;
+
+  /**
+   * @brief Converts the edge to a pair of IDs.
+   * @return A pair of IDs representing the start and end of the edge.
+   */
+  std::pair<Id, Id> toIds() const {
+    return {Id::fromBits(start_), Id::fromBits(end_)};
+  }
+};
+
+/**
+ * @brief Represents a path consisting of multiple edges.
+ */
+struct Path {
+  // The edges that make up the path.
+  std::vector<Edge> edges_;
+
+  /**
+   * @brief Checks if the path is empty.
+   * @return True if the path is empty, false otherwise.
+   */
+  bool empty() const { return edges_.empty(); }
+
+  /**
+   * @brief Returns the number of edges in the path.
+   * @return The number of edges in the path.
+   */
+  size_t size() const { return edges_.size(); }
+
+  /**
+   * @brief Adds an edge to the end of the path.
+   * @param edge The edge to add.
+   */
+  void push_back(const Edge& edge) { edges_.push_back(edge); }
+
+  /**
+   * @brief Reverses the order of the edges in the path.
+   */
+  void reverse() { std::ranges::reverse(edges_); }
+
+  /**
+   * @brief Returns the ID of the first node in the path, if it exists.
+   * @return The ID of the first node, or std::nullopt if the path is empty.
+   */
+  std::optional<uint64_t> firstNode() const {
+    return !empty() ? std::optional<uint64_t>{edges_.front().start_}
+                    : std::nullopt;
+  }
+
+  /**
+   * @brief Returns the ID of the last node in the path, if it exists.
+   * @return The ID of the last node, or std::nullopt if the path is empty.
+   */
+  std::optional<uint64_t> lastNode() const {
+    return !empty() ? std::optional<uint64_t>{edges_.back().end_}
+                    : std::nullopt;
+  }
+
+  /**
+   * @brief Checks if the path ends with the given node ID.
+   * @param node The node ID to check.
+   * @return True if the path ends with the given node ID, false otherwise.
+   */
+  bool ends_with(uint64_t node) const {
+    return (!empty() && node == lastNode().value());
+  }
+};
 
 /**
  * @brief Struct to hold configuration parameters for the path search.
@@ -78,9 +150,6 @@ struct PathSearchConfiguration {
       case PathSearchAlgorithm::ALL_PATHS:
         os << "Algorithm: All paths" << '\n';
         break;
-      case PathSearchAlgorithm::SHORTEST_PATHS:
-        os << "Algorithm: Shortest paths" << '\n';
-        break;
     }
 
     os << "Source: " << searchSideToString(sources_) << '\n';
@@ -116,7 +185,7 @@ class BinSearchWrapper {
   std::vector<Path> findPaths(const Id& source,
                               const std::unordered_set<uint64_t>& targets);
 
-  bool isTarget(const Id node) const;
+  std::span<const Id> getSources() const;
 
  private:
   Edge makeEdgeFromRow(size_t row) const;
@@ -130,13 +199,8 @@ class PathSearch : public Operation {
   size_t resultWidth_;
   VariableToColumnMap variableColumns_;
 
-  // The graph on which the path search is performed.
-  Graph graph_;
   // Configuration for the path search.
   PathSearchConfiguration config_;
-
-  std::vector<Id> indexToId_;
-  IdToNodeMap idToIndex_;
 
   std::optional<TreeAndCol> boundSources_;
   std::optional<TreeAndCol> boundTargets_;
@@ -210,23 +274,6 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  /**
-   * @brief Builds the graph from the given nodes and edge properties.
-   * @param startNodes A span of start nodes.
-   * @param endNodes A span of end nodes.
-   * @param edgePropertyLists A span of edge property lists.
-   */
-  void buildGraph(std::span<const Id> startNodes, std::span<const Id> endNodes,
-                  std::span<std::span<const Id>> edgePropertyLists);
-
-  /**
-   * @brief Builds the mapping from node IDs to indices.
-   * @param startNodes A span of start nodes.
-   * @param endNodes A span of end nodes.
-   */
-  void buildMapping(std::span<const Id> startNodes,
-                    std::span<const Id> endNodes);
-
   std::span<const Id> handleSearchSide(
       const SearchSide& side, const std::optional<TreeAndCol>& binding) const;
 
@@ -245,16 +292,6 @@ class PathSearch : public Operation {
   std::vector<Path> allPaths(std::span<const Id> sources,
                              std::span<const Id> targets,
                              BinSearchWrapper& binSearch) const;
-
-  /**
-   * @brief Finds the shortest paths in the graph.
-   * @return A vector of the shortest paths.
-   */
-  std::vector<Path> shortestPaths(std::span<const Id> sources,
-                                  std::span<const Id> targets) const;
-
-  std::vector<Path> reconstructPaths(uint64_t source, uint64_t target,
-                                     PredecessorMap predecessors) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

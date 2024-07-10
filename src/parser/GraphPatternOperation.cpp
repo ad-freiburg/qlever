@@ -131,13 +131,11 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
 
     if (objString.ends_with("allPaths>")) {
       algorithm_ = PathSearchAlgorithm::ALL_PATHS;
-    } else if (objString.ends_with("shortestPaths>")) {
-      algorithm_ = PathSearchAlgorithm::SHORTEST_PATHS;
     } else {
       throw PathSearchException(
           "Unsupported algorithm in pathSearch: " + objString +
           ". Supported Algorithms: "
-          "allPaths, shortestPaths.");
+          "allPaths.");
     }
   } else {
     throw PathSearchException(
