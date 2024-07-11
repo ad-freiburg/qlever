@@ -36,8 +36,8 @@ struct IdTriple {
 
   // TODO: default once we drop clang16 with libc++16
   std::strong_ordering operator<=>(const IdTriple& other) const {
-    return std::lexicographical_compare_three_way(
-        ids_.begin(), ids_.end(), other.ids_.begin(), other.ids_.end());
+    return std::tie(ids_[0], ids_[1], ids_[2]) <=>
+           std::tie(other.ids_[0], other.ids_[1], other.ids_[2]);
   }
   bool operator==(const IdTriple& other) const = default;
 
