@@ -26,8 +26,6 @@ class IteratorExpired : public std::exception {};
 template <typename T>
 class CacheableGenerator {
   using GenIterator = typename cppcoro::generator<T>::iterator;
-  using Reference = const T&;
-  using Pointer = const T*;
 
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
@@ -37,13 +35,13 @@ class CacheableGenerator {
     std::condition_variable_any conditionVariable_;
     cppcoro::generator<T> generator_;
     std::optional<GenIterator> generatorIterator_{};
-    std::vector<std::optional<T>> cachedValues_{};
+    std::vector<std::shared_ptr<T>> cachedValues_{};
     MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
     std::atomic<std::thread::id> currentOwningThread{};
     // Returns true if cache needs to shrink, accepts a parameter that tells the
-    // callback if we actually can shrink
-    std::function<bool(bool)> onSizeChanged_{};
-    std::function<void(bool)> onGeneratorFinished_{};
+    // callback if we actually can shrink, if the size changed because of a
+    // newly generated entry and the entry about to be removed or newly added.
+    std::function<bool(bool, bool, std::shared_ptr<const T>)> onSizeChanged_{};
     std::function<void(std::chrono::milliseconds)> onNextChunkComputed_{};
 
    public:
@@ -70,7 +68,7 @@ class CacheableGenerator {
         AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::NOT_STARTED);
       }
       if (index < cachedValues_.size()) {
-        if (!cachedValues_.at(index).has_value()) {
+        if (!cachedValues_.at(index)) {
           throw IteratorExpired{};
         }
         return;
@@ -101,27 +99,24 @@ class CacheableGenerator {
                                                                   start));
       }
       if (generatorIterator_.value() != generator_.end()) {
-        cachedValues_.emplace_back(std::move(*generatorIterator_.value()));
-        if (onSizeChanged_ && onSizeChanged_(true)) {
+        auto pointer =
+            std::make_shared<T>(std::move(*generatorIterator_.value()));
+        cachedValues_.push_back(pointer);
+        if (onSizeChanged_ && onSizeChanged_(true, true, std::move(pointer))) {
           tryShrinkCache();
         }
-      } else if (onGeneratorFinished_) {
-        onGeneratorFinished_(cachedValues_.empty() ||
-                             cachedValues_.at(0).has_value());
       }
       if (isMaster) {
         conditionVariable_.notify_all();
       }
     }
 
-    // TODO<RobinTF> return shared pointer instead of reference for thread
-    // safety
-    Reference getCachedValue(size_t index) const {
+    std::shared_ptr<const T> getCachedValue(size_t index) const {
       std::shared_lock lock{mutex_};
-      if (!cachedValues_.at(index).has_value()) {
+      if (!cachedValues_.at(index)) {
         throw IteratorExpired{};
       }
-      return cachedValues_.at(index).value();
+      return cachedValues_.at(index);
     }
 
     // Needs to be public in order to compile with gcc 11 & 12
@@ -141,7 +136,9 @@ class CacheableGenerator {
       conditionVariable_.notify_all();
     }
 
-    void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) noexcept {
+    void setOnSizeChanged(
+        std::function<bool(bool, bool, std::shared_ptr<const T>)>
+            onSizeChanged) noexcept {
       std::unique_lock lock{mutex_, std::defer_lock};
       if (currentOwningThread != std::this_thread::get_id()) {
         lock.lock();
@@ -149,13 +146,13 @@ class CacheableGenerator {
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
-    void setOnGeneratorFinished(
-        std::function<void(bool)> onGeneratorFinished) noexcept {
+    std::function<bool(bool, bool, std::shared_ptr<const T>)>
+    resetOnSizeChanged() noexcept {
       std::unique_lock lock{mutex_, std::defer_lock};
       if (currentOwningThread != std::this_thread::get_id()) {
         lock.lock();
       }
-      onGeneratorFinished_ = std::move(onGeneratorFinished);
+      return std::move(onSizeChanged_);
     }
 
     void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
@@ -167,28 +164,15 @@ class CacheableGenerator {
       onNextChunkComputed_ = std::move(onNextChunkComputed);
     }
 
-    void forEachCachedValue(
-        const std::invocable<const T&> auto& function) const {
-      // Don't lock again if we're calling this within a listener.
-      std::shared_lock lock{mutex_, std::defer_lock};
-      if (currentOwningThread != std::this_thread::get_id()) {
-        lock.lock();
-      }
-      for (const auto& optional : cachedValues_) {
-        if (optional.has_value()) {
-          function(optional.value());
-        }
-      }
-    }
-
     void tryShrinkCache() {
       size_t maxBound = cachedValues_.size() - 1;
       for (size_t i = 0; i < maxBound; i++) {
-        if (cachedValues_.at(i).has_value()) {
-          cachedValues_.at(i).reset();
+        auto& pointer = cachedValues_.at(i);
+        if (pointer) {
+          auto movedPointer = std::move(pointer);
           if (onSizeChanged_) {
             bool isShrinkable = i < maxBound - 1;
-            if (onSizeChanged_(isShrinkable)) {
+            if (onSizeChanged_(isShrinkable, false, std::move(movedPointer))) {
               AD_CONTRACT_CHECK(isShrinkable);
             } else {
               break;
@@ -255,11 +239,9 @@ class CacheableGenerator {
     // Need to provide post-increment operator to implement the 'Range' concept.
     void operator++(int) { (void)operator++(); }
 
-    Reference operator*() const {
+    std::shared_ptr<const T> operator*() const {
       return storage()->getCachedValue(currentIndex_);
     }
-
-    Pointer operator->() const { return std::addressof(operator*()); }
   };
 
   Iterator begin(bool isMaster = false) const {
@@ -268,17 +250,15 @@ class CacheableGenerator {
 
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
-  void forEachCachedValue(const std::invocable<const T&> auto& function) const {
-    computationStorage_->forEachCachedValue(function);
-  }
-
-  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged) noexcept {
+  void setOnSizeChanged(
+      std::function<bool(bool, bool, std::shared_ptr<const T>)>
+          onSizeChanged) noexcept {
     computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
   }
 
-  void setOnGeneratorFinished(
-      std::function<void(bool)> onGeneratorFinished) noexcept {
-    computationStorage_->setOnGeneratorFinished(std::move(onGeneratorFinished));
+  std::function<bool(bool, bool, std::shared_ptr<const T>)>
+  resetOnSizeChanged() {
+    return computationStorage_->resetOnSizeChanged();
   }
 
   void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>

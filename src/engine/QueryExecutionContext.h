@@ -24,14 +24,33 @@ class CacheValue {
  private:
   std::shared_ptr<CacheableResult> resultTable_;
   RuntimeInformation runtimeInfo_;
-  std::unique_ptr<std::atomic_bool> newlyCreated =
-      std::make_unique<std::atomic_bool>(true);
+  std::shared_ptr<std::atomic_size_t> currentSize_ =
+      std::make_shared<std::atomic_size_t>(0);
 
  public:
   explicit CacheValue(CacheableResult resultTable,
                       RuntimeInformation runtimeInfo)
       : resultTable_{std::make_shared<CacheableResult>(std::move(resultTable))},
-        runtimeInfo_{std::move(runtimeInfo)} {}
+        runtimeInfo_{std::move(runtimeInfo)} {
+    if (!resultTable_->isDataEvaluated()) {
+      auto function = resultTable_->resetOnSizeChanged();
+      // We assume this value has previously been set, otherwise this can be
+      // simplified
+      AD_CONTRACT_CHECK(function);
+      resultTable_->setOnSizeChanged(
+          [function = std::move(function), currentSize = currentSize_](
+              bool isShrinkable, bool entryAdded,
+              std::shared_ptr<const IdTable> entry) {
+            ad_utility::MemorySize size = calculateSize(*entry);
+            if (entryAdded) {
+              currentSize->fetch_add(size.getBytes());
+            } else {
+              currentSize->fetch_sub(size.getBytes());
+            }
+            return function(isShrinkable, entryAdded, std::move(entry));
+          });
+    }
+  }
 
   CacheValue(CacheValue&&) = default;
   CacheValue(const CacheValue&) = delete;
@@ -48,12 +67,16 @@ class CacheValue {
     return runtimeInfo_;
   }
 
+  static ad_utility::MemorySize calculateSize(const IdTable& idTable) {
+    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
+                                         sizeof(Id));
+  };
+
   ~CacheValue() {
     if (resultTable_ && !resultTable_->isDataEvaluated()) {
       // Clear listeners
       try {
         resultTable_->setOnSizeChanged({});
-        resultTable_->setOnGeneratorFinished({});
         resultTable_->setOnNextChunkComputed({});
       } catch (...) {
         // Should never happen. The listeners only throw assertion errors
@@ -67,16 +90,10 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue.resultTable_; tablePtr) {
-        // Avoid holding lock on initial computation (where the result will be 0
-        // anyways) to prevent thread sanitizer warning of potential deadlocks
-        // because later in the execution the cache lock is acquired after
-        // acquiring the lock of the cached generator, whereas here we would do
-        // it in the opposite order otherwise.
-        if (cacheValue.newlyCreated->exchange(false) &&
-            !tablePtr->isDataEvaluated()) {
-          return 0_B;
+        if (tablePtr->isDataEvaluated()) {
+          return calculateSize(tablePtr->idTable());
         }
-        return tablePtr->getCurrentSize();
+        return ad_utility::MemorySize::bytes(cacheValue.currentSize_->load());
       } else {
         return 0_B;
       }

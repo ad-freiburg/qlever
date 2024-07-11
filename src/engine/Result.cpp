@@ -222,33 +222,16 @@ CacheableResult::CacheableResult(ProtoResult protoResult)
       }} {}
 
 // _____________________________________________________________________________
-ad_utility::MemorySize CacheableResult::getCurrentSize() const {
-  auto calculateSize = [](const IdTable& idTable) {
-    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
-  };
-  if (storage_.isDataEvaluated()) {
-    return calculateSize(idTable());
-  } else {
-    ad_utility::MemorySize totalMemory = 0_B;
-    storage_.idTables().forEachCachedValue(
-        [&totalMemory, &calculateSize](const IdTable& idTable) {
-          totalMemory += calculateSize(idTable);
-        });
-    return totalMemory;
-  }
-}
-
-// _____________________________________________________________________________
 void CacheableResult::setOnSizeChanged(
-    std::function<bool(bool)> onSizeChanged) {
+    std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+        onSizeChanged) {
   storage_.idTables().setOnSizeChanged(std::move(onSizeChanged));
 }
 
 // _____________________________________________________________________________
-void CacheableResult::setOnGeneratorFinished(
-    std::function<void(bool)> onGeneratorFinished) {
-  storage_.idTables().setOnGeneratorFinished(std::move(onGeneratorFinished));
+std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+CacheableResult::resetOnSizeChanged() {
+  return storage_.idTables().resetOnSizeChanged();
 }
 
 // _____________________________________________________________________________
@@ -258,29 +241,23 @@ void CacheableResult::setOnNextChunkComputed(
 }
 
 // _____________________________________________________________________________
-ProtoResult CacheableResult::aggregateTable() const {
-  size_t totalRows = 0;
-  size_t numCols = 0;
-  std::optional<IdTable::Allocator> allocator;
-  storage_.idTables().forEachCachedValue(
-      [&totalRows, &numCols, &allocator](const IdTable& table) {
-        totalRows += table.numRows();
-        if (numCols == 0) {
-          numCols = table.numColumns();
-        }
-        if (!allocator.has_value()) {
-          allocator = table.getAllocator();
-        }
-      });
-  IdTable idTable{
-      numCols, std::move(allocator).value_or(makeAllocatorWithLimit<Id>(0_B))};
-  idTable.reserve(totalRows);
-  storage_.idTables().forEachCachedValue([&idTable](const IdTable& table) {
-    idTable.insertAtEnd(table.begin(), table.end());
-  });
-  return ProtoResult{
-      std::move(idTable), storage_.sortedBy_,
-      ProtoResult::SharedLocalVocabWrapper{storage_.localVocab_}};
+std::optional<ProtoResult> CacheableResult::aggregateTable() const {
+  try {
+    std::optional<IdTable> clone;
+    for (const std::shared_ptr<const IdTable>& table : storage_.idTables()) {
+      if (clone.has_value()) {
+        clone->insertAtEnd(table->begin(), table->end());
+      } else {
+        clone.emplace(table->clone());
+      }
+    }
+    AD_CORRECTNESS_CHECK(clone.has_value());
+    return ProtoResult{
+        std::move(clone).value(), storage_.sortedBy_,
+        ProtoResult::SharedLocalVocabWrapper{storage_.localVocab_}};
+  } catch (const ad_utility::IteratorExpired&) {
+    return std::nullopt;
+  }
 }
 
 // _____________________________________________________________________________
@@ -373,7 +350,7 @@ Result Result::createResultWithFallback(
     size_t index = 0;
     try {
       for (auto&& idTable : sharedResult->storage_.idTables()) {
-        co_yield idTable;
+        co_yield *idTable;
         index++;
       }
       co_return;
@@ -421,11 +398,12 @@ Result Result::createResultAsMasterConsumer(
                       auto onIteration) -> cppcoro::generator<const IdTable> {
     using ad_utility::IteratorWrapper;
     auto& generator = original->storage_.idTables();
-    for (const IdTable& idTable : IteratorWrapper{generator, true}) {
+    for (std::shared_ptr<const IdTable> idTable :
+         IteratorWrapper{generator, true}) {
       if (onIteration) {
         onIteration();
       }
-      co_yield idTable;
+      co_yield *idTable;
     }
   };
   auto sortedBy = original->storage_.sortedBy_;

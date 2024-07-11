@@ -129,31 +129,16 @@ CacheValue Operation::runComputationAndTransformToCache(
     ad_utility::Timer& timer, ComputationMode computationMode,
     const std::string& cacheKey) {
   auto& cache = _executionContext->getQueryTreeCache();
-  auto result = CacheableResult{runComputation(timer, computationMode)};
+  CacheableResult result{runComputation(timer, computationMode)};
   if (!result.isDataEvaluated()) {
-    result.setOnSizeChanged([&cache, cacheKey](bool isShrinkable) {
+    result.setOnSizeChanged([&cache, cacheKey](bool isShrinkable, bool,
+                                               std::shared_ptr<const IdTable>) {
       // TODO<RobinTF> find out how to handle pinned entries properly.
       auto sizeChange = cache.recomputeSize(cacheKey, !isShrinkable);
       if (sizeChange == ad_utility::ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE) {
         return isShrinkable;
       }
       return false;
-    });
-    result.setOnGeneratorFinished([&cache, cacheKey](bool isComplete) mutable {
-      if (isComplete) {
-        // Move key onto the stack, because transformValue indirectly clears
-        // this listener causing `cacheKey` to be erased from the heap. `cache`
-        // does not need to be stored on the stack because it is passed via
-        // reference, so the original object where `this` will be pointing to
-        // when calling `transformValue` will continue to exist even if this
-        // lambda doesn't anymore.
-        std::string key = std::move(cacheKey);
-        cache.transformValue(key, [](const CacheValue& oldValue) {
-          return CacheValue{
-              CacheableResult{oldValue.resultTable().aggregateTable()},
-              oldValue.runtimeInfo()};
-        });
-      }
     });
     result.setOnNextChunkComputed([runtimeInfo = getRuntimeInfoPointer()](
                                       std::chrono::milliseconds duration) {
@@ -174,8 +159,28 @@ Result Operation::extractFromCache(
                << resultNumCols << std::endl;
   }
 
-  // TODO<RobinTF> fix case where non-lazy request fetches cached lazy result
-  // and doesn't aggregate as this might break operations.
+  // Keep backwards compatible for operations that don't support this
+  if (!result->isDataEvaluated() &&
+      computationMode == ComputationMode::FULLY_MATERIALIZED) {
+    auto& cache = _executionContext->getQueryTreeCache();
+    auto cacheKey = getCacheKey();
+    try {
+      cache.transformValue(getCacheKey(), [](const CacheValue& oldValue) {
+        const auto& oldResult = oldValue.resultTable();
+        return CacheValue{CacheableResult{oldResult.aggregateTable().value()},
+                          oldValue.runtimeInfo()};
+      });
+    } catch (const std::bad_optional_access&) {
+      ad_utility::Timer timer{ad_utility::Timer::Started};
+      CacheableResult newResult{runComputation(timer, computationMode)};
+      cache.transformValue(
+          cacheKey, [this, &newResult, &result](const CacheValue&) {
+            CacheValue value{std::move(newResult), runtimeInfo()};
+            result = value.resultTablePtr();
+            return value;
+          });
+    }
+  }
   if (result->isDataEvaluated()) {
     return Result::createResultWithFullyEvaluatedIdTable(std::move(result));
   }

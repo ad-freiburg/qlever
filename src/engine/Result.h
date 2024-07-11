@@ -16,7 +16,6 @@
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CacheableGenerator.h"
-#include "util/MemorySize/MemorySize.h"
 
 template <typename IdTableType, typename GeneratorType>
 class ResultStorage {
@@ -186,16 +185,17 @@ class CacheableResult {
 
   explicit CacheableResult(ProtoResult protoResult);
 
-  ad_utility::MemorySize getCurrentSize() const;
+  void setOnSizeChanged(
+      std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+          onSizeChanged);
 
-  void setOnSizeChanged(std::function<bool(bool)> onSizeChanged);
-
-  void setOnGeneratorFinished(std::function<void(bool)> onGeneratorFinished);
+  std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+  resetOnSizeChanged();
 
   void setOnNextChunkComputed(
       std::function<void(std::chrono::milliseconds)> onNextChunkComputed);
 
-  ProtoResult aggregateTable() const;
+  std::optional<ProtoResult> aggregateTable() const;
 
   const IdTable& idTable() const;
 
