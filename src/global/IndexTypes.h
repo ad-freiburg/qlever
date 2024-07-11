@@ -33,17 +33,17 @@ class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
  private:
   using Base = ad_utility::triple_component::LiteralOrIri;
-  mutable CopyableAtomic<VocabIndex> lowerBoundInIndex_;
-  mutable CopyableAtomic<VocabIndex> upperBoundInIndex_;
+  mutable CopyableAtomic<VocabIndex> lowerBoundInVocab_;
+  mutable CopyableAtomic<VocabIndex> upperBoundInVocab_;
   mutable CopyableAtomic<bool> positionInVocabKnown = false;
 
  public:
-  struct BoundsInIndex {
+  struct PositionInVocab {
     VocabIndex lowerBound_;
     VocabIndex upperBound_;
   };
   using Base::Base;
-  BoundsInIndex lowerBoundInIndex() const;
+  PositionInVocab positionInVocab() const;
 
   LocalVocabEntry(const Base& base) : Base{base} {}
   LocalVocabEntry(Base&& base) noexcept : Base{std::move(base)} {}

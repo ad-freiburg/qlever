@@ -118,6 +118,7 @@ inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
   if (ad_utility::contains(
           std::array{Datatype::LocalVocabIndex, Datatype::VocabIndex},
           datatype)) {
+    // TODO<joka921> This doesn't work....
     auto lower_bound =
         std::lower_bound(begin, end, Datatype::VocabIndex, comparator);
     auto upper_bound =
@@ -426,11 +427,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  auto typeA = valueIdBegin.getDatatype();
-  auto typeB = valueIdEnd.getDatatype();
-  AD_CONTRACT_CHECK(typeA == typeB ||
-                    (ad_utility::contains(Id::stringTypes_, typeA) &&
-                     ad_utility::contains(Id::stringTypes_, typeB)));
+  auto typeBegin = valueIdBegin.getDatatype();
+  auto typeEnd = valueIdEnd.getDatatype();
+  AD_CONTRACT_CHECK(typeBegin == typeEnd ||
+                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
+                     ad_utility::contains(Id::stringTypes_, typeEnd)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:

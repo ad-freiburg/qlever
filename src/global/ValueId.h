@@ -145,9 +145,10 @@ class ValueId {
     if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
-    auto compareVocabAndLocalVocab = [](::VocabIndex vocabIndex,
-                                        ::LocalVocabIndex localVocabIndex) {
-      auto [lowerBound, upperBound] = localVocabIndex->lowerBoundInIndex();
+    auto compareVocabAndLocalVocab =
+        [](::VocabIndex vocabIndex,
+           ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
+      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
       if (vocabIndex < lowerBound) {
         return std::strong_ordering::less;
       } else if (vocabIndex >= upperBound) {

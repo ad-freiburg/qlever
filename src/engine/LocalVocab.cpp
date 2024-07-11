@@ -81,16 +81,18 @@ std::vector<LocalVocab::LiteralOrIri> LocalVocab::getAllWordsForTesting()
 
 // TODO<joka921> Consider moving the cheap case (if precomputed) into the
 // header.
-auto LocalVocabEntry::lowerBoundInIndex() const -> BoundsInIndex {
+auto LocalVocabEntry::positionInVocab() const -> PositionInVocab {
   if (positionInVocabKnown) {
-    return {lowerBoundInIndex_, upperBoundInIndex_};
+    return {lowerBoundInVocab_, upperBoundInVocab_};
   }
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
-  BoundsInIndex result;
+  PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
-  result.lowerBound_ = vocab.lower_bound_external(toStringRepresentation());
-  result.upperBound_ = vocab.upper_bound_external(toStringRepresentation());
-  lowerBoundInIndex_ = result.lowerBound_;
-  upperBoundInIndex_ = result.upperBound_;
-  return result;
+  positionInVocab.lowerBound_ =
+      vocab.lower_bound_external(toStringRepresentation());
+  positionInVocab.upperBound_ =
+      vocab.upper_bound_external(toStringRepresentation());
+  lowerBoundInVocab_ = positionInVocab.lowerBound_;
+  upperBoundInVocab_ = positionInVocab.upperBound_;
+  return positionInVocab;
 }
