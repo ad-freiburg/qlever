@@ -1372,7 +1372,8 @@ IdTable IndexImpl::scan(
     std::optional<std::reference_wrapper<const TripleComponent>> col2String,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   AD_CORRECTNESS_CHECK(!col2String.has_value() || col1String.has_value());
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   // TODO<C++23> Use the monadic operations for std::optional.
@@ -1395,15 +1396,16 @@ IdTable IndexImpl::scan(
     return IdTable{numColumns + additionalColumns.size(), allocator_};
   }
   return scan({col0Id.value(), col1Id, col2Id}, permutation, additionalColumns,
-              cancellationHandle);
+              cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     const Permutation::ScanSpecification& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,
-                                cancellationHandle);
+                                cancellationHandle, limitOffset);
 }
 
 // _____________________________________________________________________________
