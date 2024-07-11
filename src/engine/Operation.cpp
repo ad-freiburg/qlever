@@ -152,23 +152,19 @@ CacheValue Operation::runComputationAndTransformToCache(
 Result Operation::extractFromCache(
     std::shared_ptr<const CacheableResult> result, bool freshlyInserted,
     bool isRoot, ComputationMode computationMode) {
-  if (result->isDataEvaluated()) {
-    auto resultNumRows = result->idTable().size();
-    auto resultNumCols = result->idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
-  }
-
   // Keep backwards compatible for operations that don't support this
   if (!result->isDataEvaluated() &&
       computationMode == ComputationMode::FULLY_MATERIALIZED) {
     auto& cache = _executionContext->getQueryTreeCache();
     auto cacheKey = getCacheKey();
     try {
-      cache.transformValue(getCacheKey(), [](const CacheValue& oldValue) {
+      cache.transformValue(getCacheKey(), [&result](
+                                              const CacheValue& oldValue) {
         const auto& oldResult = oldValue.resultTable();
-        return CacheValue{CacheableResult{oldResult.aggregateTable().value()},
-                          oldValue.runtimeInfo()};
+        CacheValue value{CacheableResult{oldResult.aggregateTable().value()},
+                         oldValue.runtimeInfo()};
+        result = value.resultTablePtr();
+        return value;
       });
     } catch (const std::bad_optional_access&) {
       ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -180,10 +176,25 @@ Result Operation::extractFromCache(
             return value;
           });
     }
+    // TODO<RobinTF> In rare cases this assertion might be violated when
+    // the cache is cleared while we are transforming. The solution would be to
+    // replace transformValue with a solution that is part of computeOnce that
+    // calls some sort of "cache entry needs recomputing check" and replaces the
+    // value while blocking the individual entry, but not the whole cache.
+    AD_CORRECTNESS_CHECK(result->isDataEvaluated());
   }
+
+  if (result->isDataEvaluated()) {
+    auto resultNumRows = result->idTable().size();
+    auto resultNumCols = result->idTable().numColumns();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
+  }
+
   if (result->isDataEvaluated()) {
     return Result::createResultWithFullyEvaluatedIdTable(std::move(result));
   }
+
   if (freshlyInserted) {
     return Result::createResultAsMasterConsumer(
         std::move(result),
