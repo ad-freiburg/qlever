@@ -288,7 +288,8 @@ TEST(QueryPlanner, testStarTwoFree) {
 
 TEST(QueryPlanner, testFilterAfterSeed) {
   auto scan = h::IndexScanFromStrings;
-  auto qec = ad_utility::testing::getQec("<s> <r> <x>");
+  auto qec = ad_utility::testing::getQec(
+      "<s> <r> <x>, <x2>, <x3>. <s2> <r> <y1>, <y2>, <y3>.");
   h::expect(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "

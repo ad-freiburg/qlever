@@ -1419,7 +1419,7 @@ size_t IndexImpl::getResultSizeOfScan(
                                  ? col2.value().get().toValueId(getVocab())
                                  : std::nullopt;
   if (!col0Id.has_value() || !col1Id.has_value() ||
-      (col2.has_value() && !col1Id.has_value())) {
+      (col2.has_value() && !col2Id.has_value())) {
     return 0;
   }
   const Permutation& p = getPermutation(permutation);
