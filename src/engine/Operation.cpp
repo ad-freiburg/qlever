@@ -159,8 +159,10 @@ std::shared_ptr<const Result> Operation::getResult(
         result.applyLimitOffset(_limit);
         runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
       } else {
-        AD_CONTRACT_CHECK(result.idTable().numRows() ==
-                          _limit.actualSize(result.idTable().numRows()));
+        auto numRows = result.idTable().numRows();
+        auto limit = _limit._limit;
+        AD_CONTRACT_CHECK(!limit.has_value() ||
+                          numRows <= static_cast<size_t>(limit.value()));
       }
       return CacheValue{std::move(result), runtimeInfo()};
     };
@@ -341,6 +343,13 @@ void Operation::createRuntimeInfoFromEstimates(
 
   _runtimeInfo->costEstimate_ = getCostEstimate();
   _runtimeInfo->sizeEstimate_ = getSizeEstimateBeforeLimit();
+  const auto& [limit, offset, _] = getLimit();
+  if (limit.has_value()) {
+    _runtimeInfo->addDetail("limit", limit.value());
+  }
+  if (offset > 0) {
+    _runtimeInfo->addDetail("offset", offset);
+  }
 
   std::vector<float> multiplicityEstimates;
   multiplicityEstimates.reserve(numCols);
