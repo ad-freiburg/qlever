@@ -4,6 +4,8 @@
 
 #include "PathSearch.h"
 
+#include <vector>
+
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
@@ -68,7 +70,9 @@ std::span<const Id> BinSearchWrapper::getSources() const {
   while (index < startIds.size()) {
     lastId = startIds[index];
     sources.push_back(lastId);
-    while (lastId == startIds[index]) { index++; }
+    while (lastId == startIds[index]) {
+      index++;
+    }
   }
 
   return sources;
@@ -90,9 +94,7 @@ Edge BinSearchWrapper::makeEdgeFromRow(size_t row) const {
 PathSearch::PathSearch(QueryExecutionContext* qec,
                        std::shared_ptr<QueryExecutionTree> subtree,
                        PathSearchConfiguration config)
-    : Operation(qec),
-      subtree_(std::move(subtree)),
-      config_(std::move(config)) {
+    : Operation(qec), subtree_(std::move(subtree)), config_(std::move(config)) {
   AD_CORRECTNESS_CHECK(qec != nullptr);
 
   auto startCol = subtree_->getVariableColumn(config_.start_);
@@ -228,7 +230,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto sideTime = timer.msecs();
     timer.start();
 
-    auto paths = findPaths(sources, targets, binSearch);
+    auto paths = allPaths(sources, targets, binSearch);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -271,15 +273,67 @@ std::span<const Id> PathSearch::handleSearchSide(
 }
 
 // _____________________________________________________________________________
-std::vector<Path> PathSearch::findPaths(std::span<const Id> sources,
-                                        std::span<const Id> targets,
-                                        BinSearchWrapper& binSearch) const {
-  switch (config_.algorithm_) {
-    case PathSearchAlgorithm::ALL_PATHS:
-      return allPaths(sources, targets, binSearch);
-    default:
-      AD_FAIL();
+std::vector<Path> PathSearch::findPaths(
+    const Id source, const std::unordered_set<uint64_t>& targets,
+    const BinSearchWrapper& binSearch) const {
+  std::forward_list<Edge> edgeStack;
+  Path currentPath;
+  std::unordered_map<uint64_t, std::vector<Path>> pathCache;
+  std::unordered_set<uint64_t> visited;
+
+  auto addToCache =
+      [](std::unordered_map<uint64_t, std::vector<Path>>& pathCache,
+         const Path& path, size_t stopIndex) {
+        for (size_t i = 0; i < stopIndex; i++) {
+          const auto& edge = path.edges_[i];
+          auto startIndex = edge.start_.getBits();
+          pathCache.try_emplace(startIndex, std::vector<Path>());
+          pathCache[startIndex].push_back(path.startingAt(i));
+        }
+      };
+
+  visited.insert(source.getBits());
+  for (auto edge : binSearch.outgoingEdes(source)) {
+    edgeStack.push_front(std::move(edge));
   }
+
+  while (!edgeStack.empty()) {
+    auto edge = edgeStack.front();
+    edgeStack.pop_front();
+
+    while (!currentPath.empty() && edge.start_ != currentPath.end()) {
+      currentPath.pop_back();
+    }
+
+    currentPath.push_back(edge);
+
+    // TODO clean this up
+    if (pathCache.contains(edge.end_.getBits())) {
+      for (auto subPath : pathCache[edge.end_.getBits()]) {
+        if (subPath.first() == currentPath.first()) {
+          addToCache(pathCache, currentPath, currentPath.size());
+        } else {
+          auto fullPath = currentPath.concat(subPath);
+          addToCache(pathCache, fullPath, currentPath.size());
+        }
+      }
+      continue;
+    }
+
+    if (targets.empty() || targets.contains(edge.end_.getBits())) {
+      addToCache(pathCache, currentPath, currentPath.size());
+    }
+
+    if (!visited.contains(edge.end_.getBits())) {
+      for (auto outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
+        edgeStack.push_front(outgoingEdge);
+      }
+    }
+
+    visited.insert(edge.end_.getBits());
+  }
+
+  return pathCache[source.getBits()];
 }
 
 // _____________________________________________________________________________
@@ -298,8 +352,7 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
     sources = binSearch.getSources();
   }
   for (auto source : sources) {
-    for (auto path : binSearch.findPaths(source, targetSet)) {
-      std::ranges::reverse(path.edges_);
+    for (auto path : findPaths(source, targetSet, binSearch)) {
       paths.push_back(path);
     }
   }

@@ -81,19 +81,18 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
-  auto getVariable = [](std::string parameter, const TripleComponent& object){
+  auto getVariable = [](std::string parameter, const TripleComponent& object) {
     if (!object.isVariable()) {
       throw PathSearchException("The value " + object.toString() +
                                 " for parameter '" + parameter +
                                 "' has to be a variable");
     }
-    
+
     return object.getVariable();
   };
 
-  auto setVariable =
-      [&](std::string parameter, const TripleComponent& object,
-         std::optional<Variable>& existingValue) {
+  auto setVariable = [&](std::string parameter, const TripleComponent& object,
+                         std::optional<Variable>& existingValue) {
     auto variable = getVariable(parameter, object);
 
     if (existingValue.has_value()) {
@@ -121,8 +120,7 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
   } else if (predString.ends_with("edgeColumn>")) {
     setVariable("edgeColumn", object, edgeColumn_);
   } else if (predString.ends_with("edgeProperty>")) {
-    edgeProperties_.push_back(
-        getVariable("edgeProperty", object));
+    edgeProperties_.push_back(getVariable("edgeProperty", object));
   } else if (predString.ends_with("algorithm>")) {
     if (!object.isIri()) {
       throw PathSearchException("The 'algorithm' value has to be an Iri");

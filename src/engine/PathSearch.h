@@ -61,10 +61,31 @@ struct Path {
    */
   void push_back(const Edge& edge) { edges_.push_back(edge); }
 
+  void pop_back() { edges_.pop_back(); }
+
   /**
    * @brief Reverses the order of the edges in the path.
    */
   void reverse() { std::ranges::reverse(edges_); }
+
+  Path concat(const Path& other) const {
+    Path path;
+    path.edges_ = edges_;
+    path.edges_.insert(path.edges_.end(), other.edges_.begin(),
+                       other.edges_.end());
+    return path;
+  }
+
+  const Id& end() { return edges_.back().end_; }
+  const Id& first() { return edges_.front().start_; }
+
+  Path startingAt(size_t index) const {
+    std::vector<Edge> edges;
+    for (size_t i = index; i < edges_.size(); i++) {
+      edges.push_back(edges_[i]);
+    }
+    return Path{edges};
+  }
 };
 
 /**
@@ -243,9 +264,9 @@ class PathSearch : public Operation {
    * @brief Finds paths based on the configured algorithm.
    * @return A vector of paths.
    */
-  std::vector<Path> findPaths(std::span<const Id> sources,
-                              std::span<const Id> targets,
-                              BinSearchWrapper& binSearch) const;
+  std::vector<Path> findPaths(const Id source,
+                              const std::unordered_set<uint64_t>& targets,
+                              const BinSearchWrapper& binSearch) const;
 
   /**
    * @brief Finds all paths in the graph.
