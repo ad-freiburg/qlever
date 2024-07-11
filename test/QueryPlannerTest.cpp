@@ -287,31 +287,27 @@ TEST(QueryPlanner, testStarTwoFree) {
 }
 
 TEST(QueryPlanner, testFilterAfterSeed) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <r> <x>");
+  h::expect(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
-      "FILTER(?x != ?y) }");
-  QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(qet.getCacheKey(),
-            "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
-            "[0]\n|X|\nSCAN PSO with P = \"<r>\" join-column: [0] with "
-            "N16sparqlExpression10relational20RelationalExpressionILN18valueIdC"
-            "omparators10ComparisonE3EEE#column_1##column_0#");
+      "FILTER(?x != ?y) }",
+      h::Join(h::Filter("?x != ?y", scan("?x", "<r>", "?y")),
+              scan("?y", "<r>", "?z")),
+      qec);
 }
 
 TEST(QueryPlanner, testFilterAfterJoin) {
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<s> <r> <x>");
+  h::expect(
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
-      "FILTER(?x != ?z) }");
-  QueryPlanner qp = makeQueryPlanner();
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(qet.getCacheKey(),
-            "FILTER JOIN\nSCAN POS with P = \"<r>\" join-column: "
-            "[0]\n|X|\nSCAN PSO with P = \"<r>\" join-column: [0] with "
-            "N16sparqlExpression10relational20RelationalExpressionILN18valueIdC"
-            "omparators10ComparisonE3EEE#column_1##column_2#");
+      "FILTER(?x != ?z) }",
+      h::Filter("?x != ?z",
+                h::Join(scan("?x", "<r>", "?y"), scan("?y", "<r>", "?z"))),
+      qec);
 }
 
 TEST(QueryPlanner, threeVarTriples) {
@@ -565,25 +561,18 @@ TEST(QueryExecutionTreeTest, testFormerSegfaultTriFilter) {
 }
 
 TEST(QueryPlanner, testSimpleOptional) {
-  QueryPlanner qp = makeQueryPlanner();
-
-  ParsedQuery pq = SparqlParser::parseQuery(
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
       "SELECT ?a ?b \n "
-      "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}");
-  QueryExecutionTree qet = qp.createExecutionTree(pq);
-  ASSERT_EQ(qet.getCacheKey(),
-            "OPTIONAL_JOIN\nSCAN PSO with P = \"<rel1>\" join-columns: "
-            "[0]\n|X|\nSCAN PSO with P = \"<rel2>\" join-columns: [0]");
-
-  ParsedQuery pq2 = SparqlParser::parseQuery(
+      "WHERE  {?a <rel1> ?b . OPTIONAL { ?a <rel2> ?c }}",
+      h::OptionalJoin(scan("?a", "<rel1>", "?b"), scan("?a", "<rel2>", "?c")));
+  h::expect(
       "SELECT ?a ?b \n "
       "WHERE  {?a <rel1> ?b . "
-      "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b");
-  QueryExecutionTree qet2 = qp.createExecutionTree(pq2);
-  ASSERT_EQ(qet2.getCacheKey(),
-            "ORDER BY on columns:asc(1) \nOPTIONAL_JOIN\nSCAN PSO with P = "
-            "\"<rel1>\" join-columns: [0]\n|X|\nSCAN PSO with P = \"<rel2>\" "
-            "join-columns: [0]");
+      "OPTIONAL { ?a <rel2> ?c }} ORDER BY ?b",
+      h::OrderBy({{Variable{"?b"}, ::OrderBy::AscOrDesc::Asc}},
+                 h::OptionalJoin(scan("?a", "<rel1>", "?b"),
+                                 scan("?a", "<rel2>", "?c"))));
 }
 
 TEST(QueryPlanner, SimpleTripleOneVariable) {

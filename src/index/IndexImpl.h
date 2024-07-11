@@ -400,20 +400,22 @@ class IndexImpl {
   IdTable scan(
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+      std::optional<std::reference_wrapper<const TripleComponent>> col2String,
       const Permutation::Enum& permutation,
       Permutation::ColumnIndicesRef additionalColumns,
       const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
   IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
+      const Permutation::ScanSpecification& scanSpecification,
+      Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
       const ad_utility::SharedCancellationHandle& cancellationHandle) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const TripleComponent& col0,
-                             const TripleComponent& col1,
-                             const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(
+      const TripleComponent& col0, const TripleComponent& col1,
+      std::optional<std::reference_wrapper<const TripleComponent>> col2,
+      const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions

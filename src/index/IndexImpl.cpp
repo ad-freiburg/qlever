@@ -1369,41 +1369,59 @@ vector<float> IndexImpl::getMultiplicities(
 IdTable IndexImpl::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+  AD_CORRECTNESS_CHECK(!col2String.has_value() || col1String.has_value());
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
-  if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
-    size_t numColumns = col1String.has_value() ? 1 : 2;
+  // TODO<C++23> Use the monadic operations for std::optional.
+  bool elementNotFound = !col0Id.has_value();
+  size_t numColumns = 2;
+  auto handleOptional = [&elementNotFound, &numColumns,
+                         this](const auto& comp) -> std::optional<Id> {
+    if (!comp.has_value()) {
+      return std::nullopt;
+    }
+    --numColumns;
+    auto result = comp.value().get().toValueId(getVocab());
+    elementNotFound = elementNotFound || !result.has_value();
+    return result;
+  };
+  std::optional<Id> col1Id = handleOptional(col1String);
+  std::optional<Id> col2Id = handleOptional(col2String);
+  if (elementNotFound) {
     cancellationHandle->throwIfCancelled();
     return IdTable{numColumns + additionalColumns.size(), allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
+  return scan({col0Id.value(), col1Id, col2Id}, permutation, additionalColumns,
               cancellationHandle);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
+    const Permutation::ScanSpecification& scanSpecification,
+    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
-                                additionalColumns, cancellationHandle);
+  return getPermutation(p).scan(scanSpecification, additionalColumns,
+                                cancellationHandle);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
     const TripleComponent& col0, const TripleComponent& col1,
+    std::optional<std::reference_wrapper<const TripleComponent>> col2,
     const Permutation::Enum& permutation) const {
   std::optional<Id> col0Id = col0.toValueId(getVocab());
   std::optional<Id> col1Id = col1.toValueId(getVocab());
-  if (!col0Id.has_value() || !col1Id.has_value()) {
+  std::optional<Id> col2Id = col2.has_value()
+                                 ? col2.value().get().toValueId(getVocab())
+                                 : std::nullopt;
+  if (!col0Id.has_value() || !col1Id.has_value() ||
+      (col2.has_value() && !col1Id.has_value())) {
     return 0;
   }
   const Permutation& p = getPermutation(permutation);
-  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), std::nullopt});
+  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), col2Id});
 }
 
 // _____________________________________________________________________________

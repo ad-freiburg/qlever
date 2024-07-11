@@ -278,24 +278,27 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->scan(col0String, col1String, p, additionalColumns,
-                      std::move(cancellationHandle));
+  return pimpl_->scan(col0String, col1String, col2String, p, additionalColumns,
+                      cancellationHandle);
 }
 
 // ____________________________________________________________________________
 IdTable Index::scan(
-    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-    Permutation::ColumnIndicesRef additionalColumns,
+    Id col0Id, std::optional<Id> col1Id, std::optional<Id> col2Id,
+    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
-                      std::move(cancellationHandle));
+  return pimpl_->scan({col0Id, col1Id, col2Id}, p, additionalColumns,
+                      cancellationHandle);
 }
 
 // ____________________________________________________________________________
-size_t Index::getResultSizeOfScan(const TripleComponent& col0String,
-                                  const TripleComponent& col1String,
-                                  const Permutation::Enum& permutation) const {
-  return pimpl_->getResultSizeOfScan(col0String, col1String, permutation);
+size_t Index::getResultSizeOfScan(
+    const TripleComponent& col0String, const TripleComponent& col1String,
+    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
+    const Permutation::Enum& permutation) const {
+  return pimpl_->getResultSizeOfScan(col0String, col1String, col2String,
+                                     permutation);
 }
