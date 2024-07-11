@@ -152,7 +152,11 @@ class CacheableGenerator {
       if (currentOwningThread != std::this_thread::get_id()) {
         lock.lock();
       }
-      return std::move(onSizeChanged_);
+      auto result = std::move(onSizeChanged_);
+      // Explicitly empty function because not all standard libraries do that on
+      // move.
+      onSizeChanged_ = {};
+      return result;
     }
 
     void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
