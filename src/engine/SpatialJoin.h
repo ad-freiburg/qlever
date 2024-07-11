@@ -26,7 +26,12 @@ class SpatialJoin : public Operation {
 
     // this function assumes, that the complete cross product is build and
     // returned. If the SpatialJoin does not have both children yet, it just
-    // returns one as a dummy return.
+    // returns one as a dummy return. As no column gets joined in the
+    // SpatialJoin (both point columns stay in the result table in their row)
+    // each row can have at most the same number of distinct elements as it had
+    // before. If the size increases, the multiplicity increases. The assumption
+    // is, that the distinctness doesn't change and only the multiplicity
+    // changes.
     float getMultiplicity(size_t col) override;
     
     bool knownEmptyResult() override;
@@ -66,6 +71,10 @@ class SpatialJoin : public Operation {
 
     void onlyForTestingSetAddDistToResult(bool addDistToResult_) {
       addDistToResult = addDistToResult_;
+    }
+
+    const string getInternalDistanceName() {
+      return nameDistanceInternal;
     }
 
   private:

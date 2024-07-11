@@ -31,7 +31,7 @@ void print_vec(std::vector<std::string> vec) {
 
 // helper function to create a vector of strings from a result table
 std::vector<std::string> printTable(const QueryExecutionContext* qec,
-                  ResultTable* table) {
+                  const ResultTable* table) {
   std::vector<std::string> output;
   for (size_t i = 0; i < table->size(); i++) {
     std::string line = "";
@@ -354,9 +354,7 @@ void createAndTestSpatialJoin(QueryExecutionContext* qec,
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
         ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
         std::nullopt, std::nullopt);
-  // test VariableToColumnMap
-  // test sizeEstimate
-  // test multiplicities
+  
   // add first child
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -1634,27 +1632,155 @@ TEST(SpatialJoin, getCacheKeyImpl) {
 
 }  // namespace stringRepresentation
 
-namespace getMultiplicity {
+namespace getMultiplicityAndSizeEstimate {
 
-TEST(SpatialJoin, getMultiplicity){
+void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
+                                      bool testMultiplicities) {
+
+  auto multiplicitiesBeforeAllChildrenAdded = [&] (SpatialJoin* spatialJoin) {
+    for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
+      ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
+    }
+  };
+                                        
   std::string kg = createSmallDatasetWithPoints();
   
-  // test, delete below
+  // add multiplicities to test knowledge graph
   kg += "<node_1> <name> \"testing multiplicity\" .";
+  kg += "<node_1> <name> \"testing multiplicity 2\" .";
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal_;
-  ASSERT_EQ(numTriples, 16);
+  const unsigned int nrTriplesInput = 17;
+  ASSERT_EQ(numTriples, nrTriplesInput);
   
-  TripleComponent sub{Variable{"?sub"}};
-  TripleComponent obj{Variable{"?obj"}};
-  auto dummy = computeResultTest::buildIndexScan(qec, sub, "<name>", obj);
-  std::shared_ptr<Operation> op = dummy->getRootOperation();
-  std::cerr << op->getMultiplicity(0) << " " << op->getMultiplicity(1) << std::endl;
+  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
+                      "<max-distance-in-meters:10000000>",
+                      TripleComponent{Variable{"?point2"}}};
+  // ===================== build the first child ===============================
+  auto leftChild = computeResultTest::buildMediumChild(qec,
+          "?obj1", std::string{"<name>"}, "?name1",
+          "?obj1", std::string{"<hasGeometry>"}, "?geo1",
+          "?geo1", std::string{"<asWKT>"}, "?point1",
+          "?obj1", "?geo1");
+  // result table of leftChild:
+  // ?obj1    ?name1                    ?geo1       ?point1
+  // node_1   Uni Freiburg TF           geometry1   Point(7.83505 48.01267)
+  // node_1   testing multiplicity      geometry1   Point(7.83505 48.01267)
+  // node_1   testing multiplicity 2    geometry1   Point(7.83505 48.01267)
+  // node_2   Minster Freiburg          geometry2   POINT(7.85298 47.99557)
+  // node_3   London Eye                geometry3   POINT(-0.11957 51.50333)
+  // node_4   Statue of Liberty         geometry4   POINT(-74.04454 40.68925)
+  // node_5   eiffel tower              geometry5   POINT(2.29451 48.85825)
+  
+  // ======================= build the second child ============================
+  auto rightChild = computeResultTest::buildMediumChild(qec,
+          "?obj2", std::string{"<name>"}, "?name2",
+          "?obj2", std::string{"<hasGeometry>"}, "?geo2",
+          "?geo2", std::string{"<asWKT>"}, "?point2",
+          "?obj2", "?geo2");
+  // result table of rightChild is identical to leftChild, see above
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+        ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
+        std::nullopt, std::nullopt);
+  
+  // add children and test, that multiplicity is a dummy return before all
+  // children are added
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable = addLeftChildFirst ? 
+        spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+  Variable secondVariable = addLeftChildFirst ? 
+        spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+  
+  if (testMultiplicities) {
+    multiplicitiesBeforeAllChildrenAdded(spatialJoin);
+    spatialJoin->addChild(firstChild, firstVariable);
+    multiplicitiesBeforeAllChildrenAdded(spatialJoin);
+    spatialJoin->addChild(secondChild, secondVariable);
+    auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
+    auto varColsVec = copySortedByColumnIndex(varColsMap);
+    auto leftVarColMap = leftChild->getVariableColumns();
+    auto rightVarColMap = rightChild->getVariableColumns();
+    for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
+      // get variable at column 0 of the result table
+      Variable var = varColsVec.at(i).first;
+      auto varChild = leftVarColMap.find(var);
+      auto inputChild = leftChild;
+      if (varChild == leftVarColMap.end()) {
+        varChild = rightVarColMap.find(var);
+        inputChild = rightChild;
+      }
+      if (varChild == rightVarColMap.end() &&
+            var.name() == spatialJoin->getInternalDistanceName()) {
+        // as each distance is very likely to be unique (even if only after
+        // a few decimal places), no multiplicities are assumed
+        ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
+      } else {
+        auto col_index = varChild->second.columnIndex_;
+        auto multiplicityChild = inputChild->getMultiplicity(col_index);
+        auto sizeEstimateChild = inputChild->getSizeEstimate();
+        double distinctnessChild = sizeEstimateChild / multiplicityChild;
+        auto mult = spatialJoin->getMultiplicity(i);
+        auto sizeEst = spatialJoin->getSizeEstimate();
+        double distinctness = sizeEst / mult;
+        // multiplicity, distinctness and size are related via the formula
+        // size = distinctness * multiplicity. Therefore if we have two of them,
+        // we can calculate the third one. Here we check, that this formula
+        // holds true. The distinctness must not change after the operation, the
+        // other two variables can change. Therefore we check the correctness
+        // via distinctness.
+        std::cerr << "============ var: " << var.name() << " distinctness should be"
+                  << distinctnessChild << "and is " << distinctness
+                  << " sizeEstimate: " << sizeEst
+                  << "" << std::endl;
+        ASSERT_DOUBLE_EQ(distinctnessChild, distinctness);
+      }
+    }
+  } else {
+    // test getSizeEstimate
+    ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
+    spatialJoin->addChild(firstChild, firstVariable);
+    ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
+    spatialJoin->addChild(secondChild, secondVariable);
+    // the size should be 49, because both input tables have 7 rows and it is
+    // assumed, that the whole cross product is build
+    auto estimate =
+            spatialJoin->onlyForTestingGetLeftChild()->getSizeEstimate() *
+              spatialJoin->onlyForTestingGetRightChild()->getSizeEstimate();
+    ASSERT_EQ(estimate, spatialJoin->getSizeEstimate());
+  }
+  
 }
 
-}  // namespace getMultiplicity
+TEST(SpatialJoin, getMultiplicity) {
+  // test how the multiplicity works: multiplicity = size / distinct
+  // TripleComponent sub{Variable{"?sub"}};
+  // TripleComponent obj{Variable{"?obj"}};
+  // auto dummy = computeResultTest::buildIndexScan(qec, sub, "<name>", obj);
+  // std::shared_ptr<Operation> op = dummy->getRootOperation();
+  // std::cerr << op->getMultiplicity(0) << " " << op->getMultiplicity(1) << std::endl;
+  // test how multiplicity works ends
+
+  // expected behavior:
+  // assert (result table at column i has the same distinctness as the
+  // corresponding input table (via varToColMap))
+  // assert, that distinctness * multiplicity = sizeEstimate
+
+  testMultiplicitiesOrSizeEstimate(false, true);
+  testMultiplicitiesOrSizeEstimate(true, true);
+}
+
+TEST(SpatialJoin, getSizeEstimate){
+  testMultiplicitiesOrSizeEstimate(false, false);
+  testMultiplicitiesOrSizeEstimate(true, false);
+}
+
+}  // namespace getMultiplicityAndSizeEstimate
 
 // test the compute result method on the large dataset from above
 // TODO

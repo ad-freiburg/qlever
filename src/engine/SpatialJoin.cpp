@@ -139,13 +139,14 @@ size_t SpatialJoin::getCostEstimate() {
 // ____________________________________________________________________________
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
-    if (maxDist % 1000 == 2) {
-      return 500;
-    }
+    return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+    //if (maxDist % 1000 == 2) {
+    //  return 500;
+    //}
   } else {
     LOG(INFO) << "called before both children are added ============================" << std::endl;
   }
-  return 1;  // dummy return for now
+  return 1;  // dummy return if not both children are added
 }
 
 void dummy_print_var_cols_map(VariableToColumnMap vars) {
@@ -164,62 +165,40 @@ void dummy_print_col_var_map(std::vector<std::pair<Variable, ColumnIndexAndTypeI
 
 // ____________________________________________________________________________
 float SpatialJoin::getMultiplicity(size_t col) {
+  auto getDistinctness = [](std::shared_ptr<QueryExecutionTree> child,
+                              ColumnIndex ind) {
+    auto size = (u_int) child->getSizeEstimate();
+    auto multiplicity = child->getMultiplicity(ind);
+    return size / multiplicity;
+  };
+
+
   if (childLeft_ && childRight_) {
     auto varColsLeftMap = childLeft_->getVariableColumns();
     auto varColsRightMap = childRight_->getVariableColumns();
-    auto sizeLeft = childLeft_->getSizeEstimate();
-    auto sizeRight = childRight_->getSizeEstimate();
     auto varColMap = computeVariableToColumnMap();
     auto colVarMap = copySortedByColumnIndex(varColMap);
     Variable var = colVarMap.at(col).first;
     auto left = varColsLeftMap.find(var);
-    // testing start
-    LOG(INFO) << "starting debugging statements var cols left map" << std::endl;
-    dummy_print_var_cols_map(varColsLeftMap);
-    LOG(INFO) << "starting debugging statements var cols right map" << std::endl;
-    dummy_print_var_cols_map(varColsRightMap);
-    LOG(INFO) << "starting debugging statements var col map" << std::endl;
-    dummy_print_var_cols_map(varColMap);
-    LOG(INFO) << "starting debugging statements col var map" << std::endl;
-    dummy_print_col_var_map(colVarMap);
-    LOG(INFO) << "size Left " << sizeLeft << std::endl;
-    LOG(INFO) << "size right"  << sizeRight << std::endl;
-    LOG(INFO) << "Variable " << var.name() << std::endl;
-    // testing end
-    /*if (left != varColsLeftMap.end()) {
-      // multiplicity of var times size of right
-      LOG(INFO) << "=============MULTIPLICITY 1" << childLeft_->getMultiplicity(
-                    varColsLeftMap[var].columnIndex_) * sizeRight << std::endl;
-      return childLeft_->getMultiplicity(
-                        varColsLeftMap[var].columnIndex_) * sizeRight;
-    } else {
-      auto right = varColsRightMap.find(var);
-      if (right != varColsRightMap.end()) {
-        // multiplicity of right times size of left
-        LOG(INFO) << "==========MULTIPLICITY 2" << childRight_->getMultiplicity(
-                varColsRightMap[var].columnIndex_) * sizeLeft << std::endl;
-        return childRight_->getMultiplicity(
-                varColsRightMap[var].columnIndex_) * sizeLeft;
-      } else if (var.name().compare(nameDistanceInternal) == 0) {
-        LOG(INFO) << "==============MULTIPLICITY 3" << std::endl;
-        return 1;  // dummy return for now
-      } else {
-        AD_THROW("Variable does not match");
-      }
-    }*/
-    // seems like it only works, when this method returns 1, maybe it's
-    // because then the join is done on ?geometry instead of ?wkt1
-    // return sizeLeft * sizeRight; // this line is only for testing, seems to introduce mistakes elsewhere
-    // return 1;
-    // testing starting
-    if (maxDist % 1000 == 1) {
+    auto right = varColsRightMap.find(var);
+  
+    if (var.name() == nameDistanceInternal) {
+      // as each distance is very likely to be unique (even if only after
+      // a few decimal places), no multiplicities are assumed
       return 1;
+    } else if (left != varColsLeftMap.end()) {
+      auto distinctnessChild = getDistinctness(childLeft_,
+                                                left->second.columnIndex_);
+      return getSizeEstimate() / distinctnessChild;
+    } else if (right != varColsRightMap.end()) {
+      auto distinctnessChild = getDistinctness(childRight_,
+                                                right->second.columnIndex_);
+      return getSizeEstimate() / distinctnessChild;
     } else {
-      return sizeLeft * sizeRight;
+      AD_FAIL();  // this should not be reachable
     }
-    // testing ending
+    return 1;  // to prevent compiler warning
   } else {
-    LOG(INFO) << "==============MULTIPLICITY 4" << std::endl;
     return 1;  // dummy return, as the class does not have its children yet
   }
 }
