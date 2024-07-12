@@ -28,11 +28,10 @@ class DurationOverflowException : public std::exception {
 
  public:
   DurationOverflowException(std::string_view className,
-                            std::string_view datatype) {
-    message_ =
-        absl::StrCat("Overflow exception raised by ", className,
-                     ", please provide smaller values for ", datatype, ".");
-  }
+                            std::string_view datatype)
+      : message_(absl::StrCat("Overflow exception raised by ", className,
+                              ", please provide smaller values for ", datatype,
+                              ".")) {}
   [[nodiscard]] const char* what() const noexcept override {
     return message_.c_str();
   }

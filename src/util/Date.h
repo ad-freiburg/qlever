@@ -22,10 +22,9 @@ class DateOutOfRangeException : public std::exception {
   std::string message_;
 
  public:
-  DateOutOfRangeException(std::string_view name, const auto& value) {
-    message_ =
-        absl::StrCat(name, " ", value, " is out of range for a DateTime");
-  }
+  DateOutOfRangeException(std::string_view name, const auto& value)
+      : message_(absl::StrCat(name, " ", value,
+                              " is out of range for a DateTime")) {}
   [[nodiscard]] const char* what() const noexcept override {
     return message_.c_str();
   }
