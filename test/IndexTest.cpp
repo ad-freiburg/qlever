@@ -455,13 +455,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
-  auto literals = std::pair{firstLiteral, increment(lastLiteral)};
 
-  // Nothing in the external vocabulary for this test.
-  //
-  // TODO: Also have words in the external vocabulary for this test. This
-  // requires making getQec() easier to use when setting only few of the many
-  // default arguments to other values.
   auto firstIdExternalVocabulary = Id::makeFromVocabIndex(
       VocabIndex::make(index.getVocab().getInternalVocab().size()));
   auto emptyRangeExternalVocabulary =
