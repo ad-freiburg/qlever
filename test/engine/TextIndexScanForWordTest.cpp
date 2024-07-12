@@ -5,6 +5,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include "../printers/VariablePrinters.h"
 #include "../util/GTestHelpers.h"
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -29,17 +30,18 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test*"};
   TextIndexScanForWord s2{qec, Variable{"?text2"}, "test*"};
 
-  ASSERT_EQ(s1.getResultWidth(), 2);
+  ASSERT_EQ(s1.getResultWidth(), 3);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 2);
+  ASSERT_EQ(result.idTable().numColumns(), 3);
   ASSERT_EQ(result.idTable().size(), 3);
   s2.getExternallyVisibleVariableColumns();
 
   using enum ColumnIndexAndTypeInfo::UndefStatus;
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
-      {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}}};
+      {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
+      {Variable{"?ql_score_text2_fixedEntity_test_42_"}, {2, AlwaysDefined}}};
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 
@@ -60,10 +62,10 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   TextIndexScanForWord s1{qec, Variable{"?text1"}, "test"};
 
-  ASSERT_EQ(s1.getResultWidth(), 1);
+  ASSERT_EQ(s1.getResultWidth(), 2);
 
   auto result = s1.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 1);
+  ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 2);
 
   ASSERT_EQ("\"he failed the test\"",
@@ -73,10 +75,10 @@ TEST(TextIndexScanForWord, WordScanBasic) {
 
   TextIndexScanForWord s2{qec, Variable{"?text1"}, "testing"};
 
-  ASSERT_EQ(s2.getResultWidth(), 1);
+  ASSERT_EQ(s2.getResultWidth(), 2);
 
   result = s2.computeResultOnlyForTesting();
-  ASSERT_EQ(result.idTable().numColumns(), 1);
+  ASSERT_EQ(result.idTable().numColumns(), 2);
   ASSERT_EQ(result.idTable().size(), 1);
 
   ASSERT_EQ("\"testing can help\"",

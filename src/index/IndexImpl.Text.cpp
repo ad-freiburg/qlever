@@ -736,10 +736,9 @@ IdTable IndexImpl::readWordCl(
         return Id::makeFromWordVocabIndex(WordVocabIndex::make(id));
       });
   std::ranges::transform(
-      readFreqComprList<Score>(
-          tbmd._cl._nofElements, tbmd._cl._startScorelist,
-          static_cast<size_t>(tbmd._cl._lastByte + 1 -
-                              tbmd._cl._startScorelist)),
+      readFreqComprList<Score>(tbmd._cl._nofElements, tbmd._cl._startScorelist,
+                               static_cast<size_t>(tbmd._cl._lastByte + 1 -
+                                                   tbmd._cl._startScorelist)),
       idTable.getColumn(2).begin(), &Id::makeFromInt);
   return idTable;
 }
