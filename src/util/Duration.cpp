@@ -7,7 +7,6 @@
 #include <ctre.hpp>
 #include <iomanip>
 
-#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "global/Constants.h"
 #include "util/CtreHelpers.h"
@@ -33,7 +32,7 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
   if (hours != 0 || minutes != 0 || seconds != 0.00) {
     absl::StrAppend(&str, "T");
   } else {
-    if (str[str.length() - 1] == 'P') {
+    if (days == 0) {
       absl::StrAppend(&str, std::string_view("T0S"));
     }
     return {str, XSD_DAYTIME_DURATION_TYPE};
@@ -49,7 +48,7 @@ std::pair<std::string, const char*> DayTimeDuration::toStringAndType() const {
     return {str, XSD_DAYTIME_DURATION_TYPE};
   }
 
-  // Handle the seconds with it's decimal places properly.
+  // Handle the seconds with its decimal places properly.
   double dIntPart;
   if (std::modf(seconds, &dIntPart) == 0.0) {
     absl::StrAppend(&str, static_cast<int>(seconds), std::string_view("S"));
@@ -68,7 +67,7 @@ DayTimeDuration DayTimeDuration::parseXsdDayTimeDuration(
       "minutes>\\d+)M)?((?<seconds>\\d+(\\.\\d+)?)S)?)?";
 
   // Try to match the given pattern with the provided string. If the matching
-  // procedure fails, raise DurationParseException (for Trutle Parser).
+  // procedure fails, raise DurationParseException (for Turtle Parser).
   auto match = ctre::match<dayTimePattern>(dayTimeDurationStr);
   if (!match) {
     throw DurationParseException{

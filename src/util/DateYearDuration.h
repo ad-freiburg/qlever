@@ -12,7 +12,7 @@
 #include "util/NBitInteger.h"
 
 // This class either encodes a `Date`, a year that is outside the range that
-// can be currently represented by the year class [-9999, 9999] or a
+// can be currently represented by the year class [-9999, 9999], or a
 // `DayTimeDuration` object (more information in Duration.h). The underlying
 // format is as follows (starting from the most significant bit):
 // - 5 bits (or 14 bits with DayTimeDuration) that are always zero and ignored

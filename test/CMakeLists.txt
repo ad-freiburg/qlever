@@ -252,6 +252,8 @@ addLinkAndDiscoverTest(HttpUtilsTest util http)
 
 addLinkAndDiscoverTest(DateYearDurationTest util parser)
 
+addLinkAndDiscoverTest(DurationTest util)
+
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
 addLinkAndDiscoverTest(ValueIdTest util)

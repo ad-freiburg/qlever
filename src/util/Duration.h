@@ -2,7 +2,7 @@
 //                  Chair of Algorithms and Data Structures
 //  Author: Hannes Baumann <baumannh@informatik.uni-freiburg.de>
 //
-//  Tests for this class can be found in DateYearDurationTest.cpp
+//  Tests for this class can be found in DurationTest.cpp
 
 #ifndef QLEVER_DURATION_H
 #define QLEVER_DURATION_H
@@ -19,6 +19,8 @@
 #include <string>
 #include <string_view>
 
+#include "absl/strings/str_cat.h"
+
 //______________________________________________________________________________
 class DurationOverflowException : public std::exception {
  private:
@@ -27,10 +29,9 @@ class DurationOverflowException : public std::exception {
  public:
   DurationOverflowException(std::string_view className,
                             std::string_view datatype) {
-    std::stringstream s;
-    s << "Overflow exception raised by " << className
-      << ", please provide smaller values for " << datatype << ".";
-    message_ = std::move(s).str();
+    message_ =
+        absl::StrCat("Overflow exception raised by ", className,
+                     ", please provide smaller values for ", datatype, ".");
   }
   [[nodiscard]] const char* what() const noexcept override {
     return message_.c_str();
@@ -68,15 +69,15 @@ class DurationParseException : public std::runtime_error {
 // normalized over the conversion procedure.
 class DayTimeDuration {
  public:
-  // seconds, minutes, hours (multiplier for conversion to milliseconds)
+  // seconds, minutes, hours and days (multiplier for conversion to
+  // milliseconds)
   static constexpr int secondMultiplier = 1000;
   static constexpr int minuteMultiplier = 60 * secondMultiplier;
   static constexpr int hourMultiplier = 60 * minuteMultiplier;
+  static constexpr int dayMultiplier = 24 * hourMultiplier;
 
-  // days
   // The maxDays value of 1048575 corresponds to approximately 2870 years.
   static constexpr unsigned long maxDays = 1048575;
-  static constexpr int dayMultiplier = 24 * hourMultiplier;
 
   // With the given specifications above, the total number of milliseconds we
   // have to store at the limit (days -> milliseconds) + (hours -> milliseconds)
@@ -92,12 +93,23 @@ class DayTimeDuration {
   // totalMilliseconds_.
   static constexpr uint8_t numMillisecondBits =
       std::bit_width(boundTotalMilliseconds * 2);
-
-  // numUnusedBits is 16
   static constexpr uint8_t numUnusedBits = 64 - numMillisecondBits;
+  static_assert(numUnusedBits == 16,
+                "The number of unused bits for Duration should be 16");
 
  private:
-  // The actual duration in milliseconds is stored here.
+  // Given that totalMilliseconds_ is of type uint64_t, to correctly store
+  // the provided values here, even for durations smaller zero, they must be
+  // positive. This is achieved by adding boundTotalMilliseconds to the actual
+  // number of milliseconds for the respective duration values, thus all values,
+  // also negative ones, get shifted into the positive range.
+  //
+  // Initial range: -boundTotalMilliseconds to +boundTotalMilliseconds
+  // shift by adding boundTotalMilliSeconds (line 170-171)
+  // => Shifted range: 0 to 2 * boundTotalMilliseconds (storable as unsigned)
+  //
+  // To retrieve the initial number of milliseconds, we just subtract
+  // boundTotalMilliseconds from totalMilliSeconds_. (line 181-182)
   uint64_t totalMilliseconds_ : numMillisecondBits = 0;
 
   // The value of unusedBits_ is relevant w.r.t. to the DateYearOrDuration class
@@ -131,10 +143,7 @@ class DayTimeDuration {
   constexpr DayTimeDuration(Type signType = Type::Positive, int days = 0,
                             int hours = 0, int minutes = 0,
                             double seconds = 0.00) {
-    AD_CONTRACT_CHECK(days >= 0 && hours >= 0 && minutes >= 0 &&
-                      seconds >= 0.00);
-    int sign = signType == Type::Positive ? 1 : -1;
-    setValues(days, hours, minutes, seconds, sign);
+    setValues(days, hours, minutes, seconds, signType);
   }
 
   // ___________________________________________________________________________
@@ -146,8 +155,10 @@ class DayTimeDuration {
 
   //____________________________________________________________________________
   constexpr void setValues(int days, int hours, int minutes, double seconds,
-                           int sign) {
-    AD_CONTRACT_CHECK(sign == 1 || sign == -1);
+                           Type signType) {
+    AD_CONTRACT_CHECK(days >= 0 && hours >= 0 && minutes >= 0 &&
+                      seconds >= 0.00);
+    int sign = signType == Type::Positive ? 1 : -1;
     auto totalMilliseconds =
         static_cast<long long>(days) * dayMultiplier +
         static_cast<long long>(hours) * hourMultiplier +
@@ -169,9 +180,15 @@ class DayTimeDuration {
     // reuse the remainder (updated totalMilliseconds).
     auto totalMilliseconds = static_cast<long long>(totalMilliseconds_) -
                              static_cast<long long>(boundTotalMilliseconds);
-    if (!isPositive()) {
-      totalMilliseconds = -totalMilliseconds;
-    }
+
+    // Given the current duration logic, the sign of a duration is defined by
+    // its Type and not its values, hence the respective values should be always
+    // positive (days, hours, minutes, seconds).
+    // -> totalMilliseconds range is symmetric to 0, thus if
+    // totalMilliseconds < 0, just map it to it's positive value.
+    totalMilliseconds =
+        totalMilliseconds < 0 ? -totalMilliseconds : totalMilliseconds;
+
     auto numDays = totalMilliseconds / dayMultiplier;
     totalMilliseconds -= numDays * dayMultiplier;
     auto numHours = totalMilliseconds / hourMultiplier;

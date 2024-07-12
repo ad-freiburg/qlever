@@ -4,7 +4,6 @@
 
 #include "util/Date.h"
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
 #include "global/Constants.h"

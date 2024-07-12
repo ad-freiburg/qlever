@@ -5,6 +5,8 @@
 #ifndef QLEVER_DATE_H
 #define QLEVER_DATE_H
 
+#include <absl/strings/str_cat.h>
+
 #include <bit>
 #include <cmath>
 #include <cstdint>
@@ -21,9 +23,8 @@ class DateOutOfRangeException : public std::exception {
 
  public:
   DateOutOfRangeException(std::string_view name, const auto& value) {
-    std::stringstream s;
-    s << name << " " << value << " is out of range for a DateTime";
-    message_ = std::move(s).str();
+    message_ =
+        absl::StrCat(name, " ", value, " is out of range for a DateTime");
   }
   [[nodiscard]] const char* what() const noexcept override {
     return message_.c_str();
@@ -140,6 +141,8 @@ class Date {
   static constexpr uint8_t numUnusedBits =
       64 - numBitsYear - numBitsMonth - numBitsDay - numBitsHour -
       numBitsMinute - numBitsSecond - numBitsTimeZone;
+  static_assert(numUnusedBits == 7,
+                "The number of unused bits for Date should be 7.");
 
  private:
   // TODO<joka921> The details of bitfields are implementation-specific, but

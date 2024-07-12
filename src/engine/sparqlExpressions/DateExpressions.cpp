@@ -51,25 +51,27 @@ inline auto extractDay = [](std::optional<DateYearOrDuration> d) {
 //______________________________________________________________________________
 inline auto extractStrTimezone =
     [](std::optional<DateYearOrDuration> d) -> IdOrLiteralOrIri {
-  if (d.has_value()) {
-    auto timezoneStr = d.value().getStrTimezone();
-    return LiteralOrIri{Literal::literalWithNormalizedContent(
-        asNormalizedStringViewUnsafe(timezoneStr))};
+  // TODO<C++23> Use the monadic operations for std::optional
+  if (!d.has_value()) {
+    return Id::makeUndefined();
   }
-  return Id::makeUndefined();
+  auto timezoneStr = d.value().getStrTimezone();
+  return LiteralOrIri{Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(timezoneStr))};
 };
 
 //______________________________________________________________________________
 inline auto extractTimezoneDurationFormat =
     [](std::optional<DateYearOrDuration> d) {
-      if (d.has_value()) {
-        const auto& optDayTimeDuration =
-            DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
-        return optDayTimeDuration.has_value()
-                   ? Id::makeFromDate(optDayTimeDuration.value())
-                   : Id::makeUndefined();
+      // TODO<C++23> Use the monadic operations for std::optional
+      if (!d.has_value()) {
+        return Id::makeUndefined();
       }
-      return Id::makeUndefined();
+      const auto& optDayTimeDuration =
+          DateYearOrDuration::xsdDayTimeDurationFromDate(d.value());
+      return optDayTimeDuration.has_value()
+                 ? Id::makeFromDate(optDayTimeDuration.value())
+                 : Id::makeUndefined();
     };
 
 //______________________________________________________________________________

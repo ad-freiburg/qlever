@@ -4,7 +4,6 @@
 
 #include "util/DateYearDuration.h"
 
-#include <absl/strings/str_cat.h>
 #include <absl/strings/str_format.h>
 
 #include "util/CtreHelpers.h"
@@ -217,10 +216,10 @@ DateYearOrDuration::xsdDayTimeDurationFromDate(
     Date::TimeZone timezone = dateOrLargeYear.getDateUnchecked().getTimeZone();
     if (std::holds_alternative<int>(timezone)) {
       int hour = std::get<int>(timezone);
-      return hour < 0 ? DateYearOrDuration{DayTimeDuration(
-                            DayTimeDuration::Type::Negative, 0, -hour, 0, 0.0)}
-                      : DateYearOrDuration{DayTimeDuration(
-                            DayTimeDuration::Type::Positive, 0, hour, 0, 0.0)};
+      auto type = hour < 0 ? DayTimeDuration::Type::Negative
+                           : DayTimeDuration::Type::Positive;
+      return DateYearOrDuration{
+          DayTimeDuration(type, 0, std::abs(hour), 0, 0.0)};
     } else if (std::holds_alternative<Date::TimeZoneZ>(timezone)) {
       return DateYearOrDuration{DayTimeDuration{}};
     } else {
