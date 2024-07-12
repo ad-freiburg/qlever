@@ -13,8 +13,8 @@
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
   std::optional<uint64_t> _limit;
-  std::optional<uint64_t> textLimit_ = std::nullopt;
   uint64_t _offset = 0;
+  std::optional<uint64_t> textLimit_ = std::nullopt;
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
@@ -51,6 +51,11 @@ struct LimitOffsetClause {
     AD_CORRECTNESS_CHECK(upper >= offset);
     return upper - offset;
   }
+
+  // Return true iff there is neither a limit nor an offset clause.
+  // Note: The `TEXTLIMIT` is ignored for this function, as it is irrelevant
+  // almost always.
+  bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
 
   bool operator==(const LimitOffsetClause&) const = default;
 };

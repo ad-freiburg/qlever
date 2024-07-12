@@ -236,6 +236,8 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   totalTime_ += timeForLimit;
   actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
                              fullResultIsNotCached);
+  actualOperation->eraseDetail("limit");
+  actualOperation->eraseDetail("offset");
   addDetail("executed-implicitly-during-query-export", !fullResultIsNotCached);
   sizeEstimate_ = l.actualSize(sizeEstimate_);
 

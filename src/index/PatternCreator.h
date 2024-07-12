@@ -176,6 +176,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
+  PatternID finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
