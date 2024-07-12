@@ -1491,7 +1491,7 @@ TEST(SpatialJoin, variableToColumnMap) {
 namespace knownEmptyResult {
 
 void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
-      bool addLeftChildFirst) {
+          bool addLeftChildFirst) {
   auto checkEmptyResult = [](SpatialJoin* spatialJoin_, bool shouldBeEmpty) {
     ASSERT_EQ(spatialJoin_->knownEmptyResult(), shouldBeEmpty);
   };
@@ -1563,6 +1563,46 @@ TEST(SpatialJoin, knownEmpyResult) {
 }
 
 } // namespace knownEmptyResult
+
+namespace resultSortedOn {
+
+TEST(SpatialJoin, resultSortedOn) {
+  std::string kg = createSmallDatasetWithPoints();
+
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  ASSERT_EQ(numTriples, 15);
+  
+  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
+                      "<max-distance-in-meters:10000000>",
+                      TripleComponent{Variable{"?point2"}}};
+  
+  TripleComponent subj1{Variable{"?geometry1"}};
+  TripleComponent obj1{Variable{"?point1"}};
+  TripleComponent subj2{Variable{"?geometry2"}};
+  TripleComponent obj2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+          qec, subj1, "<asWKT>", obj1);
+  auto rightChild = computeResultTest::buildIndexScan(
+          qec, subj2, "<asWKT>", obj2);
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
+      std::nullopt, std::nullopt);
+
+  // add children and test, that multiplicity is a dummy return before all
+  // children are added
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
+  spatialJoin->addChild(leftChild, obj1.getVariable());
+  ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
+  spatialJoin->addChild(rightChild, obj2.getVariable());
+  ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
+}
+
+}  // namespace resultSortedOn
 
 namespace stringRepresentation {
 
@@ -1641,6 +1681,12 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
       ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
     }
+  };
+
+  auto assert_double_with_bounds = [](double value1, double value2) {
+    // ASSERT_DOUBLE_EQ did not work properly
+    ASSERT_TRUE(value1 * 0.99999 < value2);
+    ASSERT_TRUE(value1 * 1.00001 > value2);
   };
                                         
   std::string kg = createSmallDatasetWithPoints();
@@ -1734,11 +1780,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
         // holds true. The distinctness must not change after the operation, the
         // other two variables can change. Therefore we check the correctness
         // via distinctness.
-        std::cerr << "============ var: " << var.name() << " distinctness should be"
-                  << distinctnessChild << "and is " << distinctness
-                  << " sizeEstimate: " << sizeEst
-                  << "" << std::endl;
-        ASSERT_DOUBLE_EQ(distinctnessChild, distinctness);
+        assert_double_with_bounds(distinctnessChild, distinctness);
       }
     }
   } else {
@@ -1755,6 +1797,88 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_EQ(estimate, spatialJoin->getSizeEstimate());
   }
   
+  {  // new block for hard coded testing
+  // ======================== hard coded test ================================
+  // here the child are only index scans, as they are perfectly predictable in
+  // relation to size and multiplicity estimates
+  std::string kg = createSmallDatasetWithPoints();
+
+  // add multiplicities to test knowledge graph
+  kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
+  kg += "<geometry1> <asWKT> \"POINT(7.54321 48.54321)\".";
+
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto numTriples = qec->getIndex().numTriples().normal_;
+  const unsigned int nrTriplesInput = 17;
+  ASSERT_EQ(numTriples, nrTriplesInput);
+  
+  auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
+                      "<max-distance-in-meters:10000000>",
+                      TripleComponent{Variable{"?point2"}}};
+  
+  TripleComponent subj1{Variable{"?geometry1"}};
+  TripleComponent obj1{Variable{"?point1"}};
+  TripleComponent subj2{Variable{"?geometry2"}};
+  TripleComponent obj2{Variable{"?point2"}};
+  auto leftChild = computeResultTest::buildIndexScan(
+          qec, subj1, "<asWKT>", obj1);
+  auto rightChild = computeResultTest::buildIndexScan(
+          qec, subj2, "<asWKT>", obj2);
+  
+  std::shared_ptr<QueryExecutionTree> spatialJoinOperation = 
+      ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
+      std::nullopt, std::nullopt);
+
+  // add children and test, that multiplicity is a dummy return before all
+  // children are added
+  std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
+  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto firstChild = addLeftChildFirst ? leftChild : rightChild;
+  auto secondChild = addLeftChildFirst ? rightChild : leftChild;
+  Variable firstVariable = addLeftChildFirst ? 
+      spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+  Variable secondVariable = addLeftChildFirst ? 
+      spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+  
+  // each of the input child result tables should look like this:
+  // ?geometry           ?point
+  // <geometry1>         POINT(7.83505 48.01267)
+  // <geometry1>         POINT(7.12345 48.12345)
+  // <geometry1>         POINT(7.54321 48.54321)
+  // <geometry2>         POINT(7.85298 47.99557)
+  // <geometry3>         POINT(-0.11957 51.50333)
+  // <geometry4>         POINT(-74.04454 40.68925)
+  // <geometry5>         POINT(2.29451 48.85825)
+  // multiplicity of ?geometry: 1,4   multiplicity of ?point: 1   size: 7
+
+  if (testMultiplicities) {
+    multiplicitiesBeforeAllChildrenAdded(spatialJoin);
+    spatialJoin->addChild(firstChild, firstVariable);
+    multiplicitiesBeforeAllChildrenAdded(spatialJoin);
+    spatialJoin->addChild(secondChild, secondVariable);
+    auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
+    Variable distance{spatialJoin->getInternalDistanceName()};
+
+    assert_double_with_bounds(spatialJoin->getMultiplicity(
+                          varColsMap[subj1.getVariable()].columnIndex_), 9.8);
+    assert_double_with_bounds(spatialJoin->getMultiplicity(
+                          varColsMap[obj1.getVariable()].columnIndex_), 7.0);
+    assert_double_with_bounds(spatialJoin->getMultiplicity(
+                          varColsMap[subj2.getVariable()].columnIndex_), 9.8);
+    assert_double_with_bounds(spatialJoin->getMultiplicity(
+                          varColsMap[obj2.getVariable()].columnIndex_), 7.0);
+    assert_double_with_bounds(spatialJoin->getMultiplicity(
+                          varColsMap[distance].columnIndex_), 1);
+  } else {
+    ASSERT_EQ(leftChild->getSizeEstimate(), 7);
+    ASSERT_EQ(rightChild->getSizeEstimate(), 7);
+    spatialJoin->addChild(firstChild, firstVariable);
+    spatialJoin->addChild(secondChild, secondVariable);
+    ASSERT_EQ(spatialJoin->getSizeEstimate(), 49);
+  }
+  }
+
 }
 
 TEST(SpatialJoin, getMultiplicity) {

@@ -225,7 +225,11 @@ bool SpatialJoin::knownEmptyResult() {
 
 // ____________________________________________________________________________
 vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
-  return {};  // dummy return for now
+  // the baseline (with O(n^2) runtime) can have some sorted columns, but as
+  // the "true" computeResult method will use bounding boxes, which can't
+  // guarantee that a sorted column stays sorted, this will return no sorted
+  // column in all cases.
+  return {};
 }
 
 long long SpatialJoin::getMaxDist() {
