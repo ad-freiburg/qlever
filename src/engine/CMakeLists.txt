@@ -13,5 +13,7 @@ add_library(engine
         VariableToColumnMap.cpp ExportQueryExecutionTrees.cpp
         CartesianProductJoin.cpp TextIndexScanForWord.cpp TextIndexScanForEntity.cpp
         TextLimit.cpp
-        idTable/CompressedExternalIdTable.h)
+        idTable/CompressedExternalIdTable.h
+        LocalVocabEntry.cpp
+        LocalVocabEntry.h)
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)

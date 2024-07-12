@@ -95,6 +95,13 @@ class ValueId {
   // form contiguous ranges).
   static constexpr std::array<Datatype, 2> stringTypes_{
       Datatype::VocabIndex, Datatype::LocalVocabIndex};
+  // Assert, that the `stringTypes_` are directly adjacent, this is required
+  // to make the comparison of IDs in `ValueIdComparators.h` work.
+  static constexpr Datatype maxStringType_ = std::ranges::max(stringTypes_);
+  static constexpr Datatype minStringType_ = std::ranges::min(stringTypes_);
+  static_assert(static_cast<size_t>(maxStringType_) -
+                    static_cast<size_t>(minStringType_) + 1 ==
+                stringTypes_.size());
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than

@@ -148,6 +148,10 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+
+  // Global static pointers to the currently active index and comparator.
+  // Those are used to compare LocalVocab entries with each other as well as
+  // with Vocab entries.
   static inline const IndexImpl* globalSingletonIndex_ = nullptr;
   static inline const TripleComponentComparator* globalSingletonComparator_ =
       nullptr;
