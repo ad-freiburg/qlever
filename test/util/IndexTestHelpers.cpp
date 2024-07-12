@@ -155,8 +155,10 @@ Index makeTestIndex(const std::string& indexBasename,
     std::fstream settingsFile(inputFilename + ".settings.json",
                               std::ios_base::out);
     nlohmann::json settingsJson;
-    settingsJson["prefixes-external"] = std::vector<std::string>{""};
-    settingsJson["languages-internal"] = std::vector<std::string>{""};
+    if (!createTextIndex) {
+      settingsJson["prefixes-external"] = std::vector<std::string>{""};
+      settingsJson["languages-internal"] = std::vector<std::string>{""};
+    }
     settingsFile << settingsJson.dump();
   }
   {
