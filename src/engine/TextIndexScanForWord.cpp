@@ -20,9 +20,10 @@ Result TextIndexScanForWord::computeResult(
 
   if (!isPrefix_) {
     IdTable smallIdTable{getExecutionContext()->getAllocator()};
-    smallIdTable.setNumColumns(1);
+    smallIdTable.setNumColumns(2);
     smallIdTable.resize(idTable.numRows());
     std::ranges::copy(idTable.getColumn(0), smallIdTable.getColumn(0).begin());
+    std::ranges::copy(idTable.getColumn(2), smallIdTable.getColumn(1).begin());
 
     return {std::move(smallIdTable), resultSortedOn(), LocalVocab{}};
   }
@@ -46,12 +47,13 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
     addDefinedVar(textRecordVar_.getMatchingWordVariable(
         std::string_view(word_).substr(0, word_.size() - 1)));
   }
+  addDefinedVar(textRecordVar_.getScoreVariable(word_));
   return vcmap;
 }
 
 // _____________________________________________________________________________
 size_t TextIndexScanForWord::getResultWidth() const {
-  return 1 + (isPrefix_ ? 1 : 0);
+  return 2 + (isPrefix_ ? 1 : 0);
 }
 
 // _____________________________________________________________________________
