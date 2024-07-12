@@ -294,8 +294,8 @@ TEST(QueryPlanner, testFilterAfterSeed) {
       "SELECT ?x ?y ?z WHERE {"
       "?x <r> ?y . ?y <r> ?z . "
       "FILTER(?x != ?y) }",
-      h::Join(h::Filter("?x != ?y", scan("?x", "<r>", "?y")),
-              scan("?y", "<r>", "?z")),
+      h::Filter("?x != ?y",
+                h::Join(scan("?x", "<r>", "?y"), scan("?y", "<r>", "?z"))),
       qec);
 }
 
