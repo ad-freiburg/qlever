@@ -13,12 +13,15 @@ using namespace ad_utility;
 TEST(CopyableSynchronization, CopyableMutex) {
   // Not much to test here.
   CopyableMutex m1;
-  [[maybe_unused]] CopyableMutex m2{m1};
-  m1 = m2;
   m1.lock();
+  [[maybe_unused]] CopyableMutex m2{m1};
+  // m2 is still unlocked.
   EXPECT_TRUE(m2.try_lock());
-  m1.unlock();
   m2.unlock();
+  m1 = m2;
+  // m1 is still locked;
+  EXPECT_FALSE(m1.try_lock());
+  m1.unlock();
 }
 
 // _________________________________________________

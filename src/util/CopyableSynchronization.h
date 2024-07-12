@@ -10,6 +10,9 @@ namespace ad_utility {
 // a new mutex. This is sufficient for applications like in
 // `getInternallyVisibleVariableColumns()` where we just want to make a
 // `const` member function that modifies a `mutable` member threadsafe.
+// Note that a copy-constructed `CopyableMutex` will be unlocked, even if the
+// source was locked, and that copy assignment also never locks or unlocks any
+// of the involved atomics.
 struct CopyableMutex : std::mutex {
   using std::mutex::mutex;
   CopyableMutex(const CopyableMutex&) {}
