@@ -204,6 +204,20 @@ TEST(QueryPlanner, testBFSLeaveOut) {
   }
 }
 
+TEST(QueryPlanner, indexScanZeroVariables) {
+  auto scan = h::IndexScanFromStrings;
+  using enum Permutation::Enum;
+  h::expect(
+      "SELECT * \n "
+      "WHERE \t {<x> <y> <z>}",
+      scan("<x>", "<y>", "<z>"));
+  h::expect(
+      "SELECT * \n "
+      "WHERE \t {<x> <y> <z> . <x> <y> ?z}",
+      h::CartesianProductJoin(scan("<x>", "<y>", "<z>"),
+                              scan("<x>", "<y>", "?z")));
+}
+
 TEST(QueryPlanner, indexScanOneVariable) {
   auto scan = h::IndexScanFromStrings;
   using enum Permutation::Enum;

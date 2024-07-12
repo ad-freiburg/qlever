@@ -1367,35 +1367,19 @@ vector<float> IndexImpl::getMultiplicities(
 
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  AD_CORRECTNESS_CHECK(!col2String.has_value() || col1String.has_value());
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  // TODO<C++23> Use the monadic operations for std::optional.
-  bool elementNotFound = !col0Id.has_value();
-  size_t numColumns = 2;
-  auto handleOptional = [&elementNotFound, &numColumns,
-                         this](const auto& comp) -> std::optional<Id> {
-    if (!comp.has_value()) {
-      return std::nullopt;
-    }
-    --numColumns;
-    auto result = comp.value().get().toValueId(getVocab());
-    elementNotFound = elementNotFound || !result.has_value();
-    return result;
-  };
-  std::optional<Id> col1Id = handleOptional(col1String);
-  std::optional<Id> col2Id = handleOptional(col2String);
-  if (elementNotFound) {
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns + additionalColumns.size(), allocator_};
+    return IdTable{
+        scanSpecificationAsTc.numColumns() + additionalColumns.size(),
+        allocator_};
   }
-  return scan({col0Id.value(), col1Id, col2Id}, permutation, additionalColumns,
+  return scan(scanSpecification.value(), permutation, additionalColumns,
               cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
@@ -1410,20 +1394,14 @@ IdTable IndexImpl::scan(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
-    const TripleComponent& col0, const TripleComponent& col1,
-    std::optional<std::reference_wrapper<const TripleComponent>> col2,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation) const {
-  std::optional<Id> col0Id = col0.toValueId(getVocab());
-  std::optional<Id> col1Id = col1.toValueId(getVocab());
-  std::optional<Id> col2Id = col2.has_value()
-                                 ? col2.value().get().toValueId(getVocab())
-                                 : std::nullopt;
-  if (!col0Id.has_value() || !col1Id.has_value() ||
-      (col2.has_value() && !col2Id.has_value())) {
+  const Permutation& p = getPermutation(permutation);
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     return 0;
   }
-  const Permutation& p = getPermutation(permutation);
-  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), col2Id});
+  return p.getResultSizeOfScan(scanSpecification.value());
 }
 
 // _____________________________________________________________________________

@@ -276,31 +276,43 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 
 // ____________________________________________________________________________
 IdTable Index::scan(
-    const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
+    const ScanSpecificationAsTripleComponent& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan(col0String, col1String, col2String, p, additionalColumns,
+  return pimpl_->scan(scanSpecification, p, additionalColumns,
                       cancellationHandle, limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Index::scan(
-    Id col0Id, std::optional<Id> col1Id, std::optional<Id> col2Id,
+    const Permutation::ScanSpecification& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  return pimpl_->scan({col0Id, col1Id, col2Id}, p, additionalColumns,
+  return pimpl_->scan(scanSpecification, p, additionalColumns,
                       cancellationHandle, limitOffset);
 }
 
 // ____________________________________________________________________________
 size_t Index::getResultSizeOfScan(
-    const TripleComponent& col0String, const TripleComponent& col1String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col2String,
+    const ScanSpecificationAsTripleComponent& scanSpecification,
     const Permutation::Enum& permutation) const {
-  return pimpl_->getResultSizeOfScan(col0String, col1String, col2String,
-                                     permutation);
+  return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
+}
+// ____________________________________________________________________________
+std::optional<Permutation::ScanSpecification>
+ScanSpecificationAsTripleComponent::toScanSpecification(
+    const IndexImpl& index) const {
+  std::optional<Id> col0Id = col0_.toValueId(index.getVocab());
+  std::optional<Id> col1Id = col1_.has_value()
+                                 ? col1_.value().toValueId(index.getVocab())
+                                 : std::nullopt;
+  std::optional<Id> col2Id = col2_.has_value()
+                                 ? col2_.value().toValueId(index.getVocab())
+                                 : std::nullopt;
+  if (!col0Id.has_value() || (col1_.has_value() && !col1Id.has_value()) ||
+      (col2_.has_value() && !col2Id.has_value())) {
+    return std::nullopt;
+  }
 }

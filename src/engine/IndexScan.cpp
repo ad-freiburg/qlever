@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include <boost/optional.hpp>
 #include <sstream>
 #include <string>
 
@@ -130,20 +131,9 @@ Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  const auto permutedTriple = getPermutedTriple();
-  if (numVariables_ == 2) {
-    idTable =
-        index.scan(*permutedTriple[0], std::nullopt, std::nullopt, permutation_,
-                   additionalColumns(), cancellationHandle_, getLimit());
-  } else if (numVariables_ == 1) {
-    idTable = index.scan(*permutedTriple[0], *permutedTriple[1], std::nullopt,
-                         permutation_, additionalColumns(), cancellationHandle_,
-                         getLimit());
-  } else if (numVariables_ == 0) {
-    idTable = index.scan(*permutedTriple[0], *permutedTriple[1],
-                         *permutedTriple[2], permutation_, additionalColumns(),
-                         cancellationHandle_, getLimit());
-
+  if (numVariables_ < 3) {
+    idTable = index.scan(getPermutedTripleNoVariables(), permutation_,
+                         additionalColumns(), cancellationHandle_, getLimit());
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
     computeFullScan(&idTable, permutation_);
@@ -158,14 +148,7 @@ Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
   if (_executionContext) {
-    // Should always be in this branch. Else is only for test cases.
-
-    // We have to do a simple scan anyway so might as well do it now
-    if (numVariables_ == 0) {
-      return getIndex().getResultSizeOfScan(
-          *getPermutedTriple()[0], *getPermutedTriple().at(1),
-          *getPermutedTriple()[2], permutation_);
-    } else if (numVariables_ == 1) {
+    if (numVariables_ == 1) {
       // TODO<C++23> Use the monadic operation `std::optional::or_else`.
       // Note: we cannot use `optional::value_or()` here, because the else
       // case is expensive to compute, and we need it lazily evaluated.
@@ -173,16 +156,13 @@ size_t IndexScan::computeSizeEstimate() const {
               getCacheKey());
           size.has_value()) {
         return size.value();
-      } else {
-        // This call explicitly has to read two blocks of triples from memory to
-        // obtain an exact size estimate.
-        return getIndex().getResultSizeOfScan(*getPermutedTriple()[0],
-                                              *getPermutedTriple().at(1),
-                                              std::nullopt, permutation_);
       }
-    } else if (numVariables_ == 2) {
-      const TripleComponent& firstKey = *getPermutedTriple().at(0);
-      return getIndex().getCardinality(firstKey, permutation_);
+    }
+
+    // We have to do a simple scan anyway so might as well do it now
+    if (numVariables_ < 3) {
+      return getIndex().getResultSizeOfScan(getPermutedTripleNoVariables(),
+                                            permutation_);
     } else {
       // The triple consists of three variables.
       // TODO<joka921> As soon as all implementations of a full index scan
@@ -293,6 +273,13 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
+ScanSpecificationAsTripleComponent IndexScan::getPermutedTripleNoVariables()
+    const {
+  auto permutedTriple = getPermutedTriple();
+  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
+}
+
+// ___________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
   const IndexImpl& index = s.getIndex().getImpl();
@@ -304,11 +291,11 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
   if (s.numVariables_ < 2) {
     col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
   }
-  std::optional<Id> col2Id;
-  if (s.numVariables_ < 1) {
-    col2Id = s.getPermutedTriple()[2]->toValueId(index.getVocab()).value();
-  }
 
+  // This function is currently only called by the `getLazyScanForJoin...`
+  // functions. In these cases we always have at least one variable in each of
+  // the scans, because otherwise there would be no join column.
+  AD_CORRECTNESS_CHECK(s.numVariables_ >= 1);
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -318,7 +305,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           : std::nullopt;
 
   return index.getPermutation(s.permutation())
-      .lazyScan({col0Id, col1Id, col2Id}, std::move(actualBlocks),
+      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
                 s.additionalColumns(), s.cancellationHandle_, s.getLimit());
 };
 

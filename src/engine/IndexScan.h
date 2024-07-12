@@ -3,6 +3,7 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
+#include <boost/optional.hpp>
 #include <string>
 
 #include "./Operation.h"
@@ -100,6 +101,7 @@ class IndexScan final : public Operation {
   // `permutation_`. For example if `permutation_ == PSO` then the result is
   // {&predicate_, &subject_, &object_}
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
+  ScanSpecificationAsTripleComponent getPermutedTripleNoVariables() const;
 
  private:
   Result computeResult([[maybe_unused]] bool requestLaziness) override;

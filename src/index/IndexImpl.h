@@ -397,14 +397,11 @@ class IndexImpl {
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(
-      const TripleComponent& col0String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col2String,
-      const Permutation::Enum& permutation,
-      Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle,
-      const LimitOffsetClause& limitOffset = {}) const;
+  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
+               const Permutation::Enum& permutation,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
   IdTable scan(const Permutation::ScanSpecification& scanSpecification,
@@ -415,8 +412,7 @@ class IndexImpl {
 
   // _____________________________________________________________________________
   size_t getResultSizeOfScan(
-      const TripleComponent& col0, const TripleComponent& col1,
-      std::optional<std::reference_wrapper<const TripleComponent>> col2,
+      const ScanSpecificationAsTripleComponent& scanSpecification,
       const Permutation::Enum& permutation) const;
 
  private:

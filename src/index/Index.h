@@ -23,6 +23,21 @@ class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 
+// TODO<joka921> Comment.
+struct ScanSpecificationAsTripleComponent {
+  TripleComponent col0_;
+  std::optional<TripleComponent> col1_;
+  std::optional<TripleComponent> col2_;
+  ScanSpecificationAsTripleComponent(TripleComponent col0,
+                                     const TripleComponent& col1,
+                                     const TripleComponent& col2);
+  std::optional<Permutation::ScanSpecification> toScanSpecification(
+      const IndexImpl& index) const;
+  size_t numColumns() const {
+    return 2 - col1_.has_value() - col2_.has_value();
+  }
+};
+
 class Index {
  private:
   // Pimpl to reduce compile times.
@@ -238,16 +253,14 @@ class Index {
    * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
    * members of Index class).
    */
-  IdTable scan(
-      const TripleComponent& col0String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col2String,
-      Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle,
-      const LimitOffsetClause& limitOffset = {}) const;
+  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
+               Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, std::optional<Id> col2Id,
+  IdTable scan(const Permutation::ScanSpecification& scanSpecification,
                Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
@@ -256,8 +269,7 @@ class Index {
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.
   size_t getResultSizeOfScan(
-      const TripleComponent& col0String, const TripleComponent& col1String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col2String,
+      const ScanSpecificationAsTripleComponent& scanSpecification,
       const Permutation::Enum& permutation) const;
 
   // Get access to the implementation. This should be used rarely as it
