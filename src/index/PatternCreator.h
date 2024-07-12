@@ -96,7 +96,6 @@ class PatternCreator {
   // subject (the subject of the last triple for which `processTriple` was
   // called).
   std::optional<Id> currentSubject_;
-  bool currentSubjectCompletelyIgnored_ = true;
   // The pattern of `currentSubject_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;
@@ -176,6 +175,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
+  PatternID finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
