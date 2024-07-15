@@ -14,7 +14,7 @@
 
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
-#include "util/Date.h"
+#include "util/DateYearDuration.h"
 #include "util/NBitInteger.h"
 #include "util/Serializer/Serializer.h"
 #include "util/SourceLocation.h"
@@ -257,12 +257,12 @@ class ValueId {
   }
 
   // Store or load a `Date` object.
-  static ValueId makeFromDate(DateOrLargeYear d) noexcept {
+  static ValueId makeFromDate(DateYearOrDuration d) noexcept {
     return addDatatypeBits(std::bit_cast<uint64_t>(d), Datatype::Date);
   }
 
-  DateOrLargeYear getDate() const noexcept {
-    return std::bit_cast<DateOrLargeYear>(removeDatatypeBits(_bits));
+  DateYearOrDuration getDate() const noexcept {
+    return std::bit_cast<DateYearOrDuration>(removeDatatypeBits(_bits));
   }
 
   // TODO<joka921> implement dates
@@ -340,7 +340,7 @@ class ValueId {
         ostr << std::to_string(value);
       } else if constexpr (ad_utility::isSimilar<T, bool>) {
         ostr << (value ? "true" : "false");
-      } else if constexpr (ad_utility::isSimilar<T, DateOrLargeYear>) {
+      } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);

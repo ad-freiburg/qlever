@@ -308,7 +308,7 @@ TEST(ValueId, toDebugString) {
   test(makeWordVocabId(42), "W:42");
   test(makeBlankNodeId(27), "B:27");
   test(ValueId::makeFromDate(
-           DateOrLargeYear{123456, DateOrLargeYear::Type::Year}),
+           DateYearOrDuration{123456, DateYearOrDuration::Type::Year}),
        "D:123456");
   // make an ID with an invalid datatype
   ASSERT_ANY_THROW(test(ValueId::max(), "blim"));

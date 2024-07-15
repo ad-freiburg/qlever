@@ -558,8 +558,8 @@ TEST(TurtleParserTest, DateLiterals) {
       R"("-2014-03-16T12:13:52"^^<)"s + XSD_DATETIME_TYPE + ">",
       R"("2084"^^<)"s + XSD_GYEAR_TYPE + ">",
       R"("2083-12"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
-  using L = DateOrLargeYear;
-  std::vector<DateOrLargeYear> expected{
+  using L = DateYearOrDuration;
+  std::vector<DateYearOrDuration> expected{
       L{Date{2000, 10, 15}}, L{Date{-2014, 3, 16, 12, 13, 52}},
       L{Date{2084, 0, 0}}, L{Date{2083, 12, 0}}};
 
@@ -580,12 +580,68 @@ TEST(TurtleParserTest, DateLiterals) {
   std::vector<TripleComponent::Literal> expectedInvalidDateLiterals{
       lit("\"2000-10\""),   lit("\"2000-50\""), lit(R"("-2014-03-16T12:13")"s),
       lit(R"("2084-12")"s), lit(R"("20##")"s),  lit(R"("2083-12-13")"s)};
-  using L = DateOrLargeYear;
+  using L = DateYearOrDuration;
   for (size_t i = 0; i < invalidDateLiterals.size(); ++i) {
     checkParseResult<Re2Parser, &Re2Parser::object>(
         invalidDateLiterals[i], expectedInvalidDateLiterals[i]);
     checkParseResult<CtreParser, &CtreParser::object>(
         invalidDateLiterals[i], expectedInvalidDateLiterals[i]);
+  }
+}
+
+TEST(TurtleParserTest, DayTimeDurationLiterals) {
+  std::vector<std::string> dayTimeDurationLiterals{
+      R"("P0DT0H0M0.00S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PT0S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P365DT23H23M59.99S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-PT126.76S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P9999D"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P23DT23.22S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PT72H134M129.98S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
+
+  using L = DateYearOrDuration;
+  auto positive = DayTimeDuration::Type::Positive;
+  auto negative = DayTimeDuration::Type::Negative;
+
+  std::vector<DateYearOrDuration> expected{
+      L{DayTimeDuration{}},
+      L{DayTimeDuration{}},
+      L{DayTimeDuration{negative, 365, 23, 23, 59.9900}},
+      L{DayTimeDuration{negative, 0, 0, 0, 126.7600}},
+      L{DayTimeDuration{negative, 9999, 0, 0, 0.0000}},
+      L{DayTimeDuration{positive, 23, 0, 0, 23.2200}},
+      L{DayTimeDuration{positive, 0, 72, 134, 129.9800}}};
+
+  for (size_t i = 0; i < dayTimeDurationLiterals.size(); ++i) {
+    checkParseResult<Re2Parser, &Re2Parser::object>(dayTimeDurationLiterals[i],
+                                                    expected[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(
+        dayTimeDurationLiterals[i], expected[i]);
+  }
+
+  std::vector<std::string> invalidDayTimeDurationLiterals{
+      R"("PinvalidDH2.53S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P234D23H23M23.55S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PH-33.33S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P2001693"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-98D59M59.99S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-PDTS"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P200000032DT4H3M4S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P1048576DT4H3M4.23S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
+
+  std::vector<TripleComponent::Literal> expectedInvalidDayTimeDurationLiterals{
+      lit("\"PinvalidDH2.53S\""),    lit("\"P234D23H23M23.55S\""),
+      lit("\"PH-33.33S\""),          lit("\"P2001693\""),
+      lit("\"-98D59M59.99S\""),      lit("\"-PDTS\""),
+      lit("\"P200000032DT4H3M4S\""), lit("\"-P1048576DT4H3M4.23S\"")};
+
+  for (size_t i = 0; i < invalidDayTimeDurationLiterals.size(); ++i) {
+    checkParseResult<Re2Parser, &Re2Parser::object>(
+        invalidDayTimeDurationLiterals[i],
+        expectedInvalidDayTimeDurationLiterals[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(
+        invalidDayTimeDurationLiterals[i],
+        expectedInvalidDayTimeDurationLiterals[i]);
   }
 }
 

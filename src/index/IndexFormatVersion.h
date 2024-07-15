@@ -6,7 +6,7 @@
 
 #include <cstdint>
 
-#include "util/Date.h"
+#include "util/DateYearDuration.h"
 #include "util/json.h"
 
 namespace qlever {
@@ -17,7 +17,7 @@ struct IndexFormatVersion {
   // The number of the pull request that changed the index format most recently.
   uint64_t prNumber_;
   // The date of the last breaking change of the index format.
-  DateOrLargeYear date_{Date{1900, 1, 1}};
+  DateYearOrDuration date_{Date{1900, 1, 1}};
 
   // Conversion To JSON.
   friend void to_json(nlohmann::json& j, const IndexFormatVersion& version) {
@@ -28,7 +28,7 @@ struct IndexFormatVersion {
   // Conversion from JSON.
   friend void from_json(const nlohmann::json& j, IndexFormatVersion& version) {
     version.prNumber_ = static_cast<uint64_t>(j["pull-request-number"]);
-    version.date_ = DateOrLargeYear::parseXsdDate(std::string{j["date"]});
+    version.date_ = DateYearOrDuration::parseXsdDate(std::string{j["date"]});
   }
   bool operator==(const IndexFormatVersion&) const = default;
 };
@@ -36,5 +36,5 @@ struct IndexFormatVersion {
 // The actual index version. Change it once the binary format of the index
 // changes.
 inline const IndexFormatVersion& indexFormatVersion{
-    1320, DateOrLargeYear{Date{2024, 4, 17}}};
+    1320, DateYearOrDuration{Date{2024, 4, 17}}};
 }  // namespace qlever

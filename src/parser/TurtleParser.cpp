@@ -12,6 +12,7 @@
 #include "parser/NormalizedString.h"
 #include "parser/RdfEscaping.h"
 #include "util/Conversions.h"
+#include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 using namespace std::chrono_literals;
@@ -417,16 +418,19 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
       parser->parseDoubleConstant(normalizedLiteralContent);
     } else if (type == XSD_DATETIME_TYPE) {
       parser->lastParseResult_ =
-          DateOrLargeYear::parseXsdDatetime(normalizedLiteralContent);
+          DateYearOrDuration::parseXsdDatetime(normalizedLiteralContent);
     } else if (type == XSD_DATE_TYPE) {
       parser->lastParseResult_ =
-          DateOrLargeYear::parseXsdDate(normalizedLiteralContent);
+          DateYearOrDuration::parseXsdDate(normalizedLiteralContent);
     } else if (type == XSD_GYEARMONTH_TYPE) {
       parser->lastParseResult_ =
-          DateOrLargeYear::parseGYearMonth(normalizedLiteralContent);
+          DateYearOrDuration::parseGYearMonth(normalizedLiteralContent);
     } else if (type == XSD_GYEAR_TYPE) {
       parser->lastParseResult_ =
-          DateOrLargeYear::parseGYear(normalizedLiteralContent);
+          DateYearOrDuration::parseGYear(normalizedLiteralContent);
+    } else if (type == XSD_DAYTIME_DURATION_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
     } else {
       literal.addDatatype(typeIri);
       parser->lastParseResult_ = std::move(literal);
@@ -446,6 +450,22 @@ TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
         << ". It is treated as a plain string literal without datatype "
            "instead"
         << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const DurationParseException&) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as a duration object of type " << type
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const DurationOverflowException& ex) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as duration object for the following "
+                  "reason: "
+               << ex.what()
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
     parser->lastParseResult_ = std::move(literal);
   } catch (const std::exception& e) {
     parser->raise(e.what());
