@@ -10,9 +10,9 @@ static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple,
-                                   bool ignoreForPatterns) {
+                                   bool ignoreTripleForPatterns) {
   if (!currentSubject_.has_value()) {
-    // This is the first triple.
+    // This is the very first triple.
     currentSubject_ = triple[0];
   } else if (triple[0] != currentSubject_) {
     // New subject.
@@ -20,11 +20,11 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
     currentSubject_ = triple[0];
     currentPattern_.clear();
   }
-  tripleBuffer_.emplace_back(triple, ignoreForPatterns);
-  if (ignoreForPatterns) {
+  tripleBuffer_.emplace_back(triple, ignoreTripleForPatterns);
+  if (ignoreTripleForPatterns) {
     return;
   }
-  // Don't list predicates twice in the same pattern.
+  // Add predicate to pattern unless it was already added.
   if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
     currentPattern_.push_back(triple[1]);
   }
@@ -77,7 +77,6 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
                         [this, patternId, &curSubject](const auto& t) {
                           const auto& [s, p, o] = t.triple_;
                           AD_CORRECTNESS_CHECK(s == curSubject);
-                          AD_CORRECTNESS_CHECK(curSubject == s);
                           ospSorterTriplesWithPattern().push(
                               std::array{s, p, o, Id::makeFromInt(patternId)});
                         });

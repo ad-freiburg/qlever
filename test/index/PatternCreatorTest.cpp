@@ -69,9 +69,8 @@ auto createExamplePatterns(PatternCreator& creator) {
     expected.push_back(A{triple[0], triple[1], triple[2], I(patternIdx)});
   };
 
-  // The first subject gets the first pattern.
-  // (We have an ignored Triple at the end which doesn't count towards the
-  // pattern.
+  // The first subject gets the first pattern. We have an ignored triple at the
+  // end which doesn't count towards the pattern.
   push({V(0), V(10), V(20)}, false, 0);
   push({V(0), V(10), V(21)}, false, 0);
   push({V(0), V(11), V(18)}, false, 0);
