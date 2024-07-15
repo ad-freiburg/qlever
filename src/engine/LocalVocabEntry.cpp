@@ -9,9 +9,14 @@
 // TODO<joka921> Consider moving the cheap case (if precomputed) into the
 // header.
 auto LocalVocabEntry::positionInVocab() const -> PositionInVocab {
-  if (positionInVocabKnown) {
-    return {lowerBoundInVocab_, upperBoundInVocab_};
+  // Immediately return if we have previously computed and cached the position.
+  if (positionInVocabKnown_.load(std::memory_order_acquire)) {
+    return {lowerBoundInVocab_.load(std::memory_order_relaxed),
+            upperBoundInVocab_.load(std::memory_order_relaxed)};
   }
+
+  // Lookup the lower and upper bound from the vocabulary of the index,
+  // cache and return them.
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
@@ -19,7 +24,10 @@ auto LocalVocabEntry::positionInVocab() const -> PositionInVocab {
       vocab.lower_bound_external(toStringRepresentation());
   positionInVocab.upperBound_ =
       vocab.upper_bound_external(toStringRepresentation());
-  lowerBoundInVocab_ = positionInVocab.lowerBound_;
-  upperBoundInVocab_ = positionInVocab.upperBound_;
+  lowerBoundInVocab_.store(positionInVocab.lowerBound_,
+                           std::memory_order_relaxed);
+  upperBoundInVocab_.store(positionInVocab.upperBound_,
+                           std::memory_order_relaxed);
+  positionInVocabKnown_.store(true, std::memory_order_release);
   return positionInVocab;
 }
