@@ -409,7 +409,6 @@ TEST(IndexTest, getIgnoredIdRanges) {
   auto getId = makeGetId(indexNoImpl);
   Id label = getId("<label>");
   Id firstLiteral = getId("\"A\"");
-  Id lastLiteral = getId("\"zz\"@en");
   Id x = getId("<x>");
   Id enLabel =
       getId(ad_utility::convertToLanguageTaggedPredicate("<label>", "en"));
@@ -455,11 +454,6 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
-
-  auto firstIdExternalVocabulary = Id::makeFromVocabIndex(
-      VocabIndex::make(index.getVocab().getInternalVocab().size()));
-  auto emptyRangeExternalVocabulary =
-      std::pair{firstIdExternalVocabulary, firstIdExternalVocabulary};
 
   auto specialIds = qlever::getBoundsForSpecialIds();
   {
