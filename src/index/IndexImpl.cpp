@@ -1384,8 +1384,8 @@ IdTable IndexImpl::scan(
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    const Permutation::ScanSpecification& scanSpecification,
-    Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
+    const ScanSpecification& scanSpecification, Permutation::Enum p,
+    Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan(scanSpecification, additionalColumns,

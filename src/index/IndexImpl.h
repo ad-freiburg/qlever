@@ -404,8 +404,7 @@ class IndexImpl {
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  IdTable scan(const Permutation::ScanSpecification& scanSpecification,
-               Permutation::Enum p,
+  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
                const LimitOffsetClause& limitOffset = {}) const;

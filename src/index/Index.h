@@ -23,24 +23,6 @@ class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
 
-// TODO<joka921> Comment.
-class ScanSpecificationAsTripleComponent {
-  using T = std::optional<TripleComponent>;
-
- private:
-  std::optional<TripleComponent> col0_;
-  std::optional<TripleComponent> col1_;
-  std::optional<TripleComponent> col2_;
-
- public:
-  ScanSpecificationAsTripleComponent(T col0, T col1, T col2);
-  std::optional<Permutation::ScanSpecification> toScanSpecification(
-      const IndexImpl& index) const;
-  size_t numColumns() const {
-    return 3 - col0_.has_value() - col1_.has_value() - col2_.has_value();
-  }
-};
-
 class Index {
  private:
   // Pimpl to reduce compile times.
@@ -263,8 +245,7 @@ class Index {
                const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(const Permutation::ScanSpecification& scanSpecification,
-               Permutation::Enum p,
+  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
                const LimitOffsetClause& limitOffset = {}) const;
