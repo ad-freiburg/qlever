@@ -393,8 +393,8 @@ template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
     std::string_view normalizedLiteralContent,
     const TripleComponent::Iri& typeIri, TurtleParser<T>* parser) {
-  auto literal =
-      TripleComponent::Literal::literalWithoutQuotes(normalizedLiteralContent);
+  auto literal = TripleComponent::Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(normalizedLiteralContent));
   std::string_view type = asStringViewUnsafe(typeIri.getContent());
 
   try {

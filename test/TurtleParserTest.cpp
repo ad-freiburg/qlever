@@ -197,6 +197,10 @@ TEST(TurtleParserTest, rdfLiteral) {
   std::vector<TripleComponent> expected;
   literals.emplace_back(R"("simpleString")");
   expected.emplace_back(lit(R"("simpleString")"));
+  literals.emplace_back(R"("string\"with \\ escapes\n"^^<www.x.de>)");
+  expected.emplace_back(TripleComponent::Literal::fromEscapedRdfLiteral(
+      R"("string\"with \\ escapes\n")",
+      TripleComponent::Iri::fromIriref("<www.x.de>")));
   literals.emplace_back(R"("langtag"@en-gb)");
   expected.emplace_back(lit(R"("langtag")", "@en-gb"));
   literals.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
