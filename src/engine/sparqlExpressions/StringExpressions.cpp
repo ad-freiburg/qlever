@@ -114,25 +114,15 @@ struct LiftStringFunction {
 
 // IRI or URI
 //
-// TODOs:
-//
 // 1. Check for `BASE` URL and if it exists, prepend it.
 // 2. What's the correct behavior for non-strings, like `1` or `true`?
 //
-// @1: Ignored by the implementation below.
-// @2: The implementation below converts all this to a string and then to an
-// IRI.
-[[maybe_unused]] auto iriOrUri =
-    [](std::optional<std::string> s) -> IdOrLiteralOrIri {
-  if (!s.has_value()) {
-    return Id::makeUndefined();
-  } else {
-    return IdOrLiteralOrIri{
-        LiteralOrIri{Iri::fromIrirefWithoutBrackets(s.value())}};
-  }
-};
-
-using IriOrUriExpression = NARY<1, FV<decltype(iriOrUri), StringValueGetter>>;
+// @1: Added static method `fromIrirefWithBasicUrlCheck` for `Iri` which checks
+// if the provided iri string satisifies basic URL pattern.
+// @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
+// consideration within the `IriOrUriValueGetter`, hence automatically
+// ignores values like `1`, `true`, `Date` etc.
+using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
 
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
@@ -507,9 +497,11 @@ Expr make(std::same_as<Expr> auto&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+
 Expr makeIriOrUriExpression(Expr child) {
   return make<IriOrUriExpression>(child);
 }
+
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
 
 Expr makeSubstrExpression(Expr string, Expr start, Expr length) {

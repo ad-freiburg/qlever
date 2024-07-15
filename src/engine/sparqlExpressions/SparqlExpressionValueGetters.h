@@ -22,6 +22,7 @@ namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
+using IdOrLiteralOrIri = std::variant<ValueId, LiteralOrIri>;
 
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.
@@ -297,4 +298,14 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
     }
   }
 };
+
+// Value getter for implementing the expressions `IRI()`/`URI()`.
+struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
+  using Mixin<IriOrUriValueGetter>::operator();
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
+};
+
 }  // namespace sparqlExpression::detail

@@ -234,16 +234,20 @@ OptIri IriValueGetter::operator()(
   }
 }
 
-// _____________________________________________________________________________
-std::optional<std::string> LanguageTagValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
+//______________________________________________________________________________
+template <typename T, typename ValueGetter>
+requires std::same_as<IdOrLiteralOrIri, T> ||
+         std::same_as<std::optional<std::string>, T>
+T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+           ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                         context->_qec.getIndex(), id, context->_localVocab),
-                     context);
+      return valueGetter(
+          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+              context->_qec.getIndex(), id, context->_localVocab),
+          context);
     case TextRecordIndex:
     case WordVocabIndex:
     case BlankNodeIndex:
@@ -252,7 +256,37 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case Double:
     case Date:
     case Undefined:
-      return std::nullopt;
+      if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
+        return Id::makeUndefined();
+      } else {
+        return std::nullopt;
+      }
   }
   AD_FAIL();
+}
+
+//_____________________________________________________________________________
+IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  return getValue<IdOrLiteralOrIri>(id, context, *this);
+}
+
+//______________________________________________________________________________
+std::optional<std::string> LanguageTagValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  return getValue<std::optional<std::string>>(id, context, *this);
+}
+
+//______________________________________________________________________________
+IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  const auto& optIri = Iri::fromIrirefWithBasicUrlCheck(
+      litOrIri.isIri()
+          ? asStringViewUnsafe(litOrIri.getIri().getContent())
+          : asStringViewUnsafe(litOrIri.getLiteral().getContent()));
+  if (optIri.has_value()) {
+    return LiteralOrIri{optIri.value()};
+  }
+  return Id::makeUndefined();
 }

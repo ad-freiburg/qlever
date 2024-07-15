@@ -4,6 +4,7 @@
 
 #pragma once
 
+#include <optional>
 #include <string_view>
 
 #include "parser/NormalizedString.h"
@@ -36,11 +37,16 @@ class Iri {
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();
 
-  // Create a new iri given an iri with brackets
+  // Create a new `Iri` given an iri string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
-  // create a new iri given an iri without brackets
+  // Create a new `Iri` given an iri string without brackets.
   static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);
+
+  // Creat a new `Iri` if the provided iri string (without brackets) passes
+  // the basic `URL` pattern check.
+  static std::optional<Iri> fromIrirefWithBasicUrlCheck(
+      std::string_view stringWithoutBrackets);
 
   // Create a new iri given a prefix iri and its suffix
   static Iri fromPrefixAndSuffix(const Iri& prefix, std::string_view suffix);
