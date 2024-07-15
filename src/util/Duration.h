@@ -181,7 +181,7 @@ class DayTimeDuration {
                              static_cast<long long>(boundTotalMilliseconds);
 
     // Given the current duration logic, the sign of a duration is defined by
-    // its Type and not its values, hence the respective values should be always
+    // its type and not its values, hence the respective values should be always
     // positive (days, hours, minutes, seconds).
     // -> totalMilliseconds range is symmetric to 0, thus if
     // totalMilliseconds < 0, just map it to it's positive value.
