@@ -300,11 +300,17 @@ size_t Index::getResultSizeOfScan(
     const Permutation::Enum& permutation) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
 }
+
 // ____________________________________________________________________________
 std::optional<Permutation::ScanSpecification>
 ScanSpecificationAsTripleComponent::toScanSpecification(
     const IndexImpl& index) const {
-  std::optional<Id> col0Id = col0_.toValueId(index.getVocab());
+  // TODO<C++23> Use `std::optional::transform`.
+  // TODO<SPARQL UPDATE>: We can also have LocalVocab entries is the
+  // ScanSpecification.
+  std::optional<Id> col0Id = col0_.has_value()
+                                 ? col0_.value().toValueId(index.getVocab())
+                                 : std::nullopt;
   std::optional<Id> col1Id = col1_.has_value()
                                  ? col1_.value().toValueId(index.getVocab())
                                  : std::nullopt;
@@ -315,4 +321,30 @@ ScanSpecificationAsTripleComponent::toScanSpecification(
       (col2_.has_value() && !col2Id.has_value())) {
     return std::nullopt;
   }
+  return Permutation::ScanSpecification{col0Id, col1Id, col2Id};
+}
+
+// ____________________________________________________________________________
+ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(T col0,
+                                                                       T col1,
+                                                                       T col2) {
+  auto isUnbound = [](const T& t) {
+    return !t.has_value() || t.value().isVariable();
+  };
+  if (isUnbound(col0)) {
+    AD_CONTRACT_CHECK(isUnbound(col1));
+  }
+  if (isUnbound(col1)) {
+    AD_CONTRACT_CHECK(isUnbound(col2));
+  }
+  auto toNulloptIfVariable = [](T& tc) -> std::optional<TripleComponent> {
+    if (tc.has_value() && tc.value().isVariable()) {
+      return std::nullopt;
+    } else {
+      return std::move(tc);
+    }
+  };
+  col0_ = toNulloptIfVariable(col0);
+  col1_ = toNulloptIfVariable(col1);
+  col2_ = toNulloptIfVariable(col2);
 }

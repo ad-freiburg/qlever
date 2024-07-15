@@ -24,17 +24,20 @@ class TextBlockMetaData;
 class IndexImpl;
 
 // TODO<joka921> Comment.
-struct ScanSpecificationAsTripleComponent {
-  TripleComponent col0_;
+class ScanSpecificationAsTripleComponent {
+  using T = std::optional<TripleComponent>;
+
+ private:
+  std::optional<TripleComponent> col0_;
   std::optional<TripleComponent> col1_;
   std::optional<TripleComponent> col2_;
-  ScanSpecificationAsTripleComponent(TripleComponent col0,
-                                     const TripleComponent& col1,
-                                     const TripleComponent& col2);
+
+ public:
+  ScanSpecificationAsTripleComponent(T col0, T col1, T col2);
   std::optional<Permutation::ScanSpecification> toScanSpecification(
       const IndexImpl& index) const;
   size_t numColumns() const {
-    return 2 - col1_.has_value() - col2_.has_value();
+    return 3 - col0_.has_value() - col1_.has_value() - col2_.has_value();
   }
 };
 

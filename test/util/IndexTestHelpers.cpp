@@ -61,7 +61,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkSingleElement = [&cancellationDummy, &hasPatternId](
                                 const Index& index, size_t patternIdx, Id id) {
     auto scanResultHasPattern =
-        index.scan(hasPatternId, id, std::nullopt, Permutation::Enum::PSO, {},
+        index.scan({hasPatternId, id, std::nullopt}, Permutation::Enum::PSO, {},
                    cancellationDummy);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
@@ -80,7 +80,7 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
-            col0Id, std::nullopt, std::nullopt, permutation,
+            {col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy);
