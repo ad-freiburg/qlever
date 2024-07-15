@@ -27,6 +27,9 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
+  // We previously had `nullptr`s here in unit tests. This is no longer
+  // necessary nor allowed.
+  AD_CONTRACT_CHECK(qec != nullptr);
   for (auto& [idx, variable] : triple.additionalScanColumns_) {
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
@@ -91,18 +94,8 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  switch (numVariables_) {
-    case 0:
-      return {};
-    case 1:
-      return {ColumnIndex{0}};
-    case 2:
-      return {ColumnIndex{0}, ColumnIndex{1}};
-    case 3:
-      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
-    default:
-      AD_FAIL();
-  }
+  auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
+  return std::vector<ColumnIndex>{resAsView.begin(), resAsView.end()};
 }
 
 // _____________________________________________________________________________
@@ -147,39 +140,20 @@ Result IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
-  if (_executionContext) {
-    if (numVariables_ == 1) {
-      // TODO<C++23> Use the monadic operation `std::optional::or_else`.
-      // Note: we cannot use `optional::value_or()` here, because the else
-      // case is expensive to compute, and we need it lazily evaluated.
-      if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
-              getCacheKey());
-          size.has_value()) {
-        return size.value();
-      }
-    }
-
-    // We have to do a simple scan anyway so might as well do it now
-    if (numVariables_ < 3) {
-      return getIndex().getResultSizeOfScan(getPermutedTripleNoVariables(),
-                                            permutation_);
-    } else {
-      // The triple consists of three variables.
-      // TODO<joka921> As soon as all implementations of a full index scan
-      // (Including the "dummy joins" in Join.cpp) consistently exclude the
-      // internal triples, this estimate should be changed to only return
-      // the number of triples in the actual knowledge graph (excluding the
-      // internal triples).
-      AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return getIndex().numTriples().normalAndInternal_();
-    }
+  AD_CORRECTNESS_CHECK(_executionContext);
+  // We have to do a simple scan anyway so might as well do it now
+  if (numVariables_ < 3) {
+    return getIndex().getResultSizeOfScan(getPermutedTripleNoVariables(),
+                                          permutation_);
   } else {
-    // Only for test cases. The handling of the objects is to make the
-    // strange query planner tests pass.
-    auto strLen = [](const auto& el) {
-      return (el.isString() ? el.getString() : el.toString()).size();
-    };
-    return 1000 + strLen(subject_) + strLen(object_) + strLen(predicate_);
+    // The triple consists of three variables.
+    // TODO<joka921> As soon as all implementations of a full index scan
+    // (Including the "dummy joins" in Join.cpp) consistently exclude the
+    // internal triples, this estimate should be changed to only return
+    // the number of triples in the actual knowledge graph (excluding the
+    // internal triples).
+    AD_CORRECTNESS_CHECK(numVariables_ == 3);
+    return getIndex().numTriples().normalAndInternal_();
   }
 }
 
@@ -192,32 +166,20 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
-  multiplicity_.clear();
-  if (numVariables_ == 0) {
-    return;
-  }
-  if (_executionContext) {
+  multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
-    if (numVariables_ == 1) {
+    if (numVariables_ == 0) {
+      return {};
+    } else if (numVariables_ == 1) {
       // There are no duplicate triples in RDF and two elements are fixed.
-      multiplicity_.emplace_back(1);
+      return {1.0f};
     } else if (numVariables_ == 2) {
-      const auto permutedTriple = getPermutedTriple();
-      multiplicity_ = idx.getMultiplicities(*permutedTriple[0], permutation_);
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_);
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      multiplicity_ = idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(permutation_);
     }
-  } else {
-    // This branch is only used in certain unit tests.
-    multiplicity_.emplace_back(1);
-    if (numVariables_ == 2) {
-      multiplicity_.emplace_back(1);
-    }
-    if (numVariables_ == 3) {
-      multiplicity_.emplace_back(1);
-    }
-  }
+  }();
   for ([[maybe_unused]] size_t i :
        std::views::iota(multiplicity_.size(), getResultWidth())) {
     multiplicity_.emplace_back(1);

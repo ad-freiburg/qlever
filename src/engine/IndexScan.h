@@ -3,7 +3,6 @@
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
 #pragma once
 
-#include <boost/optional.hpp>
 #include <string>
 
 #include "./Operation.h"

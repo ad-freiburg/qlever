@@ -17,7 +17,7 @@ constexpr auto iri = ad_utility::testing::iri;
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
-  return QueryPlanner{nullptr,
+  return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
