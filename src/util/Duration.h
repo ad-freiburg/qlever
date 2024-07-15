@@ -97,15 +97,15 @@ class DayTimeDuration {
                 "The number of unused bits for Duration should be 16");
 
  private:
-  // Given that totalMilliseconds_ is of type uint64_t, to correctly store
+  // Given that `totalMilliseconds_` is of type `uint64_t`, to correctly store
   // the provided values here, even for durations smaller zero, they must be
-  // positive. This is achieved by adding boundTotalMilliseconds to the actual
+  // positive. This is achieved by adding `boundTotalMilliseconds` to the actual
   // number of milliseconds for the respective duration values, thus all values,
   // also negative ones, get shifted into the positive range.
   //
-  // Initial range: -boundTotalMilliseconds to +boundTotalMilliseconds
-  // shift by adding boundTotalMilliSeconds (line 170-171)
-  // => Shifted range: 0 to 2 * boundTotalMilliseconds (storable as unsigned)
+  // Initial range: [-boundTotalMilliseconds, +boundTotalMilliseconds]
+  // shift by adding `boundTotalMilliSeconds` (line 170-171)
+  // => Shifted range: [0,  2 * boundTotalMilliseconds] (storable as unsigned)
   //
   // To retrieve the initial number of milliseconds, we just subtract
   // boundTotalMilliseconds from totalMilliSeconds_. (line 181-182)
