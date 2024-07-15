@@ -118,7 +118,7 @@ struct LiftStringFunction {
 // 2. What's the correct behavior for non-strings, like `1` or `true`?
 //
 // @1: Added static method `fromIrirefWithBasicUrlCheck` for `Iri` which checks
-// if the provided iri string satisifies basic URL pattern.
+// if the provided iri string satisfies basic URL pattern.
 // @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
 // consideration within the `IriOrUriValueGetter`, hence automatically
 // ignores values like `1`, `true`, `Date` etc.
