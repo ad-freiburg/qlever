@@ -600,9 +600,10 @@ TEST(SparqlExpression, stringOperators) {
 
   auto T = Id::makeFromBool(true);
   auto F = Id::makeFromBool(false);
-  auto dateDate = Id::makeFromDate(DateOrLargeYear::parseXsdDate("2025-01-01"));
-  auto dateLYear =
-      Id::makeFromDate(DateOrLargeYear(11853, DateOrLargeYear::Type::Year));
+  auto dateDate =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-01-01"));
+  auto dateLYear = Id::makeFromDate(
+      DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
   checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
