@@ -174,8 +174,7 @@ IdTable LocatedTriplesPerBlock::mergeTriples(size_t blockIndex,
 
 // ____________________________________________________________________________
 std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
-    std::span<const LocatedTriple> locatedTriples,
-    std::vector<CompressedBlockMetadata> originalMetadata) {
+    std::span<const LocatedTriple> locatedTriples) {
   std::vector<LocatedTriples::iterator> handles;
   handles.reserve(locatedTriples.size());
   for (auto triple : locatedTriples) {
@@ -187,15 +186,14 @@ std::vector<LocatedTriples::iterator> LocatedTriplesPerBlock::add(
     handles.emplace_back(handle);
   }
 
-  updateAugmentedMetadata(std::move(originalMetadata));
+  updateAugmentedMetadata();
 
   return handles;
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::erase(
-    size_t blockIndex, LocatedTriples::iterator iter,
-    std::vector<CompressedBlockMetadata> originalMetadata) {
+void LocatedTriplesPerBlock::erase(size_t blockIndex,
+                                   LocatedTriples::iterator iter) {
   auto blockIter = map_.find(blockIndex);
   AD_CONTRACT_CHECK(blockIter != map_.end(), "Block ", blockIndex,
                     " is not contained.");
@@ -205,15 +203,22 @@ void LocatedTriplesPerBlock::erase(
   if (block.empty()) {
     map_.erase(blockIndex);
   }
-  updateAugmentedMetadata(std::move(originalMetadata));
+  updateAugmentedMetadata();
 }
 
 // ____________________________________________________________________________
-void LocatedTriplesPerBlock::updateAugmentedMetadata(
+void LocatedTriplesPerBlock::setOriginalMetadata(
     std::vector<CompressedBlockMetadata> metadata) {
-  // Copy block metadata to augment it with updated triples.
+  originalMetadata_ = std::move(metadata);
+  updateAugmentedMetadata();
+}
+
+// ____________________________________________________________________________
+void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
+  // Copy to preserve originalMetadata_.
+  std::vector<CompressedBlockMetadata> metadata(originalMetadata_);
   for (auto& blockMetadata : metadata) {
     if (hasUpdates(blockIndex)) {
       const auto& blockUpdates = map_.at(blockIndex);

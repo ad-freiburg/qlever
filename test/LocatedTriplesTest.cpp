@@ -70,10 +70,9 @@ class LocatedTriplesTest : public ::testing::Test {
   // Make `LocatedTriplesPerBlock` from a list of `LocatedTriple` objects (the
   // order in which the objects are given does not matter).
   LocatedTriplesPerBlock makeLocatedTriplesPerBlock(
-      const std::vector<LocatedTriple>& locatedTriples,
-      std::vector<CompressedBlockMetadata> metadata) {
+      const std::vector<LocatedTriple>& locatedTriples) {
     LocatedTriplesPerBlock result;
-    result.add(locatedTriples, metadata);
+    result.add(locatedTriples);
     return result;
   }
 };
@@ -126,7 +125,8 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
   auto LT8 = LT{3, IT(25, 5, 0), true};
   auto LT9 = LT{4, IT(31, 6, 1), false};
   auto locatedTriplesPerBlock =
-      makeLocatedTriplesPerBlock({LT1, LT2, LT3, LT4, LT5, LT6, LT7}, metadata);
+      makeLocatedTriplesPerBlock({LT1, LT2, LT3, LT4, LT5, LT6, LT7});
+  locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
@@ -137,7 +137,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               locatedTriplesAre(
                   {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
 
-  auto handles = locatedTriplesPerBlock.add(std::vector{LT8, LT9}, metadata);
+  auto handles = locatedTriplesPerBlock.add(std::vector{LT8, LT9});
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(4));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(9));
@@ -150,7 +150,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
                                  {3, {LT8}},
                                  {4, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(3, handles[0], metadata);
+  locatedTriplesPerBlock.erase(3, handles[0]);
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(8));
@@ -163,7 +163,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
           {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
 
   // Erasing in a block that does not exist, raises an exception.
-  EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1], metadata),
+  EXPECT_THROW(locatedTriplesPerBlock.erase(100, handles[1]),
                ad_utility::Exception);
 
   // Nothing changed.
@@ -177,7 +177,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
       locatedTriplesAre(
           {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7, LT9}}}));
 
-  locatedTriplesPerBlock.erase(4, handles[1], metadata);
+  locatedTriplesPerBlock.erase(4, handles[1]);
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(3));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(7));
@@ -188,7 +188,7 @@ TEST_F(LocatedTriplesTest, numTriplesInBlock) {
               locatedTriplesAre(
                   {{1, {LT1, LT2, LT3}}, {2, {LT4, LT5}}, {4, {LT6, LT7}}}));
 
-  locatedTriplesPerBlock.clear(metadata);
+  locatedTriplesPerBlock.clear();
 
   EXPECT_THAT(locatedTriplesPerBlock, numBlocks(0));
   EXPECT_THAT(locatedTriplesPerBlock, numTriplesTotal(0));
@@ -214,19 +214,17 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {2, 30, 20},  // Row 4
         {3, 30, 30}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 5, 10), true},    // Insert before row 0
-            LT{1, IT(1, 10, 10), false},  // Delete row 0
-            LT{1, IT(1, 10, 11), true},   // Insert before row 1
-            LT{1, IT(2, 11, 10), true},   // Insert before row 1
-            LT{1, IT(2, 30, 10), true},   // Insert before row 4
-            LT{1, IT(2, 30, 20), false},  // Delete row 4
-            LT{1, IT(3, 30, 25), false},  // Delete non-existent row
-            LT{1, IT(3, 30, 30), false},  // Delete row 5
-            LT{1, IT(4, 10, 10), true},   // Insert after row 5
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
     IdTable resultExpected = makeIdTableFromVector({
         {1, 5, 10},   // LT 1
         {1, 10, 11},  // LT 2
@@ -253,18 +251,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {30, 20},  // Row 4
         {30, 30}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 10, 10), false},  // Delete row 0
-            LT{1, IT(1, 10, 11), true},   // Insert before row 1
-            LT{1, IT(1, 11, 10), true},   // Insert before row 1
-            LT{1, IT(1, 21, 11), true},   // Insert before row 4
-            LT{1, IT(1, 30, 10), true},   // Insert before row 4
-            LT{1, IT(1, 30, 20), false},  // Delete row 4
-            LT{1, IT(1, 30, 25), false},  // Delete non-existent row
-            LT{1, IT(1, 30, 30), false}   // Delete row 5
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(1, 11, 10), true},   // Insert before row 1
+        LT{1, IT(1, 21, 11), true},   // Insert before row 4
+        LT{1, IT(1, 30, 10), true},   // Insert before row 4
+        LT{1, IT(1, 30, 20), false},  // Delete row 4
+        LT{1, IT(1, 30, 25), false},  // Delete non-existent row
+        LT{1, IT(1, 30, 30), false}   // Delete row 5
+    });
     IdTable resultExpected = makeIdTableFromVector({
         {10, 11},  // LT 2
         {11, 10},  // LT 3
@@ -289,12 +285,10 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {23},  // Row 4
         {30}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 10, 12), false},  // Delete row 2
-            LT{1, IT(1, 10, 13), true},   // Insert before row 3
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 10, 12), false},  // Delete row 2
+        LT{1, IT(1, 10, 13), true},   // Insert before row 3
+    });
     IdTable resultExpected = makeIdTableFromVector({
         {10},  // orig. Row 0
         {11},  // orig. Row 1
@@ -312,7 +306,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
   {
     IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
     auto locatedTriplesPerBlock =
-        makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}}, emptyMetadata);
+        makeLocatedTriplesPerBlock({LT{1, IT(1, 3, 5), true}});
     IdTable resultExpected = block.clone();
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
@@ -324,8 +318,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
     IdTable block = makeIdTableFromVector({{1, 2, 3}, {1, 3, 5}, {1, 7, 9}});
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
         {LT{1, IT(1, 2, 4), false}, LT{1, IT(1, 2, 5), false},
-         LT{1, IT(1, 3, 5), false}},
-        emptyMetadata);
+         LT{1, IT(1, 3, 5), false}});
     IdTable resultExpected = makeIdTableFromVector({{1, 2, 3}, {1, 7, 9}});
 
     auto merged = locatedTriplesPerBlock.mergeTriples(1, block, 3);
@@ -341,7 +334,7 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
                                            {1, 3, 5, IntId(12), IntId(11)},
                                            {1, 7, 9, IntId(13), IntId(14)}});
     auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {LT{1, IT(1, 3, 5), false}, LT{1, IT(1, 3, 6), true}}, emptyMetadata);
+        {LT{1, IT(1, 3, 5), false}, LT{1, IT(1, 3, 6), true}});
     IdTable resultExpected =
         makeIdTableFromVector({{1, 2, 3, IntId(10), IntId(11)},
                                {1, 3, 6, UndefId(), UndefId()},
@@ -361,18 +354,16 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {5, 30, 20},  // Row 4
         {6, 30, 30}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 5, 10), true},    // Insert before row 0
-            LT{1, IT(1, 10, 10), false},  // Delete row 0
-            LT{1, IT(1, 10, 11), true},   // Insert before row 1
-            LT{1, IT(2, 11, 10), true},   // Insert before row 1
-            LT{1, IT(2, 30, 10), true},   // Insert before row 4
-            LT{1, IT(2, 30, 20), false},  // Delete row 4
-            LT{1, IT(3, 30, 30), false},  // Delete row 5
-            LT{1, IT(4, 10, 10), true},   // Insert after row 5
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
 
     EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(2, block, 3),
                  ad_utility::Exception);
@@ -388,19 +379,17 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {2, 30, 20},  // Row 4
         {3, 30, 30}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 5, 10), true},    // Insert before row 0
-            LT{1, IT(1, 10, 10), false},  // Delete row 0
-            LT{1, IT(1, 10, 11), true},   // Insert before row 1
-            LT{1, IT(2, 11, 10), true},   // Insert before row 1
-            LT{1, IT(2, 30, 10), true},   // Insert before row 4
-            LT{1, IT(2, 30, 20), false},  // Delete row 4
-            LT{1, IT(3, 30, 25), false},  // Delete non-existent row
-            LT{1, IT(3, 30, 30), false},  // Delete row 5
-            LT{1, IT(4, 10, 10), true},   // Insert after row 5
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},    // Insert before row 0
+        LT{1, IT(1, 10, 10), false},  // Delete row 0
+        LT{1, IT(1, 10, 11), true},   // Insert before row 1
+        LT{1, IT(2, 11, 10), true},   // Insert before row 1
+        LT{1, IT(2, 30, 10), true},   // Insert before row 4
+        LT{1, IT(2, 30, 20), false},  // Delete row 4
+        LT{1, IT(3, 30, 25), false},  // Delete non-existent row
+        LT{1, IT(3, 30, 30), false},  // Delete row 5
+        LT{1, IT(4, 10, 10), true},   // Insert after row 5
+    });
     EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 4),
                  ad_utility::Exception);
   }
@@ -415,12 +404,10 @@ TEST_F(LocatedTriplesTest, mergeTriples) {
         {},  // Row 4
         {}   // Row 5
     });
-    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock(
-        {
-            LT{1, IT(1, 5, 10), true},   // Insert before row 0
-            LT{1, IT(2, 11, 10), true},  // Insert before row 1
-        },
-        emptyMetadata);
+    auto locatedTriplesPerBlock = makeLocatedTriplesPerBlock({
+        LT{1, IT(1, 5, 10), true},   // Insert before row 0
+        LT{1, IT(2, 11, 10), true},  // Insert before row 1
+    });
     EXPECT_THROW(locatedTriplesPerBlock.mergeTriples(1, block, 0),
                  ad_utility::Exception);
   }
@@ -462,7 +449,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
   {
     // Each PTn defines a block with only a single triple.
-    std::vector<CompressedBlockMetadata> metadata;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
         Span{CBM(0, PT1, PT1), CBM(1, PT2, PT2), CBM(2, PT3, PT3),
@@ -482,7 +468,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Block 3: PT4 - PT5
     // Block 4: PT6 - PT7
     // Block 8: PT8
-    std::vector<CompressedBlockMetadata> metadata;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
         Span{CBM(0, PT1, PT1), CBM(1, PT2, PT3), CBM(2, PT4, PT5),
@@ -497,7 +482,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
   {
     // The relations (identical first column) are in a block each.
-    std::vector<CompressedBlockMetadata> metadata;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate,
         Span{CBM(0, PT1, PT1), CBM(1, PT2, PT7), CBM(2, PT8, PT8)}, {0, 1, 2},
@@ -513,7 +497,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
     // Blocks are identical to previous test, but the triples to locate are not
     // sorted. We will probably require a sorted input later, but for now this
     // is supported.
-    std::vector<CompressedBlockMetadata> metadata;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocateReverse,
         Span{CBM(0, PT1, PT1), CBM(1, PT2, PT7), CBM(2, PT8, PT8)}, {0, 1, 2},
@@ -527,7 +510,6 @@ TEST_F(LocatedTriplesTest, locatedTriple) {
 
   {
     // All triples are in one block.
-    std::vector<CompressedBlockMetadata> metadata;
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
         triplesToLocate, Span{CBM(0, PT1, PT8)}, {0, 1, 2}, false, handle);
     EXPECT_THAT(locatedTriples,
@@ -565,23 +547,21 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
   // At the beginning the augmented metadata is equal to the block metadata.
   LocatedTriplesPerBlock locatedTriplesPerBlock;
-  locatedTriplesPerBlock.updateAugmentedMetadata(metadata);
+  locatedTriplesPerBlock.setOriginalMetadata(metadata);
 
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
   // Adding no triples does no changed the augmented metadata.
   locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-                                 Span{}, metadata, {0, 1, 2}, true, handle),
-                             metadata);
+      Span{}, metadata, {0, 1, 2}, true, handle));
 
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
   // T1 is before block 0. The beginning of block 0 changes.
   locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-                                 Span{T1}, metadata, {0, 1, 2}, false, handle),
-                             metadata);
+      Span{T1}, metadata, {0, 1, 2}, false, handle));
 
   expectedAugmentedMetadata[0] = CBM(0, T1.toPermutedTriple(), PT1);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
@@ -589,8 +569,7 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
 
   // T2 is inside block 1. Borders don't change.
   locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-                                 Span{T2}, metadata, {0, 1, 2}, true, handle),
-                             metadata);
+      Span{T2}, metadata, {0, 1, 2}, true, handle));
 
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
@@ -598,31 +577,29 @@ TEST_F(LocatedTriplesTest, augmentedMetadata) {
   // T3 is equal to PT4, the beginning of block 2. All update (update and
   // delete) add to the block borders. Borders don't change.
   locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
-                                 Span{T3}, metadata, {0, 1, 2}, false, handle),
-                             metadata);
+      Span{T3}, metadata, {0, 1, 2}, false, handle));
 
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
   // T4 is before block 4. The beginning of block 4 changes.
-  auto handles = locatedTriplesPerBlock.add(
-      LocatedTriple::locateTriplesInPermutation(Span{T4}, metadata, {0, 1, 2},
-                                                true, handle),
-      metadata);
+  auto handles =
+      locatedTriplesPerBlock.add(LocatedTriple::locateTriplesInPermutation(
+          Span{T4}, metadata, {0, 1, 2}, true, handle));
 
   expectedAugmentedMetadata[4] = CBM(4, T4.toPermutedTriple(), PT8);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
   // Erasing the update of T4 restores the beginning of block 4.
-  locatedTriplesPerBlock.erase(4, handles[0], metadata);
+  locatedTriplesPerBlock.erase(4, handles[0]);
 
   expectedAugmentedMetadata[4] = CBM(4, PT8, PT8);
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(expectedAugmentedMetadata));
 
   // Clearing the updates restores the original block borders.
-  locatedTriplesPerBlock.clear(metadata);
+  locatedTriplesPerBlock.clear();
 
   EXPECT_THAT(locatedTriplesPerBlock.getAugmentedMetadata(),
               testing::ElementsAreArray(metadata));
@@ -641,9 +618,9 @@ TEST_F(LocatedTriplesTest, debugPrints) {
 
   {
     LocatedTriplesPerBlock ltpb;
+    ltpb.setOriginalMetadata(std::vector{CBM(0, PT(1, 1, 1), PT(1, 10, 15))});
     EXPECT_THAT(ltpb, InsertIntoStream(testing::StrEq("")));
-    ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)},
-             std::vector{CBM(0, PT(1, 1, 1), PT(1, 10, 15))});
+    ltpb.add(std::vector{LT(0, IT(1, 1, 1), true)});
     EXPECT_THAT(
         ltpb, InsertIntoStream(testing::StrEq(
                   "LTs in Block #0: { LT(0 IdTriple(V:1, V:1, V:1, ) 1) }\n")));
