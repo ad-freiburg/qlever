@@ -22,7 +22,6 @@ namespace sparqlExpression::detail {
 
 using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
 using Iri = ad_utility::triple_component::Iri;
-using IdOrLiteralOrIri = std::variant<ValueId, LiteralOrIri>;
 
 // An empty struct to represent a non-numeric value in a context where only
 // numeric values make sense.

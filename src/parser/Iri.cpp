@@ -4,7 +4,6 @@
 
 #include "parser/Iri.h"
 
-#include <ctre.hpp>
 #include <utility>
 
 #include "parser/LiteralOrIri.h"
@@ -40,20 +39,6 @@ Iri Iri::fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets) {
   AD_CORRECTNESS_CHECK(!stringWithoutBrackets.starts_with('<') &&
                        !stringWithoutBrackets.ends_with('>'));
   return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};
-}
-
-// ____________________________________________________________________________
-std::optional<Iri> Iri::fromIrirefWithBasicUrlCheck(
-    std::string_view stringWithoutBrackets) {
-  AD_CORRECTNESS_CHECK(!stringWithoutBrackets.starts_with('<') &&
-                       !stringWithoutBrackets.ends_with('>'));
-  // Pattern to check for valid base Url, ignores path.
-  constexpr static ctll::fixed_string patternUrlBase =
-      "^((https|http|ftp)://[a-zA-Z0-9.\\-]+(:[0-9]+)?)(.*)$";
-  if (ctre::match<patternUrlBase>(stringWithoutBrackets)) {
-    return Iri{absl::StrCat("<"sv, stringWithoutBrackets, ">"sv)};
-  }
-  return std::nullopt;
 }
 
 // ____________________________________________________________________________

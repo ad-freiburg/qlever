@@ -236,7 +236,7 @@ OptIri IriValueGetter::operator()(
 
 //______________________________________________________________________________
 template <typename T, typename ValueGetter>
-requires std::same_as<IdOrLiteralOrIri, T> ||
+requires std::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
          std::same_as<std::optional<std::string>, T>
 T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
            ValueGetter& valueGetter) {
@@ -256,7 +256,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
     case Double:
     case Date:
     case Undefined:
-      if constexpr (std::is_same_v<T, IdOrLiteralOrIri>) {
+      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
       } else {
         return std::nullopt;
@@ -266,9 +266,9 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
 }
 
 //_____________________________________________________________________________
-IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
     ValueId id, const EvaluationContext* context) const {
-  return getValue<IdOrLiteralOrIri>(id, context, *this);
+  return getValue<sparqlExpression::IdOrLiteralOrIri>(id, context, *this);
 }
 
 //______________________________________________________________________________
@@ -278,15 +278,11 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
 }
 
 //______________________________________________________________________________
-IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
     const LiteralOrIri& litOrIri,
     [[maybe_unused]] const EvaluationContext* context) const {
-  const auto& optIri = Iri::fromIrirefWithBasicUrlCheck(
-      litOrIri.isIri()
-          ? asStringViewUnsafe(litOrIri.getIri().getContent())
-          : asStringViewUnsafe(litOrIri.getLiteral().getContent()));
-  if (optIri.has_value()) {
-    return LiteralOrIri{optIri.value()};
-  }
-  return Id::makeUndefined();
+  return LiteralOrIri{litOrIri.isIri()
+                          ? litOrIri.getIri()
+                          : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
+                                litOrIri.getLiteral().getContent()))};
 }

@@ -582,18 +582,18 @@ TEST(SparqlExpression, stringOperators) {
 
   auto T = Id::makeFromBool(true);
   auto F = Id::makeFromBool(false);
-  auto date = Id::makeFromDate(DateOrLargeYear::parseXsdDate("2025-01-01"));
+  auto dateDate = Id::makeFromDate(DateOrLargeYear::parseXsdDate("2025-01-01"));
+  auto dateLYear =
+      Id::makeFromDate(DateOrLargeYear(11853, DateOrLargeYear::Type::Year));
   // Test `iriOrUriExpression`.
   // test invalid
-  checkIriOrUri(
-      IdOrLiteralOrIriVec{lit("bim"), lit("bam"), U, IntId(2), DoubleId(12.99),
-                          date, T, F, testContext().x, testContext().aelpha,
-                          testContext().notInVocabAelpha,
-                          iriref("<h://bimbam>"), iriref("<a>")},
-      IdOrLiteralOrIriVec{U, U, U, U, U, U, U, U, U, U, U, U, U});
+  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
+                                    dateLYear, T, F},
+                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
   // test valid
   checkIriOrUri(
-      IdOrLiteralOrIriVec{lit("https://www.bimbimbam/2001/bamString"),
+      IdOrLiteralOrIriVec{lit("bimbim"), iriref("<bambim>"),
+                          lit("https://www.bimbimbam/2001/bamString"),
                           lit("http://www.w3.org/2001/XMLSchema#unsignedShort"),
                           lit("http://www.w3.org/2001/XMLSchema#string"),
                           iriref("<http://www.w3.org/2001/XMLSchema#string>"),
@@ -601,6 +601,7 @@ TEST(SparqlExpression, stringOperators) {
                           testContext().notInVocabIriLit,
                           lit("http://example/"), iriref("<http://example/>")},
       IdOrLiteralOrIriVec{
+          iriref("<bimbim>"), iriref("<bambim>"),
           iriref("<https://www.bimbimbam/2001/bamString>"),
           iriref("<http://www.w3.org/2001/XMLSchema#unsignedShort>"),
           iriref("<http://www.w3.org/2001/XMLSchema#string>"),
