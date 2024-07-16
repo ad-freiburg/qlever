@@ -14,7 +14,7 @@ using std::vector;
 
 class Distinct : public Operation {
  private:
-  std::shared_ptr<QueryExecutionTree> _subtree;
+  std::shared_ptr<QueryExecutionTree> subtree_;
   vector<ColumnIndex> _keepIndices;
 
  public:
@@ -24,38 +24,37 @@ class Distinct : public Operation {
 
   [[nodiscard]] size_t getResultWidth() const override;
 
- public:
   [[nodiscard]] string getDescriptor() const override;
 
   [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
-    return _subtree->resultSortedOn();
+    return subtree_->resultSortedOn();
   }
 
  private:
   uint64_t getSizeEstimateBeforeLimit() override {
-    return _subtree->getSizeEstimate();
+    return subtree_->getSizeEstimate();
   }
 
  public:
-  virtual size_t getCostEstimate() override {
-    return getSizeEstimateBeforeLimit() + _subtree->getCostEstimate();
+  size_t getCostEstimate() override {
+    return getSizeEstimateBeforeLimit() + subtree_->getCostEstimate();
   }
 
-  virtual float getMultiplicity(size_t col) override {
-    return _subtree->getMultiplicity(col);
+  float getMultiplicity(size_t col) override {
+    return subtree_->getMultiplicity(col);
   }
 
-  bool knownEmptyResult() override { return _subtree->knownEmptyResult(); }
+  bool knownEmptyResult() override { return subtree_->knownEmptyResult(); }
 
   vector<QueryExecutionTree*> getChildren() override {
-    return {_subtree.get()};
+    return {subtree_.get()};
   }
 
  protected:
   [[nodiscard]] string getCacheKeyImpl() const override;
 
  private:
-  virtual Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  Result computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
