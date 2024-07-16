@@ -89,7 +89,6 @@ IdTable LocatedTriplesPerBlock::mergeTriplesImpl(size_t blockIndex,
   AD_CONTRACT_CHECK(map_.contains(blockIndex));
 
   AD_CONTRACT_CHECK(numIndexColumns <= block.numColumns());
-  AD_CONTRACT_CHECK(block.numColumns() >= 1);
 
   auto numInsertsAndDeletes = numTriples(blockIndex);
   IdTable result{block.numColumns(), block.getAllocator()};
