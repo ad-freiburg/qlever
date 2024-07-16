@@ -88,6 +88,8 @@ class LocatedTriplesPerBlock {
   // Stores the block metadata where the block borders have been adjusted for
   // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
+  std::vector<CompressedBlockMetadata> originalMetadata_;
+  void updateAugmentedMetadata();
 
  public:
   // Get upper limits for the number of located triples for the given block. The
@@ -130,11 +132,9 @@ class LocatedTriplesPerBlock {
   // 1. The `locatedTriples` must not already exist in
   // `LocatedTriplesPerBlock`.
   std::vector<LocatedTriples::iterator> add(
-      std::span<const LocatedTriple> locatedTriples,
-      std::vector<CompressedBlockMetadata> originalMetadata);
+      std::span<const LocatedTriple> locatedTriples);
 
-  void erase(size_t blockIndex, LocatedTriples::iterator iter,
-             std::vector<CompressedBlockMetadata> originalMetadata);
+  void erase(size_t blockIndex, LocatedTriples::iterator iter);
 
   // Get the total number of `LocatedTriple`s (for all blocks).
   size_t numTriples() const { return numTriples_; }
@@ -143,9 +143,9 @@ class LocatedTriplesPerBlock {
   size_t numBlocks() const { return map_.size(); }
 
   // Must be called initially before using the `LocatedTriplesPerBlock` to
-  // initialize the block metadata that is augmented for updated triples. This
-  // is currently done in `Permutation::loadFromDisk`.
-  void updateAugmentedMetadata(std::vector<CompressedBlockMetadata> metadata);
+  // initialize the original block metadata that is augmented for updated
+  // triples. This is currently done in `Permutation::loadFromDisk`.
+  void setOriginalMetadata(std::vector<CompressedBlockMetadata> metadata);
 
   // Returns the block metadata where the block borders have been updated to
   // account for the update triples. All triples (both insert and delete) will
@@ -156,10 +156,10 @@ class LocatedTriplesPerBlock {
   };
 
   // Remove all located triples.
-  void clear(std::vector<CompressedBlockMetadata> metadata) {
+  void clear() {
     map_.clear();
     numTriples_ = 0;
-    augmentedMetadata_ = std::move(metadata);
+    augmentedMetadata_ = originalMetadata_;
   }
 
   // This operator is only for debugging and testing. It returns a
