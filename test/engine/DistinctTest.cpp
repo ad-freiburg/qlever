@@ -5,7 +5,6 @@
 #include <gmock/gmock.h>
 
 #include "../util/IndexTestHelpers.h"
-#include "./ValuesForTesting.h"
 #include "engine/Distinct.h"
 #include "engine/NeutralElementOperation.h"
 
