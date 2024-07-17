@@ -217,8 +217,8 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
   // TODO<C++23> use view::enumerate
   size_t blockIndex = 0;
   // Copy to preserve originalMetadata_.
-  std::vector<CompressedBlockMetadata> metadata(originalMetadata_);
-  for (auto& blockMetadata : metadata) {
+  augmentedMetadata_ = originalMetadata_;
+  for (auto& blockMetadata : augmentedMetadata_.value()) {
     if (hasUpdates(blockIndex)) {
       const auto& blockUpdates = map_.at(blockIndex);
       blockMetadata.firstTriple_ =
@@ -230,7 +230,6 @@ void LocatedTriplesPerBlock::updateAugmentedMetadata() {
     }
     blockIndex++;
   }
-  augmentedMetadata_ = std::move(metadata);
 }
 
 // ____________________________________________________________________________
