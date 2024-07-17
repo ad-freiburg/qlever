@@ -658,13 +658,6 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B, C>& a,
                             const SplitValBase<A, B, C>& b,
                             const Level level) const {
-    // Currently all internal words stand before all external words.
-    // TODO<joka921> This has to be changed once we have the IDs interleaved
-    // via the MilestoneIdManager.
-    if (a.isExternalized_ != b.isExternalized_) {
-      return a.isExternalized_ ? 1 : -1;
-    }
-
     if (auto res =
             std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
         res != 0) {
@@ -686,7 +679,18 @@ class TripleComponentComparator {
 
     // Only if two literals are bytewise equal, we compare by the langtag or
     // datatype.
-    return a.langtag_.compare(b.langtag_);
+    if (int res = a.langtag_.compare(b.langtag_) != 0) {
+      return res;
+    }
+    // If we have the same literal in `externalized` and `internalized`, then
+    // we need to see the internalized one first to make the vocabulary mergin
+    // work correctly.
+    if (a.isExternalized_ != b.isExternalized_) {
+      return a.isExternalized_ ? 1 : -1;
+    }
+
+    // They are truly equal.
+    return 0;
   }
 
   /**

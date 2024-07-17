@@ -437,15 +437,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto internalVocabularyAction = vocab_.makeWordWriterForInternalVocabulary(
-        onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+    auto internalVocabularyAction =
+        vocab_.makeWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
     internalVocabularyAction.readableName() = "internal vocabulary";
-    auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
-        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-    externalVocabularyAction.readableName() = "external vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, internalVocabularyAction,
-        externalVocabularyAction, memoryLimitIndexBuilding());
+        memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;

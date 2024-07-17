@@ -45,7 +45,6 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
 auto VocabularyMerger::mergeVocabulary(
     const std::string& basename, size_t numFiles,
     WordComparator auto comparator, WordCallback auto& internalVocabularyAction,
-    WordCallback auto& externalVocabularyAction,
     ad_utility::MemorySize memoryToUse) -> VocabularyMetaData {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal. All internal IRIs or literals come before all external ones.
@@ -108,10 +107,8 @@ auto VocabularyMerger::mergeVocabulary(
       // Wait for the (asynchronous) writing of the last batch of words, and
       // trigger the (again asynchronous) writing of the next batch.
       auto writeTask = [this, buffer = std::move(sortedBuffer),
-                        &internalVocabularyAction, &externalVocabularyAction,
-                        &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, internalVocabularyAction,
-                                     externalVocabularyAction, lessThan,
+                        &internalVocabularyAction, &lessThan, &progressBar]() {
+        this->writeQueueWordsToIdVec(buffer, internalVocabularyAction, lessThan,
                                      progressBar);
       };
       sortedBuffer.clear();
@@ -136,8 +133,8 @@ auto VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction,
-                           externalVocabularyAction, lessThan, progressBar);
+    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, lessThan,
+                           progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -151,7 +148,6 @@ auto VocabularyMerger::mergeVocabulary(
 void VocabularyMerger::writeQueueWordsToIdVec(
     const std::vector<QueueWord>& buffer,
     WordCallback auto& internalVocabularyAction,
-    WordCallback auto& externalVocabularyAction,
     std::predicate<TripleComponentWithIndex,
                    TripleComponentWithIndex> auto const& lessThan,
     ad_utility::ProgressBar& progressBar) {
@@ -188,11 +184,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
         ++metaData_.numBlankNodesTotal_;
       } else {
-        if (!nextWord.isExternal()) {
-          internalVocabularyAction(nextWord.iriOrLiteral());
-        } else {
-          externalVocabularyAction(nextWord.iriOrLiteral());
-        }
+        internalVocabularyAction(nextWord.iriOrLiteral(),
+                                 nextWord.isExternal());
 
         metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
                                                      nextWord.index_);
@@ -203,6 +196,9 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
+    } else {
+      bool& external = lastTripleComponent_.value().isExternal();
+      external = external || top.isExternal();
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =
