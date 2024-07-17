@@ -125,7 +125,7 @@ class VocabularyInMemoryBinSearch {
         : writer_{filename}, offsetWriter_{filename + ".ids"} {}
     void operator()(std::string_view str, uint64_t idx) {
       writer_.push(str.data(), str.size());
-      offsetWriter_.push(idx)
+      offsetWriter_.push(idx);
     }
 
     void finish() {

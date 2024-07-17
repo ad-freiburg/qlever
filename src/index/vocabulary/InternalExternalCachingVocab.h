@@ -43,7 +43,7 @@ class VocabularyInternalExternal {
   }
 
   /// Write the vocabulary to a file.
-  void writeToFile(const string& fileName) {
+  void writeToFile([[maybe_unused]] const string& fileName) {
     // TODO<joka921> Do we need this?
     AD_FAIL();
   }
