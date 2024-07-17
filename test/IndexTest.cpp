@@ -433,8 +433,8 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // TODO: Also have words in the external vocabulary for this test. This
   // requires making getQec() easier to use when setting only few of the many
   // default arguments to other values.
-  auto firstIdExternalVocabulary = Id::makeFromVocabIndex(
-      VocabIndex::make(index.getVocab().getInternalVocab().size()));
+  auto firstIdExternalVocabulary =
+      Id::makeFromVocabIndex(VocabIndex::make(index.getVocab().size()));
   auto emptyRangeExternalVocabulary =
       std::pair{firstIdExternalVocabulary, firstIdExternalVocabulary};
 

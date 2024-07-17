@@ -120,8 +120,7 @@ TEST(Vocabulary, PrefixFilter) {
 
   // Found in internal but not in external vocabulary.
   auto ranges = vocabulary.prefixRanges("\"exp");
-  auto firstIndexExternal =
-      VocabIndex::make(vocabulary.getInternalVocab().size());
+  auto firstIndexExternal = VocabIndex::make(vocabulary.size());
   RdfsVocabulary::PrefixRanges expectedRanges{
       {std::pair{VocabIndex::make(1u), VocabIndex::make(2u)},
        {std::pair{firstIndexExternal, firstIndexExternal}}}};

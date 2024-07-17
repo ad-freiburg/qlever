@@ -211,11 +211,13 @@ class CompressedVocabulary {
       uncompressedSize_ += uncompressedSize;
 
       auto compressAndWrite = [uncompressedSize, words = std::move(wordBuffer_),
-                               this, idx = queueIndex_++]() {
+                               this, idx = queueIndex_++,
+                               additionalBuffer =
+                                   std::move(additionalBuffer_)]() {
         auto bulkResult = CompressionWrapper::compressAll(words);
         writeQueue_.push(std::pair{
             idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
-                  additionalBuffer = std::move(additionalBuffer_)]() {
+                  additionalBuffer = std::move(additionalBuffer)]() {
               auto& [buffer, views, decoder] = bulkResult;
               auto compressedSize = getSize(views);
               compressedSize_ += compressedSize;

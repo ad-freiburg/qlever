@@ -171,18 +171,13 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   VocabularyMetaData res;
   {
     auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&file](const auto& word) {
+    // TODO<joka921> Also check that the `isExternal` flag works.
+    auto internalVocabularyAction = [&file](const auto& word,
+                                            [[maybe_unused]] bool isExternal) {
       file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
     };
-    auto fileExternal =
-        ad_utility::makeOfstream(_basePath + EXTERNAL_VOCAB_SUFFIX);
-    auto externalVocabularyAction = [&fileExternal](const auto& word) {
-      fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    };
-
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, externalVocabularyAction,
-                          1_GB);
+                          internalVocabularyAction, 1_GB);
   }
 
   // No language tags in text file
