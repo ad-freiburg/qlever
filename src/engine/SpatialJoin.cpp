@@ -59,13 +59,13 @@ SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
 std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
       std::shared_ptr<QueryExecutionTree> child, Variable varOfChild) {
   if (varOfChild == leftChildVariable) {
-    childLeft_ = child;
+    //childLeft_ = child;
     return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
-          childLeft_, childRight_);
+          child, childRight_);
   } else if (varOfChild == rightChildVariable) {
-    childRight_ = child;
+    //childRight_ = child;
     return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
-          childLeft_, childRight_);
+          childLeft_, child);
   } else {
     AD_THROW("variable does not match");
   }
@@ -237,7 +237,7 @@ long long SpatialJoin::getMaxDist() {
 }
 
 // ____________________________________________________________________________
-Result SpatialJoin::computeResult(bool requestLaziness) {
+Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   auto betweenQuotes = [] (std::string extractFrom) {
     // returns everything between the first two quotes. If the string does not
     // contain two quotes, the string is returned as a whole
