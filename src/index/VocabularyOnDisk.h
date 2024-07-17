@@ -106,6 +106,17 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  template <typename Comparator>
+  WordAndIndex lower_bound(uint64_t lower, uint64_t upper, const auto& word,
+                           Comparator comparator) const {
+    AD_CORRECTNESS_CHECK(lower <= size());
+    AD_CORRECTNESS_CHECK(lower <= upper);
+    AD_CORRECTNESS_CHECK(upper <= size());
+    auto it = std::lower_bound(begin() + lower, begin() + upper, word,
+                               transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
   // Same as `lower_bound`, but the `comparator` compares an `iterator` (first
   // argument) and a `WordAndIndex` (second argument). This is used for
   // compressed vocabularies in which the decompression depends on the position
@@ -115,6 +126,18 @@ class VocabularyOnDisk {
                                     Comparator comparator) const {
     auto it = ad_utility::lower_bound_iterator(begin(), end(), word,
                                                transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+  template <typename Comparator>
+  WordAndIndex lower_bound_iterator(uint64_t lower, uint64_t upper,
+                                    const auto& word,
+                                    Comparator comparator) const {
+    AD_CORRECTNESS_CHECK(lower <= size());
+    AD_CORRECTNESS_CHECK(lower <= upper);
+    AD_CORRECTNESS_CHECK(upper <= size());
+    auto it =
+        ad_utility::lower_bound_iterator(begin() + lower, begin() + upper, word,
+                                         transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
 
@@ -129,6 +152,17 @@ class VocabularyOnDisk {
     return iteratorToWordAndIndex(it);
   }
 
+  template <typename Comparator>
+  WordAndIndex upper_bound(uint64_t lower, uint64_t upper, const auto& word,
+                           Comparator comparator) const {
+    AD_CORRECTNESS_CHECK(lower <= size());
+    AD_CORRECTNESS_CHECK(lower <= upper);
+    AD_CORRECTNESS_CHECK(upper <= size());
+    auto it = std::upper_bound(begin() + lower, begin() + upper, word,
+                               transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
   // Same as `upper_bound`, but the `comparator` compares a `WordAndIndex`
   // (first argument) and an `Iterator` (second argument). This is used for
   // compressed vocabularies in which the decompression depends on the position
@@ -138,6 +172,19 @@ class VocabularyOnDisk {
                                     Comparator comparator) const {
     auto it = ad_utility::upper_bound_iterator(begin(), end(), word,
                                                transformComparator(comparator));
+    return iteratorToWordAndIndex(it);
+  }
+
+  template <typename Comparator>
+  WordAndIndex upper_bound_iterator(uint64_t lower, uint64_t upper,
+                                    const auto& word,
+                                    Comparator comparator) const {
+    AD_CORRECTNESS_CHECK(lower <= size());
+    AD_CORRECTNESS_CHECK(lower <= upper);
+    AD_CORRECTNESS_CHECK(upper <= size());
+    auto it =
+        ad_utility::upper_bound_iterator(begin() + lower, begin() + upper, word,
+                                         transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
 
