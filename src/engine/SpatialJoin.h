@@ -36,7 +36,7 @@ class SpatialJoin : public Operation {
     
     bool knownEmptyResult() override;
     [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override;
-    ResultTable computeResult() override;
+    Result computeResult(bool requestLaziness) override;
 
     // Depending on the amount of children the operation returns a different
     // VariableToColumnMap. If the operation doesn't have both children it needs

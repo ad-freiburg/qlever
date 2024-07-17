@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include "engine/SpatialJoin.h"
-#include "../IndexTestHelpers.h"
+#include "../util/IndexTestHelpers.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/data/Variable.h"
 #include "engine/IndexScan.h"
@@ -31,11 +31,11 @@ void print_vec(std::vector<std::string> vec) {
 
 // helper function to create a vector of strings from a result table
 std::vector<std::string> printTable(const QueryExecutionContext* qec,
-                  const ResultTable* table) {
+                  const Result* table) {
   std::vector<std::string> output;
-  for (size_t i = 0; i < table->size(); i++) {
+  for (size_t i = 0; i < table->idTable().numRows(); i++) {
     std::string line = "";
-    for (size_t k = 0; k < table->width(); k++) {
+    for (size_t k = 0; k < table->idTable().numColumns(); k++) {
       auto test = ExportQueryExecutionTrees::idToStringAndType(qec->getIndex(),
             table->idTable().at(i, k), {});
       line += test.value().first;
@@ -361,9 +361,9 @@ void createAndTestSpatialJoin(QueryExecutionContext* qec,
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
   Variable firstVariable = addLeftChildFirst ? 
-        spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+        spatialJoinTriple.s_.getVariable() : spatialJoinTriple.o_.getVariable();
   Variable secondVariable = addLeftChildFirst ? 
-        spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+        spatialJoinTriple.o_.getVariable() : spatialJoinTriple.s_.getVariable();
   spatialJoin->addChild(firstChild, firstVariable);
   
   // add second child
@@ -378,7 +378,7 @@ void createAndTestSpatialJoin(QueryExecutionContext* qec,
   auto expectedOutput =
           createRowVectorFromColumnVector(expectedOutputOrdered);
   
-  auto res = spatialJoin->computeResult();
+  auto res = spatialJoin->computeResult(false);
   auto vec = printTable(qec, &res);
   compareResultTable(vec, &expectedOutput);
 
@@ -411,7 +411,7 @@ void buildAndTestSmallTestSetLargeChildren(
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ===================== build the first child ===============================
   auto leftChild = buildMediumChild(qec,
@@ -449,7 +449,7 @@ void buildAndTestSmallTestSetSmallChildren(
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent obj1{Variable{"?obj1"}};
@@ -482,7 +482,7 @@ void buildAndTestSmallTestSetDiffSizeChildren(
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ========================= build big child =================================
   auto bigChild = buildMediumChild(qec,
@@ -1202,7 +1202,7 @@ void testAddChild(bool addLeftChildFirst) {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent obj1{Variable{"?obj1"}};
@@ -1260,7 +1260,7 @@ TEST(SpatialJoin, isConstructed) {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent obj1{Variable{"?obj1"}};
@@ -1295,7 +1295,7 @@ TEST(SpatialJoin, getChildren) {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   TripleComponent obj1{Variable{"?obj1"}};
@@ -1364,7 +1364,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
   auto leftChild = leftSideBigChild ?
@@ -1434,7 +1434,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
     }
     
     auto varColMap = spatialJoin->computeVariableToColumnMap();
-    auto resultTable = spatialJoin->computeResult();
+    auto resultTable = spatialJoin->computeResult(false);
 
     // if the size of varColMap and expectedColumns is the same and each element
     // of expectedColumns is contained in varColMap, then they are the same
@@ -1499,7 +1499,7 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
   auto leftChild = leftSideEmptyChild ?
@@ -1571,7 +1571,7 @@ TEST(SpatialJoin, resultSortedOn) {
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   
   auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
@@ -1629,7 +1629,7 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   std::string kg = createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
   auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
@@ -1652,11 +1652,11 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
   
-  spatialJoin->addChild(leftChild, spatialJoinTriple._s.getVariable());
+  spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  spatialJoin->addChild(rightChild, spatialJoinTriple._o.getVariable());
+  spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
 
   auto cacheKeyString = spatialJoin->getCacheKeyImpl();
   auto leftCacheKeyString =
@@ -1697,7 +1697,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   const unsigned int nrTriplesInput = 17;
   ASSERT_EQ(numTriples, nrTriplesInput);
   
@@ -1739,9 +1739,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
   Variable firstVariable = addLeftChildFirst ? 
-        spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+        spatialJoinTriple.s_.getVariable() : spatialJoinTriple.o_.getVariable();
   Variable secondVariable = addLeftChildFirst ? 
-        spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+        spatialJoinTriple.o_.getVariable() : spatialJoinTriple.s_.getVariable();
   
   if (testMultiplicities) {
     multiplicitiesBeforeAllChildrenAdded(spatialJoin);
@@ -1809,7 +1809,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
-  auto numTriples = qec->getIndex().numTriples().normal_;
+  auto numTriples = qec->getIndex().numTriples().normal;
   const unsigned int nrTriplesInput = 17;
   ASSERT_EQ(numTriples, nrTriplesInput);
   
@@ -1837,9 +1837,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   auto firstChild = addLeftChildFirst ? leftChild : rightChild;
   auto secondChild = addLeftChildFirst ? rightChild : leftChild;
   Variable firstVariable = addLeftChildFirst ? 
-      spatialJoinTriple._s.getVariable() : spatialJoinTriple._o.getVariable();
+      spatialJoinTriple.s_.getVariable() : spatialJoinTriple.o_.getVariable();
   Variable secondVariable = addLeftChildFirst ? 
-      spatialJoinTriple._o.getVariable() : spatialJoinTriple._s.getVariable();
+      spatialJoinTriple.o_.getVariable() : spatialJoinTriple.s_.getVariable();
   
   // each of the input child result tables should look like this:
   // ?geometry           ?point

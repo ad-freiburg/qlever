@@ -2,7 +2,7 @@
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
 #include "global/ValueId.h"
-#include "ValuesForTesting.h"
+//#include "ValuesForTesting.h"
 #include "parser/ParsedQuery.h"
 #include "VariableToColumnMap.h"
 #include "engine/ExportQueryExecutionTrees.h"
@@ -14,7 +14,7 @@ SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
   std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
             : Operation(qec) {
   triple_ = triple;
-  const std::string input = triple._p._iri;
+  const std::string input = triple.p_._iri;
   std::string errormessage = "parsing of the maximum distance for the "
       "SpatialJoin operation was not possible";
   if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
@@ -47,9 +47,9 @@ SpatialJoin::SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
     childRight_ = childRight.value();
   }
   
-  if (triple._s.isVariable() && triple._o.isVariable()) {
-    leftChildVariable = triple._s.getVariable();
-    rightChildVariable = triple._o.getVariable();
+  if (triple.s_.isVariable() && triple.o_.isVariable()) {
+    leftChildVariable = triple.s_.getVariable();
+    rightChildVariable = triple.o_.getVariable();
   } else {
     AD_THROW("SpatialJoin needs two variables");
   }
@@ -104,9 +104,9 @@ string SpatialJoin::getCacheKeyImpl() const {
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
   //return "Descriptor of SpatialJoin";
-  return "SpatialJoin: " + triple_.value()._s.getVariable().name() +
+  return "SpatialJoin: " + triple_.value().s_.getVariable().name() +
         " max distance of " + std::to_string(maxDist) + " to " +
-        triple_.value()._o.getVariable().name();
+        triple_.value().o_.getVariable().name();
 }
 
 // ____________________________________________________________________________
@@ -237,7 +237,7 @@ long long SpatialJoin::getMaxDist() {
 }
 
 // ____________________________________________________________________________
-ResultTable SpatialJoin::computeResult() {
+Result SpatialJoin::computeResult(bool requestLaziness) {
   auto betweenQuotes = [] (std::string extractFrom) {
     // returns everything between the first two quotes. If the string does not
     // contain two quotes, the string is returned as a whole
@@ -271,8 +271,8 @@ ResultTable SpatialJoin::computeResult() {
     IdTable idtable = IdTable(0, _allocator);
     idtable.setNumColumns(getResultWidth());
 
-    std::shared_ptr<const ResultTable> res_left = childLeft_->getResult();
-    std::shared_ptr<const ResultTable> res_right = childRight_->getResult();
+    std::shared_ptr<const Result> res_left = childLeft_->getResult();
+    std::shared_ptr<const Result> res_right = childRight_->getResult();
 
     const IdTable* idLeft = &res_left->idTable();
     const IdTable* idRight = &res_right->idTable();
@@ -314,10 +314,10 @@ ResultTable SpatialJoin::computeResult() {
 
     LocalVocab lv = {}; // let's assume, this has no local vocabs
     std::vector<ColumnIndex> sortedBy = {0};
-    return ResultTable(std::move(idtable), {}, std::move(lv));
+    return Result(std::move(idtable), {}, std::move(lv));
   } else {
-    std::shared_ptr<const ResultTable> res_left_ = childLeft_->getResult();
-    std::shared_ptr<const ResultTable> res_right_ = childRight_->getResult();
+    std::shared_ptr<const Result> res_left_ = childLeft_->getResult();
+    std::shared_ptr<const Result> res_right_ = childRight_->getResult();
     const IdTable* res_left = &res_left_->idTable();
     const IdTable* res_right = &res_right_->idTable();
     size_t numColumns = getResultWidth();
@@ -373,7 +373,7 @@ ResultTable SpatialJoin::computeResult() {
         }
       }
     }
-    return ResultTable(std::move(result),
+    return Result(std::move(result),
             std::vector<ColumnIndex>{}, LocalVocab{});
   }
   AD_THROW("SpatialJoin: this line should never be reached");
