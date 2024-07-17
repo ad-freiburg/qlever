@@ -117,7 +117,6 @@ class VocabularyMerger {
   friend VocabularyMetaData mergeVocabulary(
       const std::string& basename, size_t numFiles,
       WordComparator auto comparator, WordCallback auto& internalWordCallback,
-      WordCallback auto& externalWordCallback,
       ad_utility::MemorySize memoryToUse);
   VocabularyMerger() = default;
 
@@ -128,7 +127,6 @@ class VocabularyMerger {
                                      size_t numFiles,
                                      WordComparator auto comparator,
                                      WordCallback auto& internalWordCallback,
-                                     WordCallback auto& externalWordCallback,
                                      ad_utility::MemorySize memoryToUse);
 
   // Helper `struct` for a word from a partial vocabulary.

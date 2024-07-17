@@ -33,12 +33,10 @@ namespace ad_utility::vocabulary_merger {
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
-                                   WordCallback auto& externalWordCallback,
                                    ad_utility::MemorySize memoryToUse) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, externalWordCallback,
-                                memoryToUse);
+                                internalWordCallback, memoryToUse);
 }
 
 // _________________________________________________________________

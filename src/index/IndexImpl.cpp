@@ -705,10 +705,9 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
 
-  totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
+  totalVocabularySize_ = vocab_.size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
