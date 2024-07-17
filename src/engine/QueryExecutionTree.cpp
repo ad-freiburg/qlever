@@ -14,6 +14,7 @@
 
 #include "engine/Sort.h"
 #include "parser/RdfEscaping.h"
+#include "engine/SpatialJoin.h"
 
 using std::string;
 
