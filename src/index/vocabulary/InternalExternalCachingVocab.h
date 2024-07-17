@@ -113,7 +113,8 @@ class VocabularyInternalExternal {
     explicit WordWriter(const std::string& filename)
         : internalWriter_{filename + ".internal"},
           externalWriter_{filename + ".external"} {}
-    void operator()(std::string_view str, bool isExternal) {
+    // TODO<joka921> Get rid of the default argument...
+    void operator()(std::string_view str, bool isExternal = true) {
       externalWriter_(str);
       if (!isExternal) {
         internalWriter_(str, idx_);

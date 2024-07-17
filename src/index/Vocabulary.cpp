@@ -43,12 +43,13 @@ bool Vocabulary<StringType, ComparatorType, IndexT>::PrefixRanges::contain(
 
 // _____________________________________________________________________________
 template <class S, class C, typename I>
-void Vocabulary<S, C, I>::readFromFile(const string& fileName,
-                                       const string& extLitsFileName) {
+void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
   LOG(INFO) << "Reading vocabulary from file " << fileName << " ..."
             << std::endl;
-  internalVocabulary_.close();
-  internalVocabulary_.open(fileName);
+  vocabulary_.close();
+  vocabulary_.open(fileName);
+  // TODO<joka921> Reinstate the printing of the statistics.
+  /*
   LOG(INFO) << "Done, number of words: " << internalVocabulary_.size()
             << std::endl;
   if (!extLitsFileName.empty()) {
@@ -65,6 +66,7 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName,
     LOG(INFO) << "Number of words in external vocabulary: "
               << externalVocabulary_.size() << std::endl;
   }
+*/
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.
@@ -81,13 +83,13 @@ template <class S, class C, class I>
 void Vocabulary<S, C, I>::createFromSet(
     const ad_utility::HashSet<std::string>& set, const std::string& filename) {
   LOG(DEBUG) << "BEGIN Vocabulary::createFromSet" << std::endl;
-  internalVocabulary_.close();
+  vocabulary_.close();
   std::vector<std::string> words(set.begin(), set.end());
   auto totalComparison = [this](const auto& a, const auto& b) {
     return getCaseComparator()(a, b, SortLevel::TOTAL);
   };
   std::sort(begin(words), end(words), totalComparison);
-  internalVocabulary_.build(words, filename);
+  vocabulary_.build(words, filename);
   LOG(DEBUG) << "END Vocabulary::createFromSet" << std::endl;
 }
 
@@ -209,14 +211,13 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
     const string& word) const {
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
   IdRange<I> range;
-  auto [begin, end] =
-      internalVocabulary_.prefix_range(word.substr(0, word.size() - 1));
+  auto [begin, end] = vocabulary_.prefix_range(word.substr(0, word.size() - 1));
   bool notEmpty = end > begin;
 
   if (notEmpty) {
     range = IdRange{I::make(begin), I::make(end).decremented()};
-    AD_CONTRACT_CHECK(range.first().get() < internalVocabulary_.size());
-    AD_CONTRACT_CHECK(range.last().get() < internalVocabulary_.size());
+    AD_CONTRACT_CHECK(range.first().get() < vocabulary_.size());
+    AD_CONTRACT_CHECK(range.last().get() < vocabulary_.size());
     return range;
   }
   return std::nullopt;
@@ -227,7 +228,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(internalVocabulary_.upper_bound(word, level)._index);
+  return IndexType::make(vocabulary_.upper_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
@@ -235,7 +236,7 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(internalVocabulary_.lower_bound(word, level)._index);
+  return IndexType::make(vocabulary_.lower_bound(word, level)._index);
 }
 
 // _____________________________________________________________________________
@@ -243,9 +244,9 @@ template <typename S, typename ComparatorType, typename I>
 void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
                                                  const std::string& country,
                                                  bool ignorePunctuation) {
-  internalVocabulary_.getComparator() =
+  vocabulary_.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
-  externalVocabulary_.getComparator() =
+  vocabulary_.getComparator() =
       ComparatorType(language, country, ignorePunctuation);
 }
 
@@ -254,22 +255,15 @@ template <typename StringType, typename C, typename I>
 //! lvalue for compressedString and const& for string-based vocabulary
 AccessReturnType_t<StringType> Vocabulary<StringType, C, I>::at(
     IndexType idx) const {
-  return internalVocabulary_[idx.get()];
+  return vocabulary_[idx.get()];
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
-  if (!shouldBeExternalized(word)) {
-    // need the TOTAL level because we want the unique word.
-    *idx = lower_bound(word, SortLevel::TOTAL);
-    // works for the case insensitive version because
-    // of the strict ordering.
-    return idx->get() < internalVocabulary_.size() && at(*idx) == word;
-  }
-  auto wordAndIndex = externalVocabulary_.lower_bound(word, SortLevel::TOTAL);
+  // need the TOTAL level because we want the unique word.
+  auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
   idx->get() = wordAndIndex._index;
-  idx->get() += internalVocabulary_.size();
   return wordAndIndex._word == word;
 }
 
@@ -277,23 +271,21 @@ bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
 template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
     -> Vocabulary<S, C, I>::PrefixRanges {
-  auto rangeInternal = internalVocabulary_.prefix_range(prefix);
-  auto rangeExternal = externalVocabulary_.prefix_range(prefix);
-  auto offset = internalVocabulary_.size();
+  auto rangeInternal = vocabulary_.prefix_range(prefix);
   std::pair<I, I> indexRangeInternal{I::make(rangeInternal.first),
                                      I::make(rangeInternal.second)};
-  std::pair<I, I> indexRangeExternal{I::make(rangeExternal.first + offset),
-                                     I::make(rangeExternal.second + offset)};
-  return PrefixRanges{{indexRangeInternal, indexRangeExternal}};
+  // TODO<joka921> Remove the second (redundant) range...
+  return PrefixRanges{{indexRangeInternal, indexRangeInternal}};
 }
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 template <typename, typename>
+// TODO<joka921> Is this used in the Text vocab?
 std::optional<std::string_view> Vocabulary<S, C, I>::operator[](
     IndexType idx) const {
-  if (idx.get() < internalVocabulary_.size()) {
-    return internalVocabulary_[idx.get()];
+  if (idx.get() < vocabulary_.size()) {
+    return vocabulary_[idx.get()];
   } else {
     return std::nullopt;
   }
