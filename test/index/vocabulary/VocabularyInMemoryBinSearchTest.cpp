@@ -8,6 +8,7 @@
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
 #include "util/Forward.h"
 
+namespace {
 using namespace vocabulary_test;
 
 // A common suffix for all files to reduce the probability of colliding file
@@ -99,6 +100,7 @@ auto createVocabularyFromDiskImpl(std::string filename) {
     return c.createVocabularyFromDiskImpl(AD_FWD(args)...);
   };
 }
+}  // namespace
 
 TEST(VocabularyInMemoryBinSearch, LowerUpperBoundStdLess) {
   testUpperAndLowerBoundWithStdLess(

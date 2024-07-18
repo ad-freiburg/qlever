@@ -9,6 +9,7 @@
 #include "util/Exception.h"
 #include "util/Forward.h"
 
+namespace {
 using namespace vocabulary_test;
 
 // A common suffix for all files to reduce the probability of colliding file
@@ -24,7 +25,7 @@ class VocabularyCreator {
 
  public:
   explicit VocabularyCreator(const std::string& filename)
-      : vocabFilename_{filename + ".internalExternalVocabTest.dat"} {
+      : vocabFilename_{filename + suffix} {
     ad_utility::deleteFile(vocabFilename_, false);
   }
   ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
@@ -92,6 +93,7 @@ auto createVocabularyFromDiskImpl(std::string filename) {
     return c.createVocabularyFromDiskImpl(AD_FWD(args)...);
   };
 }
+}  // namespace
 
 TEST(VocabularyInternalExternal, LowerUpperBoundStdLess) {
   testUpperAndLowerBoundWithStdLess(
