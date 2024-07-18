@@ -1,12 +1,12 @@
 #include "SpatialJoin.h"
 
-#include "global/ValueId.h"
-#include "util/AllocatorWithLimit.h"
-#include "util/MemorySize/MemorySize.h"
 #include "VariableToColumnMap.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
+#include "util/AllocatorWithLimit.h"
 #include "util/GeoSparqlHelpers.h"
+#include "util/MemorySize/MemorySize.h"
 
 // ____________________________________________________________________________
 SpatialJoin::SpatialJoin(

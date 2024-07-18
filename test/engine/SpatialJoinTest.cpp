@@ -365,7 +365,7 @@ void createAndTestSpatialJoin(
   Variable secondVariable = addLeftChildFirst
                                 ? spatialJoinTriple.o_.getVariable()
                                 : spatialJoinTriple.s_.getVariable();
-  
+
   auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
   spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
@@ -1689,12 +1689,14 @@ TEST(SpatialJoin, getCacheKeyImpl) {
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  auto spJoin1 = spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
+  auto spJoin1 =
+      spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
   spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  auto spJoin2 = spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
+  auto spJoin2 =
+      spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
   spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto cacheKeyString = spatialJoin->getCacheKeyImpl();

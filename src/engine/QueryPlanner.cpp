@@ -694,7 +694,7 @@ auto QueryPlanner::seedWithScansAndText(
     }
 
     const string input = node.triple_.p_._iri;
-    if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
+    if (input.starts_with(MAX_DIST_IN_METERS) &&
         input[input.size() - 1] == '>') {
       pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
                                             std::nullopt));
@@ -1715,7 +1715,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
 
 // _____________________________________________________________________________
 auto QueryPlanner::createSpatialJoin(
-    SubtreePlan a, SubtreePlan b,
+    const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
   auto aIsSpatialJoin =
@@ -1723,8 +1723,10 @@ auto QueryPlanner::createSpatialJoin(
   auto bIsSpatialJoin =
       std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
 
-  if (!(static_cast<bool>(aIsSpatialJoin) ^
-        static_cast<bool>(bIsSpatialJoin))) {
+  bool aIs = static_cast<bool>(aIsSpatialJoin);
+  bool bIs = static_cast<bool>(bIsSpatialJoin);
+
+  if ((aIs && bIs) || (!aIs && !bIs)) {
     return std::nullopt;
   }
 
