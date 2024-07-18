@@ -113,7 +113,7 @@ class VocabularyInternalExternal {
     size_t milestoneDistance_;
     size_t sinceMilestone = 0;
     explicit WordWriter(const std::string& filename,
-                        size_t milestoneDistance = 10'000)
+                        size_t milestoneDistance = 1'000)
         : internalWriter_{filename + ".internal"},
           externalWriter_{filename + ".external"},
           milestoneDistance_{milestoneDistance} {}
