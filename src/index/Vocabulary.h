@@ -77,7 +77,7 @@ class Vocabulary {
   // external vocabulary. It would be easy to add more ranges.
   struct PrefixRanges {
    public:
-    using Ranges = std::array<std::pair<IndexT, IndexT>, 2>;
+    using Ranges = std::array<std::pair<IndexT, IndexT>, 1>;
 
    private:
     Ranges ranges_{};

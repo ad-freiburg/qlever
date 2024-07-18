@@ -274,8 +274,7 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
   auto rangeInternal = vocabulary_.prefix_range(prefix);
   std::pair<I, I> indexRangeInternal{I::make(rangeInternal.first),
                                      I::make(rangeInternal.second)};
-  // TODO<joka921> Remove the second (redundant) range...
-  return PrefixRanges{{indexRangeInternal, indexRangeInternal}};
+  return PrefixRanges{{indexRangeInternal}};
 }
 
 // _____________________________________________________________________________

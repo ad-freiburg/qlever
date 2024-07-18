@@ -45,14 +45,9 @@ auto VocabularyMerger::mergeVocabulary(
     WordComparator auto comparator, WordCallback auto& internalVocabularyAction,
     ad_utility::MemorySize memoryToUse) -> VocabularyMetaData {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal. All internal IRIs or literals come before all external ones.
-  // TODO<joka921> Change this as soon as we have Interleaved Ids via the
-  // MilestoneIdManager
+  // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    if (t1.isExternal() != t2.isExternal()) {
-      return t2.isExternal();
-    }
     return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
@@ -163,7 +158,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value() &&
           !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        LOG(WARN) << "Total vocabulary order violated for "
+        std::cerr << "Total vocabulary order violated for "
                   << lastTripleComponent_->iriOrLiteral() << " and "
                   << top.iriOrLiteral() << std::endl;
       }
