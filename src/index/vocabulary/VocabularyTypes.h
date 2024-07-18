@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VOCABULARYTYPES_H
-#define QLEVER_VOCABULARYTYPES_H
+#pragma once
 
 #include <optional>
 
@@ -13,6 +12,11 @@
 struct WordAndIndex {
   std::optional<std::string> _word;
   uint64_t _index;
+  // The next valid indices before and after `_index`. If `nullopt` either no
+  // such index exists (because `_index` is already the first/last valid index),
+  // or they simply weren't set. These members are currently used to communicate
+  // between the `VocabularyInMemoryBinSearch` and the
+  // `InternalExternalVocabulary`.
   std::optional<uint64_t> _previousIndex;
   std::optional<uint64_t> _nextIndex;
 
@@ -51,5 +55,3 @@ struct WordAndIndex {
     return os;
   }
 };
-
-#endif  // QLEVER_VOCABULARYTYPES_H

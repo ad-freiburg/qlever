@@ -118,8 +118,7 @@ static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char RDF_LANGTAG_STRING[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
-static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
+static const std::string VOCAB_SUFFIX = ".vocabulary";
 static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 

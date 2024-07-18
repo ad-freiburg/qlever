@@ -69,20 +69,25 @@ class VocabularyInMemoryBinSearch
   }
 
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
-  // auto operator[](uint64_t i) const { return _words[i]; }
+  std::optional<std::string_view> operator[](uint64_t i) const {
+    auto it = std::ranges::lower_bound(offsets_, i);
+    if (it != offsets_.end() && *it == i) {
+      return _words[i];
+    }
+    return std::nullopt;
+  }
 
   WordAndIndex boundImpl(auto it) const {
     WordAndIndex result;
     auto idx = static_cast<uint64_t>(it - _words.begin());
     result._index = idx < size() ? offsets_[idx] : getHighestId() + 1;
     if (idx > 0) {
-      result._previousIndex = offsets_[idx];
+      result._previousIndex = offsets_[idx - 1];
     }
     if (idx + 1 < size()) {
       result._nextIndex = offsets_[idx + 1];
     }
-    result._word =
-        idx < size() ? std::optional{_words[result._index]} : std::nullopt;
+    result._word = idx < size() ? std::optional{_words[idx]} : std::nullopt;
     return result;
   }
 

@@ -438,7 +438,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
     auto internalVocabularyAction =
-        vocab_.makeWordWriter(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+        vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
     internalVocabularyAction.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
         onDiskBase_, numFiles, sortPred, internalVocabularyAction,
@@ -705,7 +705,7 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   totalVocabularySize_ = vocab_.size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "

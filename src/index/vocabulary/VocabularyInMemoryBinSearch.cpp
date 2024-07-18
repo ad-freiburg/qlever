@@ -9,8 +9,14 @@ using std::string;
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
   _words.clear();
-  ad_utility::serialization::FileReadSerializer file(fileName);
-  file >> _words;
+  {
+    ad_utility::serialization::FileReadSerializer file(fileName);
+    file >> _words;
+  }
+  {
+    ad_utility::serialization::FileReadSerializer idFile(fileName + ".ids");
+    idFile >> offsets_;
+  }
 }
 
 // _____________________________________________________________________________

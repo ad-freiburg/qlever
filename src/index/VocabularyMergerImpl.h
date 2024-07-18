@@ -40,10 +40,12 @@ VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
 }
 
 // _________________________________________________________________
-auto VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles,
-    WordComparator auto comparator, WordCallback auto& internalVocabularyAction,
-    ad_utility::MemorySize memoryToUse) -> VocabularyMetaData {
+auto VocabularyMerger::mergeVocabulary(const std::string& basename,
+                                       size_t numFiles,
+                                       WordComparator auto comparator,
+                                       WordCallback auto& wordCallback,
+                                       ad_utility::MemorySize memoryToUse)
+    -> VocabularyMetaData {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
   // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
@@ -99,9 +101,9 @@ auto VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= bufferSize_) {
       // Wait for the (asynchronous) writing of the last batch of words, and
       // trigger the (again asynchronous) writing of the next batch.
-      auto writeTask = [this, buffer = std::move(sortedBuffer),
-                        &internalVocabularyAction, &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, internalVocabularyAction, lessThan,
+      auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
+                        &lessThan, &progressBar]() {
+        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
                                      progressBar);
       };
       sortedBuffer.clear();
@@ -126,8 +128,7 @@ auto VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction, lessThan,
-                           progressBar);
+    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -139,8 +140,7 @@ auto VocabularyMerger::mergeVocabulary(
 
 // ________________________________________________________________________________
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer,
-    WordCallback auto& internalVocabularyAction,
+    const std::vector<QueueWord>& buffer, WordCallback auto& wordCallback,
     std::predicate<TripleComponentWithIndex,
                    TripleComponentWithIndex> auto const& lessThan,
     ad_utility::ProgressBar& progressBar) {
@@ -158,7 +158,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         top.iriOrLiteral() != lastTripleComponent_.value().iriOrLiteral()) {
       if (lastTripleComponent_.has_value() &&
           !lessThan(lastTripleComponent_.value(), top.entry_)) {
-        std::cerr << "Total vocabulary order violated for "
+        LOG(WARN) << "Total vocabulary order violated for "
                   << lastTripleComponent_->iriOrLiteral() << " and "
                   << top.iriOrLiteral() << std::endl;
       }
@@ -177,8 +177,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
         ++metaData_.numBlankNodesTotal_;
       } else {
-        internalVocabularyAction(nextWord.iriOrLiteral(),
-                                 nextWord.isExternal());
+        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
 
         metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
                                                      nextWord.index_);
@@ -190,6 +189,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
     } else {
+      // If a word appears with different values for `isExternal`, then we
+      // externalize it.
       bool& external = lastTripleComponent_.value().isExternal();
       external = external || top.isExternal();
     }

@@ -7,15 +7,10 @@
 #include <string>
 #include <string_view>
 
-#include "../../global/Pattern.h"
-#include "../../util/Exception.h"
-#include "../CompressedString.h"
-#include "./VocabularyTypes.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/VocabularyInMemoryBinSearch.h"
-#include "util/Algorithm.h"
-#include "util/Serializer/FileSerializer.h"
-#include "util/Serializer/SerializeVector.h"
+#include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
@@ -58,8 +53,11 @@ class VocabularyInternalExternal {
   }
 
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
-  auto operator[](uint64_t i) const {
-    // TODO<joka921> Implement efficient caching.
+  std::string operator[](uint64_t i) const {
+    auto fromInternal = internalVocab_[i];
+    if (fromInternal.has_value()) {
+      return std::string{fromInternal.value()};
+    }
     return externalVocab_[i];
   }
 
@@ -70,28 +68,10 @@ class VocabularyInternalExternal {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
                          auto boundFunction) const {
-    // TODO<joka921> Implement efficient caching...
     WordAndIndex lowerBoundInternal =
         boundFunction(internalVocab_, word, comparator);
-    // TODO<joka921> We have to fix the comparisons here...
-    /*
-    if constexpr (isLowerBound) {
-      // TODO<joka921> Do we need both directions?
-      if  constexpr (isIteratorFunction) {
-        if ((!comparator(lowerBoundInternal._word, word)) &&
-            (!comparator(word, lowerBoundInternal._word))) {
-          return lowerBoundInternal;
-        }
-      } else {
-        if ((!comparator(lowerBoundInternal._word, word)) &&
-            (!comparator(word, lowerBoundInternal._word))) {
-          return lowerBoundInternal;
-        }
-      }
-    }
-     */
-    // TODO<joka921> We don't necessarily have to search from "previous" to
-    // "next"... Figure this out and test it.
+
+    //  The external vocabulary might have slightly different bounds.
     return boundFunction(externalVocab_, word, comparator,
                          lowerBoundInternal._previousIndex,
                          lowerBoundInternal._nextIndex);

@@ -171,7 +171,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
   {
-    auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
+    auto file = ad_utility::makeOfstream(_basePath + VOCAB_SUFFIX);
     // TODO<joka921> Also check that the `isExternal` flag works.
     auto internalVocabularyAction = [&file](const auto& word,
                                             [[maybe_unused]] bool isExternal) {
@@ -189,10 +189,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   ASSERT_EQ(res.internalEntities_.end(), Id::makeUndefined());
   // coheck that (external) vocabulary has the right form.
   // TODO<joka921> fix these tests.
-  ASSERT_TRUE(
-      areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
-  ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
-                                  _basePath + EXTERNAL_VOCAB_SUFFIX));
+  ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + VOCAB_SUFFIX));
 
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
