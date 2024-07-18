@@ -302,9 +302,6 @@ void Join::computeSizeEstimateAndMultiplicities() {
     }
     _multiplicities.emplace_back(m);
   }
-  LOG(INFO) << "Join stuff with multiplicities ================ " << std::endl;
-  LOG(INFO) << _left->getCacheKey() << "\n\n " << _right->getCacheKey() << std::endl;
-  LOG(INFO) << _multiplicities.size() << " " << getResultWidth() << std::endl;
   assert(_multiplicities.size() == getResultWidth());
 }
 

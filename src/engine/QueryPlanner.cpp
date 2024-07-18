@@ -27,6 +27,7 @@
 #include "engine/OrderBy.h"
 #include "engine/Service.h"
 #include "engine/Sort.h"
+#include "engine/SpatialJoin.h"
 #include "engine/TextIndexScanForEntity.h"
 #include "engine/TextIndexScanForWord.h"
 #include "engine/TextLimit.h"
@@ -35,7 +36,6 @@
 #include "engine/Values.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
-#include "engine/SpatialJoin.h"
 
 namespace p = parsedQuery;
 namespace {
@@ -695,7 +695,7 @@ auto QueryPlanner::seedWithScansAndText(
 
     const string input = node.triple_.p_._iri;
     if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
-          input[input.size() - 1] == '>' ) {
+        input[input.size() - 1] == '>') {
       // move the parsing of maxDist into the constructor
       /*int maxDist = 0;
       try {
@@ -706,8 +706,8 @@ auto QueryPlanner::seedWithScansAndText(
         AD_THROW("parsing of the maximum distance for the SpatialJoin "
             "operation was not possible");
       }*/
-      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_,
-          std::nullopt, std::nullopt));
+      pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
+                                            std::nullopt));
       continue;
     }
 
@@ -1640,7 +1640,6 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-
   // if one of the inputs is the spatial join and the other input is a matching
   // geometry, add the geometry as a child to the spatial join. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
@@ -1729,13 +1728,13 @@ auto QueryPlanner::createSpatialJoin(
     SubtreePlan a, SubtreePlan b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
+  auto aIsSpatialJoin =
+      std::dynamic_pointer_cast<const SpatialJoin>(a._qet->getRootOperation());
+  auto bIsSpatialJoin =
+      std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
 
-  auto aIsSpatialJoin = std::dynamic_pointer_cast<const SpatialJoin>(
-      a._qet->getRootOperation());
-  auto bIsSpatialJoin = std::dynamic_pointer_cast<const SpatialJoin>(
-      b._qet->getRootOperation());
-  
-  if (!(static_cast<bool>(aIsSpatialJoin) ^ static_cast<bool>(bIsSpatialJoin))){
+  if (!(static_cast<bool>(aIsSpatialJoin) ^
+        static_cast<bool>(bIsSpatialJoin))) {
     return std::nullopt;
   }
 
@@ -1753,8 +1752,8 @@ auto QueryPlanner::createSpatialJoin(
     AD_THROW("in its current implementation only one pair is allowed");
   }
   ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
-  Variable var = otherSubtreePlan._qet->
-                      getVariableAndInfoByColumnIndex(ind).first;
+  Variable var =
+      otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 

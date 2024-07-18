@@ -13,8 +13,8 @@
 #include <vector>
 
 #include "engine/Sort.h"
-#include "parser/RdfEscaping.h"
 #include "engine/SpatialJoin.h"
+#include "parser/RdfEscaping.h"
 
 using std::string;
 
