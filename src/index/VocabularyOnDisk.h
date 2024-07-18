@@ -96,8 +96,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // `VocabularyInMemory`.
   uint64_t getHighestId() const { return highestIdx_; }
 
-  auto boundImpl(auto it) const { return iteratorToWordAndIndex(it); }
-
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
@@ -115,7 +113,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
- private:
   // Convert an iterator to the corresponding `WordAndIndex`. For the `end()`
   // iterator return `{nullopt, highestID + 1}`.
   [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
@@ -126,6 +123,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
     }
   }
 
+ private:
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;

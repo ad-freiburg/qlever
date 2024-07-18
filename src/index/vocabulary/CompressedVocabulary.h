@@ -122,7 +122,7 @@ class CompressedVocabulary {
   class DiskWriterFromUncompressedWords {
    private:
     std::vector<std::string> wordBuffer_;
-    std::vector<bool> additionalBuffer_;
+    std::vector<bool> isExternalBuffer_;
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
@@ -154,7 +154,7 @@ class CompressedVocabulary {
                     bool isExternal = false) {
       AD_CORRECTNESS_CHECK(!isFinished_);
       wordBuffer_.emplace_back(uncompressedWord);
-      additionalBuffer_.push_back(isExternal);
+      isExternalBuffer_.push_back(isExternal);
       if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
@@ -226,12 +226,12 @@ class CompressedVocabulary {
 
       auto compressAndWrite = [uncompressedSize, words = std::move(wordBuffer_),
                                this, idx = queueIndex_++,
-                               additionalBuffer =
-                                   std::move(additionalBuffer_)]() {
+                               isExternalBuffer =
+                                   std::move(isExternalBuffer_)]() mutable {
         auto bulkResult = CompressionWrapper::compressAll(words);
         writeQueue_.push(std::pair{
             idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
-                  additionalBuffer = std::move(additionalBuffer)]() {
+                  isExternalBuffer = std::move(isExternalBuffer)]() {
               auto& [buffer, views, decoder] = bulkResult;
               auto compressedSize = getSize(views);
               compressedSize_ += compressedSize;
@@ -241,7 +241,7 @@ class CompressedVocabulary {
               size_t i = 0;
               for (auto& word : views) {
                 if constexpr (requires() { underlyingWriter_(word, false); }) {
-                  underlyingWriter_(word, additionalBuffer.at(i));
+                  underlyingWriter_(word, isExternalBuffer.at(i));
                   ++i;
                 } else {
                   underlyingWriter_(word);
@@ -252,7 +252,7 @@ class CompressedVocabulary {
       };
       compressQueue_.push(std::move(compressAndWrite));
       wordBuffer_.clear();
-      additionalBuffer_.clear();
+      isExternalBuffer_.clear();
     }
   };
   using WordWriter = DiskWriterFromUncompressedWords;

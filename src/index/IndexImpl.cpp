@@ -48,11 +48,6 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
-  // first save the total number of words, this is needed to initialize the
-  // dense IndexMetaData variants
-  totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
-  LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
 
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
@@ -437,11 +432,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto internalVocabularyAction =
-        vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
-    internalVocabularyAction.readableName() = "internal vocabulary";
+    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
+        onDiskBase_, numFiles, sortPred, wordCallback,
         memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
@@ -707,9 +701,8 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
-  totalVocabularySize_ = vocab_.size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
+             << vocab_.size() << std::endl;
 
   pso_.loadFromDisk(onDiskBase_);
   pos_.loadFromDisk(onDiskBase_);

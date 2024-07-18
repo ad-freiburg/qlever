@@ -19,12 +19,11 @@ int main(int argc, char** argv) {
   size_t numFiles = atoi(argv[2]);
 
   auto file = ad_utility::makeOfstream(basename + VOCAB_SUFFIX);
-  auto internalVocabularyAction = [&file](const auto& word,
-                                          [[maybe_unused]] bool isExternal) {
+  auto wordCallback = [&file](const auto& word,
+                              [[maybe_unused]] bool isExternal) {
     file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
   };
   VocabularyOnDisk vocab;
   ad_utility::vocabulary_merger::mergeVocabulary(
-      basename, numFiles, TripleComponentComparator(), internalVocabularyAction,
-      4_GB);
+      basename, numFiles, TripleComponentComparator(), wordCallback, 4_GB);
 }

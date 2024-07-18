@@ -5,7 +5,7 @@
 #include <gtest/gtest.h>
 
 #include "./VocabularyTestHelpers.h"
-#include "index/vocabulary/InternalExternalCachingVocab.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
 

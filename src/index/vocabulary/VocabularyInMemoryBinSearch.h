@@ -34,32 +34,32 @@ class VocabularyInMemoryBinSearch
   Indices indices_;
 
  public:
-  /// Construct an empty vocabulary
+  // Construct an empty vocabulary
   VocabularyInMemoryBinSearch() = default;
 
-  /// Construct the vocabulary from `Words` and `Indices`
+  // Construct the vocabulary from `Words` and `Indices`
   explicit VocabularyInMemoryBinSearch(Words words, Indices indices)
       : words_{std::move(words)}, indices_{std::move(indices)} {}
 
-  // Vocabularies are movable
+  // Vocabularies are movable (but not copyable).
   VocabularyInMemoryBinSearch& operator=(
       VocabularyInMemoryBinSearch&&) noexcept = default;
   VocabularyInMemoryBinSearch(VocabularyInMemoryBinSearch&&) noexcept = default;
 
-  const auto& indices() const { return indices_; }
+  // Const access for the indices.
+  const Indices& indices() const { return indices_; }
 
-  /// Read the vocabulary from a file. The file must have been created using a
-  /// `WordWriter`.
+  // Read the vocabulary from a file. The file must have been created using a
+  // `WordWriter`.
   void open(const string& fileName);
 
-  /// Return the total number of words
+  // Return the total number of words
   [[nodiscard]] size_t size() const {
     AD_CORRECTNESS_CHECK(indices_.size() == words_.size());
     return words_.size();
   }
 
-  /// Return the highest ID (= index) that occurs in this vocabulary. May only
-  /// becalled if size() > 0.
+  // Return the highest ID (= index) that occurs in this vocabulary.
   [[nodiscard]] uint64_t getHighestId() const {
     if (indices_.empty()) {
       return 0;
@@ -67,15 +67,15 @@ class VocabularyInMemoryBinSearch
     return indices_.back();
   }
 
-  // Return the word with index `i`. If this index is not part of the
+  // Return the word with index `index`. If this index is not part of the
   // vocabulary, return `std::nullopt`.
-  std::optional<std::string_view> operator[](uint64_t i) const;
+  std::optional<std::string_view> operator[](uint64_t index) const;
 
   // Convert an iterator to a `WordAndIndex`. Required for the mixin.
-  WordAndIndex boundImpl(std::ranges::iterator_t<Words> it) const;
+  WordAndIndex iteratorToWordAndIndex(std::ranges::iterator_t<Words> it) const;
 
-  /// A helper type that can be used to directly write a vocabulary to disk
-  /// word-by-word, without having to materialize it in RAM first.
+  // A helper type that can be used to directly write a vocabulary to disk
+  // word-by-word, without having to materialize it in RAM first.
   struct WordWriter {
     typename Words::Writer writer_;
     using OffsetWriter = ad_utility::serialization::VectorIncrementalSerializer<
@@ -95,7 +95,7 @@ class VocabularyInMemoryBinSearch
 
   // Return a `WordWriter` that directly writes the words to the given
   // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initizlied via `open(filename)`.
+  // has to be explicitly initialized via `open(filename)`.
   WordWriter makeDiskWriter(const std::string& filename) const {
     return WordWriter{filename};
   }
@@ -103,7 +103,7 @@ class VocabularyInMemoryBinSearch
   // Clear the vocabulary.
   void close();
 
-  // Initialize the vocabulary from the given `words`. The indices are assigned
+  // Build the vocabulary from the given `words`. The indices are assigned
   // contiguously starting from 0.
   void build(const std::vector<std::string>& words,
              const std::string& filename);

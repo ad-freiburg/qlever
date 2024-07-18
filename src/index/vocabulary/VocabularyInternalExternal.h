@@ -49,7 +49,7 @@ class VocabularyInternalExternal {
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
 
   /// Return the highest ID (= index) that occurs in this vocabulary. May only
-  /// becalled if size() > 0.
+  /// be called if `size() > 0`.
   [[nodiscard]] uint64_t getHighestId() const {
     return externalVocab_.getHighestId();
   }
@@ -154,16 +154,19 @@ class VocabularyInternalExternal {
 
  private:
   // The common implementation of `lower_bound`, `upper_bound`,
-  // `lower_bound_iterator`, and `upper_bound_iterator`.
+  // `lower_bound_iterator`, and `upper_bound_iterator`. The `boundFunction`
+  // must be a lambda, that calls the corresponding function (e.g.
+  // `lower_bound`) on its first argument (see above for usages).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
                          auto boundFunction) const {
-    WordAndIndex lowerBoundInternal =
+    // First do a binary search in the internal vocab.
+    WordAndIndex boundFromInternalVocab =
         boundFunction(internalVocab_, word, comparator);
 
-    //  The external vocabulary might have slightly different bounds.
+    // Then refine it in the external vocab.
     return boundFunction(externalVocab_, word, comparator,
-                         lowerBoundInternal._previousIndex,
-                         lowerBoundInternal._nextIndex);
+                         boundFromInternalVocab._previousIndex,
+                         boundFromInternalVocab._nextIndex);
   }
 };

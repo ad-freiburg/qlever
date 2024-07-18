@@ -122,7 +122,6 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
-  size_t totalVocabularySize_ = 0;
   Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;

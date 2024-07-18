@@ -8,7 +8,9 @@ using std::string;
 
 // _____________________________________________________________________________
 void VocabularyInMemoryBinSearch::open(const string& fileName) {
-  words_.clear();
+  AD_CORRECTNESS_CHECK(
+      words_.size() == 0 && indices_.empty(),
+      "Calling open on the same vocabulary twice is probably a bug");
   {
     ad_utility::serialization::FileReadSerializer file(fileName);
     file >> words_;
@@ -21,16 +23,16 @@ void VocabularyInMemoryBinSearch::open(const string& fileName) {
 
 // _____________________________________________________________________________
 std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
-    uint64_t i) const {
-  auto it = std::ranges::lower_bound(indices_, i);
-  if (it != indices_.end() && *it == i) {
+    uint64_t index) const {
+  auto it = std::ranges::lower_bound(indices_, index);
+  if (it != indices_.end() && *it == index) {
     return words_[it - indices_.begin()];
   }
   return std::nullopt;
 }
 
 // _____________________________________________________________________________
-WordAndIndex VocabularyInMemoryBinSearch::boundImpl(
+WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     std::ranges::iterator_t<Words> it) const {
   WordAndIndex result;
   auto idx = static_cast<uint64_t>(it - words_.begin());
