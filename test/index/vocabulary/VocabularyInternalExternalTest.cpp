@@ -88,11 +88,6 @@ auto createVocabularyFromDisk(std::string filename) {
   };
 }
 
-auto createVocabularyFromDiskImpl(std::string filename) {
-  return [c = VocabularyCreator{std::move(filename)}](auto&&... args) mutable {
-    return c.createVocabularyFromDiskImpl(AD_FWD(args)...);
-  };
-}
 }  // namespace
 
 TEST(VocabularyInternalExternal, LowerUpperBoundStdLess) {
