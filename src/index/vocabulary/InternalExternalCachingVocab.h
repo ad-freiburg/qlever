@@ -28,7 +28,7 @@ class VocabularyInternalExternal {
 
  public:
   /// Construct an empty vocabulary
-  VocabularyInternalExternal() = default;
+  VocabularyInternalExternal();
 
   // Vocabularies are movable
   VocabularyInternalExternal& operator=(VocabularyInternalExternal&&) noexcept =
@@ -110,16 +110,22 @@ class VocabularyInternalExternal {
     VocabularyInMemoryBinSearch::WordWriter internalWriter_;
     VocabularyOnDisk::WordWriter externalWriter_;
     uint64_t idx_ = 0;
-    explicit WordWriter(const std::string& filename)
+    size_t milestoneDistance_;
+    size_t sinceMilestone = 0;
+    explicit WordWriter(const std::string& filename,
+                        size_t milestoneDistance = 10'000)
         : internalWriter_{filename + ".internal"},
-          externalWriter_{filename + ".external"} {}
+          externalWriter_{filename + ".external"},
+          milestoneDistance_{milestoneDistance} {}
     // TODO<joka921> Get rid of the default argument...
     void operator()(std::string_view str, bool isExternal = true) {
       externalWriter_(str);
-      if (!isExternal) {
+      if (!isExternal || sinceMilestone >= milestoneDistance_) {
         internalWriter_(str, idx_);
+        sinceMilestone = 0;
       }
       ++idx_;
+      ++sinceMilestone;
     }
 
     void finish() {
