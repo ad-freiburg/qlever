@@ -95,7 +95,7 @@ class PatternCreator {
   // Between the calls to `processTriple` we have to remember the current
   // subject (the subject of the last triple for which `processTriple` was
   // called).
-  std::optional<Id> currentSubject_;
+  std::optional<IdNoLocalVocab> currentSubject_;
   // The pattern of `currentSubject_`. This might still be incomplete,
   // because more triples with the same subject might be pushed.
   Pattern currentPattern_;

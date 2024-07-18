@@ -18,7 +18,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
   if (!currentSubject_.has_value()) {
     // This is the first triple.
     currentSubject_ = triple[0];
-  } else if (triple[0] != currentSubject_) {
+  } else if (IdNoLocalVocab(triple[0]) != currentSubject_) {
     // New subject.
     finishSubject(currentSubject_.value(), currentPattern_);
     currentSubject_ = triple[0];
@@ -26,7 +26,7 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
   }
   tripleBuffer_.emplace_back(triple, ignoreForPatterns);
   // Don't list predicates twice in the same pattern.
-  if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
+  if (currentPattern_.empty() || ! ValueId::equalByBits(currentPattern_.back(), triple[1])) {
     currentPattern_.push_back(triple[1]);
   }
 }
@@ -64,8 +64,8 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
     // It might happen that the `tripleBuffer_` contains different subjects
     // which are purely internal and therefore have no pattern.
     auto actualPatternId =
-        Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId);
-    AD_CORRECTNESS_CHECK(curSubject == s || t.isInternal_);
+        Id::makeFromInt(curSubject != IdNoLocalVocab{s} ? NO_PATTERN : patternId);
+    AD_CORRECTNESS_CHECK(curSubject == IdNoLocalVocab{s} || t.isInternal_);
     ospSorterTriplesWithPattern().push(std::array{s, p, o, actualPatternId});
   });
   tripleBuffer_.clear();

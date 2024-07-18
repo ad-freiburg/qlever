@@ -241,7 +241,7 @@ set(ABSL_PROPAGATE_CXX_STD ON)
 FetchContent_Declare(
         abseil
         GIT_REPOSITORY https://github.com/abseil/abseil-cpp.git
-        GIT_TAG 93ac3a4f9ee7792af399cebd873ee99ce15aed08  # 2024-05-16
+        GIT_TAG 9605d816c5ed3ad5e68b155974389fb84580b5b4  # 2024-05-31
 )
 
 if (USE_PARALLEL)
@@ -393,6 +393,12 @@ endif ()
 # Precompiled headers
 set(PRECOMPILED_HEADER_FILES_ENGINE src/util/HashMap.h src/engine/Operation.h src/engine/QueryExecutionTree.h)
 set(PRECOMPILED_HEADER_FILES_PARSER src/engine/sparqlExpressions/AggregateExpression.h ${ctre_SOURCE_DIR}/single-header/ctre-unicode.hpp ${antlr_SOURCE_DIR}/runtime/Cpp/runtime/src/antlr4-runtime.h)
+
+# TODO<joka921> Add an option to enable boost-stacktrace, every now and then it is very useful
+#add_definitions("-DBOOST_STACKTRACE_USE_ADDR2LINE")
+#add_compile_options("-g;-fno-inline")
+#add_link_options( "-no-pie")
+#link_libraries(dl)
 
 add_subdirectory(src/parser)
 target_precompile_headers(parser PRIVATE ${PRECOMPILED_HEADER_FILES_PARSER})

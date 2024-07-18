@@ -501,7 +501,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
     auto hasPattern = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-    ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
+    ASSERT_TRUE(lambda(std::array<Id, 3>{firstLiteral, hasPattern, x}));
     EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds,
                                              emptyRangeExternalVocabulary));
   }

@@ -277,7 +277,7 @@ class AddCombinedRowToIdTable {
       static constexpr size_t idx = isColFromLeft ? 0 : 1;
       for (const auto& [targetIndex, sourceIndices] : indexBuffer_) {
         auto resultId = col[sourceIndices[idx]];
-        numUndef += static_cast<size_t>(resultId == Id::makeUndefined());
+        numUndef += static_cast<size_t>(resultId.isUndefined());
         resultCol[oldSize + targetIndex] = resultId;
       }
 
