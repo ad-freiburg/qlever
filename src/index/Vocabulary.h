@@ -118,10 +118,10 @@ class Vocabulary {
       std::conditional_t<isCompressed_,
                          CompressedVocabulary<VocabularyInternalExternal>,
                          VocabularyInMemory>;
-  using UnicodeVocabulary =
+  using VocabularyWithUnicodeComparator =
       UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
-  UnicodeVocabulary vocabulary_;
+  VocabularyWithUnicodeComparator vocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
