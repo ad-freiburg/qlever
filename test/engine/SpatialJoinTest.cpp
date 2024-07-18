@@ -365,10 +365,13 @@ void createAndTestSpatialJoin(
   Variable secondVariable = addLeftChildFirst
                                 ? spatialJoinTriple.o_.getVariable()
                                 : spatialJoinTriple.s_.getVariable();
-  spatialJoin->addChild(firstChild, firstVariable);
+  
+  auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   // add second child
-  spatialJoin->addChild(secondChild, secondVariable);
+  auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   // prepare expected output
   // swap rows and columns to use the function orderColAccordingToVarColMap
@@ -1261,11 +1264,13 @@ void testAddChild(bool addLeftChildFirst) {
   ASSERT_EQ(spatialJoin->onlyForTestingGetLeftChild(), nullptr);
   ASSERT_EQ(spatialJoin->onlyForTestingGetRightChild(), nullptr);
 
-  spatialJoin->addChild(firstChild, firstVariable);
+  auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   checkVariable(spatialJoin, addLeftChildFirst);
 
-  spatialJoin->addChild(secondChild, secondVariable);
+  auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   checkVariable(spatialJoin, (!addLeftChildFirst));
 }
@@ -1301,11 +1306,13 @@ TEST(SpatialJoin, isConstructed) {
 
   ASSERT_FALSE(spatialJoin->isConstructed());
 
-  spatialJoin->addChild(leftChild, point1.getVariable());
+  auto spJoin1 = spatialJoin->addChild(leftChild, point1.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_FALSE(spatialJoin->isConstructed());
 
-  spatialJoin->addChild(rightChild, point2.getVariable());
+  auto spJoin2 = spatialJoin->addChild(rightChild, point2.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   ASSERT_TRUE(spatialJoin->isConstructed());
 }
@@ -1336,11 +1343,13 @@ TEST(SpatialJoin, getChildren) {
 
   ASSERT_ANY_THROW(spatialJoin->getChildren());
 
-  spatialJoin->addChild(leftChild, point1.getVariable());
+  auto spJoin1 = spatialJoin->addChild(leftChild, point1.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_ANY_THROW(spatialJoin->getChildren());
 
-  spatialJoin->addChild(rightChild, point2.getVariable());
+  auto spJoin2 = spatialJoin->addChild(rightChild, point2.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 2);
 
@@ -1421,8 +1430,10 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
       addLeftChildFirst ? Variable{"?point1"} : Variable{"?point2"};
   Variable secondVariable =
       addLeftChildFirst ? Variable{"?point2"} : Variable{"?point1"};
-  spatialJoin->addChild(firstChild, firstVariable);
-  spatialJoin->addChild(secondChild, secondVariable);
+  auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
+  auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   if (!testVarToColMap) {
     ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
@@ -1566,10 +1577,12 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
 
   checkEmptyResult(spatialJoin, false);
 
-  spatialJoin->addChild(firstChild, firstVariable);
+  auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
   checkEmptyResult(spatialJoin, firstChildEmpty);
 
-  spatialJoin->addChild(secondChild, secondVariable);
+  auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
   checkEmptyResult(spatialJoin, (firstChildEmpty || secondChildEmpty));
 }
 
@@ -1618,9 +1631,11 @@ TEST(SpatialJoin, resultSortedOn) {
   std::shared_ptr<Operation> op = spatialJoinOperation->getRootOperation();
   SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
-  spatialJoin->addChild(leftChild, obj1.getVariable());
+  auto spJoin1 = spatialJoin->addChild(leftChild, obj1.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
-  spatialJoin->addChild(rightChild, obj2.getVariable());
+  auto spJoin2 = spatialJoin->addChild(rightChild, obj2.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
   ASSERT_EQ(spatialJoin->getResultSortedOn().size(), 0);
 }
 
@@ -1674,11 +1689,13 @@ TEST(SpatialJoin, getCacheKeyImpl) {
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
+  auto spJoin1 = spatialJoin->addChild(leftChild, spatialJoinTriple.s_.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
 
   ASSERT_EQ(spatialJoin->getCacheKeyImpl(), "incomplete SpatialJoin class");
 
-  spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
+  auto spJoin2 = spatialJoin->addChild(rightChild, spatialJoinTriple.o_.getVariable());
+  spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
 
   auto cacheKeyString = spatialJoin->getCacheKeyImpl();
   auto leftCacheKeyString =
@@ -1766,9 +1783,11 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   if (testMultiplicities) {
     multiplicitiesBeforeAllChildrenAdded(spatialJoin);
-    spatialJoin->addChild(firstChild, firstVariable);
+    auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+    spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
     multiplicitiesBeforeAllChildrenAdded(spatialJoin);
-    spatialJoin->addChild(secondChild, secondVariable);
+    auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+    spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
     auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
     auto varColsVec = copySortedByColumnIndex(varColsMap);
     auto leftVarColMap = leftChild->getVariableColumns();
@@ -1807,9 +1826,11 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
   } else {
     // test getSizeEstimate
     ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
-    spatialJoin->addChild(firstChild, firstVariable);
+    auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+    spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
     ASSERT_EQ(spatialJoin->getSizeEstimate(), 1);
-    spatialJoin->addChild(secondChild, secondVariable);
+    auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+    spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
     // the size should be 49, because both input tables have 7 rows and it is
     // assumed, that the whole cross product is build
     auto estimate =
@@ -1877,9 +1898,11 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
     if (testMultiplicities) {
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
-      spatialJoin->addChild(firstChild, firstVariable);
+      auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+      spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
-      spatialJoin->addChild(secondChild, secondVariable);
+      auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+      spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
       Variable distance{spatialJoin->getInternalDistanceName()};
 
@@ -1904,8 +1927,10 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     } else {
       ASSERT_EQ(leftChild->getSizeEstimate(), 7);
       ASSERT_EQ(rightChild->getSizeEstimate(), 7);
-      spatialJoin->addChild(firstChild, firstVariable);
-      spatialJoin->addChild(secondChild, secondVariable);
+      auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
+      spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
+      auto spJoin2 = spatialJoin->addChild(secondChild, secondVariable);
+      spatialJoin = static_cast<SpatialJoin*>(spJoin2.get());
       ASSERT_EQ(spatialJoin->getSizeEstimate(), 49);
     }
   }
