@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 
+#include "global/Id.h"
 #include "util/Enums.h"
 #include "util/Exception.h"
 #include "util/Forward.h"
@@ -92,6 +93,17 @@ class Row {
     std::array<T, numStaticColumns> result;
     std::ranges::copy(*this, result.begin());
     return result;
+  }
+
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
+  friend std::ostream& operator<<(std::ostream& os, const Row& idTableRow)
+      requires(std::is_same_v<T, Id>) {
+    os << "(";
+    for (size_t i = 0; i < idTableRow.numColumns(); ++i) {
+      os << idTableRow[i] << (i < idTableRow.numColumns() - 1 ? " " : ")");
+    }
+    return os;
   }
 };
 
