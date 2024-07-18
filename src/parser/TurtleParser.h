@@ -501,6 +501,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   FRIEND_TEST(TurtleParserTest, blankNode);
   FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
   FRIEND_TEST(TurtleParserTest, DateLiterals);
+  FRIEND_TEST(TurtleParserTest, DayTimeDurationLiterals);
 };
 
 /**

@@ -173,9 +173,9 @@ auto testLanguageExpressions = [](const std::vector<T>& expected,
 TEST(LanguageTagGetter, testLanguageTagValueGetterWithoutVocabId) {
   TestContext testContext{};
   LanguageTagGetter langTagGetter{};
-  Id dateId1 =
-         DateId(DateOrLargeYear::parseXsdDatetime, "1900-12-13T03:12:00.33Z"),
-     dateId2 = DateId(DateOrLargeYear::parseXsdDate, "2025-01-01");
+  Id dateId1 = DateId(DateYearOrDuration::parseXsdDatetime,
+                      "1900-12-13T03:12:00.33Z"),
+     dateId2 = DateId(DateYearOrDuration::parseXsdDate, "2025-01-01");
 
   // define the input containing IDs (non literal) and corresponding expected
   // return values w.r.t. LanguageTagValueGetter
