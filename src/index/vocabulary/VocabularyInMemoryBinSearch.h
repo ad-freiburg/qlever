@@ -72,7 +72,7 @@ class VocabularyInMemoryBinSearch
   std::optional<std::string_view> operator[](uint64_t i) const {
     auto it = std::ranges::lower_bound(offsets_, i);
     if (it != offsets_.end() && *it == i) {
-      return _words[i];
+      return _words[it - offsets_.begin()];
     }
     return std::nullopt;
   }
