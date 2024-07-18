@@ -350,7 +350,6 @@ void createAndTestSpatialJoin(
     return result;
   };
 
-  // std::cerr << "starting createAndTest" << std::endl;
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
                                                  std::nullopt, std::nullopt);
@@ -382,14 +381,6 @@ void createAndTestSpatialJoin(
   auto res = spatialJoin->computeResult(false);
   auto vec = printTable(qec, &res);
   compareResultTable(vec, &expectedOutput);
-
-  /* std::cerr << res.size() << " " << spatialJoinTriple._p.getIri()
-            << spatialJoin->getMaxDist() << " " << std::endl;
-  std::cerr << "output" << std::endl;
-  print_vec(vec);
-  std::cerr << "expected" << std::endl;
-  print_vec(expectedOutput);
-  std::cerr << "ending createAndTest" << std::endl; */
 }
 
 // build the test using the small dataset. Let the SpatialJoin operation be the
@@ -1921,14 +1912,6 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 }
 
 TEST(SpatialJoin, getMultiplicity) {
-  // test how the multiplicity works: multiplicity = size / distinct
-  // TripleComponent sub{Variable{"?sub"}};
-  // TripleComponent obj{Variable{"?obj"}};
-  // auto dummy = computeResultTest::buildIndexScan(qec, sub, "<name>", obj);
-  // std::shared_ptr<Operation> op = dummy->getRootOperation();
-  // std::cerr << op->getMultiplicity(0) << " " << op->getMultiplicity(1) <<
-  // std::endl; test how multiplicity works ends
-
   // expected behavior:
   // assert (result table at column i has the same distinctness as the
   // corresponding input table (via varToColMap))

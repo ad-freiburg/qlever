@@ -3,7 +3,6 @@
 #include "global/ValueId.h"
 #include "util/AllocatorWithLimit.h"
 #include "util/MemorySize/MemorySize.h"
-// #include "ValuesForTesting.h"
 #include "VariableToColumnMap.h"
 #include "engine/ExportQueryExecutionTrees.h"
 #include "parser/ParsedQuery.h"
@@ -143,30 +142,8 @@ size_t SpatialJoin::getCostEstimate() {
 uint64_t SpatialJoin::getSizeEstimateBeforeLimit() {
   if (childLeft_ && childRight_) {
     return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
-    // if (maxDist % 1000 == 2) {
-    //   return 500;
-    // }
-  } else {
-    LOG(INFO)
-        << "called before both children are added ============================"
-        << std::endl;
   }
   return 1;  // dummy return if not both children are added
-}
-
-void dummy_print_var_cols_map(VariableToColumnMap vars) {
-  for (auto i : vars) {
-    LOG(INFO) << "Variable " << i.first.name() << " column "
-              << i.second.columnIndex_ << std::endl;
-  }
-}
-
-void dummy_print_col_var_map(
-    std::vector<std::pair<Variable, ColumnIndexAndTypeInfo>> vars) {
-  for (unsigned int i = 0; i < vars.size(); i++) {
-    LOG(INFO) << "Variable: " << vars[i].first.name()
-              << " Column: " << vars[i].second.columnIndex_ << std::endl;
-  }
 }
 
 // ____________________________________________________________________________
