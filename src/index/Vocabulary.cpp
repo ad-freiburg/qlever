@@ -6,17 +6,12 @@
 
 #include "index/Vocabulary.h"
 
-#include <fstream>
 #include <iostream>
 
 #include "index/ConstantsIndexBuilding.h"
 #include "parser/RdfEscaping.h"
 #include "parser/Tokenizer.h"
-#include "util/BatchedPipeline.h"
-#include "util/File.h"
-#include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/Serializer/FileSerializer.h"
 #include "util/json.h"
 
 using std::string;
@@ -48,25 +43,16 @@ void Vocabulary<S, C, I>::readFromFile(const string& fileName) {
             << std::endl;
   vocabulary_.close();
   vocabulary_.open(fileName);
-  // TODO<joka921> Reinstate the printing of the statistics.
-  /*
-  LOG(INFO) << "Done, number of words: " << internalVocabulary_.size()
-            << std::endl;
-  if (!extLitsFileName.empty()) {
-    if (!isCompressed_) {
-      LOG(INFO) << "ERROR: trying to load externalized literals to an "
-                   "uncompressed vocabulary. This is not valid and a "
-                   "programming error. Terminating"
-                << std::endl;
-      AD_FAIL();
-    }
-
-    LOG(DEBUG) << "Registering external vocabulary" << std::endl;
-    externalVocabulary_.open(extLitsFileName);
+  if constexpr (isCompressed_) {
+    const auto& internalExternalVocab =
+        vocabulary_.getUnderlyingVocabulary().getUnderlyingVocabulary();
+    LOG(INFO) << "Done, number of words: "
+              << internalExternalVocab.internalVocab().size() << std::endl;
     LOG(INFO) << "Number of words in external vocabulary: "
-              << externalVocabulary_.size() << std::endl;
+              << internalExternalVocab.externalVocab().size() << std::endl;
+  } else {
+    LOG(INFO) << "Done, number of words: " << vocabulary_.size() << std::endl;
   }
-*/
 
   // Precomputing ranges for IRIs, blank nodes, and literals, for faster
   // processing of the `isIrI` and `isLiteral` functions.

@@ -49,8 +49,8 @@ struct WordAndIndex {
   // This operator provides human-readable output for a `WordAndIndex`,
   // useful for testing.
   friend std::ostream& operator<<(std::ostream& os, const WordAndIndex& wi) {
-    os << "WordAndIndex : ";
-    os << (wi._word.value_or("nullopt"));
+    os << "WordAndIndex : \"";
+    os << (wi._word.value_or("nullopt")) << '"';
     os << wi._index << ", ";
     return os;
   }

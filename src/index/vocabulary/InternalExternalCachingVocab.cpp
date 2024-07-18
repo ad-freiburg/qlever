@@ -35,7 +35,7 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
 void VocabularyInternalExternal::WordWriter::operator()(std::string_view str,
                                                         bool isExternal) {
   externalWriter_(str);
-  if (!isExternal || sinceMilestone >= milestoneDistance_) {
+  if (!isExternal || sinceMilestone >= milestoneDistance_ || idx_ == 0) {
     internalWriter_(str, idx_);
     sinceMilestone = 0;
   }

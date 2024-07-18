@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/vocabulary/CombinedVocabulary.h"
-#include "../src/index/vocabulary/VocabularyInMemory.h"
-#include "./VocabularyTestHelpers.h"
+#include "VocabularyTestHelpers.h"
+#include "index/vocabulary/CombinedVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 
 using namespace vocabulary_test;
 

@@ -61,7 +61,9 @@ class VocabularyInMemoryBinSearch
   /// Return the highest ID (= index) that occurs in this vocabulary. May only
   /// becalled if size() > 0.
   [[nodiscard]] uint64_t getHighestId() const {
-    AD_CONTRACT_CHECK(size() > 0);
+    if (indices_.empty()) {
+      return 0;
+    }
     return indices_.back();
   }
 
@@ -79,6 +81,7 @@ class VocabularyInMemoryBinSearch
     using OffsetWriter = ad_utility::serialization::VectorIncrementalSerializer<
         uint64_t, ad_utility::serialization::FileWriteSerializer>;
     OffsetWriter offsetWriter_;
+    std::optional<uint64_t> lastIndex_ = std::nullopt;
     // Construct a `WordWriter` that will write to the given `filename`.
     explicit WordWriter(const std::string& filename);
     // Add the given `word` with the given `idx`. The `idx` must be greater than

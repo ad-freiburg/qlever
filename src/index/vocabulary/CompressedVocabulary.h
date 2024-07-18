@@ -95,7 +95,6 @@ class CompressedVocabulary {
     auto underlyingResult =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
     // TODO:: make this a private helper function.
-    // TODO<joka921> Get rid of the code duplication...
     WordAndIndex result;
     result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {

@@ -34,6 +34,10 @@ class VocabularyInternalExternal {
       default;
   VocabularyInternalExternal(VocabularyInternalExternal&&) noexcept = default;
 
+  // Direct const access to the underlying vocabularies.
+  const auto& internalVocab() const { return internalVocab_; }
+  const auto& externalVocab() const { return externalVocab_; }
+
   // Read the vocabulary from a file. The file must have been created using a
   // `WordWriter`.
   void open(const string& filename) {
