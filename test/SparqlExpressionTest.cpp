@@ -611,23 +611,25 @@ TEST(SparqlExpression, stringOperators) {
                 IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
   // test valid
   checkIriOrUri(
-      IdOrLiteralOrIriVec{lit("bimbim"), iriref("<bambim>"),
-                          lit("https://www.bimbimbam/2001/bamString"),
-                          lit("http://www.w3.org/2001/XMLSchema#unsignedShort"),
-                          lit("http://www.w3.org/2001/XMLSchema#string"),
-                          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
-                          testContext().notInVocabIri,
-                          testContext().notInVocabIriLit,
-                          lit("http://example/"), iriref("<http://example/>")},
+      IdOrLiteralOrIriVec{
+          lit("bimbim"), iriref("<bambim>"),
+          lit("https://www.bimbimbam/2001/bamString"),
+          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+          lit("http://www.w3.org/2001/XMLSchema#string"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          testContext().notInVocabIri, testContext().notInVocabIriLit,
+          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+          lit("\t\n\r")},
       IdOrLiteralOrIriVec{
           iriref("<bimbim>"), iriref("<bambim>"),
           iriref("<https://www.bimbimbam/2001/bamString>"),
-          iriref("<http://www.w3.org/2001/XMLSchema#unsignedShort>"),
+          iriref("<http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort>"),
           iriref("<http://www.w3.org/2001/XMLSchema#string>"),
           iriref("<http://www.w3.org/2001/XMLSchema#string>"),
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
           iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
-          iriref("<http://example/>"), iriref("<http://example/>")});
+          iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
+          iriref("<\t\n\r>")});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
