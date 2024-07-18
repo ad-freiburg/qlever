@@ -46,12 +46,18 @@ class CompressedVocabulary {
     return underlyingVocabulary_.getHighestId();
   }
 
+  // From a `comparator` that can compare two strings, make a new comparator,
+  // that can compare a string and an `iterator` by decompressing the word that
+  // the iterator points to. The returned comparator is symmetric, meaning that
+  // the iterator can either be the left or the right argument.
   template <typename StringType, typename Comparator>
   auto makeSymmetricComparator(Comparator comparator = Comparator{}) const {
-    auto pred1 = [=, self = this](const StringType& el, const auto& it) {
+    auto pred1 = [comparator, self = this](const StringType& el,
+                                           const auto& it) {
       return comparator(el, self->decompressFromIterator(it));
     };
-    auto pred2 = [=, self = this](const auto& it, const StringType& el) {
+    auto pred2 = [comparator, self = this](const auto& it,
+                                           const StringType& el) {
       return comparator(self->decompressFromIterator(it), el);
     };
     return ad_utility::OverloadCallOperator{pred1, pred2};
@@ -59,7 +65,7 @@ class CompressedVocabulary {
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
+  /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
@@ -78,7 +84,7 @@ class CompressedVocabulary {
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
@@ -89,6 +95,7 @@ class CompressedVocabulary {
     auto underlyingResult =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
     // TODO:: make this a private helper function.
+    // TODO<joka921> Get rid of the code duplication...
     WordAndIndex result;
     result._index = underlyingResult._index;
     if (underlyingResult._word.has_value()) {

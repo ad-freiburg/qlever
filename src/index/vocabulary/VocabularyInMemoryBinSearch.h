@@ -16,9 +16,9 @@
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 
-//! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
-//! and provides additional methods for reading and writing to/from file,
-//! and retrieval via binary search.
+// A vocabulary that stores all words in memory. The vocabulary supports
+// "holes", meaning that the indices of the contained words don't have to be
+// contiguous (but ascending). All accesses are implemented using binary search.
 class VocabularyInMemoryBinSearch
     : public VocabularyBinarySearchMixin<VocabularyInMemoryBinSearch> {
  public:
@@ -26,90 +26,68 @@ class VocabularyInMemoryBinSearch
   using StringView = std::basic_string_view<CharType>;
   using String = std::basic_string<CharType>;
   using Words = CompactVectorOfStrings<CharType>;
-  using Offsets = std::vector<uint64_t>;
+  using Indices = std::vector<uint64_t>;
 
  private:
   // The actual storage.
-  Words _words;
-  Offsets offsets_;
+  Words words_;
+  Indices indices_;
 
  public:
   /// Construct an empty vocabulary
   VocabularyInMemoryBinSearch() = default;
 
-  /// Construct the vocabulary from `Words`
-  explicit VocabularyInMemoryBinSearch(Words words, Offsets offsets)
-      : _words{std::move(words)}, offsets_{std::move(offsets)} {}
+  /// Construct the vocabulary from `Words` and `Indices`
+  explicit VocabularyInMemoryBinSearch(Words words, Indices indices)
+      : words_{std::move(words)}, indices_{std::move(indices)} {}
 
   // Vocabularies are movable
   VocabularyInMemoryBinSearch& operator=(
       VocabularyInMemoryBinSearch&&) noexcept = default;
   VocabularyInMemoryBinSearch(VocabularyInMemoryBinSearch&&) noexcept = default;
 
-  const auto& offsets() const { return offsets_; }
+  const auto& indices() const { return indices_; }
 
-  /// Read the vocabulary from a file. The file must have been created by a call
-  /// to `writeToFile` or using a `WordWriter`.
+  /// Read the vocabulary from a file. The file must have been created using a
+  /// `WordWriter`.
   void open(const string& fileName);
-
-  /// Write the vocabulary to a file.
-  void writeToFile(const string& fileName) const;
 
   /// Return the total number of words
   [[nodiscard]] size_t size() const {
-    AD_CORRECTNESS_CHECK(offsets_.size() == _words.size());
-    return _words.size();
+    AD_CORRECTNESS_CHECK(indices_.size() == words_.size());
+    return words_.size();
   }
 
   /// Return the highest ID (= index) that occurs in this vocabulary. May only
   /// becalled if size() > 0.
   [[nodiscard]] uint64_t getHighestId() const {
     AD_CONTRACT_CHECK(size() > 0);
-    return offsets_.back();
+    return indices_.back();
   }
 
-  /// Return the `i-th` word. The behavior is undefined if `i >= size()`
-  std::optional<std::string_view> operator[](uint64_t i) const {
-    auto it = std::ranges::lower_bound(offsets_, i);
-    if (it != offsets_.end() && *it == i) {
-      return _words[it - offsets_.begin()];
-    }
-    return std::nullopt;
-  }
+  // Return the word with index `i`. If this index is not part of the
+  // vocabulary, return `std::nullopt`.
+  std::optional<std::string_view> operator[](uint64_t i) const;
 
-  WordAndIndex boundImpl(auto it) const {
-    WordAndIndex result;
-    auto idx = static_cast<uint64_t>(it - _words.begin());
-    result._index = idx < size() ? offsets_[idx] : getHighestId() + 1;
-    if (idx > 0) {
-      result._previousIndex = offsets_[idx - 1];
-    }
-    if (idx + 1 < size()) {
-      result._nextIndex = offsets_[idx + 1];
-    }
-    result._word = idx < size() ? std::optional{_words[idx]} : std::nullopt;
-    return result;
-  }
+  // Convert an iterator to a `WordAndIndex`. Required for the mixin.
+  WordAndIndex boundImpl(std::ranges::iterator_t<Words> it) const;
 
   /// A helper type that can be used to directly write a vocabulary to disk
-  /// word-by-word, without having to materialize it in RAM first. See the
-  /// documentation of `CompactVectorOfStrings` for details.
+  /// word-by-word, without having to materialize it in RAM first.
   struct WordWriter {
     typename Words::Writer writer_;
     using OffsetWriter = ad_utility::serialization::VectorIncrementalSerializer<
         uint64_t, ad_utility::serialization::FileWriteSerializer>;
     OffsetWriter offsetWriter_;
-    explicit WordWriter(const std::string& filename)
-        : writer_{filename}, offsetWriter_{filename + ".ids"} {}
-    void operator()(std::string_view str, uint64_t idx) {
-      writer_.push(str.data(), str.size());
-      offsetWriter_.push(idx);
-    }
+    // Construct a `WordWriter` that will write to the given `filename`.
+    explicit WordWriter(const std::string& filename);
+    // Add the given `word` with the given `idx`. The `idx` must be greater than
+    // all previous indices.
+    void operator()(std::string_view word, uint64_t idx);
 
-    void finish() {
-      writer_.finish();
-      offsetWriter_.finish();
-    }
+    // Finish writing and dump all contents that still reside in buffers to
+    // disk.
+    void finish();
   };
 
   // Return a `WordWriter` that directly writes the words to the given
@@ -119,26 +97,15 @@ class VocabularyInMemoryBinSearch
     return WordWriter{filename};
   }
 
-  /// Clear the vocabulary.
-  void close() {
-    _words.clear();
-    offsets_.clear();
-  }
+  // Clear the vocabulary.
+  void close();
 
-  /// Initialize the vocabulary from the given `words`.
+  // Initialize the vocabulary from the given `words`. The indices are assigned
+  // contiguously starting from 0.
   void build(const std::vector<std::string>& words,
-             const std::string& filename) {
-    WordWriter writer = makeDiskWriter(filename);
-    uint64_t idx = 0;
-    for (const auto& word : words) {
-      writer(word, idx);
-      ++idx;
-    }
-    writer.finish();
-    open(filename);
-  }
+             const std::string& filename);
 
   // Const access to the underlying words.
-  auto begin() const { return _words.begin(); }
-  auto end() const { return _words.end(); }
+  auto begin() const { return words_.begin(); }
+  auto end() const { return words_.end(); }
 };

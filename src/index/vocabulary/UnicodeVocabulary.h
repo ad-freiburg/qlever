@@ -38,7 +38,7 @@ class UnicodeVocabulary {
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
+  /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
@@ -51,7 +51,7 @@ class UnicodeVocabulary {
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
