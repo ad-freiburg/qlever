@@ -679,18 +679,7 @@ class TripleComponentComparator {
 
     // Only if two literals are bytewise equal, we compare by the langtag or
     // datatype.
-    if (int res = a.langtag_.compare(b.langtag_) != 0) {
-      return res;
-    }
-    // If we have the same literal in `externalized` and `internalized`, then
-    // we need to see the internalized one first to make the vocabulary mergin
-    // work correctly.
-    if (a.isExternalized_ != b.isExternalized_) {
-      return a.isExternalized_ ? 1 : -1;
-    }
-
-    // They are truly equal.
-    return 0;
+    return a.langtag_.compare(b.langtag_);
   }
 
   /**
