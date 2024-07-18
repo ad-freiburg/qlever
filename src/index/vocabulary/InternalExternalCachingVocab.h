@@ -68,10 +68,45 @@ class VocabularyInternalExternal {
   /// `_words` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
+  WordAndIndex boundImpl(const InternalStringType& word, Comparator comparator,
+                         auto boundFunction) const {
+    // TODO<joka921> Implement efficient caching...
+    WordAndIndex lowerBoundInternal =
+        boundFunction(internalVocab_, word, comparator);
+    // TODO<joka921> We have to fix the comparisons here...
+    /*
+    if constexpr (isLowerBound) {
+      // TODO<joka921> Do we need both directions?
+      if  constexpr (isIteratorFunction) {
+        if ((!comparator(lowerBoundInternal._word, word)) &&
+            (!comparator(word, lowerBoundInternal._word))) {
+          return lowerBoundInternal;
+        }
+      } else {
+        if ((!comparator(lowerBoundInternal._word, word)) &&
+            (!comparator(word, lowerBoundInternal._word))) {
+          return lowerBoundInternal;
+        }
+      }
+    }
+     */
+    // TODO<joka921> We don't necessarily have to search from "previous" to
+    // "next"... Figure this out and test it.
+    return boundFunction(externalVocab_, word, comparator,
+                         lowerBoundInternal._previousIndex,
+                         lowerBoundInternal._nextIndex);
+  }
+
+  /// Return a `WordAndIndex` that points to the first entry that is equal or
+  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
+  /// `_words` are sorted according to the comparator (exactly like in
+  /// `std::lower_bound`, which is used internally).
+  template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    // TODO<joka921> Implement efficient caching...
-    return externalVocab_.lower_bound(word, comparator);
+    return boundImpl(word, comparator, [](const auto& vocab, auto&&... args) {
+      return vocab.lower_bound(AD_FWD(args)...);
+    });
   }
 
   // Same as `lower_bound`, but compares an `iterator` and a `value` instead of
@@ -79,8 +114,9 @@ class VocabularyInternalExternal {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {
-    // TODO<joka921> Implement efficient caching...
-    return externalVocab_.lower_bound_iterator(word, comparator);
+    return boundImpl(word, comparator, [](const auto& vocab, auto&&... args) {
+      return vocab.lower_bound_iterator(AD_FWD(args)...);
+    });
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -90,8 +126,9 @@ class VocabularyInternalExternal {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    // TODO<joka921> Implement efficient caching...
-    return externalVocab_.upper_bound(word, comparator);
+    return boundImpl(word, comparator, [](const auto& vocab, auto&&... args) {
+      return vocab.upper_bound(AD_FWD(args)...);
+    });
   }
 
   // Same as `upper_bound`, but compares a `value` and an `iterator` instead of
@@ -99,8 +136,9 @@ class VocabularyInternalExternal {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {
-    // TODO<joka921> Implement efficient caching...
-    return externalVocab_.upper_bound_iterator(word, comparator);
+    return boundImpl(word, comparator, [](const auto& vocab, auto&&... args) {
+      return vocab.upper_bound_iterator(AD_FWD(args)...);
+    });
   }
 
   /// A helper type that can be used to directly write a vocabulary to disk
@@ -156,7 +194,14 @@ class VocabularyInternalExternal {
   }
 
   // Const access to the underlying words.
-  // TODO<joka921> Is this needed?
   auto begin() const { return externalVocab_.begin(); }
   auto end() const { return externalVocab_.end(); }
+
+  auto iteratorToIndex(auto it) const {
+    if constexpr (requires() { it - begin(); }) {
+      return it - begin();
+    } else {
+      return internalVocab_.offsets().at(it - internalVocab_.begin());
+    }
+  }
 };

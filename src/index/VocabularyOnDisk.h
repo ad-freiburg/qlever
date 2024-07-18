@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
@@ -17,7 +18,7 @@
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
 // then binary search for a string can be performed.
-class VocabularyOnDisk {
+class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
  private:
   // The offset of a word in the underlying file.
   using Offset = uint64_t;
@@ -95,6 +96,9 @@ class VocabularyOnDisk {
   // `VocabularyInMemory`.
   uint64_t getHighestId() const { return highestIdx_; }
 
+  auto boundImpl(auto it) const { return iteratorToWordAndIndex(it); }
+
+  /*
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
   /// vocabulary is sorted according to the comparator (exactly like in
@@ -187,6 +191,7 @@ class VocabularyOnDisk {
                                          transformComparator(comparator));
     return iteratorToWordAndIndex(it);
   }
+   */
 
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {

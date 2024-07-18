@@ -7,18 +7,20 @@
 #include <string>
 #include <string_view>
 
-#include "../../global/Pattern.h"
-#include "../../util/Exception.h"
-#include "../CompressedString.h"
-#include "./VocabularyTypes.h"
+#include "global/Pattern.h"
+#include "index/CompressedString.h"
+#include "index/vocabulary/VocabularyBinarySearchMixin.h"
+#include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
+#include "util/Exception.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializeVector.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.
-class VocabularyInMemoryBinSearch {
+class VocabularyInMemoryBinSearch
+    : public VocabularyBinarySearchMixin<VocabularyInMemoryBinSearch> {
  public:
   using CharType = char;
   using StringView = std::basic_string_view<CharType>;
@@ -44,6 +46,8 @@ class VocabularyInMemoryBinSearch {
       VocabularyInMemoryBinSearch&&) noexcept = default;
   VocabularyInMemoryBinSearch(VocabularyInMemoryBinSearch&&) noexcept = default;
 
+  const auto& offsets() const { return offsets_; }
+
   /// Read the vocabulary from a file. The file must have been created by a call
   /// to `writeToFile` or using a `WordWriter`.
   void open(const string& fileName);
@@ -67,50 +71,19 @@ class VocabularyInMemoryBinSearch {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   // auto operator[](uint64_t i) const { return _words[i]; }
 
-  auto boundImpl(auto it) {
+  WordAndIndex boundImpl(auto it) const {
     WordAndIndex result;
-    auto idx = it - _words.begin();
+    auto idx = static_cast<uint64_t>(it - _words.begin());
     result._index = idx < size() ? offsets_[idx] : getHighestId() + 1;
+    if (idx > 0) {
+      result._previousIndex = offsets_[idx];
+    }
+    if (idx + 1 < size()) {
+      result._nextIndex = offsets_[idx + 1];
+    }
     result._word =
         idx < size() ? std::optional{_words[result._index]} : std::nullopt;
-  }
-
-  /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
-  /// `std::lower_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    return boundImpl(std::ranges::lower_bound(_words, word, comparator));
-  }
-
-  // Same as `lower_bound`, but compares an `iterator` and a `value` instead of
-  // two values. Required by the `CompressedVocabulary`.
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound_iterator(const InternalStringType& word,
-                                    Comparator comparator) const {
-    return boundImpl(ad_utility::lower_bound_iterator(
-        _words.begin(), _words.end(), word, comparator));
-  }
-
-  /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
-  /// are sorted according to the comparator (exactly like in
-  /// `std::upper_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    return boundImpl(std::ranges::upper_bound(_words, word, comparator));
-  }
-
-  // Same as `upper_bound`, but compares a `value` and an `iterator` instead of
-  // two values. Required by the `CompressedVocabulary`.
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound_iterator(const InternalStringType& word,
-                                    Comparator comparator) const {
-    return boundImpl(ad_utility::upper_bound_iterator(
-        _words.begin(), _words.end(), word, comparator));
+    return result;
   }
 
   /// A helper type that can be used to directly write a vocabulary to disk

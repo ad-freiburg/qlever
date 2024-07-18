@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_COMPRESSEDVOCABULARY_H
-#define QLEVER_COMPRESSEDVOCABULARY_H
+#pragma once
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
@@ -11,6 +10,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/TaskQueue.h"
@@ -46,6 +46,17 @@ class CompressedVocabulary {
     return underlyingVocabulary_.getHighestId();
   }
 
+  template <typename StringType, typename Comparator>
+  auto makeSymmetricComparator(Comparator comparator = Comparator{}) const {
+    auto pred1 = [=, self = this](const StringType& el, const auto& it) {
+      return comparator(el, self->decompressFromIterator(it));
+    };
+    auto pred2 = [=, self = this](const auto& it, const StringType& el) {
+      return comparator(self->decompressFromIterator(it), el);
+    };
+    return ad_utility::OverloadCallOperator{pred1, pred2};
+  }
+
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
   /// `_words` are sorted according to the comparator (exactly like in
@@ -53,10 +64,8 @@ class CompressedVocabulary {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [self = this, &comparator](const auto& it,
-                                                       const auto& b) {
-      return comparator(self->decompressFromIterator(it), b);
-    };
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
     auto underlyingResult =
         underlyingVocabulary_.lower_bound_iterator(word, actualComparator);
     WordAndIndex result;
@@ -75,9 +84,8 @@ class CompressedVocabulary {
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [this, &comparator](const auto& a, const auto& it) {
-      return comparator(a, this->decompressFromIterator(it));
-    };
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
     auto underlyingResult =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
     // TODO:: make this a private helper function.
@@ -279,7 +287,13 @@ class CompressedVocabulary {
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
-    auto idx = it - underlyingVocabulary_.begin();
+    auto idx = [&]() {
+      if constexpr (requires() { it - underlyingVocabulary_.begin(); }) {
+        return it - underlyingVocabulary_.begin();
+      } else {
+        return underlyingVocabulary_.iteratorToIndex(it);
+      }
+    }();
     return compressionWrapper_.decompress(toStringView(*it),
                                           getDecoderIdx(idx));
   };
@@ -302,5 +316,3 @@ class CompressedVocabulary {
     }
   }
 };
-
-#endif  // QLEVER_COMPRESSEDVOCABULARY_H

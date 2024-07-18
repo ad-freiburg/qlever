@@ -13,6 +13,8 @@
 struct WordAndIndex {
   std::optional<std::string> _word;
   uint64_t _index;
+  std::optional<uint64_t> _previousIndex;
+  std::optional<uint64_t> _nextIndex;
 
   WordAndIndex() = default;
   // Constructors that are needed to construct a word and index from one of
