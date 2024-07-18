@@ -28,7 +28,7 @@ class VocabularyInternalExternal {
 
  public:
   /// Construct an empty vocabulary
-  VocabularyInternalExternal();
+  VocabularyInternalExternal() = default;
 
   // Vocabularies are movable
   VocabularyInternalExternal& operator=(VocabularyInternalExternal&&) noexcept =
