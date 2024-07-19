@@ -1285,14 +1285,13 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
 
 // TODO<joka921> Once we have an overview over the folding this logic should
 // probably not be in the index class.
-std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
-  // TODO<joka921> no reason for an optional here.
+std::string IndexImpl::idToOptionalString(VocabIndex id) const {
   return vocab_[id];
 }
 
-std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
-  // TODO<joka921> Does this also work with string_view.
-  return std::string{textVocab_[id]};
+// ___________________________________________________________________________
+std::string_view IndexImpl::idToOptionalString(WordVocabIndex id) const {
+  return textVocab_[id];
 }
 
 // ___________________________________________________________________________

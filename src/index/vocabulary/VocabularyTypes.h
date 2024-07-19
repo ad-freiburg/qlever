@@ -32,6 +32,11 @@ class WordAndIndex {
     return wordAndIndex_.value().second;
   }
 
+  // _______________________________________________________
+  uint64_t indexOrDefault(uint64_t defaultValue) const {
+    return isEnd() ? defaultValue : index();
+  }
+
   // The next valid indices before `index()`. If `nullopt` either no
   // such index exists (because `index()` is already the first valid index),
   // or it simply wasn't set. This member is currently used to communicate

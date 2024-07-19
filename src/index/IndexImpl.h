@@ -247,11 +247,11 @@ class IndexImpl {
   size_t getCardinality(const TripleComponent& comp,
                         Permutation::Enum permutation) const;
 
-  // TODO<joka921> Once we have an overview over the folding this logic should
-  // probably not be in the index class.
-  std::optional<string> idToOptionalString(VocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string idToOptionalString(VocabIndex id) const;
 
-  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string_view idToOptionalString(WordVocabIndex id) const;
 
  private:
   // ___________________________________________________________________________

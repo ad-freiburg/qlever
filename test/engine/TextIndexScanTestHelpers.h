@@ -11,28 +11,22 @@ namespace textIndexScanTestHelpers {
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
                                            const Result& result,
                                            const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(0)[rowIndex].getVocabIndex())
-      .value();
+  return qec->getIndex().idToOptionalString(
+      result.idTable().getColumn(0)[rowIndex].getVocabIndex());
 }
 
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
                                        const Result& result,
                                        const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(1)[rowIndex].getVocabIndex())
-      .value();
+  return qec->getIndex().idToOptionalString(
+      result.idTable().getColumn(1)[rowIndex].getVocabIndex());
 }
 
 inline string getWordFromResultTable(const QueryExecutionContext* qec,
                                      const Result& result,
                                      const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())
-      .value();
+  return std::string{qec->getIndex().idToOptionalString(
+      result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
 inline string combineToString(const string& text, const string& word) {

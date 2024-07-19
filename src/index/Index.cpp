@@ -68,12 +68,12 @@ size_t Index::getCardinality(Id id, Permutation::Enum p) const {
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
+std::string Index::idToOptionalString(VocabIndex id) const {
   return pimpl_->idToOptionalString(id);
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
+std::string_view Index::idToOptionalString(WordVocabIndex id) const {
   return pimpl_->idToOptionalString(id);
 }
 
