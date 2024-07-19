@@ -159,7 +159,7 @@ class LocaleManager {
    */
   template <typename T, typename U>
   static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
-                     [[maybe_unused]] const Level) {
+                     [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
 
@@ -462,20 +462,16 @@ class SimpleStringComparator {
     return cmp < 0;
   }
 
-  // TODO<joka921> Write tests for those...
-  bool operator()(const LocaleManager::SortKey& b, std::string_view a,
-                  [[maybe_unused]] const Level l) const {
-    auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
-    auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
-    return cmp > 0;
-  }
+  // This method is left undefined on purpose, as it is only used for
+  // constraints checking in the <ranges> header for the UnicodeVocabulary
+  // class.
+  bool operator()(const LocaleManager::SortKey& a, std::string_view s,
+                  [[maybe_unused]] const Level l = Level::PRIMARY) const;
 
+  // Same goes for this function (undefined on purpose).
   bool operator()(const LocaleManager::SortKey& a,
                   const LocaleManager::SortKey& b,
-                  [[maybe_unused]] const Level l) const {
-    auto cmp = LocaleManager::compare(a, b, Level::PRIMARY);
-    return cmp < 0;
-  }
+                  [[maybe_unused]] Level level = Level::PRIMARY) const;
 
   /**
    * @brief Transform a string s to the SortKey of the first possible

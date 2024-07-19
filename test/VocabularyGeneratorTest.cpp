@@ -43,10 +43,9 @@ class MergeVocabularyTest : public ::testing::Test {
   std::string _path1;
   // the base directory for our test
   std::string _basePath;
-  // path to expected vocabulary text file
-  std::string _pathVocabExp;
-  // path to expected external vocabulary text file
-  std::string _pathExternalVocabExp;
+
+  using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
+  ExpectedVocabulary expectedMergedVocabulary_;
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
@@ -74,27 +73,25 @@ class MergeVocabularyTest : public ::testing::Test {
     // make paths absolute under created tmp directory
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
-    _pathVocabExp = _basePath + std::string(".vocabExp");
-    _pathExternalVocabExp = _basePath + std::string("externalTextFileExp");
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},    {"\"gorilla\"", false, 2},
-        {"\"monkey\"", false, 3}, {"_:blank", false, 0},
-        {"_:blunk", false, 1},    {"\"bla\"", true, 5}};
+        {"\"ape\"", false, 0},     {"\"bla\"", true, 2},
+        {"\"gorilla\"", false, 3}, {"\"monkey\"", false, 4},
+        {"_:blank", false, 0},     {"_:blunk", false, 1}};
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
-        {"\"monkey\"", false, 3},
-        {"\"zebra\"", false, 4},
+        {"\"monkey\"", true, 4},
+        {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
     };
 
-    // write expected vocabulary files
-    std::ofstream expVoc(_pathVocabExp);
-    std::ofstream expExtVoc(_pathExternalVocabExp);
-    expVoc << "\"ape\"\n\"bear\"\n\"gorilla\"\n\"monkey\"\n\"zebra\"\n";
-    expExtVoc << "\"bla\"\n";
+    // Note that the word "monkey" appears in both vocabularies, buth with
+    // different settings for `isExternal`. In this case it is externalized.
+    expectedMergedVocabulary_ = ExpectedVocabulary{
+        {"\"ape\"", false},    {"\"bear\"", false},  {"\"bla\"", true},
+        {"\"gorila\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
@@ -167,16 +164,14 @@ class MergeVocabularyTest : public ::testing::Test {
 
 // Test for merge Vocabulary
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
-  GTEST_SKIP_("TODO<joka921> Reinstate this tests");
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
+  std::vector<std::pair<std::string, bool>> mergeResult;
   {
-    auto file = ad_utility::makeOfstream(_basePath + VOCAB_SUFFIX);
-    // TODO<joka921> Also check that the `isExternal` flag works.
-    auto internalVocabularyAction = [&file](const auto& word,
-                                            [[maybe_unused]] bool isExternal) {
-      file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    };
+    auto internalVocabularyAction =
+        [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
+          mergeResult.emplace_back(word, isExternal);
+        };
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, 1_GB);
   }
@@ -187,10 +182,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // Also no internal entities there.
   ASSERT_EQ(res.internalEntities_.begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities_.end(), Id::makeUndefined());
-  // coheck that (external) vocabulary has the right form.
-  // TODO<joka921> fix these tests.
-  ASSERT_TRUE(areBinaryFilesEqual(_pathVocabExp, _basePath + VOCAB_SUFFIX));
-
+  // Check that vocabulary has the right form.
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
   IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));

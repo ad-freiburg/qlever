@@ -214,7 +214,7 @@ size_t IndexImpl::processWordsForVocabulary(string const& contextFile,
   for (auto line : wordsInTextRecords(contextFile, addWordsFromLiterals)) {
     ++numLines;
     // LOG(INFO) << "LINE: "
-    //           << std::setw(50) << line.word_ << "   "
+    //           << std::setw(50) << line._word << "   "
     //           << line._isEntity << "\t"
     //           << line._contextId.get() << "\t"
     //           << line._score << std::endl;
