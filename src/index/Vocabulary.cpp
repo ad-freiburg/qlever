@@ -198,10 +198,12 @@ std::optional<IdRange<I>> Vocabulary<S, C, I>::getIdRangeForFullTextPrefix(
   AD_CONTRACT_CHECK(word[word.size() - 1] == PREFIX_CHAR);
   IdRange<I> range;
   auto [begin, end] = vocabulary_.prefix_range(word.substr(0, word.size() - 1));
-  bool notEmpty = end > begin;
+  bool notEmpty =
+      begin.has_value() && (!end.has_value() || end.value() > begin.value());
 
   if (notEmpty) {
-    range = IdRange{I::make(begin), I::make(end).decremented()};
+    range = IdRange{I::make(begin.value()),
+                    I::make(end.value_or(size())).decremented()};
     AD_CONTRACT_CHECK(range.first().get() < vocabulary_.size());
     AD_CONTRACT_CHECK(range.last().get() < vocabulary_.size());
     return range;
@@ -214,7 +216,13 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::upper_bound(const string& word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(vocabulary_.upper_bound(word, level)._index);
+  // TODO<GCC12> use the monadic operations for std::optional.
+  auto wordAndIndex = vocabulary_.upper_bound(word, level);
+  if (wordAndIndex.isEnd()) {
+    return IndexType::make(size());
+  } else {
+    return IndexType::make(wordAndIndex.index());
+  }
 }
 
 // _____________________________________________________________________________
@@ -222,7 +230,13 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::lower_bound(std::string_view word,
                                       const SortLevel level) const
     -> IndexType {
-  return IndexType::make(vocabulary_.lower_bound(word, level)._index);
+  // TODO<GCC12> use the monadic operations for std::optional.
+  auto wordAndIndex = vocabulary_.lower_bound(word, level);
+  if (wordAndIndex.isEnd()) {
+    return IndexType::make(size());
+  } else {
+    return IndexType::make(wordAndIndex.index());
+  }
 }
 
 // _____________________________________________________________________________
@@ -249,8 +263,11 @@ template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
   // need the TOTAL level because we want the unique word.
   auto wordAndIndex = vocabulary_.lower_bound(word, SortLevel::TOTAL);
-  idx->get() = wordAndIndex._index;
-  return wordAndIndex._word == word;
+  if (wordAndIndex.isEnd()) {
+    return false;
+  }
+  idx->get() = wordAndIndex.index();
+  return wordAndIndex.word() == word;
 }
 
 // ___________________________________________________________________________
@@ -258,8 +275,9 @@ template <typename S, typename C, typename I>
 auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
     -> Vocabulary<S, C, I>::PrefixRanges {
   auto rangeInternal = vocabulary_.prefix_range(prefix);
-  std::pair<I, I> indexRangeInternal{I::make(rangeInternal.first),
-                                     I::make(rangeInternal.second)};
+  std::pair<I, I> indexRangeInternal{
+      I::make(rangeInternal.first.value_or(size())),
+      I::make(rangeInternal.second.value_or(size()))};
   return PrefixRanges{{indexRangeInternal}};
 }
 

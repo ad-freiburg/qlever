@@ -117,7 +117,7 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // iterator return `{nullopt, highestID + 1}`.
   [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
     if (it == end()) {
-      return {std::nullopt, getHighestId() + 1};
+      return WordAndIndex::end();
     } else {
       return {*it, static_cast<uint64_t>(it - begin())};
     }

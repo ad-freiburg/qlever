@@ -7,16 +7,18 @@
 #include <string>
 #include <string_view>
 
-#include "../../global/Pattern.h"
-#include "../../util/Exception.h"
-#include "../CompressedString.h"
-#include "../StringSortComparator.h"
-#include "./VocabularyTypes.h"
+#include "global/Pattern.h"
+#include "index/CompressedString.h"
+#include "index/StringSortComparator.h"
+#include "index/vocabulary/VocabularyBinarySearchMixin.h"
+#include "index/vocabulary/VocabularyTypes.h"
+#include "util/Exception.h"
 
 //! A vocabulary. Wraps a `CompactVectorOfStrings<char>`
 //! and provides additional methods for reading and writing to/from file,
 //! and retrieval via binary search.
-class VocabularyInMemory {
+class VocabularyInMemory
+    : public VocabularyBinarySearchMixin<VocabularyInMemory> {
  public:
   using CharType = char;
   using StringView = std::basic_string_view<CharType>;
@@ -58,6 +60,15 @@ class VocabularyInMemory {
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
+  WordAndIndex iteratorToWordAndIndex(auto it) const {
+    if (it == _words.end()) {
+      return WordAndIndex::end();
+    }
+    size_t idx = it - _words.begin();
+    return {_words[idx], idx};
+  }
+
+  /*
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in
@@ -66,11 +77,11 @@ class VocabularyInMemory {
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
     WordAndIndex result;
-    result._index =
+    result.index_ =
         std::lower_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
+    result.word_ = result.index_ < _words.size()
+                       ? std::optional{_words[result.index_]}
                        : std::nullopt;
     return result;
   }
@@ -81,11 +92,11 @@ class VocabularyInMemory {
   WordAndIndex lower_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {
     WordAndIndex result;
-    result._index = ad_utility::lower_bound_iterator(
+    result.index_ = ad_utility::lower_bound_iterator(
                         _words.begin(), _words.end(), word, comparator) -
                     _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
+    result.word_ = result.index_ < _words.size()
+                       ? std::optional{_words[result.index_]}
                        : std::nullopt;
     return result;
   }
@@ -98,11 +109,11 @@ class VocabularyInMemory {
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
     WordAndIndex result;
-    result._index =
+    result.index_ =
         std::upper_bound(_words.begin(), _words.end(), word, comparator) -
         _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
+    result.word_ = result.index_ < _words.size()
+                       ? std::optional{_words[result.index_]}
                        : std::nullopt;
     return result;
   }
@@ -113,14 +124,15 @@ class VocabularyInMemory {
   WordAndIndex upper_bound_iterator(const InternalStringType& word,
                                     Comparator comparator) const {
     WordAndIndex result;
-    result._index = ad_utility::upper_bound_iterator(
+    result.index_ = ad_utility::upper_bound_iterator(
                         _words.begin(), _words.end(), word, comparator) -
                     _words.begin();
-    result._word = result._index < _words.size()
-                       ? std::optional{_words[result._index]}
+    result.word_ = result.index_ < _words.size()
+                       ? std::optional{_words[result.index_]}
                        : std::nullopt;
     return result;
   }
+   */
 
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the

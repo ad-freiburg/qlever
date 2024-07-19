@@ -123,29 +123,14 @@ class VocabularyInternalExternal {
     void finish();
   };
 
-  // Return a `WordWriter` that directly writes the words to the given
-  // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initialized via `open(filename)`.
-  WordWriter makeDiskWriter(const std::string& filename) const {
-    return WordWriter{filename};
-  }
-
   /// Clear the vocabulary.
   void close() { internalVocab_.close(); }
-
-  /// Initialize the vocabulary from the given `words`.
-  void build(const std::vector<std::string>& words,
-             const std::string& filename);
-
-  // Const access to the underlying words.
-  auto begin() const { return externalVocab_.begin(); }
-  auto end() const { return externalVocab_.end(); }
 
   // Convert an iterator (which can be an iterator to the external or internal
   // vocabulary) into the corresponding index by (logically) subtracting
   // `begin()`.
   uint64_t iteratorToIndex(std::ranges::iterator_t<VocabularyOnDisk> it) const {
-    return it - begin();
+    return it - externalVocab_.begin();
   }
   uint64_t iteratorToIndex(
       std::ranges::iterator_t<VocabularyInMemoryBinSearch> it) const {
@@ -165,8 +150,11 @@ class VocabularyInternalExternal {
         boundFunction(internalVocab_, word, comparator);
 
     // Then refine it in the external vocab.
+    std::optional<uint64_t> upperBound = std::nullopt;
+    if (!boundFromInternalVocab.isEnd()) {
+      upperBound = boundFromInternalVocab.index() + 1;
+    }
     return boundFunction(externalVocab_, word, comparator,
-                         boundFromInternalVocab._previousIndex,
-                         boundFromInternalVocab._nextIndex);
+                         boundFromInternalVocab.previousIndex_, upperBound);
   }
 };

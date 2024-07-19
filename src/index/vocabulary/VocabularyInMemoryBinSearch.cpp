@@ -34,29 +34,15 @@ std::optional<std::string_view> VocabularyInMemoryBinSearch::operator[](
 // _____________________________________________________________________________
 WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
     std::ranges::iterator_t<Words> it) const {
-  WordAndIndex result;
+  if (it == words_.end()) {
+    return WordAndIndex::end();
+  }
   auto idx = static_cast<uint64_t>(it - words_.begin());
-  result._index = idx < size() ? indices_[idx] : getHighestId() + 1;
+  WordAndIndex result{words_[idx], indices_[idx]};
   if (idx > 0) {
-    result._previousIndex = indices_[idx - 1];
+    result.previousIndex_ = indices_[idx - 1];
   }
-  if (idx + 1 < size()) {
-    result._nextIndex = indices_[idx + 1];
-  }
-  result._word = idx < size() ? std::optional{words_[idx]} : std::nullopt;
   return result;
-}
-// _____________________________________________________________________________
-void VocabularyInMemoryBinSearch::build(const std::vector<std::string>& words,
-                                        const std::string& filename) {
-  WordWriter writer = makeDiskWriter(filename);
-  uint64_t idx = 0;
-  for (const auto& word : words) {
-    writer(word, idx);
-    ++idx;
-  }
-  writer.finish();
-  open(filename);
 }
 
 // _____________________________________________________________________________

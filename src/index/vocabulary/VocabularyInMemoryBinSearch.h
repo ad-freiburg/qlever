@@ -37,10 +37,6 @@ class VocabularyInMemoryBinSearch
   // Construct an empty vocabulary
   VocabularyInMemoryBinSearch() = default;
 
-  // Construct the vocabulary from `Words` and `Indices`
-  explicit VocabularyInMemoryBinSearch(Words words, Indices indices)
-      : words_{std::move(words)}, indices_{std::move(indices)} {}
-
   // Vocabularies are movable (but not copyable).
   VocabularyInMemoryBinSearch& operator=(
       VocabularyInMemoryBinSearch&&) noexcept = default;
@@ -93,20 +89,8 @@ class VocabularyInMemoryBinSearch
     void finish();
   };
 
-  // Return a `WordWriter` that directly writes the words to the given
-  // `filename`. The words are not materialized in RAM, but the vocabulary later
-  // has to be explicitly initialized via `open(filename)`.
-  WordWriter makeDiskWriter(const std::string& filename) const {
-    return WordWriter{filename};
-  }
-
   // Clear the vocabulary.
   void close();
-
-  // Build the vocabulary from the given `words`. The indices are assigned
-  // contiguously starting from 0.
-  void build(const std::vector<std::string>& words,
-             const std::string& filename);
 
   // Const access to the underlying words.
   auto begin() const { return words_.begin(); }

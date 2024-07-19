@@ -22,18 +22,16 @@ inline auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
   }
 };
 
-auto matchWordAndIndex = [](const WordAndIndex& wi) {
-  auto indexMatcher = [&wi]() -> ::testing::Matcher<const uint64_t&> {
-    // If the word is nullopt, then we don't care about the index.
-    if (wi._word == std::nullopt) {
-      return ::testing::_;
-    } else {
-      return ::testing::Eq(wi._index);
-    }
-  }();
+auto matchWordAndIndex =
+    [](const WordAndIndex& wi) -> ::testing::Matcher<const WordAndIndex&> {
+  auto isEndMatcher =
+      AD_PROPERTY(WordAndIndex, isEnd, ::testing::Eq(wi.isEnd()));
+  if (wi.isEnd()) {
+    return isEndMatcher;
+  }
   return ::testing::AllOf(
-      AD_FIELD(WordAndIndex, _word, ::testing::Eq(wi._word)),
-      AD_FIELD(WordAndIndex, _index, indexMatcher));
+      isEndMatcher, AD_PROPERTY(WordAndIndex, word, ::testing::Eq(wi.word())),
+      AD_PROPERTY(WordAndIndex, index, ::testing::Eq(wi.index())));
 };
 
 /**
@@ -58,8 +56,6 @@ inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   ASSERT_FALSE(words.empty());
   ASSERT_EQ(vocab.size(), words.size());
 
-  auto maxId = vocab.getHighestId();
-
   for (size_t i = 0; i < vocab.size(); ++i) {
     WordAndIndex wi{words[i], ids[i]};
     EXPECT_THAT(vocab.lower_bound(words[i], comparator), matchWordAndIndex(wi));
@@ -70,7 +66,7 @@ inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
+    auto wi = WordAndIndex::end();
     EXPECT_THAT(vocab.lower_bound(makeWordLarger(words.back()), comparator),
                 matchWordAndIndex(wi));
   }
@@ -91,7 +87,7 @@ inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
+    auto wi = WordAndIndex::end();
     ASSERT_THAT(vocab.upper_bound(words.back(), comparator),
                 matchWordAndIndex(wi));
   }
@@ -230,7 +226,7 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
 auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
-  WordAndIndex expected{std::nullopt, 0};
+  auto expected = WordAndIndex::end();
   EXPECT_THAT(vocab.lower_bound("someWord", comparator),
               matchWordAndIndex(expected));
   EXPECT_THAT(vocab.upper_bound("someWord", comparator),

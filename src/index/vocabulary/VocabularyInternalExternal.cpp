@@ -14,17 +14,6 @@ std::string VocabularyInternalExternal::operator[](uint64_t i) const {
 }
 
 // _____________________________________________________________________________
-void VocabularyInternalExternal::build(const std::vector<std::string>& words,
-                                       const std::string& filename) {
-  WordWriter writer = makeDiskWriter(filename);
-  for (const auto& word : words) {
-    writer(word, false);
-  }
-  writer.finish();
-  open(filename);
-}
-
-// _____________________________________________________________________________
 VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
                                                    size_t milestoneDistance)
     : internalWriter_{filename + ".internal"},

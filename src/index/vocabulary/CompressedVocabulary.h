@@ -74,13 +74,12 @@ class CompressedVocabulary {
         makeSymmetricComparator<InternalStringType>(comparator);
     auto underlyingResult =
         underlyingVocabulary_.lower_bound_iterator(word, actualComparator);
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = compressionWrapper_.decompress(
-          underlyingResult._word.value(), getDecoderIdx(result._index));
+    if (underlyingResult.isEnd()) {
+      return underlyingResult;
     }
-    return result;
+    auto decompressedWord = compressionWrapper_.decompress(
+        underlyingResult.word(), getDecoderIdx(underlyingResult.index()));
+    return {std::move(decompressedWord), underlyingResult.index()};
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -95,13 +94,12 @@ class CompressedVocabulary {
     auto underlyingResult =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
     // TODO:: make this a private helper function.
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = compressionWrapper_.decompress(
-          underlyingResult._word.value(), getDecoderIdx(result._index));
+    if (underlyingResult.isEnd()) {
+      return underlyingResult;
     }
-    return result;
+    auto decompressedWord = compressionWrapper_.decompress(
+        underlyingResult.word(), getDecoderIdx(underlyingResult.index()));
+    return {std::move(decompressedWord), underlyingResult.index()};
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
@@ -318,7 +316,7 @@ class CompressedVocabulary {
       return toStringView(el.value());
     } else {
       // WordAndIndex
-      return el._word.value();
+      return el.word_.value();
     }
   }
 };

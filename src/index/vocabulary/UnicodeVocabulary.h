@@ -68,8 +68,10 @@ class UnicodeVocabulary {
   /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
   /// TODO<joka921> Also support other levels, but this requires intrusive
   /// hacking of ICU's SortKeys.
-  [[nodiscard]] std::pair<uint64_t, uint64_t> prefix_range(
-      std::string_view prefix) const {
+  /// a value of `nullopt` in the entries means "the bound is higher than the
+  /// largest word in the vocabulary".
+  [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
+  prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {
       if (size() == 0) {
         return {0, 0};
@@ -77,13 +79,17 @@ class UnicodeVocabulary {
       return {0, _underlyingVocabulary.getHighestId() + 1};
     }
 
-    auto lb = lower_bound(prefix, SortLevel::PRIMARY)._index;
+    auto lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed = _comparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
-    auto ub = lower_bound(transformed, SortLevel::PRIMARY)._index;
+    auto ub = lower_bound(transformed, SortLevel::PRIMARY);
 
-    return {lb, ub};
+    auto toOptionalIndex = [](const WordAndIndex& wi) {
+      return wi.isEnd() ? std::nullopt : std::optional{wi.index()};
+    };
+
+    return {toOptionalIndex(lb), toOptionalIndex(ub)};
   }
 
   /// Open the underlying vocabulary from a file. The file must have been

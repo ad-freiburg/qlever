@@ -462,6 +462,21 @@ class SimpleStringComparator {
     return cmp < 0;
   }
 
+  // TODO<joka921> Write tests for those...
+  bool operator()(const LocaleManager::SortKey& b, std::string_view a,
+                  [[maybe_unused]] const Level l) const {
+    auto aTrans = _locManager.getSortKey(a, Level::PRIMARY);
+    auto cmp = LocaleManager::compare(aTrans, b, Level::PRIMARY);
+    return cmp > 0;
+  }
+
+  bool operator()(const LocaleManager::SortKey& a,
+                  const LocaleManager::SortKey& b,
+                  [[maybe_unused]] const Level l) const {
+    auto cmp = LocaleManager::compare(a, b, Level::PRIMARY);
+    return cmp < 0;
+  }
+
   /**
    * @brief Transform a string s to the SortKey of the first possible
    * string that compares greater to s according to the held locale on the

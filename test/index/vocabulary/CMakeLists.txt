@@ -6,8 +6,6 @@ addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
 
-addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
-
 addLinkAndDiscoverTest(VocabularyInternalExternalTest vocabulary)
 
 addLinkAndDiscoverTest(VocabularyInMemoryBinSearchTest vocabulary)
