@@ -32,10 +32,6 @@ class UnicodeVocabulary {
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
-  [[nodiscard]] uint64_t getHighestId() const {
-    return _underlyingVocabulary.getHighestId();
-  }
-
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
   /// `words_` are sorted according to the comparator (exactly like in
@@ -73,10 +69,7 @@ class UnicodeVocabulary {
   [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
   prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {
-      if (size() == 0) {
-        return {0, 0};
-      }
-      return {0, _underlyingVocabulary.getHighestId() + 1};
+      return {std::nullopt, std::nullopt};
     }
 
     auto lb = lower_bound(prefix, SortLevel::PRIMARY);

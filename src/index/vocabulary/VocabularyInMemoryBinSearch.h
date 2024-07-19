@@ -55,14 +55,6 @@ class VocabularyInMemoryBinSearch
     return words_.size();
   }
 
-  // Return the highest ID (= index) that occurs in this vocabulary.
-  [[nodiscard]] uint64_t getHighestId() const {
-    if (indices_.empty()) {
-      return 0;
-    }
-    return indices_.back();
-  }
-
   // Return the word with index `index`. If this index is not part of the
   // vocabulary, return `std::nullopt`.
   std::optional<std::string_view> operator[](uint64_t index) const;

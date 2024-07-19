@@ -42,9 +42,6 @@ class CompressedVocabulary {
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
-  [[nodiscard]] uint64_t getHighestId() const {
-    return underlyingVocabulary_.getHighestId();
-  }
 
   // From a `comparator` that can compare two strings, make a new comparator,
   // that can compare a string and an `iterator` by decompressing the word that

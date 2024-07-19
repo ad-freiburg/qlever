@@ -48,12 +48,6 @@ class VocabularyInternalExternal {
   // Return the total number of words
   [[nodiscard]] size_t size() const { return externalVocab_.size(); }
 
-  /// Return the highest ID (= index) that occurs in this vocabulary. May only
-  /// be called if `size() > 0`.
-  [[nodiscard]] uint64_t getHighestId() const {
-    return externalVocab_.getHighestId();
-  }
-
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   std::string operator[](uint64_t i) const;
 

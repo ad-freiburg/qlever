@@ -50,13 +50,6 @@ class VocabularyInMemory
   /// Return the total number of words
   [[nodiscard]] size_t size() const { return _words.size(); }
 
-  /// Return the highest ID (= index) that occurs in this vocabulary. May only
-  /// becalled if size() > 0.
-  [[nodiscard]] uint64_t getHighestId() const {
-    AD_CONTRACT_CHECK(size() > 0);
-    return size() - 1;
-  }
-
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 

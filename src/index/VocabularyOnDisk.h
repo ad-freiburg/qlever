@@ -89,13 +89,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
-  // Get the largest ID contained in this vocabulary. If the vocabulary is
-  // empty, this is the highest possible ID (s.t. `getHighestId() + 1` overflows
-  // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
-  // vocabularies consistent with other vocabulary types like
-  // `VocabularyInMemory`.
-  uint64_t getHighestId() const { return highestIdx_; }
-
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
