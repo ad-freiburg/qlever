@@ -144,22 +144,9 @@ class Vocabulary {
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName);
 
-  //! Get the word with the given idx or an empty optional if the
-  //! word is not in the vocabulary.
-  //! Only enabled when uncompressed which also means no externalization
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  std::optional<std::string_view> operator[](IndexType idx) const;
-
-  //! Get the word with the given idx or an empty optional if the
-  //! word is not in the vocabulary. Returns an lvalue because compressed or
-  //! externalized words don't allow references
-  template <typename U = StringType>
-  [[nodiscard]] std::optional<string> indexToOptionalString(
-      IndexType idx) const;
-
-  //! Get the word with the given idx.
-  //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(IndexType idx) const;
+  // Get the word with the given idx. Throw if the idx is not contained
+  // in the vocabulary
+  AccessReturnType_t<StringType> operator[](IndexType idx) const;
 
   // AccessReturnType_t<StringType> at(IndexType idx) const { return
   // operator[](id); }
@@ -258,13 +245,3 @@ using RdfsVocabulary =
     Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
 using TextVocabulary =
     Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
-
-// _______________________________________________________________
-template <typename S, typename C, typename I>
-template <typename>
-std::optional<string> Vocabulary<S, C, I>::indexToOptionalString(
-    IndexType idx) const {
-  AD_CONTRACT_CHECK(idx.get() < vocabulary_.size());
-  // TODO<joka921> Why does this return an optional?
-  return std::optional<string>(vocabulary_[idx.get()]);
-}

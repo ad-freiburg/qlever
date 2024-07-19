@@ -24,12 +24,12 @@ VocabularyInternalExternal::WordWriter::WordWriter(const std::string& filename,
 void VocabularyInternalExternal::WordWriter::operator()(std::string_view str,
                                                         bool isExternal) {
   externalWriter_(str);
-  if (!isExternal || sinceMilestone >= milestoneDistance_ || idx_ == 0) {
+  if (!isExternal || sinceMilestone_ >= milestoneDistance_ || idx_ == 0) {
     internalWriter_(str, idx_);
-    sinceMilestone = 0;
+    sinceMilestone_ = 0;
   }
   ++idx_;
-  ++sinceMilestone;
+  ++sinceMilestone_;
 }
 
 // _____________________________________________________________________________

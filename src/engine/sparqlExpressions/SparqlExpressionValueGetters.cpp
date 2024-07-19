@@ -55,13 +55,7 @@ auto EffectiveBooleanValueGetter::operator()(
       auto index = id.getVocabIndex();
       // TODO<joka921> We could precompute whether the empty literal or empty
       // iri are contained in the KB.
-      return context->_qec.getIndex()
-                     .getVocab()
-                     .indexToOptionalString(index)
-                     .value_or("")
-                     .empty()
-                 ? False
-                 : True;
+      return context->_qec.getIndex().getVocab()[index].empty() ? False : True;
     }
     case Datatype::LocalVocabIndex: {
       return (context->_localVocab.getWord(id.getLocalVocabIndex())

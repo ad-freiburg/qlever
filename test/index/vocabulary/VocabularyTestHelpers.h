@@ -11,6 +11,18 @@
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
 
+// human-readable output for the `WordAndIndex` class within GTest.
+inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
+  auto& os = *osPtr;
+  os << "WordAndIndex :";
+  if (wi.isEnd()) {
+    os << "[end]";
+  } else {
+    os << '"' << wi.word() << '"';
+    os << wi.index();
+  }
+}
+
 namespace vocabulary_test {
 
 // Can be used to compare arbitrary vocabularies to each other and to
@@ -22,7 +34,9 @@ inline auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
   }
 };
 
-auto matchWordAndIndex =
+// A matcher for the `WordAndIndex` class. It currently ignores the
+// `previousIndex_` member, which is mostly redundant.
+constexpr auto matchWordAndIndex =
     [](const WordAndIndex& wi) -> ::testing::Matcher<const WordAndIndex&> {
   auto isEndMatcher =
       AD_PROPERTY(WordAndIndex, isEnd, ::testing::Eq(wi.isEnd()));

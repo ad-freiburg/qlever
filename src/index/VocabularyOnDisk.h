@@ -28,11 +28,6 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   // The IDs and offsets of the words.
   ad_utility::MmapVectorView<Offset> offsets_;
 
-  // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
-  // this will be Id(-1), s.t. highestIdx_ + 1 will overflow to 0.
-  static constexpr uint64_t highestIndexEmpty_ =
-      std::numeric_limits<uint64_t>::max();
-  uint64_t highestIdx_ = highestIndexEmpty_;
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
 
@@ -106,9 +101,9 @@ class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
-  // Convert an iterator to the corresponding `WordAndIndex`. For the `end()`
-  // iterator return `{nullopt, highestID + 1}`.
-  [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
+  // Convert an iterator to the corresponding `WordAndIndex`. Needed for the
+  // Mixin base class
+  WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
     if (it == end()) {
       return WordAndIndex::end();
     } else {

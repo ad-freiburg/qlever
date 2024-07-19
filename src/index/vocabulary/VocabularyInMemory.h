@@ -53,6 +53,7 @@ class VocabularyInMemory
   /// Return the `i-th` word. The behavior is undefined if `i >= size()`
   auto operator[](uint64_t i) const { return _words[i]; }
 
+  // Conversion function that is used by the Mixin base class.
   WordAndIndex iteratorToWordAndIndex(auto it) const {
     if (it == _words.end()) {
       return WordAndIndex::end();
@@ -60,72 +61,6 @@ class VocabularyInMemory
     size_t idx = it - _words.begin();
     return {_words[idx], idx};
   }
-
-  /*
-  /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt. to the `comparator`. Only works correctly if the
-  /// `words_` are sorted according to the comparator (exactly like in
-  /// `std::lower_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    WordAndIndex result;
-    result.index_ =
-        std::lower_bound(_words.begin(), _words.end(), word, comparator) -
-        _words.begin();
-    result.word_ = result.index_ < _words.size()
-                       ? std::optional{_words[result.index_]}
-                       : std::nullopt;
-    return result;
-  }
-
-  // Same as `lower_bound`, but compares an `iterator` and a `value` instead of
-  // two values. Required by the `CompressedVocabulary`.
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex lower_bound_iterator(const InternalStringType& word,
-                                    Comparator comparator) const {
-    WordAndIndex result;
-    result.index_ = ad_utility::lower_bound_iterator(
-                        _words.begin(), _words.end(), word, comparator) -
-                    _words.begin();
-    result.word_ = result.index_ < _words.size()
-                       ? std::optional{_words[result.index_]}
-                       : std::nullopt;
-    return result;
-  }
-
-  /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
-  /// are sorted according to the comparator (exactly like in
-  /// `std::upper_bound`, which is used internally).
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound(const InternalStringType& word,
-                           Comparator comparator) const {
-    WordAndIndex result;
-    result.index_ =
-        std::upper_bound(_words.begin(), _words.end(), word, comparator) -
-        _words.begin();
-    result.word_ = result.index_ < _words.size()
-                       ? std::optional{_words[result.index_]}
-                       : std::nullopt;
-    return result;
-  }
-
-  // Same as `upper_bound`, but compares a `value` and an `iterator` instead of
-  // two values. Required by the `CompressedVocabulary`.
-  template <typename InternalStringType, typename Comparator>
-  WordAndIndex upper_bound_iterator(const InternalStringType& word,
-                                    Comparator comparator) const {
-    WordAndIndex result;
-    result.index_ = ad_utility::upper_bound_iterator(
-                        _words.begin(), _words.end(), word, comparator) -
-                    _words.begin();
-    result.word_ = result.index_ < _words.size()
-                       ? std::optional{_words[result.index_]}
-                       : std::nullopt;
-    return result;
-  }
-   */
 
   /// A helper type that can be used to directly write a vocabulary to disk
   /// word-by-word, without having to materialize it in RAM first. See the

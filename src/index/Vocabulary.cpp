@@ -250,14 +250,6 @@ void Vocabulary<S, ComparatorType, I>::setLocale(const std::string& language,
       ComparatorType(language, country, ignorePunctuation);
 }
 
-template <typename StringType, typename C, typename I>
-//! Get the word with the given idx.
-//! lvalue for compressedString and const& for string-based vocabulary
-AccessReturnType_t<StringType> Vocabulary<StringType, C, I>::at(
-    IndexType idx) const {
-  return vocabulary_[idx.get()];
-}
-
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
 bool Vocabulary<S, C, I>::getId(std::string_view word, IndexType* idx) const {
@@ -283,21 +275,11 @@ auto Vocabulary<S, C, I>::prefixRanges(std::string_view prefix) const
 
 // _____________________________________________________________________________
 template <typename S, typename C, typename I>
-template <typename, typename>
-// TODO<joka921> Is this used in the Text vocab?
-std::optional<std::string_view> Vocabulary<S, C, I>::operator[](
-    IndexType idx) const {
-  if (idx.get() < vocabulary_.size()) {
-    return vocabulary_[idx.get()];
-  } else {
-    return std::nullopt;
-  }
+auto Vocabulary<S, C, I>::operator[](IndexType idx) const
+    -> AccessReturnType_t<S> {
+  AD_CONTRACT_CHECK(idx.get() < size());
+  return vocabulary_[idx.get()];
 }
-template std::optional<std::string_view>
-TextVocabulary::operator[]<std::string, void>(IndexType idx) const;
-
-template std::optional<string>
-RdfsVocabulary::indexToOptionalString<CompressedString>(IndexType idx) const;
 
 // Explicit template instantiations
 template class Vocabulary<CompressedString, TripleComponentComparator,

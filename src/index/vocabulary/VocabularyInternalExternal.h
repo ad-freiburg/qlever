@@ -102,7 +102,7 @@ class VocabularyInternalExternal {
     VocabularyOnDisk::WordWriter externalWriter_;
     uint64_t idx_ = 0;
     size_t milestoneDistance_;
-    size_t sinceMilestone = 0;
+    size_t sinceMilestone_ = 0;
 
     // Construct from the `filename` to which the vocabulary will be serialized.
     // At least every `milestoneDistance`-th word will be cached in RAM.
@@ -149,6 +149,6 @@ class VocabularyInternalExternal {
       upperBound = boundFromInternalVocab.index() + 1;
     }
     return boundFunction(externalVocab_, word, comparator,
-                         boundFromInternalVocab.previousIndex_, upperBound);
+                         boundFromInternalVocab.previousIndex(), upperBound);
   }
 };

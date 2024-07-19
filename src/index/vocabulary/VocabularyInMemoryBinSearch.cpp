@@ -40,7 +40,7 @@ WordAndIndex VocabularyInMemoryBinSearch::iteratorToWordAndIndex(
   auto idx = static_cast<uint64_t>(it - words_.begin());
   WordAndIndex result{words_[idx], indices_[idx]};
   if (idx > 0) {
-    result.previousIndex_ = indices_[idx - 1];
+    result.previousIndex() = indices_[idx - 1];
   }
   return result;
 }
