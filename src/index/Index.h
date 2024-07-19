@@ -118,8 +118,8 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  std::string idToOptionalString(VocabIndex id) const;
-  std::string_view idToOptionalString(WordVocabIndex id) const;
+  std::string indexToString(VocabIndex id) const;
+  std::string_view indexToString(WordVocabIndex id) const;
 
   std::optional<Id> getId(
       const ad_utility::triple_component::LiteralOrIri& element) const;

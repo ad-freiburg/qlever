@@ -1285,12 +1285,10 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
 
 // TODO<joka921> Once we have an overview over the folding this logic should
 // probably not be in the index class.
-std::string IndexImpl::idToOptionalString(VocabIndex id) const {
-  return vocab_[id];
-}
+std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
 
 // ___________________________________________________________________________
-std::string_view IndexImpl::idToOptionalString(WordVocabIndex id) const {
+std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
   return textVocab_[id];
 }
 

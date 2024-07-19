@@ -248,10 +248,10 @@ class IndexImpl {
                         Permutation::Enum permutation) const;
 
   // ___________________________________________________________________________
-  std::string idToOptionalString(VocabIndex id) const;
+  std::string indexToString(VocabIndex id) const;
 
   // ___________________________________________________________________________
-  std::string_view idToOptionalString(WordVocabIndex id) const;
+  std::string_view indexToString(WordVocabIndex id) const;
 
  private:
   // ___________________________________________________________________________
