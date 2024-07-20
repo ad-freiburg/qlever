@@ -256,7 +256,9 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest util parser)
+addLinkAndDiscoverTest(DateYearDurationTest util parser)
+
+addLinkAndDiscoverTest(DurationTest util)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
@@ -401,3 +403,5 @@ addLinkAndDiscoverTest(JThreadTest)
 addLinkAndDiscoverTest(ChunkedForLoopTest)
 
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
+
+addLinkAndDiscoverTest(CopyableSynchronizationTest)

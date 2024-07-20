@@ -10,13 +10,9 @@ static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(std::array<Id, 3> triple,
-                                   bool ignoreForPatterns) {
-  if (ignoreForPatterns) {
-    tripleBuffer_.emplace_back(triple, ignoreForPatterns);
-    return;
-  }
+                                   bool ignoreTripleForPatterns) {
   if (!currentSubject_.has_value()) {
-    // This is the first triple.
+    // This is the very first triple.
     currentSubject_ = triple[0];
   } else if (triple[0] != currentSubject_) {
     // New subject.
@@ -24,50 +20,67 @@ void PatternCreator::processTriple(std::array<Id, 3> triple,
     currentSubject_ = triple[0];
     currentPattern_.clear();
   }
-  tripleBuffer_.emplace_back(triple, ignoreForPatterns);
-  // Don't list predicates twice in the same pattern.
+  tripleBuffer_.emplace_back(triple, ignoreTripleForPatterns);
+  if (ignoreTripleForPatterns) {
+    return;
+  }
+  // Add predicate to pattern unless it was already added.
   if (currentPattern_.empty() || currentPattern_.back() != triple[1]) {
     currentPattern_.push_back(triple[1]);
   }
 }
 
-// ________________________________________________________________________________
-void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
-  numDistinctSubjects_++;
+// _____________________________________________________________________________
+PatternID PatternCreator::finishPattern(const Pattern& pattern) {
+  if (pattern.empty()) {
+    return NO_PATTERN;
+  }
   numDistinctSubjectPredicatePairs_ += pattern.size();
-  PatternID patternId;
   auto it = patternToIdAndCount_.find(pattern);
-  if (it == patternToIdAndCount_.end()) {
-    // This is a new pattern, assign a new pattern ID and a count of 1.
-    patternId = static_cast<PatternID>(patternToIdAndCount_.size());
-    patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
-
-    // Count the total number of distinct predicates that appear in the
-    // pattern and have not been counted before.
-    for (auto predicate : pattern) {
-      distinctPredicates_.insert(predicate);
-    }
-  } else {
+  if (it != patternToIdAndCount_.end()) {
     // We have already seen the same pattern for a previous subject ID, reuse
     // the ID and increase the count.
-    patternId = it->second.patternId_;
     it->second.count_++;
+    return it->second.patternId_;
+  }
+  // This is a new pattern, assign a new pattern ID and a count of 1.
+  auto patternId = static_cast<PatternID>(patternToIdAndCount_.size());
+  patternToIdAndCount_[pattern] = PatternIdAndCount{patternId, 1UL};
+
+  // Count the total number of distinct predicates that appear in the
+  // pattern and have not been counted before.
+  for (auto predicate : pattern) {
+    distinctPredicates_.insert(predicate);
+  }
+  return patternId;
+}
+
+// ________________________________________________________________________________
+void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
+  // Write the pattern to disk and obtain its ID.
+  PatternID patternId = finishPattern(pattern);
+
+  // Write the triple `<subject> ql:has-pattern <patternId>`, but only if the
+  // subject has a pattern.
+  if (!pattern.empty()) {
+    auto additionalTriple =
+        std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
+    tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
+    ++numDistinctSubjects_;
   }
 
-  auto additionalTriple =
-      std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
-  tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
+  // Write the quads `<subject> <predicate> <object> <patternOfSubject>.
+  // Note: This has to be done for all triples, including those where the
+  // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  std::ranges::for_each(tripleBuffer_, [this, patternId,
-                                        &curSubject](const auto& t) {
-    const auto& [s, p, o] = t.triple_;
-    // It might happen that the `tripleBuffer_` contains different subjects
-    // which are purely internal and therefore have no pattern.
-    auto actualPatternId =
-        Id::makeFromInt(curSubject != s ? NO_PATTERN : patternId);
-    AD_CORRECTNESS_CHECK(curSubject == s || t.isInternal_);
-    ospSorterTriplesWithPattern().push(std::array{s, p, o, actualPatternId});
-  });
+  std::ranges::for_each(tripleBuffer_,
+                        [this, patternId, &curSubject](const auto& t) {
+                          const auto& [s, p, o] = t.triple_;
+                          AD_CORRECTNESS_CHECK(s == curSubject);
+                          ospSorterTriplesWithPattern().push(
+                              std::array{s, p, o, Id::makeFromInt(patternId)});
+                        });
+
   tripleBuffer_.clear();
 }
 

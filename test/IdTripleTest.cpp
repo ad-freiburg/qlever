@@ -51,3 +51,12 @@ TEST(IdTripleTest, permute) {
                                         {IntId(10), IntId(5)})));
   }
 }
+
+TEST(IdTripleTest, toPermutedTriple) {
+  {
+    IdTriple<0> idTriple({VocabId(0), VocabId(10), VocabId(5)});
+    EXPECT_THAT(idTriple.toPermutedTriple(),
+                testing::Eq(CompressedBlockMetadata::PermutedTriple{
+                    VocabId(0), VocabId(10), VocabId(5)}));
+  }
+}

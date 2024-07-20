@@ -86,6 +86,8 @@ class LocatedTriplesPerBlock {
   template <size_t numIndexColumns>
   IdTable mergeTriplesImpl(size_t blockIndex, const IdTable& block) const;
 
+  // Stores the block metadata where the block borders have been adjusted for
+  // the updated triples.
   std::optional<std::vector<CompressedBlockMetadata>> augmentedMetadata_;
   std::vector<CompressedBlockMetadata> originalMetadata_;
   void updateAugmentedMetadata();

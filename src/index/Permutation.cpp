@@ -37,7 +37,7 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   }
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
-  locatedTriplesPerBlock.updateAugmentedMetadata(meta_.blockData());
+  locatedTriplesPerBlock.setOriginalMetadata(meta_.blockData());
   reader_.value().enableUpdateUse();
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;

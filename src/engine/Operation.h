@@ -17,6 +17,7 @@
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
+#include "util/CopyableSynchronization.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -337,17 +338,8 @@ class Operation {
   // future.
   LimitOffsetClause _limit;
 
-  // A mutex that can be "copied". The semantics are, that copying will create
-  // a new mutex. This is sufficient for applications like in
-  // `getInternallyVisibleVariableColumns()` where we just want to make a
-  // `const` member function that modifies a `mutable` member threadsafe.
-  struct CopyableMutex : std::mutex {
-    using std::mutex::mutex;
-    CopyableMutex(const CopyableMutex&) {}
-  };
-
   // Mutex that protects the `variableToColumnMap_` below.
-  mutable CopyableMutex variableToColumnMapMutex_;
+  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
   // Store the mapping from variables to column indices. `nullopt` means that
   // this map has not yet been computed. This computation is typically performed
   // in the const member function `getInternallyVisibleVariableColumns`, so we
@@ -361,7 +353,7 @@ class Operation {
       externallyVisibleVariableToColumnMap_;
 
   // Mutex that protects the `_resultSortedColumns` below.
-  mutable CopyableMutex _resultSortedColumnsMutex;
+  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =

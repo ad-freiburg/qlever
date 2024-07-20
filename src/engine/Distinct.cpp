@@ -14,19 +14,18 @@ using std::endl;
 using std::string;
 
 // _____________________________________________________________________________
-size_t Distinct::getResultWidth() const { return _subtree->getResultWidth(); }
+size_t Distinct::getResultWidth() const { return subtree_->getResultWidth(); }
 
 // _____________________________________________________________________________
 Distinct::Distinct(QueryExecutionContext* qec,
                    std::shared_ptr<QueryExecutionTree> subtree,
                    const vector<ColumnIndex>& keepIndices)
-    : Operation(qec), _subtree(subtree), _keepIndices(keepIndices) {}
+    : Operation(qec), subtree_(std::move(subtree)), _keepIndices(keepIndices) {}
 
 // _____________________________________________________________________________
 string Distinct::getCacheKeyImpl() const {
-  std::ostringstream os;
-  os << "Distinct " << _subtree->getCacheKey();
-  return std::move(os).str();
+  return absl::StrCat("DISTINCT (", subtree_->getCacheKey(), ") (",
+                      absl::StrJoin(_keepIndices, ","), ")");
 }
 
 // _____________________________________________________________________________
@@ -34,14 +33,14 @@ string Distinct::getDescriptor() const { return "Distinct"; }
 
 // _____________________________________________________________________________
 VariableToColumnMap Distinct::computeVariableToColumnMap() const {
-  return _subtree->getVariableColumns();
+  return subtree_->getVariableColumns();
 }
 
 // _____________________________________________________________________________
 Result Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
-  std::shared_ptr<const Result> subRes = _subtree->getResult();
+  std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   LOG(DEBUG) << "Distinct result computation..." << endl;
   idTable.setNumColumns(subRes->idTable().numColumns());
