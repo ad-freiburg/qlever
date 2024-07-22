@@ -174,5 +174,5 @@ class Engine {
   // Return the number of distinct rows in the `input`. The input must be sorted
   // for this to work.
   static size_t countDistinct(const IdTable& input,
-                              std::function<void()> checkCancellation);
+                              const std::function<void()>& checkCancellation);
 };

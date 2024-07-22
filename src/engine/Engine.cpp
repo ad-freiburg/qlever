@@ -53,12 +53,15 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
 
 // ___________________________________________________________________________
 size_t Engine::countDistinct(const IdTable& input,
-                             std::function<void()> checkCancellation) {
+                             const std::function<void()>& checkCancellation) {
+  AD_EXPENSIVE_CHECK(
+      std::ranges::is_sorted(input, std::ranges::lexicographical_compare),
+      "Input to Engine::countDistinct must be sorted");
   if (input.empty()) {
     return 0;
   }
   std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
-      input.numRows() - 1, '1', input.getAllocator());
+      input.numRows() - 1, static_cast<char>(true), input.getAllocator());
 
   for (const auto& col : input.getColumns()) {
     ad_utility::chunkedForLoop<100'000>(
@@ -68,6 +71,7 @@ size_t Engine::countDistinct(const IdTable& input,
         },
         [&checkCancellation]() { checkCancellation(); });
   }
-  return input.numRows() -
-         std::accumulate(counter.begin(), counter.end(), 0ull);
+
+  auto numDuplicates = std::accumulate(counter.begin(), counter.end(), 0ULL);
+  return input.numRows() - numDuplicates;
 }

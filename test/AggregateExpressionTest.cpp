@@ -9,6 +9,7 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -99,4 +100,36 @@ TEST(AggregateExpression, count) {
 
   auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
   testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+}
+
+// ______________________________________________________________________________
+TEST(AggregateExpression, CountStar) {
+  auto t = TestContext{};
+  auto totalSize = t.table.size();
+  using namespace sparqlExpression;
+  auto m = makeCountStarExpression(false);
+  EXPECT_THAT(
+      m->evaluate(&t.context),
+      ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));
+  // TODO<joka921> Test with an input that actually contains duplicates...
+  m = makeCountStarExpression(true);
+  EXPECT_THAT(
+      m->evaluate(&t.context),
+      ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));
+}
+
+// ______________________________________________________________________________
+TEST(AggregateExpression, CountStarSimpleMembers) {
+  auto t = TestContext{};
+  auto totalSize = t.table.size();
+  using namespace sparqlExpression;
+  auto m = makeCountStarExpression(false);
+  const auto& exp = *m;
+  EXPECT_THAT(exp.getCacheKey({}), ::testing::HasSubstr("COUNT *"));
+  auto m2 = makeCountStarExpression(true);
+  EXPECT_NE(exp.getCacheKey({}), m2->getCacheKey({}));
+
+  EXPECT_THAT(m->children(), ::testing::IsEmpty());
+  EXPECT_THAT(m->getUnaggregatedVariables(), ::testing::IsEmpty());
+  EXPECT_TRUE(m->isAggregate());
 }
