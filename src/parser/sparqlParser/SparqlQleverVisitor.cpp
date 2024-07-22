@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "absl/time/time.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
@@ -2164,29 +2165,26 @@ void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   using namespace sparqlExpression;
+  const auto& children = ctx->children;
+  std::string functionName =
+      ad_utility::getLowercase(children.at(0)->getText());
+
+  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+    return ad_utility::getLowercase(child->getText()) == "distinct";
+  });
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
-    reportError(ctx,
-                "This parser currently doesn't support COUNT(*), please "
-                "specify an explicit expression for the COUNT");
+    AD_CORRECTNESS_CHECK(functionName == "count");
+    return makeCountStarExpression(distinct);
   }
   auto childExpression = visit(ctx->expression());
-  auto children = ctx->children;
-  bool distinct = false;
-  for (const auto& child : children) {
-    if (ad_utility::getLowercase(child->getText()) == "distinct") {
-      distinct = true;
-    }
-  }
   auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
     return result;
   };
-
-  std::string functionName = ad_utility::getLowercase(children[0]->getText());
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();

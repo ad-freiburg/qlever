@@ -49,3 +49,19 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
                               });
   }
 }
+
+// ___________________________________________________________________________
+size_t Engine::countDistinct(const IdTable& input) {
+  if (input.empty()) {
+    return 0;
+  }
+  std::vector<char> counter(input.numRows() - 1, '1');
+
+  for (const auto& col : input.getColumns()) {
+    for (size_t i = 0; i < input.numRows() - 1; ++i) {
+      counter[i] &= static_cast<char>(col[i] == col[i + 1]);
+    }
+  }
+  return input.numRows() -
+         std::accumulate(counter.begin(), counter.end(), 0ull);
+}

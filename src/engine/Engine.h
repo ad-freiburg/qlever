@@ -170,4 +170,8 @@ class Engine {
     *dynResult = std::move(result).toDynamic();
     LOG(DEBUG) << "Distinct done.\n";
   }
+
+  // Return the number of distinct rows in the `input`. The input must be sorted
+  // for this to work.
+  static size_t countDistinct(const IdTable& input);
 };
