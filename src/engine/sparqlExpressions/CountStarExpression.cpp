@@ -6,6 +6,7 @@
 
 #include "engine/Engine.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "global/RuntimeParameters.h"
 
 namespace sparqlExpression {
 class CountStarExpression : public SparqlExpression {
@@ -33,8 +34,27 @@ class CountStarExpression : public SparqlExpression {
     for (auto i : ad_utility::integerRange(table.numColumns())) {
       indices.push_back(i);
     }
+    // TODO<joka921> proper timeout for sorting operations
+    /*
+    auto sortEstimateCancellationFactor =
+        RuntimeParameters().get<"sort-estimate-cancellation-factor">();
+    if (ctx->_qec.getSortPerformanceEstimator().estimatedSortTime(
+            table.numRows(), table.numColumns()) >
+        remainingTime() * sortEstimateCancellationFactor) {
+      // The estimated time for this sort is much larger than the actually
+      // remaining time, cancel this operation
+      throw ad_utility::CancellationException(
+          "Sort operation was canceled, because time estimate exceeded "
+          "remaining time by a factor of " +
+          std::to_string(sortEstimateCancellationFactor));
+    }
+     */
     Engine::sort(table, indices);
-    return Id::makeFromInt(static_cast<int64_t>(Engine::countDistinct(table)));
+    auto checkCancellation = [ctx]() {
+      ctx->cancellationHandle_->throwIfCancelled();
+    };
+    return Id::makeFromInt(
+        static_cast<int64_t>(Engine::countDistinct(table, checkCancellation)));
   }
 
   // COUNT * technically is an aggregate.
