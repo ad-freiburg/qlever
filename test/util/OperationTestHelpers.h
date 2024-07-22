@@ -50,8 +50,9 @@ class StallForeverOperation : public Operation {
 class ShallowParentOperation : public Operation {
   std::shared_ptr<QueryExecutionTree> child_;
 
-  explicit ShallowParentOperation(std::shared_ptr<QueryExecutionTree> child)
-      : child_{std::move(child)} {}
+  explicit ShallowParentOperation(QueryExecutionContext* qec,
+                                  std::shared_ptr<QueryExecutionTree> child)
+      : Operation(qec), child_{std::move(child)} {}
   string getCacheKeyImpl() const override { return "ParentOperation"; }
   string getDescriptor() const override { return "ParentOperationDescriptor"; }
   size_t getResultWidth() const override { return 0; }
@@ -66,7 +67,7 @@ class ShallowParentOperation : public Operation {
   template <typename ChildOperation, typename... Args>
   static ShallowParentOperation of(QueryExecutionContext* qec, Args&&... args) {
     return ShallowParentOperation{
-        ad_utility::makeExecutionTree<ChildOperation>(qec, args...)};
+        qec, ad_utility::makeExecutionTree<ChildOperation>(qec, args...)};
   }
 
   std::vector<QueryExecutionTree*> getChildren() override {

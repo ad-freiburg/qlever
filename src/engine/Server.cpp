@@ -683,9 +683,10 @@ boost::asio::awaitable<void> Server::processQuery(
                               std::ref(messageSender), pinSubtrees, pinResult);
     auto [cancellationHandle, cancelTimeoutOnDestruction] =
         setupCancellationHandle(messageSender.getQueryId(), timeLimit);
+    qec.setSharedCancellationHandle(cancellationHandle);
+    qec.deadline() = std::chrono::steady_clock::now() + timeLimit;
 
-    plannedQuery =
-        co_await parseAndPlan(query, qec, cancellationHandle, timeLimit);
+    plannedQuery = co_await parseAndPlan(query, qec, cancellationHandle);
     AD_CORRECTNESS_CHECK(plannedQuery.has_value());
     auto& qet = plannedQuery.value().queryExecutionTree_;
     qet.isRoot() = true;  // allow pinning of the final result
@@ -836,7 +837,7 @@ Awaitable<T> Server::computeInNewThread(Function function,
 // _____________________________________________________________________________
 net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
     const std::string& query, QueryExecutionContext& qec,
-    SharedCancellationHandle handle, TimeLimit timeLimit) {
+    SharedCancellationHandle handle) {
   auto handleCopy = handle;
 
   // The usage of an `optional` here is required because of a limitation in
@@ -846,8 +847,7 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
   // probably related to issues in GCC's coroutine implementation.
   return computeInNewThread(
       [&query, &qec, enablePatternTrick = enablePatternTrick_,
-       handle = std::move(handle),
-       timeLimit]() mutable -> std::optional<PlannedQuery> {
+       handle = std::move(handle)]() mutable -> std::optional<PlannedQuery> {
         auto pq = SparqlParser::parseQuery(query);
         handle->throwIfCancelled();
         QueryPlanner qp(&qec, handle);
@@ -856,10 +856,6 @@ net::awaitable<std::optional<Server::PlannedQuery>> Server::parseAndPlan(
         handle->throwIfCancelled();
         PlannedQuery plannedQuery{std::move(pq), std::move(qet)};
 
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetCancellationHandle(std::move(handle));
-        plannedQuery.queryExecutionTree_.getRootOperation()
-            ->recursivelySetTimeConstraint(timeLimit);
         return plannedQuery;
       },
       std::move(handleCopy));

@@ -38,13 +38,13 @@ class Operation {
 
   // Typical Constructor.
   explicit Operation(QueryExecutionContext* executionContext)
-      : _executionContext(executionContext) {}
+      : _executionContext(executionContext),
+        cancellationHandle_(executionContext->getSharedCancellationHandle()) {}
 
   // Destructor.
-  virtual ~Operation() {
-    // Do NOT delete _executionContext, since
-    // there is no ownership.
-  }
+  // Do NOT delete _executionContext, since
+  // there is no ownership.
+  virtual ~Operation() = default;
 
   /// get non-owning pointers to all the held subtrees to actually use the
   /// Execution Trees as trees
@@ -159,21 +159,6 @@ class Operation {
       bool isRoot = false,
       ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
-  // Use the same cancellation handle for all children of an operation (= query
-  // plan rooted at that operation). As soon as one child is aborted, the whole
-  // operation is aborted out.
-  void recursivelySetCancellationHandle(
-      SharedCancellationHandle cancellationHandle);
-
-  template <typename Rep, typename Period>
-  void recursivelySetTimeConstraint(
-      std::chrono::duration<Rep, Period> duration) {
-    recursivelySetTimeConstraint(std::chrono::steady_clock::now() + duration);
-  }
-
-  void recursivelySetTimeConstraint(
-      std::chrono::steady_clock::time_point deadline);
-
   // True iff this operation directly implement a `LIMIT` clause on its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
@@ -245,9 +230,6 @@ class Operation {
   /// Pointer to the cancellation handle of this operation.
   SharedCancellationHandle cancellationHandle_ =
       std::make_shared<SharedCancellationHandle::element_type>();
-
-  std::chrono::steady_clock::time_point deadline_ =
-      std::chrono::steady_clock::time_point::max();
 
   // Get the mapping from variables to column indices. This mapping may only be
   // used internally, because the actually visible variables might be different

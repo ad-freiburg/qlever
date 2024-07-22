@@ -144,9 +144,9 @@ TEST_F(OperationTestFixture, verifyCachePreventsInProgressState) {
 TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
   auto qec = getQec();
   auto handle = std::make_shared<CancellationHandle<>>();
+  qec->setSharedCancellationHandle(handle);
   ShallowParentOperation operation =
       ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetCancellationHandle(handle);
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
@@ -162,9 +162,10 @@ TEST(OperationTest, verifyExceptionIsThrownOnCancellation) {
 TEST(OperationTest, verifyRemainingTimeDoesCountDown) {
   constexpr auto timeout = 5ms;
   auto qec = getQec();
+  qec->deadline() =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(5);
   ShallowParentOperation operation =
       ShallowParentOperation::of<StallForeverOperation>(qec);
-  operation.recursivelySetTimeConstraint(timeout);
 
   auto childOperation = std::dynamic_pointer_cast<StallForeverOperation>(
       operation.getChildren().at(0)->getRootOperation());

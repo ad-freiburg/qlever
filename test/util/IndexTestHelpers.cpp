@@ -259,7 +259,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                          blocksizePermutations, createTextIndex)),
                      std::make_unique<QueryResultCache>()});
   }
-  return contextMap.at(key).qec_.get();
+  auto res = contextMap.at(key).qec_.get();
+  res->resetCancellationHandleAndDeadline();
+  return res;
 }
 
 // ___________________________________________________________

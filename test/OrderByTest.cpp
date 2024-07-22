@@ -250,10 +250,10 @@ TEST(OrderBy, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
       orderBy.getExecutionContext()->getSortPerformanceEstimator())
       .computeEstimatesExpensively(
           ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
-
-  orderBy.recursivelySetTimeConstraint(0ms);
+  orderBy.getExecutionContext()->deadline() = std::chrono::steady_clock::now();
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       orderBy.getResult(true), ::testing::HasSubstr("time estimate exceeded"),
       ad_utility::CancellationException);
+  orderBy.getExecutionContext()->deadline() = std::chrono::steady_clock::now();
 }

@@ -190,7 +190,7 @@ TEST(Sort, verifyOperationIsPreemptivelyAbortedWithNoRemainingTime) {
       .computeEstimatesExpensively(
           ad_utility::makeUnlimitedAllocator<ValueId>(), 1'000'000);
 
-  sort.recursivelySetTimeConstraint(0ms);
+  sort.getExecutionContext()->deadline() = std::chrono::steady_clock::now();
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       sort.getResult(true), ::testing::HasSubstr("time estimate exceeded"),

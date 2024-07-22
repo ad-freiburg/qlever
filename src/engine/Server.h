@@ -183,7 +183,7 @@ class Server {
   /// technical reasons that are described in the definition of this function.
   net::awaitable<std::optional<PlannedQuery>> parseAndPlan(
       const std::string& query, QueryExecutionContext& qec,
-      SharedCancellationHandle handle, TimeLimit timeLimit);
+      SharedCancellationHandle handle);
 
   /// Acquire the `CancellationHandle` for the given `QueryId`, start the
   /// watchdog and call `cancelAfterDeadline` to set the timeout after

@@ -50,26 +50,6 @@ vector<string> Operation::collectWarnings() const {
 }
 
 // ________________________________________________________________________
-void Operation::recursivelySetCancellationHandle(
-    SharedCancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(cancellationHandle);
-  forAllDescendants([&cancellationHandle](auto child) {
-    child->getRootOperation()->cancellationHandle_ = cancellationHandle;
-  });
-  cancellationHandle_ = std::move(cancellationHandle);
-}
-
-// ________________________________________________________________________
-
-void Operation::recursivelySetTimeConstraint(
-    std::chrono::steady_clock::time_point deadline) {
-  deadline_ = deadline;
-  forAllDescendants([deadline](auto child) {
-    child->getRootOperation()->deadline_ = deadline;
-  });
-}
-
-// ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
   ad_utility::Timer timer{ad_utility::Timer::Started};
@@ -225,7 +205,8 @@ std::shared_ptr<const Result> Operation::getResult(
 // ______________________________________________________________________
 
 std::chrono::milliseconds Operation::remainingTime() const {
-  auto interval = deadline_ - std::chrono::steady_clock::now();
+  auto interval =
+      getExecutionContext()->deadline() - std::chrono::steady_clock::now();
   return std::max(
       0ms, std::chrono::duration_cast<std::chrono::milliseconds>(interval));
 }

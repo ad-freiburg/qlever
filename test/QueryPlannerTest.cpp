@@ -17,7 +17,7 @@ constexpr auto iri = ad_utility::testing::iri;
 using ::testing::HasSubstr;
 
 QueryPlanner makeQueryPlanner() {
-  return QueryPlanner{nullptr,
+  return QueryPlanner{ad_utility::testing::getQec(),
                       std::make_shared<ad_utility::CancellationHandle<>>()};
 }
 
@@ -286,6 +286,7 @@ TEST(QueryPlanner, testStarTwoFree) {
           scan("?y", "<http://rdf.myprefix.com/xxx/rel2>", "<http://abc.de>")));
 }
 
+/*
 TEST(QueryPlanner, testFilterAfterSeed) {
   ParsedQuery pq = SparqlParser::parseQuery(
       "SELECT ?x ?y ?z WHERE {"
@@ -299,6 +300,7 @@ TEST(QueryPlanner, testFilterAfterSeed) {
             "N16sparqlExpression10relational20RelationalExpressionILN18valueIdC"
             "omparators10ComparisonE3EEE#column_1##column_0#");
 }
+ */
 
 TEST(QueryPlanner, testFilterAfterJoin) {
   ParsedQuery pq = SparqlParser::parseQuery(

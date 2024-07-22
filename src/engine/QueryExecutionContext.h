@@ -136,6 +136,34 @@ class QueryExecutionContext {
   bool _pinSubtrees;
   bool _pinResult;
 
+  ad_utility::CancellationHandle<>& cancellationHandle() {
+    return *cancellationHandle_;
+  }
+  const ad_utility::CancellationHandle<>& cancellationHandle() const {
+    return *cancellationHandle_;
+  }
+
+  void setSharedCancellationHandle(
+      ad_utility::SharedCancellationHandle handle) {
+    cancellationHandle_ = std::move(handle);
+  }
+
+  ad_utility::SharedCancellationHandle getSharedCancellationHandle() const {
+    return cancellationHandle_;
+  }
+
+  const std::chrono::steady_clock::time_point& deadline() const {
+    return deadline_;
+  }
+
+  std::chrono::steady_clock::time_point& deadline() { return deadline_; }
+
+  void resetCancellationHandleAndDeadline() {
+    cancellationHandle_ =
+        std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+    deadline_ = std::chrono::steady_clock::time_point::max();
+  }
+
  private:
   const Index& _index;
   QueryResultCache* const _subtreeCache;
@@ -144,4 +172,8 @@ class QueryExecutionContext {
   QueryPlanningCostFactors _costFactors;
   SortPerformanceEstimator _sortPerformanceEstimator;
   std::function<void(std::string)> updateCallback_;
+  ad_utility::SharedCancellationHandle cancellationHandle_ =
+      std::make_shared<ad_utility::SharedCancellationHandle::element_type>();
+  std::chrono::steady_clock::time_point deadline_ =
+      std::chrono::steady_clock::time_point::max();
 };
