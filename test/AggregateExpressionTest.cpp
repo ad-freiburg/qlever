@@ -120,8 +120,6 @@ TEST(AggregateExpression, CountStar) {
 
 // ______________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
-  auto t = TestContext{};
-  auto totalSize = t.table.size();
   using namespace sparqlExpression;
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
