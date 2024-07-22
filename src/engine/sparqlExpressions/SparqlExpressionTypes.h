@@ -191,6 +191,8 @@ struct EvaluationContext {
   bool _isPartOfGroupBy = false;
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
+  using TimePoint = std::chrono::steady_clock::time_point;
+  TimePoint deadline_;
 
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
@@ -198,7 +200,8 @@ struct EvaluationContext {
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle);
+                    ad_utility::SharedCancellationHandle cancellationHandle,
+                    TimePoint deadline);
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.

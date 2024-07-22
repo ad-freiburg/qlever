@@ -49,6 +49,10 @@ class SortPerformanceEstimator {
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       size_t maxNumberOfElementsToSort);
 
+  void throwIfEstimateTooLong(size_t numRows, size_t numColumns,
+                              std::chrono::steady_clock::time_point deadline,
+                              std::string_view operationDescriptor) const;
+
  private:
   // The number of columns for which we will sample the sorting time as a base
   // for the estimates. It is crucial that we have values for 5 and 6, because
