@@ -16,11 +16,14 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -1698,6 +1701,90 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("CONTAINS(?x, ?y)", makeMatcher(&makeContainsExpression));
   expectBuiltInCall("STRAFTER(?x, ?y)", makeMatcher(&makeStrAfterExpression));
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
+}
+
+namespace aggregateTestHelpers {
+using namespace sparqlExpression;
+template <typename T>
+::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
+    bool distinct, const Variable& child, const auto&... additionalMatchers) {
+  using namespace ::testing;
+  using namespace builtInCallTestHelpers;
+  using Exp = SparqlExpression;
+
+  auto innerMatcher = [&]() -> Matcher<const T&> {
+    if constexpr (sizeof...(additionalMatchers) > 0) {
+      return AllOf(additionalMatchers...);
+    } else {
+      return ::testing::_;
+    }
+  }();
+  return Pointee(AllOf(
+      AD_PROPERTY(Exp, isDistinct, Eq(distinct)),
+      AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
+      WhenDynamicCastTo<const T&>(innerMatcher)));
+}
+}  // namespace aggregateTestHelpers
+
+// ___________________________________________________________
+TEST(SparqlParser, aggregateExpressions) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  using namespace aggregateTestHelpers;
+  using V = Variable;
+  auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
+  auto expectAggregateFails = ExpectParseFails<&Parser::aggregate>{};
+
+  auto typeIdLambda = [](const auto& ptr) {
+    return std::type_index{typeid(ptr)};
+  };
+  auto typeIdxCountStar = typeIdLambda(*makeCountStarExpression(true));
+
+  auto matchCountStar =
+      [&typeIdLambda, typeIdxCountStar](
+          bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
+    using namespace ::testing;
+    return Pointee(
+        AllOf(AD_PROPERTY(SparqlExpression, isDistinct, Eq(distinct)),
+              ResultOf(typeIdLambda, Eq(typeIdxCountStar))));
+  };
+
+  expectAggregate("COUNT(*)", matchCountStar(false));
+  expectAggregate("COUNT(DISTINCT *)", matchCountStar(true));
+
+  expectAggregate("SAMPLE(?x)",
+                  matchPtrWithVariables<SampleExpression>(V{"?x"}));
+  expectAggregate("Min(?x)", matchAggregate<MinExpression>(false, V{"?x"}));
+  expectAggregate("Min(DISTINCT ?x)",
+                  matchAggregate<MinExpression>(true, V{"?x"}));
+
+  expectAggregate("Max(?x)", matchAggregate<MaxExpression>(false, V{"?x"}));
+  expectAggregate("Max(DISTINCT ?x)",
+                  matchAggregate<MaxExpression>(true, V{"?x"}));
+
+  expectAggregate("Count(?x)", matchAggregate<CountExpression>(false, V{"?x"}));
+  expectAggregate("Count(DISTINCT ?x)",
+                  matchAggregate<CountExpression>(true, V{"?x"}));
+
+  expectAggregate("Avg(?x)", matchAggregate<AvgExpression>(false, V{"?x"}));
+  expectAggregate("Avg(DISTINCT ?x)",
+                  matchAggregate<AvgExpression>(true, V{"?x"}));
+
+  auto separator = [](const std::string& sep) {
+    return AD_PROPERTY(GroupConcatExpression, getSeparator, Eq(sep));
+  };
+  expectAggregate("GROUP_CONCAT(?x)", matchAggregate<GroupConcatExpression>(
+                                          false, V{"?x"}, separator(" ")));
+  expectAggregate(
+      "group_concat(DISTINCT ?x)",
+      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(" ")));
+
+  expectAggregate(
+      "GROUP_CONCAT(?x; SEPARATOR= \";\")",
+      matchAggregate<GroupConcatExpression>(false, V{"?x"}, separator(";")));
+  expectAggregate(
+      "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
+      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
 }
 
 // Update queries are WIP. The individual parts to parse some update queries
