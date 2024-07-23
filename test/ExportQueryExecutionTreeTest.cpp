@@ -637,6 +637,168 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
 }
 
 // ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, TestWithIriEscaped) {
+  std::string kg = "<s> <p> <https://\\u0009:\\u0020)\\u000AtestIriKg>";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o }";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><uri>https://)" +
+                            "\x09" + R"(: )
+testIriKg</uri></binding>
+  </result>)" + xmlTrailer;
+
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "<https:// : )\\ntestIriKg>\n",
+      // CSV
+      "o\n"
+      "\"https://\t: )\ntestIriKg\"\n",
+      makeExpectedQLeverJSON({"<https://\t: )\ntestIriKg>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "uri", "https://\t: )\ntestIriKg")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t<https:// : )\\ntestIriKg>\n",
+      // CSV
+      "<s>,<p>,\"<https://\t: )\ntestIriKg>\"\n",
+      // Turtle
+      "<s> <p> <https://\t: )\ntestIriKg> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "<https://\t: )\ntestIriKg>"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+TEST(ExportQueryExecutionTree, TestWithIriExtendedEscaped) {
+  std::string kg =
+      "<s> <p>"
+      "<iriescaped\\u0001o\\u0002e\\u0003i\\u0004o\\u0005u\\u0006e\\u00"
+      "07g\\u0008c\\u0009u\\u000Ae\\u000Be\\u000Ca\\u000Dd\\u000En\\u000F?"
+      "\\u0010u\\u0011u\\u0012u\\u0013###\\u0020d>";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o }";
+  std::string expectedXml =
+      makeXMLHeader({"o"}) +
+      R"(
+  <result>
+    <binding name="o"><uri>)" +
+      "iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d" +
+      R"(</uri></binding>
+  </result>)" +
+      xmlTrailer;
+
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc u\\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
+      // CSV
+      "o\n"
+      "\"iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d\"\n",
+      makeExpectedQLeverJSON(
+          {"<iriescaped\u0001o\u0002e\u0003i\u0004o\u0005u\u0006e\u0007"
+           "g\u0008c\u0009u\u000Ae\u000Be\u000Ca\u000Dd\u000En\u000F?"
+           "\u0010u\u0011u\u0012u\u0013### d>"s}),
+      makeExpectedSparqlJSON({makeJSONBinding(
+          std::nullopt, "uri",
+          "iriescaped\u0001o\u0002e\u0003i\u0004o\u0005u\u0006e"
+          "\u0007"
+          "g\u0008c\u0009u\u000Ae\u000Be\u000Ca\u000Dd\u000En\u000F?"
+          "\u0010u\u0011u\u0012u\u0013### d")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc u\\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
+      // CSV
+      "<s>,<p>,\"<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\"\n",
+      // Turtle
+      "<s> <p> <iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{
+            "<s>"s, "<p>"s,
+            "<iriescaped\x01o\x02"
+            "e\x03i\x04o\x05u\x06"
+            "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>"s});
+        return j;
+      }(),
+  };
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTree, TestIriWithEscapedIriString) {
+  std::string kg = "<s> <p> \" hallo\\n\\t welt\"";
+  std::string objectQuery =
+      "SELECT ?o WHERE { "
+      "BIND(IRI(\" hallo\\n\\t welt\") AS ?o) }";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><uri> hallo
+)" + "\t" + R"( welt</uri></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "< hallo\\n  welt>\n",
+      // CSV
+      "o\n"
+      "\" hallo\n\t welt\"\n",
+      makeExpectedQLeverJSON({"< hallo\n\t welt>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "uri", " hallo\n\t welt")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t\" hallo\\n  welt\"\n",
+      // CSV
+      "<s>,<p>,\"\"\" hallo\n\t welt\"\"\"\n",
+      // Turtle
+      "<s> <p> \" hallo\\n\t welt\" .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "\" hallo\n\t welt\""s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
 TEST(ExportQueryExecutionTree, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
