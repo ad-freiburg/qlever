@@ -167,5 +167,5 @@ class Result {
   bool checkDefinedness(const VariableToColumnMap& varColMap);
 };
 
-// Temporary alias to keep PRs reviewable
+// In the future (as soon as we implement lazy operations) the `ProtoResult` and the `Result` will have different implementations. For now we simply use an alias to reduce the size of the diff in the PRs for lazy operations.
 using ProtoResult = Result;
