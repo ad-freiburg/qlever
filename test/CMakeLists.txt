@@ -403,3 +403,5 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
+
+addLinkAndDiscoverTest(LazyJsonParserTest)
