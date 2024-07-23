@@ -1723,8 +1723,8 @@ auto QueryPlanner::createSpatialJoin(
   auto bIsSpatialJoin =
       std::dynamic_pointer_cast<const SpatialJoin>(b._qet->getRootOperation());
 
-  bool aIs = static_cast<bool>(aIsSpatialJoin);
-  bool bIs = static_cast<bool>(bIsSpatialJoin);
+  auto aIs = static_cast<bool>(aIsSpatialJoin);
+  auto bIs = static_cast<bool>(bIsSpatialJoin);
 
   if ((aIs && bIs) || (!aIs && !bIs)) {
     return std::nullopt;
@@ -1734,7 +1734,7 @@ auto QueryPlanner::createSpatialJoin(
   SubtreePlan otherSubtreePlan = aIsSpatialJoin ? b : a;
 
   std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
-  SpatialJoin* spatialJoin = static_cast<SpatialJoin*>(op.get());
+  auto spatialJoin = static_cast<SpatialJoin*>(op.get());
 
   if (spatialJoin->isConstructed()) {
     return std::nullopt;

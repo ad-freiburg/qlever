@@ -59,35 +59,35 @@ class SpatialJoin : public Operation {
   bool isConstructed();
 
   // this function is used to give the maximum distance for testing purposes
-  long long getMaxDist();
+  long long getMaxDist() const;
 
-  std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() {
+  const std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() {
     return childLeft_;
   }
 
-  std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() {
+  const std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() {
     return childRight_;
   }
 
-  void onlyForTestingSetAddDistToResult(bool addDistToResult_) {
-    addDistToResult = addDistToResult_;
+  void onlyForTestingSetAddDistToResult(bool addDistToResult) {
+    addDistToResult_ = addDistToResult;
   }
 
-  const string getInternalDistanceName() { return nameDistanceInternal; }
+  string getInternalDistanceName() const { return nameDistanceInternal_; }
 
  private:
-  ad_utility::MemorySize _limit = ad_utility::MemorySize::bytes(100000000);
-  ad_utility::AllocatorWithLimit<ValueId> _allocator =
-      ad_utility::makeAllocatorWithLimit<ValueId>(_limit);
-  std::optional<Variable> leftChildVariable = std::nullopt;
-  std::optional<Variable> rightChildVariable = std::nullopt;
+  ad_utility::MemorySize limit_ = ad_utility::MemorySize::bytes(100000000);
+  ad_utility::AllocatorWithLimit<ValueId> allocator_ =
+      ad_utility::makeAllocatorWithLimit<ValueId>(limit_);
+  std::optional<Variable> leftChildVariable_ = std::nullopt;
+  std::optional<Variable> rightChildVariable_ = std::nullopt;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
   std::optional<SparqlTriple> triple_ = std::nullopt;
-  long long maxDist = 0;  // max distance in meters
+  long long maxDist_ = 0;  // max distance in meters
 
   // adds an extra column to the result, which contains the actual distance,
   // between the two objects
-  bool addDistToResult = true;
-  const string nameDistanceInternal = "?distOfTheTwoObjectsAddedInternally";
+  bool addDistToResult_ = true;
+  const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
 };
