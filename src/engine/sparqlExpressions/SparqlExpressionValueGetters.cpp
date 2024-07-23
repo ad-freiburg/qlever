@@ -234,16 +234,20 @@ OptIri IriValueGetter::operator()(
   }
 }
 
-// _____________________________________________________________________________
-std::optional<std::string> LanguageTagValueGetter::operator()(
-    ValueId id, const EvaluationContext* context) const {
+//______________________________________________________________________________
+template <typename T, typename ValueGetter>
+requires std::same_as<sparqlExpression::IdOrLiteralOrIri, T> ||
+         std::same_as<std::optional<std::string>, T>
+T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
+           ValueGetter& valueGetter) {
   using enum Datatype;
   switch (id.getDatatype()) {
     case LocalVocabIndex:
     case VocabIndex:
-      return (*this)(ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
-                         context->_qec.getIndex(), id, context->_localVocab),
-                     context);
+      return valueGetter(
+          ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+              context->_qec.getIndex(), id, context->_localVocab),
+          context);
     case TextRecordIndex:
     case WordVocabIndex:
     case BlankNodeIndex:
@@ -252,7 +256,33 @@ std::optional<std::string> LanguageTagValueGetter::operator()(
     case Double:
     case Date:
     case Undefined:
-      return std::nullopt;
+      if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
+        return Id::makeUndefined();
+      } else {
+        return std::nullopt;
+      }
   }
   AD_FAIL();
+}
+
+//_____________________________________________________________________________
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  return getValue<sparqlExpression::IdOrLiteralOrIri>(id, context, *this);
+}
+
+//______________________________________________________________________________
+std::optional<std::string> LanguageTagValueGetter::operator()(
+    ValueId id, const EvaluationContext* context) const {
+  return getValue<std::optional<std::string>>(id, context, *this);
+}
+
+//______________________________________________________________________________
+sparqlExpression::IdOrLiteralOrIri IriOrUriValueGetter::operator()(
+    const LiteralOrIri& litOrIri,
+    [[maybe_unused]] const EvaluationContext* context) const {
+  return LiteralOrIri{litOrIri.isIri()
+                          ? litOrIri.getIri()
+                          : Iri::fromIrirefWithoutBrackets(asStringViewUnsafe(
+                                litOrIri.getLiteral().getContent()))};
 }

@@ -69,14 +69,16 @@ auto createExamplePatterns(PatternCreator& creator) {
     expected.push_back(A{triple[0], triple[1], triple[2], I(patternIdx)});
   };
 
-  // The first subject gets the first pattern.
+  // The first subject gets the first pattern. We have an ignored triple at the
+  // end which doesn't count towards the pattern.
   push({V(0), V(10), V(20)}, false, 0);
   push({V(0), V(10), V(21)}, false, 0);
   push({V(0), V(11), V(18)}, false, 0);
+  push({V(0), V(12), V(18)}, true, 0);
 
-  // New subject, different predicates, so a new pattern
+  // New subject, different predicates, so a new pattern.
   push({V(1), V(10), V(18)}, false, 1);
-  // ignored triple, but `V(1)` has other non-ignored triple, so it will have a
+  // Ignored triple, but `V(1)` has other non-ignored triple, so it will have a
   // pattern, but `V(11)` will not contribute to that pattern.
   push({V(1), V(11), V(18)}, true, 1);
   push({V(1), V(12), V(18)}, false, 1);
@@ -88,6 +90,9 @@ auto createExamplePatterns(PatternCreator& creator) {
   push({V(2), V(14), V(18)}, true, NO_PATTERN);
 
   // New subject, but has the same predicate and therefore patterns as `V(0)`.
+  // We have an ignored triple at the beginning, which doesn't count towards
+  // the pattern.
+  push({V(3), V(9), V(18)}, true, 0);
   push({V(3), V(10), V(28)}, false, 0);
   push({V(3), V(11), V(29)}, false, 0);
   push({V(3), V(11), V(45)}, false, 0);
