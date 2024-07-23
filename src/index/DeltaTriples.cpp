@@ -80,7 +80,7 @@ void DeltaTriples::eraseTripleInAllPermutations(
     auto ltIter = handles.forPermutation(permutation);
     getLocatedTriplesPerBlock(permutation).erase(ltIter->blockIndex_, ltIter);
   }
-};
+}
 
 // ____________________________________________________________________________
 void DeltaTriples::insertTriples(
@@ -147,8 +147,6 @@ void DeltaTriples::deleteTriples(
 // ____________________________________________________________________________
 const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
-  // TODO: This `switch` would no longer be needed if the six
-  // locatedTriplesPerBlockIn... were a map with the permutation as key.
   switch (permutation) {
     case Permutation::PSO:
       return locatedTriplesPerBlockInPSO_;
@@ -166,10 +164,10 @@ const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
       AD_FAIL();
   }
 }
+
+// ____________________________________________________________________________
 LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) {
-  // TODO: This `switch` would no longer be needed if the six
-  // locatedTriplesPerBlockIn... were a map with the permutation as key.
   switch (permutation) {
     case Permutation::PSO:
       return locatedTriplesPerBlockInPSO_;

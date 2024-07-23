@@ -70,9 +70,6 @@ class DeltaTriples {
   // Construct for given index.
   explicit DeltaTriples(const Index& index) : index_(index) {}
 
-  // Get the `Index` to which these delta triples refer.
-  const Index& getIndex() const { return index_; }
-
   // Get the common `LocalVocab` of the delta triples.
   LocalVocab& localVocab() { return localVocab_; }
   const LocalVocab& localVocab() const { return localVocab_; }
