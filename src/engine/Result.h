@@ -166,3 +166,6 @@ class Result {
   // check is successful.
   bool checkDefinedness(const VariableToColumnMap& varColMap);
 };
+
+// Temporary alias to keep PRs reviewable
+using ProtoResult = Result;

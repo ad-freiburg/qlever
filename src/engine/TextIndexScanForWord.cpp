@@ -13,7 +13,7 @@ TextIndexScanForWord::TextIndexScanForWord(QueryExecutionContext* qec,
       isPrefix_(word_.ends_with('*')) {}
 
 // _____________________________________________________________________________
-Result TextIndexScanForWord::computeResult(
+ProtoResult TextIndexScanForWord::computeResult(
     [[maybe_unused]] bool requestLaziness) {
   IdTable idTable = getExecutionContext()->getIndex().getWordPostingsForTerm(
       word_, getExecutionContext()->getAllocator());
