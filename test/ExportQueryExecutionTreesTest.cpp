@@ -681,7 +681,7 @@ testIriKg</uri></binding>
   runConstructQueryTestCase(testCaseConstruct);
 }
 
-TEST(ExportQueryExecutionTree, TestWithIriExtendedEscaped) {
+TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
   std::string kg =
       "<s> <p>"
       "<iriescaped\\u0001o\\u0002e\\u0003i\\u0004o\\u0005u\\u0006e\\u00"
@@ -754,7 +754,7 @@ TEST(ExportQueryExecutionTree, TestWithIriExtendedEscaped) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TestIriWithEscapedIriString) {
+TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
   std::string kg = "<s> <p> \" hallo\\n\\t welt\"";
   std::string objectQuery =
       "SELECT ?o WHERE { "
@@ -799,7 +799,7 @@ TEST(ExportQueryExecutionTree, TestIriWithEscapedIriString) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UndefinedValues) {
+TEST(ExportQueryExecutionTrees, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
