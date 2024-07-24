@@ -1289,10 +1289,9 @@ CompressedRelationReader::getMetadataForSmallRelation(
 }
 
 // ____________________________________________________________________________
-void CompressedRelationReader::enableUpdateUse() { useUpdates_ = true; }
-
-// ____________________________________________________________________________
-void CompressedRelationReader::disableUpdateUse() { useUpdates_ = false; }
+void CompressedRelationReader::enableUpdates(bool enable) {
+  useUpdates_ = enable;
+}
 
 std::ostream& operator<<(std::ostream& os,
                          const std::optional<ValueId>& scanSpec) {

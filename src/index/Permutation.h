@@ -140,6 +140,9 @@ class Permutation {
   // _______________________________________________________
   const vector<CompressedBlockMetadata>& augmentedBlockData() const;
 
+  // _______________________________________________________
+  void enableUpdates(bool enable);
+
  private:
   // for Log output, e.g. "POS"
   std::string readableName_;

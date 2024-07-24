@@ -32,7 +32,7 @@ class Server {
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
-                  bool usePatternTrick = true);
+                  bool usePatternTrick = true, bool useUpdates = false);
 
   virtual ~Server() = default;
 
@@ -69,6 +69,7 @@ class Server {
   ad_utility::websocket::QueryRegistry queryRegistry_{};
 
   bool enablePatternTrick_;
+  bool useUpdates_;
 
   /// Non-owning reference to the `QueryHub` instance living inside
   /// the `WebSocketHandler` created for `HttpServer`.

@@ -38,7 +38,6 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
   locatedTriplesPerBlock.setOriginalMetadata(meta_.blockData());
-  reader_.value().enableUpdateUse();
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;
@@ -168,4 +167,10 @@ Permutation::IdTableGenerator Permutation::lazyScan(
 }
 const vector<CompressedBlockMetadata>& Permutation::augmentedBlockData() const {
   return locatedTriplesPerBlock_.getAugmentedMetadata();
+}
+
+// _____________________________________________________________________
+void Permutation::enableUpdates(bool enable) {
+  AD_CORRECTNESS_CHECK(reader_.has_value());
+  reader_.value().enableUpdates(enable);
 }

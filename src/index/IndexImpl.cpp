@@ -1578,3 +1578,10 @@ std::unique_ptr<ExternalSorter<Comparator, I>> IndexImpl::makeSorterPtr(
     std::string_view permutationName) const {
   return makeSorterImpl<Comparator, I, true>(permutationName);
 }
+
+// _____________________________________________________________________________
+void IndexImpl::enableUpdates(bool enable) {
+  for (auto permutation : Permutation::ALL) {
+    getPermutation(permutation).enableUpdates(enable);
+  }
+}

@@ -310,3 +310,6 @@ size_t Index::getResultSizeOfScan(const TripleComponent& col0String,
                                   const Permutation::Enum& permutation) const {
   return pimpl_->getResultSizeOfScan(col0String, col1String, permutation);
 }
+
+// _____________________________________________________________________________
+void Index::enableUpdates(bool enable) { pimpl_->enableUpdates(enable); }

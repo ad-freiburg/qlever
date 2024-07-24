@@ -266,4 +266,6 @@ class Index {
   // Get access to the delta triples.
   [[nodiscard]] DeltaTriples& deltaTriples();
   [[nodiscard]] const DeltaTriples& deltaTriples() const;
+
+  void enableUpdates(bool enable);
 };

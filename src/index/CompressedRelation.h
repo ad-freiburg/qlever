@@ -567,8 +567,7 @@ class CompressedRelationReader {
   const Allocator& allocator() const { return allocator_; }
 
   // Enable/disable the use of triples gathered from Updates when querying.
-  void enableUpdateUse();
-  void disableUpdateUse();
+  void enableUpdates(bool enable);
 
  private:
   // Read the block that is identified by the `blockMetaData` from the `file`.

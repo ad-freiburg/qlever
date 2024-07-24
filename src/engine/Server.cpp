@@ -32,7 +32,7 @@ using ad_utility::MediaType;
 // __________________________________________________________________________
 Server::Server(unsigned short port, size_t numThreads,
                ad_utility::MemorySize maxMem, std::string accessToken,
-               bool usePatternTrick)
+               bool usePatternTrick, bool useUpdates)
     : numThreads_(numThreads),
       port_(port),
       accessToken_(std::move(accessToken)),
@@ -45,6 +45,7 @@ Server::Server(unsigned short port, size_t numThreads,
       enablePatternTrick_(usePatternTrick),
       // The number of server threads currently also is the number of queries
       // that can be processed simultaneously.
+      useUpdates_(useUpdates),
       threadPool_{numThreads} {
   // This also directly triggers the update functions and propagates the
   // values of the parameters to the cache.
@@ -71,6 +72,8 @@ void Server::initialize(const string& indexBaseName, bool useText,
   if (useText) {
     index_.addTextFromOnDiskIndex();
   }
+
+  index_.enableUpdates(useUpdates_);
 
   sortPerformanceEstimator_.computeEstimatesExpensively(
       allocator_, index_.numTriples().normalAndInternal_() *
