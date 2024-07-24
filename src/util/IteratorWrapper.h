@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef ITERATORWRAPPER_H
-#define ITERATORWRAPPER_H
+#pragma once
 
 #include <tuple>
 
@@ -27,5 +26,3 @@ class IteratorWrapper {
 };
 
 };  // namespace ad_utility
-
-#endif  // ITERATORWRAPPER_H

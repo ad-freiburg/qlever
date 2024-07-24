@@ -2,8 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#ifndef CACHEABLEGENERATOR_H
-#define CACHEABLEGENERATOR_H
+#pragma once
 
 #include <absl/cleanup/cleanup.h>
 
@@ -271,5 +270,3 @@ class CacheableGenerator {
   }
 };
 };  // namespace ad_utility
-
-#endif  // CACHEABLEGENERATOR_H
