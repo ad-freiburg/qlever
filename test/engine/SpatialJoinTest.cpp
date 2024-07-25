@@ -230,7 +230,7 @@ std::string createTestKnowledgeGraph(bool verbose) {
     }
   };
 
-  string kg = "";  // knowlegde graph
+  string kg = "";  // knowledge graph
   // for loop to iterate over the longitudes
   for (int lon = -90; lon <= 90; lon++) {     // iterate over longitude
     for (int lat = -180; lat < 180; lat++) {  // iterate over latitude
@@ -1474,7 +1474,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
     for (size_t i = 0; i < expectedColumns.size(); i++) {
       ASSERT_TRUE(varColMap.contains(Variable{expectedColumns.at(i).first}));
 
-      // test, that the column containes the correct values
+      // test, that the column contains the correct values
       ColumnIndex ind =
           varColMap[Variable{expectedColumns.at(i).first}].columnIndex_;
       ValueId tableEntry = resultTable.idTable().at(0, ind);

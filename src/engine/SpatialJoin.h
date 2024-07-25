@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Operation.h"
+#include "engine/Operation.h"
 #include "parser/ParsedQuery.h"
 
 // This class is implementing a SpatialJoin operation. This operations joins
@@ -13,7 +13,8 @@ class SpatialJoin : public Operation {
   // variable names. Those are the names of the children, which get added
   // later. In addition to that, the SpatialJoin operation needs a maximum
   // distance, which two objects can be apart, which will still be accepted
-  // as a match and therefore be part of the result table.
+  // as a match and therefore be part of the result table. The distance is
+  // parsed from the triple.
   SpatialJoin(QueryExecutionContext* qec, SparqlTriple triple,
               std::optional<std::shared_ptr<QueryExecutionTree>> childLeft_,
               std::optional<std::shared_ptr<QueryExecutionTree>> childRight_);
@@ -50,7 +51,8 @@ class SpatialJoin : public Operation {
   // added. The reason for this behavior is, that the QueryPlanner can then
   // still use the existing SpatialJoin object, to try different orders
   std::shared_ptr<SpatialJoin> addChild(
-      std::shared_ptr<QueryExecutionTree> child, Variable varOfChild);
+        std::shared_ptr<QueryExecutionTree> child,
+        const Variable& varOfChild) const;
 
   // if the spatialJoin has both children its construction is done. Then true
   // is returned. This function is needed in the QueryPlanner, so that the
@@ -73,12 +75,12 @@ class SpatialJoin : public Operation {
     addDistToResult_ = addDistToResult;
   }
 
-  string getInternalDistanceName() const { return nameDistanceInternal_; }
+  const string& getInternalDistanceName() const {
+    return nameDistanceInternal_;
+  }
 
  private:
-  ad_utility::MemorySize limit_ = ad_utility::MemorySize::bytes(100000000);
-  ad_utility::AllocatorWithLimit<ValueId> allocator_ =
-      ad_utility::makeAllocatorWithLimit<ValueId>(limit_);
+  void parseMaxDistance();
   std::optional<Variable> leftChildVariable_ = std::nullopt;
   std::optional<Variable> rightChildVariable_ = std::nullopt;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;

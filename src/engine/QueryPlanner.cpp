@@ -693,7 +693,7 @@ auto QueryPlanner::seedWithScansAndText(
           "necessary also rebuild the index.");
     }
 
-    const string input = node.triple_.p_._iri;
+    const auto& input = node.triple_.p_._iri;
     if (input.starts_with(MAX_DIST_IN_METERS) &&
         input[input.size() - 1] == '>') {
       pushPlan(makeSubtreePlan<SpatialJoin>(_qec, node.triple_, std::nullopt,
@@ -1630,8 +1630,8 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
     return candidates;
   }
 
-  // if one of the inputs is the spatial join and the other input is a matching
-  // geometry, add the geometry as a child to the spatial join. As unbound
+  // if one of the inputs is the spatial join and the other input is compatible
+  // with the SpatialJoin, add it as a child to the spatialJoin. As unbound
   // SpatialJoin operations are incompatible with normal join operations, we
   // return immediately instead of creating a normal join below as well.
   // Note, that this if statement should be evaluated first, such that no other
@@ -1726,12 +1726,13 @@ auto QueryPlanner::createSpatialJoin(
   auto aIs = static_cast<bool>(aIsSpatialJoin);
   auto bIs = static_cast<bool>(bIsSpatialJoin);
 
+  // Ecactly one of the inputs must be a SpatialJoin.
   if ((aIs && bIs) || (!aIs && !bIs)) {
     return std::nullopt;
   }
 
-  SubtreePlan spatialSubtreePlan = aIsSpatialJoin ? a : b;
-  SubtreePlan otherSubtreePlan = aIsSpatialJoin ? b : a;
+  const SubtreePlan& spatialSubtreePlan = aIsSpatialJoin ? a : b;
+  const SubtreePlan& otherSubtreePlan = aIsSpatialJoin ? b : a;
 
   std::shared_ptr<Operation> op = spatialSubtreePlan._qet->getRootOperation();
   auto spatialJoin = static_cast<SpatialJoin*>(op.get());
@@ -1741,10 +1742,11 @@ auto QueryPlanner::createSpatialJoin(
   }
 
   if (jcs.size() > 1) {
-    AD_THROW("in its current implementation only one pair is allowed");
+    AD_THROW("Currently, if both sides of a SpatialJoin are variables, then the"
+            "SpatialJoin must be the only connection between these variables");
   }
   ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
-  Variable var =
+  const Variable& var =
       otherSubtreePlan._qet->getVariableAndInfoByColumnIndex(ind).first;
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
