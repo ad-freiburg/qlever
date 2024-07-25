@@ -378,6 +378,8 @@ TEST(Engine, countDistinct) {
   t1 = makeIdTableFromVector(
       {{0, 0}, {1, 4}, {1, 3}, {1, 4}, {1, 4}, {4, 4}, {4, 5}, {4, 7}});
 
-  AD_EXPECT_THROW_WITH_MESSAGE(Engine::countDistinct(t1, noop),
-                               ::testing::HasSubstr("must be sorted"));
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    AD_EXPECT_THROW_WITH_MESSAGE(Engine::countDistinct(t1, noop),
+                                 ::testing::HasSubstr("must be sorted"));
+  }
 }
