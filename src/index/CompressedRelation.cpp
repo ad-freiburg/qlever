@@ -1024,12 +1024,20 @@ auto CompressedRelationWriter::createPermutationPair(
   // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the block
   // and feeds it to `writer2`.)
   auto addBlockOfSmallRelationsToSwitched =
-      [&writer2, compare](std::shared_ptr<IdTable> relationPtr) {
+      [&writer2](std::shared_ptr<IdTable> relationPtr) {
         auto& relation = *relationPtr;
         // We don't use the parallel twinRelationSorter to create the twin
         // relation as its overhead is far too high for small relations.
         relation.swapColumns(c1Idx, c2Idx);
-        std::ranges::sort(relation, compare);
+
+        // We only need to sort by the columns of the triple, not the
+        // additional payload.
+        // TODO<joka921> As soon as we implement named graphs, those should
+        // probably also be part of the ordering.
+        auto compare = [](const auto& a, const auto& b) {
+          return std::tie(a[0], a[1], a[2]) < std::tie(b[0], b[1], b[2]);
+        };
+        std::ranges::sort(relation, std::ranges::lexicographical_compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
         writer2.compressAndWriteBlock(relation.at(0, 0),
                                       relation.at(relation.size() - 1, 0),
