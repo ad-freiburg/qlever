@@ -24,33 +24,13 @@ class CacheValue {
  private:
   std::shared_ptr<CacheableResult> resultTable_;
   RuntimeInformation runtimeInfo_;
-  std::shared_ptr<std::atomic_size_t> currentSize_ =
-      std::make_shared<std::atomic_size_t>(0);
 
  public:
+  // TODO<RobinTF> accept ProtoResult to define type of cacheable result
   explicit CacheValue(CacheableResult resultTable,
                       RuntimeInformation runtimeInfo)
       : resultTable_{std::make_shared<CacheableResult>(std::move(resultTable))},
-        runtimeInfo_{std::move(runtimeInfo)} {
-    if (!resultTable_->isDataEvaluated()) {
-      auto function = resultTable_->resetOnSizeChanged();
-      // We assume this value has previously been set, otherwise this can be
-      // simplified
-      AD_CONTRACT_CHECK(function);
-      resultTable_->setOnSizeChanged(
-          [function = std::move(function), currentSize = currentSize_](
-              bool isShrinkable, bool entryAdded,
-              std::shared_ptr<const IdTable> entry) {
-            ad_utility::MemorySize size = calculateSize(*entry);
-            if (entryAdded) {
-              currentSize->fetch_add(size.getBytes());
-            } else {
-              currentSize->fetch_sub(size.getBytes());
-            }
-            return function(isShrinkable, entryAdded, std::move(entry));
-          });
-    }
-  }
+        runtimeInfo_{std::move(runtimeInfo)} {}
 
   CacheValue(CacheValue&&) = default;
   CacheValue(const CacheValue&) = delete;
@@ -77,7 +57,6 @@ class CacheValue {
       // Clear listeners
       try {
         resultTable_->setOnSizeChanged({});
-        resultTable_->setOnNextChunkComputed({});
       } catch (...) {
         // Should never happen. The listeners only throw assertion errors
         // if the result is evaluated.
@@ -93,7 +72,8 @@ class CacheValue {
         if (tablePtr->isDataEvaluated()) {
           return calculateSize(tablePtr->idTable());
         }
-        return ad_utility::MemorySize::bytes(cacheValue.currentSize_->load());
+        return ad_utility::MemorySize::bytes(
+            tablePtr->idTables().getCurrentSize());
       } else {
         return 0_B;
       }

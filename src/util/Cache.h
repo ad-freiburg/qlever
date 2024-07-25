@@ -28,12 +28,6 @@ using namespace ad_utility::memory_literals;
 
 static constexpr auto size_t_max = std::numeric_limits<size_t>::max();
 
-enum class ResizeResult {
-  FITS_IN_CACHE,
-  EXCEEDS_SINGLE_ENTRY_SIZE,
-  EXCEEDS_MAX_SIZE
-};
-
 /*
  @brief Associative array for almost arbitrary keys and values that acts as a
  cache with fixed memory capacity.
@@ -232,67 +226,30 @@ class FlexibleCache {
     // TODO<joka921>:: implement this functionality
   }
 
-  ResizeResult recomputeSize(const Key& key, bool removeIfEntryGrewTooBig) {
-    ResizeResult result = ResizeResult::FITS_IN_CACHE;
-    auto applySizeDifference = [this, &key, &result, removeIfEntryGrewTooBig](
-                                   MemorySize& variable, bool pinned) {
-      auto newSize = _valueSizeGetter(*(*this)[key]);
-      auto& oldSize = _sizeMap.at(key);
-      bool needsShrinking = true;
-      MemorySize pinnedOffset = pinned ? 0_B : _totalSizePinned;
-      if (_maxSizeSingleEntry < newSize) {
-        result = ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE;
-        if (removeIfEntryGrewTooBig && !pinned) {
-          erase(key);
-          return;
-        }
-        // We don't know how to shrink the size here, so if
-        // `removeIfEntryGrewTooBig` is false, this needs to be handled by the
-        // caller.
-        needsShrinking = false;
-      } else if (_maxSize - std::min(pinnedOffset, _maxSize) < newSize) {
-        result = ResizeResult::EXCEEDS_MAX_SIZE;
-        // We can't fit it in the cache, so remove if not pinned
-        if (!pinned) {
-          erase(key);
-          return;
-        }
-      }
-
-      if (newSize >= oldSize) {
-        variable += newSize - oldSize;
-      } else {
-        variable -= oldSize - newSize;
-      }
-      oldSize = newSize;
-      if (needsShrinking && _totalSizePinned <= _maxSize) {
-        makeRoomIfFits(0_B);
-      }
-    };
-    if (containsPinned(key)) {
-      applySizeDifference(_totalSizePinned, true);
-    } else if (containsNonPinned(key)) {
-      applySizeDifference(_totalSizeNonPinned, false);
-    }
-    return result;
-  }
-
-  void transformValue(
-      const Key& key,
-      const InvocableWithExactReturnType<Value, const Value&> auto&
-          transformer) {
-    bool pinned = false;
-    if (containsPinned(key)) {
-      pinned = true;
-    } else if (!containsNonPinned(key)) {
+  void recomputeSize(const Key& key) {
+    // Pinned entries must not be dynamic in nature
+    AD_CONTRACT_CHECK(!containsPinned(key));
+    if (!containsNonPinned(key)) {
       return;
     }
-    auto transformedValue = transformer(*(*this)[key]);
-    erase(key);
-    if (pinned) {
-      insertPinned(key, std::move(transformedValue));
+    auto newSize = _valueSizeGetter(*(*this)[key]);
+    auto& oldSize = _sizeMap.at(key);
+    // Entry has grown too big to completely keep within the cache or we can't
+    // fit it in the cache
+    if (_maxSizeSingleEntry < newSize ||
+        _maxSize - std::min(_totalSizePinned, _maxSize) < newSize) {
+      erase(key);
+      return;
+    }
+
+    if (newSize >= oldSize) {
+      _totalSizeNonPinned += newSize - oldSize;
     } else {
-      insert(key, std::move(transformedValue));
+      _totalSizeNonPinned -= oldSize - newSize;
+    }
+    oldSize = newSize;
+    if (_totalSizePinned <= _maxSize) {
+      makeRoomIfFits(0_B);
     }
   }
 
@@ -481,7 +438,6 @@ class FlexibleCache {
   FRIEND_TEST(LRUCacheTest,
               verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned);
   FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed);
-  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputedPinned);
   FRIEND_TEST(LRUCacheTest,
               verifyNonPinnedEntriesAreRemovedToMakeRoomForResize);
   FRIEND_TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement);

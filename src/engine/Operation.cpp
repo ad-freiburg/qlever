@@ -131,19 +131,14 @@ CacheValue Operation::runComputationAndTransformToCache(
   auto& cache = _executionContext->getQueryTreeCache();
   CacheableResult result{runComputation(timer, computationMode)};
   if (!result.isDataEvaluated()) {
-    result.setOnSizeChanged([&cache, cacheKey](bool isShrinkable, bool,
-                                               std::shared_ptr<const IdTable>) {
-      // TODO<RobinTF> find out how to handle pinned entries properly.
-      auto sizeChange = cache.recomputeSize(cacheKey, !isShrinkable);
-      if (sizeChange == ad_utility::ResizeResult::EXCEEDS_SINGLE_ENTRY_SIZE) {
-        return isShrinkable;
-      }
-      return false;
-    });
-    result.setOnNextChunkComputed([runtimeInfo = getRuntimeInfoPointer()](
-                                      std::chrono::milliseconds duration) {
-      runtimeInfo->totalTime_ += duration;
-    });
+    result.setOnSizeChanged(
+        [&cache, cacheKey, runtimeInfo = getRuntimeInfoPointer()](
+            std::optional<std::chrono::milliseconds> duration) {
+          cache.recomputeSize(cacheKey);
+          if (duration.has_value()) {
+            runtimeInfo->totalTime_ += duration.value();
+          }
+        });
   }
   return CacheValue{std::move(result), runtimeInfo()};
 }
@@ -152,38 +147,6 @@ CacheValue Operation::runComputationAndTransformToCache(
 Result Operation::extractFromCache(
     std::shared_ptr<const CacheableResult> result, bool freshlyInserted,
     bool isRoot, ComputationMode computationMode) {
-  // Keep backwards compatible for operations that don't support this
-  if (!result->isDataEvaluated() &&
-      computationMode == ComputationMode::FULLY_MATERIALIZED) {
-    auto& cache = _executionContext->getQueryTreeCache();
-    auto cacheKey = getCacheKey();
-    try {
-      cache.transformValue(getCacheKey(), [&result](
-                                              const CacheValue& oldValue) {
-        const auto& oldResult = oldValue.resultTable();
-        CacheValue value{CacheableResult{oldResult.aggregateTable().value()},
-                         oldValue.runtimeInfo()};
-        result = value.resultTablePtr();
-        return value;
-      });
-    } catch (const std::bad_optional_access&) {
-      ad_utility::Timer timer{ad_utility::Timer::Started};
-      CacheableResult newResult{runComputation(timer, computationMode)};
-      cache.transformValue(
-          cacheKey, [this, &newResult, &result](const CacheValue&) {
-            CacheValue value{std::move(newResult), runtimeInfo()};
-            result = value.resultTablePtr();
-            return value;
-          });
-    }
-    // TODO<RobinTF> In rare cases this assertion might be violated when
-    // the cache is cleared while we are transforming. The solution would be to
-    // replace transformValue with a solution that is part of computeOnce that
-    // calls some sort of "cache entry needs recomputing check" and replaces the
-    // value while blocking the individual entry, but not the whole cache.
-    AD_CORRECTNESS_CHECK(result->isDataEvaluated());
-  }
-
   if (result->isDataEvaluated()) {
     auto resultNumRows = result->idTable().size();
     auto resultNumCols = result->idTable().numColumns();
@@ -275,17 +238,30 @@ std::shared_ptr<const Result> Operation::getResult(
                                                cacheKey);
     };
 
-    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
+    using ad_utility::CachePolicy;
+
+    CachePolicy cachePolicy = computationMode == ComputationMode::ONLY_IF_CACHED
+                                  ? CachePolicy::neverCompute
+                                  : CachePolicy::computeOnDemand;
 
     auto result =
-        pinResult
-            ? cache.computeOncePinned(cacheKey, cacheSetup, onlyReadFromCache)
-            : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache);
+        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup, cachePolicy)
+                  : cache.computeOnce(cacheKey, cacheSetup, cachePolicy);
 
     if (result._resultPointer == nullptr) {
-      AD_CORRECTNESS_CHECK(onlyReadFromCache);
+      AD_CORRECTNESS_CHECK(cachePolicy == CachePolicy::neverCompute);
       return nullptr;
     }
+
+    if (!result._resultPointer->resultTable().isDataEvaluated() &&
+        computationMode == ComputationMode::FULLY_MATERIALIZED) {
+      AD_CORRECTNESS_CHECK(!actuallyComputed);
+      result = pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
+                                                   CachePolicy::alwaysCompute)
+                         : cache.computeOnce(cacheKey, cacheSetup,
+                                             CachePolicy::alwaysCompute);
+    }
+
     updateRuntimeInformationOnSuccess(
         result, result._resultPointer->resultTable().isDataEvaluated()
                     ? timer.msecs()

@@ -23,6 +23,13 @@ namespace ad_utility {
 class IteratorExpired : public std::exception {};
 
 template <typename T>
+struct DefaultSizeCounter {
+  uint64_t operator()(const std::remove_reference_t<T>&) const { return 1; }
+};
+
+template <typename T, InvocableWithExactReturnType<
+                          uint64_t, const std::remove_reference_t<T>&>
+                          SizeCounter = DefaultSizeCounter<T>>
 class CacheableGenerator {
   using GenIterator = typename cppcoro::generator<T>::iterator;
 
@@ -37,11 +44,11 @@ class CacheableGenerator {
     std::vector<std::shared_ptr<T>> cachedValues_{};
     MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
     std::atomic<std::thread::id> currentOwningThread{};
-    // Returns true if cache needs to shrink, accepts a parameter that tells the
-    // callback if we actually can shrink, if the size changed because of a
-    // newly generated entry and the entry about to be removed or newly added.
-    std::function<bool(bool, bool, std::shared_ptr<const T>)> onSizeChanged_{};
-    std::function<void(std::chrono::milliseconds)> onNextChunkComputed_{};
+    SizeCounter sizeCounter_{};
+    std::atomic<uint64_t> currentSize_ = 0;
+    uint64_t maxSize_ = std::numeric_limits<uint64_t>::max();
+    std::function<void(std::optional<std::chrono::milliseconds>)>
+        onSizeChanged_{};
 
    public:
     explicit ComputationStorage(cppcoro::generator<T> generator)
@@ -92,18 +99,16 @@ class CacheableGenerator {
         generatorIterator_ = generator_.begin();
       }
       auto stop = std::chrono::steady_clock::now();
-      if (onNextChunkComputed_) {
-        onNextChunkComputed_(
-            std::chrono::duration_cast<std::chrono::milliseconds>(stop -
-                                                                  start));
-      }
       if (generatorIterator_.value() != generator_.end()) {
         auto pointer =
             std::make_shared<T>(std::move(*generatorIterator_.value()));
-        cachedValues_.push_back(pointer);
-        if (onSizeChanged_ && onSizeChanged_(true, true, std::move(pointer))) {
-          tryShrinkCache();
+        currentSize_.fetch_add(sizeCounter_(*pointer));
+        cachedValues_.push_back(std::move(pointer));
+        if (onSizeChanged_) {
+          onSizeChanged_(std::chrono::duration_cast<std::chrono::milliseconds>(
+              stop - start));
         }
+        tryShrinkCacheIfNeccessary();
       }
       if (isMaster) {
         conditionVariable_.notify_all();
@@ -136,7 +141,7 @@ class CacheableGenerator {
     }
 
     void setOnSizeChanged(
-        std::function<bool(bool, bool, std::shared_ptr<const T>)>
+        std::function<void(std::optional<std::chrono::milliseconds>)>
             onSizeChanged) noexcept {
       std::unique_lock lock{mutex_, std::defer_lock};
       if (currentOwningThread != std::this_thread::get_id()) {
@@ -145,46 +150,32 @@ class CacheableGenerator {
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
-    std::function<bool(bool, bool, std::shared_ptr<const T>)>
-    resetOnSizeChanged() noexcept {
-      std::unique_lock lock{mutex_, std::defer_lock};
-      if (currentOwningThread != std::this_thread::get_id()) {
-        lock.lock();
+    void tryShrinkCacheIfNeccessary() {
+      if (currentSize_ <= maxSize_) {
+        return;
       }
-      auto result = std::move(onSizeChanged_);
-      // Explicitly empty function because not all standard libraries do that on
-      // move.
-      onSizeChanged_ = {};
-      return result;
-    }
-
-    void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
-                                    onNextChunkComputed) noexcept {
-      std::unique_lock lock{mutex_, std::defer_lock};
-      if (currentOwningThread != std::this_thread::get_id()) {
-        lock.lock();
-      }
-      onNextChunkComputed_ = std::move(onNextChunkComputed);
-    }
-
-    void tryShrinkCache() {
       size_t maxBound = cachedValues_.size() - 1;
       for (size_t i = 0; i < maxBound; i++) {
         auto& pointer = cachedValues_.at(i);
         if (pointer) {
-          auto movedPointer = std::move(pointer);
+          currentSize_.fetch_add(sizeCounter_(*pointer));
+          pointer.reset();
           if (onSizeChanged_) {
-            bool isShrinkable = i < maxBound - 1;
-            if (onSizeChanged_(isShrinkable, false, std::move(movedPointer))) {
-              AD_CONTRACT_CHECK(isShrinkable);
-            } else {
-              break;
-            }
+            onSizeChanged_(std::nullopt);
+          }
+          if (currentSize_ <= maxSize_ || i >= maxBound - 1) {
+            break;
           }
         }
       }
     }
+
+    void setMaxSize(uint64_t maxSize) {
+      std::unique_lock lock{mutex_};
+      maxSize_ = maxSize;
+    }
   };
+
   std::shared_ptr<ComputationStorage> computationStorage_;
 
  public:
@@ -254,19 +245,17 @@ class CacheableGenerator {
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
   void setOnSizeChanged(
-      std::function<bool(bool, bool, std::shared_ptr<const T>)>
+      std::function<void(std::optional<std::chrono::milliseconds>)>
           onSizeChanged) noexcept {
     computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
   }
 
-  std::function<bool(bool, bool, std::shared_ptr<const T>)>
-  resetOnSizeChanged() {
-    return computationStorage_->resetOnSizeChanged();
+  uint64_t getCurrentSize() const {
+    return computationStorage_->currentSize_.load();
   }
 
-  void setOnNextChunkComputed(std::function<void(std::chrono::milliseconds)>
-                                  onNextChunkComputed) noexcept {
-    computationStorage_->setOnNextChunkComputed(std::move(onNextChunkComputed));
+  void setMaxSize(uint64_t maxSize) {
+    computationStorage_->setMaxSize(maxSize);
   }
 };
 };  // namespace ad_utility

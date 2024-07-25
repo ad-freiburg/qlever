@@ -43,6 +43,12 @@ enum struct CacheStatus {
   notInCacheAndNotComputed
 };
 
+enum class CachePolicy {
+  neverCompute,
+  computeOnDemand,
+  alwaysCompute,
+};
+
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
 constexpr std::string_view toString(CacheStatus status) {
@@ -184,8 +190,8 @@ class ConcurrentCache {
   ResultAndCacheStatus computeOnce(
       const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache = false) {
-    return computeOnceImpl(false, key, computeFunction, onlyReadFromCache);
+      CachePolicy cachePolicy = CachePolicy::computeOnDemand) {
+    return computeOnceImpl(false, key, computeFunction, cachePolicy);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
@@ -193,21 +199,12 @@ class ConcurrentCache {
   ResultAndCacheStatus computeOncePinned(
       const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache = false) {
-    return computeOnceImpl(true, key, computeFunction, onlyReadFromCache);
+      CachePolicy cachePolicy = CachePolicy::computeOnDemand) {
+    return computeOnceImpl(true, key, computeFunction, cachePolicy);
   }
 
-  auto recomputeSize(const Key& key, bool removeIfEntryGrewTooBig) {
-    return _cacheAndInProgressMap.wlock()->_cache.recomputeSize(
-        key, removeIfEntryGrewTooBig);
-  }
-
-  void transformValue(
-      const Key& key,
-      const InvocableWithExactReturnType<Value, const Value&> auto&
-          transformer) {
-    return _cacheAndInProgressMap.wlock()->_cache.transformValue(key,
-                                                                 transformer);
+  void recomputeSize(const Key& key) {
+    _cacheAndInProgressMap.wlock()->_cache.recomputeSize(key);
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -320,11 +317,14 @@ class ConcurrentCache {
   }
 
  private:
-  // implementation for computeOnce (pinned and normal variant).
+  // TODO<RobinTF> accept computeFunction with or without old cached value in
+  // case cached value needs recomputation due to some condition like pinned/non
+  // lazy requirement implementation for computeOnce (pinned and normal
+  // variant).
   ResultAndCacheStatus computeOnceImpl(
       bool pinned, const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      bool onlyReadFromCache) {
+      CachePolicy cachePolicy) {
     using std::make_shared;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
@@ -341,9 +341,10 @@ class ConcurrentCache {
       if (contained) {
         // the result is in the cache, simply return it.
         return {cache[key], cacheStatus};
-      } else if (onlyReadFromCache) {
+      } else if (cachePolicy == CachePolicy::neverCompute) {
         return {nullptr, CacheStatus::notInCacheAndNotComputed};
-      } else if (lockPtr->_inProgress.contains(key)) {
+      } else if (lockPtr->_inProgress.contains(key) &&
+                 cachePolicy == CachePolicy::computeOnDemand) {
         // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
         // this call blocks and we currently hold a lock.

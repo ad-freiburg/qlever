@@ -223,45 +223,19 @@ CacheableResult::CacheableResult(ProtoResult protoResult)
 
 // _____________________________________________________________________________
 void CacheableResult::setOnSizeChanged(
-    std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+    std::function<void(std::optional<std::chrono::milliseconds> duration)>
         onSizeChanged) {
   storage_.idTables().setOnSizeChanged(std::move(onSizeChanged));
 }
 
 // _____________________________________________________________________________
-std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
-CacheableResult::resetOnSizeChanged() {
-  return storage_.idTables().resetOnSizeChanged();
-}
-
-// _____________________________________________________________________________
-void CacheableResult::setOnNextChunkComputed(
-    std::function<void(std::chrono::milliseconds)> onNextChunkComputed) {
-  storage_.idTables().setOnNextChunkComputed(std::move(onNextChunkComputed));
-}
-
-// _____________________________________________________________________________
-std::optional<ProtoResult> CacheableResult::aggregateTable() const {
-  try {
-    std::optional<IdTable> clone;
-    for (const std::shared_ptr<const IdTable>& table : storage_.idTables()) {
-      if (clone.has_value()) {
-        clone->insertAtEnd(table->begin(), table->end());
-      } else {
-        clone.emplace(table->clone());
-      }
-    }
-    AD_CORRECTNESS_CHECK(clone.has_value());
-    return ProtoResult{
-        std::move(clone).value(), storage_.sortedBy_,
-        ProtoResult::SharedLocalVocabWrapper{storage_.localVocab_}};
-  } catch (const ad_utility::IteratorExpired&) {
-    return std::nullopt;
-  }
-}
-
-// _____________________________________________________________________________
 const IdTable& CacheableResult::idTable() const { return storage_.idTable(); }
+
+// _____________________________________________________________________________
+const ad_utility::CacheableGenerator<IdTable>& CacheableResult::idTables()
+    const {
+  return storage_.idTables();
+}
 
 // _____________________________________________________________________________
 bool CacheableResult::isDataEvaluated() const noexcept {

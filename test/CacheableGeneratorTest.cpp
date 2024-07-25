@@ -205,7 +205,7 @@ TEST(CacheableGenerator, verifyExhaustedMasterCausesFreeForAll) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, verifyOnNextChunkComputedIsCalled) {
+TEST(CacheableGenerator, verifyOnSizeChangedIsCalledWithCorrectTimingInfo) {
   auto timedGenerator = []() -> generator<int> {
     while (true) {
 #ifndef _QLEVER_NO_TIMING_TESTS
@@ -219,7 +219,7 @@ TEST(CacheableGenerator, verifyOnNextChunkComputedIsCalled) {
 
   CacheableGenerator generator{std::move(timedGenerator)};
 
-  generator.setOnNextChunkComputed([&](auto duration) {
+  generator.setOnSizeChanged([&](auto duration) {
 #ifndef _QLEVER_NO_TIMING_TESTS
     using ::testing::AllOf;
     using ::testing::Le;
@@ -304,11 +304,7 @@ TEST(CacheableGenerator, verifyOnNextChunkComputedIsCalled) {
 TEST(CacheableGenerator, verifyOnSizeChangedIsCalledAndRespectsShrink) {
   CacheableGenerator generator{testGenerator(3)};
   uint32_t callCounter = 0;
-  generator.setOnSizeChanged(
-      [&](bool canShrink, bool, std::shared_ptr<const uint32_t>) {
-        ++callCounter;
-        return canShrink && callCounter > 2;
-      });
+  generator.setOnSizeChanged([&](auto) { ++callCounter; });
 
   auto iterator = generator.begin(true);
   EXPECT_EQ(callCounter, 1);
@@ -322,6 +318,8 @@ TEST(CacheableGenerator, verifyOnSizeChangedIsCalledAndRespectsShrink) {
   ++iterator;
   EXPECT_EQ(callCounter, 2);
   ASSERT_NE(iterator, generator.end());
+
+  generator.setMaxSize(1);
 
   ++slaveIterator1;
   EXPECT_EQ(callCounter, 2);
@@ -350,47 +348,10 @@ TEST(CacheableGenerator, verifyOnSizeChangedIsCalledAndRespectsShrink) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, verifyOnSizeChangedIsCalledWithCorrectParameters) {
-  CacheableGenerator generator{testGenerator(3)};
-  uint32_t callCounter = 0;
-  generator.setOnSizeChanged([&](bool canShrink, bool wasAdded,
-                                 std::shared_ptr<const uint32_t> pointer) {
-    switch (callCounter) {
-      case 0:
-      case 1:
-        EXPECT_TRUE(wasAdded);
-        EXPECT_EQ(*pointer, callCounter);
-        break;
-      case 2:
-        EXPECT_FALSE(wasAdded);
-        EXPECT_EQ(*pointer, 0);
-        break;
-      default:
-        ADD_FAILURE() << "Invalid call count: " << callCounter;
-        break;
-    }
-    ++callCounter;
-    return canShrink && callCounter > 1;
-  });
-
-  auto iterator = generator.begin(true);
-  EXPECT_EQ(callCounter, 1);
-  ASSERT_NE(iterator, generator.end());
-
-  ++iterator;
-  EXPECT_EQ(callCounter, 3);
-  ASSERT_NE(iterator, generator.end());
-}
-
-// _____________________________________________________________________________
 TEST(CacheableGenerator, verifyShrinkKeepsSingleElement) {
   CacheableGenerator generator{testGenerator(3)};
   uint32_t callCounter = 0;
-  generator.setOnSizeChanged(
-      [&](bool canShrink, bool, std::shared_ptr<const uint32_t>) {
-        ++callCounter;
-        return canShrink && callCounter > 2;
-      });
+  generator.setOnSizeChanged([&](auto) { ++callCounter; });
 
   auto iterator = generator.begin(true);
   EXPECT_EQ(callCounter, 1);
@@ -403,6 +364,8 @@ TEST(CacheableGenerator, verifyShrinkKeepsSingleElement) {
   ++iterator;
   EXPECT_EQ(callCounter, 2);
   ASSERT_NE(iterator, generator.end());
+
+  generator.setMaxSize(0);
 
   ++slaveIterator;
   EXPECT_EQ(callCounter, 2);
@@ -423,51 +386,9 @@ TEST(CacheableGenerator, verifyShrinkKeepsSingleElement) {
 }
 
 // _____________________________________________________________________________
-TEST(CacheableGenerator, verifyShrinkStopsShrinking) {
-  CacheableGenerator generator{testGenerator(3)};
-  uint32_t callCounter = 0;
-  generator.setOnSizeChanged(
-      [&](bool canShrink, bool, std::shared_ptr<const uint32_t>) {
-        ++callCounter;
-        return canShrink && callCounter == 3;
-      });
-
-  auto iterator = generator.begin(true);
-  EXPECT_EQ(callCounter, 1);
-  ASSERT_NE(iterator, generator.end());
-
-  auto slaveIterator = generator.begin();
-  EXPECT_EQ(callCounter, 1);
-  ASSERT_NE(slaveIterator, generator.end());
-
-  ++iterator;
-  EXPECT_EQ(callCounter, 2);
-  ASSERT_NE(iterator, generator.end());
-
-  ++iterator;
-  EXPECT_EQ(callCounter, 4);
-  ASSERT_NE(iterator, generator.end());
-
-  ++iterator;
-  EXPECT_EQ(callCounter, 4);
-  EXPECT_EQ(iterator, generator.end());
-
-  ++slaveIterator;
-  ASSERT_NE(slaveIterator, generator.end());
-  EXPECT_EQ(**slaveIterator, 1);
-
-  ++slaveIterator;
-  ASSERT_NE(slaveIterator, generator.end());
-  EXPECT_EQ(**slaveIterator, 2);
-}
-
-// _____________________________________________________________________________
 TEST(CacheableGenerator, verifySlavesCantBlockMasterIterator) {
   CacheableGenerator generator{testGenerator(3)};
-  generator.setOnSizeChanged(
-      [](bool canShrink, bool, std::shared_ptr<const uint32_t>) {
-        return canShrink;
-      });
+  generator.setMaxSize(1);
 
   auto masterIterator = generator.begin(true);
   ASSERT_NE(masterIterator, generator.end());
@@ -489,29 +410,4 @@ TEST(CacheableGenerator, verifySlavesCantBlockMasterIterator) {
 
   ++masterIterator;
   EXPECT_EQ(masterIterator, generator.end());
-}
-
-// _____________________________________________________________________________
-TEST(CacheableGenerator, verifyResetDoesRemoveAndReturnListener) {
-  CacheableGenerator generator{testGenerator(3)};
-  uint32_t callCounter = 0;
-  generator.setOnSizeChanged(
-      [&](bool canShrink, bool, std::shared_ptr<const uint32_t>) {
-        ++callCounter;
-        return canShrink;
-      });
-
-  auto function = generator.resetOnSizeChanged();
-  ASSERT_TRUE(function);
-
-  auto iterator = generator.begin(true);
-  EXPECT_EQ(callCounter, 0);
-
-  auto result = function(false, false, {});
-  EXPECT_EQ(callCounter, 1);
-  EXPECT_FALSE(result);
-
-  result = function(true, false, {});
-  EXPECT_EQ(callCounter, 2);
-  EXPECT_TRUE(result);
 }

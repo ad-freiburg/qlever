@@ -172,6 +172,7 @@ class ProtoResult {
 
 class CacheableResult {
   friend class Result;
+  // TODO<RobinTF> Add custom size counter and set max size
   using StorageType =
       ResultStorage<IdTable, ad_utility::CacheableGenerator<IdTable>>;
   StorageType storage_;
@@ -186,18 +187,12 @@ class CacheableResult {
   explicit CacheableResult(ProtoResult protoResult);
 
   void setOnSizeChanged(
-      std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
+      std::function<void(std::optional<std::chrono::milliseconds>)>
           onSizeChanged);
 
-  std::function<bool(bool, bool, std::shared_ptr<const IdTable>)>
-  resetOnSizeChanged();
-
-  void setOnNextChunkComputed(
-      std::function<void(std::chrono::milliseconds)> onNextChunkComputed);
-
-  std::optional<ProtoResult> aggregateTable() const;
-
   const IdTable& idTable() const;
+
+  const ad_utility::CacheableGenerator<IdTable>& idTables() const;
 
   bool isDataEvaluated() const noexcept;
 };
