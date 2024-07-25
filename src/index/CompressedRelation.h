@@ -199,6 +199,8 @@ class CompressedRelationWriter {
     MetadataCallback callback_;
   };
 
+  ad_utility::Timer writeTimer{ad_utility::Timer::Stopped};
+
   using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
   SmallBlocksCallback smallBlocksCallback_;
 
@@ -265,7 +267,9 @@ class CompressedRelationWriter {
   void finish() {
     AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
+    writeTimer.cont();
     blockWriteQueue_.finish();
+    writeTimer.stop();
     outfile_.wlock()->close();
   }
 
