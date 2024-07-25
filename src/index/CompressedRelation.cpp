@@ -1041,8 +1041,8 @@ auto CompressedRelationWriter::createPermutationPair(
   auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
                          &writer1, &numBlocksCurrentRel, &col0IdCurrentRelation,
                          &relation, &distinctCol1Counter,
-                         &addBlockForLargeRelation, &compare, &blocksize,
-                         &writeMetadata, &largeTwinRelationTimer]() {
+                         &addBlockForLargeRelation, &blocksize, &writeMetadata,
+                         &largeTwinRelationTimer]() {
     ++numDistinctCol0;
     if (numBlocksCurrentRel > 0 || static_cast<double>(relation.numRows()) >
                                        0.8 * static_cast<double>(blocksize)) {
@@ -1061,6 +1061,9 @@ auto CompressedRelationWriter::createPermutationPair(
       [[maybe_unused]] auto md1 = writer1.addSmallRelation(
           col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
           relation.asStaticView<0>());
+      // We don't need to do anything for the twin permutation and writer2,
+      // because we have set up `writer1.smallBlocksCallback_` to do that work
+      // for us (see above).
     }
     relation.clear();
     numBlocksCurrentRel = 0;
