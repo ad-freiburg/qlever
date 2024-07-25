@@ -31,8 +31,8 @@ class UrlParser {
     std::string query_;
   };
 
-  /// The difference to `UrlPathAndQuery` is that the
-  /// key-value pairs of the "query" are parsed and stored in a hash map.
+  /// The difference to `UrlPathAndQuery` is that the key-value pairs of the
+  /// "query" are parsed and stored in a hash map.
   struct UrlPathAndParameters {
     std::string _path;
     ad_utility::HashMap<std::string, std::string> _parameters;

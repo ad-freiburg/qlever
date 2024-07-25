@@ -74,8 +74,8 @@ UrlParser::UrlPathAndParameters UrlParser::parseGetRequestTarget(
     target = target.substr(0, target.find('#'));
   }
 
-  // Set `_path`. If the query string (part
-  // starting with "?") is empty, we are done at this point.
+  // If the query string (part starting with "?") is empty, we are done at this
+  // point.
   auto [path, query] = splitPathAndQuery(target);
   result._path = path;
   if (query.empty()) {
