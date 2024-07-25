@@ -1037,7 +1037,7 @@ auto CompressedRelationWriter::createPermutationPair(
         auto compare = [](const auto& a, const auto& b) {
           return std::tie(a[0], a[1], a[2]) < std::tie(b[0], b[1], b[2]);
         };
-        std::ranges::sort(relation, std::ranges::lexicographical_compare);
+        std::ranges::sort(relation, compare);
         AD_CORRECTNESS_CHECK(!relation.empty());
         writer2.compressAndWriteBlock(relation.at(0, 0),
                                       relation.at(relation.size() - 1, 0),
