@@ -178,13 +178,15 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     return ad_utility::UrlParser::parseGetRequestTarget(request.target());
   }
   if (request.method() == http::verb::post) {
-    // For a POST request, the content type *must* be either
-    // "application/x-www-form-urlencoded" or "application/sparql-query". In
-    // the first case, the body of the POST request contains a URL-encoded
-    // query (just like in the part of a GET request after the "?"). In the
-    // second case, the body of the POST request contains *only* the SPARQL
-    // query, but not URL-encoded, and no other URL parameters. See Sections
-    // 2.1.2 and 2.1.3 of the SPARQL 1.1 standard:
+    // For a POST request, the content type *must* be one of two types.
+    // "application/x-www-form-urlencoded" or "application/sparql-query" for
+    // queries and "application/x-www-form-urlencoded" or
+    // "application/sparql-update" for updates. In the first case each, the body
+    // of the POST request contains a URL-encoded query or update (just like in
+    // the part of a GET request after the "?"). In the second case each, the
+    // body of the POST request contains *only* the SPARQL query or update, but
+    // not URL-encoded, and no other URL parameters. See Sections
+    // 2.1.2, 2.1.3, 2.2.1 and 2.2.2 of the SPARQL 1.1 Protocol standard:
     // https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
     std::string_view contentType = request.base()[http::field::content_type];
     LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
@@ -192,6 +194,8 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
         "application/x-www-form-urlencoded";
     static constexpr std::string_view contentTypeSparqlQuery =
         "application/sparql-query";
+    static constexpr std::string_view contentTypeSparqlUpdate =
+        "application/sparql-update";
 
     // In either of the two cases explained above, we convert the data to a
     // format as if it came from a GET request. The second argument to
@@ -206,9 +210,23 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
       return ad_utility::UrlParser::parseGetRequestTarget(
           absl::StrCat(toStd(request.target()), "?", request.body()), true);
     }
+    // Note: Updates and Queries are processed regardless of the content
+    // type. I.e. an update sent with the content type for query will be
+    // processed.
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(toStd(request.target()), "?query=", request.body()),
+          absl::StrCat(
+              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
+                  .path_,
+              "?query=", request.body()),
+          false);
+    }
+    if (contentType.starts_with(contentTypeSparqlUpdate)) {
+      return ad_utility::UrlParser::parseGetRequestTarget(
+          absl::StrCat(
+              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
+                  .path_,
+              "?update=", request.body()),
           false);
     }
     throw std::runtime_error(
@@ -380,8 +398,26 @@ Awaitable<void> Server::process(
     }
   }
 
-  // If "query" parameter is given, process query.
+  // TODO<qup42> Updates can currently be smuggled as a Query. `processQuery`
+  // will simply execute everything it gets - queries and updates. If "query"
+  // parameter is given, process query.
   if (auto query = checkParameter("query", std::nullopt)) {
+    if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
+            checkParameter("timeout", std::nullopt), accessTokenOk, request,
+            send)) {
+      co_return co_await processQuery(parameters, requestTimer,
+                                      std::move(request), send,
+                                      timeLimit.value());
+
+    } else {
+      // If the optional is empty, this indicates an error response has been
+      // sent to the client already. We can stop here.
+      co_return;
+    }
+  }
+
+  // Process "update" only if updates are enabled.
+  if (auto update = checkParameter("update", std::nullopt) && useUpdates_) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -726,13 +762,36 @@ nlohmann::json Server::executeUpdateQuery(
 }
 
 // ____________________________________________________________________________
+std::optional<MediaType> Server::determineMediatype(
+    auto& containsParam, std::string_view acceptHeader) {
+  // The explicit `action=..._export` parameter have precedence over the
+  // `Accept:...` header field
+  if (containsParam("action", "csv_export")) {
+    return MediaType::csv;
+  } else if (containsParam("action", "tsv_export")) {
+    return MediaType::tsv;
+  } else if (containsParam("action", "qlever_json_export")) {
+    return MediaType::qleverJson;
+  } else if (containsParam("action", "sparql_json_export")) {
+    return MediaType::sparqlJson;
+  } else if (containsParam("action", "turtle_export")) {
+    return MediaType::turtle;
+  } else if (containsParam("action", "binary_export")) {
+    return MediaType::octetStream;
+  } else {
+    return ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
+  }
+}
+
+// ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
-  AD_CONTRACT_CHECK(params.contains("query"));
-  const auto& query = params.at("query");
+  AD_CONTRACT_CHECK(params.contains("query") || params.contains("update"));
+  const auto& query =
+      params.contains("query") ? params.at("query") : params.at("update");
 
   auto sendJson =
       [&request, &send](
@@ -765,44 +824,9 @@ boost::asio::awaitable<void> Server::processQuery(
               << (pinSubtrees ? " [pin subresults]" : "") << "\n"
               << query << std::endl;
 
-    // The following code block determines the media type to be used for the
-    // result. The media type is either determined by the "Accept:" header of
-    // the request or by the URL parameter "action=..." (for TSV and CSV export,
-    // for QLever-historical reasons).
-
-    std::optional<MediaType> mediaType = std::nullopt;
-
-    // The explicit `action=..._export` parameter have precedence over the
-    // `Accept:...` header field
-    if (containsParam("action", "csv_export")) {
-      mediaType = MediaType::csv;
-    } else if (containsParam("action", "tsv_export")) {
-      mediaType = MediaType::tsv;
-    } else if (containsParam("action", "qlever_json_export")) {
-      mediaType = MediaType::qleverJson;
-    } else if (containsParam("action", "sparql_json_export")) {
-      mediaType = MediaType::sparqlJson;
-    } else if (containsParam("action", "turtle_export")) {
-      mediaType = MediaType::turtle;
-    } else if (containsParam("action", "binary_export")) {
-      mediaType = MediaType::octetStream;
-    }
-
     std::string_view acceptHeader = request.base()[http::field::accept];
-
-    if (!mediaType.has_value()) {
-      mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
-    }
-
-    std::optional<uint64_t> maxSend =
-        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
-                                : std::nullopt;
-    // Limit JSON requests by default
-    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                                 mediaType == MediaType::qleverJson)) {
-      maxSend = MAX_NOF_ROWS_IN_RESULT;
-    }
-
+    std::optional<MediaType> mediaType =
+        determineMediatype(containsParam, acceptHeader);
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
           absl::StrCat("Did not find any supported media type "
@@ -814,6 +838,15 @@ boost::asio::awaitable<void> Server::processQuery(
     AD_CONTRACT_CHECK(mediaType.has_value());
     LOG(INFO) << "Requested media type of result is \""
               << ad_utility::toString(mediaType.value()) << "\"" << std::endl;
+
+    std::optional<uint64_t> maxSend =
+        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
+                                : std::nullopt;
+    // Limit JSON requests by default
+    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
+                                 mediaType == MediaType::qleverJson)) {
+      maxSend = MAX_NOF_ROWS_IN_RESULT;
+    }
 
     auto queryHub = queryHub_.lock();
     AD_CORRECTNESS_CHECK(queryHub);
@@ -860,6 +893,12 @@ boost::asio::awaitable<void> Server::processQuery(
     plannedQuery.value().parsedQuery_._limitOffset._offset -=
         qet.getRootOperation()->getLimit()._offset;
 
+    // TODO: the handling of queries and updates should be separated. Ideally
+    // into `processQuery` and `processUpdate`. These are then called by
+    // `process`. This has one big benefit. We might want to constrain who can
+    // run updates. With this structure it is much easier to control than doing
+    // it in `processQuery`. This would also remove the need for have an
+    // additional grammar rule to unify update and query.
     if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
       nlohmann::basic_json resp = Server::executeUpdateQuery(
           plannedQuery.value().parsedQuery_, qet, requestTimer,

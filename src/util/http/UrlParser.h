@@ -23,6 +23,11 @@ namespace ad_utility {
  */
 class UrlParser {
  public:
+  struct UrlPathAndQuery {
+    std::string path_;
+    std::string query_;
+  };
+
   /// Representation of the "path" and "query" of a URL. For a GET request, the
   /// "path" is the part before the "?" (or everything if there is no "?"), and
   /// the "query" is the part after the "?" (empty if there is no "?"). The
@@ -52,6 +57,8 @@ class UrlParser {
   ///  If the parsing or one of the checks fails, std::nullopt is returned.
   static std::optional<std::string> getDecodedPathAndCheck(
       std::string_view target) noexcept;
+
+  static UrlPathAndQuery splitPathAndQuery(std::string_view target);
 
  private:
   // Helper function that parses a single key-value pair from a URL query

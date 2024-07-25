@@ -144,6 +144,13 @@ class Server {
 
   json composeCacheStatsJson() const;
 
+  // Determines the media type to be used for the
+  // result. The media type is either determined by the "Accept:" header of
+  // the request or by the URL parameter "action=..." (for TSV and CSV export,
+  // for QLever-historical reasons).
+  std::optional<ad_utility::MediaType> determineMediatype(
+      auto& containsParam, std::string_view acceptHeader);
+
   /// Invoke `function` on `threadPool_`, and return an awaitable to wait for
   /// it's completion, wrapping the result.
   template <std::invocable Function,
