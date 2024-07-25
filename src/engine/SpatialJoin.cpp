@@ -1,7 +1,7 @@
 #include "engine/SpatialJoin.h"
 
-#include "engine/VariableToColumnMap.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "engine/VariableToColumnMap.h"
 #include "global/ValueId.h"
 #include "parser/ParsedQuery.h"
 #include "util/AllocatorWithLimit.h"
@@ -15,7 +15,7 @@ SpatialJoin::SpatialJoin(
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
     : Operation(qec) {
   triple_ = std::move(triple);
-  
+
   parseMaxDistance();
 
   if (childLeft) {
@@ -248,13 +248,14 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
                          ColumnIndex leftPointCol, ColumnIndex rightPointCol) {
     auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
       return ExportQueryExecutionTrees::idToStringAndType(
-              getExecutionContext()->getIndex(), restable->at(row, col), {})
-              .value().first;
+                 getExecutionContext()->getIndex(), restable->at(row, col), {})
+          .value()
+          .first;
     };
 
     std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
     std::string point2 = getPoint(resRight, rowRight, rightPointCol);
-    
+
     point1 = betweenQuotes(point1);
     point2 = betweenQuotes(point2);
     double dist = ad_utility::detail::wktDistImpl(point1, point2);
@@ -265,9 +266,8 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   // into the table res. It copies them into the row
   // rowIndRes and column column colIndRes. It returns the column number
   // until which elements were copied
-  auto addColumns = [](IdTable* res, const IdTable* copyFrom,
-                        size_t rowIndRes, size_t colIndRes,
-                        size_t rowIndCopy) {
+  auto addColumns = [](IdTable* res, const IdTable* copyFrom, size_t rowIndRes,
+                       size_t colIndRes, size_t rowIndCopy) {
     size_t col = 0;
     while (col < copyFrom->numColumns()) {
       res->at(rowIndRes, colIndRes) = (*copyFrom).at(rowIndCopy, col);
@@ -299,7 +299,7 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
       size_t rescol = 0;
       long long dist = computeDist(resLeft, resRight, rowLeft, rowRight,
-                                    leftJoinCol, rightJoinCol);
+                                   leftJoinCol, rightJoinCol);
       if (maxDist_ == 0 || dist < maxDist_) {
         result.emplace_back();
         if (addDistToResult_) {

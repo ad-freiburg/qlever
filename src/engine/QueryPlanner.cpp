@@ -1742,8 +1742,9 @@ auto QueryPlanner::createSpatialJoin(
   }
 
   if (jcs.size() > 1) {
-    AD_THROW("Currently, if both sides of a SpatialJoin are variables, then the"
-            "SpatialJoin must be the only connection between these variables");
+    AD_THROW(
+        "Currently, if both sides of a SpatialJoin are variables, then the"
+        "SpatialJoin must be the only connection between these variables");
   }
   ColumnIndex ind = aIsSpatialJoin ? jcs[0][1] : jcs[0][0];
   const Variable& var =

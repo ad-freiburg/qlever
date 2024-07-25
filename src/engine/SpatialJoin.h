@@ -51,8 +51,8 @@ class SpatialJoin : public Operation {
   // added. The reason for this behavior is, that the QueryPlanner can then
   // still use the existing SpatialJoin object, to try different orders
   std::shared_ptr<SpatialJoin> addChild(
-        std::shared_ptr<QueryExecutionTree> child,
-        const Variable& varOfChild) const;
+      std::shared_ptr<QueryExecutionTree> child,
+      const Variable& varOfChild) const;
 
   // if the spatialJoin has both children its construction is done. Then true
   // is returned. This function is needed in the QueryPlanner, so that the
