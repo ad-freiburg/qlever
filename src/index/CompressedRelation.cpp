@@ -1026,7 +1026,7 @@ auto CompressedRelationWriter::createPermutationPair(
                                       std::move(relationPtr), false);
       };
 
-  writer2.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
+  writer1.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
 
   auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
                          &writer1, &numBlocksCurrentRel, &col0IdCurrentRelation,
