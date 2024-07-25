@@ -171,8 +171,10 @@ class Engine {
     LOG(DEBUG) << "Distinct done.\n";
   }
 
-  // Return the number of distinct rows in the `input`. The input must be sorted
-  // for this to work.
+  // Return the number of distinct rows in the `input`. The input must have all
+  // duplicates adjacent to each other (e.g. by being sorted), otherwise the
+  // behavior is undefined. `checkCancellation()` is invoked regularly and can
+  // be used to implement a cancellation mechanism that throws on cancellation.
   static size_t countDistinct(const IdTable& input,
                               const std::function<void()>& checkCancellation);
 };

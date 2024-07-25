@@ -191,6 +191,11 @@ struct EvaluationContext {
   bool _isPartOfGroupBy = false;
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
+
+  // A point in time at which the evaluation of the expression is to be
+  // cancelled because of a timeout. This is used by mechanisms that can't use
+  // the `cancellationHandle_` directly, like the sorting in a `COUNT DISTINCT
+  // *` expression.
   using TimePoint = std::chrono::steady_clock::time_point;
   TimePoint deadline_;
 

@@ -111,8 +111,35 @@ TEST(AggregateExpression, CountStar) {
   EXPECT_THAT(
       m->evaluate(&t.context),
       ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));
-  // TODO<joka921> Test with an input that actually contains duplicates...
+
+  // Add some duplicates.
+  t.table.push_back(t.table.at(0));
+  t.table.push_back(t.table.at(1));
+  t.table.push_back(t.table.at(0));
+  t.table.at(0, 0) = I(193847521);
+
+  t.context._endIndex += 3;
+
+  t.qec->getQueryTreeCache().clearAll();
+  // A COUNT * has now a size which is larger by 3, but a COUNT DISTINCT * still
+  // has the same size.
+  EXPECT_THAT(m->evaluate(&t.context), ::testing::VariantWith<Id>(::testing::Eq(
+                                           Id::makeFromInt(totalSize + 3))));
+
+  // We have added two duplicates, and one new distinct row
   m = makeCountStarExpression(true);
+  EXPECT_THAT(m->evaluate(&t.context), ::testing::VariantWith<Id>(::testing::Eq(
+                                           Id::makeFromInt(totalSize + 1))));
+
+  // If we modify the `varToColMap` such that it doesn't contain our unique
+  // value in column 0, then the number of distinct entries goes back to where
+  // it originally was (columns that are hidden e.g. by a subquery have to be
+  // ignored by COUNT DISTINCT *).
+  t.varToColMap.clear();
+
+  t.varToColMap[Variable{"?x"}] = {
+      1, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
+  t.qec->getQueryTreeCache().clearAll();
   EXPECT_THAT(
       m->evaluate(&t.context),
       ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));

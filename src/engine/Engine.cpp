@@ -60,12 +60,16 @@ size_t Engine::countDistinct(const IdTable& input,
   if (input.empty()) {
     return 0;
   }
+  // Store whether the `i`-th entry in the `input` is equal to the `i+1`-th
+  // entry in the columns that have already been checked.
   std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
       input.numRows() - 1, static_cast<char>(true), input.getAllocator());
 
+  // For each column, set the entries in `counter` to 0 where there's a
+  // mismatch.
   for (const auto& col : input.getColumns()) {
     ad_utility::chunkedForLoop<100'000>(
-        0ull, input.numRows() - 1,
+        0ULL, input.numRows() - 1,
         [&counter, &col](size_t i) {
           counter[i] &= static_cast<char>(col[i] == col[i + 1]);
         },

@@ -6,6 +6,8 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 
+// Return a `SparqlExpression::Ptr` that implements the `COUNT [DISTINCT} *`
+// function.
 namespace sparqlExpression {
 SparqlExpression::Ptr makeCountStarExpression(bool distinct);
 }

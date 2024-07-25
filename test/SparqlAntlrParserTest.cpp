@@ -1705,14 +1705,19 @@ TEST(SparqlParser, binaryStringExpressions) {
 
 namespace aggregateTestHelpers {
 using namespace sparqlExpression;
-template <typename T>
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// points to an `AggregateExpr`, that the distinctness and the child variable of
+// the aggregate expression match, and that the `AggregateExpr`(via dynamic
+// cast) matches all the `additionalMatchers`.
+template <typename AggregateExpr>
 ::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
     bool distinct, const Variable& child, const auto&... additionalMatchers) {
   using namespace ::testing;
   using namespace builtInCallTestHelpers;
   using Exp = SparqlExpression;
 
-  auto innerMatcher = [&]() -> Matcher<const T&> {
+  auto innerMatcher = [&]() -> Matcher<const AggregateExpr&> {
     if constexpr (sizeof...(additionalMatchers) > 0) {
       return AllOf(additionalMatchers...);
     } else {
@@ -1722,7 +1727,7 @@ template <typename T>
   return Pointee(AllOf(
       AD_PROPERTY(Exp, isDistinct, Eq(distinct)),
       AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
-      WhenDynamicCastTo<const T&>(innerMatcher)));
+      WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
 }
 }  // namespace aggregateTestHelpers
 
@@ -1735,11 +1740,14 @@ TEST(SparqlParser, aggregateExpressions) {
   auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
   auto expectAggregateFails = ExpectParseFails<&Parser::aggregate>{};
 
+  // For the `COUNT *` expression we have completely hidden the type. So we need
+  // to match it via RTTI.
   auto typeIdLambda = [](const auto& ptr) {
     return std::type_index{typeid(ptr)};
   };
   auto typeIdxCountStar = typeIdLambda(*makeCountStarExpression(true));
 
+  // A matcher that matches a `COUNT *` expression with the given distinctness.
   auto matchCountStar =
       [&typeIdLambda, typeIdxCountStar](
           bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
@@ -1770,6 +1778,7 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate("Avg(DISTINCT ?x)",
                   matchAggregate<AvgExpression>(true, V{"?x"}));
 
+  // A matcher for the separator of `GROUP_CONCAT`.
   auto separator = [](const std::string& sep) {
     return AD_PROPERTY(GroupConcatExpression, getSeparator, Eq(sep));
   };

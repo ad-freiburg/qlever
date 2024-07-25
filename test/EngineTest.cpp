@@ -354,6 +354,7 @@ TEST(OptionalJoin, gallopingJoin) {
   }
 }
 
+// _____________________________________________________________________________
 TEST(Engine, countDistinct) {
   auto alloc = ad_utility::testing::makeAllocator();
   IdTable t1(alloc);
