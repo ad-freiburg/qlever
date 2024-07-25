@@ -30,7 +30,8 @@ class VocabularyCreator {
   ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
 
   // Create and return a `VocabularyInMemoryBinSearch` from words and ids.
-  // `words` and `ids` must have the same size.
+  // `words` and `ids` must have the same size. If `ids` is `nullopt`, then
+  // ascending IDs starting at 0 will be automatically assigned to the words.
   auto createVocabularyImpl(
       const std::vector<std::string>& words,
       std::optional<std::vector<uint64_t>> ids = std::nullopt) {
@@ -57,8 +58,7 @@ class VocabularyCreator {
     return vocabulary;
   }
 
-  // Create and return a `VocabularyInMemoryBinSearch` from words and ids.
-  // `words` and `ids` must have the same size. Note: The resulting vocabulary
+  // Like `createVocabularyImpl`,but the resulting vocabulary
   // will be destroyed and re-initialized from disk before it is returned.
   auto createVocabularyFromDiskImpl(
       const std::vector<std::string>& words,
@@ -118,9 +118,6 @@ TEST(VocabularyInMemoryBinSearch, AccessOperator) {
 }
 
 TEST(VocabularyInMemoryBinSearch, AccessOperatorWithNonContiguousIds) {
-  std::vector<std::string> words{"game",  "4",      "nobody", "33",
-                                 "alpha", "\n\1\t", "222",    "1111"};
-  std::vector<uint64_t> ids{2, 4, 8, 16, 17, 19, 42, 42 * 42 + 7};
   testAccessOperatorForUnorderedVocabulary(
       createVocabulary("AccessOperatorWithNonContiguousIds1"));
   testAccessOperatorForUnorderedVocabulary(

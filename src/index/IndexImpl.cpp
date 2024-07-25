@@ -1283,8 +1283,7 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   return 0;
 }
 
-// TODO<joka921> Once we have an overview over the folding this logic should
-// probably not be in the index class.
+// ___________________________________________________________________________
 std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
 
 // ___________________________________________________________________________

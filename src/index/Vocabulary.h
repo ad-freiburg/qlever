@@ -144,8 +144,8 @@ class Vocabulary {
   //! Read the vocabulary from file.
   void readFromFile(const string& fileName);
 
-  // Get the word with the given idx. Throw if the idx is not contained
-  // in the vocabulary
+  // Get the word with the given `idx`. Throw if the `idx` is not contained
+  // in the vocabulary.
   AccessReturnType_t<StringType> operator[](IndexType idx) const;
 
   // AccessReturnType_t<StringType> at(IndexType idx) const { return

@@ -60,10 +60,10 @@ class UnicodeVocabulary {
 
   /// Return the index range [lowest, highest) of words where a prefix of the
   /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
+  /// A value of `nullopt` in the entries means "the bound is higher than the
+  /// largest word in the vocabulary".
   /// TODO<joka921> Also support other levels, but this requires intrusive
   /// hacking of ICU's SortKeys.
-  /// a value of `nullopt` in the entries means "the bound is higher than the
-  /// largest word in the vocabulary".
   [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
   prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {

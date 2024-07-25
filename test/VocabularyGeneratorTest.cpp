@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cstdlib>
 #include <ctime>
@@ -44,6 +44,8 @@ class MergeVocabularyTest : public ::testing::Test {
   // the base directory for our test
   std::string _basePath;
 
+  // The bool means "is in the external vocabulary and not in the internal
+  // vocabulary".
   using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
   ExpectedVocabulary expectedMergedVocabulary_;
 
@@ -129,20 +131,6 @@ class MergeVocabularyTest : public ::testing::Test {
     // harder to debug test failures
   }
 
-  // returns true if and only if the files with names n1 and n2 exist, can be
-  // opened for reading and are bytewise equal.
-  bool areBinaryFilesEqual(const std::string& n1, const std::string& n2) {
-    auto p1 = readAllBytes(n1);
-    auto p2 = readAllBytes(n2);
-    auto s1 = p1.first;
-    auto s2 = p2.first;
-    auto& f1 = p1.second;
-    auto& f2 = p2.second;
-
-    return (s1 && s2 && f1.size() == f2.size() &&
-            std::equal(f1.begin(), f1.end(), f2.begin()));
-  }
-
   // read all bytes from a file (e.g. to check equality of small test files)
   static std::pair<bool, std::vector<char>> readAllBytes(
       const std::string& filename) {
@@ -175,6 +163,9 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
                           internalVocabularyAction, 1_GB);
   }
+
+  EXPECT_THAT(mergeResult,
+              ::testing::ElementsAreArray(expectedMergedVocabulary_));
 
   // No language tags in text file
   ASSERT_EQ(res.langTaggedPredicates_.begin(), Id::makeUndefined());

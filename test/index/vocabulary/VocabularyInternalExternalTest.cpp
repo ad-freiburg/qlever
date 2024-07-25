@@ -30,8 +30,7 @@ class VocabularyCreator {
   }
   ~VocabularyCreator() { ad_utility::deleteFile(vocabFilename_); }
 
-  // Create and return a `VocabularyInternalExternal` from words and ids.
-  // `words` and `ids` must have the same size.
+  // Create and return a `VocabularyInternalExternal` from the given words.
   auto createVocabularyImpl(const std::vector<std::string>& words) {
     VocabularyInternalExternal vocabulary;
     {
@@ -52,9 +51,8 @@ class VocabularyCreator {
     return vocabulary;
   }
 
-  // Create and return a `VocabularyInternalExternal` from words and ids.
-  // `words` and `ids` must have the same size. Note: The resulting vocabulary
-  // will be destroyed and re-initialized from disk before it is returned.
+  // Like `createVocabularyImpl` above, but the resulting vocabulary will be
+  // destroyed and re-initialized from disk before it is returned.
   auto createVocabularyFromDiskImpl(const std::vector<std::string>& words) {
     { createVocabularyImpl(words); }
     VocabularyInternalExternal vocabulary;

@@ -69,14 +69,10 @@ class CompressedVocabulary {
                            Comparator comparator) const {
     auto actualComparator =
         makeSymmetricComparator<InternalStringType>(comparator);
+
     auto underlyingResult =
         underlyingVocabulary_.lower_bound_iterator(word, actualComparator);
-    if (underlyingResult.isEnd()) {
-      return underlyingResult;
-    }
-    auto decompressedWord = compressionWrapper_.decompress(
-        underlyingResult.word(), getDecoderIdx(underlyingResult.index()));
-    return {std::move(decompressedWord), underlyingResult.index()};
+    return convertWordAndIndexFromUnderlyingVocab(underlyingResult);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
@@ -90,13 +86,7 @@ class CompressedVocabulary {
         makeSymmetricComparator<InternalStringType>(comparator);
     auto underlyingResult =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
-    // TODO:: make this a private helper function.
-    if (underlyingResult.isEnd()) {
-      return underlyingResult;
-    }
-    auto decompressedWord = compressionWrapper_.decompress(
-        underlyingResult.word(), getDecoderIdx(underlyingResult.index()));
-    return {std::move(decompressedWord), underlyingResult.index()};
+    return convertWordAndIndexFromUnderlyingVocab(underlyingResult);
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
@@ -315,5 +305,17 @@ class CompressedVocabulary {
       // WordAndIndex
       return el.word_.value();
     }
+  }
+
+  // Convert a `WordAndIndex` from the underlying vocabulary by decompressing
+  // the word.
+  WordAndIndex convertWordAndIndexFromUnderlyingVocab(
+      const WordAndIndex& underlyingResult) const {
+    if (underlyingResult.isEnd()) {
+      return underlyingResult;
+    }
+    auto decompressedWord = compressionWrapper_.decompress(
+        underlyingResult.word(), getDecoderIdx(underlyingResult.index()));
+    return {std::move(decompressedWord), underlyingResult.index()};
   }
 };

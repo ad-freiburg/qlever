@@ -13,7 +13,7 @@
 class WordAndIndex {
  private:
   std::optional<std::pair<std::string, uint64_t>> wordAndIndex_;
-  // See the accessor member function below for documentation.
+  // See the documentation for `previousIndex()` below.
   std::optional<uint64_t> previousIndex_ = std::nullopt;
 
  public:
@@ -37,10 +37,10 @@ class WordAndIndex {
     return isEnd() ? defaultValue : index();
   }
 
-  // The next valid indices before `index()`. If `nullopt` either no
+  // The next valid index before `index()`. If `nullopt` either no
   // such index exists (because `index()` is already the first valid index),
-  // or it simply wasn't set. This member is currently used to communicate
-  // between the `VocabularyInMemoryBinSearch` and the
+  // or the `previousIndex_` simply wasn't set. This member is currently used to
+  // communicate between the `VocabularyInMemoryBinSearch` and the
   // `InternalExternalVocabulary`.
   std::optional<uint64_t>& previousIndex() { return previousIndex_; }
 
