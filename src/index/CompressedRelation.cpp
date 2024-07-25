@@ -597,6 +597,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   }
 
   AD_CORRECTNESS_CHECK(smallRelationsBuffer_.numColumns() == numColumns());
+  // We write small relations to a single block, so we specify the last
+  // argument to `true` to invoke the `smallBlocksCallback_`.
   compressAndWriteBlock(
       currentBlockFirstCol0_, currentBlockLastCol0_,
       std::make_shared<IdTable>(std::move(smallRelationsBuffer_).toDynamic()),
@@ -672,7 +674,7 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 void CompressedRelationWriter::compressAndWriteBlock(
     Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
     bool invokeCallback) {
-  writeTimer.cont();
+  blockWriteQueueTimer_.cont();
   blockWriteQueue_.push([this, buf = std::move(block), firstCol0Id, lastCol0Id,
                          invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
@@ -695,7 +697,7 @@ void CompressedRelationWriter::compressAndWriteBlock(
       std::invoke(smallBlocksCallback_, std::move(buf));
     }
   });
-  writeTimer.stop();
+  blockWriteQueueTimer_.stop();
 }
 
 // _____________________________________________________________________________
@@ -853,6 +855,8 @@ void CompressedRelationWriter::addBlockForLargeRelation(
   currentCol0Id_ = col0Id;
   currentRelationPreviousSize_ += relation->numRows();
   writeBufferedRelationsToSingleBlock();
+  // This is a block of a large relation, so we don't invoke the
+  // `smallBlocksCallback_`. Hence the last argument is `false`.
   compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
                         false);
 }
@@ -1015,6 +1019,10 @@ auto CompressedRelationWriter::createPermutationPair(
     ++numBlocksCurrentRel;
   };
 
+  // Set up the handling of small relations for the twin permutation.
+  // A complete block of them is handed from `writer1` to the following lambda
+  // (via the `smallBlocksCallback_` mechanism. The lambda the resorts the block
+  // and feeds it to `writer2`.)
   auto addBlockOfSmallRelationsToSwitched =
       [&writer2, compare](std::shared_ptr<IdTable> relationPtr) {
         auto& relation = *relationPtr;
@@ -1124,11 +1132,13 @@ auto CompressedRelationWriter::createPermutationPair(
               << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
               << std::endl;
   LOG(TIMING) << "Time spent waiting for writer1's queue "
-              << ad_utility::Timer::toSeconds(writer1.writeTimer.msecs()) << "s"
-              << std::endl;
+              << ad_utility::Timer::toSeconds(
+                     writer1.blockWriteQueueTimer_.msecs())
+              << "s" << std::endl;
   LOG(TIMING) << "Time spent waiting for writer2's queue "
-              << ad_utility::Timer::toSeconds(writer2.writeTimer.msecs()) << "s"
-              << std::endl;
+              << ad_utility::Timer::toSeconds(
+                     writer2.blockWriteQueueTimer_.msecs())
+              << "s" << std::endl;
   LOG(TIMING) << "Time spent waiting for large twin relations "
               << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
               << "s" << std::endl;

@@ -177,6 +177,14 @@ class CompressedRelationWriter {
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+  ad_utility::Timer blockWriteQueueTimer_{ad_utility::Timer::Stopped};
+
+  // This callback is invoked with a block of small relations (which share the
+  // same block), after this block has been completely handled by this writer.
+  // This callback is used to efficiently pass this block from a permutation to
+  // its twin permutation, which only has to resort and write this block.
+  using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
+  SmallBlocksCallback smallBlocksCallback_;
 
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
@@ -198,11 +206,6 @@ class CompressedRelationWriter {
     CompressedRelationWriter& writer_;
     MetadataCallback callback_;
   };
-
-  ad_utility::Timer writeTimer{ad_utility::Timer::Stopped};
-
-  using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
-  SmallBlocksCallback smallBlocksCallback_;
 
   /**
    * @brief Write two permutations that only differ by the order of the col1 and
@@ -267,9 +270,9 @@ class CompressedRelationWriter {
   void finish() {
     AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
-    writeTimer.cont();
+    blockWriteQueueTimer_.cont();
     blockWriteQueue_.finish();
-    writeTimer.stop();
+    blockWriteQueueTimer_.stop();
     outfile_.wlock()->close();
   }
 
@@ -288,7 +291,10 @@ class CompressedRelationWriter {
 
   // Compress the given `block` and write it to the `outfile_`. The
   // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
-  // which is appended to the internal buffer.
+  // which is appended to the internal buffer. If `invokeCallback` is true and
+  // the `smallBlocksCallback_` is not empty, then
+  // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
+  // completely been dealt with.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
                              std::shared_ptr<IdTable> block,
                              bool invokeCallback);
