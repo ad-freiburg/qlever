@@ -50,6 +50,18 @@ std::string UrlParser::applyPercentDecoding(std::string_view url,
 }
 
 // ___________________________________________________________________________
+UrlParser::UrlPathAndQuery UrlParser::splitPathAndQuery(
+    std::string_view target) {
+  size_t index = target.find('?');
+  if (index == std::string::npos) {
+    return {std::string(target), ""};
+  } else {
+    return {std::string(target.substr(0, index)),
+            std::string(target.substr(index + 1))};
+  }
+}
+
+// ___________________________________________________________________________
 UrlParser::UrlPathAndParameters UrlParser::parseGetRequestTarget(
     std::string_view target, bool urlDecode) {
   UrlPathAndParameters result;
@@ -62,14 +74,14 @@ UrlParser::UrlPathAndParameters UrlParser::parseGetRequestTarget(
     target = target.substr(0, target.find('#'));
   }
 
-  // Set `_path` and remove it from `target`. If there is no query string (part
-  // starting with "?"), we are done at this point.
-  size_t index = target.find('?');
-  result._path = target.substr(0, index);
-  if (index == std::string::npos) {
+  // Set `_path`. If the query string (part
+  // starting with "?") is empty, we are done at this point.
+  auto [path, query] = splitPathAndQuery(target);
+  result._path = path;
+  if (query.empty()) {
     return result;
   }
-  target.remove_prefix(index + 1);
+  target = query;
 
   // Parse the query string and store the result in a hash map. Throw an error
   // if the same key appears twice in the query string. Note that this excludes

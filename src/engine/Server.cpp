@@ -198,11 +198,18 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     // these parameters.
     if (contentType.starts_with(contentTypeUrlEncoded)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(toStd(request.target()), "?", request.body()), true);
+          absl::StrCat(
+              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
+                  .path_,
+              "?", request.body()),
+          true);
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
       return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(toStd(request.target()), "?query=", request.body()),
+          absl::StrCat(
+              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
+                  .path_,
+              "?query=", request.body()),
           false);
     }
     throw std::runtime_error(

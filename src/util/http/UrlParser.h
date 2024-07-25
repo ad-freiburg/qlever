@@ -25,8 +25,14 @@ class UrlParser {
  public:
   /// Representation of the "path" and "query" of a URL. For a GET request, the
   /// "path" is the part before the "?" (or everything if there is no "?"), and
-  /// the "query" is the part after the "?" (empty if there is no "?"). The
-  /// key-value pairs of the "query" are stored in a hash map.
+  /// the "query" is the part after the "?" (empty if there is no "?").
+  struct UrlPathAndQuery {
+    std::string path_;
+    std::string query_;
+  };
+
+  /// The difference to `UrlPathAndQuery` is that the
+  /// key-value pairs of the "query" are parsed and stored in a hash map.
   struct UrlPathAndParameters {
     std::string _path;
     ad_utility::HashMap<std::string, std::string> _parameters;
@@ -37,14 +43,19 @@ class UrlParser {
   static std::string applyPercentDecoding(std::string_view url,
                                           bool urlDecode = true);
 
-  /// Parse the `target` part of an HTTP GET Request, for example,
+  /// Split the `target` of an HTTP Request (e.g.
+  /// `/api.html?someKey=some+val%0Fue`) into the path (`/api.html`) and query
+  /// (`someKey=some+val%0Fue`).
+  static UrlPathAndQuery splitPathAndQuery(std::string_view target);
+
+  /// Parse the `target` part of an HTTP Request, for example,
   /// `/api.html?someKey=some+val%0Fue`. The second argument specifies whether
   /// the key-value pairs of the query string should be URL-decoded (default:
   /// yes).
   static UrlPathAndParameters parseGetRequestTarget(std::string_view target,
                                                     bool urlDecode = true);
 
-  ///  From the `target` part of an HTTP GET request, only extract the path,
+  ///  From the `target` part of an HTTP request, only extract the path,
   ///  with percent decoding applied. E.g. `/target.html?key=value` will become
   ///  `/target.html`. Additionally the following checks are applied:
   ///  - The path must not contain `..` to escape from the document root.
