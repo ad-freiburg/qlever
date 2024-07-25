@@ -1120,21 +1120,22 @@ auto CompressedRelationWriter::createPermutationPair(
   blockCallbackTimer.cont();
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
-  LOG(INFO) << "Time spent waiting for the input "
-            << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-            << std::endl;
-  LOG(INFO) << "Time spent waiting for writer1's queue "
-            << ad_utility::Timer::toSeconds(writer1.writeTimer.msecs()) << "s"
-            << std::endl;
-  LOG(INFO) << "Time spent waiting for writer2's queue "
-            << ad_utility::Timer::toSeconds(writer2.writeTimer.msecs()) << "s"
-            << std::endl;
-  LOG(INFO) << "Time spent waiting for large twin relations "
-            << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-            << "s" << std::endl;
-  LOG(INFO) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
-            << std::endl;
+  LOG(TIMING) << "Time spent waiting for the input "
+              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+              << std::endl;
+  LOG(TIMING) << "Time spent waiting for writer1's queue "
+              << ad_utility::Timer::toSeconds(writer1.writeTimer.msecs()) << "s"
+              << std::endl;
+  LOG(TIMING) << "Time spent waiting for writer2's queue "
+              << ad_utility::Timer::toSeconds(writer2.writeTimer.msecs()) << "s"
+              << std::endl;
+  LOG(TIMING) << "Time spent waiting for large twin relations "
+              << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
+              << "s" << std::endl;
+  LOG(TIMING)
+      << "Time spent waiting for triple callbacks (e.g. the next sorter) "
+      << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
+      << std::endl;
   return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
           std::move(writer2).getFinishedBlocks()};
 }
