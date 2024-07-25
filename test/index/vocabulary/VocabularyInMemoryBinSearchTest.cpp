@@ -48,7 +48,7 @@ class VocabularyCreator {
         ++idx;
       }
       static std::atomic<unsigned> doFinish = 0;
-      // In some tests, call `finish` expclitly, in others let the destructor
+      // In some tests, call `finish` explicitly, in others let the destructor
       // handle this.
       if (doFinish.fetch_add(1) % 2 == 0) {
         writer.finish();
@@ -58,8 +58,8 @@ class VocabularyCreator {
     return vocabulary;
   }
 
-  // Like `createVocabularyImpl`,but the resulting vocabulary
-  // will be destroyed and re-initialized from disk before it is returned.
+  // Like `createVocabularyImpl`, but the resulting vocabulary will be destroyed
+  // and re-initialized from disk before it is returned.
   auto createVocabularyFromDiskImpl(
       const std::vector<std::string>& words,
       std::optional<std::vector<uint64_t>> ids = std::nullopt) {

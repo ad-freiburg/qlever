@@ -41,7 +41,7 @@ class VocabularyCreator {
         ++i;
       }
       static std::atomic<unsigned> doFinish = 0;
-      // In some tests, call `finish` expclitly, in others let the destructor
+      // In some tests, call `finish` explicitly, in others let the destructor
       // handle this.
       if (doFinish.fetch_add(1) % 2 == 0) {
         writer.finish();

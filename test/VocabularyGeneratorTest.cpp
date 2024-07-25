@@ -92,8 +92,8 @@ class MergeVocabularyTest : public ::testing::Test {
     // Note that the word "monkey" appears in both vocabularies, buth with
     // different settings for `isExternal`. In this case it is externalized.
     expectedMergedVocabulary_ = ExpectedVocabulary{
-        {"\"ape\"", false},    {"\"bear\"", false},  {"\"bla\"", true},
-        {"\"gorila\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
+        {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
+        {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
