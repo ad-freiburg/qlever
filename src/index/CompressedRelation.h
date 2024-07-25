@@ -199,6 +199,9 @@ class CompressedRelationWriter {
     MetadataCallback callback_;
   };
 
+  using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
+  SmallBlocksCallback smallBlocksCallback_;
+
   /**
    * @brief Write two permutations that only differ by the order of the col1 and
    * col2 (e.g. POS and PSO).
@@ -283,7 +286,8 @@ class CompressedRelationWriter {
   // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
   // which is appended to the internal buffer.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
-                             std::shared_ptr<IdTable> block);
+                             std::shared_ptr<IdTable> block,
+                             bool invokeCallback);
 
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.

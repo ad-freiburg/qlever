@@ -599,7 +599,8 @@ void CompressedRelationWriter::writeBufferedRelationsToSingleBlock() {
   AD_CORRECTNESS_CHECK(smallRelationsBuffer_.numColumns() == numColumns());
   compressAndWriteBlock(
       currentBlockFirstCol0_, currentBlockLastCol0_,
-      std::make_shared<IdTable>(std::move(smallRelationsBuffer_).toDynamic()));
+      std::make_shared<IdTable>(std::move(smallRelationsBuffer_).toDynamic()),
+      true);
   smallRelationsBuffer_.clear();
   smallRelationsBuffer_.reserve(2 * blocksize());
 }
@@ -669,26 +670,30 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 
 // _____________________________________________________________________________
 void CompressedRelationWriter::compressAndWriteBlock(
-    Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block) {
-  blockWriteQueue_.push(
-      [this, buf = std::move(block), firstCol0Id, lastCol0Id]() {
-        std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
-        for (const auto& column : buf->getColumns()) {
-          offsets.push_back(compressAndWriteColumn(column));
-        }
-        AD_CORRECTNESS_CHECK(!offsets.empty());
-        auto numRows = buf->numRows();
-        const auto& first = (*buf)[0];
-        const auto& last = (*buf)[buf->numRows() - 1];
-        AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
-        AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
+    Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
+    bool invokeCallback) {
+  blockWriteQueue_.push([this, buf = std::move(block), firstCol0Id, lastCol0Id,
+                         invokeCallback]() mutable {
+    std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
+    for (const auto& column : buf->getColumns()) {
+      offsets.push_back(compressAndWriteColumn(column));
+    }
+    AD_CORRECTNESS_CHECK(!offsets.empty());
+    auto numRows = buf->numRows();
+    const auto& first = (*buf)[0];
+    const auto& last = (*buf)[buf->numRows() - 1];
+    AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
+    AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-        blockBuffer_.wlock()->push_back(
-            CompressedBlockMetadata{std::move(offsets),
-                                    numRows,
-                                    {first[0], first[1], first[2]},
-                                    {last[0], last[1], last[2]}});
-      });
+    blockBuffer_.wlock()->push_back(
+        CompressedBlockMetadata{std::move(offsets),
+                                numRows,
+                                {first[0], first[1], first[2]},
+                                {last[0], last[1], last[2]}});
+    if (invokeCallback && smallBlocksCallback_) {
+      std::invoke(smallBlocksCallback_, std::move(buf));
+    }
+  });
 }
 
 // _____________________________________________________________________________
@@ -846,7 +851,8 @@ void CompressedRelationWriter::addBlockForLargeRelation(
   currentCol0Id_ = col0Id;
   currentRelationPreviousSize_ += relation->numRows();
   writeBufferedRelationsToSingleBlock();
-  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation));
+  compressAndWriteBlock(currentCol0Id_, currentCol0Id_, std::move(relation),
+                        false);
 }
 
 namespace {
@@ -1007,6 +1013,21 @@ auto CompressedRelationWriter::createPermutationPair(
     ++numBlocksCurrentRel;
   };
 
+  auto addBlockOfSmallRelationsToSwitched =
+      [&writer2, compare](std::shared_ptr<IdTable> relationPtr) {
+        auto& relation = *relationPtr;
+        // We don't use the parallel twinRelationSorter to create the twin
+        // relation as its overhead is far too high for small relations.
+        relation.swapColumns(c1Idx, c2Idx);
+        std::ranges::sort(relation, compare);
+        AD_CORRECTNESS_CHECK(!relation.empty());
+        writer2.compressAndWriteBlock(relation.at(0, 0),
+                                      relation.at(relation.size() - 1, 0),
+                                      std::move(relationPtr), false);
+      };
+
+  writer2.smallBlocksCallback_ = addBlockOfSmallRelationsToSwitched;
+
   auto finishRelation = [&numDistinctCol0, &twinRelationSorter, &writer2,
                          &writer1, &numBlocksCurrentRel, &col0IdCurrentRelation,
                          &relation, &distinctCol1Counter,
@@ -1030,17 +1051,6 @@ auto CompressedRelationWriter::createPermutationPair(
       [[maybe_unused]] auto md1 = writer1.addSmallRelation(
           col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
           relation.asStaticView<0>());
-      // We don't use the parallel twinRelationSorter to create the twin
-      // relation as its overhead is far too high for small relations.
-      relation.swapColumns(c1Idx, c2Idx);
-      std::ranges::sort(relation, compare);
-      std::ranges::for_each(relation.getColumn(c1Idx),
-                            std::ref(distinctCol1Counter));
-      [[maybe_unused]] auto md2 = writer2.addSmallRelation(
-          col0IdCurrentRelation.value(), distinctCol1Counter.getAndReset(),
-          relation.asStaticView<0>());
-      // Ignore the metadata of the small relations, it is wasteful to store.
-      // writeMetadata(md1, md2);
     }
     relation.clear();
     numBlocksCurrentRel = 0;
