@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_COMPRESSEDVOCABULARY_H
-#define QLEVER_COMPRESSEDVOCABULARY_H
+#pragma once
 
 #include "index/ConstantsIndexBuilding.h"
 #include "index/PrefixHeuristic.h"
@@ -11,6 +10,7 @@
 #include "index/vocabulary/PrefixCompressor.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/FsstCompressor.h"
+#include "util/OverloadCallOperator.h"
 #include "util/Serializer/FileSerializer.h"
 #include "util/Serializer/SerializePair.h"
 #include "util/TaskQueue.h"
@@ -42,52 +42,51 @@ class CompressedVocabulary {
   }
 
   [[nodiscard]] uint64_t size() const { return underlyingVocabulary_.size(); }
-  [[nodiscard]] uint64_t getHighestId() const {
-    return underlyingVocabulary_.getHighestId();
+
+  // From a `comparator` that can compare two strings, make a new comparator,
+  // that can compare a string and an `iterator` by decompressing the word that
+  // the iterator points to. The returned comparator is symmetric, meaning that
+  // the iterator can either be the left or the right argument.
+  template <typename StringType, typename Comparator>
+  auto makeSymmetricComparator(Comparator comparator = Comparator{}) const {
+    auto pred1 = [comparator, self = this](const StringType& el,
+                                           const auto& it) {
+      return comparator(el, self->decompressFromIterator(it));
+    };
+    auto pred2 = [comparator, self = this](const auto& it,
+                                           const StringType& el) {
+      return comparator(self->decompressFromIterator(it), el);
+    };
+    return ad_utility::OverloadCallOperator{pred1, pred2};
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
+  /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex lower_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [self = this, &comparator](const auto& it,
-                                                       const auto& b) {
-      return comparator(self->decompressFromIterator(it), b);
-    };
-    auto underlyingResult =
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
+
+    auto wordAndIndex =
         underlyingVocabulary_.lower_bound_iterator(word, actualComparator);
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = compressionWrapper_.decompress(
-          underlyingResult._word.value(), getDecoderIdx(result._index));
-    }
-    return result;
+    return convertWordAndIndexFromUnderlyingVocab(wordAndIndex);
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   template <typename InternalStringType, typename Comparator>
   WordAndIndex upper_bound(const InternalStringType& word,
                            Comparator comparator) const {
-    auto actualComparator = [this, &comparator](const auto& a, const auto& it) {
-      return comparator(a, this->decompressFromIterator(it));
-    };
-    auto underlyingResult =
+    auto actualComparator =
+        makeSymmetricComparator<InternalStringType>(comparator);
+    auto wordAndIndex =
         underlyingVocabulary_.upper_bound_iterator(word, actualComparator);
-    // TODO:: make this a private helper function.
-    WordAndIndex result;
-    result._index = underlyingResult._index;
-    if (underlyingResult._word.has_value()) {
-      result._word = compressionWrapper_.decompress(
-          underlyingResult._word.value(), getDecoderIdx(result._index));
-    }
-    return result;
+    return convertWordAndIndexFromUnderlyingVocab(wordAndIndex);
   }
 
   /// Open the underlying vocabulary from a file. The vocabulary must have been
@@ -108,6 +107,7 @@ class CompressedVocabulary {
   class DiskWriterFromUncompressedWords {
    private:
     std::vector<std::string> wordBuffer_;
+    std::vector<bool> isExternalBuffer_;
     std::vector<typename CompressionWrapper::Decoder> decoders_;
     typename UnderlyingVocabulary::WordWriter underlyingWriter_;
     std::string filenameDecoders_;
@@ -135,9 +135,11 @@ class CompressedVocabulary {
           filenameDecoders_{filenameDecoders} {}
 
     /// Compress the `uncompressedWord` and write it to disk.
-    void operator()(std::string_view uncompressedWord) {
+    void operator()(std::string_view uncompressedWord,
+                    bool isExternal = false) {
       AD_CORRECTNESS_CHECK(!isFinished_);
       wordBuffer_.emplace_back(uncompressedWord);
+      isExternalBuffer_.push_back(isExternal);
       if (wordBuffer_.size() == NumWordsPerBlock) {
         finishBlock();
       }
@@ -208,25 +210,34 @@ class CompressedVocabulary {
       uncompressedSize_ += uncompressedSize;
 
       auto compressAndWrite = [uncompressedSize, words = std::move(wordBuffer_),
-                               this, idx = queueIndex_++]() {
+                               this, idx = queueIndex_++,
+                               isExternalBuffer =
+                                   std::move(isExternalBuffer_)]() mutable {
         auto bulkResult = CompressionWrapper::compressAll(words);
         writeQueue_.push(std::pair{
-            idx,
-            [uncompressedSize, bulkResult = std::move(bulkResult), this]() {
+            idx, [uncompressedSize, bulkResult = std::move(bulkResult), this,
+                  isExternalBuffer = std::move(isExternalBuffer)]() {
               auto& [buffer, views, decoder] = bulkResult;
               auto compressedSize = getSize(views);
               compressedSize_ += compressedSize;
               ++numBlocks_;
               numBlocksLargerWhenCompressed_ +=
                   static_cast<size_t>(compressedSize > uncompressedSize);
+              size_t i = 0;
               for (auto& word : views) {
-                underlyingWriter_(word);
+                if constexpr (requires() { underlyingWriter_(word, false); }) {
+                  underlyingWriter_(word, isExternalBuffer.at(i));
+                  ++i;
+                } else {
+                  underlyingWriter_(word);
+                }
               }
               decoders_.emplace_back(decoder);
             }});
       };
       compressQueue_.push(std::move(compressAndWrite));
       wordBuffer_.clear();
+      isExternalBuffer_.clear();
     }
   };
   using WordWriter = DiskWriterFromUncompressedWords;
@@ -267,7 +278,13 @@ class CompressedVocabulary {
   // Decompress the word that `it` points to. `it` is an iterator into the
   // underlying vocabulary.
   auto decompressFromIterator(auto it) const {
-    auto idx = it - underlyingVocabulary_.begin();
+    auto idx = [&]() {
+      if constexpr (requires() { it - underlyingVocabulary_.begin(); }) {
+        return it - underlyingVocabulary_.begin();
+      } else {
+        return underlyingVocabulary_.iteratorToIndex(it);
+      }
+    }();
     return compressionWrapper_.decompress(toStringView(*it),
                                           getDecoderIdx(idx));
   };
@@ -286,9 +303,19 @@ class CompressedVocabulary {
       return toStringView(el.value());
     } else {
       // WordAndIndex
-      return el._word.value();
+      return el.word_.value();
     }
   }
-};
 
-#endif  // QLEVER_COMPRESSEDVOCABULARY_H
+  // Convert a `WordAndIndex` from the underlying vocabulary by decompressing
+  // the word.
+  WordAndIndex convertWordAndIndexFromUnderlyingVocab(
+      const WordAndIndex& wordAndIndex) const {
+    if (wordAndIndex.isEnd()) {
+      return wordAndIndex;
+    }
+    auto decompressedWord = compressionWrapper_.decompress(
+        wordAndIndex.word(), getDecoderIdx(wordAndIndex.index()));
+    return {std::move(decompressedWord), wordAndIndex.index()};
+  }
+};

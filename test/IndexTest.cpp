@@ -454,6 +454,9 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
+  auto literals = std::pair{firstLiteral, increment(lastLiteral)};
+  // Nothing in the external vocabulary for this test.
+  //
 
   auto specialIds = qlever::getBoundsForSpecialIds();
   {
@@ -467,8 +470,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, x, x}));
     EXPECT_THAT(ranges,
                 UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds, internalEntitiesExternalVocab,
-                                     taggedPredicatesExternalVocab));
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::PSO);
@@ -481,8 +483,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, x, x}));
     EXPECT_THAT(ranges,
                 UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds, internalEntitiesExternalVocab,
-                                     taggedPredicatesExternalVocab));
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SOP);
@@ -490,9 +491,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
     EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literalsInternalVocab,
-                                     specialIds, internalEntitiesExternalVocab,
-                                     literalsExternalVocab));
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SPO);
@@ -500,17 +499,14 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
     EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literalsInternalVocab,
-                                     specialIds, internalEntitiesExternalVocab,
-                                     literalsExternalVocab));
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OSP);
     ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds,
-                                             internalEntitiesExternalVocab));
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OPS);
@@ -519,8 +515,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, label, x}));
     auto hasPattern = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
     ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds,
-                                             internalEntitiesExternalVocab));
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
 }
 
