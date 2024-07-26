@@ -167,9 +167,6 @@ inline const auto compareIdsOrStrings =
         const EvaluationContext* ctx) -> valueIdComparators::ComparisonResult {
   if constexpr (ad_utility::isSimilar<LocalVocabEntry, T> &&
                 ad_utility::isSimilar<LocalVocabEntry, U>) {
-    // TODO<joka921> integrate comparison via ICU and proper handling for
-    // IRIs/ Literals/etc.
-    // TODO<joka921> This is now the place to fix it....
     return valueIdComparators::fromBool(applyComparison<Comp>(a, b));
   } else {
     auto x = makeValueId(a, ctx);

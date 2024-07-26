@@ -424,11 +424,6 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
 
-  auto literalsInternalVocabLower = index.getVocab().lower_bound("\"");
-  auto literalsInternalVocabUpper = index.getVocab().lower_bound("\"zzzz");
-  auto literalsInternalVocab =
-      std::pair{Id::makeFromVocabIndex(literalsInternalVocabLower),
-                Id::makeFromVocabIndex(literalsInternalVocabUpper)};
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;

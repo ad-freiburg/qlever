@@ -8,20 +8,7 @@
 
 #include "global/VocabIndex.h"
 #include "parser/LiteralOrIri.h"
-
-// TODO<joka921> Move to util library
-template <typename T>
-class CopyableAtomic : public std::atomic<T> {
-  using Base = std::atomic<T>;
-
- public:
-  using Base::Base;
-  CopyableAtomic(const CopyableAtomic& rhs) : Base{rhs.load()} {}
-  CopyableAtomic& operator=(const CopyableAtomic& rhs) {
-    static_cast<Base&>(*this) = rhs.load();
-    return *this;
-  }
-};
+#include "util/CopyableSynchronization.h"
 
 // This is the type we use to store literals and IRIs in the `LocalVocab`.
 // It consists of a `LiteralOrIri` and a cache to store the position, where
@@ -41,9 +28,9 @@ class alignas(16) LocalVocabEntry
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
   // a bit of resources. We however don't consider this case to be likely.
-  mutable CopyableAtomic<VocabIndex> lowerBoundInVocab_;
-  mutable CopyableAtomic<VocabIndex> upperBoundInVocab_;
-  mutable CopyableAtomic<bool> positionInVocabKnown_ = false;
+  mutable ad_utility::CopyableAtomic<VocabIndex> lowerBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<VocabIndex> upperBoundInVocab_;
+  mutable ad_utility::CopyableAtomic<bool> positionInVocabKnown_ = false;
 
  public:
   // Inherit the constructors from `LiteralOrIri`
