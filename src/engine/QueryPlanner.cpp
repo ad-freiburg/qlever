@@ -875,8 +875,8 @@ ParsedQuery::GraphPattern QueryPlanner::uniteGraphPatterns(
 
 // _____________________________________________________________________________
 Variable QueryPlanner::generateUniqueVarName() {
-  return Variable{"?_qlever_internal_variable_query_planner_" +
-                  std::to_string(_internalVarCount++)};
+  return Variable{absl::StrCat(INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX,
+                               _internalVarCount++)};
 }
 
 // _____________________________________________________________________________

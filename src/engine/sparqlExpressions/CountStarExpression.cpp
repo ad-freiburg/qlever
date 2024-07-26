@@ -36,11 +36,17 @@ class CountStarExpression : public SparqlExpression {
     // We only need to copy columns that are actually visible. Columns that are
     // hidden, e.g. because they weren't selectedd in a subquery shouldn't be
     // part of the DISTINCT computation.
-    table.setNumColumns(ctx->_variableToColumnMap.size());
+
+    auto varToColNoInternalVariables =
+        ctx->_variableToColumnMap |
+        std::views::filter([](const auto& varAndIdx) {
+          return !varAndIdx.first.name().starts_with(INTERNAL_VARIABLE_PREFIX);
+        });
+    table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
     table.resize(ctx->size());
     size_t targetIdx = 0;
     for (const auto& [sourceIdx, _] :
-         ctx->_variableToColumnMap | std::views::values) {
+         varToColNoInternalVariables | std::views::values) {
       const auto& sourceColumn = ctx->_inputTable.getColumn(sourceIdx);
       std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
                         sourceColumn.begin() + ctx->_endIndex,

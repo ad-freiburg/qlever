@@ -105,12 +105,22 @@ TEST(AggregateExpression, count) {
 // ______________________________________________________________________________
 TEST(AggregateExpression, CountStar) {
   auto t = TestContext{};
+  // A matcher that first clears the cache and then checks that the result of
+  // evaluating a `SparqlExpression::Ptr` yields the single integer ID that
+  // stores `i`.
+  auto matcher = [&](int64_t i) {
+    auto evaluate = [&](const SparqlExpression::Ptr& expr) {
+      return expr->evaluate(&t.context);
+    };
+    using namespace ::testing;
+    t.qec->getQueryTreeCache().clearAll();
+    return ResultOf(evaluate, VariantWith<Id>(Eq(Id::makeFromInt(i))));
+  };
+
   auto totalSize = t.table.size();
   using namespace sparqlExpression;
   auto m = makeCountStarExpression(false);
-  EXPECT_THAT(
-      m->evaluate(&t.context),
-      ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));
+  EXPECT_THAT(m, matcher(totalSize));
 
   // Add some duplicates.
   t.table.push_back(t.table.at(0));
@@ -120,16 +130,12 @@ TEST(AggregateExpression, CountStar) {
 
   t.context._endIndex += 3;
 
-  t.qec->getQueryTreeCache().clearAll();
   // A COUNT * has now a size which is larger by 3, but a COUNT DISTINCT * still
   // has the same size.
-  EXPECT_THAT(m->evaluate(&t.context), ::testing::VariantWith<Id>(::testing::Eq(
-                                           Id::makeFromInt(totalSize + 3))));
-
+  EXPECT_THAT(m, matcher(totalSize + 3));
   // We have added two duplicates, and one new distinct row
   m = makeCountStarExpression(true);
-  EXPECT_THAT(m->evaluate(&t.context), ::testing::VariantWith<Id>(::testing::Eq(
-                                           Id::makeFromInt(totalSize + 1))));
+  EXPECT_THAT(m, matcher(totalSize + 1));
 
   // If we modify the `varToColMap` such that it doesn't contain our unique
   // value in column 0, then the number of distinct entries goes back to where
@@ -139,10 +145,15 @@ TEST(AggregateExpression, CountStar) {
 
   t.varToColMap[Variable{"?x"}] = {
       1, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
+  EXPECT_THAT(m, matcher(totalSize));
+
+  // This variable is internal, so it doesn't count towards the `COUNT(DISTINCT
+  // *)` and doesn't change the result.
+  t.varToColMap[Variable{
+      absl::StrCat(INTERNAL_VARIABLE_PREFIX, "someInternalVar")}] = {
+      0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
   t.qec->getQueryTreeCache().clearAll();
-  EXPECT_THAT(
-      m->evaluate(&t.context),
-      ::testing::VariantWith<Id>(::testing::Eq(Id::makeFromInt(totalSize))));
+  EXPECT_THAT(m, matcher(totalSize));
 }
 
 // ______________________________________________________________________________

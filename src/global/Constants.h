@@ -69,6 +69,9 @@ static const std::string INTERNAL_VARIABLE_PREFIX =
 constexpr std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
     "?_QLever_internal_variable_bn_";
 
+constexpr std::string_view INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX =
+    "?_QLever_internal_variable_qp_";
+
 static constexpr std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
