@@ -457,7 +457,7 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
   };
   // TODO<joka921> Make this work for the WordIndex also.
   auto isString = [](Datatype type) {
-    return type == Datatype::VocabIndex || type == Datatype::LocalVocabIndex;
+    return ad_utility::contains(ValueId::stringTypes_, type);
   };
   auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
   // Note: Undefined values cannot be compared to other undefined values.

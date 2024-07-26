@@ -6,9 +6,8 @@
 
 #include "index/IndexImpl.h"
 
-// TODO<joka921> Consider moving the cheap case (if precomputed) into the
-// header.
-auto LocalVocabEntry::positionInVocab() const -> PositionInVocab {
+// ___________________________________________________________________________
+auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
   // Immediately return if we have previously computed and cached the position.
   if (positionInVocabKnown_.load(std::memory_order_acquire)) {
     return {lowerBoundInVocab_.load(std::memory_order_relaxed),

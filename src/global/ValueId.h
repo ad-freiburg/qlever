@@ -2,15 +2,13 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VALUEID_H
-#define QLEVER_VALUEID_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
 #include <bit>
 #include <cstdint>
 #include <functional>
-#include <iostream>
 #include <limits>
 
 #include "global/IndexTypes.h"
@@ -89,14 +87,15 @@ class ValueId {
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
-  // These types store strings. When sorting IDs, then these types are still
-  // interleaved (meaning that there is a consecutive range of IDs that contains
-  // VocabIndex and LocalVocabIndex, but those two datatypes do not necessarily
-  // form contiguous ranges).
+  // All types that store strings. Together, the IDs of all the items of these
+  // types form a consecutive range of IDs when sorted. Within this range, the
+  // IDs are ordered by their string values, not by their IDs (and hence also
+  // not by their types).
   static constexpr std::array<Datatype, 2> stringTypes_{
       Datatype::VocabIndex, Datatype::LocalVocabIndex};
-  // Assert, that the `stringTypes_` are directly adjacent, this is required
-  // to make the comparison of IDs in `ValueIdComparators.h` work.
+
+  // Assert that the types in `stringTypes_` are directly adjacent. This is
+  // required to make the comparison of IDs in `ValueIdComparators.h` work.
   static constexpr Datatype maxStringType_ = std::ranges::max(stringTypes_);
   static constexpr Datatype minStringType_ = std::ranges::min(stringTypes_);
   static_assert(static_cast<size_t>(maxStringType_) -
@@ -111,9 +110,9 @@ class ValueId {
     std::string errorMessage_;
 
    public:
-    IndexTooLargeException(T tooBigValue,
-                           ad_utility::source_location s =
-                               ad_utility::source_location::current()) {
+    explicit IndexTooLargeException(
+        T tooBigValue, ad_utility::source_location s =
+                           ad_utility::source_location::current()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
@@ -172,6 +171,10 @@ class ValueId {
                                                     getLocalVocabIndex());
       return 0 <=> inverseOrder;
     }
+
+    // One of the types is `LocalVocab`, and the other one is a non-string type
+    // like `Integer` or `Undefined. Then the comparison by bits automatically
+    // compares by the datatype.
     return _bits <=> other._bits;
   }
 
@@ -411,5 +414,3 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
-
-#endif  // QLEVER_VALUEID_H

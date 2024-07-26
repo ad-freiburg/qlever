@@ -14,7 +14,7 @@
 // It consists of a `LiteralOrIri` and a cache to store the position, where
 // the entry would be in the global vocabulary of the Index. This position is
 // used for efficient comparisons between entries in the local and global
-// vocabulary because we only have to lookup the position once per
+// vocabulary because we only have to look up the position once per
 // `LocalVocabEntry`, and all subsequent comparisons are cheap.
 class alignas(16) LocalVocabEntry
     : public ad_utility::triple_component::LiteralOrIri {
@@ -23,7 +23,7 @@ class alignas(16) LocalVocabEntry
 
   // The cache for the position in the vocabulary. As usual, the `lowerBound` is
   // inclusive, the `upperBound` is not, so if `lowerBound == upperBound`, then
-  // the entry is not part of the globalVocabulary, an `lowerBound` points to
+  // the entry is not part of the globalVocabulary, and `lowerBound` points to
   // the first *larger* word in the vocabulary. Note: we store the cache as
   // three separate atomics to avoid mutexes. The downside is, that in parallel
   // code multiple threads might look up the position concurrently, which wastes
@@ -44,14 +44,22 @@ class alignas(16) LocalVocabEntry
   // Return the position in the vocabulary. If it is not already cached, then
   // the call to `positionInVocab()` first computes the position and then
   // caches it.
-  // Note:: We use `lower` and `upperBound` because depending on the Local
+  // Note:: We use `lowerBound` and `upperBound` because depending on the Local
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   struct PositionInVocab {
     VocabIndex lowerBound_;
     VocabIndex upperBound_;
   };
-  PositionInVocab positionInVocab() const;
+  PositionInVocab positionInVocab() const {
+    // Immediately return if we have previously computed and cached the
+    // position.
+    if (positionInVocabKnown_.load(std::memory_order_acquire)) {
+      return {lowerBoundInVocab_.load(std::memory_order_relaxed),
+              upperBoundInVocab_.load(std::memory_order_relaxed)};
+    }
+    return positionInVocabExpensiveCase();
+  }
 
   // It suffices to hash the base class `LiteralOrIri` as the position in the
   // vocab is redundant for those purposes.
@@ -67,4 +75,8 @@ class alignas(16) LocalVocabEntry
   auto operator<=>(const LocalVocabEntry& rhs) const {
     return static_cast<const Base&>(*this) <=> static_cast<const Base&>(rhs);
   }
+
+ private:
+  // The expensive case of looking up the position in vocab.
+  PositionInVocab positionInVocabExpensiveCase() const;
 };

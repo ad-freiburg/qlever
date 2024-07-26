@@ -4,12 +4,14 @@
 
 #pragma once
 
-#include "./TypedIndex.h"
-#include "./VocabIndex.h"
 #include "engine/LocalVocabEntry.h"
+#include "global/TypedIndex.h"
+#include "global/VocabIndex.h"
 
 // Typedefs for several kinds of typed indices that are used across QLever.
 
+// Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
+// a cyclic dependency (it is needed by `LocalVocabEntry.h`.
 using LocalVocabIndex = const LocalVocabEntry*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;

@@ -7,7 +7,6 @@
 #include "absl/strings/str_cat.h"
 #include "global/Id.h"
 #include "global/ValueId.h"
-#include "index/IndexImpl.h"
 
 // _____________________________________________________________________________
 LocalVocab LocalVocab::clone() const {
