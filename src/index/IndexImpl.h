@@ -122,7 +122,6 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
-  size_t totalVocabularySize_ = 0;
   Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
@@ -248,11 +247,11 @@ class IndexImpl {
   size_t getCardinality(const TripleComponent& comp,
                         Permutation::Enum permutation) const;
 
-  // TODO<joka921> Once we have an overview over the folding this logic should
-  // probably not be in the index class.
-  std::optional<string> idToOptionalString(VocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string indexToString(VocabIndex id) const;
 
-  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string_view indexToString(WordVocabIndex id) const;
 
  private:
   // ___________________________________________________________________________

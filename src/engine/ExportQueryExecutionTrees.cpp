@@ -190,9 +190,8 @@ ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
     case Datatype::LocalVocabIndex:
       return localVocab.getWord(id.getLocalVocabIndex());
     case Datatype::VocabIndex: {
-      auto entity = index.idToOptionalString(id.getVocabIndex());
-      AD_CONTRACT_CHECK(entity.has_value());
-      return LiteralOrIri::fromStringRepresentation(entity.value());
+      auto entity = index.indexToString(id.getVocabIndex());
+      return LiteralOrIri::fromStringRepresentation(entity);
     }
     default:
       AD_FAIL();
@@ -232,10 +231,8 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
   };
   switch (id.getDatatype()) {
     case Datatype::WordVocabIndex: {
-      std::optional<string> entity =
-          index.idToOptionalString(id.getWordVocabIndex());
-      AD_CONTRACT_CHECK(entity.has_value());
-      return std::pair{escapeFunction(std::move(entity.value())), nullptr};
+      std::string_view entity = index.indexToString(id.getWordVocabIndex());
+      return std::pair{escapeFunction(std::string{entity}), nullptr};
     }
     case VocabIndex:
     case LocalVocabIndex:

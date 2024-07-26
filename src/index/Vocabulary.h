@@ -26,6 +26,7 @@
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/UnicodeVocabulary.h"
 #include "index/vocabulary/VocabularyInMemory.h"
+#include "index/vocabulary/VocabularyInternalExternal.h"
 #include "util/Exception.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
@@ -76,7 +77,7 @@ class Vocabulary {
   // external vocabulary. It would be easy to add more ranges.
   struct PrefixRanges {
    public:
-    using Ranges = std::array<std::pair<IndexT, IndexT>, 2>;
+    using Ranges = std::array<std::pair<IndexT, IndexT>, 1>;
 
    private:
     Ranges ranges_{};
@@ -113,17 +114,14 @@ class Vocabulary {
   // externalized.
   vector<std::string> externalizedPrefixes_;
 
-  using InternalUnderlyingVocabulary =
+  using UnderlyingVocabulary =
       std::conditional_t<isCompressed_,
-                         CompressedVocabulary<VocabularyInMemory>,
+                         CompressedVocabulary<VocabularyInternalExternal>,
                          VocabularyInMemory>;
-  using InternalVocabulary =
-      UnicodeVocabulary<InternalUnderlyingVocabulary, ComparatorType>;
-  InternalVocabulary internalVocabulary_;
+  using VocabularyWithUnicodeComparator =
+      UnicodeVocabulary<UnderlyingVocabulary, ComparatorType>;
 
-  using ExternalVocabulary =
-      UnicodeVocabulary<CompressedVocabulary<VocabularyOnDisk>, ComparatorType>;
-  ExternalVocabulary externalVocabulary_;
+  VocabularyWithUnicodeComparator vocabulary_;
 
   // ID ranges for IRIs and literals. Used for the efficient computation of the
   // `isIRI` and `isLiteral` functions.
@@ -144,30 +142,17 @@ class Vocabulary {
   virtual ~Vocabulary() = default;
 
   //! Read the vocabulary from file.
-  void readFromFile(const string& fileName, const string& extLitsFileName = "");
+  void readFromFile(const string& fileName);
 
-  //! Get the word with the given idx or an empty optional if the
-  //! word is not in the vocabulary.
-  //! Only enabled when uncompressed which also means no externalization
-  template <typename U = StringType, typename = enable_if_uncompressed<U>>
-  std::optional<std::string_view> operator[](IndexType idx) const;
-
-  //! Get the word with the given idx or an empty optional if the
-  //! word is not in the vocabulary. Returns an lvalue because compressed or
-  //! externalized words don't allow references
-  template <typename U = StringType>
-  [[nodiscard]] std::optional<string> indexToOptionalString(
-      IndexType idx) const;
-
-  //! Get the word with the given idx.
-  //! lvalue for compressedString and const& for string-based vocabulary
-  AccessReturnType_t<StringType> at(IndexType idx) const;
+  // Get the word with the given `idx`. Throw if the `idx` is not contained
+  // in the vocabulary.
+  AccessReturnType_t<StringType> operator[](IndexType idx) const;
 
   // AccessReturnType_t<StringType> at(IndexType idx) const { return
   // operator[](id); }
 
   //! Get the number of words in the vocabulary.
-  [[nodiscard]] size_t size() const { return internalVocabulary_.size(); }
+  [[nodiscard]] size_t size() const { return vocabulary_.size(); }
 
   //! Get an Id from the vocabulary for some "normal" word.
   //! Return value signals if something was found at all.
@@ -229,7 +214,7 @@ class Vocabulary {
 
   // _____________________________________________________________________
   const ComparatorType& getCaseComparator() const {
-    return internalVocabulary_.getComparator();
+    return vocabulary_.getComparator();
   }
 
   // Get prefix ranges for the given prefix.
@@ -246,33 +231,13 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word, const SortLevel level) const;
 
-  const ExternalVocabulary& getExternalVocab() const {
-    return externalVocabulary_;
-  }
-
-  const InternalVocabulary& getInternalVocab() const {
-    return internalVocabulary_;
-  }
-
-  // Get a writer for the external vocab that has an `operator()` method to
-  // which the single words have to be pushed one by one to add words to the
+  // Get a writer for the vocab that has an `operator()` method to
+  // which the single words + the information whether they shall be cached in
+  // the internal vocabulary  have to be pushed one by one to add words to the
   // vocabulary.
-  CompressedVocabulary<VocabularyOnDisk>::WordWriter
-  makeWordWriterForExternalVocabulary(const std::string& filename) const {
-    return externalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
-        filename);
-  }
-
-  // Same as `makeWordWriterForExternalVocabulary`, but for the internal
-  // vocabulary.
-  // TODO<joka921> Fix the unicode inconsistencies in Wikidata, and then let the
-  // UnicodeVocabulary hand out the writer including assertions that the
-  // vocabulary is sorted. Then we don't need the call to
-  // `getUnderlyingVocabulary()` here.
-  InternalUnderlyingVocabulary::WordWriter makeWordWriterForInternalVocabulary(
+  UnderlyingVocabulary::WordWriter makeWordWriter(
       const std::string& filename) const {
-    return internalVocabulary_.getUnderlyingVocabulary().makeDiskWriter(
-        filename);
+    return vocabulary_.getUnderlyingVocabulary().makeDiskWriter(filename);
   }
 };
 
@@ -280,18 +245,3 @@ using RdfsVocabulary =
     Vocabulary<CompressedString, TripleComponentComparator, VocabIndex>;
 using TextVocabulary =
     Vocabulary<std::string, SimpleStringComparator, WordVocabIndex>;
-
-// _______________________________________________________________
-template <typename S, typename C, typename I>
-template <typename>
-std::optional<string> Vocabulary<S, C, I>::indexToOptionalString(
-    IndexType idx) const {
-  if (idx.get() < internalVocabulary_.size()) {
-    return std::optional<string>(internalVocabulary_[idx.get()]);
-  } else {
-    // this word must be externalized
-    idx.get() -= internalVocabulary_.size();
-    AD_CONTRACT_CHECK(idx.get() < externalVocabulary_.size());
-    return externalVocabulary_[idx.get()];
-  }
-}
