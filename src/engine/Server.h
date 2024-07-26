@@ -233,4 +233,10 @@ class Server {
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
       const QueryExecutionTree& qet,
       SharedCancellationHandle cancellationHandle) const;
+
+  nlohmann::json executeUpdateQuery(const ParsedQuery& query,
+                                    const QueryExecutionTree& qet,
+                                    const ad_utility::Timer& requestTimer,
+                                    SharedCancellationHandle cancellationHandle,
+                                    Index& index);
 };

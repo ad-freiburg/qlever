@@ -24,6 +24,7 @@ NumericValue NumericValueGetter::operator()(
       // functions.
       return static_cast<int64_t>(id.getBool());
     case Datatype::Undefined:
+    case Datatype::Sentinel:
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
@@ -49,6 +50,7 @@ auto EffectiveBooleanValueGetter::operator()(
     case Datatype::Bool:
       return id.getBool() ? True : False;
     case Datatype::Undefined:
+    case Datatype::Sentinel:
     case Datatype::BlankNodeIndex:
       return Undef;
     case Datatype::VocabIndex: {
@@ -142,6 +144,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     ValueId id, [[maybe_unused]] const EvaluationContext* context) const {
   switch (id.getDatatype()) {
     case Datatype::Undefined:
+    case Datatype::Sentinel:
       return std::monostate{};
     case Datatype::Int:
       return id.getInt();
@@ -196,6 +199,7 @@ OptIri DatatypeValueGetter::operator()(ValueId id,
                          context->_qec.getIndex(), id, context->_localVocab),
                      context);
     case Undefined:
+    case Sentinel:
     case BlankNodeIndex:
     case TextRecordIndex:
     case WordVocabIndex:
@@ -256,6 +260,7 @@ T getValue(ValueId id, const sparqlExpression::EvaluationContext* context,
     case Double:
     case Date:
     case Undefined:
+    case Sentinel:
       if constexpr (std::is_same_v<T, sparqlExpression::IdOrLiteralOrIri>) {
         return Id::makeUndefined();
       } else {

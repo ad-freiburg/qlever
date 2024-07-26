@@ -12,6 +12,8 @@
 #include "global/Id.h"
 #include "index/CompressedRelation.h"
 
+// TODO<qup42> some matching comparison operators between
+// idtriple/permutedtriple would be nice
 template <size_t N = 0>
 struct IdTriple {
   // The three IDs that define the triple.

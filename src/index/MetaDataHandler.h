@@ -40,6 +40,7 @@ class MetaDataWrapperDense {
     using BaseIterator::BaseIterator;
     AddGetIdIterator(BaseIterator base) : BaseIterator{base} {}
     [[nodiscard]] Id getId() const { return getIdFromElement(*(*this)); }
+    [[nodiscard]] const auto& getMetaData() const { return *(*this); }
     static Id getIdFromElement(const typename BaseIterator::value_type& v) {
       return v.col0Id_;
     }
@@ -126,7 +127,8 @@ class MetaDataWrapperDense {
   // ___________________________________________________________
   std::string getFilename() const { return _vec.getFilename(); }
 
- private:
+  // NOTE: The following used to be private (they were only used as subroutines
+  // in the above), but we now need them in `LocatedTriples::locateTriple`.
   ConstIterator lower_bound(Id id) const {
     auto cmp = [](const auto& metaData, Id id) {
       return metaData.col0Id_ < id;

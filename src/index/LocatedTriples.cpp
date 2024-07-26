@@ -18,6 +18,8 @@ std::vector<LocatedTriple> LocatedTriple::locateTriplesInPermutation(
     std::span<const CompressedBlockMetadata> blockMetadata,
     const std::array<size_t, 3>& keyOrder, bool shouldExist,
     ad_utility::SharedCancellationHandle cancellationHandle) {
+  // TODO<qup42> using IdTable as an input here would make it easy to have the
+  // input already be permuted.
   std::vector<LocatedTriple> out;
   out.reserve(triples.size());
   ad_utility::chunkedForLoop<10'000>(

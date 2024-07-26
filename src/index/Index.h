@@ -22,6 +22,7 @@
 class IdTable;
 class TextBlockMetaData;
 class IndexImpl;
+class DeltaTriples;
 
 class Index {
  private:
@@ -261,4 +262,8 @@ class Index {
   // requires including the rather expensive `IndexImpl.h` header
   IndexImpl& getImpl() { return *pimpl_; }
   [[nodiscard]] const IndexImpl& getImpl() const { return *pimpl_; }
+
+  // Get access to the delta triples.
+  [[nodiscard]] DeltaTriples& deltaTriples();
+  [[nodiscard]] const DeltaTriples& deltaTriples() const;
 };

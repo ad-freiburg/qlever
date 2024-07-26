@@ -13,7 +13,10 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/QueryPlanner.h"
 #include "global/RuntimeParameters.h"
+#include "index/IndexImpl.h"
+#include "index/LocatedTriples.h"
 #include "util/AsioHelpers.h"
+#include "util/CancellationHandle.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/ParseableDuration.h"
@@ -313,6 +316,10 @@ Awaitable<void> Server::process(
     logCommand(cmd, "clear cache completely (including unpinned elements)");
     cache_.clearAll();
     response = createJsonResponse(composeCacheStatsJson(), request);
+  } else if (auto cmd = checkParameter("cmd", "clear-updates")) {
+    logCommand(cmd, "clear updates");
+    index_.deltaTriples().clear();
+    response = createJsonResponse(nlohmann::json{}, request);
   } else if (auto cmd = checkParameter("cmd", "get-settings")) {
     logCommand(cmd, "get server settings");
     response = createJsonResponse(RuntimeParameters().toMap(), request);
@@ -577,6 +584,144 @@ Awaitable<void> Server::sendStreamableResponse(
   }
 }
 
+// _____________________________________________________________________________
+// TODO: move somewhere else?
+nlohmann::json Server::executeUpdateQuery(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    SharedCancellationHandle cancellationHandle, Index& index) {
+  AD_CONTRACT_CHECK(query.hasUpdateClause());
+  parsedQuery::UpdateClause update = query.updateClause();
+
+  ad_utility::Timer step{ad_utility::Timer::Started};
+
+  std::shared_ptr<const Result> res = qet.getResult();
+  auto timeQueryBodyExecution = step.msecs();
+  step.start();
+
+  auto& vocab = qet.getQec()->getIndex().getVocab();
+  LocalVocab& localVocab = index.deltaTriples().localVocab();
+  using IdOrVariable = std::variant<Id, Variable>;
+
+  auto transformSparqlTripleComponent =
+      [&vocab, &localVocab](TripleComponent component) -> IdOrVariable {
+    if (component.isVariable()) {
+      return std::move(component.getVariable());
+    } else {
+      return std::move(component).toValueId(vocab, localVocab);
+    }
+  };
+  auto transformSparqlTripleSimple =
+      [&transformSparqlTripleComponent](SparqlTripleSimple triple) {
+        return std::array<IdOrVariable, 3>{
+            transformSparqlTripleComponent(std::move(triple.s_)),
+            transformSparqlTripleComponent(std::move(triple.p_)),
+            transformSparqlTripleComponent(std::move(triple.o_))};
+      };
+  std::vector<std::array<IdOrVariable, 3>> toInsertTemplates =
+      ad_utility::transform(std::move(update.toInsert_),
+                            transformSparqlTripleSimple);
+  std::vector<std::array<IdOrVariable, 3>> toDeleteTemplates =
+      ad_utility::transform(std::move(update.toDelete_),
+                            transformSparqlTripleSimple);
+  auto timeTemplatePrepration = step.msecs();
+  step.start();
+
+  auto resolveVariable = [](const ConstructQueryExportContext& context,
+                            IdOrVariable idOrVar) -> std::optional<Id> {
+    if (std::holds_alternative<Variable>(idOrVar)) {
+      auto var = std::get<Variable>(std::move(idOrVar));
+      if (!context._variableColumns.contains(var)) {
+        return std::nullopt;
+      } else {
+        return context._res.idTable().operator()(
+            context._row, context._variableColumns.at(var).columnIndex_);
+      }
+    } else if (std::holds_alternative<Id>(idOrVar)) {
+      return std::get<Id>(idOrVar);
+    } else {
+      AD_FAIL();
+    }
+  };
+
+  std::vector<IdTriple<0>> toInsert;
+  std::vector<IdTriple<0>> toDelete;
+  toInsert.reserve(res->idTable().size() * toInsertTemplates.size());
+  toDelete.reserve(res->idTable().size() * toDeleteTemplates.size());
+  // Result size is size(query result) x num template rows
+  // TODO: use ExportQueryExecutionTrees::getRowIndices as iterator
+  for (size_t i : std::views::iota((size_t)0, res->idTable().size())) {
+    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
+                                        qet.getQec()->getIndex()};
+    for (const auto& [s, p, o] : toInsertTemplates) {
+      auto subject = resolveVariable(context, s);
+      auto predicate = resolveVariable(context, p);
+      auto object = resolveVariable(context, o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toInsert.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
+      cancellationHandle->throwIfCancelled();
+    }
+
+    for (const auto& [s, p, o] : toDeleteTemplates) {
+      auto subject = resolveVariable(context, s);
+      auto predicate = resolveVariable(context, p);
+      auto object = resolveVariable(context, o);
+      if (!subject.has_value() || !predicate.has_value() ||
+          !object.has_value()) {
+        continue;
+      }
+
+      toDelete.emplace_back(std::array<Id, 3>{
+          subject.value(), predicate.value(), object.value()});
+      cancellationHandle->throwIfCancelled();
+    }
+  }
+
+  auto timeMaterializeUpdateTriples = step.msecs();
+  step.start();
+
+  index.deltaTriples().insertTriples(cancellationHandle, std::move(toInsert));
+  index.deltaTriples().deleteTriples(cancellationHandle, std::move(toDelete));
+  auto timeDeltaTriples = step.msecs();
+  step.start();
+
+  nlohmann::json j;
+  j["query"] = query._originalString;
+  j["status"] = "OK";
+  j["res"] = nlohmann::json::array();
+  j["selected"] = nlohmann::json::array();
+  j["resultsize"] = 0;
+  auto warnings = qet.collectWarnings();
+  warnings.emplace_back("SPARQL 1.1 Update for QLever is highly experimental.");
+  j["warnings"] = warnings;
+
+  j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  runtimeInformation.addLimitOffsetRow(
+      query._limitOffset, std::chrono::milliseconds::zero(), false);
+  runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
+  j["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInformation);
+
+  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
+  j["time"]["queryBody"] =
+      std::to_string(timeQueryBodyExecution.count()) + "ms";
+  j["time"]["computeResult"] = j["time"]["total"];
+  j["time"]["templatePreparation"] =
+      std::to_string(timeTemplatePrepration.count()) + "ms";
+  j["time"]["updateTripleMaterialization"] =
+      std::to_string(timeMaterializeUpdateTriples.count()) + "ms";
+  j["time"]["deltaTriples"] = std::to_string(timeDeltaTriples.count()) + "ms";
+
+  return j;
+}
+
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
     const ParamValueMap& params, ad_utility::Timer& requestTimer,
@@ -711,6 +856,43 @@ boost::asio::awaitable<void> Server::processQuery(
     // then the exporter can safely apply it during export.
     plannedQuery.value().parsedQuery_._limitOffset._offset -=
         qet.getRootOperation()->getLimit()._offset;
+
+    if (plannedQuery.value().parsedQuery_.hasUpdateClause()) {
+      nlohmann::basic_json resp = Server::executeUpdateQuery(
+          plannedQuery.value().parsedQuery_, qet, requestTimer,
+          std::move(cancellationHandle), index_);
+      switch (mediaType.value()) {
+        using enum MediaType;
+        case csv:
+        case tsv:
+        case octetStream:
+        case sparqlXml:
+        case turtle: {
+          auto response = ad_utility::httpUtils::createOkResponse(
+              "id", request, mediaType.value());
+          try {
+            co_await send(std::move(response));
+            co_return;
+          } catch (const boost::system::system_error& e) {
+            if (e.code().value() == EPIPE) {
+              co_return;
+            }
+            LOG(ERROR) << "Unexpected error while sending response: "
+                       << e.what() << std::endl;
+          } catch (const std::exception& e) {
+            LOG(ERROR) << e.what() << std::endl;
+          }
+        } break;
+        case qleverJson:
+        case sparqlJson: {
+          co_return co_await sendJson(std::move(resp), responseStatus);
+        } break;
+        default:
+          // This should never happen, because we have carefully restricted the
+          // subset of mediaTypes that can occur here.
+          AD_FAIL();
+      }
+    }
 
     // This actually processes the query and sends the result in the requested
     // format.

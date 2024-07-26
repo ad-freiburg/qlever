@@ -176,8 +176,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     // Scan for all distinct `col0` and check that we get the expected result.
     CompressedRelationReader::ScanSpecification scanSpec{
         metaData[i].col0Id_, std::nullopt, std::nullopt};
-    IdTable table =
-        reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
+    LocatedTriplesPerBlock locatedTriplesPerBlock{};
+    IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
+                                cancellationHandle, locatedTriplesPerBlock);
     const auto& col1And2 = inputs[i].col1And2_;
     checkThatTablesAreEqual(col1And2, table);
     table.clear();
@@ -185,8 +186,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<LimitOffsetClause> limitOffsetClauses{
         {std::nullopt, 5}, {5, 0}, {std::nullopt, 12}, {12, 0}, {7, 5}};
     for (const auto& limitOffset : limitOffsetClauses) {
-      IdTable table = reader.scan(scanSpec, blocks, additionalColumns,
-                                  cancellationHandle, limitOffset);
+      IdTable table =
+          reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle,
+                      locatedTriplesPerBlock, limitOffset);
       auto col1And2 = inputs[i].col1And2_;
       col1And2.resize(limitOffset.upperBound(col1And2.size()));
       col1And2.erase(
@@ -194,8 +196,9 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
           col1And2.begin() + limitOffset.actualOffset(col1And2.size()));
       checkThatTablesAreEqual(col1And2, table);
     }
-    for (const auto& block : reader.lazyScan(
-             scanSpec, blocks, additionalColumns, cancellationHandle)) {
+    for (const auto& block :
+         reader.lazyScan(scanSpec, blocks, additionalColumns,
+                         cancellationHandle, locatedTriplesPerBlock)) {
       table.insertAtEnd(block.begin(), block.end());
     }
     checkThatTablesAreEqual(col1And2, table);
@@ -209,17 +212,18 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     auto scanAndCheck = [&]() {
       CompressedRelationReader::ScanSpecification scanSpec{
           metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
-      auto size = reader.getResultSizeOfScan(scanSpec, blocks);
+      auto size =
+          reader.getResultSizeOfScan(scanSpec, blocks, locatedTriplesPerBlock);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},
-                      cancellationHandle);
+                      cancellationHandle, locatedTriplesPerBlock);
       ASSERT_EQ(tableWidthOne.numColumns(), 1);
       EXPECT_EQ(size, tableWidthOne.numRows());
       checkThatTablesAreEqual(col3, tableWidthOne);
       tableWidthOne.clear();
       for (const auto& block :
            reader.lazyScan(scanSpec, blocks, Permutation::ColumnIndices{},
-                           cancellationHandle)) {
+                           cancellationHandle, locatedTriplesPerBlock)) {
         tableWidthOne.insertAtEnd(block.begin(), block.end());
       }
       checkThatTablesAreEqual(col3, tableWidthOne);
@@ -391,11 +395,11 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
 
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+      1, {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
+      2, {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -403,7 +407,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, 0, blocks, std::nullopt};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -433,15 +437,15 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 }
 TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+      1, {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}};
+      2, {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}};
   CompressedBlockMetadata block4{
-      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}};
+      3, {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}};
   CompressedBlockMetadata block5{
-      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}};
+      4, {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -449,20 +453,20 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {relation.col0Id_, std::nullopt, std::nullopt}, 0, blocks, std::nullopt};
 
   CompressedBlockMetadata blockB1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      0, {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
   CompressedBlockMetadata blockB2{
-      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}};
+      1, {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}};
   CompressedBlockMetadata blockB3{
-      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}};
+      2, {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}};
   CompressedBlockMetadata blockB4{
-      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}};
+      3, {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}};
   CompressedBlockMetadata blockB5{
-      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}};
+      4, {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}};
   CompressedBlockMetadata blockB6{
-      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}};
+      5, {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relationB;
@@ -470,7 +474,7 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
+      {V(47), std::nullopt, std::nullopt}, 0, blocksB, std::nullopt};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
@@ -521,5 +525,66 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
   auto tr = CompressedBlockMetadata::PermutedTriple{V(12), V(13), V(27)};
   std::stringstream str;
   str << tr;
-  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
+  ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27");
+}
+
+TEST(CompressedRelationReader, completeColumnIndices) {
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 2};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 3);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray(originalColumns));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray(originalColumns));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 2, 4, 5};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 3);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4, 5}));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray({0, 1, 2, 3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 1, 4};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 2);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({0, 1, 3}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{0, 5, 6};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 1);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 5, 6}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({0, 3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{1, 4};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 1);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 4}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({1, 3}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{3, 6};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 0);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2, 3, 6}));
+    EXPECT_THAT(filterSubsetColumns, testing::ElementsAreArray({3, 4}));
+  }
+
+  {
+    std::vector<ColumnIndex> originalColumns{};
+    auto [amendedColumns, filterSubsetColumns] =
+        CompressedRelationReader::completeColumnIndices(originalColumns, 0);
+    EXPECT_THAT(amendedColumns, testing::ElementsAreArray({0, 1, 2}));
+    EXPECT_THAT(filterSubsetColumns,
+                testing::ElementsAreArray(originalColumns));
+  }
 }

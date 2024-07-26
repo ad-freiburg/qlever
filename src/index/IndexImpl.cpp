@@ -40,8 +40,10 @@ using namespace ad_utility::memory_literals;
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
-IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator,
+                     std::unique_ptr<DeltaTriples> deltaTriples)
+    : deltaTriples_(std::move(deltaTriples)),
+      allocator_{std::move(allocator)} {};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
@@ -715,14 +717,20 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << totalVocabularySize_ << std::endl;
 
-  pso_.loadFromDisk(onDiskBase_);
-  pos_.loadFromDisk(onDiskBase_);
+  pso_.loadFromDisk(onDiskBase_,
+                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::PSO));
+  pos_.loadFromDisk(onDiskBase_,
+                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::POS));
 
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_);
-    osp_.loadFromDisk(onDiskBase_);
-    spo_.loadFromDisk(onDiskBase_);
-    sop_.loadFromDisk(onDiskBase_);
+    ops_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::OPS));
+    osp_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::OSP));
+    spo_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::SPO));
+    sop_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
+                                       Permutation::SOP));
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"
@@ -1373,10 +1381,12 @@ IdTable IndexImpl::scan(
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
+  std::optional<Id> col0Id =
+      col0String.toValueIdNoAdd(getVocab(), deltaTriples_->localVocab());
+  std::optional<Id> col1Id = col1String.has_value()
+                                 ? col1String.value().get().toValueIdNoAdd(
+                                       getVocab(), deltaTriples_->localVocab())
+                                 : std::nullopt;
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
