@@ -8,6 +8,7 @@
 #include <limits>
 #include <memory>
 
+#include "engine/PathSearch.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/GraphPattern.h"
 #include "parser/TripleComponent.h"
@@ -136,6 +137,43 @@ struct TransPath {
   GraphPattern _childGraphPattern;
 };
 
+class PathSearchException : public std::exception {
+  std::string message_;
+
+ public:
+  PathSearchException(std::string message) : message_(message) {}
+  const char* what() const noexcept override { return message_.data(); }
+};
+
+// The PathQuery object holds intermediate information for the PathSearch.
+// The PathSearchConfiguration requires concrete Ids. The vocabulary from the
+// QueryPlanner is needed to translate the TripleComponents to ValueIds.
+// Also, the members of the PathQuery have defaults and can be set after
+// the object creation, simplifying the parsing process. If a required
+// value has not been set during parsing, the method 'toPathSearchConfiguration'
+// will throw an exception.
+// All the error handling for the PathSearch happens in the PathQuery object.
+// Thus, if a PathSearchConfiguration can be constructed, it is valid.
+struct PathQuery {
+  std::vector<TripleComponent> sources_;
+  std::vector<TripleComponent> targets_;
+  std::optional<Variable> start_;
+  std::optional<Variable> end_;
+  std::optional<Variable> pathColumn_;
+  std::optional<Variable> edgeColumn_;
+  std::vector<Variable> edgeProperties_;
+  PathSearchAlgorithm algorithm_;
+
+  GraphPattern childGraphPattern_;
+
+  void addParameter(const SparqlTriple& triple);
+  void fromBasicPattern(const BasicGraphPattern& pattern);
+  std::variant<Variable, std::vector<Id>> toSearchSide(
+      std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+  PathSearchConfiguration toPathSearchConfiguration(
+      const Index::Vocab& vocab) const;
+};
+
 // A SPARQL Bind construct.
 struct Bind {
   sparqlExpression::SparqlExpressionPimpl _expression;
@@ -152,7 +190,7 @@ struct Bind {
 // class actually becomes `using GraphPatternOperation = std::variant<...>`
 using GraphPatternOperationVariant =
     std::variant<Optional, Union, Subquery, TransPath, Bind, BasicGraphPattern,
-                 Values, Service, Minus, GroupGraphPattern>;
+                 Values, Service, PathQuery, Minus, GroupGraphPattern>;
 struct GraphPatternOperation
     : public GraphPatternOperationVariant,
       public VisitMixin<GraphPatternOperation, GraphPatternOperationVariant> {

@@ -22,6 +22,7 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/GraphPatternOperation.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
@@ -699,8 +700,34 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
   return GraphPatternOperation{parsedQuery::Optional{std::move(pattern)}};
 }
 
+GraphPatternOperation Visitor::visitPathQuery(
+    Parser::ServiceGraphPatternContext* ctx) {
+  auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
+                           const parsedQuery::GraphPatternOperation& op) {
+    if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
+      pathQuery.fromBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+    } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
+      auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
+      pathQuery.childGraphPattern_ = std::move(pattern._child);
+    } else {
+      throw parsedQuery::PathSearchException(
+          "Unsupported subquery in pathSearch."
+          "PathQuery may only consist of triples for configuration"
+          "And a subquery specifying edges.");
+    }
+  };
+
+  parsedQuery::GraphPattern graphPattern = visit(ctx->groupGraphPattern());
+  parsedQuery::PathQuery pathQuery;
+  for (const auto& op : graphPattern._graphPatterns) {
+    parsePathQuery(pathQuery, op);
+  }
+
+  return pathQuery;
+}
+
 // Parsing for the `serviceGraphPattern` rule.
-parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
+GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   // If SILENT is specified, report that we do not support it yet.
   //
   // TODO: Support it, it's not hard. The semantics of SILENT is that if no
@@ -725,6 +752,11 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
   }
   AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
   Iri serviceIri = std::get<Iri>(varOrIri);
+  if (serviceIri.toSparql() ==
+      "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
+    return visitPathQuery(ctx);
+  }
+
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -740,9 +772,9 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.begin(),
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
-  return {std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-          prologueString_,
-          getOriginalInputForContext(ctx->groupGraphPattern())};
+  return parsedQuery::Service{
+      std::move(visibleVariablesServiceQuery), std::move(serviceIri),
+      prologueString_, getOriginalInputForContext(ctx->groupGraphPattern())};
 }
 
 // ____________________________________________________________________________

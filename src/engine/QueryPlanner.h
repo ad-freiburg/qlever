@@ -333,6 +333,10 @@ class QueryPlanner {
       SubtreePlan a, SubtreePlan b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithPathSearch(
+      const SubtreePlan& a, const SubtreePlan& b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
@@ -495,6 +499,7 @@ class QueryPlanner {
     void visitBasicGraphPattern(const parsedQuery::BasicGraphPattern& pattern);
     void visitBind(const parsedQuery::Bind& bind);
     void visitTransitivePath(parsedQuery::TransPath& transitivePath);
+    void visitPathSearch(parsedQuery::PathQuery& config);
     void visitUnion(parsedQuery::Union& un);
     void visitSubquery(parsedQuery::Subquery& subquery);
 
