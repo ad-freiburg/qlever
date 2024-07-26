@@ -48,26 +48,53 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
-// ______________________________________________________________________________
-TEST(AggregateExpression, max) {
-  auto testMaxId = testAggregate<MaxExpression, Id>;
-  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
-  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
+// Test `CountExpression`.
+TEST(AggregateExpression, count) {
+  auto testCountId = testAggregate<CountExpression, Id>;
+  testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
+  testCountId({D(2), D(2), I(2), V(17)}, I(3), true);
+  testCountId({U, I(3), U}, I(1));
+  testCountId({I(3), NaN, NaN}, I(2), true);
+  testCountId({}, I(0));
 
-  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
-  // TODO<joka921> Implement correct comparison on strings
-  testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("äpfel"));
+  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
+  testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
 }
 
-// ______________________________________________________________________________
+// Test `SumExpression`.
+TEST(AggregateExpression, sum) {
+  auto testSumId = testAggregate<SumExpression, Id>;
+  testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
+  testSumId({D(2), D(2), I(2)}, D(4), true);
+  testSumId({I(3), U}, U);
+  testSumId({I(3), NaN}, NaN);
+  testSumId({}, I(0));
+
+  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
+  testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
+}
+
+// Test `AvgExpression`.
+TEST(AggregateExpression, avg) {
+  auto testAvgId = testAggregate<AvgExpression, Id>;
+  testAvgId({I(3), D(0), I(0), I(4), (I(-2))}, D(1));
+  testAvgId({D(2), D(2), I(2)}, D(2), true);
+  testAvgId({I(3), U}, U);
+  testAvgId({I(3), NaN}, NaN);
+  testAvgId({}, D(0));
+
+  auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
+  testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
+}
+
+// Test `MinExpression`.
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
   testMinId({V(7), V(2), V(4)}, V(2));
   testMinId({V(7), U, V(2), V(4)}, U);
   testMinId({I(3), V(0), L(3), (I(-1))}, I(-1));
+  testMinId({}, U);
 
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   // TODO<joka921> Implement correct comparison on strings
@@ -75,28 +102,16 @@ TEST(AggregateExpression, min) {
                 lit("Beta"));
 }
 
-// ______________________________________________________________________________
-TEST(AggregateExpression, sum) {
-  auto testSumId = testAggregate<SumExpression, Id>;
-  testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
-  testSumId({D(2), D(2), I(2)}, D(4), true);
+// Test `MaxExpression`.
+TEST(AggregateExpression, max) {
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
+  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
+  testMaxId({}, U);
 
-  testSumId({I(3), U}, U);
-  testSumId({I(3), NaN}, NaN);
-
-  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
-  testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
-}
-
-// ______________________________________________________________________________
-TEST(AggregateExpression, count) {
-  auto testCountId = testAggregate<CountExpression, Id>;
-  testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
-  testCountId({D(2), D(2), I(2), V(17)}, I(3), true);
-
-  testCountId({U, I(3), U}, I(1));
-  testCountId({I(3), NaN, NaN}, I(2), true);
-
-  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
-  testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
+  // TODO<joka921> Implement correct comparison on strings
+  testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
+                lit("äpfel"));
 }

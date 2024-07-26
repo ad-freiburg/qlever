@@ -238,9 +238,13 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
                         IdTable* dynResult, const IdTable* inTable,
                         LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
-  if (dynInput.empty()) {
+  // For an implicit GROUP BY (`groupByCols.empty()`), we have to produce
+  // a result row even when the input (`dynInput`) is empty. Otherwise, the
+  // result is also empty and we can just return.
+  if (dynInput.empty() && !groupByCols.empty()) {
     return;
   }
+
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
 
@@ -274,8 +278,8 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
   };
 
+  // Handle the implicit GROUP BY, where the entire input is a single group.
   if (groupByCols.empty()) {
-    // The entire input is a single group
     processNextBlock(0, input.size());
     *dynResult = std::move(result).toDynamic();
     return;

@@ -10,8 +10,8 @@ namespace sparqlExpression {
 namespace detail {
 
 // __________________________________________________________________________
-template <typename AggregateOperation, typename FinalOp>
-AggregateExpression<AggregateOperation, FinalOp>::AggregateExpression(
+template <typename AggregateOperation, typename FinalOperation>
+AggregateExpression<AggregateOperation, FinalOperation>::AggregateExpression(
     bool distinct, Ptr&& child, AggregateOperation aggregateOp)
     : _distinct(distinct),
       _child{std::move(child)},
@@ -28,8 +28,9 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 
   return std::visit(
       [this, context](auto&& arg) {
-        return evaluateOnChildOperand(_aggregateOp, FinalOperation{}, context,
-                                      _distinct, AD_FWD(arg));
+        return evaluateOnChildOperand(_aggregateOp, this->resultForEmptyGroup(),
+                                      FinalOperation{}, context, _distinct,
+                                      AD_FWD(arg));
       },
       std::move(childResult));
 }
@@ -69,14 +70,14 @@ AggregateExpression<AggregateOperation, FinalOperation>::getVariableForCount()
   return std::nullopt;
 }
 
-#define INSTANTIATE_AGG_EXP(...)      \
-  template class AggregateExpression< \
-      Operation<2, FunctionAndValueGetters<__VA_ARGS__>>>;
+// Explicit instantiatio for the AVG expression.
+template class AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
+
+// Explicit instantiations for the other aggregate expressions.
+#define INSTANTIATE_AGG_EXP(Function, ValueGetter) \
+  template class AggregateExpression<              \
+      Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
-
-template class AggregateExpression<
-    AGG_OP<decltype(addForSum), NumericValueGetter>, decltype(averageFinalOp)>;
-
 INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
 INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
 INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
