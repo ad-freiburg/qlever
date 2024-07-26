@@ -214,7 +214,8 @@ bool SpatialJoin::knownEmptyResult() {
   // return false if either both children don't have an empty result, only one
   // child is available, which doesn't have a known empty result or neither
   // child is available
-  return false;
+  return (childLeft_ && childLeft_->knownEmptyResult()) ||
+         (childRight_ && childRight_->knownEmptyResult());
 }
 
 // ____________________________________________________________________________
@@ -300,7 +301,7 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
       size_t rescol = 0;
       long long dist = computeDist(resLeft, resRight, rowLeft, rowRight,
                                    leftJoinCol, rightJoinCol);
-      if (maxDist_ == 0 || dist < maxDist_) {
+      if (dist <= maxDist_) {
         result.emplace_back();
         if (addDistToResult_) {
           result.at(resrow, rescol) = ValueId::makeFromInt(dist);

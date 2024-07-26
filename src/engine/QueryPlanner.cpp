@@ -1752,7 +1752,7 @@ auto QueryPlanner::createSpatialJoin(
 
   auto newSpatialJoin = spatialJoin->addChild(otherSubtreePlan._qet, var);
 
-  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(newSpatialJoin);
+  SubtreePlan plan = makeSubtreePlan<SpatialJoin>(std::move(newSpatialJoin));
   mergeSubtreePlanIds(plan, a, b);
   return plan;
 }
