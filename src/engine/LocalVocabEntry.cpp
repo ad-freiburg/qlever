@@ -20,10 +20,8 @@ auto LocalVocabEntry::positionInVocab() const -> PositionInVocab {
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();
   PositionInVocab positionInVocab;
   const auto& vocab = index.getVocab();
-  positionInVocab.lowerBound_ =
-      vocab.lower_bound_external(toStringRepresentation());
-  positionInVocab.upperBound_ =
-      vocab.upper_bound_external(toStringRepresentation());
+  positionInVocab.lowerBound_ = vocab.lower_bound(toStringRepresentation());
+  positionInVocab.upperBound_ = vocab.upper_bound(toStringRepresentation());
   lowerBoundInVocab_.store(positionInVocab.lowerBound_,
                            std::memory_order_relaxed);
   upperBoundInVocab_.store(positionInVocab.upperBound_,

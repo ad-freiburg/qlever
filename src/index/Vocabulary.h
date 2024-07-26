@@ -231,13 +231,6 @@ class Vocabulary {
   // _______________________________________________________________
   IndexType upper_bound(const string& word,
                         const SortLevel level = SortLevel::QUARTERNARY) const;
-  IndexType lower_bound_external(
-      std::string_view word,
-      const SortLevel level = SortLevel::QUARTERNARY) const;
-
-  // _______________________________________________________________
-  IndexType upper_bound_external(
-      const string& word, const SortLevel level = SortLevel::QUARTERNARY) const;
 
   // Get a writer for the vocab that has an `operator()` method to
   // which the single words + the information whether they shall be cached in
