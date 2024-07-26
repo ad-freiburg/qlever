@@ -11,7 +11,7 @@
 // Typedefs for several kinds of typed indices that are used across QLever.
 
 // Note the `VocabIndex` is declared in a separate header `VocabIndex` to break
-// a cyclic dependency (it is needed by `LocalVocabEntry.h`.
+// a cyclic dependency (it is needed by `LocalVocabEntry.h`).
 using LocalVocabIndex = const LocalVocabEntry*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;

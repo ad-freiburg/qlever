@@ -8,12 +8,6 @@
 
 // ___________________________________________________________________________
 auto LocalVocabEntry::positionInVocabExpensiveCase() const -> PositionInVocab {
-  // Immediately return if we have previously computed and cached the position.
-  if (positionInVocabKnown_.load(std::memory_order_acquire)) {
-    return {lowerBoundInVocab_.load(std::memory_order_relaxed),
-            upperBoundInVocab_.load(std::memory_order_relaxed)};
-  }
-
   // Lookup the lower and upper bound from the vocabulary of the index,
   // cache and return them.
   const IndexImpl& index = IndexImpl::staticGlobalSingletonIndex();

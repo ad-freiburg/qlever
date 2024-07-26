@@ -44,7 +44,7 @@ class alignas(16) LocalVocabEntry
   // Return the position in the vocabulary. If it is not already cached, then
   // the call to `positionInVocab()` first computes the position and then
   // caches it.
-  // Note:: We use `lowerBound` and `upperBound` because depending on the Local
+  // Note: We use `lowerBound` and `upperBound` because depending on the Local
   // settings there might be a range of words that are considered equal for the
   // purposes of comparing and sorting them.
   struct PositionInVocab {
