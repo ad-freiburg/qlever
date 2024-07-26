@@ -17,6 +17,7 @@
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
+#include "util/CopyableSynchronization.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
@@ -173,7 +174,8 @@ class Operation {
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
 
-  // True iff this operation directly implement a `LIMIT` clause on its result.
+  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
+  // its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
@@ -204,7 +206,7 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual Result computeResultOnlyForTesting(
+  virtual ProtoResult computeResultOnlyForTesting(
       bool requestLaziness = false) final {
     return computeResult(requestLaziness);
   }
@@ -256,7 +258,7 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual Result computeResult(bool requestLaziness) = 0;
+  virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
@@ -337,17 +339,8 @@ class Operation {
   // future.
   LimitOffsetClause _limit;
 
-  // A mutex that can be "copied". The semantics are, that copying will create
-  // a new mutex. This is sufficient for applications like in
-  // `getInternallyVisibleVariableColumns()` where we just want to make a
-  // `const` member function that modifies a `mutable` member threadsafe.
-  struct CopyableMutex : std::mutex {
-    using std::mutex::mutex;
-    CopyableMutex(const CopyableMutex&) {}
-  };
-
   // Mutex that protects the `variableToColumnMap_` below.
-  mutable CopyableMutex variableToColumnMapMutex_;
+  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
   // Store the mapping from variables to column indices. `nullopt` means that
   // this map has not yet been computed. This computation is typically performed
   // in the const member function `getInternallyVisibleVariableColumns`, so we
@@ -361,7 +354,7 @@ class Operation {
       externallyVisibleVariableToColumnMap_;
 
   // Mutex that protects the `_resultSortedColumns` below.
-  mutable CopyableMutex _resultSortedColumnsMutex;
+  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
