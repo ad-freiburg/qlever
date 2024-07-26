@@ -41,6 +41,11 @@ class alignas(16) LocalVocabEntry
   explicit(false) LocalVocabEntry(Base&& base) noexcept
       : Base{std::move(base)} {}
 
+  // Slice to base class `LiteralOrIri`.
+  const ad_utility::triple_component::LiteralOrIri& asLiteralOrIri() const {
+    return *this;
+  }
+
   // Return the position in the vocabulary. If it is not already cached, then
   // the call to `positionInVocab()` first computes the position and then
   // caches it.

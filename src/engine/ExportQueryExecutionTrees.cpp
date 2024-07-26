@@ -188,8 +188,7 @@ ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
   using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
   switch (id.getDatatype()) {
     case Datatype::LocalVocabIndex:
-      return static_cast<LiteralOrIri>(
-          localVocab.getWord(id.getLocalVocabIndex()));
+      return localVocab.getWord(id.getLocalVocabIndex()).asLiteralOrIri();
     case Datatype::VocabIndex: {
       auto entity = index.indexToString(id.getVocabIndex());
       return LiteralOrIri::fromStringRepresentation(entity);
