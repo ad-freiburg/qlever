@@ -159,7 +159,7 @@ class LocaleManager {
    */
   template <typename T, typename U>
   static int compare(const SortKeyImpl<T>& a, const SortKeyImpl<U>& b,
-                     [[maybe_unused]] const Level) {
+                     [[maybe_unused]] const Level = Level::PRIMARY) {
     return a.compare(b);
   }
 
@@ -462,6 +462,17 @@ class SimpleStringComparator {
     return cmp < 0;
   }
 
+  // This method is left undefined on purpose, as it is only used for
+  // constraints checking in the <ranges> header for the UnicodeVocabulary
+  // class.
+  bool operator()(const LocaleManager::SortKey& a, std::string_view s,
+                  [[maybe_unused]] const Level l = Level::PRIMARY) const;
+
+  // Same goes for this function (undefined on purpose).
+  bool operator()(const LocaleManager::SortKey& a,
+                  const LocaleManager::SortKey& b,
+                  [[maybe_unused]] Level level = Level::PRIMARY) const;
+
   /**
    * @brief Transform a string s to the SortKey of the first possible
    * string that compares greater to s according to the held locale on the
@@ -658,13 +669,6 @@ class TripleComponentComparator {
   [[nodiscard]] int compare(const SplitValBase<A, B, C>& a,
                             const SplitValBase<A, B, C>& b,
                             const Level level) const {
-    // Currently all internal words stand before all external words.
-    // TODO<joka921> This has to be changed once we have the IDs interleaved
-    // via the MilestoneIdManager.
-    if (a.isExternalized_ != b.isExternalized_) {
-      return a.isExternalized_ ? 1 : -1;
-    }
-
     if (auto res =
             std::strncmp(&a.firstOriginalChar_, &b.firstOriginalChar_, 1);
         res != 0) {

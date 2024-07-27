@@ -5,8 +5,8 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/GTestHelpers.h"
 #include "parser/RdfEscaping.h"
-
 using namespace RdfEscaping;
 
 // ___________________________________________________________________________
@@ -43,6 +43,11 @@ TEST(RdfEscapingTest, normalizedContentFromLiteralOrIri) {
   ASSERT_EQ(f("\"bumm\"^^<http://www.mycustomiris.com/sometype>"), "bumm");
 }
 
+TEST(RdfEscapingTest, invalidEscapeThrows) {
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      normalizeRDFLiteral("\"invalid\\Escape\""),
+      ::testing::HasSubstr("Unsupported escape sequence"));
+}
 // ___________________________________________________________________________
 TEST(RdfEscapingTest, escapeForXml) {
   ASSERT_EQ(escapeForXml("abc\n\t;"), "abc\n\t;");

@@ -25,8 +25,8 @@ TEST(NowDatetimeExpression, nowExpressionEvaluate) {
   ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant));
   const auto& resultDate = std::get<Id>(resultAsVariant);
 
-  DateOrLargeYear dateNowTest =
-      DateOrLargeYear(DateOrLargeYear::parseXsdDatetime(strDate));
+  DateYearOrDuration dateNowTest =
+      DateYearOrDuration(DateYearOrDuration::parseXsdDatetime(strDate));
 
   ASSERT_EQ(resultDate.getDatatype(), Datatype::Date);
   ASSERT_EQ(resultDate.getDate(), dateNowTest);
@@ -35,7 +35,7 @@ TEST(NowDatetimeExpression, nowExpressionEvaluate) {
   auto resultAsVariant2 =
       NowDatetimeExpression{strDate}.evaluate(&evaluationContext);
   ASSERT_TRUE(std::holds_alternative<Id>(resultAsVariant2));
-  DateOrLargeYear singleDateNow = std::get<Id>(resultAsVariant2).getDate();
+  DateYearOrDuration singleDateNow = std::get<Id>(resultAsVariant2).getDate();
   ASSERT_EQ(singleDateNow, dateNowTest);
 }
 
