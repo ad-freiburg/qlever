@@ -884,12 +884,12 @@ TEST(QueryPlanner, TextLimit) {
   h::expect(
       "SELECT * WHERE { ?text ql:contains-word \"test*\" . ?text "
       "ql:contains-entity <testEntity> } TEXTLIMIT 10",
-      h::TextLimit(
-          10,
-          h::Join(wordScan(Var{"?text"}, "test*"),
-                  entityScan(Var{"?text"}, "<testEntity>", "test*")),
-          Var{"?text"}, vector<Variable>{},
-          vector<Variable>{Var{"?text"}.getScoreVariable("<testEntity>")}),
+      h::TextLimit(10,
+                   h::Join(wordScan(Var{"?text"}, "test*"),
+                           entityScan(Var{"?text"}, "<testEntity>", "test*")),
+                   Var{"?text"}, vector<Variable>{},
+                   vector<Variable>{
+                       Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
   // Contains entity
@@ -901,7 +901,8 @@ TEST(QueryPlanner, TextLimit) {
           h::Join(wordScan(Var{"?text"}, "test*"),
                   entityScan(Var{"?text"}, Var{"?scientist"}, "test*")),
           Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"})}),
+          vector<Variable>{
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist"})}),
       qec);
 
   // Contains entity and fixed entity
@@ -909,15 +910,15 @@ TEST(QueryPlanner, TextLimit) {
       "SELECT * WHERE { ?text ql:contains-entity ?scientist . ?text "
       "ql:contains-word \"test*\" . ?text ql:contains-entity <testEntity>} "
       "TEXTLIMIT 5",
-      h::TextLimit(
-          5,
-          h::UnorderedJoins(
-              wordScan(Var{"?text"}, "test*"),
-              entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
-              entityScan(Var{"?text"}, "<testEntity>", "test*")),
-          Var{"?text"}, vector<Variable>{Var{"?scientist"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
-                           Var{"?text"}.getScoreVariable("<testEntity>")}),
+      h::TextLimit(5,
+                   h::UnorderedJoins(
+                       wordScan(Var{"?text"}, "test*"),
+                       entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
+                       entityScan(Var{"?text"}, "<testEntity>", "test*")),
+                   Var{"?text"}, vector<Variable>{Var{"?scientist"}},
+                   vector<Variable>{
+                       Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
+                       Var{"?text"}.getEntityScoreVariable("<testEntity>")}),
       qec);
 
   // Contains two entities
@@ -932,8 +933,9 @@ TEST(QueryPlanner, TextLimit) {
               entityScan(Var{"?text"}, Var{"?scientist"}, "test*"),
               entityScan(Var{"?text"}, Var{"?scientist2"}, "test*")),
           Var{"?text"}, vector<Variable>{Var{"?scientist"}, Var{"?scientist2"}},
-          vector<Variable>{Var{"?text"}.getScoreVariable(Var{"?scientist"}),
-                           Var{"?text"}.getScoreVariable(Var{"?scientist2"})}),
+          vector<Variable>{
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist"}),
+              Var{"?text"}.getEntityScoreVariable(Var{"?scientist2"})}),
       qec);
 
   // Contains two text variables. Also checks if the textlimit at an efficient
@@ -950,17 +952,17 @@ TEST(QueryPlanner, TextLimit) {
                       entityScan(Var{"?text1"}, Var{"?scientist1"}, "test*")),
               Var{"?text1"}, vector<Variable>{Var{"?scientist1"}},
               vector<Variable>{
-                  Var{"?text1"}.getScoreVariable(Var{"?scientist1"})}),
-          h::TextLimit(5,
-                       h::UnorderedJoins(
-                           wordScan(Var{"?text2"}, "test*"),
-                           entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
-                           entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
-                       Var{"?text2"},
-                       vector<Variable>{Var{"?author1"}, Var{"?author2"}},
-                       vector<Variable>{
-                           Var{"?text2"}.getScoreVariable(Var{"?author1"}),
-                           Var{"?text2"}.getScoreVariable(Var{"?author2"})})),
+                  Var{"?text1"}.getEntityScoreVariable(Var{"?scientist1"})}),
+          h::TextLimit(
+              5,
+              h::UnorderedJoins(
+                  wordScan(Var{"?text2"}, "test*"),
+                  entityScan(Var{"?text2"}, Var{"?author1"}, "test*"),
+                  entityScan(Var{"?text2"}, Var{"?author2"}, "test*")),
+              Var{"?text2"}, vector<Variable>{Var{"?author1"}, Var{"?author2"}},
+              vector<Variable>{
+                  Var{"?text2"}.getEntityScoreVariable(Var{"?author1"}),
+                  Var{"?text2"}.getEntityScoreVariable(Var{"?author2"})})),
       qec);
 }
 

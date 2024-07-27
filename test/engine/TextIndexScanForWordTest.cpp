@@ -41,7 +41,7 @@ TEST(TextIndexScanForWord, WordScanPrefix) {
   VariableToColumnMap expectedVariables{
       {Variable{"?text2"}, {0, AlwaysDefined}},
       {Variable{"?ql_matchingword_text2_test"}, {1, AlwaysDefined}},
-      {Variable{"?ql_score_text2_fixedEntity_test_42_"}, {2, AlwaysDefined}}};
+      {Variable{"?ql_score_prefix_text2_test"}, {2, AlwaysDefined}}};
   EXPECT_THAT(s2.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expectedVariables));
 

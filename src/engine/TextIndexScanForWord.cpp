@@ -47,7 +47,7 @@ VariableToColumnMap TextIndexScanForWord::computeVariableToColumnMap() const {
     addDefinedVar(textRecordVar_.getMatchingWordVariable(
         std::string_view(word_).substr(0, word_.size() - 1)));
   }
-  addDefinedVar(textRecordVar_.getScoreVariable(word_));
+  addDefinedVar(textRecordVar_.getWordScoreVariable(word_, isPrefix_));
   return vcmap;
 }
 

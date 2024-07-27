@@ -48,10 +48,10 @@ VariableToColumnMap TextIndexScanForEntity::computeVariableToColumnMap() const {
   };
   addDefinedVar(textRecordVar_);
   if (hasFixedEntity()) {
-    addDefinedVar(textRecordVar_.getScoreVariable(fixedEntity()));
+    addDefinedVar(textRecordVar_.getEntityScoreVariable(fixedEntity()));
   } else {
     addDefinedVar(entityVariable());
-    addDefinedVar(textRecordVar_.getScoreVariable(entityVariable()));
+    addDefinedVar(textRecordVar_.getEntityScoreVariable(entityVariable()));
   }
   return vcmap;
 }

@@ -55,7 +55,7 @@ Variable::Variable(std::string name) : _name{std::move(name)} {
 }
 
 // _____________________________________________________________________________
-Variable Variable::getScoreVariable(
+Variable Variable::getEntityScoreVariable(
     const std::variant<Variable, std::string>& varOrEntity) const {
   std::string_view type;
   std::string entity;
@@ -76,6 +76,31 @@ Variable Variable::getScoreVariable(
   }
   return Variable{
       absl::StrCat(SCORE_VARIABLE_PREFIX, name().substr(1), type, entity)};
+}
+
+// _____________________________________________________________________________
+Variable Variable::getWordScoreVariable(const std::string& word,
+                                        const bool& isPrefix) const {
+  std::string_view type;
+  std::string_view wordToConvert;
+  std::string convertedWord;
+  if (isPrefix) {
+    wordToConvert = std::string_view(word.data(), word.size() - 1);
+    type = "prefix_";
+  } else {
+    wordToConvert = std::string_view(word);
+    type = "word_";
+  }
+  convertedWord += "_";
+  for (char c : wordToConvert) {
+    if (isalpha(static_cast<unsigned char>(c))) {
+      convertedWord += c;
+    } else {
+      absl::StrAppend(&convertedWord, "_", std::to_string(c), "_");
+    }
+  }
+  return Variable{absl::StrCat(SCORE_VARIABLE_PREFIX, type, name().substr(1),
+                               convertedWord)};
 }
 
 // _____________________________________________________________________________
