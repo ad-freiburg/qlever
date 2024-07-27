@@ -2,8 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VALUEID_H
-#define QLEVER_VALUEID_H
+#pragma once
 
 #include <absl/strings/str_cat.h>
 
@@ -88,6 +87,20 @@ class ValueId {
 
   // The largest representable integer value.
   static constexpr int64_t maxInt = IntegerType::max();
+  // All types that store strings. Together, the IDs of all the items of these
+  // types form a consecutive range of IDs when sorted. Within this range, the
+  // IDs are ordered by their string values, not by their IDs (and hence also
+  // not by their types).
+  static constexpr std::array<Datatype, 2> stringTypes_{
+      Datatype::VocabIndex, Datatype::LocalVocabIndex};
+
+  // Assert that the types in `stringTypes_` are directly adjacent. This is
+  // required to make the comparison of IDs in `ValueIdComparators.h` work.
+  static constexpr Datatype maxStringType_ = std::ranges::max(stringTypes_);
+  static constexpr Datatype minStringType_ = std::ranges::min(stringTypes_);
+  static_assert(static_cast<size_t>(maxStringType_) -
+                    static_cast<size_t>(minStringType_) + 1 ==
+                stringTypes_.size());
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
@@ -97,9 +110,9 @@ class ValueId {
     std::string errorMessage_;
 
    public:
-    IndexTooLargeException(T tooBigValue,
-                           ad_utility::source_location s =
-                               ad_utility::source_location::current()) {
+    explicit IndexTooLargeException(
+        T tooBigValue, ad_utility::source_location s =
+                           ad_utility::source_location::current()) {
       errorMessage_ = absl::StrCat(
           s.file_name(), ", line ", s.line(), ": The given value ", tooBigValue,
           " is bigger than what the maxIndex of ValueId allows.");
@@ -120,21 +133,6 @@ class ValueId {
   /// Default construction of an uninitialized id.
   ValueId() = default;
 
-  /// Equality comparison is performed directly on the underlying
-  /// representation.
-  // NOTE: (Also for the operator<=> below: These comparisons only work
-  // correctly if we only store entries in the local vocab that are NOT part of
-  // the vocabulary. This is currently not true for expression results from
-  // GROUP BY and BIND operations (for performance reasons). So a join with such
-  // results will currently lead to wrong results.
-  constexpr bool operator==(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
-      return *getLocalVocabIndex() == *other.getLocalVocabIndex();
-    }
-    return _bits == other._bits;
-  }
-
   /// Comparison is performed directly on the underlying representation. Note
   /// that because the type bits are the most significant bits, all values of
   /// the same `Datatype` will be adjacent to each other. Unsigned index types
@@ -144,11 +142,46 @@ class ValueId {
   /// doubles in reversed order. This is a direct consequence of comparing the
   /// bit representation of these values as unsigned integers.
   constexpr auto operator<=>(const ValueId& other) const {
-    if (getDatatype() == Datatype::LocalVocabIndex &&
-        other.getDatatype() == Datatype::LocalVocabIndex) [[unlikely]] {
+    using enum Datatype;
+    auto type = getDatatype();
+    auto otherType = other.getDatatype();
+    if (type != LocalVocabIndex && otherType != LocalVocabIndex) {
+      return _bits <=> other._bits;
+    }
+    if (type == LocalVocabIndex && otherType == LocalVocabIndex) [[unlikely]] {
       return *getLocalVocabIndex() <=> *other.getLocalVocabIndex();
     }
+    auto compareVocabAndLocalVocab =
+        [](::VocabIndex vocabIndex,
+           ::LocalVocabIndex localVocabIndex) -> std::strong_ordering {
+      auto [lowerBound, upperBound] = localVocabIndex->positionInVocab();
+      if (vocabIndex < lowerBound) {
+        return std::strong_ordering::less;
+      } else if (vocabIndex >= upperBound) {
+        return std::strong_ordering::greater;
+      } else {
+        return std::strong_ordering::equal;
+      }
+    };
+    if (type == VocabIndex) {
+      return compareVocabAndLocalVocab(getVocabIndex(),
+                                       other.getLocalVocabIndex());
+    } else if (otherType == VocabIndex) {
+      auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
+                                                    getLocalVocabIndex());
+      return 0 <=> inverseOrder;
+    }
+
+    // One of the types is `LocalVocab`, and the other one is a non-string type
+    // like `Integer` or `Undefined. Then the comparison by bits automatically
+    // compares by the datatype.
     return _bits <=> other._bits;
+  }
+
+  // For some reason which I (joka921) don't understand, we still need
+  // operator== although we already have operator <=>.
+  constexpr bool operator==(const ValueId& other) const {
+    return (*this <=> other) == 0;
   }
 
   /// Get the underlying bit representation, e.g. for compression etc.
@@ -381,5 +414,3 @@ class ValueId {
     return addDatatypeBits(id, type);
   }
 };
-
-#endif  // QLEVER_VALUEID_H

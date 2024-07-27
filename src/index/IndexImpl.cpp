@@ -41,7 +41,9 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+    : allocator_{std::move(allocator)} {
+  globalSingletonIndex_ = this;
+};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
@@ -700,6 +702,7 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
   vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  globalSingletonComparator_ = &vocab_.getCaseComparator();
 
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << vocab_.size() << std::endl;

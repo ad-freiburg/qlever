@@ -19,7 +19,6 @@ namespace {
 auto I = IntId;
 auto V = VocabId;
 auto U = Id::makeUndefined();
-auto L = LocalVocabId;
 auto D = DoubleId;
 auto lit = [](auto s) {
   return IdOrLiteralOrIri(
@@ -51,28 +50,48 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
 // ______________________________________________________________________________
 TEST(AggregateExpression, max) {
   auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto t = TestContext{};
+  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
+  Id beta = t.Beta;    // Vocab Id of the Literal "Beta"
+
+  LocalVocabEntry l =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  Id alx = Id::makeFromLocalVocabIndex(&l);
+
   testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
   testMaxId({V(7), U, V(2), V(4)}, V(7));
-  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
+  // Correct comparison between vocab and local vocab entries.
+  testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
+  testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
 
   auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
-  // TODO<joka921> Implement correct comparison on strings
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("äpfel"));
+                lit("unfug"));
 }
 
 // ______________________________________________________________________________
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
+  TestContext t;
+  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
+
+  LocalVocabEntry l =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  Id alx = Id::makeFromLocalVocabIndex(&l);
+  LocalVocabEntry l2 =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx");
+  Id aalx = Id::makeFromLocalVocabIndex(&l2);
+
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
   testMinId({V(7), V(2), V(4)}, V(2));
   testMinId({V(7), U, V(2), V(4)}, U);
-  testMinId({I(3), V(0), L(3), (I(-1))}, I(-1));
+  testMinId({I(3), alpha, alx, (I(-1))}, I(-1));
+  testMinId({I(3), alpha, alx, (I(-1)), U}, U);
+  testMinId({alpha, alx, aalx}, aalx);
 
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
-  // TODO<joka921> Implement correct comparison on strings
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("Beta"));
+                lit("alpha"));
 }
 
 // ______________________________________________________________________________

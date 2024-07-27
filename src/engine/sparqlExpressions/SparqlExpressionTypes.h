@@ -85,8 +85,7 @@ static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
 // that can only yield strings.
-using IdOrLiteralOrIri =
-    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
+using IdOrLiteralOrIri = std::variant<ValueId, LocalVocabEntry>;
 // Printing for GTest.
 void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 
@@ -223,8 +222,7 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
         [&localVocab]<typename R>(R&& el) mutable {
-          if constexpr (ad_utility::isSimilar<
-                            R, ad_utility::triple_component::LiteralOrIri>) {
+          if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {

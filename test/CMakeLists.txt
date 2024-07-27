@@ -245,7 +245,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest util parser)
+addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
 
 addLinkAndDiscoverTest(DurationTest util)
 

@@ -43,7 +43,6 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
-
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
 // of the `index` and checks whether the result of the
@@ -424,6 +423,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all entities that start with
   // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
+
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
