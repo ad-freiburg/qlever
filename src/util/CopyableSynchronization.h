@@ -38,7 +38,7 @@ class CopyableAtomic : public std::atomic<T> {
       : Base{rhs.load()} {}
   CopyableAtomic& operator=(CopyableAtomic&& rhs) noexcept(
       std::is_nothrow_move_assignable_v<T>) {
-    static_cast<Base&>(*this) = std::move(rhs.load());
+    static_cast<Base&>(*this) = rhs.load();
     return *this;
   }
 };
