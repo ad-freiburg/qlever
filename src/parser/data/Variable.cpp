@@ -80,7 +80,7 @@ Variable Variable::getEntityScoreVariable(
 
 // _____________________________________________________________________________
 Variable Variable::getWordScoreVariable(const std::string& word,
-                                        const bool& isPrefix) const {
+                                        bool isPrefix) const {
   std::string_view type;
   std::string_view wordToConvert;
   std::string convertedWord;
@@ -93,6 +93,29 @@ Variable Variable::getWordScoreVariable(const std::string& word,
   }
   convertedWord += "_";
   for (char c : wordToConvert) {
+    if (isalpha(static_cast<unsigned char>(c))) {
+      convertedWord += c;
+    } else {
+      absl::StrAppend(&convertedWord, "_", std::to_string(c), "_");
+    }
+  }
+  return Variable{absl::StrCat(SCORE_VARIABLE_PREFIX, type, name().substr(1),
+                               convertedWord)};
+}
+
+// _____________________________________________________________________________
+Variable Variable::getWordScoreVariable(std::string_view word,
+                                        bool isPrefix) const {
+  std::string_view type;
+  std::string convertedWord;
+  if (isPrefix) {
+    word.remove_suffix(1);
+    type = "prefix_";
+  } else {
+    type = "word_";
+  }
+  convertedWord = "_";
+  for (char c : word) {
     if (isalpha(static_cast<unsigned char>(c))) {
       convertedWord += c;
     } else {
