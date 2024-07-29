@@ -1490,8 +1490,7 @@ void Visitor::setMatchingWordAndScoreVisibleIfPresent(
     }
     for (std::string_view s : std::vector<std::string>(
              absl::StrSplit(name.substr(1, name.size() - 2), ' '))) {
-      addVisibleVariable(
-          var->getWordScoreVariable(std::string(s), s.ends_with('*')));
+      addVisibleVariable(var->getWordScoreVariable(s, s.ends_with('*')));
       if (!s.ends_with('*')) {
         continue;
       }

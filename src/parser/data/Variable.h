@@ -57,8 +57,11 @@ class Variable {
   // `?ql_score_prefix_someTextVar_somePrefix`.
   // Note that if the word contains non ascii characters they are converted to
   // numbers and escaped.
-  Variable getWordScoreVariable(const std::string& word,
-                                const bool& isPrefix) const;
+  Variable getWordScoreVariable(const std::string& word, bool isPrefix) const;
+
+  // Does the same thing as the function with std::string& param only for
+  // std::string_view
+  Variable getWordScoreVariable(std::string_view word, bool isPrefix) const;
 
   // Convert `?someVariable` into `?ql_matchingword_someVariable_someTerm`
   Variable getMatchingWordVariable(std::string_view term) const;
