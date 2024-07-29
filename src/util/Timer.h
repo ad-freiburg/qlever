@@ -134,8 +134,11 @@ class Timer {
 // synchronization. It consists of several single-threaded time measurements,
 // the times of which are (atomically) summed up. This means that if some of the
 // single-threaded measurements run in parallel, then the total time will be
-// larger than the passed wall clock time.
+// larger than the elapsed wall clock time.
 class [[nodiscard]] ThreadSafeTimer {
+ private:
+  using Rep = Timer::Duration::rep;
+  std::atomic<Rep> totalTime_ = 0;
   // The implementation of the single-threaded measurements.
   class TimeMeasurement {
     Timer measuringTimer_;
@@ -154,25 +157,23 @@ class [[nodiscard]] ThreadSafeTimer {
       isStopped_ = true;
       measuringTimer_.stop();
       parentTimer_->totalTime_.fetch_add(measuringTimer_.value().count(),
-                                         std::memory_order_relaxed);
+                                         std::memory_order_release);
     }
 
     // Destructor. Implicitly stops the measurement.
     ~TimeMeasurement() { stop(); }
   };
 
-  using Rep = Timer::Duration::rep;
-  std::atomic<Rep> totalTime_ = 0;
-
  public:
   // Start a single-threaded time measurement. An explicit call to `stop` on the
   // returned object, or its destruction, will stop the time measurement, and
-  // will add the passed wall clock to the total time of this `ThreadSafeTimer`.
+  // will add the elapsed wall clock to the total time of this
+  // `ThreadSafeTimer`.
   TimeMeasurement startMeasurement() { return TimeMeasurement{this}; }
 
   // Return the summed time over all finished measurements.
   Timer::Duration value() {
-    return Timer::Duration{totalTime_.load(std::memory_order_relaxed)};
+    return Timer::Duration{totalTime_.load(std::memory_order_acquire)};
   }
 
   // Return the summed time over all finished measurements, in milliseconds.

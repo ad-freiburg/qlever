@@ -49,6 +49,14 @@ class Batcher {
  public:
   using ValueT = std::decay_t<decltype(std::declval<Creator>()().value())>;
 
+ private:
+  size_t batchSize_;
+  std::unique_ptr<Creator> creator_;
+  std::unique_ptr<ThreadsafeTimer> waitingTime_{
+      std::make_unique<ThreadsafeTimer>()};
+  std::future<detail::Batch<ValueT>> fut_;
+
+ public:
   // construct from the batchSize and Creator Rvalue Reference
   /// @brief Don't use these, call setupPipeline or setupParallelPipeline
   /// instead
@@ -93,12 +101,6 @@ class Batcher {
   [[nodiscard]] size_t getBatchSize() const { return batchSize_; }
 
  private:
-  size_t batchSize_;
-  std::unique_ptr<Creator> creator_;
-  std::unique_ptr<ThreadsafeTimer> waitingTime_{
-      std::make_unique<ThreadsafeTimer>()};
-  std::future<detail::Batch<ValueT>> fut_;
-
   // start assembling the next batch in parallel
   void orderNextBatch() {
     // since the unique_ptr creator_ owns the creator,
@@ -176,10 +178,22 @@ class BatchedPipeline {
   // the value type the previous pipeline stage delivers to us
   using InT = std::decay_t<
       decltype(std::declval<PreviousStage&>().pickupBatch().content_[0])>;
-
   // the value type this BatchedPipeline produces
   using ResT = std::invoke_result_t<FirstTransformer, InT>;
 
+ private:
+  std::unique_ptr<ThreadsafeTimer> waitingTime_{
+      std::make_unique<ThreadsafeTimer>()};
+  // the unique_ptrs to our Transformers
+  using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
+  // raw non-owning pointers to the transformers
+  using rawPtrTuple = toRawPtrTuple_t<uniquePtrTuple>;
+  uniquePtrTuple transformers_;
+  rawPtrTuple rawTransformers_;
+  std::unique_ptr<PreviousStage> previousStage_;
+  std::future<Batch<ResT>> fut_;
+
+ public:
   /* TODO<joka921>: Currently the Transformers have to be copy-constructible.
    * could be changed to some kind of perfect forwarding should this ever become
    * an issue, but copying is pretty much the default for Function objects in
@@ -347,18 +361,6 @@ class BatchedPipeline {
                         moveAndTransform(startIt, endIt, outIt, transformer);
                       });
   }
-
- private:
-  std::unique_ptr<ThreadsafeTimer> waitingTime_{
-      std::make_unique<ThreadsafeTimer>()};
-  // the unique_ptrs to our Transformers
-  using uniquePtrTuple = toUniquePtrTuple_t<FirstTransformer, Transformers...>;
-  // raw non-owning pointers to the transformers
-  using rawPtrTuple = toRawPtrTuple_t<uniquePtrTuple>;
-  uniquePtrTuple transformers_;
-  rawPtrTuple rawTransformers_;
-  std::unique_ptr<PreviousStage> previousStage_;
-  std::future<Batch<ResT>> fut_;
 };
 
 /*
@@ -469,13 +471,22 @@ class Interface;  // forward declaration needed below for friend declaration
  */
 template <class Pipeline>
 class BatchExtractor {
-  using ThreadsafeTimer = detail::ThreadsafeTimer;
-
  public:
   /// The type of our elements after all transformations were applied
   using ValueT = std::decay_t<
       decltype(std::declval<Pipeline>().pickupBatch().content_[0])>;
 
+ private:
+  using ThreadsafeTimer = detail::ThreadsafeTimer;
+  std::unique_ptr<ThreadsafeTimer> waitingTime_{
+      std::make_unique<ThreadsafeTimer>()};
+  std::unique_ptr<Pipeline> pipeline_;
+  std::future<detail::Batch<ValueT>> fut_;
+  std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> buffer_;
+  size_t bufferPosition_ = 0;
+  bool isPipelineValid_ = true;
+
+ public:
   /// Get the next completely transformed value from the pipeline. std::nullopt
   /// means that all elements have been extracted and the pipeline is exhausted.
   /// Might block if the pipeline is currently busy and the internal buffer is
@@ -523,14 +534,6 @@ class BatchExtractor {
   [[nodiscard]] size_t getBatchSize() const { return pipeline_.getBatchSize(); }
 
  private:
-  std::unique_ptr<ThreadsafeTimer> waitingTime_{
-      std::make_unique<ThreadsafeTimer>()};
-  std::unique_ptr<Pipeline> pipeline_;
-  std::future<detail::Batch<ValueT>> fut_;
-  std::vector<ValueT, ad_utility::default_init_allocator<ValueT>> buffer_;
-  size_t bufferPosition_ = 0;
-  bool isPipelineValid_ = true;
-
   // Pipelines are move-only types
   explicit BatchExtractor(Pipeline&& pipeline)
       : pipeline_(std::make_unique<Pipeline>(std::move(pipeline))) {
