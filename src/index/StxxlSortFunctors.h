@@ -13,7 +13,13 @@ struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
-    constexpr auto c = &Id::compareWithoutLocalVocab;
+    auto permute = [](const auto& x) { return std::tie(x[i0], x[i1], x[i2]); };
+    return permute(a) < permute(b);
+  }
+  /*
+  bool operator()(const auto& a, const auto& b) const {
+   // constexpr auto c = &Id::compareWithoutLocalVocab;
+   constexpr auto c = &Id::operator<=>;
     auto c1 = std::invoke(c, a[i0], b[i0]);
     if (c1 != 0) {
       return c1 < 0;
@@ -25,6 +31,7 @@ struct SortTriple {
     auto c3 = std::invoke(c, a[i2], b[i2]);
     return c3 < 0;
   }
+   */
 
   // Value that is strictly smaller than any input element.
   static T min_value() { return {Id::min(), Id::min(), Id::min()}; }
