@@ -130,6 +130,44 @@ class Timer {
   }
 };
 
+class [[nodiscard]] ThreadSafeTimer {
+  class TimerWithDestructor {
+    Timer measuringTimer_;
+    ThreadSafeTimer* timer_;
+    bool isStopped_ = false;
+
+   public:
+    explicit TimerWithDestructor(ThreadSafeTimer* timer)
+        : measuringTimer_(Timer::Started), timer_{timer} {}
+
+    void stop() {
+      if (isStopped_) {
+        return;
+      }
+      isStopped_ = true;
+      measuringTimer_.stop();
+      timer_->totalTime_.fetch_add(measuringTimer_.value().count(),
+                                   std::memory_order_relaxed);
+    }
+
+    ~TimerWithDestructor() { stop(); }
+  };
+
+  using Rep = Timer::Duration::rep;
+  std::atomic<Rep> totalTime_ = 0;
+
+ public:
+  TimerWithDestructor startMeasurement() { return TimerWithDestructor{this}; }
+
+  Timer::Duration value() {
+    return Timer::Duration{totalTime_.load(std::memory_order_relaxed)};
+  }
+
+  Timer::Milliseconds msecs() {
+    return std::chrono::duration_cast<Timer::Milliseconds>(value());
+  }
+};
+
 namespace detail {
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message
