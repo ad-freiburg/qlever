@@ -106,7 +106,7 @@ class Server {
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
-  ad_utility::UrlParser::UrlPathAndParameters getUrlPathAndParameters(
+  ad_utility::UrlParser::ParsedUrl getUrlPathAndParameters(
       const ad_utility::httpUtils::HttpRequest auto& request);
 
   /// Handle a single HTTP request. Check whether a file request or a query was
@@ -119,9 +119,8 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send);
 
   /// Handle a http request that asks for the processing of a query.
-  /// \param params The key-value-pairs  sent in the HTTP GET request. When this
-  /// function is called, we already know that a parameter "query" is contained
-  /// in `params`.
+  /// \param params The key-value-pairs  sent in the HTTP GET request.
+  /// \param query The query.
   /// \param requestTimer Timer that measure the total processing
   ///                     time of this request.
   /// \param request The HTTP request.
@@ -130,7 +129,8 @@ class Server {
   /// \param timeLimit Duration in seconds after which the query will be
   ///                  cancelled.
   Awaitable<void> processQuery(
-      const ParamValueMap& params, ad_utility::Timer& requestTimer,
+      const ParamValueMap& params, const string& query,
+      ad_utility::Timer& requestTimer,
       const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
       TimeLimit timeLimit);
 

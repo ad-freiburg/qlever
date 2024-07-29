@@ -6,6 +6,7 @@
 
 #include "engine/Server.h"
 
+#include <boost/url.hpp>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -163,23 +164,36 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
+ad_utility::UrlParser::ParsedUrl Server::getUrlPathAndParameters(
     const ad_utility::httpUtils::HttpRequest auto& request) {
+  ad_utility::UrlParser::ParsedUrl parsedUrl =
+      ad_utility::UrlParser::parseRequestTarget(request.target());
+
   if (request.method() == http::verb::get) {
-    // For a GET request, `request.target()` yields the part after the domain,
-    // which is a concatenation of the path and the query string (the query
-    // string starting with "?").
-    return ad_utility::UrlParser::parseGetRequestTarget(request.target());
+    // For a GET request, `request.target()` yields the HTTP Request-URI.
+    // This is a concatenation of the URL path and the query strings.
+    if (!parsedUrl.parameters_.contains("query")) {
+      throw std::runtime_error(absl::StrCat("GET Request to \"",
+                                            std::string{request.target()},
+                                            "\" missing \"query\" parameter."));
+    }
+    parsedUrl.query_ = parsedUrl.parameters_["query"];
+    return parsedUrl;
   }
   if (request.method() == http::verb::post) {
     // For a POST request, the content type *must* be either
-    // "application/x-www-form-urlencoded" or "application/sparql-query". In
-    // the first case, the body of the POST request contains a URL-encoded
-    // query (just like in the part of a GET request after the "?"). In the
-    // second case, the body of the POST request contains *only* the SPARQL
-    // query, but not URL-encoded, and no other URL parameters. See Sections
-    // 2.1.2 and 2.1.3 of the SPARQL 1.1 standard:
-    // https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
+    // "application/x-www-form-urlencoded" (1) or "application/sparql-query"
+    // (2).
+    //
+    // (1) The body of the POST request contains a URL-encoded
+    // query (just like in the part of a GET request after the "?"). Reference
+    // Section 2.1.2.
+    //
+    // (2) The body of the POST request contains *only* the SPARQL
+    // query, but not URL-encoded, and no other URL parameters. Reference
+    // Section 2.1.3.
+    //
+    // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
     std::string_view contentType = request.base()[http::field::content_type];
     LOG(DEBUG) << "Content-type: \"" << contentType << "\"" << std::endl;
     static constexpr std::string_view contentTypeUrlEncoded =
@@ -187,30 +201,34 @@ ad_utility::UrlParser::UrlPathAndParameters Server::getUrlPathAndParameters(
     static constexpr std::string_view contentTypeSparqlQuery =
         "application/sparql-query";
 
-    // In either of the two cases explained above, we convert the data to a
-    // format as if it came from a GET request. The second argument to
-    // `parseGetRequestTarget` says whether the function should apply URL
-    // decoding.
     // Note: For simplicity we only check via `starts_with`. This ignores
     // additional parameters like `application/sparql-query;charset=utf8`. We
     // currently always expect UTF-8.
     // TODO<joka921> Implement more complete parsing that allows the checking of
     // these parameters.
     if (contentType.starts_with(contentTypeUrlEncoded)) {
-      return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(
-              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
-                  .path_,
-              "?", request.body()),
-          true);
+      // Query String Parameters must be empty for URL-encoded POST. See
+      // SPARQL 1.1 Protocol Sections 2.1 and 3.1
+      if (!parsedUrl.parameters_.empty()) {
+        throw std::runtime_error(
+            "URL-encoded POST requests must not contain query parameters in "
+            "the URL.");
+      }
+      // Set the parameters from the request body.
+      parsedUrl.parameters_ = ad_utility::UrlParser::paramsToMap(
+          boost::urls::parse_query(request.body()).value());
+
+      if (parsedUrl.parameters_.contains("query")) {
+        parsedUrl.query_ = parsedUrl.parameters_["query"];
+      } else {
+        throw std::runtime_error("POST Request missing \"query\" parameter.");
+      }
+
+      return parsedUrl;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
-      return ad_utility::UrlParser::parseGetRequestTarget(
-          absl::StrCat(
-              ad_utility::UrlParser::splitPathAndQuery(toStd(request.target()))
-                  .path_,
-              "?query=", request.body()),
-          false);
+      parsedUrl.query_ = request.body();
+      return parsedUrl;
     }
     throw std::runtime_error(
         absl::StrCat("POST request with content type \"", contentType,
@@ -275,8 +293,8 @@ Awaitable<void> Server::process(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  const auto urlPathAndParameters = getUrlPathAndParameters(request);
-  const auto& parameters = urlPathAndParameters._parameters;
+  const auto parsedUrl = getUrlPathAndParameters(request);
+  const auto& parameters = parsedUrl.parameters_;
 
   auto checkParameter = [&parameters](std::string_view key,
                                       std::optional<std::string_view> value,
@@ -338,7 +356,7 @@ Awaitable<void> Server::process(
   }
 
   // Ping with or without message.
-  if (urlPathAndParameters._path == "/ping") {
+  if (parsedUrl.path_ == "/ping") {
     if (auto msg = checkParameter("msg", std::nullopt)) {
       LOG(INFO) << "Alive check with message \"" << msg.value() << "\""
                 << std::endl;
@@ -378,12 +396,13 @@ Awaitable<void> Server::process(
   }
 
   // If "query" parameter is given, process query.
-  if (auto query = checkParameter("query", std::nullopt)) {
+  // TODO: the else case doesn't make sense now
+  if (parsedUrl.query_.has_value()) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(parameters, requestTimer,
-                                      std::move(request), send,
+      co_return co_await processQuery(parameters, parsedUrl.query_.value(),
+                                      requestTimer, std::move(request), send,
                                       timeLimit.value());
 
     } else {
@@ -586,12 +605,11 @@ Awaitable<void> Server::sendStreamableResponse(
 
 // ____________________________________________________________________________
 boost::asio::awaitable<void> Server::processQuery(
-    const ParamValueMap& params, ad_utility::Timer& requestTimer,
+    const ParamValueMap& params, const string& query,
+    ad_utility::Timer& requestTimer,
     const ad_utility::httpUtils::HttpRequest auto& request, auto&& send,
     TimeLimit timeLimit) {
   using namespace ad_utility::httpUtils;
-  AD_CONTRACT_CHECK(params.contains("query"));
-  const auto& query = params.at("query");
 
   auto sendJson =
       [&request, &send](
