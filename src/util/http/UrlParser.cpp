@@ -7,6 +7,7 @@
 
 using namespace ad_utility;
 
+// _____________________________________________________________________________
 UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
   UrlParser::ParsedUrl parsedUrl;
   auto result = boost::urls::parse_origin_form(target);
@@ -20,11 +21,28 @@ UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
 
   return parsedUrl;
 }
+
+// _____________________________________________________________________________
 ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
     boost::urls::params_view params) {
   ad_utility::HashMap<std::string, std::string> result;
   for (auto param : params) {
     auto [iterator, isNewElement] = result.insert({param.key, param.value});
+    if (!isNewElement) {
+      AD_THROW("Duplicate HTTP parameter: " + iterator->first);
+    }
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
+    boost::urls::params_encoded_view params) {
+  ad_utility::HashMap<std::string, std::string> result;
+  for (auto param : params) {
+    auto [iterator, isNewElement] =
+        result.insert({param.key.decode(boost::urls::encoding_opts(true)),
+                       param.value.decode(boost::urls::encoding_opts(true))});
     if (!isNewElement) {
       AD_THROW("Duplicate HTTP parameter: " + iterator->first);
     }

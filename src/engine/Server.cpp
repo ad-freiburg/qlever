@@ -172,12 +172,9 @@ ad_utility::UrlParser::ParsedUrl Server::getUrlPathAndParameters(
   if (request.method() == http::verb::get) {
     // For a GET request, `request.target()` yields the HTTP Request-URI.
     // This is a concatenation of the URL path and the query strings.
-    if (!parsedUrl.parameters_.contains("query")) {
-      throw std::runtime_error(absl::StrCat("GET Request to \"",
-                                            std::string{request.target()},
-                                            "\" missing \"query\" parameter."));
+    if (parsedUrl.parameters_.contains("query")) {
+      parsedUrl.query_ = parsedUrl.parameters_["query"];
     }
-    parsedUrl.query_ = parsedUrl.parameters_["query"];
     return parsedUrl;
   }
   if (request.method() == http::verb::post) {

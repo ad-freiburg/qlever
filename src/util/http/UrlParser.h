@@ -37,6 +37,8 @@ class UrlParser {
 
   static ad_utility::HashMap<std::string, std::string> paramsToMap(
       boost::urls::params_view params);
+  static ad_utility::HashMap<std::string, std::string> paramsToMap(
+      boost::urls::params_encoded_view params);
 };
 }  // namespace ad_utility
 
