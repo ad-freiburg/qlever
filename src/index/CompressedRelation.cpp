@@ -674,7 +674,7 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 void CompressedRelationWriter::compressAndWriteBlock(
     Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
     bool invokeCallback) {
-  blockWriteQueueTimer_.cont();
+  auto t = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, buf = std::move(block), firstCol0Id, lastCol0Id,
                          invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
@@ -697,7 +697,7 @@ void CompressedRelationWriter::compressAndWriteBlock(
       std::invoke(smallBlocksCallback_, std::move(buf));
     }
   });
-  blockWriteQueueTimer_.stop();
+  t.stop();
 }
 
 // _____________________________________________________________________________

@@ -177,7 +177,7 @@ class CompressedRelationWriter {
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
-  ad_utility::Timer blockWriteQueueTimer_{ad_utility::Timer::Stopped};
+  ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
   // This callback is invoked with a block of small relations (which share the
   // same block), after this block has been completely handled by this writer.
@@ -270,9 +270,9 @@ class CompressedRelationWriter {
   void finish() {
     AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
-    blockWriteQueueTimer_.cont();
+    auto t = blockWriteQueueTimer_.startMeasurement();
     blockWriteQueue_.finish();
-    blockWriteQueueTimer_.stop();
+    t.stop();
     outfile_.wlock()->close();
   }
 
