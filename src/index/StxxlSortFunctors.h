@@ -13,8 +13,8 @@ struct SortTriple {
   using T = std::array<Id, 3>;
   // comparison function
   bool operator()(const auto& a, const auto& b) const {
-    // constexpr auto c = &Id::compareWithoutLocalVocab;
-    constexpr auto c = &Id::operator<=>;
+    constexpr auto c = &Id::compareWithoutLocalVocab;
+    // constexpr auto c = &Id::operator<=>;
     auto c1 = std::invoke(c, a[i0], b[i0]);
     if (c1 != 0) {
       return c1 < 0;
