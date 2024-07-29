@@ -179,10 +179,10 @@ class CompressedRelationWriter {
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
   ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
 
-  // This callback is invoked with a block of small relations (which share the
+  // This callback is invoked for each block of small relations (which share the
   // same block), after this block has been completely handled by this writer.
-  // This callback is used to efficiently pass this block from a permutation to
-  // its twin permutation, which only has to resort and write this block.
+  // This callback is used to efficiently pass the block from a permutation to
+  // its twin permutation, which only has to re-sort and write the block.
   using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
   SmallBlocksCallback smallBlocksCallback_;
 
@@ -270,9 +270,9 @@ class CompressedRelationWriter {
   void finish() {
     AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
-    auto t = blockWriteQueueTimer_.startMeasurement();
+    auto timer = blockWriteQueueTimer_.startMeasurement();
     blockWriteQueue_.finish();
-    t.stop();
+    timer.stop();
     outfile_.wlock()->close();
   }
 

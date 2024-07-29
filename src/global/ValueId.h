@@ -179,9 +179,9 @@ class ValueId {
   }
 
   // When there are no local vocab entries, then comparison can only be done
-  // one the underlying bits, which allows much better code generation (e.g.
-  // vectorization). This method should for example be used during
-  // IndexBuilding.
+  // on the underlying bits, which allows much better code generation (e.g.
+  // vectorization). In particular, this method should for example be used
+  // during index building.
   constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
     return _bits <=> other._bits;
   }

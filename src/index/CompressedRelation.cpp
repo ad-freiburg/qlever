@@ -674,7 +674,7 @@ CompressedRelationWriter::compressAndWriteColumn(std::span<const Id> column) {
 void CompressedRelationWriter::compressAndWriteBlock(
     Id firstCol0Id, Id lastCol0Id, std::shared_ptr<IdTable> block,
     bool invokeCallback) {
-  auto t = blockWriteQueueTimer_.startMeasurement();
+  auto timer = blockWriteQueueTimer_.startMeasurement();
   blockWriteQueue_.push([this, buf = std::move(block), firstCol0Id, lastCol0Id,
                          invokeCallback]() mutable {
     std::vector<CompressedBlockMetadata::OffsetAndCompressedSize> offsets;
@@ -684,7 +684,7 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(!offsets.empty());
     auto numRows = buf->numRows();
     const auto& first = (*buf)[0];
-    const auto& last = (*buf)[buf->numRows() - 1];
+    const auto& last = (*buf)[numRows - 1];
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
@@ -697,7 +697,7 @@ void CompressedRelationWriter::compressAndWriteBlock(
       std::invoke(smallBlocksCallback_, std::move(buf));
     }
   });
-  t.stop();
+  timer.stop();
 }
 
 // _____________________________________________________________________________
@@ -1034,6 +1034,8 @@ auto CompressedRelationWriter::createPermutationPair(
         // additional payload.
         // TODO<joka921> As soon as we implement named graphs, those should
         // probably also be part of the ordering.
+        // Note: We could also use `compareWithoutLocalVocab` to compare the IDs
+        // cheaper, but this sort is far from being a performance bottleneck.
         auto compare = [](const auto& a, const auto& b) {
           return std::tie(a[0], a[1], a[2]) < std::tie(b[0], b[1], b[2]);
         };
@@ -1139,23 +1141,24 @@ auto CompressedRelationWriter::createPermutationPair(
   blockCallbackTimer.cont();
   blockCallbackQueue.finish();
   blockCallbackTimer.stop();
-  LOG(INFO) << "Time spent waiting for the input "
-            << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
-            << std::endl;
-  LOG(INFO) << "Time spent waiting for writer1's queue "
-            << ad_utility::Timer::toSeconds(
-                   writer1.blockWriteQueueTimer_.msecs())
-            << "s" << std::endl;
-  LOG(INFO) << "Time spent waiting for writer2's queue "
-            << ad_utility::Timer::toSeconds(
-                   writer2.blockWriteQueueTimer_.msecs())
-            << "s" << std::endl;
-  LOG(INFO) << "Time spent waiting for large twin relations "
-            << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
-            << "s" << std::endl;
-  LOG(INFO) << "Time spent waiting for triple callbacks (e.g. the next sorter) "
-            << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
-            << std::endl;
+  LOG(TIMING) << "Time spent waiting for the input "
+              << ad_utility::Timer::toSeconds(inputWaitTimer.msecs()) << "s"
+              << std::endl;
+  LOG(TIMING) << "Time spent waiting for writer1's queue "
+              << ad_utility::Timer::toSeconds(
+                     writer1.blockWriteQueueTimer_.msecs())
+              << "s" << std::endl;
+  LOG(TIMING) << "Time spent waiting for writer2's queue "
+              << ad_utility::Timer::toSeconds(
+                     writer2.blockWriteQueueTimer_.msecs())
+              << "s" << std::endl;
+  LOG(TIMING) << "Time spent waiting for large twin relations "
+              << ad_utility::Timer::toSeconds(largeTwinRelationTimer.msecs())
+              << "s" << std::endl;
+  LOG(TIMING)
+      << "Time spent waiting for triple callbacks (e.g. the next sorter) "
+      << ad_utility::Timer::toSeconds(blockCallbackTimer.msecs()) << "s"
+      << std::endl;
   return {numDistinctCol0, std::move(writer1).getFinishedBlocks(),
           std::move(writer2).getFinishedBlocks()};
 }
