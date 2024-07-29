@@ -181,7 +181,7 @@ class CompressedRelationWriter {
 
   // This callback is invoked for each block of small relations (which share the
   // same block), after this block has been completely handled by this writer.
-  // This callback is used to efficiently pass the block from a permutation to
+  // The callback is used to efficiently pass the block from a permutation to
   // its twin permutation, which only has to re-sort and write the block.
   using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
   SmallBlocksCallback smallBlocksCallback_;
