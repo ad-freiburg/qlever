@@ -5,10 +5,23 @@
 #ifndef QLEVER_VOCABULARYTESTHELPERS_H
 #define QLEVER_VOCABULARYTESTHELPERS_H
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
+#include "../../util/GTestHelpers.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Exception.h"
+
+// human-readable output for the `WordAndIndex` class within GTest.
+inline void PrintTo(const WordAndIndex& wi, std::ostream* osPtr) {
+  auto& os = *osPtr;
+  os << "WordAndIndex :";
+  if (wi.isEnd()) {
+    os << "[end]";
+  } else {
+    os << '"' << wi.word() << '"';
+    os << wi.index();
+  }
+}
 
 namespace vocabulary_test {
 
@@ -19,6 +32,20 @@ inline auto assertThatRangesAreEqual = [](const auto& a, const auto& b) {
   for (size_t i = 0; i < a.size(); ++i) {
     ASSERT_EQ(a[i], b[i]);
   }
+};
+
+// A matcher for the `WordAndIndex` class. It currently ignores the
+// `previousIndex_` member, which is mostly redundant.
+constexpr auto matchWordAndIndex =
+    [](const WordAndIndex& wi) -> ::testing::Matcher<const WordAndIndex&> {
+  auto isEndMatcher =
+      AD_PROPERTY(WordAndIndex, isEnd, ::testing::Eq(wi.isEnd()));
+  if (wi.isEnd()) {
+    return isEndMatcher;
+  }
+  return ::testing::AllOf(
+      isEndMatcher, AD_PROPERTY(WordAndIndex, word, ::testing::Eq(wi.word())),
+      AD_PROPERTY(WordAndIndex, index, ::testing::Eq(wi.index())));
 };
 
 /**
@@ -43,36 +70,40 @@ inline void testUpperAndLowerBound(const auto& vocab, auto makeWordLarger,
   ASSERT_FALSE(words.empty());
   ASSERT_EQ(vocab.size(), words.size());
 
-  auto maxId = vocab.getHighestId();
-
   for (size_t i = 0; i < vocab.size(); ++i) {
     WordAndIndex wi{words[i], ids[i]};
-    EXPECT_EQ(vocab.lower_bound(words[i], comparator), wi);
+    EXPECT_THAT(vocab.lower_bound(words[i], comparator), matchWordAndIndex(wi));
     auto lexicographicallySmallerWord = makeWordSmaller(words[i]);
-    EXPECT_EQ(vocab.lower_bound(lexicographicallySmallerWord, comparator), wi);
+    auto res = vocab.lower_bound(lexicographicallySmallerWord, comparator);
+    EXPECT_THAT(vocab.lower_bound(lexicographicallySmallerWord, comparator),
+                matchWordAndIndex(wi));
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
-    ASSERT_EQ(vocab.lower_bound(makeWordLarger(words.back()), comparator), wi);
+    auto wi = WordAndIndex::end();
+    EXPECT_THAT(vocab.lower_bound(makeWordLarger(words.back()), comparator),
+                matchWordAndIndex(wi));
   }
 
   for (size_t i = 1; i < vocab.size(); ++i) {
     WordAndIndex wi{words[i], ids[i]};
-    EXPECT_EQ(vocab.upper_bound(words[i - 1], comparator), wi);
+    EXPECT_THAT(vocab.upper_bound(words[i - 1], comparator),
+                matchWordAndIndex(wi));
     auto lexicographicallyLargerWord = makeWordLarger(words[i - 1]);
-    EXPECT_EQ(vocab.upper_bound(lexicographicallyLargerWord, comparator), wi);
+    EXPECT_THAT(vocab.upper_bound(lexicographicallyLargerWord, comparator),
+                matchWordAndIndex(wi));
   }
 
   {
     WordAndIndex wi{words.front(), ids[0]};
-    ASSERT_EQ(vocab.upper_bound(makeWordSmaller(words.front()), comparator),
-              wi);
+    ASSERT_THAT(vocab.upper_bound(makeWordSmaller(words.front()), comparator),
+                matchWordAndIndex(wi));
   }
 
   {
-    WordAndIndex wi{std::nullopt, maxId + 1};
-    ASSERT_EQ(vocab.upper_bound(words.back(), comparator), wi);
+    auto wi = WordAndIndex::end();
+    ASSERT_THAT(vocab.upper_bound(words.back(), comparator),
+                matchWordAndIndex(wi));
   }
 };
 
@@ -209,9 +240,11 @@ auto testAccessOperatorForUnorderedVocabulary(auto createVocabulary) {
 auto testEmptyVocabularyWithComparator(auto createVocabulary, auto comparator) {
   auto vocab = createVocabulary(std::vector<std::string>{});
   ASSERT_EQ(0u, vocab.size());
-  WordAndIndex expected{std::nullopt, 0};
-  ASSERT_EQ(expected, vocab.lower_bound("someWord", comparator));
-  ASSERT_EQ(expected, vocab.upper_bound("someWord", comparator));
+  auto expected = WordAndIndex::end();
+  EXPECT_THAT(vocab.lower_bound("someWord", comparator),
+              matchWordAndIndex(expected));
+  EXPECT_THAT(vocab.upper_bound("someWord", comparator),
+              matchWordAndIndex(expected));
 }
 
 // Check that an empty vocabulary, created via

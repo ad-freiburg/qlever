@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "global/Id.h"
+#include "index/vocabulary/VocabularyBinarySearchMixin.h"
 #include "index/vocabulary/VocabularyTypes.h"
 #include "util/Algorithm.h"
 #include "util/File.h"
@@ -17,7 +18,7 @@
 // On-disk vocabulary of strings. Each entry is a pair of <ID, String>. The IDs
 // are ascending, but not (necessarily) contiguous. If the strings are sorted,
 // then binary search for a string can be performed.
-class VocabularyOnDisk {
+class VocabularyOnDisk : public VocabularyBinarySearchMixin<VocabularyOnDisk> {
  private:
   // The offset of a word in the underlying file.
   using Offset = uint64_t;
@@ -27,11 +28,6 @@ class VocabularyOnDisk {
   // The IDs and offsets of the words.
   ad_utility::MmapVectorView<Offset> offsets_;
 
-  // The highest ID that occurs in the vocabulary. If the vocabulary is empty,
-  // this will be Id(-1), s.t. highestIdx_ + 1 will overflow to 0.
-  static constexpr uint64_t highestIndexEmpty_ =
-      std::numeric_limits<uint64_t>::max();
-  uint64_t highestIdx_ = highestIndexEmpty_;
   // The number of words stored in the vocabulary.
   size_t size_ = 0;
 
@@ -88,59 +84,6 @@ class VocabularyOnDisk {
   VocabularyOnDisk(VocabularyOnDisk&&) noexcept = default;
   VocabularyOnDisk& operator=(VocabularyOnDisk&&) noexcept = default;
 
-  // Get the largest ID contained in this vocabulary. If the vocabulary is
-  // empty, this is the highest possible ID (s.t. `getHighestId() + 1` overflows
-  // to 0). This makes the behavior of `lower_bound` and `upper_bound` for empty
-  // vocabularies consistent with other vocabulary types like
-  // `VocabularyInMemory`.
-  uint64_t getHighestId() const { return highestIdx_; }
-
-  /// Return a `WordAndIndex` that points to the first entry that is equal or
-  /// greater than `word` wrt the `comparator`. Only works correctly if the
-  /// vocabulary is sorted according to the comparator (exactly like in
-  /// `std::lower_bound`, which is used internally).
-  template <typename Comparator>
-  WordAndIndex lower_bound(const auto& word, Comparator comparator) const {
-    auto it =
-        std::lower_bound(begin(), end(), word, transformComparator(comparator));
-    return iteratorToWordAndIndex(it);
-  }
-
-  // Same as `lower_bound`, but the `comparator` compares an `iterator` (first
-  // argument) and a `WordAndIndex` (second argument). This is used for
-  // compressed vocabularies in which the decompression depends on the position
-  // of a word in the vocabulary
-  template <typename Comparator>
-  WordAndIndex lower_bound_iterator(const auto& word,
-                                    Comparator comparator) const {
-    auto it = ad_utility::lower_bound_iterator(begin(), end(), word,
-                                               transformComparator(comparator));
-    return iteratorToWordAndIndex(it);
-  }
-
-  /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt the `comparator`. Only works correctly if the
-  /// vocabulary is sorted according to the comparator (exactly like in
-  /// `std::upper_bound`, which is used internally).
-  template <typename Comparator>
-  WordAndIndex upper_bound(const auto& word, Comparator comparator) const {
-    auto it =
-        std::upper_bound(begin(), end(), word, transformComparator(comparator));
-    return iteratorToWordAndIndex(it);
-  }
-
-  // Same as `upper_bound`, but the `comparator` compares a `WordAndIndex`
-  // (first argument) and an `Iterator` (second argument). This is used for
-  // compressed vocabularies in which the decompression depends on the position
-  // of a word in the vocabulary
-  template <typename Comparator>
-  WordAndIndex upper_bound_iterator(const auto& word,
-                                    Comparator comparator) const {
-    auto it = ad_utility::upper_bound_iterator(begin(), end(), word,
-                                               transformComparator(comparator));
-    return iteratorToWordAndIndex(it);
-  }
-
   // The offset of a word in `file_` and its size in number of bytes.
   struct OffsetAndSize {
     uint64_t _offset;
@@ -158,37 +101,17 @@ class VocabularyOnDisk {
   const_iterator begin() const { return {this, 0}; }
   const_iterator end() const { return {this, size()}; }
 
- private:
-  // Takes a lambda that compares two string-like objects and returns a lambda
-  // that compares two objects, either of which can be string-like or
-  // `WordAndIndex`.
-  auto transformComparator(auto comparator) const {
-    // For a `WordAndIndex`, return the word, else (for string types) just
-    // return the input.
-    auto getString = [&]<typename T>(const T& input) -> decltype(auto) {
-      if constexpr (ad_utility::isSimilar<T, WordAndIndex>) {
-        AD_CONTRACT_CHECK(input._word.has_value());
-        return input._word.value();
-      } else {
-        return input;
-      }
-    };
-
-    return [comparator, getString](const auto& a, const auto& b) {
-      return comparator(getString(a), getString(b));
-    };
-  }
-
-  // Convert an iterator to the corresponding `WordAndIndex`. For the `end()`
-  // iterator return `{nullopt, highestID + 1}`.
-  [[nodiscard]] WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
+  // Convert an iterator to the corresponding `WordAndIndex`. Needed for the
+  // Mixin base class
+  WordAndIndex iteratorToWordAndIndex(const_iterator it) const {
     if (it == end()) {
-      return {std::nullopt, getHighestId() + 1};
+      return WordAndIndex::end();
     } else {
       return {*it, static_cast<uint64_t>(it - begin())};
     }
   }
 
+ private:
   // Get the `OffsetAndSize` for the element with the `idx`. Return
   // `std::nullopt` if `idx` is not contained in the vocabulary.
   OffsetAndSize getOffsetAndSize(uint64_t idx) const;

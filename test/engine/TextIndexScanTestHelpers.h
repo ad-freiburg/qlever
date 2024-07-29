@@ -6,33 +6,27 @@
 
 namespace textIndexScanTestHelpers {
 // NOTE: this function exploits a "lucky accident" that allows us to
-// obtain the textRecord using idToOptionalString.
+// obtain the textRecord using indexToString.
 // TODO: Implement a more elegant/stable version
 inline string getTextRecordFromResultTable(const QueryExecutionContext* qec,
                                            const ProtoResult& result,
                                            const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(0)[rowIndex].getVocabIndex())
-      .value();
+  return qec->getIndex().indexToString(
+      result.idTable().getColumn(0)[rowIndex].getVocabIndex());
 }
 
 inline string getEntityFromResultTable(const QueryExecutionContext* qec,
                                        const ProtoResult& result,
                                        const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(1)[rowIndex].getVocabIndex())
-      .value();
+  return qec->getIndex().indexToString(
+      result.idTable().getColumn(1)[rowIndex].getVocabIndex());
 }
 
 inline string getWordFromResultTable(const QueryExecutionContext* qec,
                                      const ProtoResult& result,
                                      const size_t& rowIndex) {
-  return qec->getIndex()
-      .idToOptionalString(
-          result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())
-      .value();
+  return std::string{qec->getIndex().indexToString(
+      result.idTable().getColumn(1)[rowIndex].getWordVocabIndex())};
 }
 
 inline string combineToString(const string& text, const string& word) {

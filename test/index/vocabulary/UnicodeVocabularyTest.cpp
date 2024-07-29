@@ -4,10 +4,10 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/StringSortComparator.h"
-#include "../src/index/vocabulary/UnicodeVocabulary.h"
-#include "../src/index/vocabulary/VocabularyInMemory.h"
-#include "./VocabularyTestHelpers.h"
+#include "VocabularyTestHelpers.h"
+#include "index/StringSortComparator.h"
+#include "index/vocabulary/UnicodeVocabulary.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 
 using Vocab = UnicodeVocabulary<VocabularyInMemory, SimpleStringComparator>;
 using namespace vocabulary_test;
