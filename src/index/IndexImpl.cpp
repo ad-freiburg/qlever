@@ -106,8 +106,8 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     }
   };
   auto comparator = [&projectionForComparator](const auto& l, const auto& r) {
-    projectionForComparator(l).compareWithoutLocalVocab(
-        projectionForComparator(r)) < 0;
+    return projectionForComparator(l).compareWithoutLocalVocab(
+               projectionForComparator(r)) < 0;
   };
 
   // There are 5 columns in the result (3 from the triple, as well as subject
