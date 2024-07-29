@@ -58,8 +58,11 @@ class Service : public Operation {
           GetResultFunction getResultFunction = sendHttpOrHttpsRequest,
           std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
 
-  // Set the siblingTree (subTree that will later be joined with the Result of
-  // the Service Operation), used to reduce the Service Queries Complexity.
+  // Create a new `Service` operation, that is equal to `*this` but additionally
+  // respects the `siblingTree`. The sibling tree is a partial query that will
+  // later be joined with the result of the `Service`. If the result of the
+  // sibling is small, it will be used to constrain the SERVICE query using a
+  // `VALUES` clause.
   [[nodiscard]] std::shared_ptr<Service> addSiblingTree(
       std::shared_ptr<QueryExecutionTree> siblingTree) const {
     return std::make_shared<Service>(getExecutionContext(),
