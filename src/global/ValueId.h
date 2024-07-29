@@ -178,6 +178,14 @@ class ValueId {
     return _bits <=> other._bits;
   }
 
+  // When there are no local vocab entries, then comparison can only be done
+  // one the underlying bits, which allows much better code generation (e.g.
+  // vectorization). This method should for example be used during
+  // IndexBuilding.
+  constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
+    return _bits <=> other._bits;
+  }
+
   // For some reason which I (joka921) don't understand, we still need
   // operator== although we already have operator <=>.
   constexpr bool operator==(const ValueId& other) const {
