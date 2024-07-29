@@ -11,23 +11,16 @@ namespace ad_utility {
  * A simple parser for split up JSON-data with known structure.
  *
  * Given the path to an array containing the majority of the given JSON-object,
- * the Parser will yield chunks of the object seperated after completed objects
+ * the Parser will yield chunks of the object separated after completed elements
  * in the arrayPath or after reading the entire object itself.
  */
 class LazyJsonParser {
  public:
-  struct JsonNode {
-    std::string key;
-    bool isObject{true};
-
-    bool operator==(const JsonNode& other) const {
-      return key == other.key && isObject == other.isObject;
-    }
-  };
-  LazyJsonParser(std::vector<JsonNode> arrayPath) : arrayPath_(arrayPath) {}
+  LazyJsonParser(std::vector<std::string> arrayPath);
 
   // TODO<unexenu> this should take a generator as argument instead
-  static std::string parse(std::string s, std::vector<JsonNode> arrayPath) {
+  static std::string parse(std::string s,
+                           const std::vector<std::string>& arrayPath) {
     LazyJsonParser p(arrayPath);
     return p.parseChunk(s);
   }
@@ -36,20 +29,31 @@ class LazyJsonParser {
   std::string parseChunk(std::string inStr);
 
  private:
-  constexpr bool isInArrayPath() const { return curPath_ == arrayPath_; }
+  // Checks if the current path is the arrayPath.
+  bool isInArrayPath() const { return curPath_ == arrayPath_; }
 
-  std::string remainingInput_;
-  std::string tempKey_;
+  // Parses strings in the input.
+  void parseString(size_t& idx);
+
+  // Parses the arrayPath.
+  int parseArrayPath(size_t& idx);
+
+  std::string input_;
   bool isEscaped_{false};
   bool inString_{false};
-  bool expectKey_{false};
   bool inArrayPath_{false};
-  bool setKeysValueType_{false};
   int openBracesInArrayPath_{0};
+  int openBrackets_{0};
+  int yieldCount_{0};
 
-  std::vector<JsonNode> prefixPath_;
-  std::vector<JsonNode> curPath_;
-  const std::vector<JsonNode> arrayPath_;
+  int strStart_{-1};
+  int strEnd_{-1};
+
+  std::vector<std::string> curPath_;
+  const std::vector<std::string> arrayPath_;
+
+  const std::string prefixInArray_;
+  const std::string suffixInArray_;
 };
 }  // namespace ad_utility
 

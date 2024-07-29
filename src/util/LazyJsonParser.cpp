@@ -2,151 +2,155 @@
 
 #include <absl/strings/ascii.h>
 #include <absl/strings/str_cat.h>
-
-#include <algorithm>
+#include <absl/strings/str_join.h>
 
 namespace ad_utility {
 
+LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
+    : arrayPath_(arrayPath),
+      prefixInArray_(absl::StrCat(
+          absl::StrJoin(arrayPath.begin(), arrayPath.end(), "",
+                        [](std::string* out, const std::string& s) {
+                          absl::StrAppend(out, "{\"", s, "\": ");
+                        }),
+          "[")),
+      suffixInArray_(absl::StrCat("]", std::string(arrayPath.size(), '}'))) {}
+
 std::string LazyJsonParser::parseChunk(std::string inStr) {
-  inStr = absl::StrCat(remainingInput_, inStr);
+  size_t idx = input_.size();
+  absl::StrAppend(&input_, inStr);
+  int materializeEnd = -1;
 
-  const auto startIt = inStr.begin() + remainingInput_.size();
-
-  if (remainingInput_.empty()) {
-    prefixPath_ = curPath_;
+  if (inString_) {
+    parseString(idx);
+    ++idx;
   }
 
-  bool arrayPathTouched = inArrayPath_;
-  bool endReached = false;
-  auto materializeEnd = inStr.begin();
-  auto strStart = startIt;
+  if (inArrayPath_) {
+    materializeEnd = parseArrayPath(idx);
+    ++idx;
+  }
 
-  auto openBracket = [&](bool isObject) {
-    if (inArrayPath_) {
-      ++openBracesInArrayPath_;
-    } else if (setKeysValueType_) {
-      curPath_.emplace_back(tempKey_, isObject);
-      tempKey_.clear();
-
-      inArrayPath_ = isInArrayPath();
-      if (inArrayPath_) {
-        arrayPathTouched = true;
-      }
-
-      setKeysValueType_ = false;
+  for (; idx < input_.size(); ++idx) {
+    switch (input_[idx]) {
+      case '{':
+        if (strStart_ != -1 && strEnd_ != -1) {
+          curPath_.emplace_back(input_.substr(strStart_, strEnd_ - strStart_));
+        }
+        break;
+      case '[':
+        if (openBrackets_ == 0 && strStart_ != -1 && strEnd_ != -1) {
+          curPath_.emplace_back(input_.substr(strStart_, strEnd_ - strStart_));
+        }
+        ++openBrackets_;
+        if (isInArrayPath()) {
+          materializeEnd = parseArrayPath(idx);
+        }
+        break;
+      case ']':
+        --openBrackets_;
+        if (openBrackets_ == 0 && !curPath_.empty()) {
+          curPath_.pop_back();
+          inArrayPath_ = isInArrayPath();
+        }
+        break;
+      case '}':
+        if (curPath_.empty()) {
+          materializeEnd = idx + 1;
+        } else {
+          curPath_.pop_back();
+        }
+        break;
+      case '"':
+        parseString(idx);
+        break;
     }
-    if (isObject) {
-      expectKey_ = !inArrayPath_;
-    }
-  };
+  }
 
-  auto closeBracket = [&](std::string::iterator it) {
-    if (openBracesInArrayPath_ > 0) {
-      --openBracesInArrayPath_;
-      if (openBracesInArrayPath_ == 0) {
-        materializeEnd = it + 1;
-      }
-    } else {
-      inArrayPath_ = isInArrayPath();
-      if (!curPath_.empty()) {
-        curPath_.pop_back();
-      }
-    }
-  };
+  // Construct result.
+  std::string res;
+  if (materializeEnd == -1) {
+    return res;
+  }
 
-  for (auto it = startIt; it != inStr.end(); ++it) {
+  if (yieldCount_ > 0) {
+    res = prefixInArray_;
+  }
+  ++yieldCount_;
+
+  absl::StrAppend(&res, input_.substr(0, materializeEnd));
+  input_ = materializeEnd < (int)input_.size()
+               ? input_.substr(materializeEnd + 1)
+               : "";
+
+  if (inArrayPath_) {
+    absl::StrAppend(&res, suffixInArray_);
+  }
+
+  return res;
+}
+
+int LazyJsonParser::parseArrayPath(size_t& idx) {
+  int lastObjectEnd = -1;
+  for (; idx < input_.size(); ++idx) {
+    switch (input_[idx]) {
+      case '{':
+        ++openBracesInArrayPath_;
+        break;
+      case '[':
+        if (inArrayPath_) {
+          ++openBracesInArrayPath_;
+        } else {
+          inArrayPath_ = true;
+        }
+        break;
+      case '}':
+        --openBracesInArrayPath_;
+        break;
+      case ']':
+        if (openBracesInArrayPath_ == 0) {
+          inArrayPath_ = false;
+          if (!curPath_.empty()) {
+            curPath_.pop_back();
+          }
+          return lastObjectEnd;
+        }
+        --openBracesInArrayPath_;
+        break;
+      case ',':
+        if (openBracesInArrayPath_ == 0) {
+          lastObjectEnd = idx;
+        }
+        break;
+      case '"':
+        parseString(idx);
+        break;
+    }
+  }
+  return lastObjectEnd;
+}
+
+void LazyJsonParser::parseString(size_t& idx) {
+  for (; idx < input_.size(); ++idx) {
     if (isEscaped_) {
       isEscaped_ = false;
       continue;
     }
-    switch (*it) {
-      case '{':
-        openBracket(true);
-        break;
-      case '[':
-        openBracket(false);
-        break;
-      case '}':
-        if (curPath_.empty()) {
-          endReached = true;
-          materializeEnd = it + 1;
-        }
-        closeBracket(it);
-        break;
-      case ']':
-        closeBracket(it);
-        break;
+    switch (input_[idx]) {
       case '"':
-        if (inArrayPath_) {
-          continue;
-        }
         inString_ = !inString_;
-
-        if (expectKey_) {
-          if (inString_) {
-            strStart = it + 1;
-          } else {
-            absl::StrAppend(&tempKey_, std::string(strStart, it));
-            setKeysValueType_ = true;
-            expectKey_ = false;
-          }
+        if (inString_) {
+          strStart_ = idx + 1;
+        } else {
+          strEnd_ = idx;
+          return;
         }
-        break;
-      case ',':
-        expectKey_ = curPath_.empty() || curPath_.back().isObject;
-        tempKey_.clear();
         break;
       case '\\':
         isEscaped_ = true;
         break;
     }
   }
-
-  // temporary save unfinished key
-  if (expectKey_ && inString_) {
-    absl::StrAppend(&tempKey_, std::string(strStart, inStr.end()));
-  }
-
-  std::string res = "";
-
-  if ((!inArrayPath_ && !endReached) ||
-      (inArrayPath_ && materializeEnd == inStr.begin())) {
-    remainingInput_ = inStr;
-    return res;
-  }
-
-  // skip bad prefix
-  const std::string nonPrefixChars = ", ]}";
-  auto fixedBegin =
-      std::find_if(inStr.begin(), inStr.end(), [&nonPrefixChars](char c) {
-        return nonPrefixChars.find(c) == std::string::npos;
-      });
-
-  // add prefix path after removing closed and ignored objects/arrays
-  for (auto it = inStr.begin(); it != fixedBegin; ++it) {
-    if ((*it == ']' || *it == '}') && !prefixPath_.empty()) {
-      prefixPath_.pop_back();
-    }
-  }
-  if (!prefixPath_.empty()) {
-    res = "{";
-    for (const auto& n : prefixPath_) {
-      absl::StrAppend(&res, "\"", n.key, "\": ", n.isObject ? "{" : "[");
-    }
-  }
-  prefixPath_.clear();
-
-  absl::StrAppend(&res, std::string(fixedBegin, materializeEnd));
-  remainingInput_ = std::string(materializeEnd, inStr.end());
-
-  // reconstruct closing brackets
-  for (auto it = curPath_.rbegin(); it != curPath_.rend(); ++it) {
-    absl::StrAppend(&res, it->isObject ? "}" : "]");
-  }
-
-  if (curPath_.size() > 0) {
-    absl::StrAppend(&res, "}");
-  }
-  return res;
 }
+
 }  // namespace ad_utility
