@@ -60,8 +60,11 @@ class Service : public Operation {
 
   // Set the siblingTree (subTree that will later be joined with the Result of
   // the Service Operation), used to reduce the Service Queries Complexity.
-  void setSiblingTree(std::shared_ptr<QueryExecutionTree> siblingTree) {
-    siblingTree_ = siblingTree;
+  [[nodiscard]] std::shared_ptr<Service> addSiblingTree(
+      std::shared_ptr<QueryExecutionTree> siblingTree) const {
+    return std::make_shared<Service>(getExecutionContext(),
+                                     parsedServiceClause_, getResultFunction_,
+                                     std::move(siblingTree));
   }
 
   // Methods inherited from base class `Operation`.

@@ -1790,17 +1790,22 @@ auto QueryPlanner::createJoinWithService(
     return std::nullopt;
   }
 
-  auto service = aRootOp ? aRootOp : bRootOp;
+  auto serviceWithOutSibling = aRootOp ? aRootOp : bRootOp;
   auto sibling = bRootOp ? a : b;
 
-  service->setSiblingTree(sibling._qet);
+  auto service =
+      makeSubtreePlan(serviceWithOutSibling->addSiblingTree(sibling._qet));
+  auto qec = serviceWithOutSibling->getExecutionContext();
 
-  const auto& qec = service->getExecutionContext();
+  auto serviceIdx = aRootOp ? 0 : 1;
+  auto siblingIdx = aRootOp ? 1 : 0;
 
   SubtreePlan plan =
       jcs.size() == 1
-          ? makeSubtreePlan<Join>(qec, a._qet, b._qet, jcs[0][0], jcs[0][1])
-          : makeSubtreePlan<MultiColumnJoin>(qec, a._qet, b._qet);
+          ? makeSubtreePlan<Join>(qec, std::move(service._qet), sibling._qet,
+                                  jcs[0][serviceIdx], jcs[0][siblingIdx])
+          : makeSubtreePlan<MultiColumnJoin>(qec, std::move(service._qet),
+                                             sibling._qet);
   mergeSubtreePlanIds(plan, a, b);
 
   return plan;
