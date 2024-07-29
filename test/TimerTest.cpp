@@ -160,4 +160,5 @@ TEST(Timer, ThreadSafeTimerMultiThreaded) {
   // The measurements in the threadsafe timer ran concurrently, so they have
   // aggregated more than the wall clock time.
   EXPECT_GT(t.value(), singleThreadedTimer.value());
+  testTime(t.value(), t.msecs(), 10ms);
 }
