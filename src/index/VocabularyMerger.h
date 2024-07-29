@@ -22,10 +22,11 @@ using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 using TripleVec = ad_utility::CompressedExternalIdTable<3>;
 
 namespace ad_utility::vocabulary_merger {
-// Concept for a callback that can be called with a single `string_view`
-// argument.
+// Concept for a callback that can be called with a `string_view` and a `bool`.
+// If the `bool` is true, then the word is to be stored in the external
+// vocabulary else in the internal vocabulary.
 template <typename T>
-concept WordCallback = std::invocable<T, std::string_view>;
+concept WordCallback = std::invocable<T, std::string_view, bool>;
 // Concept for a callable that compares to `string_view`s.
 template <typename T>
 concept WordComparator = std::predicate<T, std::string_view, std::string_view>;
@@ -90,13 +91,12 @@ struct VocabularyMetaData {
 // where `0 <= i < numFiles`.
 // Return the number of total Words merged and the lower and upper bound of
 // language tagged predicates. Argument `comparator` gives the way to order
-// strings (case-sensitive or not). Arguments `internalVocabAction` and
-// `externalVocabAction` are called for each merged word in the
-// internal/external vocabulary in the order of their appearance.
+// strings (case-sensitive or not). Argument `wordCallback`
+// is called for each merged word in the vocabulary in the order of their
+// appearance.
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
-                                   WordCallback auto& internalWordCallback,
-                                   WordCallback auto& externalWordCallback,
+                                   WordCallback auto& wordCallback,
                                    ad_utility::MemorySize memoryToUse);
 
 // A helper class that implements the `mergeVocabulary` function (see
@@ -115,11 +115,11 @@ class VocabularyMerger {
   const size_t bufferSize_ = BATCH_SIZE_VOCABULARY_MERGE;
 
   // Friend declaration for the publicly available function.
-  friend VocabularyMetaData mergeVocabulary(
-      const std::string& basename, size_t numFiles,
-      WordComparator auto comparator, WordCallback auto& internalWordCallback,
-      WordCallback auto& externalWordCallback,
-      ad_utility::MemorySize memoryToUse);
+  friend VocabularyMetaData mergeVocabulary(const std::string& basename,
+                                            size_t numFiles,
+                                            WordComparator auto comparator,
+                                            WordCallback auto& wordCallback,
+                                            ad_utility::MemorySize memoryToUse);
   VocabularyMerger() = default;
 
   // _______________________________________________________________
@@ -128,8 +128,7 @@ class VocabularyMerger {
   VocabularyMetaData mergeVocabulary(const std::string& basename,
                                      size_t numFiles,
                                      WordComparator auto comparator,
-                                     WordCallback auto& internalWordCallback,
-                                     WordCallback auto& externalWordCallback,
+                                     WordCallback auto& wordCallback,
                                      ad_utility::MemorySize memoryToUse);
 
   // Helper `struct` for a word from a partial vocabulary.
@@ -160,9 +159,7 @@ class VocabularyMerger {
   // The `QueueWord`s must be passed in alphabetical order wrt `lessThan` (also
   // across multiple calls).
   void writeQueueWordsToIdVec(
-      const std::vector<QueueWord>& buffer,
-      WordCallback auto& internalVocabularyAction,
-      WordCallback auto& externalVocabularyAction,
+      const std::vector<QueueWord>& buffer, WordCallback auto& wordCallback,
       std::predicate<TripleComponentWithIndex,
                      TripleComponentWithIndex> auto const& lessThan,
       ad_utility::ProgressBar& progressBar);

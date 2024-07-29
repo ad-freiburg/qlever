@@ -126,8 +126,8 @@ struct EffectiveBooleanValueGetter : Mixin<EffectiveBooleanValueGetter> {
   }
 };
 
-/// This class can be used as the `ValueGetter` argument of Expression
-/// templates. It produces a string value.
+// This class can be used as the `ValueGetter` argument of Expression
+// templates. It produces a string value.
 struct StringValueGetter : Mixin<StringValueGetter> {
   using Mixin<StringValueGetter>::operator();
   std::optional<string> operator()(ValueId, const EvaluationContext*) const;
@@ -190,10 +190,10 @@ struct IsNumericValueGetter : Mixin<IsNumericValueGetter> {
 };
 
 /// This class can be used as the `ValueGetter` argument of Expression
-/// templates. It produces a `std::optional<DateOrLargeYear>`.
+/// templates. It produces a `std::optional<DateYearOrDuration>`.
 struct DateValueGetter : Mixin<DateValueGetter> {
   using Mixin<DateValueGetter>::operator();
-  using Opt = std::optional<DateOrLargeYear>;
+  using Opt = std::optional<DateYearOrDuration>;
 
   Opt operator()(ValueId id, const EvaluationContext*) const {
     if (id.getDatatype() == Datatype::Date) {
@@ -297,4 +297,14 @@ struct LanguageTagValueGetter : Mixin<LanguageTagValueGetter> {
     }
   }
 };
+
+// Value getter for implementing the expressions `IRI()`/`URI()`.
+struct IriOrUriValueGetter : Mixin<IriOrUriValueGetter> {
+  using Mixin<IriOrUriValueGetter>::operator();
+  IdOrLiteralOrIri operator()(ValueId id,
+                              const EvaluationContext* context) const;
+  IdOrLiteralOrIri operator()(const LiteralOrIri& litOrIri,
+                              const EvaluationContext* context) const;
+};
+
 }  // namespace sparqlExpression::detail

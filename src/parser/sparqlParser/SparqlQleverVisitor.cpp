@@ -1996,6 +1996,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "iri" || functionName == "uri") {
+    return createUnary(&makeIriOrUriExpression);
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
@@ -2024,6 +2026,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDayExpression);
   } else if (functionName == "tz") {
     return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "timezone") {
+    return createUnary(&makeTimezoneExpression);
   } else if (functionName == "now") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<NowDatetimeExpression>(startTime_);

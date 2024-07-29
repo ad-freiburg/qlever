@@ -61,7 +61,7 @@ cppcoro::generator<ContextFileParser::Line> IndexImpl::wordsInTextRecords(
   if (addWordsFromLiterals) {
     for (VocabIndex index = VocabIndex::make(0); index.get() < vocab_.size();
          index = index.incremented()) {
-      auto text = vocab_.at(index);
+      auto text = vocab_[index];
       if (!isLiteral(text)) {
         continue;
       }
@@ -107,8 +107,7 @@ void IndexImpl::addTextFromContextFile(const string& contextFile,
   LOG(DEBUG) << "Reloading the RDF vocabulary ..." << std::endl;
   vocab_ = RdfsVocabulary{};
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
 
   // Build the text vocabulary (first scan over the text records).
   LOG(INFO) << "Building text vocabulary ..." << std::endl;
@@ -572,7 +571,7 @@ void IndexImpl::calculateBlockBoundariesImpl(
   };
 
   auto getLengthAndPrefixSortKey = [&](WordVocabIndex i) {
-    auto word = index.textVocab_[i].value();
+    auto word = index.textVocab_[i];
     auto [len, prefixSortKey] =
         locManager.getPrefixSortKey(word, MIN_WORD_PREFIX_SIZE);
     if (len > MIN_WORD_PREFIX_SIZE) {
@@ -712,7 +711,7 @@ void IndexImpl::openTextFileHandle() {
 
 // _____________________________________________________________________________
 std::string_view IndexImpl::wordIdToString(WordIndex wordIndex) const {
-  return textVocab_[WordVocabIndex::make(wordIndex)].value();
+  return textVocab_[WordVocabIndex::make(wordIndex)];
 }
 
 // _____________________________________________________________________________

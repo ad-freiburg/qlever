@@ -90,7 +90,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
   AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
