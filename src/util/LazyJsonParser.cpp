@@ -16,10 +16,10 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
           "[")),
       suffixInArray_(absl::StrCat("]", std::string(arrayPath.size(), '}'))) {}
 
-std::string LazyJsonParser::parseChunk(std::string inStr) {
+std::string LazyJsonParser::parseChunk(const std::string& inStr) {
   size_t idx = input_.size();
   absl::StrAppend(&input_, inStr);
-  int materializeEnd = -1;
+  size_t materializeEnd = 0;
 
   if (inString_) {
     parseString(idx);
@@ -34,24 +34,24 @@ std::string LazyJsonParser::parseChunk(std::string inStr) {
   for (; idx < input_.size(); ++idx) {
     switch (input_[idx]) {
       case '{':
-        if (strStart_ != -1 && strEnd_ != -1) {
+        if (strEnd_ != 0) {
           curPath_.emplace_back(input_.substr(strStart_, strEnd_ - strStart_));
         }
         break;
       case '[':
-        if (openBrackets_ == 0 && strStart_ != -1 && strEnd_ != -1) {
+        if (openBrackets_ == 0 && strEnd_ != 0) {
           curPath_.emplace_back(input_.substr(strStart_, strEnd_ - strStart_));
         }
         ++openBrackets_;
         if (isInArrayPath()) {
-          materializeEnd = parseArrayPath(idx);
+          inArrayPath_ = true;
+          materializeEnd = parseArrayPath(++idx);
         }
         break;
       case ']':
         --openBrackets_;
         if (openBrackets_ == 0 && !curPath_.empty()) {
           curPath_.pop_back();
-          inArrayPath_ = isInArrayPath();
         }
         break;
       case '}':
@@ -64,12 +64,14 @@ std::string LazyJsonParser::parseChunk(std::string inStr) {
       case '"':
         parseString(idx);
         break;
+      default:
+        break;
     }
   }
 
   // Construct result.
   std::string res;
-  if (materializeEnd == -1) {
+  if (materializeEnd == 0) {
     return res;
   }
 
@@ -79,9 +81,8 @@ std::string LazyJsonParser::parseChunk(std::string inStr) {
   ++yieldCount_;
 
   absl::StrAppend(&res, input_.substr(0, materializeEnd));
-  input_ = materializeEnd < (int)input_.size()
-               ? input_.substr(materializeEnd + 1)
-               : "";
+  input_ =
+      materializeEnd < input_.size() ? input_.substr(materializeEnd + 1) : "";
 
   if (inArrayPath_) {
     absl::StrAppend(&res, suffixInArray_);
@@ -90,29 +91,23 @@ std::string LazyJsonParser::parseChunk(std::string inStr) {
   return res;
 }
 
-int LazyJsonParser::parseArrayPath(size_t& idx) {
-  int lastObjectEnd = -1;
+size_t LazyJsonParser::parseArrayPath(size_t& idx) {
+  size_t lastObjectEnd = 0;
   for (; idx < input_.size(); ++idx) {
     switch (input_[idx]) {
       case '{':
         ++openBracesInArrayPath_;
         break;
       case '[':
-        if (inArrayPath_) {
-          ++openBracesInArrayPath_;
-        } else {
-          inArrayPath_ = true;
-        }
+        ++openBracesInArrayPath_;
         break;
       case '}':
         --openBracesInArrayPath_;
         break;
       case ']':
-        if (openBracesInArrayPath_ == 0) {
+        if (openBracesInArrayPath_ == 0 && !curPath_.empty()) {
           inArrayPath_ = false;
-          if (!curPath_.empty()) {
-            curPath_.pop_back();
-          }
+          curPath_.pop_back();
           return lastObjectEnd;
         }
         --openBracesInArrayPath_;

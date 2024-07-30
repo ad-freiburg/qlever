@@ -16,17 +16,17 @@ namespace ad_utility {
  */
 class LazyJsonParser {
  public:
-  LazyJsonParser(std::vector<std::string> arrayPath);
+  explicit LazyJsonParser(std::vector<std::string> arrayPath);
 
   // TODO<unexenu> this should take a generator as argument instead
-  static std::string parse(std::string s,
+  static std::string parse(const std::string& s,
                            const std::vector<std::string>& arrayPath) {
     LazyJsonParser p(arrayPath);
     return p.parseChunk(s);
   }
 
   // Parses a chunk of JSON data and returns it with reconstructed structure.
-  std::string parseChunk(std::string inStr);
+  std::string parseChunk(const std::string& inStr);
 
  private:
   // Checks if the current path is the arrayPath.
@@ -36,7 +36,7 @@ class LazyJsonParser {
   void parseString(size_t& idx);
 
   // Parses the arrayPath.
-  int parseArrayPath(size_t& idx);
+  size_t parseArrayPath(size_t& idx);
 
   std::string input_;
   bool isEscaped_{false};
@@ -46,8 +46,8 @@ class LazyJsonParser {
   int openBrackets_{0};
   int yieldCount_{0};
 
-  int strStart_{-1};
-  int strEnd_{-1};
+  size_t strStart_{0};
+  size_t strEnd_{0};
 
   std::vector<std::string> curPath_;
   const std::vector<std::string> arrayPath_;
