@@ -19,21 +19,21 @@ namespace ad_utility {
  */
 class UrlParser {
  public:
-  // Representation of parsed request URL.
+  // Representation of parsed HTTP request.
   // - `path_` is the URL path.
-  // - `query_` and `update_` contain the Query or Update respectively. Only one
-  // of the two will be non-empty.
-  // - `parameters_` is a hashmap of the URL query parameters.
-  struct ParsedUrl {
+  // - `parameters_` is a hashmap of the parameters. These can originate from
+  // the HTTP Query parameters or the request body.
+  // - `query_` contains the Query.
+  struct ParsedHTTPRequest {
     std::string path_;
     ad_utility::HashMap<std::string, std::string> parameters_;
     std::optional<std::string> query_;
-    std::optional<std::string> update_;
   };
 
   // Parse a request HTTP request target into its URL path, URL query
   // parameters. The contained query or update are not extracted.
-  static UrlParser::ParsedUrl parseRequestTarget(std::string_view target);
+  static UrlParser::ParsedHTTPRequest parseRequestTarget(
+      std::string_view target);
 
   static ad_utility::HashMap<std::string, std::string> paramsToMap(
       boost::urls::params_view params);

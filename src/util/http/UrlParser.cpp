@@ -8,18 +8,19 @@
 using namespace ad_utility;
 
 // _____________________________________________________________________________
-UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
-  UrlParser::ParsedUrl parsedUrl;
+UrlParser::ParsedHTTPRequest UrlParser::parseRequestTarget(
+    std::string_view target) {
+  UrlParser::ParsedHTTPRequest parsed;
   auto result = boost::urls::parse_origin_form(target);
   if (result.has_error()) {
     AD_THROW(absl::StrCat("Failed to parse URL: \"", target, "\"."));
   }
   boost::url url = result.value();
 
-  parsedUrl.path_ = url.path();
-  parsedUrl.parameters_ = paramsToMap(url.params());
+  parsed.path_ = url.path();
+  parsed.parameters_ = paramsToMap(url.params());
 
-  return parsedUrl;
+  return parsed;
 }
 
 // _____________________________________________________________________________

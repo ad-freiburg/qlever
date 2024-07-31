@@ -164,14 +164,16 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-ad_utility::UrlParser::ParsedUrl Server::getUrlPathAndParameters(
+ad_utility::UrlParser::ParsedHTTPRequest Server::getUrlPathAndParameters(
     const ad_utility::httpUtils::HttpRequest auto& request) {
-  ad_utility::UrlParser::ParsedUrl parsedUrl =
+  // For an HTTP request, `request.target()` yields the HTTP Request-URI.
+  // This is a concatenation of the URL path and the query strings.
+  ad_utility::UrlParser::ParsedHTTPRequest parsedUrl =
       ad_utility::UrlParser::parseRequestTarget(request.target());
 
   if (request.method() == http::verb::get) {
-    // For a GET request, `request.target()` yields the HTTP Request-URI.
-    // This is a concatenation of the URL path and the query strings.
+    // There can be valid GET requests without a query. E.g. the command to get
+    // index statistics.
     if (parsedUrl.parameters_.contains("query")) {
       parsedUrl.query_ = parsedUrl.parameters_["query"];
     }
@@ -393,7 +395,6 @@ Awaitable<void> Server::process(
   }
 
   // If "query" parameter is given, process query.
-  // TODO: the else case doesn't make sense now
   if (parsedUrl.query_.has_value()) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
