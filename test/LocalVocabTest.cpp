@@ -34,7 +34,7 @@
 namespace {
 // Get test collection of words of a given size. The words are all distinct.
 
-using TestWords = std::vector<ad_utility::triple_component::LiteralOrIri>;
+using TestWords = std::vector<LocalVocabEntry>;
 
 TestWords getTestCollectionOfWords(size_t size) {
   using namespace ad_utility::triple_component;

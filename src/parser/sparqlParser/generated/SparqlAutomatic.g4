@@ -40,7 +40,7 @@ grammar SparqlAutomatic;
 
 // query and update are disjoint in the grammar;
 // add a common parent for easier parsing
-queryOrUpdate: query | update EOF
+queryOrUpdate: (query | update) EOF
     ;
 
 query
@@ -333,7 +333,7 @@ tupleWithPath
 /*
 * We need an extra rule for this since otherwise ANTLR gives us no easy way to
 * treat the verbPaths/verbSimples above as a single list in the correct order as we lose
-* the order between the separe verbPath/verbSimple lists.
+* the order between the separate verbPath/verbSimple lists.
 */
 verbPathOrSimple
     : (verbPath | verbSimple)

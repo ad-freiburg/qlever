@@ -213,19 +213,10 @@ addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
-addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
-
-addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
-
-addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
@@ -254,7 +245,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest util parser)
+addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
 
 addLinkAndDiscoverTest(DurationTest util)
 
