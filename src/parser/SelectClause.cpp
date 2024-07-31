@@ -103,6 +103,6 @@ void SelectClause::deleteAliasesButKeepVariables() {
   }
   auto& varsAndAliases = std::get<VarsAndAliases>(varsAndAliasesOrAsterisk_);
   // The variables that the aliases are bound to have previously been stored
-  // seperately in `varsAndAliases.vars_`, so we can simply delete the aliases.
+  // separately in `varsAndAliases.vars_`, so we can simply delete the aliases.
   varsAndAliases.aliases_.clear();
 }

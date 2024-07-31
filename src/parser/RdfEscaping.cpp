@@ -41,12 +41,12 @@ std::string hexadecimalCharactersToUtf8(std::string_view hex) {
  * is not allowed is found.
  */
 template <bool acceptOnlyNumericEscapes, bool acceptOnlyBackslashAndNewline,
-          typename InputIterator, typename OutputIterator>
-void unescapeStringAndNumericEscapes(InputIterator beginIterator,
-                                     InputIterator endIterator,
+          typename OutputIterator>
+void unescapeStringAndNumericEscapes(std::string_view input,
                                      OutputIterator outputIterator) {
   static_assert(!(acceptOnlyNumericEscapes && acceptOnlyBackslashAndNewline));
-
+  auto beginIterator = input.begin();
+  auto endIterator = input.end();
   // Append the `character` to the output, but only if newlines/backslashes are
   // allowed via the configuration
   auto pushNewlineOrBackslash = [&outputIterator](
@@ -141,8 +141,9 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
       }
 
       default:
-        // should never happen
-        AD_FAIL();
+        AD_CONTRACT_CHECK(false,
+                          "Unsupported escape sequence found in RDF literal \"",
+                          input, "\"");
     }
     beginIterator = nextBackslashIterator + numCharactersFromInput;
   }
@@ -153,7 +154,7 @@ void unescapeStringAndNumericEscapes(InputIterator beginIterator,
 std::string unescapeNewlinesAndBackslashes(std::string_view literal) {
   std::string result;
   RdfEscaping::detail::unescapeStringAndNumericEscapes<false, true>(
-      literal.begin(), literal.end(), std::back_inserter(result));
+      literal, std::back_inserter(result));
   return result;
 }
 
@@ -165,7 +166,7 @@ std::string escapeNewlinesAndBackslashes(std::string_view literal) {
 // ____________________________________________________________________________
 static void literalUnescape(std::string_view input, std::string& res) {
   detail::unescapeStringAndNumericEscapes<false, false>(
-      input.begin(), input.end(), std::back_inserter(res));
+      input, std::back_inserter(res));
 }
 
 // ____________________________________________________________________________
@@ -223,7 +224,7 @@ static void unescapeIriWithoutBrackets(std::string_view input,
                                        std::string& res) {
   // Only numeric escapes are allowed for iriefs.
   RdfEscaping::detail::unescapeStringAndNumericEscapes<true, false>(
-      input.begin(), input.end(), std::back_inserter(res));
+      input, std::back_inserter(res));
 }
 
 // __________________________________________________________________________

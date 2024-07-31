@@ -10,16 +10,23 @@
 #include <memory>
 
 #include "engine/QueryExecutionContext.h"
-#include "engine/ResultTable.h"
+#include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/VariableToColumnMap.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "parser/data/Variable.h"
 #include "util/CancellationHandle.h"
 #include "util/CompilerExtensions.h"
+#include "util/CopyableSynchronization.h"
 
 // forward declaration needed to break dependencies
 class QueryExecutionTree;
+
+enum class ComputationMode {
+  FULLY_MATERIALIZED,
+  ONLY_IF_CACHED,
+  LAZY_IF_SUPPORTED
+};
 
 class Operation {
   using SharedCancellationHandle = ad_utility::SharedCancellationHandle;
@@ -140,14 +147,17 @@ class Operation {
    * @param isRoot Has be set to `true` iff this is the root operation of a
    * complete query to obtain the expected behavior wrt cache pinning and
    * runtime information in error cases.
-   * @param onlyReadFromCache If set to true the result is only returned if it
-   * can be read from the cache without any computation. If the result is not in
-   * the cache, `nullptr` will be returned.
+   * @param computationMode If set to `CACHE_ONLY` the result is only returned
+   * if it can be read from the cache without any computation. If the result is
+   * not in the cache, `nullptr` will be returned. If set to `LAZY` this will
+   * request the result to be computable at request in chunks. If the operation
+   * does not support this, it will do nothing.
    * @return A shared pointer to the result. May only be `nullptr` if
    * `onlyReadFromCache` is true.
    */
-  shared_ptr<const ResultTable> getResult(bool isRoot = false,
-                                          bool onlyReadFromCache = false);
+  std::shared_ptr<const Result> getResult(
+      bool isRoot = false,
+      ComputationMode computationMode = ComputationMode::FULLY_MATERIALIZED);
 
   // Use the same cancellation handle for all children of an operation (= query
   // plan rooted at that operation). As soon as one child is aborted, the whole
@@ -164,7 +174,8 @@ class Operation {
   void recursivelySetTimeConstraint(
       std::chrono::steady_clock::time_point deadline);
 
-  // True iff this operation directly implement a `LIMIT` clause on its result.
+  // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
+  // its result.
   [[nodiscard]] virtual bool supportsLimit() const { return false; }
 
   // Set the value of the `LIMIT` clause that will be applied to the result of
@@ -195,9 +206,12 @@ class Operation {
   // Direct access to the `computeResult()` method. This should be only used for
   // testing, otherwise the `getResult()` function should be used which also
   // sets the runtime info and uses the cache.
-  virtual ResultTable computeResultOnlyForTesting() final {
-    return computeResult();
+  virtual ProtoResult computeResultOnlyForTesting(
+      bool requestLaziness = false) final {
+    return computeResult(requestLaziness);
   }
+
+  const auto& getLimit() const { return _limit; }
 
  protected:
   // The QueryExecutionContext for this particular element.
@@ -209,8 +223,6 @@ class Operation {
    * @return The columns on which the result will be sorted.
    */
   [[nodiscard]] virtual vector<ColumnIndex> resultSortedOn() const = 0;
-
-  const auto& getLimit() const { return _limit; }
 
   /// interface to the generated warnings of this operation
   std::vector<std::string>& getWarnings() { return _warnings; }
@@ -246,10 +258,10 @@ class Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  virtual ResultTable computeResult() = 0;
+  virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
   // Create and store the complete runtime information for this operation after
-  // it has either been succesfully computed or read from the cache.
+  // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
       const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
       Milliseconds duration) final;
@@ -260,7 +272,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const ResultTable& resultTable, ad_utility::CacheStatus cacheStatus,
+      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 
@@ -327,17 +339,8 @@ class Operation {
   // future.
   LimitOffsetClause _limit;
 
-  // A mutex that can be "copied". The semantics are, that copying will create
-  // a new mutex. This is sufficient for applications like in
-  // `getInternallyVisibleVariableColumns()` where we just want to make a
-  // `const` member function that modifies a `mutable` member threadsafe.
-  struct CopyableMutex : std::mutex {
-    using std::mutex::mutex;
-    CopyableMutex(const CopyableMutex&) {}
-  };
-
   // Mutex that protects the `variableToColumnMap_` below.
-  mutable CopyableMutex variableToColumnMapMutex_;
+  mutable ad_utility::CopyableMutex variableToColumnMapMutex_;
   // Store the mapping from variables to column indices. `nullopt` means that
   // this map has not yet been computed. This computation is typically performed
   // in the const member function `getInternallyVisibleVariableColumns`, so we
@@ -351,7 +354,7 @@ class Operation {
       externallyVisibleVariableToColumnMap_;
 
   // Mutex that protects the `_resultSortedColumns` below.
-  mutable CopyableMutex _resultSortedColumnsMutex;
+  mutable ad_utility::CopyableMutex _resultSortedColumnsMutex;
 
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =

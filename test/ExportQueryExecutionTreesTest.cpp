@@ -57,7 +57,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   return ExportQueryExecutionTrees::computeResultAsJSON(
-      pq, qet, timer, 200, mediaType, std::move(cancellationHandle));
+      pq, qet, timer, mediaType, std::move(cancellationHandle));
 }
 
 // A test case that tests the correct execution and exporting of a SELECT query
@@ -210,7 +210,7 @@ static std::string makeXMLHeader(
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Integers) {
+TEST(ExportQueryExecutionTrees, Integers) {
   std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
@@ -276,7 +276,7 @@ TEST(ExportQueryExecutionTree, Integers) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Bool) {
+TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
@@ -330,7 +330,7 @@ TEST(ExportQueryExecutionTree, Bool) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UnusedVariable) {
+TEST(ExportQueryExecutionTrees, UnusedVariable) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?x} ORDER BY ?s";
   std::string expectedXml = makeXMLHeader({"o"}) + R"(
@@ -366,7 +366,7 @@ TEST(ExportQueryExecutionTree, UnusedVariable) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Floats) {
+TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
       "4.012934858173560e-12";
@@ -434,7 +434,7 @@ TEST(ExportQueryExecutionTree, Floats) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Dates) {
+TEST(ExportQueryExecutionTrees, Dates) {
   std::string kg =
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.";
@@ -493,7 +493,7 @@ TEST(ExportQueryExecutionTree, Dates) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Entities) {
+TEST(ExportQueryExecutionTrees, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -540,7 +540,7 @@ TEST(ExportQueryExecutionTree, Entities) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
+TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
   std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -589,7 +589,7 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
+TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
   std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -637,7 +637,169 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UndefinedValues) {
+TEST(ExportQueryExecutionTrees, TestWithIriEscaped) {
+  std::string kg = "<s> <p> <https://\\u0009:\\u0020)\\u000AtestIriKg>";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o }";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><uri>https://)" +
+                            "\x09" + R"(: )
+testIriKg</uri></binding>
+  </result>)" + xmlTrailer;
+
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "<https:// : )\\ntestIriKg>\n",
+      // CSV
+      "o\n"
+      "\"https://\t: )\ntestIriKg\"\n",
+      makeExpectedQLeverJSON({"<https://\t: )\ntestIriKg>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "uri", "https://\t: )\ntestIriKg")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t<https:// : )\\ntestIriKg>\n",
+      // CSV
+      "<s>,<p>,\"<https://\t: )\ntestIriKg>\"\n",
+      // Turtle
+      "<s> <p> <https://\t: )\ntestIriKg> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "<https://\t: )\ntestIriKg>"s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
+  std::string kg =
+      "<s> <p>"
+      "<iriescaped\\u0001o\\u0002e\\u0003i\\u0004o\\u0005u\\u0006e\\u00"
+      "07g\\u0008c\\u0009u\\u000Ae\\u000Be\\u000Ca\\u000Dd\\u000En\\u000F?"
+      "\\u0010u\\u0011u\\u0012u\\u0013###\\u0020d>";
+  std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o }";
+  std::string expectedXml =
+      makeXMLHeader({"o"}) +
+      R"(
+  <result>
+    <binding name="o"><uri>)" +
+      "iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d" +
+      R"(</uri></binding>
+  </result>)" +
+      xmlTrailer;
+
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc u\\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
+      // CSV
+      "o\n"
+      "\"iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d\"\n",
+      makeExpectedQLeverJSON(
+          {"<iriescaped\u0001o\u0002e\u0003i\u0004o\u0005u\u0006e\u0007"
+           "g\u0008c\u0009u\u000Ae\u000Be\u000Ca\u000Dd\u000En\u000F?"
+           "\u0010u\u0011u\u0012u\u0013### d>"s}),
+      makeExpectedSparqlJSON({makeJSONBinding(
+          std::nullopt, "uri",
+          "iriescaped\u0001o\u0002e\u0003i\u0004o\u0005u\u0006e"
+          "\u0007"
+          "g\u0008c\u0009u\u000Ae\u000Be\u000Ca\u000Dd\u000En\u000F?"
+          "\u0010u\u0011u\u0012u\u0013### d")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc u\\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\n",
+      // CSV
+      "<s>,<p>,\"<iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>\"\n",
+      // Turtle
+      "<s> <p> <iriescaped\x01o\x02"
+      "e\x03i\x04o\x05u\x06"
+      "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d> .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{
+            "<s>"s, "<p>"s,
+            "<iriescaped\x01o\x02"
+            "e\x03i\x04o\x05u\x06"
+            "e\ag\bc\tu\ne\ve\fa\rd\x0En\x0F?\x10u\x11u\x12u\x13### d>"s});
+        return j;
+      }(),
+  };
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
+  std::string kg = "<s> <p> \" hallo\\n\\t welt\"";
+  std::string objectQuery =
+      "SELECT ?o WHERE { "
+      "BIND(IRI(\" hallo\\n\\t welt\") AS ?o) }";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
+  <result>
+    <binding name="o"><uri> hallo
+)" + "\t" + R"( welt</uri></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCaseTextIndex{
+      kg, objectQuery, 1,
+      // TSV
+      "?o\n"
+      "< hallo\\n  welt>\n",
+      // CSV
+      "o\n"
+      "\" hallo\n\t welt\"\n",
+      makeExpectedQLeverJSON({"< hallo\n\t welt>"s}),
+      makeExpectedSparqlJSON(
+          {makeJSONBinding(std::nullopt, "uri", " hallo\n\t welt")}),
+      expectedXml};
+  runSelectQueryTestCase(testCaseTextIndex);
+
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t\" hallo\\n  welt\"\n",
+      // CSV
+      "<s>,<p>,\"\"\" hallo\n\t welt\"\"\"\n",
+      // Turtle
+      "<s> <p> \" hallo\\n\t welt\" .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "\" hallo\n\t welt\""s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
@@ -676,7 +838,7 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BlankNode) {
+TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -702,7 +864,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TextIndex) {
+TEST(ExportQueryExecutionTrees, TextIndex) {
   std::string kg = "<s> <p> \"alpha beta\". <s2> <p2> \"alphax betax\". ";
   std::string objectQuery =
       "SELECT ?o WHERE {<s> <p> ?t. ?text ql:contains-entity ?t .?text "
@@ -728,7 +890,7 @@ TEST(ExportQueryExecutionTree, TextIndex) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, MultipleVariables) {
+TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string expectedXml = makeXMLHeader({"p", "o"}) +
@@ -765,7 +927,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BinaryExport) {
+TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string result =
@@ -790,7 +952,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, CornerCases) {
+TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string constructQuery =
@@ -836,6 +998,10 @@ TEST(ExportQueryExecutionTree, CornerCases) {
                                                    LocalVocab{}),
       ::testing::ContainsRegex("should be unreachable"));
   AD_EXPECT_THROW_WITH_MESSAGE(
+      ExportQueryExecutionTrees::getLiteralOrIriFromVocabIndex(
+          qec->getIndex(), Id::max(), LocalVocab{}),
+      ::testing::ContainsRegex("should be unreachable"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
       ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(
           ad_utility::testing::VocabId(12)),
       ::testing::ContainsRegex("should be unreachable"));
@@ -862,8 +1028,8 @@ TEST_P(JsonMediaTypesFixture, CancellationCancelsJson) {
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       ExportQueryExecutionTrees::computeResultAsJSON(
-          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, 200,
-          GetParam(), std::move(cancellationHandle)),
+          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, GetParam(),
+          std::move(cancellationHandle)),
       HasSubstr("Query export"), ad_utility::CancellationException);
 }
 INSTANTIATE_TEST_SUITE_P(JsonMediaTypes, JsonMediaTypesFixture,

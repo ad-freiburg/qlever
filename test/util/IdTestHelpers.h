@@ -11,10 +11,15 @@
 // Lambdas to simply create an `Id` with a given value and type during unit
 // tests.
 namespace ad_utility::testing {
-inline auto IntId = [](const auto& i) { return Id::makeFromInt(i); };
 
+inline auto UndefId = []() { return Id::makeUndefined(); };
+inline auto IntId = [](const auto& i) { return Id::makeFromInt(i); };
 inline auto DoubleId = [](const auto& d) { return Id::makeFromDouble(d); };
 inline auto BoolId = [](bool b) { return Id::makeFromBool(b); };
+
+inline auto DateId = [](const auto& parse, const std::string& dateStr) {
+  return Id::makeFromDate(parse(dateStr));
+};
 
 inline auto VocabId = [](const auto& v) {
   return Id::makeFromVocabIndex(VocabIndex::make(v));
@@ -22,8 +27,10 @@ inline auto VocabId = [](const auto& v) {
 
 inline auto LocalVocabId = [](std::integral auto v) {
   static ad_utility::Synchronized<LocalVocab> localVocab;
+  using namespace ad_utility::triple_component;
   return Id::makeFromLocalVocabIndex(
-      localVocab.wlock()->getIndexAndAddIfNotContained(std::to_string(v)));
+      localVocab.wlock()->getIndexAndAddIfNotContained(
+          LiteralOrIri::literalWithoutQuotes(std::to_string(v))));
 };
 
 inline auto TextRecordId = [](const auto& t) {

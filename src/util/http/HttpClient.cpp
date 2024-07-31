@@ -21,7 +21,7 @@ namespace net = boost::asio;
 using tcp = boost::asio::ip::tcp;
 using ad_utility::httpUtils::Url;
 
-// Implemented using Boost.Beast, code apapted from
+// Implemented using Boost.Beast, code adapted from
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync/http_client_sync.cpp
 // https://www.boost.org/doc/libs/master/libs/beast/example/http/client/sync-ssl/http_client_sync_ssl.cpp
 

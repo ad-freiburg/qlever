@@ -18,7 +18,7 @@ static constexpr char iriPrefixChar = '<';
 static constexpr std::string_view iriPrefix{&iriPrefixChar, 1};
 static constexpr std::string_view literalPrefix{&literalPrefixChar, 1};
 // A wrapper class that can contain either an Iri or a Literal object.
-class LiteralOrIri {
+class alignas(16) LiteralOrIri {
  private:
   using LiteralOrIriVariant = std::variant<Literal, Iri>;
   LiteralOrIriVariant data_;
@@ -46,12 +46,11 @@ class LiteralOrIri {
 
   static LiteralOrIri fromStringRepresentation(std::string internal) {
     char tag = internal.front();
-    if (tag == iriPrefixChar) {
-      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
-    } else {
-      AD_CORRECTNESS_CHECK(tag == literalPrefixChar);
+    if (tag == literalPrefixChar) {
       return LiteralOrIri{
           Literal::fromStringRepresentation(std::move(internal))};
+    } else {
+      return LiteralOrIri{Iri::fromStringRepresentation(std::move(internal))};
     }
   }
   template <typename H>
@@ -60,6 +59,8 @@ class LiteralOrIri {
     return H::combine(std::move(h), literalOrIri.data_);
   }
   bool operator==(const LiteralOrIri&) const = default;
+
+  std::strong_ordering operator<=>(const LiteralOrIri& rhs) const;
 
   // Return true if object contains an Iri object
   bool isIri() const;

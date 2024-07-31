@@ -112,6 +112,17 @@ struct LiftStringFunction {
   }
 };
 
+// IRI or URI
+//
+// 1. Check for `BASE` URL and if it exists, prepend it.
+// 2. What's the correct behavior for non-strings, like `1` or `true`?
+//
+// @1: TODO implement `BASE`
+// @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
+// consideration within the `IriOrUriValueGetter`, hence automatically
+// ignores values like `1`, `true`, `Date` etc.
+using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
+
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
@@ -399,6 +410,81 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+// LANGMATCHES
+[[maybe_unused]] inline auto langMatching =
+    [](std::optional<std::string> languageTag,
+       std::optional<std::string> languageRange) {
+      if (!languageTag.has_value() || !languageRange.has_value()) {
+        return Id::makeUndefined();
+      } else {
+        return Id::makeFromBool(ad_utility::isLanguageMatch(
+            languageTag.value(), languageRange.value()));
+      }
+    };
+
+using LangMatches =
+    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+
+// STRING WITH LANGUAGE TAG
+[[maybe_unused]] inline auto strLangTag =
+    [](std::optional<std::string> input,
+       std::optional<std::string> langTag) -> IdOrLiteralOrIri {
+  if (!input.has_value() || !langTag.has_value()) {
+    return Id::makeUndefined();
+  } else if (!ad_utility::strIsLangTag(langTag.value())) {
+    return Id::makeUndefined();
+  } else {
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(input.value()),
+            std::move(langTag.value()));
+    return LiteralOrIri{lit};
+  }
+};
+
+using StrLangTagged = StringExpressionImpl<2, decltype(strLangTag)>;
+
+// STRING WITH DATATYPE IRI
+[[maybe_unused]] inline auto strIriDtTag =
+    [](std::optional<std::string> inputStr,
+       OptIri inputIri) -> IdOrLiteralOrIri {
+  if (!inputStr.has_value() || !inputIri.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    auto lit =
+        ad_utility::triple_component::Literal::literalWithNormalizedContent(
+            asNormalizedStringViewUnsafe(inputStr.value()), inputIri.value());
+    return LiteralOrIri{lit};
+  }
+};
+
+using StrIriTagged =
+    StringExpressionImpl<2, decltype(strIriDtTag), IriValueGetter>;
+
+// HASH
+template <auto HashFunc>
+[[maybe_unused]] inline constexpr auto hash =
+    [](std::optional<std::string> input) -> IdOrLiteralOrIri {
+  if (!input.has_value()) {
+    return Id::makeUndefined();
+  } else {
+    std::vector<unsigned char> hashed = HashFunc(input.value());
+    auto hexStr = absl::StrJoin(hashed, "", ad_utility::hexFormatter);
+    return toLiteral(std::move(hexStr));
+  }
+};
+
+using MD5Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashMd5>)>;
+using SHA1Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha1>)>;
+using SHA256Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha256>)>;
+using SHA384Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha384>)>;
+using SHA512Expression =
+    StringExpressionImpl<1, decltype(hash<ad_utility::hashSha512>)>;
+
 }  // namespace detail::string_expressions
 using namespace detail::string_expressions;
 using std::make_unique;
@@ -410,6 +496,11 @@ Expr make(std::same_as<Expr> auto&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+
+Expr makeIriOrUriExpression(Expr child) {
+  return make<IriOrUriExpression>(child);
+}
+
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
 
 Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
@@ -451,5 +542,27 @@ Expr makeConcatExpression(std::vector<Expr> children) {
 Expr makeEncodeForUriExpression(Expr child) {
   return make<EncodeForUriExpression>(child);
 }
+
+Expr makeStrLangTagExpression(Expr child1, Expr child2) {
+  return make<StrLangTagged>(child1, child2);
+}
+
+Expr makeStrIriDtExpression(Expr child1, Expr child2) {
+  return make<StrIriTagged>(child1, child2);
+}
+
+Expr makeLangMatchesExpression(Expr child1, Expr child2) {
+  return make<LangMatches>(child1, child2);
+}
+
+Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }
+
+Expr makeSHA1Expression(Expr child) { return make<SHA1Expression>(child); }
+
+Expr makeSHA256Expression(Expr child) { return make<SHA256Expression>(child); }
+
+Expr makeSHA384Expression(Expr child) { return make<SHA384Expression>(child); }
+
+Expr makeSHA512Expression(Expr child) { return make<SHA512Expression>(child); }
 
 }  // namespace sparqlExpression

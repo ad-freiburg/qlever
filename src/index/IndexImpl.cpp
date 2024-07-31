@@ -34,26 +34,23 @@
 using std::array;
 using namespace ad_utility::memory_literals;
 
-// During the index building we typically have two permutation sortings present
-// at the same time, as we directly push the triples from the first sorting to
-// the second sorting. We therefore have to adjust the amount of memory per
-// external sorter.
+// During the index building we typically have two permutations present at the
+// same time, as we directly push the triples from the first sorting to the
+// second sorting. We therefore have to adjust the amount of memory per external
+// sorter.
 static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+    : allocator_{std::move(allocator)} {
+  globalSingletonIndex_ = this;
+};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
-  // first save the total number of words, this is needed to initialize the
-  // dense IndexMetaData variants
-  totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
-  LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
 
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
@@ -166,7 +163,7 @@ IndexImpl::buildOspWithPatterns(
   // the additional permutation.
   hasPatternPredicateSortedByPSO->moveResultOnMerge() = false;
   // The column with index 1 always is `has-predicate` and is not needed here.
-  // Note that the order of the columns during index building  is alwasy `SPO`,
+  // Note that the order of the columns during index building  is always `SPO`,
   // but the sorting might be different (PSO in this case).
   auto lazyPatternScan = lazyScanWithPermutedColumns(
       hasPatternPredicateSortedByPSO, std::array<ColumnIndex, 2>{0, 2});
@@ -449,15 +446,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto internalVocabularyAction = vocab_.makeWordWriterForInternalVocabulary(
-        onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-    internalVocabularyAction.readableName() = "internal vocabulary";
-    auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
-        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-    externalVocabularyAction.readableName() = "external vocabulary";
+    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
-        externalVocabularyAction, memoryLimitIndexBuilding());
+        onDiskBase_, numFiles, sortPred, wordCallback,
+        memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
@@ -691,10 +684,12 @@ IndexImpl::createPermutations(size_t numColumns, auto&& sortedTriples,
 }
 
 // ________________________________________________________________________
-size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
+template <typename SortedTriplesType, typename... CallbackTypes>
+size_t IndexImpl::createPermutationPair(size_t numColumns,
+                                        SortedTriplesType&& sortedTriples,
                                         const Permutation& p1,
                                         const Permutation& p2,
-                                        auto&&... perTripleCallbacks) {
+                                        CallbackTypes&&... perTripleCallbacks) {
   auto [numDistinctC0, metaData1, metaData2] = createPermutations(
       numColumns, AD_FWD(sortedTriples), p1, p2, AD_FWD(perTripleCallbacks)...);
   // Set the name of this newly created pair of `IndexMetaData` objects.
@@ -718,12 +713,11 @@ size_t IndexImpl::createPermutationPair(size_t numColumns, auto&& sortedTriples,
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  globalSingletonComparator_ = &vocab_.getCaseComparator();
 
-  totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
+             << vocab_.size() << std::endl;
 
   pso_.loadFromDisk(onDiskBase_);
   pos_.loadFromDisk(onDiskBase_);
@@ -1316,14 +1310,12 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   return 0;
 }
 
-// TODO<joka921> Once we have an overview over the folding this logic should
-// probably not be in the index class.
-std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
-  return vocab_.indexToOptionalString(id);
-}
+// ___________________________________________________________________________
+std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
 
-std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
-  return textVocab_.indexToOptionalString(id);
+// ___________________________________________________________________________
+std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+  return textVocab_[id];
 }
 
 // ___________________________________________________________________________
@@ -1393,7 +1385,8 @@ IdTable IndexImpl::scan(
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   std::optional<Id> col0Id = col0String.toValueId(getVocab());
   std::optional<Id> col1Id =
       col1String.has_value() ? col1String.value().get().toValueId(getVocab())
@@ -1401,18 +1394,20 @@ IdTable IndexImpl::scan(
   if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
     size_t numColumns = col1String.has_value() ? 1 : 2;
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns, allocator_};
+    return IdTable{numColumns + additionalColumns.size(), allocator_};
   }
   return scan(col0Id.value(), col1Id, permutation, additionalColumns,
-              cancellationHandle);
+              cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
-                                additionalColumns, cancellationHandle);
+                                additionalColumns, cancellationHandle,
+                                limitOffset);
 }
 
 // _____________________________________________________________________________
@@ -1471,7 +1466,8 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
                                  qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
                                 const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += static_cast<size_t>(triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
+    numTriplesNormal += static_cast<size_t>(
+        triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph);
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter = makeNumDistinctIdsCounter<1>(numPredicatesNormal);

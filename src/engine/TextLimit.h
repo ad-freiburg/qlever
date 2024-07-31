@@ -61,7 +61,7 @@ class TextLimit : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  ResultTable computeResult() override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {child_.get()}; }
 };

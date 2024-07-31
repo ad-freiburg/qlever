@@ -58,7 +58,7 @@ class TaskQueue {
   /// "pusher" is faster for many tasks, the queue will grow too large to fit
   /// into memory. The task queue will work optimally, when on the average the
   /// workers are at least as fast as the "pusher", but the pusher is faster
-  /// sometimes (which the queue can then accomodate).
+  /// sometimes (which the queue can then accommodate).
   TaskQueue(size_t maxQueueSize, size_t numThreads, std::string name = "")
       : queueMaxSize_{maxQueueSize}, name_{std::move(name)} {
     AD_CONTRACT_CHECK(queueMaxSize_ > 0);

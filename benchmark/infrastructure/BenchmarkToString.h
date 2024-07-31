@@ -36,7 +36,7 @@ std::string getMetadataPrettyString(const BenchmarkMetadata& meta,
                                     std::string_view suffix);
 
 /*
- * @brief Returns a formated string containing all the benchmark information.
+ * @brief Returns a formatted string containing all the benchmark information.
  */
 std::string benchmarkResultsToString(
     const BenchmarkInterface* const benchmarkClass,

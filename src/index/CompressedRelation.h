@@ -11,6 +11,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
 #include "util/ConcurrentCache.h"
@@ -400,7 +401,10 @@ class CompressedRelationReader {
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
+    // If a LIMIT or OFFSET is present we possibly read more rows than we
+    // actually yield.
     size_t numElementsRead_ = 0;
+    size_t numElementsYielded_ = 0;
     std::chrono::milliseconds blockingTime_ = std::chrono::milliseconds::zero();
   };
 
@@ -470,7 +474,8 @@ class CompressedRelationReader {
   IdTable scan(const ScanSpecification& scanSpec,
                std::span<const CompressedBlockMetadata> blocks,
                ColumnIndicesRef additionalColumns,
-               const CancellationHandle& cancellationHandle) const;
+               const CancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to `scan` (directly above), but the result of the scan is lazily
   // computed and returned as a generator of the single blocks that are scanned.
@@ -478,8 +483,8 @@ class CompressedRelationReader {
   CompressedRelationReader::IdTableGenerator lazyScan(
       ScanSpecification scanSpec,
       std::vector<CompressedBlockMetadata> blockMetadata,
-      ColumnIndices additionalColumns,
-      CancellationHandle cancellationHandle) const;
+      ColumnIndices additionalColumns, CancellationHandle cancellationHandle,
+      LimitOffsetClause limitOffset = {}) const;
 
   // Only get the size of the result for a given permutation XYZ for a given X
   // and Y. This can be done by scanning one or two blocks. Note: The overload
@@ -522,7 +527,7 @@ class CompressedRelationReader {
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to. Throw an exception if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
-  // index scans between joining them to get better estimates for the begginning
+  // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
   MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
       const MetadataAndBlocks& metadataAndBlocks) const;
@@ -543,14 +548,6 @@ class CompressedRelationReader {
   // `CompressedBlockMetaData`.
   DecompressedBlock decompressBlock(const CompressedBlock& compressedBlock,
                                     size_t numRowsToRead) const;
-
-  // Similar to `decompressBlock`, but the block is directly decompressed into
-  // the `table`, starting at the `offsetInTable`-th row. The `table` and the
-  // `compressedBlock` must have the same number of columns, and the `table`
-  // must have at least `numRowsToRead + offsetInTable` rows.
-  static void decompressBlockToExistingIdTable(
-      const CompressedBlock& compressedBlock, size_t numRowsToRead,
-      IdTable& table, size_t offsetInTable);
 
   // Helper function used by `decompressBlock` and
   // `decompressBlockToExistingIdTable`. Decompress the `compressedColumn` and
@@ -589,7 +586,8 @@ class CompressedRelationReader {
   // multiple worker threads.
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle) const;
+      CancellationHandle cancellationHandle,
+      LimitOffsetClause& limitOffset) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

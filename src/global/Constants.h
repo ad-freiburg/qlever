@@ -23,7 +23,7 @@ static const ad_utility::MemorySize STXXL_DISK_SIZE_INDEX_BUILDER = 1_GB;
 
 static constexpr ad_utility::MemorySize DEFAULT_MEM_FOR_QUERIES = 4_GB;
 
-static const size_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
+constexpr uint64_t MAX_NOF_ROWS_IN_RESULT = 1'000'000;
 static const size_t MIN_WORD_PREFIX_SIZE = 4;
 static const char PREFIX_CHAR = '*';
 
@@ -63,6 +63,8 @@ static constexpr std::pair<std::string_view, std::string_view> GEOF_PREFIX = {
     "geof:", "http://www.opengis.net/def/function/geosparql/"};
 static constexpr std::pair<std::string_view, std::string_view> MATH_PREFIX = {
     "math:", "http://www.w3.org/2005/xpath-functions/math#"};
+static constexpr std::pair<std::string_view, std::string_view> XSD_PREFIX = {
+    "xsd", "http://www.w3.org/2001/XMLSchema#"};
 
 static const std::string INTERNAL_VARIABLE_PREFIX =
     "?_QLever_internal_variable_";
@@ -78,12 +80,15 @@ static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.
+static const char XSD_STRING[] = "http://www.w3.org/2001/XMLSchema#string";
 static const char XSD_DATETIME_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#dateTime";
 static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
 static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
 static const char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
+static const char XSD_DAYTIME_DURATION_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 
 constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
@@ -113,9 +118,10 @@ static const char XSD_POSITIVE_INTEGER_TYPE[] =
 constexpr inline char XSD_BOOLEAN_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#boolean";
 static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
+static const char RDF_LANGTAG_STRING[] =
+    "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
-static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
+static const std::string VOCAB_SUFFIX = ".vocabulary";
 static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 

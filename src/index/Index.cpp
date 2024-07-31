@@ -68,13 +68,13 @@ size_t Index::getCardinality(Id id, Permutation::Enum p) const {
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
-  return pimpl_->idToOptionalString(id);
+std::string Index::indexToString(VocabIndex id) const {
+  return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
-  return pimpl_->idToOptionalString(id);
+std::string_view Index::indexToString(WordVocabIndex id) const {
+  return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
@@ -279,18 +279,20 @@ IdTable Index::scan(
     const TripleComponent& col0String,
     std::optional<std::reference_wrapper<const TripleComponent>> col1String,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
   return pimpl_->scan(col0String, col1String, p, additionalColumns,
-                      std::move(cancellationHandle));
+                      cancellationHandle, limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Index::scan(
     Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
-                      std::move(cancellationHandle));
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
+  return pimpl_->scan(col0Id, col1Id, p, additionalColumns, cancellationHandle,
+                      limitOffset);
 }
 
 // ____________________________________________________________________________

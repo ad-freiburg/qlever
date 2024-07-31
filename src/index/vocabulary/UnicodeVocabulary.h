@@ -2,10 +2,8 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_UNICODEVOCABULARY_H
-#define QLEVER_UNICODEVOCABULARY_H
-
-#include "./VocabularyTypes.h"
+#pragma once
+#include "index/vocabulary/VocabularyTypes.h"
 
 /// Vocabulary with multi-level `UnicodeComparator` that allows comparison
 /// according to different Levels. Groups of words that are adjacent on a
@@ -32,13 +30,9 @@ class UnicodeVocabulary {
 
   [[nodiscard]] uint64_t size() const { return _underlyingVocabulary.size(); }
 
-  [[nodiscard]] uint64_t getHighestId() const {
-    return _underlyingVocabulary.getHighestId();
-  }
-
   /// Return a `WordAndIndex` that points to the first entry that is equal or
   /// greater than `word` wrt. to the `comparator`. Only works correctly if the
-  /// `_words` are sorted according to the comparator (exactly like in
+  /// `words_` are sorted according to the comparator (exactly like in
   /// `std::lower_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
   /// `UnicodeComparator::SortKey`
@@ -51,7 +45,7 @@ class UnicodeVocabulary {
   }
 
   /// Return a `WordAndIndex` that points to the first entry that is greater
-  /// than `word` wrt. to the `comparator`. Only works correctly if the `_words`
+  /// than `word` wrt. to the `comparator`. Only works correctly if the `words_`
   /// are sorted according to the comparator (exactly like in
   /// `std::upper_bound`, which is used internally).
   /// Type `T` can be a string-like type (`string, string_view`) or
@@ -66,24 +60,27 @@ class UnicodeVocabulary {
 
   /// Return the index range [lowest, highest) of words where a prefix of the
   /// word is equal to `prefix` on the `PRIMARY` level of the comparator.
+  /// A value of `nullopt` in the entries means "the bound is higher than the
+  /// largest word in the vocabulary".
   /// TODO<joka921> Also support other levels, but this requires intrusive
   /// hacking of ICU's SortKeys.
-  [[nodiscard]] std::pair<uint64_t, uint64_t> prefix_range(
-      std::string_view prefix) const {
+  [[nodiscard]] std::pair<std::optional<uint64_t>, std::optional<uint64_t>>
+  prefix_range(std::string_view prefix) const {
     if (prefix.empty()) {
-      if (size() == 0) {
-        return {0, 0};
-      }
-      return {0, _underlyingVocabulary.getHighestId() + 1};
+      return {std::nullopt, std::nullopt};
     }
 
-    auto lb = lower_bound(prefix, SortLevel::PRIMARY)._index;
+    auto lb = lower_bound(prefix, SortLevel::PRIMARY);
     auto transformed = _comparator.transformToFirstPossibleBiggerValue(
         prefix, SortLevel::PRIMARY);
 
-    auto ub = lower_bound(transformed, SortLevel::PRIMARY)._index;
+    auto ub = lower_bound(transformed, SortLevel::PRIMARY);
 
-    return {lb, ub};
+    auto toOptionalIndex = [](const WordAndIndex& wi) {
+      return wi.isEnd() ? std::nullopt : std::optional{wi.index()};
+    };
+
+    return {toOptionalIndex(lb), toOptionalIndex(ub)};
   }
 
   /// Open the underlying vocabulary from a file. The file must have been
@@ -108,5 +105,3 @@ class UnicodeVocabulary {
     _underlyingVocabulary.build(v, filename);
   }
 };
-
-#endif  // QLEVER_UNICODEVOCABULARY_H

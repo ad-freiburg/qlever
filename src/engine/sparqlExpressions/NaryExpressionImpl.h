@@ -6,9 +6,12 @@
 
 #include <ranges>
 
+#include "absl/strings/ascii.h"
+#include "absl/strings/charconv.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
+#include "util/CryptographicHashUtils.h"
 
 namespace sparqlExpression::detail {
 template <typename NaryOperation>
@@ -38,6 +41,11 @@ class NaryExpression : public SparqlExpression {
   // _________________________________________________________________________
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
+
+  // _________________________________________________________________________
+  std::optional<SparqlExpression*> getNthChild(size_t pos) const {
+    return pos < N ? std::make_optional(children_[pos].get()) : std::nullopt;
+  }
 
  private:
   // _________________________________________________________________________

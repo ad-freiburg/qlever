@@ -7,6 +7,8 @@
 #include <algorithm>
 #include <utility>
 
+#include "index/IndexImpl.h"
+
 namespace ad_utility::triple_component {
 // __________________________________________
 LiteralOrIri::LiteralOrIri(Iri iri) : data_{std::move(iri)} {}
@@ -105,5 +107,18 @@ LiteralOrIri LiteralOrIri::literalWithoutQuotes(
     std::optional<std::variant<Iri, string>> descriptor) {
   return LiteralOrIri(Literal::literalWithoutQuotes(rdfContentWithoutQuotes,
                                                     std::move(descriptor)));
+}
+
+// ___________________________________________
+std::strong_ordering LiteralOrIri::operator<=>(const LiteralOrIri& rhs) const {
+  int i = IndexImpl::staticGlobalSingletonComparator().compare(
+      toStringRepresentation(), rhs.toStringRepresentation());
+  if (i < 0) {
+    return std::strong_ordering::less;
+  } else if (i > 0) {
+    return std::strong_ordering::greater;
+  } else {
+    return std::strong_ordering::equal;
+  }
 }
 }  // namespace ad_utility::triple_component

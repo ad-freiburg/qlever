@@ -118,10 +118,8 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  [[nodiscard]] std::optional<std::string> idToOptionalString(
-      VocabIndex id) const;
-  [[nodiscard]] std::optional<std::string> idToOptionalString(
-      WordVocabIndex id) const;
+  std::string indexToString(VocabIndex id) const;
+  std::string_view indexToString(WordVocabIndex id) const;
 
   std::optional<Id> getId(
       const ad_utility::triple_component::LiteralOrIri& element) const;
@@ -134,8 +132,8 @@ class Index {
 
   [[nodiscard]] const CompactVectorOfStrings<Id>& getPatterns() const;
   /**
-   * @return The multiplicity of the entites column (0) of the full has-relation
-   *         relation after unrolling the patterns.
+   * @return The multiplicity of the entities column (0) of the full
+   * has-relation relation after unrolling the patterns.
    */
   [[nodiscard]] double getAvgNumDistinctPredicatesPerSubject() const;
 
@@ -242,13 +240,14 @@ class Index {
       const TripleComponent& col0String,
       std::optional<std::reference_wrapper<const TripleComponent>> col1String,
       Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+      const ad_utility::SharedCancellationHandle& cancellationHandle,
+      const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.

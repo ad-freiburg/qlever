@@ -10,7 +10,7 @@
 class SparqlTriple;
 class SparqlTripleSimple;
 
-class IndexScan : public Operation {
+class IndexScan final : public Operation {
  private:
   Permutation::Enum permutation_;
   TripleComponent subject_;
@@ -32,7 +32,7 @@ class IndexScan : public Operation {
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
             const SparqlTripleSimple& triple);
 
-  virtual ~IndexScan() = default;
+  ~IndexScan() override = default;
 
   const TripleComponent& getPredicate() const { return predicate_; }
   const TripleComponent& getSubject() const { return subject_; }
@@ -91,10 +91,8 @@ class IndexScan : public Operation {
     return numVariables() == target;
   }
 
-  // Currently only the full scans support a limit clause.
-  [[nodiscard]] bool supportsLimit() const override {
-    return getResultWidth() == 3;
-  }
+  // An index scan can directly and efficiently support LIMIT and OFFSET
+  [[nodiscard]] bool supportsLimit() const override { return true; }
 
   Permutation::Enum permutation() const { return permutation_; }
 
@@ -104,7 +102,7 @@ class IndexScan : public Operation {
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
 
  private:
-  ResultTable computeResult() override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 

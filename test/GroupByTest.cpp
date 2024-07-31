@@ -127,9 +127,12 @@ TEST_F(GroupByTest, doGroupBy) {
 
   // Create an input result table with a local vocabulary.
   auto localVocab = std::make_shared<LocalVocab>();
-  localVocab->getIndexAndAddIfNotContained("<local1>");
-  localVocab->getIndexAndAddIfNotContained("<local2>");
-  localVocab->getIndexAndAddIfNotContained("<local3>");
+  constexpr auto iriref = [](const std::string& s) {
+    return ad_utility::triple_component::LiteralOrIri::iriref(s);
+  };
+  localVocab->getIndexAndAddIfNotContained(iriref("<local1>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local2>"));
+  localVocab->getIndexAndAddIfNotContained(iriref("<local3>"));
 
   IdTable inputData(6, makeAllocator());
   // The input data types are KB, KB, VERBATIM, TEXT, FLOAT, STRING.
@@ -190,7 +193,7 @@ TEST_F(GroupByTest, doGroupBy) {
       {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
       {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
 
-  ResultTable outTable{allocator()};
+  Result outTable{allocator()};
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.
@@ -451,10 +454,10 @@ struct GroupByOptimizations : ::testing::Test {
   }
 
   static SparqlExpressionPimpl makeGroupConcatPimpl(
-      const Variable& var, const std::string& seperator = " ") {
+      const Variable& var, const std::string& separator = " ") {
     return SparqlExpressionPimpl{
         std::make_unique<GroupConcatExpression>(
-            false, makeVariableExpression(var), seperator),
+            false, makeVariableExpression(var), separator),
         "GROUP_CONCAT(?someVariable)"};
   }
 
@@ -1223,7 +1226,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   auto groupConcatExpression2 = makeGroupConcatPimpl(varY, ",");
   auto aliasGC2 = Alias{groupConcatExpression2, varW};
 
-  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;seperator=",") as ?w)
+  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;separator=",") as ?w)
   // WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
   auto result = groupBy.getResult();
@@ -1231,7 +1234,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
 
   auto getId = makeGetId(qec->getIndex());
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto value = result->localVocab().getIndexOrNullopt(word);
+    auto lit =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
+    auto value = result->localVocab().getIndexOrNullopt(lit);
     if (value.has_value())
       return ValueId::makeFromLocalVocabIndex(value.value());
     else
@@ -1278,7 +1283,9 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatLocalVocab) {
   auto getId = makeGetId(qec->getIndex());
   auto d = DoubleId;
   auto getLocalVocabId = [&result](const std::string& word) {
-    auto value = result->localVocab().getIndexOrNullopt(word);
+    auto lit =
+        ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(word);
+    auto value = result->localVocab().getIndexOrNullopt(lit);
     if (value.has_value())
       return ValueId::makeFromLocalVocabIndex(value.value());
     else

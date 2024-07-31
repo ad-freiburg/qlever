@@ -1,7 +1,7 @@
 # SPARQL+Text support in QLever
 
 QLever allows the combination of SPARQL and full-text search. The text input
-consists of text records, where passages of the text are annotated by entitites
+consists of text records, where passages of the text are annotated by entities
 from the RDF data. The format of the required input files is described below.
 In SPARQL+Text queries you can then specify co-occurrence of words from the text
 with entities from the RDF data. This is a very powerful concept: it contains

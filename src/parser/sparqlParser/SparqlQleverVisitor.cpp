@@ -13,15 +13,19 @@
 #include <string>
 #include <vector>
 
-#include "engine/sparqlExpressions/LangExpression.h"
+#include "absl/time/time.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
+#include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
+#include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
 #include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
-#include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
 #include "util/antlr/GenerateAntlrExceptionMetadata.h"
@@ -52,6 +56,12 @@ std::string Visitor::getOriginalInputForContext(
   // exists when the result of this call is used. Not performance-critical.
   return std::string{
       ad_utility::getUTF8Substring(fullInput, posBeg, posEnd - posBeg + 1)};
+}
+
+// _____________________________________________________________________________
+std::string Visitor::currentTimeAsXsdString() {
+  return absl::FormatTime("%Y-%m-%dT%H:%M:%E3S%Ez", absl::Now(),
+                          absl::LocalTimeZone());
 }
 
 // ___________________________________________________________________________
@@ -121,6 +131,16 @@ ExpressionPtr Visitor::processIriFunctionCall(
       checkNumArgs(1);
       return sparqlExpression::makeTanExpression(std::move(argList[0]));
     }
+  } else if (checkPrefix(XSD_PREFIX)) {
+    if (functionName == "integer" || functionName == "int") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToIntExpression(
+          std::move(argList[0]));
+    } else if (functionName == "double" || functionName == "decimal") {
+      checkNumArgs(1);
+      return sparqlExpression::makeConvertToDoubleExpression(
+          std::move(argList[0]));
+    }
   }
   reportNotSupported(ctx,
                      "Function \""s + iri.toStringRepresentation() + "\" is");
@@ -142,15 +162,9 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
-                                                    bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
-  if (allowLanguageFilters) {
-    checkUnsupportedLangOperationAllowFilters(ctx, result);
-  } else {
-    checkUnsupportedLangOperation(ctx, result);
-  }
-  return result;
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(
+    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -165,6 +179,25 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
   query._originalString = ctx->getStart()->getInputStream()->toString();
 
   return query;
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
+  if (ctx->update()) {
+    // An empty query currently matches the `update()` rule. We handle this
+    // case manually to get a better error message. If an update query doesn't
+    // have an `update1()`, then it consists of a (possibly empty) prologue, but
+    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
+    // details.
+    if (!ctx->update()->update1()) {
+      reportError(ctx->update(),
+                  "Empty query (this includes queries that only consist "
+                  "of comments or prefix declarations).");
+    }
+    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
+  } else {
+    return visit(ctx->query());
+  }
 }
 
 // ____________________________________________________________________________________
@@ -307,6 +340,230 @@ std::optional<Values> Visitor::visit(Parser::ValuesClauseContext* ctx) {
 }
 
 // ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::UpdateContext* ctx) {
+  visit(ctx->prologue());
+
+  auto query = visit(ctx->update1());
+
+  if (ctx->update()) {
+    parsedQuery_ = ParsedQuery{};
+    reportNotSupported(ctx->update(), "Multiple updates in one query are");
+  }
+
+  return query;
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::Update1Context* ctx) {
+  if (ctx->modify()) {
+    return visit(ctx->modify());
+  } else if (ctx->clear()) {
+    return visit(ctx->clear());
+  }
+
+  parsedQuery_._clause = parsedQuery::UpdateClause();
+
+  if (ctx->insertData() || ctx->deleteData()) {
+    // handles insertData and deleteData cases
+    visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertData());
+    visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteData());
+  } else if (ctx->deleteWhere()) {
+    auto [toDelete, pattern] = visit(ctx->deleteWhere());
+    parsedQuery_.updateClause().toDelete_ = std::move(toDelete);
+    parsedQuery_._rootGraphPattern = std::move(pattern);
+  } else {
+    visitAlternative<void>(ctx->load(), ctx->drop(), ctx->add(), ctx->move(),
+                           ctx->copy(), ctx->create());
+    AD_FAIL();
+  }
+
+  return parsedQuery_;
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::LoadContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Load is");
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::ClearContext* ctx) {
+  auto graphRef = visit(ctx->graphRefAll());
+
+  if (holds_alternative<DEFAULT>(graphRef)) {
+    parsedQuery_._clause = parsedQuery::UpdateClause();
+    parsedQuery_.updateClause().toDelete_ = {
+        {Variable("?s"), Variable("?p"), Variable("?o")}};
+    parsedQuery_._rootGraphPattern._graphPatterns.emplace_back(
+        BasicGraphPattern{{{Variable("?s"), "?p", Variable("?o")}}});
+    return parsedQuery_;
+  } else {
+    reportNotSupported(ctx, "Named Graphs are");
+  }
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::DropContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Drop is");
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::CreateContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Create is");
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::AddContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Add is");
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::MoveContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Move is");
+}
+
+// ____________________________________________________________________________________
+void Visitor::visit(const Parser::CopyContext* ctx) const {
+  reportNotSupported(ctx, "SPARQL 1.1 Update Copy is");
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::InsertDataContext* ctx) {
+  return visit(ctx->quadData());
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteDataContext* ctx) {
+  return visit(ctx->quadData());
+}
+
+// ____________________________________________________________________________________
+std::pair<vector<SparqlTripleSimple>, ParsedQuery::GraphPattern> Visitor::visit(
+    Parser::DeleteWhereContext* ctx) {
+  auto triples = visit(ctx->quadPattern());
+  auto registerIfVariable = [this](const TripleComponent& component) {
+    if (component.isVariable()) {
+      addVisibleVariable(component.getVariable());
+    }
+  };
+  auto transformAndRegisterTriple =
+      [registerIfVariable](const SparqlTripleSimple& triple) {
+        registerIfVariable(triple.s_);
+        registerIfVariable(triple.p_);
+        registerIfVariable(triple.o_);
+
+        // The predicate comes from a rule in the grammar (`verb`) which only
+        // allows variables and IRIs.
+        AD_CORRECTNESS_CHECK(triple.p_.isVariable() || triple.p_.isIri());
+        return SparqlTriple::fromSimple(triple);
+      };
+  GraphPattern pattern;
+  pattern._graphPatterns.emplace_back(BasicGraphPattern{
+      ad_utility::transform(triples, transformAndRegisterTriple)});
+
+  return {std::move(triples), std::move(pattern)};
+}
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::ModifyContext* ctx) {
+  if (ctx->iri()) {
+    reportNotSupported(ctx->iri(), "Named graphs are");
+  }
+  if (!ctx->usingClause().empty()) {
+    reportNotSupported(ctx->usingClause(0),
+                       "USING inside an DELETE or INSERT is");
+  }
+
+  parsedQuery_._rootGraphPattern = visit(ctx->groupGraphPattern());
+
+  parsedQuery_._clause = parsedQuery::UpdateClause();
+  visitIf(&parsedQuery_.updateClause().toInsert_, ctx->insertClause());
+  visitIf(&parsedQuery_.updateClause().toDelete_, ctx->deleteClause());
+
+  return parsedQuery_;
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::DeleteClauseContext* ctx) {
+  return visit(ctx->quadPattern());
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::InsertClauseContext* ctx) {
+  return visit(ctx->quadPattern());
+}
+
+// ____________________________________________________________________________________
+GraphOrDefault Visitor::visit(Parser::GraphOrDefaultContext* ctx) {
+  if (ctx->iri()) {
+    return visit(ctx->iri());
+  } else {
+    return DEFAULT{};
+  }
+}
+
+// ____________________________________________________________________________________
+GraphRef Visitor::visit(Parser::GraphRefContext* ctx) {
+  return visit(ctx->iri());
+}
+
+// ____________________________________________________________________________________
+GraphRefAll Visitor::visit(Parser::GraphRefAllContext* ctx) {
+  if (ctx->graphRef()) {
+    return visit(ctx->graphRef());
+  } else if (ctx->DEFAULT()) {
+    return DEFAULT{};
+  } else if (ctx->NAMED()) {
+    return NAMED{};
+  } else if (ctx->ALL()) {
+    return ALL{};
+  } else {
+    AD_FAIL();
+  }
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::QuadPatternContext* ctx) {
+  return visit(ctx->quads());
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::QuadDataContext* ctx) {
+  auto quads = visit(ctx->quads());
+  auto checkAndReportVar = [&ctx](const TripleComponent& term) {
+    if (term.isVariable()) {
+      reportError(ctx->quads(), "Variables (" + term.getVariable().name() +
+                                    ") are not allowed here.");
+    }
+  };
+
+  for (const auto& quad : quads) {
+    checkAndReportVar(quad.s_);
+    checkAndReportVar(quad.p_);
+    checkAndReportVar(quad.o_);
+  }
+
+  return quads;
+}
+
+// ____________________________________________________________________________________
+vector<SparqlTripleSimple> Visitor::visit(Parser::QuadsContext* ctx) {
+  if (!ctx->quadsNotTriples().empty()) {
+    // Could also be default; disallow completely for now.
+    reportNotSupported(ctx->quadsNotTriples(0), "Named graphs are");
+  }
+
+  AD_CORRECTNESS_CHECK(ctx->triplesTemplate().size() == 1);
+
+  auto convertTriple =
+      [](const std::array<GraphTerm, 3>& triple) -> SparqlTripleSimple {
+    return {visitGraphTerm(triple[0]), visitGraphTerm(triple[1]),
+            visitGraphTerm(triple[2])};
+  };
+
+  return ad_utility::transform(visit(ctx->triplesTemplate(0)), convertTriple);
+}
+
+// ____________________________________________________________________________________
 GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
   GraphPattern pattern;
 
@@ -343,7 +600,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable, language);
       } else {
-        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -392,19 +648,6 @@ Visitor::OperationOrFilterAndMaybeTriples Visitor::visit(
 
 // ____________________________________________________________________________________
 BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
-  auto visitGraphTerm = [](const GraphTerm& graphTerm) {
-    return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
-      if constexpr (std::is_same_v<T, Variable>) {
-        return element;
-      } else if constexpr (std::is_same_v<T, Literal> ||
-                           std::is_same_v<T, Iri>) {
-        return TurtleStringParser<TokenizerCtre>::parseTripleObject(
-            element.toSparql());
-      } else {
-        return element.toSparql();
-      }
-    });
-  };
   auto varToPropertyPath = [](const Variable& var) {
     return PropertyPath::fromVariable(var);
   };
@@ -417,15 +660,13 @@ BasicGraphPattern Visitor::visit(Parser::TriplesBlockContext* ctx) {
                                              propertyPathIdentity},
             varOrPath);
       };
-
   auto registerIfVariable = [this](const auto& variant) {
     if (holds_alternative<Variable>(variant)) {
       addVisibleVariable(std::get<Variable>(variant));
     }
   };
-
   auto convertAndRegisterTriple =
-      [&visitGraphTerm, &visitVarOrPath, &registerIfVariable](
+      [&visitVarOrPath, &registerIfVariable](
           const TripleWithPropertyPath& triple) -> SparqlTriple {
     registerIfVariable(triple.subject_);
     registerIfVariable(triple.predicate_);
@@ -881,7 +1122,7 @@ vector<Visitor::ExpressionPtr> Visitor::visit(Parser::ArgListContext* ctx) {
   if (ctx->NIL()) {
     return std::vector<ExpressionPtr>{};
   }
-  // The grammar allows an optional DISTICT before the argument list (the
+  // The grammar allows an optional DISTINCT before the argument list (the
   // whole list, not the individual arguments), but we currently don't support
   // it.
   if (ctx->DISTINCT()) {
@@ -1483,7 +1724,16 @@ ExpressionPtr Visitor::visit(Parser::RelationalExpressionContext* ctx) {
   auto children = visitVector(ctx->numericExpression());
 
   if (ctx->expressionList()) {
-    reportNotSupported(ctx, "IN or NOT IN in an expression is ");
+    auto lhs = visitVector(ctx->numericExpression());
+    AD_CORRECTNESS_CHECK(lhs.size() == 1);
+    auto expressions = visit(ctx->expressionList());
+    auto inExpression = std::make_unique<InExpression>(std::move(lhs.at(0)),
+                                                       std::move(expressions));
+    if (ctx->notToken) {
+      return makeUnaryNegateExpression(std::move(inExpression));
+    } else {
+      return inExpression;
+    }
   }
   AD_CONTRACT_CHECK(children.size() == 1 || children.size() == 2);
   if (children.size() == 1) {
@@ -1744,6 +1994,12 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "iri" || functionName == "uri") {
+    return createUnary(&makeIriOrUriExpression);
+  } else if (functionName == "strlang") {
+    return createBinary(&makeStrLangTagExpression);
+  } else if (functionName == "strdt") {
+    return createBinary(&makeStrIriDtExpression);
   } else if (functionName == "strlen") {
     return createUnary(&makeStrlenExpression);
   } else if (functionName == "strbefore") {
@@ -1766,15 +2022,38 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeMonthExpression);
   } else if (functionName == "day") {
     return createUnary(&makeDayExpression);
+  } else if (functionName == "tz") {
+    return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "timezone") {
+    return createUnary(&makeTimezoneExpression);
+  } else if (functionName == "now") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<NowDatetimeExpression>(startTime_);
   } else if (functionName == "hours") {
     return createUnary(&makeHoursExpression);
   } else if (functionName == "minutes") {
     return createUnary(&makeMinutesExpression);
   } else if (functionName == "seconds") {
     return createUnary(&makeSecondsExpression);
+  } else if (functionName == "md5") {
+    return createUnary(&makeMD5Expression);
+  } else if (functionName == "sha1") {
+    return createUnary(&makeSHA1Expression);
+  } else if (functionName == "sha256") {
+    return createUnary(&makeSHA256Expression);
+  } else if (functionName == "sha384") {
+    return createUnary(&makeSHA384Expression);
+  } else if (functionName == "sha512") {
+    return createUnary(&makeSHA512Expression);
   } else if (functionName == "rand") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<RandomExpression>();
+  } else if (functionName == "uuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<UuidExpression>();
+  } else if (functionName == "struuid") {
+    AD_CONTRACT_CHECK(argList.empty());
+    return std::make_unique<StrUuidExpression>();
   } else if (functionName == "ceil") {
     return createUnary(&makeCeilExpression);
   } else if (functionName == "abs") {
@@ -1801,6 +2080,10 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsLiteralExpression);
   } else if (functionName == "isnumeric") {
     return createUnary(&makeIsNumericExpression);
+  } else if (functionName == "datatype") {
+    return createUnary(&makeDatatypeExpression);
+  } else if (functionName == "langmatches") {
+    return createBinary(&makeLangMatchesExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
@@ -1829,16 +2112,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   }
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
-  // The constructor of `LangExpression` throws if the subexpression is not a
-  // single variable.
-  try {
-    return std::make_unique<sparqlExpression::LangExpression>(
-        visit(ctx->expression()));
-  } catch (const std::exception& e) {
-    reportError(ctx, e.what());
-  }
+  // The number of children for expression LANG() is fixed to one by the
+  // grammar (or definition of the parser).
+  return sparqlExpression::makeLangExpression(visit(ctx->expression()));
 }
 
 // ____________________________________________________________________________________
@@ -2118,26 +2396,16 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
 }
 
 // _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperation(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression()) {
-    throw NotSupportedException{
-        "The LANG function is currently only supported in the construct "
-        "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-  }
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperationAllowFilters(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression() &&
-      !expression.getLanguageFilterExpression()) {
-    throw NotSupportedException(
-        "The LANG() function is only supported by QLever in the construct "
-        "FILTER(LANG(?variable) = \"langtag\"",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
-  }
+TripleComponent SparqlQleverVisitor::visitGraphTerm(
+    const GraphTerm& graphTerm) {
+  return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
+    if constexpr (std::is_same_v<T, Variable>) {
+      return element;
+    } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
+      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+          element.toSparql());
+    } else {
+      return element.toSparql();
+    }
+  });
 }
