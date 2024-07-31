@@ -226,6 +226,10 @@ class FlexibleCache {
     // TODO<joka921>:: implement this functionality
   }
 
+  MemorySize getMaxSizeSingleEntry() const noexcept {
+    return _maxSizeSingleEntry;
+  }
+
   void recomputeSize(const Key& key) {
     // Pinned entries must not be dynamic in nature
     AD_CONTRACT_CHECK(!containsPinned(key));

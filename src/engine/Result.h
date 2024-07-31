@@ -172,9 +172,16 @@ class ProtoResult {
 
 class CacheableResult {
   friend class Result;
-  // TODO<RobinTF> Add custom size counter and set max size
+
+  struct SizeCalculator {
+    uint64_t operator()(const IdTable& idTable) const {
+      return idTable.size() * idTable.numColumns() * sizeof(Id);
+    }
+  };
+
   using StorageType =
-      ResultStorage<IdTable, ad_utility::CacheableGenerator<IdTable>>;
+      ResultStorage<IdTable,
+                    ad_utility::CacheableGenerator<IdTable, SizeCalculator>>;
   StorageType storage_;
 
  public:
@@ -184,7 +191,7 @@ class CacheableResult {
   CacheableResult(CacheableResult&& other) = default;
   CacheableResult& operator=(CacheableResult&& other) = default;
 
-  explicit CacheableResult(ProtoResult protoResult);
+  CacheableResult(ProtoResult protoResult, uint64_t maxElementSize);
 
   void setOnSizeChanged(
       std::function<void(std::optional<std::chrono::milliseconds>)>
@@ -192,9 +199,12 @@ class CacheableResult {
 
   const IdTable& idTable() const;
 
-  const ad_utility::CacheableGenerator<IdTable>& idTables() const;
+  const ad_utility::CacheableGenerator<IdTable, SizeCalculator>& idTables()
+      const;
 
   bool isDataEvaluated() const noexcept;
+
+  ad_utility::MemorySize getCurrentSize() const;
 };
 
 // The result of an `Operation`. This is the class QLever uses for all

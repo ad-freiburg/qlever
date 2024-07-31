@@ -129,7 +129,8 @@ CacheValue Operation::runComputationAndTransformToCache(
     ad_utility::Timer& timer, ComputationMode computationMode,
     const std::string& cacheKey) {
   auto& cache = _executionContext->getQueryTreeCache();
-  CacheableResult result{runComputation(timer, computationMode)};
+  CacheableResult result{runComputation(timer, computationMode),
+                         cache.getMaxSizeSingleEntry().getBytes()};
   if (!result.isDataEvaluated()) {
     result.setOnSizeChanged(
         [&cache, cacheKey, runtimeInfo = getRuntimeInfoPointer()](

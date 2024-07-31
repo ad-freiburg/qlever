@@ -277,6 +277,10 @@ class ConcurrentCache {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
   }
 
+  MemorySize getMaxSizeSingleEntry() const {
+    return _cacheAndInProgressMap.wlock()->_cache.getMaxSizeSingleEntry();
+  }
+
  private:
   using ResultInProgress = ConcurrentCacheDetail::ResultInProgress<Value>;
 
@@ -317,10 +321,6 @@ class ConcurrentCache {
   }
 
  private:
-  // TODO<RobinTF> accept computeFunction with or without old cached value in
-  // case cached value needs recomputation due to some condition like pinned/non
-  // lazy requirement implementation for computeOnce (pinned and normal
-  // variant).
   ResultAndCacheStatus computeOnceImpl(
       bool pinned, const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,

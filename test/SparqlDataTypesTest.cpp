@@ -17,8 +17,10 @@ namespace {
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
   Result _resultTable{Result::createResultWithFullyEvaluatedIdTable(
-      std::make_shared<const CacheableResult>(ProtoResult{
-          IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}}))};
+      std::make_shared<const CacheableResult>(
+          ProtoResult{
+              IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}},
+          std::numeric_limits<uint64_t>::max()))};
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
@@ -29,8 +31,10 @@ struct ContextWrapper {
 
   void setIdTable(IdTable&& table) {
     _resultTable = Result::createResultWithFullyEvaluatedIdTable(
-        std::make_shared<const CacheableResult>(ProtoResult{
-            std::move(table), {}, _resultTable.getSharedLocalVocab()}));
+        std::make_shared<const CacheableResult>(
+            ProtoResult{
+                std::move(table), {}, _resultTable.getSharedLocalVocab()},
+            std::numeric_limits<uint64_t>::max()));
   }
 };
 

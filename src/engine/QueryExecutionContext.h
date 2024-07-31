@@ -26,7 +26,6 @@ class CacheValue {
   RuntimeInformation runtimeInfo_;
 
  public:
-  // TODO<RobinTF> accept ProtoResult to define type of cacheable result
   explicit CacheValue(CacheableResult resultTable,
                       RuntimeInformation runtimeInfo)
       : resultTable_{std::make_shared<CacheableResult>(std::move(resultTable))},
@@ -47,11 +46,6 @@ class CacheValue {
     return runtimeInfo_;
   }
 
-  static ad_utility::MemorySize calculateSize(const IdTable& idTable) {
-    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
-                                         sizeof(Id));
-  };
-
   ~CacheValue() {
     if (resultTable_ && !resultTable_->isDataEvaluated()) {
       // Clear listeners
@@ -69,11 +63,7 @@ class CacheValue {
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
       if (const auto& tablePtr = cacheValue.resultTable_; tablePtr) {
-        if (tablePtr->isDataEvaluated()) {
-          return calculateSize(tablePtr->idTable());
-        }
-        return ad_utility::MemorySize::bytes(
-            tablePtr->idTables().getCurrentSize());
+        return tablePtr->getCurrentSize();
       } else {
         return 0_B;
       }

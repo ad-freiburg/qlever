@@ -210,16 +210,22 @@ bool ProtoResult::isDataEvaluated() const noexcept {
   return storage_.isDataEvaluated();
 }
 // _____________________________________________________________________________
-CacheableResult::CacheableResult(ProtoResult protoResult)
+CacheableResult::CacheableResult(ProtoResult protoResult,
+                                 uint64_t maxElementSize)
     : storage_{StorageType{
           protoResult.isDataEvaluated()
               ? decltype(StorageType::data_){std::move(
                     protoResult.storage_.idTable())}
-              : decltype(StorageType::data_){ad_utility::CacheableGenerator{
+              : decltype(StorageType::data_){ad_utility::CacheableGenerator<
+                    IdTable, SizeCalculator>{
                     std::move(protoResult.storage_.idTables())}},
           std::move(protoResult.storage_.sortedBy_),
           std::move(protoResult.storage_.localVocab_),
-      }} {}
+      }} {
+  if (!storage_.isDataEvaluated()) {
+    storage_.idTables().setMaxSize(maxElementSize);
+  }
+}
 
 // _____________________________________________________________________________
 void CacheableResult::setOnSizeChanged(
@@ -232,14 +238,21 @@ void CacheableResult::setOnSizeChanged(
 const IdTable& CacheableResult::idTable() const { return storage_.idTable(); }
 
 // _____________________________________________________________________________
-const ad_utility::CacheableGenerator<IdTable>& CacheableResult::idTables()
-    const {
+const ad_utility::CacheableGenerator<IdTable, CacheableResult::SizeCalculator>&
+CacheableResult::idTables() const {
   return storage_.idTables();
 }
 
 // _____________________________________________________________________________
 bool CacheableResult::isDataEvaluated() const noexcept {
   return storage_.isDataEvaluated();
+}
+
+// _____________________________________________________________________________
+ad_utility::MemorySize CacheableResult::getCurrentSize() const {
+  return ad_utility::MemorySize::bytes(
+      storage_.isDataEvaluated() ? SizeCalculator{}(storage_.idTable())
+                                 : storage_.idTables().getCurrentSize());
 }
 
 // _____________________________________________________________________________
