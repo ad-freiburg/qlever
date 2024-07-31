@@ -98,7 +98,7 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) {
+  auto projectionForComparator = []<typename T>(const T& rowOrId) -> const Id& {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
@@ -106,7 +106,8 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     }
   };
   auto comparator = [&projectionForComparator](const auto& l, const auto& r) {
-    return projectionForComparator(l) < projectionForComparator(r);
+    return projectionForComparator(l).compareWithoutLocalVocab(
+               projectionForComparator(r)) < 0;
   };
 
   // There are 5 columns in the result (3 from the triple, as well as subject
