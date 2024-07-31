@@ -34,7 +34,7 @@ class CountStarExpression : public SparqlExpression {
     IdTable table{ctx->_allocator};
 
     // We only need to copy columns that are actually visible. Columns that are
-    // hidden, e.g. because they weren't selectedd in a subquery shouldn't be
+    // hidden, e.g. because they weren't selected in a subquery, shouldn't be
     // part of the DISTINCT computation.
 
     auto varToColNoInternalVariables =
@@ -44,19 +44,19 @@ class CountStarExpression : public SparqlExpression {
         });
     table.setNumColumns(std::ranges::distance(varToColNoInternalVariables));
     table.resize(ctx->size());
-    size_t targetIdx = 0;
-    for (const auto& [sourceIdx, _] :
-         varToColNoInternalVariables | std::views::values) {
-      const auto& sourceColumn = ctx->_inputTable.getColumn(sourceIdx);
-      std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
-                        sourceColumn.begin() + ctx->_endIndex,
-                        table.getColumn(targetIdx).begin());
-      ++targetIdx;
-    }
     auto checkCancellation = [ctx]() {
       ctx->cancellationHandle_->throwIfCancelled();
     };
-    checkCancellation();
+    size_t targetColIdx = 0;
+    for (const auto& [sourceColIdx, _] :
+         varToColNoInternalVariables | std::views::values) {
+      const auto& sourceColumn = ctx->_inputTable.getColumn(sourceColIdx);
+      std::ranges::copy(sourceColumn.begin() + ctx->_beginIndex,
+                        sourceColumn.begin() + ctx->_endIndex,
+                        table.getColumn(targetColIdx).begin());
+      ++targetColIdx;
+      checkCancellation();
+    }
     ctx->_qec.getSortPerformanceEstimator().throwIfEstimateTooLong(
         table.numRows(), table.numColumns(), ctx->deadline_,
         "Sort for COUNT(DISTINCT *)");

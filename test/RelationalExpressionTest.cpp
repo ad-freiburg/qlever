@@ -472,7 +472,7 @@ auto testNotComparableHelper(T leftValue, U rightValue,
   LocalVocab localVocab;
   IdTable table{alloc};
   sparqlExpression::EvaluationContext context{
-      *TestContext{}.getQec(),
+      *TestContext{}.qec,
       map,
       table,
       alloc,

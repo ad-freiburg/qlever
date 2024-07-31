@@ -129,6 +129,8 @@ TEST(AggregateExpression, CountStar) {
   // stores `i`.
   auto matcher = [&](int64_t i) {
     auto evaluate = [&](const SparqlExpression::Ptr& expr) {
+      t.context._beginIndex = 0;
+      t.context._endIndex = t.table.size();
       return expr->evaluate(&t.context);
     };
     using namespace ::testing;
@@ -173,6 +175,26 @@ TEST(AggregateExpression, CountStar) {
       0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined};
   t.qec->getQueryTreeCache().clearAll();
   EXPECT_THAT(m, matcher(totalSize));
+
+  // Add two rows that only consist of UNDEF values.
+  // This increases the COUNT * by 2, but the COUNT DISTINCT * only by 1.
+  t.table.push_back(t.table[0]);
+  t.table.push_back(t.table[0]);
+
+  auto setToUndef = [](IdTable::row_reference row) {
+    for (Id& id : row) {
+      id = Id::makeUndefined();
+    }
+  };
+  setToUndef(t.table[t.table.numRows() - 1]);
+  setToUndef(t.table[t.table.numRows() - 2]);
+
+  t.qec->getQueryTreeCache().clearAll();
+  // Here, m is a COUNT DISTINCT *.
+  EXPECT_THAT(m, matcher(totalSize + 1));
+
+  m = makeCountStarExpression(false);
+  EXPECT_THAT(m, matcher(t.table.numRows()));
 }
 
 // ______________________________________________________________________________
