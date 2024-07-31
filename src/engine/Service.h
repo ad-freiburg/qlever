@@ -63,8 +63,11 @@ class Service : public Operation {
   // later be joined with the result of the `Service`. If the result of the
   // sibling is small, it will be used to constrain the SERVICE query using a
   // `VALUES` clause.
-  [[nodiscard]] std::shared_ptr<Service> addSiblingTree(
+  [[nodiscard]] std::shared_ptr<Service> createCopyWithSiblingTree(
       std::shared_ptr<QueryExecutionTree> siblingTree) const {
+    AD_CORRECTNESS_CHECK(siblingTree == nullptr);
+    // TODO<joka921> This copies the `parsedServiceClause_`. We could probably
+    // use a `shared_ptr` here to reduce the copying during QueryPlanning.
     return std::make_shared<Service>(getExecutionContext(),
                                      parsedServiceClause_, getResultFunction_,
                                      std::move(siblingTree));

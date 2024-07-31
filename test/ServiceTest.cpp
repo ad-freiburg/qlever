@@ -314,7 +314,8 @@ TEST_F(ServiceTest, getCacheKey) {
               {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
 
-  auto ck_sibling = service.addSiblingTree(siblingTree)->getCacheKey();
+  auto ck_sibling =
+      service.createCopyWithSiblingTree(siblingTree)->getCacheKey();
   EXPECT_NE(ck_noSibling, ck_sibling);
 
   auto siblingTree2 = std::make_shared<QueryExecutionTree>(
@@ -324,7 +325,7 @@ TEST_F(ServiceTest, getCacheKey) {
                        {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                        {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}}));
 
-  auto serviceWithSibling = service.addSiblingTree(siblingTree2);
+  auto serviceWithSibling = service.createCopyWithSiblingTree(siblingTree2);
 
   auto ck_changedSibling = serviceWithSibling->getCacheKey();
   EXPECT_NE(ck_sibling, ck_changedSibling);

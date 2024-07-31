@@ -1782,10 +1782,9 @@ auto QueryPlanner::createJoinWithService(
     const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
+  // We can only proceed if exactly one of the inputs is a `SERVICE`.
   auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
   auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
-
-  // Exactly one of the two Operations can be a serviceWithSibling.
   if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
     return std::nullopt;
   }
@@ -1793,6 +1792,8 @@ auto QueryPlanner::createJoinWithService(
   // Setup some variables that are agnostic of which of the two inputs is the
   // serviceWithSibling clause, as these cases are completely symmetric.
   const auto& [serviceIn, sibling, serviceIdx, siblingIdx] = [&]() {
+    // `std::tie` requires lvalue-references, that's why we define explicit
+    // variables for `0` and `1`.
     static constexpr size_t zero = 0;
     static constexpr size_t one = 1;
     if (aRootOp) {
@@ -1804,7 +1805,7 @@ auto QueryPlanner::createJoinWithService(
   }();
 
   auto serviceWithSibling =
-      makeSubtreePlan(serviceIn->addSiblingTree(sibling._qet));
+      makeSubtreePlan(serviceIn->createCopyWithSiblingTree(sibling._qet));
   auto qec = serviceIn->getExecutionContext();
 
   SubtreePlan plan =
