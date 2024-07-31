@@ -8,13 +8,22 @@
 
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "global/ValueId.h"
 #include "util/HashSet.h"
 #include "util/Random.h"
 #include "util/Serializer/ByteBufferSerializer.h"
 #include "util/Serializer/Serializer.h"
 
-TEST(ValueId, makeFromDouble) {
+struct ValueIdTest : public ::testing::Test {
+  ValueIdTest() {
+    // We need to initialize a (static). index, otherwise we can't compare
+    // VocabIndex to LocalVocabIndex entries
+    ad_utility::testing::getQec();
+  }
+};
+
+TEST_F(ValueIdTest, makeFromDouble) {
   auto testRepresentableDouble = [](double d) {
     auto id = ValueId::makeFromDouble(d);
     ASSERT_EQ(id.getDatatype(), Datatype::Double);
@@ -73,7 +82,7 @@ TEST(ValueId, makeFromDouble) {
   testSmallestNumber(-ValueId::minPositiveDouble);
 }
 
-TEST(ValueId, makeFromInt) {
+TEST_F(ValueIdTest, makeFromInt) {
   for (size_t i = 0; i < 10'000; ++i) {
     auto value = nonOverflowingNBitGenerator();
     auto id = ValueId::makeFromInt(value);
@@ -96,7 +105,7 @@ TEST(ValueId, makeFromInt) {
   testOverflow(underflowingNBitGenerator);
 }
 
-TEST(ValueId, Indices) {
+TEST_F(ValueIdTest, Indices) {
   auto testRandomIds = [&](auto makeId, auto getFromId, Datatype type) {
     auto testSingle = [&](auto value) {
       auto id = makeId(value);
@@ -131,23 +140,29 @@ TEST(ValueId, Indices) {
   testRandomIds(&makeWordVocabId, &getWordVocabIndex, Datatype::WordVocabIndex);
 }
 
-TEST(ValueId, Undefined) {
+TEST_F(ValueIdTest, Undefined) {
   auto id = ValueId::makeUndefined();
   ASSERT_EQ(id.getDatatype(), Datatype::Undefined);
 }
 
-TEST(ValueId, OrderingDifferentDatatypes) {
+TEST_F(ValueIdTest, OrderingDifferentDatatypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end());
 
   auto compareByDatatypeAndIndexTypes = [](ValueId a, ValueId b) {
+    auto typeA = a.getDatatype();
+    auto typeB = b.getDatatype();
+    if (ad_utility::contains(ValueId::stringTypes_, typeA) &&
+        ad_utility::contains(ValueId::stringTypes_, typeB)) {
+      return false;
+    }
     return a.getDatatype() < b.getDatatype();
   };
   ASSERT_TRUE(
       std::is_sorted(ids.begin(), ids.end(), compareByDatatypeAndIndexTypes));
 }
 
-TEST(ValueId, IndexOrdering) {
+TEST_F(ValueIdTest, IndexOrdering) {
   auto testOrder = [](auto makeIdFromIndex, auto getIndexFromId) {
     std::vector<ValueId> ids;
     addIdsFromGenerator(indexGenerator, makeIdFromIndex, ids);
@@ -171,7 +186,7 @@ TEST(ValueId, IndexOrdering) {
   testOrder(&makeTextRecordId, &getTextRecordIndex);
 }
 
-TEST(ValueId, DoubleOrdering) {
+TEST_F(ValueIdTest, DoubleOrdering) {
   auto ids = makeRandomDoubleIds();
   std::vector<double> doubles;
   doubles.reserve(ids.size());
@@ -226,7 +241,7 @@ TEST(ValueId, DoubleOrdering) {
   }
 }
 
-TEST(ValueId, SignedIntegerOrdering) {
+TEST_F(ValueIdTest, SignedIntegerOrdering) {
   std::vector<ValueId> ids;
   addIdsFromGenerator(nonOverflowingNBitGenerator, &ValueId::makeFromInt, ids);
   std::vector<int64_t> integers;
@@ -250,7 +265,7 @@ TEST(ValueId, SignedIntegerOrdering) {
   }
 }
 
-TEST(ValueId, Serialization) {
+TEST_F(ValueIdTest, Serialization) {
   auto ids = makeRandomIds();
 
   for (auto id : ids) {
@@ -264,7 +279,7 @@ TEST(ValueId, Serialization) {
   }
 }
 
-TEST(ValueId, Hashing) {
+TEST_F(ValueIdTest, Hashing) {
   auto ids = makeRandomIds();
   ad_utility::HashSet<ValueId> idsWithoutDuplicates;
   for (size_t i = 0; i < 2; ++i) {
@@ -283,7 +298,7 @@ TEST(ValueId, Hashing) {
   ASSERT_EQ(ids, idsWithoutDuplicatesAsVector);
 }
 
-TEST(ValueId, toDebugString) {
+TEST_F(ValueIdTest, toDebugString) {
   auto test = [](ValueId id, std::string_view expected) {
     std::stringstream stream;
     stream << id;
@@ -301,8 +316,9 @@ TEST(ValueId, toDebugString) {
   test(ValueId::makeFromBool(false), "B:false");
   test(ValueId::makeFromBool(true), "B:true");
   test(makeVocabId(15), "V:15");
-  auto str = ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
-      "SomeValue");
+  auto str = LocalVocabEntry{
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes(
+          "SomeValue")};
   test(ValueId::makeFromLocalVocabIndex(&str), "L:\"SomeValue\"");
   test(makeTextRecordId(37), "T:37");
   test(makeWordVocabId(42), "W:42");
@@ -314,10 +330,10 @@ TEST(ValueId, toDebugString) {
   ASSERT_ANY_THROW(test(ValueId::max(), "blim"));
 }
 
-TEST(ValueId, InvalidDatatypeEnumValue) {
+TEST_F(ValueIdTest, InvalidDatatypeEnumValue) {
   ASSERT_ANY_THROW(toString(static_cast<Datatype>(2345)));
 }
 
-TEST(ValueId, TriviallyCopyable) {
+TEST_F(ValueIdTest, TriviallyCopyable) {
   static_assert(std::is_trivially_copyable_v<ValueId>);
 }

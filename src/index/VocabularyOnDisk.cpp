@@ -97,7 +97,4 @@ void VocabularyOnDisk::open(const std::string& filename) {
   offsets_.open(filename + offsetSuffix_);
   AD_CORRECTNESS_CHECK(offsets_.size() > 0);
   size_ = offsets_.size() - 1;
-  if (size_ > 0) {
-    highestIdx_ = size_ - 1;
-  }
 }

@@ -51,7 +51,7 @@ std::string Sort::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result Sort::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Sort::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Getting sub-result for Sort result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();

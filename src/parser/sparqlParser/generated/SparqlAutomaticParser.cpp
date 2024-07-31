@@ -439,7 +439,7 @@ void sparqlautomaticParserInitialize() {
       2,    149,  7,    149,  2,    150,  7,    150,  2,    151,  7,    151,
       2,    152,  7,    152,  2,    153,  7,    153,  2,    154,  7,    154,
       2,    155,  7,    155,  2,    156,  7,    156,  1,    0,    1,    0,
-      1,    0,    1,    0,    3,    0,    319,  8,    0,    1,    1,    1,
+      3,    0,    317,  8,    0,    1,    0,    1,    0,    1,    1,    1,
       1,    1,    1,    1,    1,    1,    1,    3,    1,    326,  8,    1,
       1,    1,    1,    1,    1,    2,    1,    2,    5,    2,    332,  8,
       2,    10,   2,    12,   2,    335,  9,    2,    1,    3,    1,    3,
@@ -694,7 +694,7 @@ void sparqlautomaticParserInitialize() {
       0,    47,   48,   2,    0,    1,    1,    13,   14,   1,    0,    145,
       146,  1,    0,    149,  151,  1,    0,    152,  154,  1,    0,    155,
       157,  1,    0,    28,   29,   1,    0,    159,  162,  2,    0,    144,
-      144,  165,  165,  1761, 0,    318,  1,    0,    0,    0,    2,    320,
+      144,  165,  165,  1761, 0,    316,  1,    0,    0,    0,    2,    320,
       1,    0,    0,    0,    4,    333,  1,    0,    0,    0,    6,    336,
       1,    0,    0,    0,    8,    339,  1,    0,    0,    0,    10,   343,
       1,    0,    0,    0,    12,   353,  1,    0,    0,    0,    14,   358,
@@ -772,10 +772,10 @@ void sparqlautomaticParserInitialize() {
       1,    0,    0,    0,    300,  1625, 1,    0,    0,    0,    302,  1628,
       1,    0,    0,    0,    304,  1636, 1,    0,    0,    0,    306,  1638,
       1,    0,    0,    0,    308,  1640, 1,    0,    0,    0,    310,  1642,
-      1,    0,    0,    0,    312,  1644, 1,    0,    0,    0,    314,  319,
-      3,    2,    1,    0,    315,  316,  3,    62,   31,   0,    316,  317,
-      5,    0,    0,    1,    317,  319,  1,    0,    0,    0,    318,  314,
-      1,    0,    0,    0,    318,  315,  1,    0,    0,    0,    319,  1,
+      1,    0,    0,    0,    312,  1644, 1,    0,    0,    0,    314,  317,
+      3,    2,    1,    0,    315,  317,  3,    62,   31,   0,    316,  314,
+      1,    0,    0,    0,    316,  315,  1,    0,    0,    0,    317,  318,
+      1,    0,    0,    0,    318,  319,  5,    0,    0,    1,    319,  1,
       1,    0,    0,    0,    320,  325,  3,    4,    2,    0,    321,  326,
       3,    10,   5,    0,    322,  326,  3,    22,   11,   0,    323,  326,
       3,    24,   12,   0,    324,  326,  3,    26,   13,   0,    325,  321,
@@ -1574,7 +1574,7 @@ void sparqlautomaticParserInitialize() {
       7,    9,    0,    0,    1639, 307,  1,    0,    0,    0,    1640, 1641,
       5,    141,  0,    0,    1641, 309,  1,    0,    0,    0,    1642, 1643,
       5,    143,  0,    0,    1643, 311,  1,    0,    0,    0,    1644, 1645,
-      5,    142,  0,    0,    1645, 313,  1,    0,    0,    0,    161,  318,
+      5,    142,  0,    0,    1645, 313,  1,    0,    0,    0,    161,  316,
       325,  331,  333,  347,  360,  365,  368,  372,  387,  396,  402,  406,
       412,  415,  420,  424,  432,  441,  451,  456,  459,  462,  465,  471,
       479,  484,  490,  496,  501,  507,  509,  513,  516,  520,  523,  527,
@@ -1649,6 +1649,10 @@ SparqlAutomaticParser::QueryOrUpdateContext::QueryOrUpdateContext(
     ParserRuleContext* parent, size_t invokingState)
     : ParserRuleContext(parent, invokingState) {}
 
+tree::TerminalNode* SparqlAutomaticParser::QueryOrUpdateContext::EOF() {
+  return getToken(SparqlAutomaticParser::EOF, 0);
+}
+
 SparqlAutomaticParser::QueryContext*
 SparqlAutomaticParser::QueryOrUpdateContext::query() {
   return getRuleContext<SparqlAutomaticParser::QueryContext>(0);
@@ -1657,10 +1661,6 @@ SparqlAutomaticParser::QueryOrUpdateContext::query() {
 SparqlAutomaticParser::UpdateContext*
 SparqlAutomaticParser::QueryOrUpdateContext::update() {
   return getRuleContext<SparqlAutomaticParser::UpdateContext>(0);
-}
-
-tree::TerminalNode* SparqlAutomaticParser::QueryOrUpdateContext::EOF() {
-  return getToken(SparqlAutomaticParser::EOF, 0);
 }
 
 size_t SparqlAutomaticParser::QueryOrUpdateContext::getRuleIndex() const {
@@ -1701,29 +1701,28 @@ SparqlAutomaticParser::queryOrUpdate() {
     exitRule();
   });
   try {
-    setState(318);
+    enterOuterAlt(_localctx, 1);
+    setState(316);
     _errHandler->sync(this);
     switch (getInterpreter<atn::ParserATNSimulator>()->adaptivePredict(
         _input, 0, _ctx)) {
       case 1: {
-        enterOuterAlt(_localctx, 1);
         setState(314);
         query();
         break;
       }
 
       case 2: {
-        enterOuterAlt(_localctx, 2);
         setState(315);
         update();
-        setState(316);
-        match(SparqlAutomaticParser::EOF);
         break;
       }
 
       default:
         break;
     }
+    setState(318);
+    match(SparqlAutomaticParser::EOF);
 
   } catch (RecognitionException& e) {
     _errHandler->reportError(this, e);

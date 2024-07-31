@@ -81,7 +81,7 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-Result Bind::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Bind::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult();

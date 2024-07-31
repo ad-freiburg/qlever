@@ -18,7 +18,7 @@ TextLimit::TextLimit(QueryExecutionContext* qec, const size_t limit,
       scoreColumns_(scoreColumns) {}
 
 // _____________________________________________________________________________
-Result TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult TextLimit::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> childRes = child_->getResult();
 
   if (limit_ == 0) {

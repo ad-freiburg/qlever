@@ -13,8 +13,8 @@ namespace ad_utility {
 // copy assignment is a noop.
 struct CopyableMutex : std::mutex {
   using std::mutex::mutex;
-  CopyableMutex(const CopyableMutex&) {}
-  CopyableMutex& operator=(const CopyableMutex&) { return *this; }
+  CopyableMutex(const CopyableMutex&) noexcept {}
+  CopyableMutex& operator=(const CopyableMutex&) noexcept { return *this; }
 };
 
 // A `std::atomic` that can be "copied". The semantics are, that copying will
@@ -29,6 +29,12 @@ class CopyableAtomic : public std::atomic<T> {
   using Base::Base;
   CopyableAtomic(const CopyableAtomic& rhs) : Base{rhs.load()} {}
   CopyableAtomic& operator=(const CopyableAtomic& rhs) {
+    static_cast<Base&>(*this) = rhs.load();
+    return *this;
+  }
+
+  CopyableAtomic(CopyableAtomic&& rhs) noexcept : Base{rhs.load()} {}
+  CopyableAtomic& operator=(CopyableAtomic&& rhs) noexcept {
     static_cast<Base&>(*this) = rhs.load();
     return *this;
   }
