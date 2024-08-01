@@ -53,7 +53,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(),
         subRes->idTable(), getExecutionContext()->getAllocator(),
-        subRes->localVocab(), cancellationHandle_);
+        subRes->localVocab(), cancellationHandle_, deadline_);
 
     // TODO<joka921> This should be a mandatory argument to the
     // EvaluationContext constructor.
@@ -78,7 +78,7 @@ cppcoro::generator<IdTable> Filter::filterInChunks(
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(), idTable,
         getExecutionContext()->getAllocator(), subRes->localVocab(),
-        cancellationHandle_);
+        cancellationHandle_, deadline_);
 
     // TODO<joka921> This should be a mandatory argument to the
     // EvaluationContext constructor.
