@@ -110,6 +110,7 @@ class CacheableGenerator {
         tryShrinkCacheIfNeccessary();
       }
       if (isMaster) {
+        lock.unlock();
         conditionVariable_.notify_all();
       }
     }
