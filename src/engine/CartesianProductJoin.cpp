@@ -177,13 +177,9 @@ ProtoResult CartesianProductJoin::computeResult(
     }
   }
 
-  // TODO<joka921> find a solution to simply return the subresult.
-  // This can probably be done by using the `ProtoResult`.
-  /*
-  if (subResults.size() == 1) {
-    return subResults.at(0);
-  }
-   */
+  // TODO<joka921> Find a solution to cheaply handle the case, that only a
+  // single result is left. This can probably be done by using the
+  // `ProtoResult`.
 
   auto sizesView = std::views::transform(
       subResults, [](const auto& child) { return child->idTable().size(); });
