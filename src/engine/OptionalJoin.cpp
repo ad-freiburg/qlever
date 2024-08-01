@@ -89,7 +89,7 @@ string OptionalJoin::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult OptionalJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "OptionalJoin result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};

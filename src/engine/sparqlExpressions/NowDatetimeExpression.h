@@ -4,7 +4,7 @@
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/ChunkedForLoop.h"
-#include "util/Date.h"
+#include "util/DateYearDuration.h"
 #include "util/Random.h"
 
 namespace sparqlExpression {
@@ -15,11 +15,11 @@ namespace sparqlExpression {
 // query the same.
 class NowDatetimeExpression : public SparqlExpression {
  private:
-  DateOrLargeYear date_;
+  DateYearOrDuration date_;
 
  public:
   explicit NowDatetimeExpression(const std::string& dateTimeFormat)
-      : date_(DateOrLargeYear::parseXsdDatetime(dateTimeFormat)) {}
+      : date_(DateYearOrDuration::parseXsdDatetime(dateTimeFormat)) {}
 
   std::string getCacheKey(
       [[maybe_unused]] const VariableToColumnMap& varColMap) const override {

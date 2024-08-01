@@ -32,7 +32,7 @@ string Minus::getCacheKeyImpl() const {
 string Minus::getDescriptor() const { return "Minus"; }
 
 // _____________________________________________________________________________
-Result Minus::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Minus::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Minus result computation..." << endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};

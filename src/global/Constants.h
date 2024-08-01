@@ -69,6 +69,9 @@ static const std::string INTERNAL_VARIABLE_PREFIX =
 constexpr std::string_view INTERNAL_BLANKNODE_VARIABLE_PREFIX =
     "?_QLever_internal_variable_bn_";
 
+constexpr std::string_view INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX =
+    "?_QLever_internal_variable_qp_";
+
 static constexpr std::string_view SCORE_VARIABLE_PREFIX = "?ql_score_";
 static constexpr std::string_view MATCHINGWORD_VARIABLE_PREFIX =
     "?ql_matchingword_";
@@ -84,6 +87,8 @@ static const char XSD_DATE_TYPE[] = "http://www.w3.org/2001/XMLSchema#date";
 static const char XSD_GYEAR_TYPE[] = "http://www.w3.org/2001/XMLSchema#gYear";
 static const char XSD_GYEARMONTH_TYPE[] =
     "http://www.w3.org/2001/XMLSchema#gYearMonth";
+static const char XSD_DAYTIME_DURATION_TYPE[] =
+    "http://www.w3.org/2001/XMLSchema#dayTimeDuration";
 
 constexpr inline char XSD_INT_TYPE[] = "http://www.w3.org/2001/XMLSchema#int";
 static const char XSD_INTEGER_TYPE[] =
@@ -116,8 +121,7 @@ static const char RDF_PREFIX[] = "http://www.w3.org/1999/02/22-rdf-syntax-ns#";
 static const char RDF_LANGTAG_STRING[] =
     "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString";
 
-static const std::string INTERNAL_VOCAB_SUFFIX = ".vocabulary.internal";
-static const std::string EXTERNAL_VOCAB_SUFFIX = ".vocabulary.external";
+static const std::string VOCAB_SUFFIX = ".vocabulary";
 static const std::string MMAP_FILE_SUFFIX = ".meta";
 static const std::string CONFIGURATION_FILE = ".meta-data.json";
 

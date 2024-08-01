@@ -26,13 +26,14 @@ EvaluationContext::EvaluationContext(
     const VariableToColumnMap& variableToColumnMap, const IdTable& inputTable,
     const ad_utility::AllocatorWithLimit<Id>& allocator,
     const LocalVocab& localVocab,
-    ad_utility::SharedCancellationHandle cancellationHandle)
+    ad_utility::SharedCancellationHandle cancellationHandle, TimePoint deadline)
     : _qec{qec},
       _variableToColumnMap{variableToColumnMap},
       _inputTable{inputTable},
       _allocator{allocator},
       _localVocab{localVocab},
-      cancellationHandle_{std::move(cancellationHandle)} {
+      cancellationHandle_{std::move(cancellationHandle)},
+      deadline_{deadline} {
   AD_CONTRACT_CHECK(cancellationHandle_);
 }
 

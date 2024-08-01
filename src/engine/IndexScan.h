@@ -103,7 +103,7 @@ class IndexScan final : public Operation {
   ScanSpecificationAsTripleComponent getPermutedTripleNoVariables() const;
 
  private:
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
