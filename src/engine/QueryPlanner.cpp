@@ -1779,28 +1779,42 @@ auto QueryPlanner::createJoinWithHasPredicateScan(
 
 // _____________________________________________________________________
 auto QueryPlanner::createJoinWithService(
-    SubtreePlan a, SubtreePlan b,
+    const SubtreePlan& a, const SubtreePlan& b,
     const std::vector<std::array<ColumnIndex, 2>>& jcs)
     -> std::optional<SubtreePlan> {
+  // We can only proceed if exactly one of the inputs is a `SERVICE`.
   auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
   auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
-
-  // Exactly one of the two Operations can be a service.
   if (static_cast<bool>(aRootOp) == static_cast<bool>(bRootOp)) {
     return std::nullopt;
   }
 
-  auto service = aRootOp ? aRootOp : bRootOp;
-  auto sibling = bRootOp ? a : b;
+  // Setup some variables that are agnostic of which of the two inputs is the
+  // serviceWithSibling clause, as these cases are completely symmetric.
+  const auto& [serviceIn, sibling, serviceIdx, siblingIdx] = [&]() {
+    // `std::tie` requires lvalue-references, that's why we define explicit
+    // variables for `0` and `1`.
+    static constexpr size_t zero = 0;
+    static constexpr size_t one = 1;
+    if (aRootOp) {
+      return std::tie(aRootOp, b, zero, one);
+    } else {
+      AD_CORRECTNESS_CHECK(bRootOp);
+      return std::tie(bRootOp, a, one, zero);
+    }
+  }();
 
-  service->setSiblingTree(sibling._qet);
-
-  const auto& qec = service->getExecutionContext();
+  auto serviceWithSibling =
+      makeSubtreePlan(serviceIn->createCopyWithSiblingTree(sibling._qet));
+  auto qec = serviceIn->getExecutionContext();
 
   SubtreePlan plan =
       jcs.size() == 1
-          ? makeSubtreePlan<Join>(qec, a._qet, b._qet, jcs[0][0], jcs[0][1])
-          : makeSubtreePlan<MultiColumnJoin>(qec, a._qet, b._qet);
+          ? makeSubtreePlan<Join>(qec, std::move(serviceWithSibling._qet),
+                                  sibling._qet, jcs[0][serviceIdx],
+                                  jcs[0][siblingIdx])
+          : makeSubtreePlan<MultiColumnJoin>(
+                qec, std::move(serviceWithSibling._qet), sibling._qet);
   mergeSubtreePlanIds(plan, a, b);
 
   return plan;
