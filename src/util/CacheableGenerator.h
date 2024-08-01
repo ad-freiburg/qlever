@@ -13,6 +13,7 @@
 #include "util/Exception.h"
 #include "util/Generator.h"
 #include "util/Synchronized.h"
+#include "util/Timer.h"
 #include "util/UniqueCleanup.h"
 
 namespace ad_utility {
@@ -84,22 +85,21 @@ class CacheableGenerator {
         });
         return;
       }
-      auto start = std::chrono::steady_clock::now();
+      Timer timer{Timer::Started};
       if (generatorIterator_.has_value()) {
         AD_CONTRACT_CHECK(generatorIterator_.value() != generator_.end());
         ++generatorIterator_.value();
       } else {
         generatorIterator_ = generator_.begin();
       }
-      auto stop = std::chrono::steady_clock::now();
+      timer.stop();
       if (generatorIterator_.value() != generator_.end()) {
         auto pointer =
             std::make_shared<T>(std::move(*generatorIterator_.value()));
         currentSize_.fetch_add(sizeCounter_(*pointer));
         cachedValues_.push_back(std::move(pointer));
         if (onSizeChanged_) {
-          onSizeChanged_(std::chrono::duration_cast<std::chrono::milliseconds>(
-              stop - start));
+          onSizeChanged_(std::chrono::milliseconds{timer.msecs()});
         }
         tryShrinkCacheIfNeccessary();
       }
