@@ -54,7 +54,7 @@ ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(T col0,
   if (!col0.has_value()) {
     AD_CONTRACT_CHECK(!col1.has_value());
   }
-  if (col1.has_value()) {
+  if (!col1.has_value()) {
     AD_CONTRACT_CHECK(!col2.has_value());
   }
 }
