@@ -6,10 +6,13 @@
 
 #include <tuple>
 
+#include "Exception.h"
+
 namespace ad_utility {
 
 template <typename OriginalIterable, typename... Args>
 class IteratorWrapper {
+  bool used_ = false;
   OriginalIterable& iterable_;
   std::tuple<Args...> args_;
 
@@ -18,8 +21,11 @@ class IteratorWrapper {
       : iterable_{iterator}, args_{std::move(args)...} {}
 
   auto begin() {
-    return std::apply([this](auto... args) { return iterable_.begin(args...); },
-                      args_);
+    AD_CONTRACT_CHECK(!used_);
+    used_ = true;
+    return std::apply(
+        [this](auto... args) { return iterable_.begin(std::move(args)...); },
+        std::move(args_));
   }
 
   auto end() { return iterable_.end(); }
