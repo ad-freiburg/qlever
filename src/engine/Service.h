@@ -65,7 +65,7 @@ class Service : public Operation {
   // `VALUES` clause.
   [[nodiscard]] std::shared_ptr<Service> createCopyWithSiblingTree(
       std::shared_ptr<QueryExecutionTree> siblingTree) const {
-    AD_CORRECTNESS_CHECK(siblingTree == nullptr);
+    AD_CORRECTNESS_CHECK(siblingTree_ == nullptr);
     // TODO<joka921> This copies the `parsedServiceClause_`. We could probably
     // use a `shared_ptr` here to reduce the copying during QueryPlanning.
     return std::make_shared<Service>(getExecutionContext(),
