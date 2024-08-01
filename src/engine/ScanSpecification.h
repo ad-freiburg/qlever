@@ -74,10 +74,10 @@ class ScanSpecificationAsTripleComponent {
 
   // Convert to a `ScanSpecification`. The `index` is used to convert the
   // `TripleComponent` to `Id`s by looking them up in the vocabulary. Return
-  // `nullopt` if and only if one of the vocab lookup fails and the result of
-  // the corresponding scan will thus always be empty. Note: Once we implement
-  // SPARQL UPDATE, we possibly also have to use a `LocalVocab` here.
-  // TODO<joka921> Try out if this can be done just now.
+  // `nullopt` if and only if one of the vocab lookup fails (then the result of
+  // the corresponding scan will be empty).
+  // TODO<joka921> Once we implement SPARQL UPDATE, we possibly also to use the
+  // `LocalVocab` of the UPDATE triples here.
   std::optional<ScanSpecification> toScanSpecification(
       const IndexImpl& index) const;
   size_t numColumns() const {
