@@ -1438,8 +1438,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   if (!testVarToColMap) {
     ASSERT_EQ(spatialJoin->getResultWidth(), expectedResultWidth);
   } else {
-    std::vector<std::pair<std::string, std::string>> expectedColumns{
-        std::pair{"?distOfTheTwoObjectsAddedInternally", "0"}};
+    std::vector<std::pair<std::string, std::string>> expectedColumns{};
 
     if (leftSideBigChild) {
       expectedColumns.push_back({"?obj1", "<node_"});
@@ -1462,6 +1461,8 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
       expectedColumns.push_back({"?geo2", "<geometry"});
       expectedColumns.push_back({"?point2", "\"POINT("});
     }
+
+    expectedColumns.push_back({"?distOfTheTwoObjectsAddedInternally", "0"});
 
     auto varColMap = spatialJoin->computeVariableToColumnMap();
     auto resultTable = spatialJoin->computeResult(false);

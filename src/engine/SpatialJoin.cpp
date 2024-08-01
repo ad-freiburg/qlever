@@ -303,13 +303,16 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
                                    leftJoinCol, rightJoinCol);
       if (dist <= maxDist_) {
         result.emplace_back();
+        
+        // add columns to result table
+        rescol = addColumns(&result, resLeft, resrow, rescol, rowLeft);
+        rescol = addColumns(&result, resRight, resrow, rescol, rowRight);
+
         if (addDistToResult_) {
           result.at(resrow, rescol) = ValueId::makeFromInt(dist);
           rescol += 1;
         }
-        // add columns to result table
-        rescol = addColumns(&result, resLeft, resrow, rescol, rowLeft);
-        rescol = addColumns(&result, resRight, resrow, rescol, rowRight);
+
         resrow += 1;
       }
     }
@@ -338,21 +341,21 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     auto varColsRightMap = childRight_->getVariableColumns();
     auto varColsLeftVec = copySortedByColumnIndex(varColsLeftMap);
     auto varColsRightVec = copySortedByColumnIndex(varColsRightMap);
-    size_t index = 0;
-    if (addDistToResult_) {
-      variableToColumnMap[Variable{nameDistanceInternal_}] =
-          makeCol(ColumnIndex{index});
-      index++;
-    }
+    auto sizeLeft = childLeft_->getResultWidth();
+    auto sizeRight = childRight_->getResultWidth();
     for (size_t i = 0; i < varColsLeftVec.size(); i++) {
       variableToColumnMap[varColsLeftVec.at(i).first] =
-          makeCol(ColumnIndex{index});
-      index++;
+          makeCol(ColumnIndex{varColsLeftVec.at(i).second.columnIndex_});
     }
+    // in case a result table contains entries, which aren't contained
+    // in the varColMap
     for (size_t i = 0; i < varColsRightVec.size(); i++) {
       variableToColumnMap[varColsRightVec.at(i).first] =
-          makeCol(ColumnIndex{index});
-      index++;
+          makeCol(ColumnIndex{sizeLeft + varColsRightVec.at(i).second.columnIndex_});
+    }
+    if (addDistToResult_) {
+      variableToColumnMap[Variable{nameDistanceInternal_}] =
+          makeCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }
 
