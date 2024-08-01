@@ -18,13 +18,19 @@
 
 namespace ad_utility {
 
+/// Custom exception type that indicates the consumer took too long to consume
+/// the generator.
 class IteratorExpired : public std::exception {};
 
+/// Lambda-like type that always returns 1 to indicate size 1 for every element
+/// in the `CacheableGenerator`.
 template <typename T>
 struct DefaultSizeCounter {
   uint64_t operator()(const std::remove_reference_t<T>&) const { return 1; }
 };
 
+/// Range-like type that allows multiple consumers to consume the same
+/// single-consumption generator asynchronously.
 template <typename T, InvocableWithExactReturnType<
                           uint64_t, const std::remove_reference_t<T>&>
                           SizeCounter = DefaultSizeCounter<T>>

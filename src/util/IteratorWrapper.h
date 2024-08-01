@@ -10,6 +10,11 @@
 
 namespace ad_utility {
 
+/// Helper class allowing to use range-like datastructures with arguments for
+/// their begin() member function within range-based for loops like this:
+///
+/// This calls something.begin(1, 2, 3):
+/// for (auto elem : IteratorWrapper{something, 1, 2, 3}) {}
 template <typename OriginalIterable, typename... Args>
 class IteratorWrapper {
   bool used_ = false;
