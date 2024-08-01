@@ -154,9 +154,17 @@ ProtoResult CartesianProductJoin::computeResult(
       child.setLimit(limitIfPresent.value());
     }
     subResults.push_back(child.getResult());
+
+    const auto& table = subResults.back()->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
-    if (subResults.back()->idTable().size() == 0) {
+    if (table.size() == 0) {
       break;
+    }
+
+    // If one of the children is the neutral element (because of a triple with
+    // zero variables), we can simply ignore it here.
+    if (table.numRows() == 1 && table.numColumns() == 0) {
+      subResults.pop_back();
     }
     // Example for the following calculation: If we have a LIMIT of 1000 and
     // the first child already has a result of size 100, then the second child
@@ -168,6 +176,14 @@ ProtoResult CartesianProductJoin::computeResult(
                                       1;
     }
   }
+
+  // TODO<joka921> find a solution to simply return the subresult.
+  // This can probably be done by using the `ProtoResult`.
+  /*
+  if (subResults.size() == 1) {
+    return subResults.at(0);
+  }
+   */
 
   auto sizesView = std::views::transform(
       subResults, [](const auto& child) { return child->idTable().size(); });

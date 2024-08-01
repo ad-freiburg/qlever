@@ -630,6 +630,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
                          static_cast<size_t>(isVariable(triple.p_)) +
                          static_cast<size_t>(isVariable(triple.o_));
   if (numVars == 0) {
+    // We could read this from any of the permutations.
     addIndexScan(Permutation::Enum::PSO);
   } else if (numVars == 1) {
     indexScanSingleVarCase(triple, addIndexScan);

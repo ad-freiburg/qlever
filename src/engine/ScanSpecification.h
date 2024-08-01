@@ -5,6 +5,7 @@
 #pragma once
 #include <optional>
 
+#include "engine/LocalVocab.h"
 #include "global/Id.h"
 #include "parser/TripleComponent.h"
 
@@ -24,6 +25,7 @@ class ScanSpecification {
   T col0Id_;
   T col1Id_;
   T col2Id_;
+  friend class ScanSpecificationAsTripleComponent;
 
   void validate() const {
     bool c0 = col0Id_.has_value();
@@ -72,8 +74,9 @@ class ScanSpecificationAsTripleComponent {
 
   // Convert to a `ScanSpecification`. The `index` is used to convert the
   // `TripleComponent` to `Id`s by looking them up in the vocabulary. Return
-  // `nullopt` if one of the vocab lookup fails. Note: Once we implement SPARQL
-  // UPDATE, we possibly also have to use a `LocalVocab` here.
+  // `nullopt` if and only if one of the vocab lookup fails and the result of
+  // the corresponding scan will thus always be empty. Note: Once we implement
+  // SPARQL UPDATE, we possibly also have to use a `LocalVocab` here.
   // TODO<joka921> Try out if this can be done just now.
   std::optional<ScanSpecification> toScanSpecification(
       const IndexImpl& index) const;

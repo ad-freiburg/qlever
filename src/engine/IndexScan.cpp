@@ -125,7 +125,7 @@ ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
   if (numVariables_ < 3) {
-    idTable = index.scan(getPermutedTripleNoVariables(), permutation_,
+    idTable = index.scan(getScanSpecification(), permutation_,
                          additionalColumns(), cancellationHandle_, getLimit());
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
@@ -143,8 +143,7 @@ size_t IndexScan::computeSizeEstimate() const {
   AD_CORRECTNESS_CHECK(_executionContext);
   // We have to do a simple scan anyway so might as well do it now
   if (numVariables_ < 3) {
-    return getIndex().getResultSizeOfScan(getPermutedTripleNoVariables(),
-                                          permutation_);
+    return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
   } else {
     // The triple consists of three variables.
     // TODO<joka921> As soon as all implementations of a full index scan
@@ -235,8 +234,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-ScanSpecificationAsTripleComponent IndexScan::getPermutedTripleNoVariables()
-    const {
+ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
   auto permutedTriple = getPermutedTriple();
   return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
 }
@@ -274,26 +272,13 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
 // ________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
     const IndexScan& s) {
-  auto permutedTriple = s.getPermutedTriple();
-  const IndexImpl& index = s.getIndex().getImpl();
-  auto numVars = s.numVariables_;
-  std::optional<Id> col0Id =
-      numVars == 3 ? std::nullopt
-                   : permutedTriple[0]->toValueId(index.getVocab());
-  std::optional<Id> col1Id =
-      numVars >= 2 ? std::nullopt
-                   : permutedTriple[1]->toValueId(index.getVocab());
-  std::optional<Id> col2Id =
-      numVars >= 1 ? std::nullopt
-                   : permutedTriple[2]->toValueId(index.getVocab());
-  if ((!col0Id.has_value() && numVars < 3) ||
-      (!col1Id.has_value() && numVars < 2) ||
-      (!col2Id.has_value() && numVars < 1)) {
+  const auto& index = s.getExecutionContext()->getIndex().getImpl();
+  auto scanSpec = s.getScanSpecification().toScanSpecification(index);
+  if (!scanSpec.has_value()) {
     return std::nullopt;
   }
-
   return index.getPermutation(s.permutation())
-      .getMetadataAndBlocks({col0Id, col1Id, col2Id});
+      .getMetadataAndBlocks(scanSpec.value());
 };
 
 // ________________________________________________________________
