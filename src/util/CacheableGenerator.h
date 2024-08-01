@@ -4,13 +4,10 @@
 
 #pragma once
 
-#include <absl/cleanup/cleanup.h>
-
 #include <atomic>
 #include <chrono>
 #include <optional>
 #include <shared_mutex>
-#include <thread>
 #include <vector>
 
 #include "util/Exception.h"
@@ -43,7 +40,6 @@ class CacheableGenerator {
     std::optional<GenIterator> generatorIterator_{};
     std::vector<std::shared_ptr<T>> cachedValues_{};
     MasterIteratorState masterState_ = MasterIteratorState::NOT_STARTED;
-    std::atomic<std::thread::id> currentOwningThread{};
     SizeCounter sizeCounter_{};
     std::atomic<uint64_t> currentSize_ = 0;
     uint64_t maxSize_ = std::numeric_limits<uint64_t>::max();
@@ -61,9 +57,6 @@ class CacheableGenerator {
    private:
     void advanceTo(size_t index, bool isMaster) {
       std::unique_lock lock{mutex_};
-      currentOwningThread = std::this_thread::get_id();
-      absl::Cleanup cleanup{
-          [this]() { currentOwningThread = std::thread::id{}; }};
       AD_CONTRACT_CHECK(index <= cachedValues_.size());
       // Make sure master iterator does exist and we're not blocking
       // indefinitely
@@ -143,10 +136,7 @@ class CacheableGenerator {
     void setOnSizeChanged(
         std::function<void(std::optional<std::chrono::milliseconds>)>
             onSizeChanged) noexcept {
-      std::unique_lock lock{mutex_, std::defer_lock};
-      if (currentOwningThread != std::this_thread::get_id()) {
-        lock.lock();
-      }
+      std::unique_lock lock{mutex_};
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
