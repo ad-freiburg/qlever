@@ -379,7 +379,7 @@ std::shared_ptr<TransitivePathBase> TransitivePathBase::bindLeftOrRightSide(
     AD_CORRECTNESS_CHECK(!p->variableColumns_.contains(variable));
     p->variableColumns_[variable] = columnIndexWithType;
   }
-  p->resultWidth_ += leftOrRightOp->getResultWidth();
+  p->resultWidth_ += leftOrRightOp->getResultWidth() - 1;
   return std::move(p);
 }
 
