@@ -690,6 +690,14 @@ TEST(QueryPlanner, CartesianProductJoin) {
           scan("?x", "<b>", "?c")));
 }
 
+namespace {
+// A helper function to recreate the internal variables added by the query
+// planner for transitive paths.
+std::string internalVar(int i) {
+  return absl::StrCat(INTERNAL_VARIABLE_QUERY_PLANNER_PREFIX, i);
+}
+}  // namespace
+
 TEST(QueryPlanner, TransitivePathUnbound) {
   auto scan = h::IndexScanFromStrings;
   TransitivePathSide left{std::nullopt, 0, Variable("?x"), 0};
@@ -697,10 +705,8 @@ TEST(QueryPlanner, TransitivePathUnbound) {
   h::expect(
       "SELECT ?x ?y WHERE {"
       "?x <p>+ ?y }",
-      h::TransitivePath(
-          left, right, 1, std::numeric_limits<size_t>::max(),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")));
+      h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                        scan(internalVar(0), "<p>", internalVar(1))));
 }
 
 TEST(QueryPlanner, TransitivePathLeftId) {
@@ -714,10 +720,8 @@ TEST(QueryPlanner, TransitivePathLeftId) {
   h::expect(
       "SELECT ?y WHERE {"
       "<s> <p>+ ?y }",
-      h::TransitivePath(
-          left, right, 1, std::numeric_limits<size_t>::max(),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")),
+      h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                        scan(internalVar(0), "<p>", internalVar(1))),
       qec);
 }
 
@@ -732,10 +736,8 @@ TEST(QueryPlanner, TransitivePathRightId) {
   h::expect(
       "SELECT ?y WHERE {"
       "?x <p>+ <o> }",
-      h::TransitivePath(
-          left, right, 1, std::numeric_limits<size_t>::max(),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")),
+      h::TransitivePath(left, right, 1, std::numeric_limits<size_t>::max(),
+                        scan(internalVar(0), "<p>", internalVar(1))),
       qec);
 }
 
@@ -747,11 +749,9 @@ TEST(QueryPlanner, TransitivePathBindLeft) {
       "SELECT ?x ?y WHERE {"
       "<s> <p> ?x."
       "?x <p>* ?y }",
-      h::TransitivePath(
-          left, right, 0, std::numeric_limits<size_t>::max(),
-          scan("<s>", "<p>", "?x"),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1")));
+      h::TransitivePath(left, right, 0, std::numeric_limits<size_t>::max(),
+                        scan("<s>", "<p>", "?x"),
+                        scan(internalVar(0), "<p>", internalVar(1))));
 }
 
 TEST(QueryPlanner, TransitivePathBindRight) {
@@ -765,9 +765,7 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       h::TransitivePath(
           left, right, 0, std::numeric_limits<size_t>::max(),
           scan("?y", "<p>", "<o>"),
-          scan("?_qlever_internal_variable_query_planner_0", "<p>",
-               "?_qlever_internal_variable_query_planner_1",
-               {Permutation::POS})),
+          scan(internalVar(0), "<p>", internalVar(1), {Permutation::POS})),
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
@@ -965,9 +963,6 @@ TEST(QueryPlanner, TextLimit) {
 }
 
 TEST(QueryPlanner, NonDistinctVariablesInTriple) {
-  auto internalVar = [](int i) {
-    return absl::StrCat("?_qlever_internal_variable_query_planner_", i);
-  };
   auto eq = [](std::string_view l, std::string_view r) {
     return absl::StrCat(l, "=", r);
   };
