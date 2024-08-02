@@ -32,7 +32,8 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
     CancellationHandle cancellationHandle) {
   for (size_t i : getRowIndices(limitAndOffset, *res)) {
-    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
+    ConstructQueryExportContext context{i, res->idTable(), res->localVocab(),
+                                        qet.getVariableColumns(),
                                         qet.getQec()->getIndex()};
     using enum PositionInTriple;
     for (const auto& triple : constructTriples) {
