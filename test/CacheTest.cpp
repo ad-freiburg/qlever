@@ -5,7 +5,6 @@
 #include <gtest/gtest.h>
 
 #include <string>
-#include <string_view>
 
 #include "util/Cache.h"
 #include "util/DefaultValueSizeGetter.h"
@@ -13,6 +12,11 @@
 
 using std::string;
 using namespace ad_utility::memory_literals;
+
+using Vec = std::vector<int>;
+[[maybe_unused]] auto vectorSizeGetter = [](const auto& pointer) {
+  return pointer->size() * sizeof(int) * 1_B;
+};
 
 // first some simple Tests for the general cache interface
 TEST(FlexibleCacheTest, Simple) {
@@ -138,5 +142,184 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   ASSERT_FALSE(cache["2"]);
   ASSERT_FALSE(cache["3"]);
   ASSERT_FALSE(cache["4"]);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{1};
+
+  auto vecA = std::make_shared<Vec>();
+
+  cache.insert(0, vecA);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+  vecA->push_back(0);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+
+  cache.erase(0);
+
+  // Cache should not underflow
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+
+  cache.insert(0, vecA);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+  vecA->clear();
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  cache.erase(0);
+
+  // Cache correctly remove size, even though the vector is empty by now.
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest,
+     verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{1};
+
+  auto vecA = std::make_shared<Vec>();
+
+  cache.insertPinned(0, vecA);
+
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+  vecA->push_back(0);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+
+  cache.erase(0);
+
+  // Cache should not underflow
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+
+  cache.insertPinned(0, vecA);
+
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+  vecA->clear();
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizePinned, 4_B);
+
+  cache.erase(0);
+
+  // Cache correctly remove size, even though the vector is empty by now.
+  ASSERT_EQ(cache._totalSizePinned, 0_B);
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 12_B, 8_B};
+
+  auto vecA = std::make_shared<Vec>(0);
+  auto vecB = std::make_shared<Vec>(1);
+
+  cache.insert(0, vecA);
+  cache.insert(1, vecB);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  vecA->resize(1);
+  vecB->resize(2);
+
+  // Cache does was not notified about the size change
+  ASSERT_EQ(cache._totalSizeNonPinned, 4_B);
+
+  cache.recomputeSize(0);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecA->resize(2);
+
+  cache.recomputeSize(0);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 12_B);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  cache.recomputeSize(1);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 8_B);
+  ASSERT_FALSE(cache.contains(0));
+  ASSERT_TRUE(cache.contains(1));
+
+  vecB->resize(3);
+  cache.recomputeSize(1);
+
+  ASSERT_EQ(cache._totalSizeNonPinned, 0_B);
+  ASSERT_FALSE(cache.contains(0));
+  ASSERT_FALSE(cache.contains(1));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyNonPinnedEntriesAreRemovedToMakeRoomForResize) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 8_B, 4_B};
+
+  auto vecA = std::make_shared<Vec>(1);
+  auto vecB = std::make_shared<Vec>(1);
+  auto vecC = std::make_shared<Vec>(0);
+
+  cache.insertPinned(0, vecA);
+  cache.insert(1, vecB);
+  cache.insert(2, vecC);
+
+  vecC->resize(1);
+
+  cache.recomputeSize(2);
+  ASSERT_TRUE(cache.contains(0));
+  ASSERT_FALSE(cache.contains(1));
+  ASSERT_TRUE(cache.contains(2));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement) {
+  LRUCache<string, string, StringSizeGetter<string>> cache{1};
+  cache.insert("1", "a");
+
+  cache.recomputeSize("2");
+
+  EXPECT_TRUE(cache.contains("1"));
+  EXPECT_FALSE(cache.contains("2"));
+}
+
+TEST(LRUCacheTest, verifyRecomputeDoesNoticeExceedingSizeOnShrink) {
+  LRUCache<int, std::shared_ptr<std::vector<int>>, decltype(vectorSizeGetter)>
+      cache{3, 32_B, 16_B};
+
+  auto vecA = std::make_shared<Vec>(2);
+  auto vecB = std::make_shared<Vec>(1);
+  auto vecC = std::make_shared<Vec>(4);
+
+  cache.insert(0, vecA);
+  cache.insert(1, vecB);
+  cache.insert(2, vecC);
+
+  cache.setMaxSizeSingleEntry(8_B);
+  vecC->resize(3);
+  cache.recomputeSize(2);
+
+  EXPECT_TRUE(cache.contains(0));
+  EXPECT_TRUE(cache.contains(1));
+  EXPECT_FALSE(cache.contains(2));
+}
+
+// _____________________________________________________________________________
+TEST(LRUCacheTest, verifyRecomputeDoesErrorOutWhenPinned) {
+  LRUCache<int, int, decltype([](const auto&) { return 1_B; })> cache{3, 12_B,
+                                                                      8_B};
+
+  cache.insertPinned(0, 0);
+
+  EXPECT_THROW(cache.recomputeSize(0), ad_utility::Exception);
 }
 }  // namespace ad_utility

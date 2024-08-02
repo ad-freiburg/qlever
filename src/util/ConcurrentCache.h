@@ -18,7 +18,6 @@
 
 namespace ad_utility {
 
-using std::make_shared;
 using std::shared_ptr;
 
 /** This exception is thrown if we are waiting for a computation result,
@@ -38,6 +37,8 @@ class WaitedForResultWhichThenFailedException : public std::exception {
 enum struct CacheStatus {
   cachedNotPinned,
   cachedPinned,
+  // TODO<RobinTF> Rename to notCached, the name is just confusing. Can
+  // potentially be merged with notInCacheAndNotComputed.
   computed,
   notInCacheAndNotComputed
 };
@@ -200,6 +201,10 @@ class ConcurrentCache {
                            onlyReadFromCache);
   }
 
+  void recomputeSize(const Key& key) {
+    _cacheAndInProgressMap.wlock()->_cache.recomputeSize(key);
+  }
+
   /// Clear the cache (but not the pinned entries)
   void clearUnpinnedOnly() {
     _cacheAndInProgressMap.wlock()->_cache.clearUnpinnedOnly();
@@ -268,6 +273,10 @@ class ConcurrentCache {
   }
   void setMaxSizeSingleEntry(MemorySize maxSize) {
     _cacheAndInProgressMap.wlock()->_cache.setMaxSizeSingleEntry(maxSize);
+  }
+
+  MemorySize getMaxSizeSingleEntry() const {
+    return _cacheAndInProgressMap.wlock()->_cache.getMaxSizeSingleEntry();
   }
 
  private:
@@ -347,7 +356,7 @@ class ConcurrentCache {
         // we are the first to compute this result, setup a blank
         // result to which we can write.
         mustCompute = true;
-        resultInProgress = make_shared<ResultInProgress>();
+        resultInProgress = std::make_shared<ResultInProgress>();
         lockPtr->_inProgress[key] = std::pair(pinned, resultInProgress);
       }
     }  // release the lock, it is not required while we are computing
@@ -355,7 +364,7 @@ class ConcurrentCache {
       LOG(TRACE) << "Not in the cache, need to compute result" << std::endl;
       try {
         // The actual computation
-        shared_ptr<Value> result = make_shared<Value>(computeFunction());
+        shared_ptr<Value> result = std::make_shared<Value>(computeFunction());
         moveFromInProgressToCache(key, result);
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);
