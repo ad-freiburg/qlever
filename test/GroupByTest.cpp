@@ -1,6 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #include <gmock/gmock.h>
 
@@ -12,6 +13,7 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/NeutralElementOperation.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
@@ -1931,4 +1933,16 @@ TEST(GroupBy, AddedHavingRows) {
   auto i = IntId;
   auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
+}
+
+TEST(GroupBy, Descriptor) {
+  // Group by with variables
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}});
+  GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
+  EXPECT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+  GroupBy groupBy2{qec, {}, {}, subtree};
+  EXPECT_EQ(groupBy2.getDescriptor(), "GroupBy (implicit)");
 }
