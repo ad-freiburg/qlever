@@ -11,6 +11,7 @@
 
 // Forward declaration
 class IndexImpl;
+class Index;
 
 // The specification of a scan operation for a given permutation.
 // Can either be a full scan (all three elements are `std::nullopt`),
@@ -27,17 +28,7 @@ class ScanSpecification {
   T col2Id_;
   friend class ScanSpecificationAsTripleComponent;
 
-  void validate() const {
-    bool c0 = col0Id_.has_value();
-    bool c1 = col1Id_.has_value();
-    bool c2 = col2Id_.has_value();
-    if (!c0) {
-      AD_CORRECTNESS_CHECK(!c1 && !c2);
-    }
-    if (!c1) {
-      AD_CORRECTNESS_CHECK(!c2);
-    }
-  }
+  void validate() const;
 
  public:
   ScanSpecification(T col0Id, T col1Id, T col2Id)
@@ -47,6 +38,8 @@ class ScanSpecification {
   const T& col0Id() const { return col0Id_; }
   const T& col1Id() const { return col1Id_; }
   const T& col2Id() const { return col2Id_; }
+
+  bool operator==(const ScanSpecification&) const = default;
 
   // Only used in tests.
   void setCol1Id(T col1Id) {
@@ -80,7 +73,9 @@ class ScanSpecificationAsTripleComponent {
   // `LocalVocab` of the UPDATE triples here.
   std::optional<ScanSpecification> toScanSpecification(
       const IndexImpl& index) const;
-  size_t numColumns() const {
-    return 3 - col0_.has_value() - col1_.has_value() - col2_.has_value();
-  }
+  std::optional<ScanSpecification> toScanSpecification(
+      const Index& index) const;
+
+  // The number of columns that the corresponding index scan will have.
+  size_t numColumns() const;
 };

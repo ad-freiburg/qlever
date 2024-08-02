@@ -16,5 +16,5 @@ add_library(engine
 qlever_target_link_libraries(engine util index parser sparqlExpressions http SortPerformanceEstimator Boost::iostreams)
 
 add_library(scanSpecification ScanSpecification.cpp)
-qlever_target_link_libraries(scanSpecification index)
+qlever_target_link_libraries(scanSpecification index engine)
 qlever_target_link_libraries(engine util index parser sparqlExpressions scanSpecification http SortPerformanceEstimator Boost::iostreams)

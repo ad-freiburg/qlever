@@ -251,7 +251,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),

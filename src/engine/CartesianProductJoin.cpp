@@ -157,7 +157,7 @@ ProtoResult CartesianProductJoin::computeResult(
 
     const auto& table = subResults.back()->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
-    if (table.size() == 0) {
+    if (table.empty()) {
       break;
     }
 
@@ -165,6 +165,7 @@ ProtoResult CartesianProductJoin::computeResult(
     // zero variables), we can simply ignore it here.
     if (table.numRows() == 1 && table.numColumns() == 0) {
       subResults.pop_back();
+      continue;
     }
     // Example for the following calculation: If we have a LIMIT of 1000 and
     // the first child already has a result of size 100, then the second child

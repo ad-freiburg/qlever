@@ -53,15 +53,8 @@ class CacheValue {
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
-using ConcurrentLruCache = ad_utility::ConcurrentCache<
+using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
-class QueryResultCache : public ConcurrentLruCache {
- public:
-  virtual ~QueryResultCache() = default;
-  void clearAll() override { ConcurrentLruCache::clearAll(); }
-  // Inherit the constructor.
-  using ConcurrentLruCache::ConcurrentLruCache;
-};
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.

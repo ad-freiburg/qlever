@@ -263,7 +263,7 @@ class Operation {
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
-      const ConcurrentLruCache::ResultAndCacheStatus& resultAndCacheStatus,
+      const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
       Milliseconds duration) final;
 
   // Similar to the function above, but the components are specified manually.

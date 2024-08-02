@@ -4,7 +4,15 @@
 
 #include "engine/ScanSpecification.h"
 
+#include "index/Index.h"
 #include "index/IndexImpl.h"
+
+// ____________________________________________________________________________
+std::optional<ScanSpecification>
+ScanSpecificationAsTripleComponent::toScanSpecification(
+    const Index& index) const {
+  return toScanSpecification(index.getImpl());
+}
 
 // ____________________________________________________________________________
 std::optional<ScanSpecification>
@@ -51,10 +59,31 @@ ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(T col0,
   col1_ = toNulloptIfVariable(col1);
   col2_ = toNulloptIfVariable(col2);
 
-  if (!col0.has_value()) {
-    AD_CONTRACT_CHECK(!col1.has_value());
+  if (!col0_.has_value()) {
+    AD_CONTRACT_CHECK(!col1_.has_value());
   }
-  if (!col1.has_value()) {
-    AD_CONTRACT_CHECK(!col2.has_value());
+  if (!col1_.has_value()) {
+    AD_CONTRACT_CHECK(!col2_.has_value());
+  }
+}
+
+// ____________________________________________________________________________
+size_t ScanSpecificationAsTripleComponent::numColumns() const {
+  auto i = [](const auto& x) -> size_t {
+    return static_cast<size_t>(x.has_value());
+  };
+  return 3 - i(col0_) - i(col1_) - i(col2_);
+}
+
+// _____________________________________________________________________________
+void ScanSpecification::validate() const {
+  bool c0 = col0Id_.has_value();
+  bool c1 = col1Id_.has_value();
+  bool c2 = col2Id_.has_value();
+  if (!c0) {
+    AD_CORRECTNESS_CHECK(!c1 && !c2);
+  }
+  if (!c1) {
+    AD_CORRECTNESS_CHECK(!c2);
   }
 }
