@@ -77,7 +77,9 @@ string GroupBy::getCacheKeyImpl() const {
 }
 
 string GroupBy::getDescriptor() const {
-  // TODO<C++23>:: Use std::views::join_with.
+  if (_groupByVariables.empty()) {
+    return "GroupBy (implicit)";
+  }
   return "GroupBy on " +
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
