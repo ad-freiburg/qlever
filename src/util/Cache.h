@@ -237,7 +237,7 @@ class FlexibleCache {
       return;
     }
     auto newSize = _valueSizeGetter(*(*this)[key]);
-    auto& oldSize = _sizeMap.at(key);
+    auto& sizeInMap = _sizeMap.at(key);
     // Entry has grown too big to completely keep within the cache or we can't
     // fit it in the cache
     if (_maxSizeSingleEntry < newSize ||
@@ -246,12 +246,12 @@ class FlexibleCache {
       return;
     }
 
-    if (newSize >= oldSize) {
-      _totalSizeNonPinned += newSize - oldSize;
-    } else {
-      _totalSizeNonPinned -= oldSize - newSize;
-    }
-    oldSize = newSize;
+    // `MemorySize` type does not allow for negative values, but they are safe
+    // here, so we do it in size_t instead and convert back.
+    _totalSizeNonPinned =
+        MemorySize::bytes(_totalSizeNonPinned.getBytes() -
+                          sizeInMap.getBytes() + newSize.getBytes());
+    sizeInMap = newSize;
     if (_totalSizePinned <= _maxSize) {
       makeRoomIfFits(0_B);
     }
