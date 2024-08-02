@@ -44,7 +44,7 @@ class LazyJsonParser {
   bool inArrayPath_{false};
   int openBracesInArrayPath_{0};
   int openBrackets_{0};
-  int yieldCount_{0};
+  unsigned int yieldCount_{0};
 
   size_t strStart_{0};
   size_t strEnd_{0};
