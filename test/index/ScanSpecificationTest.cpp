@@ -6,7 +6,7 @@
 
 #include "../util/GTestHelpers.h"
 #include "../util/IndexTestHelpers.h"
-#include "engine/ScanSpecification.h"
+#include "index/ScanSpecification.h"
 
 // _____________________________________________________________________________
 TEST(ScanSpecification, validate) {

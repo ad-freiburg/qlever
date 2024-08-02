@@ -2,7 +2,7 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#include "engine/ScanSpecification.h"
+#include "index/ScanSpecification.h"
 
 #include "index/Index.h"
 #include "index/IndexImpl.h"

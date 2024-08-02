@@ -9,9 +9,9 @@
 #include <type_traits>
 #include <vector>
 
-#include "engine/ScanSpecification.h"
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
