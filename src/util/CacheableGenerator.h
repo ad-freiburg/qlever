@@ -87,12 +87,16 @@ class CacheableGenerator {
         return;
       }
       if (masterState_ == MasterIteratorState::MASTER_STARTED && !isMaster) {
-        conditionVariable_.wait(lock, [this, index]() {
-          return (generatorIterator_.has_value() &&
-                  generatorIterator_.value() == generator_.end()) ||
-                 index < cachedValues_.size();
-        });
-        return;
+        if (conditionVariable_.wait_for(
+                lock, std::chrono::milliseconds{500}, [this, index]() {
+                  return (generatorIterator_.has_value() &&
+                          generatorIterator_.value() == generator_.end()) ||
+                         index < cachedValues_.size();
+                })) {
+          return;
+        }
+        // Timeout exceeded.
+        throw IteratorExpired{};
       }
       Timer timer{Timer::Started};
       if (generatorIterator_.has_value()) {
