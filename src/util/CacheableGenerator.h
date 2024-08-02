@@ -39,6 +39,7 @@ class CacheableGenerator {
 
   enum class MasterIteratorState { NOT_STARTED, MASTER_STARTED, MASTER_DONE };
 
+  /// Underlying storage referenced by the data structure.
   class ComputationStorage {
     friend CacheableGenerator;
     mutable std::shared_mutex mutex_;
@@ -62,6 +63,8 @@ class CacheableGenerator {
     ComputationStorage& operator=(const ComputationStorage& other) = delete;
 
    private:
+    /// As master trigger new generation of values, as slave wait for them
+    /// instead.
     void advanceTo(size_t index, bool isMaster) {
       std::unique_lock lock{mutex_};
       AD_CONTRACT_CHECK(index <= cachedValues_.size());
@@ -115,6 +118,8 @@ class CacheableGenerator {
       }
     }
 
+    /// Return the value at `index` or throw an `IteratorExpired` exception if
+    /// it took too long to consume this value.
     std::shared_ptr<const T> getCachedValue(size_t index) const {
       std::shared_lock lock{mutex_};
       if (!cachedValues_.at(index)) {
@@ -125,6 +130,7 @@ class CacheableGenerator {
 
     // Needs to be public in order to compile with gcc 11 & 12
    public:
+    /// Return if the current index is the last of the generator.
     bool isDone(size_t index) noexcept {
       std::shared_lock lock{mutex_};
       return index >= cachedValues_.size() && generatorIterator_.has_value() &&
@@ -132,6 +138,8 @@ class CacheableGenerator {
     }
 
    private:
+    /// Signal that the master is done processing. After this all of the slaves
+    /// can trigger generation of new entries.
     void clearMaster() {
       std::unique_lock lock{mutex_};
       AD_CORRECTNESS_CHECK(masterState_ != MasterIteratorState::MASTER_DONE);
@@ -140,6 +148,7 @@ class CacheableGenerator {
       conditionVariable_.notify_all();
     }
 
+    /// Set the onSizeChange listener.
     void setOnSizeChanged(
         std::function<void(std::optional<std::chrono::milliseconds>)>
             onSizeChanged) noexcept {
@@ -147,6 +156,8 @@ class CacheableGenerator {
       onSizeChanged_ = std::move(onSizeChanged);
     }
 
+    /// Shrink the cache if it exceeds `maxSize_` until either only one element
+    /// is left or we are smaller that `maxSize_` again.
     void tryShrinkCacheIfNeccessary() {
       if (currentSize_ <= maxSize_) {
         return;
@@ -167,12 +178,15 @@ class CacheableGenerator {
       }
     }
 
+    /// Set the maximum size that will trigger shrinking of this data structure.
+    /// 2^64 - 1 by default.
     void setMaxSize(uint64_t maxSize) {
       std::unique_lock lock{mutex_};
       maxSize_ = maxSize;
     }
   };
 
+  /// Shared reference to the underlying storage.
   std::shared_ptr<ComputationStorage> computationStorage_;
 
  public:
@@ -188,11 +202,15 @@ class CacheableGenerator {
 
   class IteratorSentinel {};
 
+  /// Helper class to iterate over the values.
   class Iterator {
+    /// Keep track of the index of the current element
     size_t currentIndex_ = 0;
+    /// Weak reference to the underlying storage
     unique_cleanup::UniqueCleanup<std::weak_ptr<ComputationStorage>> storage_;
     bool isMaster_;
 
+    /// Perform null checks for safety. Just for convenience.
     auto storage() const {
       auto pointer = storage_->lock();
       AD_CORRECTNESS_CHECK(pointer);
@@ -235,22 +253,30 @@ class CacheableGenerator {
     }
   };
 
+  /// Begin iteration. If isMaster is true, this will allow this consumer to
+  /// generate new entries. Otherwise it will wait until the master does
+  /// generate new entries.
   Iterator begin(bool isMaster = false) const {
     return Iterator{computationStorage_, isMaster};
   }
 
   IteratorSentinel end() const noexcept { return IteratorSentinel{}; }
 
+  /// Sets the 'onSizeChanged' listener which will be called whenever an element
+  /// is added or removed, and will be passed the duration of how long it took
+  /// to compute the value in the former case.
   void setOnSizeChanged(
       std::function<void(std::optional<std::chrono::milliseconds>)>
           onSizeChanged) noexcept {
     computationStorage_->setOnSizeChanged(std::move(onSizeChanged));
   }
 
+  /// Return the size currently occupied atomically.
   uint64_t getCurrentSize() const {
     return computationStorage_->currentSize_.load();
   }
 
+  /// Set the size that will trigger shrinking once reached.
   void setMaxSize(uint64_t maxSize) {
     computationStorage_->setMaxSize(maxSize);
   }
