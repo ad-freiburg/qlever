@@ -100,6 +100,7 @@ class IndexScan final : public Operation {
   // `permutation_`. For example if `permutation_ == PSO` then the result is
   // {&predicate_, &subject_, &object_}
   std::array<const TripleComponent* const, 3> getPermutedTriple() const;
+  ScanSpecificationAsTripleComponent getScanSpecification() const;
 
  private:
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;

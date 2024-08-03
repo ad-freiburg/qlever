@@ -174,8 +174,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     ASSERT_FLOAT_EQ(m.numRows_ / static_cast<float>(i + 1),
                     m.multiplicityCol1_);
     // Scan for all distinct `col0` and check that we get the expected result.
-    CompressedRelationReader::ScanSpecification scanSpec{
-        metaData[i].col0Id_, std::nullopt, std::nullopt};
+    ScanSpecification scanSpec{metaData[i].col0Id_, std::nullopt, std::nullopt};
     IdTable table =
         reader.scan(scanSpec, blocks, additionalColumns, cancellationHandle);
     const auto& col1And2 = inputs[i].col1And2_;
@@ -207,8 +206,8 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     std::vector<std::array<int, 1>> col3;
 
     auto scanAndCheck = [&]() {
-      CompressedRelationReader::ScanSpecification scanSpec{
-          metaData[i].col0Id_, V(lastCol1Id), std::nullopt};
+      ScanSpecification scanSpec{metaData[i].col0Id_, V(lastCol1Id),
+                                 std::nullopt};
       auto size = reader.getResultSizeOfScan(scanSpec, blocks);
       IdTable tableWidthOne =
           reader.scan(scanSpec, blocks, Permutation::ColumnIndicesRef{},

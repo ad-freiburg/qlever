@@ -65,7 +65,8 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    str << "Values for testing with " << table_.numColumns() << " columns. ";
+    str << "Values for testing with " << table_.numColumns() << " columns and "
+        << table_.numRows() << " rows. ";
     if (table_.numRows() > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {

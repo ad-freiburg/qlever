@@ -1358,46 +1358,41 @@ vector<float> IndexImpl::getMultiplicities(
 
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
-  if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
-    size_t numColumns = col1String.has_value() ? 1 : 2;
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns + additionalColumns.size(), allocator_};
+    return IdTable{
+        scanSpecificationAsTc.numColumns() + additionalColumns.size(),
+        allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
+  return scan(scanSpecification.value(), permutation, additionalColumns,
               cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
-                                additionalColumns, cancellationHandle,
-                                limitOffset);
+  return getPermutation(p).scan(scanSpecification, additionalColumns,
+                                cancellationHandle, limitOffset);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
-    const TripleComponent& col0, const TripleComponent& col1,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation) const {
-  std::optional<Id> col0Id = col0.toValueId(getVocab());
-  std::optional<Id> col1Id = col1.toValueId(getVocab());
-  if (!col0Id.has_value() || !col1Id.has_value()) {
+  const Permutation& p = getPermutation(permutation);
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     return 0;
   }
-  const Permutation& p = getPermutation(permutation);
-  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), std::nullopt});
+  return p.getResultSizeOfScan(scanSpecification.value());
 }
 
 // _____________________________________________________________________________

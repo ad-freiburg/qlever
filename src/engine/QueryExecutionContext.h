@@ -53,37 +53,8 @@ class CacheValue {
 // Threadsafe LRU cache for (partial) query results, that
 // checks on insertion, if the result is currently being computed
 // by another query.
-using ConcurrentLruCache = ad_utility::ConcurrentCache<
+using QueryResultCache = ad_utility::ConcurrentCache<
     ad_utility::LRUCache<string, CacheValue, CacheValue::SizeGetter>>;
-using PinnedSizes =
-    ad_utility::Synchronized<ad_utility::HashMap<std::string, size_t>,
-                             std::shared_mutex>;
-class QueryResultCache : public ConcurrentLruCache {
- private:
-  PinnedSizes _pinnedSizes;
-
- public:
-  virtual ~QueryResultCache() = default;
-  void clearAll() override {
-    // The _pinnedSizes are not part of the (otherwise threadsafe) _cache
-    // and thus have to be manually locked.
-    auto lock = _pinnedSizes.wlock();
-    ConcurrentLruCache::clearAll();
-    lock->clear();
-  }
-  // Inherit the constructor.
-  using ConcurrentLruCache::ConcurrentLruCache;
-  const PinnedSizes& pinnedSizes() const { return _pinnedSizes; }
-  PinnedSizes& pinnedSizes() { return _pinnedSizes; }
-  std::optional<size_t> getPinnedSize(const std::string& key) {
-    auto rlock = _pinnedSizes.rlock();
-    if (rlock->contains(key)) {
-      return rlock->at(key);
-    } else {
-      return std::nullopt;
-    }
-  }
-};
 
 // Execution context for queries.
 // Holds references to index and engine, implements caching.

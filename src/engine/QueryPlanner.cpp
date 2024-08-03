@@ -629,7 +629,10 @@ void QueryPlanner::seedFromOrdinaryTriple(
   const size_t numVars = static_cast<size_t>(isVariable(triple.s_)) +
                          static_cast<size_t>(isVariable(triple.p_)) +
                          static_cast<size_t>(isVariable(triple.o_));
-  if (numVars == 1) {
+  if (numVars == 0) {
+    // We could read this from any of the permutations.
+    addIndexScan(Permutation::Enum::PSO);
+  } else if (numVars == 1) {
     indexScanSingleVarCase(triple, addIndexScan);
   } else if (numVars == 2) {
     indexScanTwoVarsCase(triple, addIndexScan, addFilter);
@@ -672,10 +675,6 @@ auto QueryPlanner::seedWithScansAndText(
     if (node.isTextNode()) {
       seeds.push_back(getTextLeafPlan(node, textLimits));
       continue;
-    }
-    if (node._variables.empty()) {
-      AD_THROW("Triples should have at least one variable. Not the case in: " +
-               node.triple_.asString());
     }
 
     // Property paths must have been handled previously.
