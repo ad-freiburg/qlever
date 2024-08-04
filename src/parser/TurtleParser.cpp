@@ -189,8 +189,8 @@ bool TurtleParser<T>::object() {
   // check blank Node first because _: also could look like a prefix
   // TODO<joka921> Currently collections and blankNodePropertyLists do not work
   // on dblp when using the relaxed parser. Is this fixable?
-  if (blankNode() || literal() || iri() || collection() ||
-      blankNodePropertyList()) {
+  if (blankNode() || blankNodePropertyList() || collection() || literal() ||
+      iri()) {
     emitTriple();
     return true;
   } else {
@@ -632,14 +632,16 @@ bool TurtleParser<T>::pnameLnRelaxed() {
   // is ok
   tok_.skipWhitespaceAndComments();
   auto view = tok_.view();
-  auto pos = view.find(':');
-  if (pos == string::npos) {
+  auto pos = view.find_first_of(" \t\r\n,;)]:");
+  // If we find any whitespace or other characters that end a structure in
+  // Turtle before we find a ':', the parsing failed.
+  if (pos == string::npos || view[pos] != ':') {
     return false;
   }
   // these can also be part of a collection etc.
   // find any character that can end a pnameLn when assuming that no
   // escape sequences were used
-  auto posEnd = view.find_first_of(" \t\r\n,;", pos);
+  auto posEnd = view.find_first_of(" \t\r\n,;)]", pos);
   if (posEnd == string::npos) {
     // make tests work
     posEnd = view.size();

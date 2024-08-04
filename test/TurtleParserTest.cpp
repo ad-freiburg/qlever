@@ -29,15 +29,18 @@ auto iri = [](std::string_view s) {
 // `rule` (a member function of `Parser` that returns a bool). Return the
 // parser, if the call to `rule` returns true, else return `std::nullopt`.
 template <typename Parser, auto rule, size_t blankNodePrefix = 0>
-std::optional<Parser> parseRule(const std::string& input) {
+auto parseRule =
+    [](const std::string& input,
+       decltype(Parser::prefixMap_) prefixMap = {}) -> std::optional<Parser> {
   Parser parser;
+  parser.prefixMap_ = std::move(prefixMap);
   parser.setBlankNodePrefixOnlyForTesting(blankNodePrefix);
   parser.setInputStream(input);
   if (!std::invoke(rule, parser)) {
     return std::nullopt;
   }
   return parser;
-}
+};
 
 // Asserts that parsing the `rule` works and that the last parse result and the
 // emitted triples are as expected. Returns the `Parser` instance that is used
@@ -317,7 +320,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
 }
 
 TEST(TurtleParserTest, object) {
-  auto runCommonTests = [](auto p) {
+  auto runCommonTests = []<typename Parser>(Parser p) {
     auto sub = iri("<sub>");
     auto pred = iri("<pred>");
     p.activeSubject_ = sub;
@@ -344,6 +347,30 @@ TEST(TurtleParserTest, object) {
 
     exp = TurtleTriple{sub, pred, "_:u_someblank"};
     ASSERT_EQ(p.triples_.back(), exp);
+
+    {
+      auto map = decltype(Parser::prefixMap_){};
+      map["b"] = iri("<bla/>");
+      auto p = parseRule<Parser, &Parser::object>("[ b:blubb 42]", map);
+      EXPECT_TRUE(p.has_value());
+      EXPECT_EQ(p.value().lastParseResult_, "_:g_0_0");
+      EXPECT_EQ(p.value().triples_.size(), 2);
+      EXPECT_THAT(
+          p.value().triples_[0],
+          ::testing::Eq(TurtleTriple{"_:g_0_0", iri("<bla/blubb>"), 42}));
+    }
+    {
+      auto map = decltype(Parser::prefixMap_){};
+      map["b"] = iri("<bla/>");
+      auto p = parseRule<Parser, &Parser::object>("(b:blubb)]", map);
+      EXPECT_TRUE(p.has_value());
+      EXPECT_EQ(p.value().lastParseResult_, "_:g_0_0");
+      EXPECT_EQ(p.value().triples_.size(), 3);
+      auto first = iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#first>");
+      EXPECT_THAT(
+          p.value().triples_[0],
+          ::testing::Eq(TurtleTriple{"_:g_0_0", first, iri("<bla/blubb>")}));
+    }
   };
   runCommonTests(Re2Parser{});
   runCommonTests(CtreParser{});
