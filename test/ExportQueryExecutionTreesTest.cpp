@@ -1069,3 +1069,260 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 
 // TODO<joka921> Unit tests that also test for the export of text records from
 // the text index and thus systematically fill the coverage gaps.
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
+  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
+  idTable.push_back({Id::makeFromInt(42)});
+  idTable.push_back({Id::makeFromInt(1337)});
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(idTable), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 2);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(42)});
+    idTable2.push_back({Id::makeFromInt(1337)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 3);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(1));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(2));
+  EXPECT_EQ(iterator->at(2)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  ASSERT_EQ(iterator->size(), 2);
+  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
+  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(1));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable1.push_back({Id::makeFromInt(1)});
+    idTable1.push_back({Id::makeFromInt(2)});
+    idTable1.push_back({Id::makeFromInt(3)});
+
+    co_yield std::move(idTable1);
+
+    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable2.push_back({Id::makeFromInt(4)});
+    idTable2.push_back({Id::makeFromInt(5)});
+
+    co_yield std::move(idTable2);
+
+    IdTable idTable3{1, ad_utility::makeUnlimitedAllocator<Id>()};
+    idTable3.push_back({Id::makeFromInt(6)});
+    idTable3.push_back({Id::makeFromInt(7)});
+    idTable3.push_back({Id::makeFromInt(8)});
+    idTable3.push_back({Id::makeFromInt(9)});
+
+    co_yield std::move(idTable3);
+  }();
+
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+
+  auto iterator = generator.begin();
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(6));
+
+  ++iterator;
+  ASSERT_NE(iterator, generator.end());
+  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(7));
+
+  ++iterator;
+  EXPECT_EQ(iterator, generator.end());
+}

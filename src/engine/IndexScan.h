@@ -103,7 +103,7 @@ class IndexScan final : public Operation {
   ScanSpecificationAsTripleComponent getScanSpecification() const;
 
  private:
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
@@ -114,6 +114,8 @@ class IndexScan final : public Operation {
   std::string getCacheKeyImpl() const override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
+
+  cppcoro::generator<IdTable> scanInChunks() const;
 
   //  Helper functions for the public `getLazyScanFor...` functions (see above).
   static Permutation::IdTableGenerator getLazyScan(

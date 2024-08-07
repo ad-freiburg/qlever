@@ -260,6 +260,14 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
+  ProtoResult runComputation(ad_utility::Timer& timer,
+                             ComputationMode computationMode);
+
+  CacheValue runComputationAndTransformToCache(ad_utility::Timer& timer,
+                                               ComputationMode computationMode,
+                                               const std::string& cacheKey,
+                                               bool pinned);
+
   // Create and store the complete runtime information for this operation after
   // it has either been successfully computed or read from the cache.
   virtual void updateRuntimeInformationOnSuccess(
@@ -272,7 +280,7 @@ class Operation {
   // allowed when `cacheStatus` is `cachedPinned` or `cachedNotPinned`,
   // otherwise a runtime check will fail.
   virtual void updateRuntimeInformationOnSuccess(
-      const Result& resultTable, ad_utility::CacheStatus cacheStatus,
+      size_t numRows, ad_utility::CacheStatus cacheStatus,
       Milliseconds duration,
       std::optional<RuntimeInformation> runtimeInfo) final;
 

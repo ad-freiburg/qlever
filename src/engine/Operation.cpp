@@ -69,6 +69,93 @@ void Operation::recursivelySetTimeConstraint(
   });
 }
 
+// _____________________________________________________________________________
+ProtoResult Operation::runComputation(ad_utility::Timer& timer,
+                                      ComputationMode computationMode) {
+  checkCancellation();
+  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+  signalQueryUpdate();
+  ProtoResult result =
+      computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
+  AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
+                    result.isDataEvaluated());
+
+  checkCancellation();
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    // Compute the datatypes that occur in each column of the result.
+    // Also assert, that if a column contains UNDEF values, then the
+    // `mightContainUndef` flag for that columns is set.
+    // TODO<joka921> It is cheaper to move this calculation into the
+    // individual results, but that requires changes in each individual
+    // operation, therefore we currently only perform this expensive
+    // change in the DEBUG builds.
+    result.checkDefinedness(getExternallyVisibleVariableColumns());
+  }
+  // Make sure that the results that are written to the cache have the
+  // correct runtimeInfo. The children of the runtime info are already set
+  // correctly because the result was computed, so we can pass `nullopt` as
+  // the last argument.
+  if (result.isDataEvaluated()) {
+    updateRuntimeInformationOnSuccess(result.idTable().size(),
+                                      ad_utility::CacheStatus::computed,
+                                      timer.msecs(), std::nullopt);
+  } else {
+    // TODO<RobinTF> check if this is sufficient here or we need more of
+    // `updateRuntimeInformationOnSuccess` functionality here.
+    runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+  }
+  // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+  // already perform it. An example for an operation that directly computes
+  // the Limit is a full index scan with three variables. Note that the
+  // `QueryPlanner` does currently only set the limit for operations that
+  // support it natively, except for operations in subqueries. This means
+  // that a lot of the time the limit is only artificially applied during
+  // export, allowing the cache to reuse the same operation for different
+  // limits and offsets.
+  if (!supportsLimit()) {
+    runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0}, true);
+    result.applyLimitOffset(_limit, [runtimeInfo = getRuntimeInfoPointer()](
+                                        std::chrono::milliseconds limitTime) {
+      runtimeInfo->totalTime_ += limitTime;
+    });
+  } else {
+    result.enforceLimitOffset(_limit);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+CacheValue Operation::runComputationAndTransformToCache(
+    ad_utility::Timer& timer, ComputationMode computationMode,
+    const std::string& cacheKey, bool pinned) {
+  auto& cache = _executionContext->getQueryTreeCache();
+  auto result = Result::fromProtoResult(
+      runComputation(timer, computationMode),
+      [&cache](const IdTable& idTable) {
+        return cache.getMaxSizeSingleEntry() >= CacheValue::getSize(idTable);
+      },
+      [this, &cache, cacheKey, pinned](Result aggregatedResult) {
+        cache.tryInsertIfNotPresent(
+            pinned, cacheKey,
+            CacheValue{std::move(aggregatedResult), runtimeInfo()});
+      });
+  /*
+        TODO<RobinTF> incorporate time calculations and query updates.
+        runtimeInfo().totalTime_ += duration;
+        if (isRoot) {
+          signalQueryUpdate();
+        }
+   */
+  if (result.isDataEvaluated()) {
+    auto resultNumRows = result.idTable().size();
+    auto resultNumCols = result.idTable().numColumns();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
+  }
+
+  return CacheValue{std::move(result), runtimeInfo()};
+}
+
 // ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
@@ -101,72 +188,34 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer, computationMode] {
-      checkCancellation();
-      runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-      signalQueryUpdate();
-      Result result =
-          computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+      return runComputationAndTransformToCache(timer, computationMode, cacheKey,
+                                               pinResult);
+    };
 
-      checkCancellation();
-      // Compute the datatypes that occur in each column of the result.
-      // Also assert, that if a column contains UNDEF values, then the
-      // `mightContainUndef` flag for that columns is set.
-      // TODO<joka921> It is cheaper to move this calculation into the
-      // individual results, but that requires changes in each individual
-      // operation, therefore we currently only perform this expensive
-      // change in the DEBUG builds.
-      AD_EXPENSIVE_CHECK(
-          result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      // Make sure that the results that are written to the cache have the
-      // correct runtimeInfo. The children of the runtime info are already set
-      // correctly because the result was computed, so we can pass `nullopt` as
-      // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
-      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-      // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables. Note that the
-      // `QueryPlanner` does currently only set the limit for operations that
-      // support it natively, except for operations in subqueries. This means
-      // that a lot of the time the limit is only artificially applied during
-      // export, allowing the cache to reuse the same operation for different
-      // limits and offsets.
-      if (!supportsLimit()) {
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        // Note: both of the following calls have no effect and negligible
-        // runtime if neither a LIMIT nor an OFFSET were specified.
-        result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else {
-        auto numRows = result.idTable().numRows();
-        auto limit = _limit._limit;
-        AD_CONTRACT_CHECK(!limit.has_value() ||
-                          numRows <= static_cast<size_t>(limit.value()));
-      }
-      return CacheValue{std::move(result), runtimeInfo()};
+    auto suitedForCache = [](const CacheValue& cacheValue) {
+      return cacheValue.resultTable().isDataEvaluated();
     };
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result = pinResult ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                      onlyReadFromCache)
-                            : cache.computeOnce(cacheKey, computeLambda,
-                                                onlyReadFromCache);
+    auto result =
+        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
+                                            onlyReadFromCache, suitedForCache)
+                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
+                                      suitedForCache);
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->idTable().size();
-    auto resultNumCols =
-        result._resultPointer->resultTable()->idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
-    return result._resultPointer->resultTable();
+    updateRuntimeInformationOnSuccess(
+        result, result._resultPointer->resultTable().isDataEvaluated()
+                    ? timer.msecs()
+                    : result._resultPointer->runtimeInfo().totalTime_);
+
+    return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
@@ -213,10 +262,10 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const Result& resultTable, ad_utility::CacheStatus cacheStatus,
-    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
+    size_t numRows, ad_utility::CacheStatus cacheStatus, Milliseconds duration,
+    std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.idTable().size();
+  _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
@@ -253,8 +302,10 @@ void Operation::updateRuntimeInformationOnSuccess(
 void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
+  const auto& result = resultAndCacheStatus._resultPointer->resultTable();
   updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->resultTable(),
+      // TODO<RobinTF> find a better representation for "unknown" than 0.
+      result.isDataEvaluated() ? result.idTable().size() : 0,
       resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }

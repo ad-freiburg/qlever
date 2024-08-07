@@ -395,11 +395,12 @@ DecompressedBlock CompressedRelationReader::readPossiblyIncompleteBlock(
   auto cacheKey = blockMetadata.offsetsAndCompressedSize_.at(0).offsetInFile_;
   auto sharedResultFromCache =
       blockCache_
-          .computeOnce(cacheKey,
-                       [&]() {
-                         return readAndDecompressBlock(blockMetadata,
-                                                       allColumns);
-                       })
+          .computeOnce(
+              cacheKey,
+              [&]() {
+                return readAndDecompressBlock(blockMetadata, allColumns);
+              },
+              false, [](const auto&) { return true; })
           ._resultPointer;
   const DecompressedBlock& block = *sharedResultFromCache;
 
