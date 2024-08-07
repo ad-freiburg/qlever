@@ -11,6 +11,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
@@ -349,48 +350,6 @@ class CompressedRelationReader {
   using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-  // The specification of a scan operation for a given permutation.
-  // Can either be a full scan (all three elements are `std::nullopt`),
-  // a scan for a fixed `col0Id`, a scan for a fixed `col0Id` and `col1Id`,
-  // or even a scan for a single triple to check whether it is contained in
-  // the knowledge graph at all. The values which are `nullopt` become variables
-  // and are returned as columns in the result of the scan.
-  class ScanSpecification {
-   private:
-    using T = std::optional<Id>;
-
-    T col0Id_;
-    T col1Id_;
-    T col2Id_;
-
-    void validate() const {
-      bool c0 = col0Id_.has_value();
-      bool c1 = col1Id_.has_value();
-      bool c2 = col2Id_.has_value();
-      if (!c0) {
-        AD_CORRECTNESS_CHECK(!c1 && !c2);
-      }
-      if (!c1) {
-        AD_CORRECTNESS_CHECK(!c2);
-      }
-    }
-
-   public:
-    ScanSpecification(T col0Id, T col1Id, T col2Id)
-        : col0Id_{col0Id}, col1Id_{col1Id}, col2Id_{col2Id} {
-      validate();
-    }
-    const T& col0Id() const { return col0Id_; }
-    const T& col1Id() const { return col1Id_; }
-    const T& col2Id() const { return col2Id_; }
-
-    // Only used in tests.
-    void setCol1Id(T col1Id) {
-      col1Id_ = col1Id;
-      validate();
-    }
-  };
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as

@@ -418,24 +418,22 @@ class IndexImpl {
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(
-      const TripleComponent& col0String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      const Permutation::Enum& permutation,
-      Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle,
-      const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
+               const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const TripleComponent& col0,
-                             const TripleComponent& col1,
-                             const Permutation::Enum& permutation) const;
+  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
+
+  // _____________________________________________________________________________
+  size_t getResultSizeOfScan(
+      const ScanSpecificationAsTripleComponent& scanSpecification,
+      const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions

@@ -25,5 +25,5 @@ add_library(parser
         Iri.cpp
         Literal.cpp
         LiteralOrIri.cpp)
-qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine)
+qlever_target_link_libraries(parser sparqlParser parserData sparqlExpressions rdfEscaping re2::re2 util engine index)
 
