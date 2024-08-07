@@ -247,13 +247,10 @@ Result Result::fromProtoResult(ProtoResult protoResult,
           },
           [storeInCache = std::move(storeInCache),
            sortedByCopy = std::move(sortedByCopy),
-           localVocabReference = std::move(localVocabReference)](
-              std::optional<IdTable> idTable) mutable {
-            if (idTable.has_value()) {
-              storeInCache(Result{std::move(idTable).value(),
-                                  std::move(sortedByCopy),
-                                  std::move(localVocabReference)});
-            }
+           localVocabReference =
+               std::move(localVocabReference)](IdTable idTable) mutable {
+            storeInCache(Result{std::move(idTable), std::move(sortedByCopy),
+                                std::move(localVocabReference)});
           }),
       std::move(protoResult.storage_.sortedBy_),
       std::move(protoResult.storage_.localVocab_)};

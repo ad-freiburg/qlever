@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <string>
+#include <string_view>
 
 #include "util/Cache.h"
 #include "util/DefaultValueSizeGetter.h"

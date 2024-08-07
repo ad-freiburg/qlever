@@ -16,7 +16,7 @@ cppcoro::generator<T> wrapGeneratorWithCache(
     cppcoro::generator<T> generator,
     InvocableWithExactReturnType<bool, std::optional<T>&, const T&> auto
         aggregator,
-    InvocableWithExactReturnType<void, std::optional<T>> auto onFullyCached) {
+    InvocableWithExactReturnType<void, T> auto onFullyCached) {
   std::optional<T> aggregatedData{};
   bool aggregate = true;
   for (auto&& element : generator) {
@@ -28,8 +28,8 @@ cppcoro::generator<T> wrapGeneratorWithCache(
     }
     co_yield AD_FWD(element);
   }
-  if (aggregate) {
-    onFullyCached(std::move(aggregatedData));
+  if (aggregatedData.has_value()) {
+    onFullyCached(std::move(aggregatedData).value());
   }
 }
 };  // namespace ad_utility

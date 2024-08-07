@@ -332,6 +332,7 @@ class ConcurrentCache {
   }
 
  private:
+  // implementation for computeOnce (pinned and normal variant).
   ResultAndCacheStatus computeOnceImpl(
       bool pinned, const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
