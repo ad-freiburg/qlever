@@ -1076,10 +1076,9 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   idTable.push_back({Id::makeFromInt(42)});
   idTable.push_back({Id::makeFromInt(1337)});
 
-  Result result = Result::createResultWithFullyEvaluatedIdTable(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(idTable), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()));
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(idTable), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1109,11 +1108,9 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1144,11 +1141,9 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
     co_yield std::move(idTable1);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
@@ -1178,11 +1173,9 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
@@ -1216,11 +1209,9 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result);
 
@@ -1258,11 +1249,9 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
@@ -1308,11 +1297,9 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable3);
   }();
 
-  Result result = Result::createResultAsMasterConsumer(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()),
-      []() {});
+  Result result = Result::fromProtoResult(
+      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 

@@ -16,11 +16,10 @@ using enum PositionInTriple;
 namespace {
 struct ContextWrapper {
   Index _index{ad_utility::makeUnlimitedAllocator<Id>()};
-  Result _resultTable{Result::createResultWithFullyEvaluatedIdTable(
-      std::make_shared<const CacheableResult>(
-          ProtoResult{
-              IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}},
-          std::numeric_limits<uint64_t>::max()))};
+  Result _resultTable = Result::fromProtoResult(
+      ProtoResult{
+          IdTable{ad_utility::testing::makeAllocator()}, {}, LocalVocab{}},
+      [](const auto&) { return false; }, [](auto) {});
   // TODO<joka921> `VariableToColumnMap`
   VariableToColumnMap _hashMap{};
 
@@ -30,11 +29,9 @@ struct ContextWrapper {
   }
 
   void setIdTable(IdTable&& table) {
-    _resultTable = Result::createResultWithFullyEvaluatedIdTable(
-        std::make_shared<const CacheableResult>(
-            ProtoResult{
-                std::move(table), {}, _resultTable.getSharedLocalVocab()},
-            std::numeric_limits<uint64_t>::max()));
+    _resultTable = Result::fromProtoResult(
+        ProtoResult{std::move(table), {}, _resultTable.getSharedLocalVocab()},
+        [](const auto&) { return false; }, [](auto) {});
   }
 };
 

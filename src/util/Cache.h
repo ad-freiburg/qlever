@@ -6,8 +6,6 @@
 
 #pragma once
 
-#include <gtest/gtest_prod.h>
-
 #include <cassert>
 #include <concepts>
 #include <limits>
@@ -170,8 +168,7 @@ class FlexibleCache {
       return {};
     }
     Score s = _scoreCalculator(*valPtr);
-    _totalSizeNonPinned += sizeOfNewEntry;
-    _sizeMap.emplace(key, sizeOfNewEntry);
+    _totalSizeNonPinned += _valueSizeGetter(*valPtr);
     auto handle = _entries.insert(std::move(s), Entry(key, std::move(valPtr)));
     _accessMap[key] = handle;
     // The first value is the value part of the key-value pair in the priority
@@ -201,8 +198,7 @@ class FlexibleCache {
     // Make room for the new entry.
     makeRoomIfFits(sizeOfNewEntry);
     _pinnedMap[key] = valPtr;
-    _totalSizePinned += sizeOfNewEntry;
-    _sizeMap.emplace(key, sizeOfNewEntry);
+    _totalSizePinned += _valueSizeGetter(*valPtr);
     return valPtr;
   }
 
@@ -230,33 +226,6 @@ class FlexibleCache {
     return _maxSizeSingleEntry;
   }
 
-  void recomputeSize(const Key& key) {
-    // Pinned entries must not be dynamic in nature
-    AD_CONTRACT_CHECK(!containsPinned(key));
-    if (!containsNonPinned(key)) {
-      return;
-    }
-    auto newSize = _valueSizeGetter(*(*this)[key]);
-    auto& sizeInMap = _sizeMap.at(key);
-    // Entry has grown too big to completely keep within the cache or we can't
-    // fit it in the cache
-    if (_maxSizeSingleEntry < newSize ||
-        _maxSize - std::min(_totalSizePinned, _maxSize) < newSize) {
-      erase(key);
-      return;
-    }
-
-    // `MemorySize` type does not allow for negative values, but they are safe
-    // here, so we do it in size_t instead and convert back.
-    _totalSizeNonPinned =
-        MemorySize::bytes(_totalSizeNonPinned.getBytes() -
-                          sizeInMap.getBytes() + newSize.getBytes());
-    sizeInMap = newSize;
-    if (_totalSizePinned <= _maxSize) {
-      makeRoomIfFits(0_B);
-    }
-  }
-
   //! Checks if there is an entry with the given key.
   bool contains(const Key& key) const {
     return containsPinned(key) || containsNonPinned(key);
@@ -281,7 +250,7 @@ class FlexibleCache {
     const ValuePtr valuePtr = handle.value().value();
 
     // adapt the sizes of the pinned and non-pinned part of the cache
-    auto sz = _sizeMap.at(key);
+    auto sz = _valueSizeGetter(*valuePtr);
     _totalSizeNonPinned -= sz;
     _totalSizePinned += sz;
     // Move the entry to the _pinnedMap and remove it from the non-pinned data
@@ -297,8 +266,7 @@ class FlexibleCache {
   void erase(const Key& key) {
     const auto pinnedIt = _pinnedMap.find(key);
     if (pinnedIt != _pinnedMap.end()) {
-      _totalSizePinned -= _sizeMap.at(key);
-      _sizeMap.erase(key);
+      _totalSizePinned -= _valueSizeGetter(*pinnedIt->second);
       _pinnedMap.erase(pinnedIt);
       return;
     }
@@ -309,8 +277,7 @@ class FlexibleCache {
       return;
     }
     // the entry exists in the non-pinned part of the cache, erase it.
-    _totalSizeNonPinned -= _sizeMap.at(key);
-    _sizeMap.erase(key);
+    _totalSizeNonPinned -= _valueSizeGetter(*mapIt->second);
     _entries.erase(std::move(mapIt->second));
     _accessMap.erase(mapIt);
   }
@@ -417,8 +384,8 @@ class FlexibleCache {
   void removeOneEntry() {
     AD_CONTRACT_CHECK(!_entries.empty());
     auto handle = _entries.pop();
-    _totalSizeNonPinned -= _sizeMap.at(handle.value().key());
-    _sizeMap.erase(handle.value().key());
+    _totalSizeNonPinned =
+        _totalSizeNonPinned - _valueSizeGetter(*handle.value().value());
     _accessMap.erase(handle.value().key());
   }
   size_t _maxNumEntries;
@@ -434,17 +401,6 @@ class FlexibleCache {
   ValueSizeGetter _valueSizeGetter;
   PinnedMap _pinnedMap;
   AccessMap _accessMap;
-  SizeMap _sizeMap;
-
-  FRIEND_TEST(LRUCacheTest,
-              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErased);
-
-  FRIEND_TEST(LRUCacheTest,
-              verifyCacheSizeIsCorrectlyTrackedWhenChangedWhenErasedPinned);
-  FRIEND_TEST(LRUCacheTest, verifyCacheSizeIsCorrectlyRecomputed);
-  FRIEND_TEST(LRUCacheTest,
-              verifyNonPinnedEntriesAreRemovedToMakeRoomForResize);
-  FRIEND_TEST(LRUCacheTest, verifyRecomputeIsNoOpForNonExistentElement);
 };
 
 // Partial instantiation of FlexibleCache using the heap-based priority queue

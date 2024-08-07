@@ -119,12 +119,7 @@ void QueryExecutionTree::readFromCache() {
   auto& cache = qec_->getQueryTreeCache();
   auto res = cache.getIfContained(getCacheKey());
   if (res.has_value()) {
-    auto resultTable = res->_resultPointer->resultTablePtr();
-    if (resultTable->isDataEvaluated()) {
-      cachedResult_ = std::make_shared<const Result>(
-          Result::createResultWithFullyEvaluatedIdTable(
-              std::move(resultTable)));
-    }
+    cachedResult_ = res->_resultPointer->resultTablePtr();
   }
 }
 

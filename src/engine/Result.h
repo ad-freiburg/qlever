@@ -20,7 +20,6 @@
 template <typename IdTableType, typename GeneratorType>
 class ResultStorage {
   friend class ProtoResult;
-  friend class CacheableResult;
   friend class Result;
 
   using Data = std::variant<IdTableType, GeneratorType>;
@@ -67,7 +66,6 @@ class ResultStorage {
 };
 
 class ProtoResult {
-  friend class CacheableResult;
   friend class Result;
   using StorageType = ResultStorage<IdTable, cppcoro::generator<IdTable>>;
   StorageType storage_;
@@ -94,7 +92,6 @@ class ProtoResult {
     explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
     friend ProtoResult;
-    friend class CacheableResult;
     friend class Result;
 
    public:
@@ -170,59 +167,21 @@ class ProtoResult {
   bool isDataEvaluated() const noexcept;
 };
 
-class CacheableResult {
-  friend class Result;
-
-  struct SizeCalculator {
-    uint64_t operator()(const IdTable& idTable) const {
-      return idTable.size() * idTable.numColumns() * sizeof(Id);
-    }
-  };
-
-  using StorageType =
-      ResultStorage<IdTable,
-                    ad_utility::CacheableGenerator<IdTable, SizeCalculator>>;
-  StorageType storage_;
-
- public:
-  CacheableResult(const CacheableResult& other) = delete;
-  CacheableResult& operator=(const CacheableResult& other) = delete;
-
-  CacheableResult(CacheableResult&& other) = default;
-  CacheableResult& operator=(CacheableResult&& other) = default;
-
-  CacheableResult(ProtoResult protoResult, uint64_t maxElementSize);
-
-  void setOnSizeChanged(
-      std::function<void(std::optional<std::chrono::milliseconds>)>
-          onSizeChanged);
-
-  const IdTable& idTable() const;
-
-  const ad_utility::CacheableGenerator<IdTable, SizeCalculator>& idTables()
-      const;
-
-  bool isDataEvaluated() const noexcept;
-
-  ad_utility::MemorySize getCurrentSize() const;
-};
-
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
 // is always a table and contained in the member `idTable()`.
 class Result {
  private:
-  using StorageType = ResultStorage<std::shared_ptr<const IdTable>,
-                                    cppcoro::generator<const IdTable>>;
+  using StorageType = ResultStorage<IdTable, cppcoro::generator<IdTable>>;
   mutable StorageType storage_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
   using SharedLocalVocabWrapper = ProtoResult::SharedLocalVocabWrapper;
 
-  Result(std::shared_ptr<const IdTable> idTable,
-         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
-  Result(cppcoro::generator<const IdTable> idTables,
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         LocalVocabPtr localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
          std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
 
  public:
@@ -234,11 +193,15 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
+  static Result fromProtoResult(ProtoResult protoResult,
+                                std::function<bool(const IdTable&)> fitsInCache,
+                                std::function<void(Result)> storeInCache);
+
   // Const access to the underlying `IdTable`.
   const IdTable& idTable() const;
 
   // Access to the underlying `IdTable`s.
-  cppcoro::generator<const IdTable>& idTables() const;
+  cppcoro::generator<IdTable>& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const {
@@ -295,16 +258,4 @@ class Result {
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
-
-  static Result createResultWithFullyEvaluatedIdTable(
-      std::shared_ptr<const CacheableResult> cacheableResult);
-
-  static Result createResultWithFallback(
-      std::shared_ptr<const CacheableResult> original,
-      std::function<ProtoResult()> fallback,
-      std::function<void(std::chrono::milliseconds)> onIteration);
-
-  static Result createResultAsMasterConsumer(
-      std::shared_ptr<const CacheableResult> original,
-      std::function<void()> onIteration);
 };

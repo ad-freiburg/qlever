@@ -395,8 +395,6 @@ addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
-addLinkAndDiscoverTest(IteratorWrapperTest)
-
 addLinkAndDiscoverTest(CacheableGeneratorTest)
 
 addLinkAndDiscoverTest(FilterTest)

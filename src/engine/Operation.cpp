@@ -127,57 +127,33 @@ ProtoResult Operation::runComputation(ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndTransformToCache(
     ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey) {
+    const std::string& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
-  CacheableResult result{runComputation(timer, computationMode),
-                         cache.getMaxSizeSingleEntry().getBytes()};
-  if (!result.isDataEvaluated()) {
-    result.setOnSizeChanged(
-        [&cache, cacheKey, runtimeInfo = getRuntimeInfoPointer()](
-            std::optional<std::chrono::milliseconds> duration) {
-          cache.recomputeSize(cacheKey);
-          if (duration.has_value()) {
-            runtimeInfo->totalTime_ += duration.value();
-          }
-        });
-  }
-  return CacheValue{std::move(result), runtimeInfo()};
-}
-
-// _____________________________________________________________________________
-Result Operation::extractFromCache(
-    std::shared_ptr<const CacheableResult> result, bool freshlyInserted,
-    bool isRoot, ComputationMode computationMode) {
-  if (result->isDataEvaluated()) {
-    auto resultNumRows = result->idTable().size();
-    auto resultNumCols = result->idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
-  }
-
-  if (result->isDataEvaluated()) {
-    return Result::createResultWithFullyEvaluatedIdTable(std::move(result));
-  }
-
-  if (freshlyInserted) {
-    return Result::createResultAsMasterConsumer(
-        std::move(result),
-        isRoot ? std::function{[this]() { signalQueryUpdate(); }}
-               : std::function<void()>{});
-  }
-  // TODO<RobinTF> timer does not make sense here.
-  ad_utility::Timer timer{ad_utility::Timer::Started};
-  return Result::createResultWithFallback(
-      std::move(result),
-      [this, timer = std::move(timer), computationMode]() mutable {
-        return runComputation(timer, computationMode);
+  auto result = Result::fromProtoResult(
+      runComputation(timer, computationMode),
+      [&cache](const IdTable& idTable) {
+        return cache.getMaxSizeSingleEntry() >= CacheValue::getSize(idTable);
       },
-      [this, isRoot](auto duration) {
+      [this, &cache, cacheKey, pinned](Result aggregatedResult) {
+        cache.tryInsertIfNotPresent(
+            pinned, cacheKey,
+            CacheValue{std::move(aggregatedResult), runtimeInfo()});
+      });
+  /*
+        TODO<RobinTF> incorporate time calculations and query updates.
         runtimeInfo().totalTime_ += duration;
         if (isRoot) {
           signalQueryUpdate();
         }
-      });
+   */
+  if (result.isDataEvaluated()) {
+    auto resultNumRows = result.idTable().size();
+    auto resultNumCols = result.idTable().numColumns();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
+  }
+
+  return CacheValue{std::move(result), runtimeInfo()};
 }
 
 // ________________________________________________________________________
@@ -212,36 +188,26 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    bool actuallyComputed = false;
-    auto cacheSetup = [this, &timer, computationMode, &actuallyComputed,
-                       &cacheKey]() {
-      actuallyComputed = true;
-      return runComputationAndTransformToCache(timer, computationMode,
-                                               cacheKey);
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+      return runComputationAndTransformToCache(timer, computationMode, cacheKey,
+                                               pinResult);
     };
 
-    using ad_utility::CachePolicy;
+    auto suitedForCache = [](const CacheValue& cacheValue) {
+      return cacheValue.resultTable().isDataEvaluated();
+    };
 
-    CachePolicy cachePolicy = computationMode == ComputationMode::ONLY_IF_CACHED
-                                  ? CachePolicy::neverCompute
-                                  : CachePolicy::computeOnDemand;
+    bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
     auto result =
-        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup, cachePolicy)
-                  : cache.computeOnce(cacheKey, cacheSetup, cachePolicy);
+        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
+                                            onlyReadFromCache, suitedForCache)
+                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
+                                      suitedForCache);
 
     if (result._resultPointer == nullptr) {
-      AD_CORRECTNESS_CHECK(cachePolicy == CachePolicy::neverCompute);
+      AD_CORRECTNESS_CHECK(onlyReadFromCache);
       return nullptr;
-    }
-
-    if (!result._resultPointer->resultTable().isDataEvaluated() &&
-        computationMode == ComputationMode::FULLY_MATERIALIZED) {
-      AD_CORRECTNESS_CHECK(!actuallyComputed);
-      result = pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
-                                                   CachePolicy::alwaysCompute)
-                         : cache.computeOnce(cacheKey, cacheSetup,
-                                             CachePolicy::alwaysCompute);
     }
 
     updateRuntimeInformationOnSuccess(
@@ -249,9 +215,7 @@ std::shared_ptr<const Result> Operation::getResult(
                     ? timer.msecs()
                     : result._resultPointer->runtimeInfo().totalTime_);
 
-    return std::make_shared<const Result>(
-        extractFromCache(result._resultPointer->resultTablePtr(),
-                         actuallyComputed, isRoot, computationMode));
+    return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;

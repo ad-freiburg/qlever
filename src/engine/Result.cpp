@@ -7,8 +7,8 @@
 #include "engine/Result.h"
 
 #include "engine/LocalVocab.h"
+#include "util/CacheableGenerator.h"
 #include "util/Exception.h"
-#include "util/IteratorWrapper.h"
 #include "util/Log.h"
 #include "util/Timer.h"
 
@@ -209,69 +209,61 @@ const IdTable& ProtoResult::idTable() const { return storage_.idTable(); }
 bool ProtoResult::isDataEvaluated() const noexcept {
   return storage_.isDataEvaluated();
 }
-// _____________________________________________________________________________
-CacheableResult::CacheableResult(ProtoResult protoResult,
-                                 uint64_t maxElementSize)
-    : storage_{StorageType{
-          protoResult.isDataEvaluated()
-              ? decltype(StorageType::data_){std::move(
-                    protoResult.storage_.idTable())}
-              : decltype(StorageType::data_){ad_utility::CacheableGenerator<
-                    IdTable, SizeCalculator>{
-                    std::move(protoResult.storage_.idTables())}},
-          std::move(protoResult.storage_.sortedBy_),
-          std::move(protoResult.storage_.localVocab_),
-      }} {
-  if (!storage_.isDataEvaluated()) {
-    storage_.idTables().setMaxSize(maxElementSize);
-  }
-}
 
 // _____________________________________________________________________________
-void CacheableResult::setOnSizeChanged(
-    std::function<void(std::optional<std::chrono::milliseconds> duration)>
-        onSizeChanged) {
-  storage_.idTables().setOnSizeChanged(std::move(onSizeChanged));
-}
-
-// _____________________________________________________________________________
-const IdTable& CacheableResult::idTable() const { return storage_.idTable(); }
-
-// _____________________________________________________________________________
-const ad_utility::CacheableGenerator<IdTable, CacheableResult::SizeCalculator>&
-CacheableResult::idTables() const {
-  return storage_.idTables();
-}
-
-// _____________________________________________________________________________
-bool CacheableResult::isDataEvaluated() const noexcept {
-  return storage_.isDataEvaluated();
-}
-
-// _____________________________________________________________________________
-ad_utility::MemorySize CacheableResult::getCurrentSize() const {
-  return ad_utility::MemorySize::bytes(
-      storage_.isDataEvaluated() ? SizeCalculator{}(storage_.idTable())
-                                 : storage_.idTables().getCurrentSize());
-}
-
-// _____________________________________________________________________________
-Result::Result(std::shared_ptr<const IdTable> idTable,
-               std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               LocalVocabPtr localVocab)
     : storage_{StorageType{std::move(idTable), std::move(sortedBy),
                            std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-Result::Result(cppcoro::generator<const IdTable> idTables,
+Result::Result(cppcoro::generator<IdTable> idTables,
                std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
     : storage_{StorageType{std::move(idTables), std::move(sortedBy),
                            std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-const IdTable& Result::idTable() const { return *storage_.idTable(); }
+Result Result::fromProtoResult(ProtoResult protoResult,
+                               std::function<bool(const IdTable&)> fitsInCache,
+                               std::function<void(Result)> storeInCache) {
+  if (protoResult.isDataEvaluated()) {
+    return Result{std::move(protoResult.storage_.idTable()),
+                  std::move(protoResult.storage_.sortedBy_),
+                  std::move(protoResult.storage_.localVocab_)};
+  }
+  auto sortedByCopy = protoResult.storage_.sortedBy_;
+  auto localVocabReference = protoResult.storage_.localVocab_;
+  return Result{
+      ad_utility::wrapGeneratorWithCache(
+          std::move(protoResult.storage_.idTables()),
+          [fitsInCache = std::move(fitsInCache)](
+              std::optional<IdTable>& aggregate, const IdTable& newTable) {
+            if (aggregate.has_value()) {
+              aggregate.value().insertAtEnd(newTable);
+            } else {
+              aggregate.emplace(newTable.clone());
+            }
+            return fitsInCache(aggregate.value());
+          },
+          [storeInCache = std::move(storeInCache),
+           sortedByCopy = std::move(sortedByCopy),
+           localVocabReference = std::move(localVocabReference)](
+              std::optional<IdTable> idTable) mutable {
+            if (idTable.has_value()) {
+              storeInCache(Result{std::move(idTable).value(),
+                                  std::move(sortedByCopy),
+                                  std::move(localVocabReference)});
+            }
+          }),
+      std::move(protoResult.storage_.sortedBy_),
+      std::move(protoResult.storage_.localVocab_)};
+}
 
 // _____________________________________________________________________________
-cppcoro::generator<const IdTable>& Result::idTables() const {
+const IdTable& Result::idTable() const { return storage_.idTable(); }
+
+// _____________________________________________________________________________
+cppcoro::generator<IdTable>& Result::idTables() const {
   return storage_.idTables();
 }
 
@@ -311,90 +303,4 @@ string Result::asDebugString() const {
     os << '\n';
   }
   return std::move(os).str();
-}
-
-// _____________________________________________________________________________
-Result Result::createResultWithFullyEvaluatedIdTable(
-    std::shared_ptr<const CacheableResult> cacheableResult) {
-  AD_CONTRACT_CHECK(cacheableResult->isDataEvaluated());
-  auto sortedBy = cacheableResult->storage_.sortedBy_;
-  auto localVocab = cacheableResult->storage_.localVocab_;
-  const IdTable* tablePointer = &cacheableResult->idTable();
-  return Result{
-      std::shared_ptr<const IdTable>{std::move(cacheableResult), tablePointer},
-      std::move(sortedBy), std::move(localVocab)};
-}
-
-// _____________________________________________________________________________
-Result Result::createResultWithFallback(
-    std::shared_ptr<const CacheableResult> original,
-    std::function<ProtoResult()> fallback,
-    std::function<void(std::chrono::milliseconds)> onIteration) {
-  AD_CONTRACT_CHECK(!original->isDataEvaluated());
-  auto generator = [](std::shared_ptr<const CacheableResult> sharedResult,
-                      std::function<ProtoResult()> fallback,
-                      auto onIteration) -> cppcoro::generator<const IdTable> {
-    size_t index = 0;
-    try {
-      for (auto&& idTable : sharedResult->storage_.idTables()) {
-        co_yield *idTable;
-        index++;
-      }
-      co_return;
-    } catch (const ad_utility::IteratorExpired&) {
-      // co_yield is not allowed here, so simply ignore this and allow control
-      // flow to take over
-    } catch (...) {
-      throw;
-    }
-    ProtoResult freshResult = fallback();
-    // If data is evaluated this means that this process is not deterministic
-    // or that there's a wrong callback used here.
-    AD_CORRECTNESS_CHECK(!freshResult.isDataEvaluated());
-    auto start = std::chrono::steady_clock::now();
-    for (auto&& idTable : freshResult.storage_.idTables()) {
-      auto stop = std::chrono::steady_clock::now();
-      if (onIteration) {
-        onIteration(std::chrono::duration_cast<std::chrono::milliseconds>(
-            stop - start));
-      }
-      if (index > 0) {
-        index--;
-        continue;
-      }
-      co_yield idTable;
-      start = std::chrono::steady_clock::now();
-    }
-    auto stop = std::chrono::steady_clock::now();
-    if (onIteration) {
-      onIteration(
-          std::chrono::duration_cast<std::chrono::milliseconds>(stop - start));
-    }
-  };
-  return Result{
-      generator(original, std::move(fallback), std::move(onIteration)),
-      original->storage_.sortedBy_, original->storage_.localVocab_};
-}
-
-// _____________________________________________________________________________
-Result Result::createResultAsMasterConsumer(
-    std::shared_ptr<const CacheableResult> original,
-    std::function<void()> onIteration) {
-  AD_CONTRACT_CHECK(!original->isDataEvaluated());
-  auto generator = [](auto original,
-                      auto onIteration) -> cppcoro::generator<const IdTable> {
-    using ad_utility::IteratorWrapper;
-    auto& generator = original->storage_.idTables();
-    for (std::shared_ptr<const IdTable> idTable :
-         IteratorWrapper{generator, true}) {
-      if (onIteration) {
-        onIteration();
-      }
-      co_yield *idTable;
-    }
-  };
-  auto sortedBy = original->storage_.sortedBy_;
-  auto localVocab = original->storage_.localVocab_;
-  return Result{generator(std::move(original), std::move(onIteration)),
-                std::move(sortedBy), std::move(localVocab)};
 }

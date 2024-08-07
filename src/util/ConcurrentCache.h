@@ -43,12 +43,6 @@ enum struct CacheStatus {
   notInCacheAndNotComputed
 };
 
-enum class CachePolicy {
-  neverCompute,
-  computeOnDemand,
-  alwaysCompute,
-};
-
 // Convert a `CacheStatus` to a human-readable string. We mostly use it for
 // JSON exports, so we use a hyphenated format.
 constexpr std::string_view toString(CacheStatus status) {
@@ -131,7 +125,7 @@ class ResultInProgress {
     std::unique_lock uniqueLock(_mutex);
     _conditionVariable.wait(uniqueLock,
                             [this] { return _status != Status::IN_PROGRESS; });
-    if (_status == ResultInProgress::Status::ABORTED) {
+    if (_status == Status::ABORTED) {
       throw WaitedForResultWhichThenFailedException{};
     }
     return _result;
@@ -185,13 +179,19 @@ class ConcurrentCache {
    * it is contained in the cache. Otherwise `nullptr` with a cache status of
    * `notInCacheNotComputed` will be returned.
    * @return A shared_ptr to the computation result.
+   * @param suitedForCache Predicate function that will be applied to newly
+   * computed value to check if it is suited for caching.
+   * @return A `ResultAndCacheStatus` shared_ptr to the computation result.
    *
    */
   ResultAndCacheStatus computeOnce(
       const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      CachePolicy cachePolicy = CachePolicy::computeOnDemand) {
-    return computeOnceImpl(false, key, computeFunction, cachePolicy);
+      bool onlyReadFromCache,
+      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
+          suitedForCache) {
+    return computeOnceImpl(false, key, computeFunction, onlyReadFromCache,
+                           suitedForCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
@@ -199,12 +199,23 @@ class ConcurrentCache {
   ResultAndCacheStatus computeOncePinned(
       const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      CachePolicy cachePolicy = CachePolicy::computeOnDemand) {
-    return computeOnceImpl(true, key, computeFunction, cachePolicy);
+      bool onlyReadFromCache,
+      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
+          suitedForCache) {
+    return computeOnceImpl(true, key, computeFunction, onlyReadFromCache,
+                           suitedForCache);
   }
 
-  void recomputeSize(const Key& key) {
-    _cacheAndInProgressMap.wlock()->_cache.recomputeSize(key);
+  void tryInsertIfNotPresent(bool pinned, const Key& key, Value value) {
+    auto lockPtr = _cacheAndInProgressMap.wlock();
+    if (pinned) {
+      if (!lockPtr->_cache.containsAndMakePinnedIfExists(key)) {
+        lockPtr->_cache.insertPinned(key,
+                                     std::make_shared<Value>(std::move(value)));
+      }
+    } else if (!lockPtr->_cache.contains(key)) {
+      lockPtr->_cache.insert(key, std::make_shared<Value>(std::move(value)));
+    }
   }
 
   /// Clear the cache (but not the pinned entries)
@@ -324,7 +335,9 @@ class ConcurrentCache {
   ResultAndCacheStatus computeOnceImpl(
       bool pinned, const Key& key,
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
-      CachePolicy cachePolicy) {
+      bool onlyReadFromCache,
+      const InvocableWithConvertibleReturnType<bool, const Value&> auto&
+          suitedForCache) {
     using std::make_shared;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
@@ -341,10 +354,9 @@ class ConcurrentCache {
       if (contained) {
         // the result is in the cache, simply return it.
         return {cache[key], cacheStatus};
-      } else if (cachePolicy == CachePolicy::neverCompute) {
+      } else if (onlyReadFromCache) {
         return {nullptr, CacheStatus::notInCacheAndNotComputed};
-      } else if (lockPtr->_inProgress.contains(key) &&
-                 cachePolicy == CachePolicy::computeOnDemand) {
+      } else if (lockPtr->_inProgress.contains(key)) {
         // the result is not cached, but someone else is computing it.
         // it is important, that we do not immediately call getResult() since
         // this call blocks and we currently hold a lock.
@@ -368,7 +380,11 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
-        moveFromInProgressToCache(key, result);
+        if (suitedForCache(*result)) {
+          moveFromInProgressToCache(key, result);
+        } else {
+          _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
+        }
         // Signal other threads who are waiting for the results.
         resultInProgress->finish(result);
         // result was not cached
@@ -384,7 +400,17 @@ class ConcurrentCache {
       // someone else is computing the result, wait till it is finished and
       // return the result, we do not count this case as "cached" as we had to
       // wait.
-      return {resultInProgress->getResult(), CacheStatus::computed};
+      auto resultPointer = resultInProgress->getResult();
+      if (resultPointer) {
+        return {std::move(resultPointer), CacheStatus::computed};
+      }
+      // TODO<RobinTF> there's a small chance this will hang indefinitely if
+      // other processes keep submitting non-cacheable entries before this
+      // thread can acquire the lock to compute the entry on its own.
+
+      // Retry if computed entry unsuited for caching
+      return computeOnceImpl(pinned, key, computeFunction, false,
+                             suitedForCache);
     }
   }
 

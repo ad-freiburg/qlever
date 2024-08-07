@@ -22,13 +22,12 @@
 
 class CacheValue {
  private:
-  std::shared_ptr<CacheableResult> resultTable_;
+  std::shared_ptr<Result> result_;
   RuntimeInformation runtimeInfo_;
 
  public:
-  explicit CacheValue(CacheableResult resultTable,
-                      RuntimeInformation runtimeInfo)
-      : resultTable_{std::make_shared<CacheableResult>(std::move(resultTable))},
+  explicit CacheValue(Result result, RuntimeInformation runtimeInfo)
+      : result_{std::make_shared<Result>(std::move(result))},
         runtimeInfo_{std::move(runtimeInfo)} {}
 
   CacheValue(CacheValue&&) = default;
@@ -36,34 +35,26 @@ class CacheValue {
   CacheValue& operator=(CacheValue&&) = default;
   CacheValue& operator=(const CacheValue&) = delete;
 
-  const CacheableResult& resultTable() const noexcept { return *resultTable_; }
+  const Result& resultTable() const noexcept { return *result_; }
 
-  std::shared_ptr<const CacheableResult> resultTablePtr() const noexcept {
-    return resultTable_;
+  std::shared_ptr<const Result> resultTablePtr() const noexcept {
+    return result_;
   }
 
   const RuntimeInformation& runtimeInfo() const noexcept {
     return runtimeInfo_;
   }
 
-  ~CacheValue() {
-    if (resultTable_ && !resultTable_->isDataEvaluated()) {
-      // Clear listeners
-      try {
-        resultTable_->setOnSizeChanged({});
-      } catch (...) {
-        // Should never happen. The listeners only throw assertion errors
-        // if the result is evaluated.
-        std::exit(1);
-      }
-    }
+  static ad_utility::MemorySize getSize(const IdTable& idTable) {
+    return ad_utility::MemorySize::bytes(idTable.size() * idTable.numColumns() *
+                                         sizeof(Id));
   }
 
   // Calculates the `MemorySize` taken up by an instance of `CacheValue`.
   struct SizeGetter {
     ad_utility::MemorySize operator()(const CacheValue& cacheValue) const {
-      if (const auto& tablePtr = cacheValue.resultTable_; tablePtr) {
-        return tablePtr->getCurrentSize();
+      if (const auto& resultPtr = cacheValue.result_; resultPtr) {
+        return getSize(resultPtr->idTable());
       } else {
         return 0_B;
       }
