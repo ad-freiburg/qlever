@@ -270,6 +270,50 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
 
+// Take a string from the vocabulary, deduce the type and
+// return a JSON dict that describes the binding.
+static nlohmann::json stringToBinding(std::string_view entitystr) {
+  nlohmann::ordered_json b;
+  // The string is an IRI or literal.
+  if (entitystr.starts_with('<')) {
+    // Strip the <> surrounding the iri.
+    b["value"] = entitystr.substr(1, entitystr.size() - 2);
+    // Even if they are technically IRIs, the format needs the type to be
+    // "uri".
+    b["type"] = "uri";
+  } else if (entitystr.starts_with("_:")) {
+    b["value"] = entitystr.substr(2);
+    b["type"] = "bnode";
+  } else {
+    // TODO<joka921> This is probably not quite correct in the corner case
+    // that there are datatype IRIs which contain quotes.
+    size_t quotePos = entitystr.rfind('"');
+    if (quotePos == std::string::npos) {
+      // TEXT entries are currently not surrounded by quotes
+      b["value"] = entitystr;
+      b["type"] = "literal";
+    } else {
+      b["value"] = entitystr.substr(1, quotePos - 1);
+      b["type"] = "literal";
+      // Look for a language tag or type.
+      if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
+        b["xml:lang"] = entitystr.substr(quotePos + 2);
+      } else if (quotePos < entitystr.size() - 2 &&
+                 entitystr[quotePos + 1] == '^') {
+        AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
+        std::string_view datatype{entitystr};
+        // remove the <angledBrackets> around the datatype IRI
+        AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
+        datatype.remove_prefix(quotePos + 4);
+        datatype.remove_suffix(1);
+        b["datatype"] = datatype;
+        ;
+      }
+    }
+  }
+  return b;
+}
+
 // _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     const QueryExecutionTree& qet,
@@ -314,50 +358,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     resultJson["results"]["bindings"] = json::array();
     return resultJson;
   }
-
-  // Take a string from the vocabulary, deduce the type and
-  // return a JSON dict that describes the binding.
-  auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
-    nlohmann::ordered_json b;
-    // The string is an IRI or literal.
-    if (entitystr.starts_with('<')) {
-      // Strip the <> surrounding the iri.
-      b["value"] = entitystr.substr(1, entitystr.size() - 2);
-      // Even if they are technically IRIs, the format needs the type to be
-      // "uri".
-      b["type"] = "uri";
-    } else if (entitystr.starts_with("_:")) {
-      b["value"] = entitystr.substr(2);
-      b["type"] = "bnode";
-    } else {
-      // TODO<joka921> This is probably not quite correct in the corner case
-      // that there are datatype IRIs which contain quotes.
-      size_t quotePos = entitystr.rfind('"');
-      if (quotePos == std::string::npos) {
-        // TEXT entries are currently not surrounded by quotes
-        b["value"] = entitystr;
-        b["type"] = "literal";
-      } else {
-        b["value"] = entitystr.substr(1, quotePos - 1);
-        b["type"] = "literal";
-        // Look for a language tag or type.
-        if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
-          b["xml:lang"] = entitystr.substr(quotePos + 2);
-        } else if (quotePos < entitystr.size() - 2 &&
-                   entitystr[quotePos + 1] == '^') {
-          AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
-          std::string_view datatype{entitystr};
-          // remove the <angledBrackets> around the datatype IRI
-          AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
-          datatype.remove_prefix(quotePos + 4);
-          datatype.remove_suffix(1);
-          b["datatype"] = datatype;
-          ;
-        }
-      }
-    }
-    return b;
-  };
 
   for (size_t rowIndex : getRowIndices(limitAndOffset, *result)) {
     // TODO: ordered_json` entries are ordered alphabetically, but insertion
@@ -406,8 +406,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
                                   std::move(result),
                                   std::move(cancellationHandle));
 }
-
-using parsedQuery::SelectClause;
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
@@ -605,6 +603,70 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 }
 
 // _____________________________________________________________________________
+template <>
+ad_utility::streams::stream_generator ExportQueryExecutionTrees::
+    selectQueryResultToStream<ad_utility::MediaType::sparqlJson>(
+        const QueryExecutionTree& qet,
+        const parsedQuery::SelectClause& selectClause,
+        LimitOffsetClause limitAndOffset,
+        CancellationHandle cancellationHandle) {
+  // This call triggers the possibly expensive computation of the query result
+  // unless the result is already cached.
+  std::shared_ptr<const Result> result = qet.getResult();
+  result->logResultSize();
+  LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
+             << std::endl;
+  auto selectedColumnIndices =
+      qet.selectedVariablesToColumnIndices(selectClause, false);
+
+  const auto& idTable = result->idTable();
+
+  auto vars = selectClause.getSelectedVariablesAsStrings();
+  std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
+  co_yield absl::StrCat("{\"head\":{\"vars\":[\"", absl::StrJoin(vars, "\",\""),
+                        "\"]},\"results\":{\"bindings\":[");
+
+  QueryExecutionTree::ColumnIndicesAndTypes columns =
+      qet.selectedVariablesToColumnIndices(selectClause, false);
+  std::erase(columns, std::nullopt);
+  if (columns.empty()) {
+    co_yield "]}}";
+    co_return;
+  }
+  for (size_t i : getRowIndices(limitAndOffset, *result)) {
+    nlohmann::ordered_json binding = {};
+    for (const auto& column : columns) {
+      const auto& currentId = idTable(i, column->columnIndex_);
+      const auto& optionalValue = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, result->localVocab());
+      auto optionalStringAndType = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, result->localVocab());
+
+      if (!optionalStringAndType) {
+        continue;
+      }
+
+      const auto& [stringValue, xsdType] = optionalStringAndType.value();
+      nlohmann::ordered_json b;
+      if (!xsdType) {
+        // No xsdType, this means that `stringValue` is a plain string literal
+        // or entity.
+        b = stringToBinding(stringValue);
+      } else {
+        b["value"] = stringValue;
+        b["type"] = "literal";
+        b["datatype"] = xsdType;
+      }
+      binding[column->variable_] = std::move(b);
+    }
+    co_yield absl::StrCat(i == 0 ? "" : ",", binding.dump());
+    cancellationHandle->throwIfCancelled();
+  }
+  co_yield "]}}";
+  co_return;
+}
+
+// _____________________________________________________________________________
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
@@ -615,7 +677,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   static_assert(format == MediaType::octetStream || format == MediaType::csv ||
-                format == MediaType::tsv || format == MediaType::sparqlXml);
+                format == MediaType::tsv || format == MediaType::sparqlXml ||
+                format == MediaType::sparqlJson);
   if constexpr (format == MediaType::octetStream) {
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
   } else if constexpr (format == MediaType::sparqlXml) {
@@ -707,8 +770,8 @@ ExportQueryExecutionTrees::computeResultAsStream(
 
   using enum MediaType;
   auto inner =
-      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml>(
-          compute, mediaType);
+      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
+                                  sparqlJson>(compute, mediaType);
   try {
     for (auto& block : inner) {
       co_yield std::move(block);

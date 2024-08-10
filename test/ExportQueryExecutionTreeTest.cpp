@@ -113,6 +113,10 @@ void runSelectQueryTestCase(
       runJSONQuery(testCase.kg, testCase.query, sparqlJson, useTextIndex);
   EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
 
+  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
+                testCase.kg, testCase.query, sparqlJson, useTextIndex)),
+            testCase.resultSparqlJSON);
+
   // TODO<joka921> Use this for proper testing etc.
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
                                               sparqlXml, useTextIndex);
