@@ -31,7 +31,7 @@ class StallForeverOperation : public Operation {
   using Operation::Operation;
   // Do-nothing operation that runs for 100ms without computing anything, but
   // which can be cancelled.
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto end = std::chrono::steady_clock::now() + 100ms;
     while (std::chrono::steady_clock::now() < end) {
       checkCancellation();
@@ -73,7 +73,7 @@ class ShallowParentOperation : public Operation {
     return {child_.get()};
   }
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
     return {childResult->idTable().clone(), resultSortedOn(),
             childResult->getSharedLocalVocab()};

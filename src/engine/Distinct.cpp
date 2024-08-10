@@ -37,7 +37,7 @@ VariableToColumnMap Distinct::computeVariableToColumnMap() const {
 }
 
 // _____________________________________________________________________________
-Result Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Distinct::computeResult([[maybe_unused]] bool requestLaziness) {
   IdTable idTable{getExecutionContext()->getAllocator()};
   LOG(DEBUG) << "Getting sub-result for distinct result computation..." << endl;
   std::shared_ptr<const Result> subRes = subtree_->getResult();

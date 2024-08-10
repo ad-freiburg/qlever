@@ -49,7 +49,7 @@ class ValuesForTesting : public Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto table = table_.clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),
@@ -65,7 +65,8 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    str << "Values for testing with " << table_.numColumns() << " columns. ";
+    str << "Values for testing with " << table_.numColumns() << " columns and "
+        << table_.numRows() << " rows. ";
     if (table_.numRows() > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {

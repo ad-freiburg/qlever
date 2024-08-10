@@ -106,9 +106,22 @@ template <typename RandomIt>
 inline std::pair<RandomIt, RandomIt> getRangeForDatatype(RandomIt begin,
                                                          RandomIt end,
                                                          Datatype datatype) {
-  return std::equal_range(
-      begin, end, datatype,
-      detail::makeSymmetricComparator(&ValueId::getDatatype));
+  // In a sorted input, `VocabIndex` and `LocalVocabIndex` IDs might be
+  // interleaved because they logically both store strings. We therefore
+  // need the range where any of those Datatypes match.
+  auto comparatorForVocabTypes = [](Datatype d1, Datatype d2) {
+    auto containsStringType = [](Datatype d) {
+      return ad_utility::contains(ValueId::stringTypes_, d);
+    };
+    if (containsStringType(d1) && containsStringType(d2)) {
+      return false;
+    }
+    return d1 < d2;
+  };
+  auto comparator = detail::makeSymmetricComparator(&ValueId::getDatatype,
+                                                    comparatorForVocabTypes);
+
+  return std::equal_range(begin, end, datatype, comparator);
 }
 
 namespace detail {
@@ -410,7 +423,11 @@ inline std::vector<std::pair<RandomIt, RandomIt>> getRangesForEqualIds(
   AD_CONTRACT_CHECK(valueIdBegin <= valueIdEnd);
   // This lambda enforces the invariants `non-empty` and `sorted` and also
   // merges directly adjacent ranges.
-  AD_CONTRACT_CHECK(valueIdBegin.getDatatype() == valueIdEnd.getDatatype());
+  auto typeBegin = valueIdBegin.getDatatype();
+  auto typeEnd = valueIdEnd.getDatatype();
+  AD_CONTRACT_CHECK(typeBegin == typeEnd ||
+                    (ad_utility::contains(Id::stringTypes_, typeBegin) &&
+                     ad_utility::contains(Id::stringTypes_, typeEnd)));
   switch (valueIdBegin.getDatatype()) {
     case Datatype::Double:
     case Datatype::Int:
@@ -438,10 +455,15 @@ inline bool areTypesCompatible(Datatype typeA, Datatype typeB) {
   auto isNumeric = [](Datatype type) {
     return type == Datatype::Double || type == Datatype::Int;
   };
+  // TODO<joka921> Make this work for the WordIndex also.
+  auto isString = [](Datatype type) {
+    return ad_utility::contains(ValueId::stringTypes_, type);
+  };
   auto isUndefined = [](Datatype type) { return type == Datatype::Undefined; };
   // Note: Undefined values cannot be compared to other undefined values.
   return (!isUndefined(typeA)) &&
-         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)));
+         ((typeA == typeB) || (isNumeric(typeA) && isNumeric(typeB)) ||
+          (isString(typeA) && isString(typeB)));
 }
 
 // This function is part of the implementation of `compareIds` (see below).
@@ -461,14 +483,19 @@ ComparisonResult compareIdsImpl(ValueId a, ValueId b, auto comparator) {
     }
   }
 
+  // If any of the entries is a `LocalVocabIndex`, then the ordinary comparison
+  // on ValueIds already does the right thing.
+  if (a.getDatatype() == Datatype::LocalVocabIndex ||
+      b.getDatatype() == Datatype::LocalVocabIndex) {
+    return fromBool(std::invoke(comparator, a, b));
+  }
+
   auto visitor = [comparator]<typename A, typename B>(
                      const A& aValue, const B& bValue) -> ComparisonResult {
     if constexpr (std::is_same_v<A, LocalVocabIndex> &&
                   std::is_same_v<B, LocalVocabIndex>) {
-      // TODO<joka921> This is one of the places that has to be changed once
-      // we want to implement correct comparisons for the local vocab that use
-      // ICU collation.
-      return fromBool(std::invoke(comparator, *aValue, *bValue));
+      // We have handled this case outside the visitor.
+      AD_FAIL();
     } else if constexpr (requires() {
                            std::invoke(comparator, aValue, bValue);
                          }) {

@@ -247,14 +247,27 @@ TEST_P(TransitivePathTest, idToLeftBound) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, V(4), 1);
-  auto T = makePathLeftBound(
-      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-      std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
-      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+  {
+    auto T = makePathLeftBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        leftOpTable.clone(), 1, {Variable{"?x"}, Variable{"?start"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+    auto resultTable = T->computeResultOnlyForTesting();
+    ASSERT_THAT(resultTable.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+  {
+    auto T = makePathLeftBound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        std::move(leftOpTable), 1, {std::nullopt, Variable{"?start"}},
+        std::move(left), std::move(right), 0,
+        std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting();
+    ASSERT_THAT(resultTable.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
 }
 
 TEST_P(TransitivePathTest, idToRightBound) {
@@ -280,14 +293,27 @@ TEST_P(TransitivePathTest, idToRightBound) {
 
   TransitivePathSide left(std::nullopt, 0, V(0), 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePathRightBound(
-      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-      std::move(rightOpTable), 0, {Variable{"?target"}, Variable{"?x"}},
-      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+  {
+    auto T = makePathRightBound(
+        sub.clone(), {Variable{"?start"}, Variable{"?target"}},
+        rightOpTable.clone(), 0, {Variable{"?target"}, Variable{"?x"}}, left,
+        right, 0, std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+    auto resultTable = T->computeResultOnlyForTesting();
+    ASSERT_THAT(resultTable.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
+  {
+    auto T = makePathRightBound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        std::move(rightOpTable), 0, {Variable{"?target"}, std::nullopt},
+        std::move(left), std::move(right), 0,
+        std::numeric_limits<size_t>::max());
+
+    auto resultTable = T->computeResultOnlyForTesting();
+    ASSERT_THAT(resultTable.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
 }
 
 TEST_P(TransitivePathTest, leftBoundToVar) {
@@ -318,14 +344,17 @@ TEST_P(TransitivePathTest, leftBoundToVar) {
 
   TransitivePathSide left(std::nullopt, 0, Variable{"?start"}, 0);
   TransitivePathSide right(std::nullopt, 1, Variable{"?target"}, 1);
-  auto T = makePathLeftBound(
-      std::move(sub), {Variable{"?start"}, Variable{"?target"}},
-      std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
-      std::move(left), std::move(right), 0, std::numeric_limits<size_t>::max());
+  {
+    auto T = makePathLeftBound(
+        std::move(sub), {Variable{"?start"}, Variable{"?target"}},
+        std::move(leftOpTable), 1, {Variable{"?x"}, Variable{"?start"}},
+        std::move(left), std::move(right), 0,
+        std::numeric_limits<size_t>::max());
 
-  auto resultTable = T->computeResultOnlyForTesting();
-  ASSERT_THAT(resultTable.idTable(),
-              ::testing::UnorderedElementsAreArray(expected));
+    auto resultTable = T->computeResultOnlyForTesting();
+    ASSERT_THAT(resultTable.idTable(),
+                ::testing::UnorderedElementsAreArray(expected));
+  }
 }
 
 TEST_P(TransitivePathTest, rightBoundToVar) {

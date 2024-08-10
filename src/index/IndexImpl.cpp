@@ -41,18 +41,15 @@ static constexpr size_t NUM_EXTERNAL_SORTERS_AT_SAME_TIME = 2u;
 
 // _____________________________________________________________________________
 IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
-    : allocator_{std::move(allocator)} {};
+    : allocator_{std::move(allocator)} {
+  globalSingletonIndex_ = this;
+};
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
     std::shared_ptr<TurtleParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
-  // first save the total number of words, this is needed to initialize the
-  // dense IndexMetaData variants
-  totalVocabularySize_ = indexBuilderData.vocabularyMetaData_.numWordsTotal_;
-  LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
 
   auto firstSorter = convertPartialToGlobalIds(
       *indexBuilderData.idTriples, indexBuilderData.actualPartialSizes,
@@ -101,7 +98,7 @@ auto lazyScanWithPermutedColumns(auto& sorterPtr, auto columnIndices) {
 auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
                                    auto resultCallback) {
   auto projection = [](const auto& row) -> Id { return row[0]; };
-  auto projectionForComparator = []<typename T>(const T& rowOrId) {
+  auto projectionForComparator = []<typename T>(const T& rowOrId) -> const Id& {
     if constexpr (ad_utility::SimilarTo<T, Id>) {
       return rowOrId;
     } else {
@@ -109,7 +106,8 @@ auto lazyOptionalJoinOnFirstColumn(auto& leftInput, auto& rightInput,
     }
   };
   auto comparator = [&projectionForComparator](const auto& l, const auto& r) {
-    return projectionForComparator(l) < projectionForComparator(r);
+    return projectionForComparator(l).compareWithoutLocalVocab(
+               projectionForComparator(r)) < 0;
   };
 
   // There are 5 columns in the result (3 from the triple, as well as subject
@@ -437,15 +435,11 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
                                                           std::string_view b) {
       return (*cmp)(a, b, decltype(vocab_)::SortLevel::TOTAL);
     };
-    auto internalVocabularyAction = vocab_.makeWordWriterForInternalVocabulary(
-        onDiskBase_ + INTERNAL_VOCAB_SUFFIX);
-    internalVocabularyAction.readableName() = "internal vocabulary";
-    auto externalVocabularyAction = vocab_.makeWordWriterForExternalVocabulary(
-        onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
-    externalVocabularyAction.readableName() = "external vocabulary";
+    auto wordCallback = vocab_.makeWordWriter(onDiskBase_ + VOCAB_SUFFIX);
+    wordCallback.readableName() = "internal vocabulary";
     return ad_utility::vocabulary_merger::mergeVocabulary(
-        onDiskBase_, numFiles, sortPred, internalVocabularyAction,
-        externalVocabularyAction, memoryLimitIndexBuilding());
+        onDiskBase_, numFiles, sortPred, wordCallback,
+        memoryLimitIndexBuilding());
   }();
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
@@ -708,12 +702,11 @@ size_t IndexImpl::createPermutationPair(size_t numColumns,
 void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   setOnDiskBase(onDiskBase);
   readConfiguration();
-  vocab_.readFromFile(onDiskBase_ + INTERNAL_VOCAB_SUFFIX,
-                      onDiskBase_ + EXTERNAL_VOCAB_SUFFIX);
+  vocab_.readFromFile(onDiskBase_ + VOCAB_SUFFIX);
+  globalSingletonComparator_ = &vocab_.getCaseComparator();
 
-  totalVocabularySize_ = vocab_.size() + vocab_.getExternalVocab().size();
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
-             << totalVocabularySize_ << std::endl;
+             << vocab_.size() << std::endl;
 
   pso_.loadFromDisk(onDiskBase_);
   pos_.loadFromDisk(onDiskBase_);
@@ -1294,14 +1287,12 @@ size_t IndexImpl::getCardinality(const TripleComponent& comp,
   return 0;
 }
 
-// TODO<joka921> Once we have an overview over the folding this logic should
-// probably not be in the index class.
-std::optional<string> IndexImpl::idToOptionalString(VocabIndex id) const {
-  return vocab_.indexToOptionalString(id);
-}
+// ___________________________________________________________________________
+std::string IndexImpl::indexToString(VocabIndex id) const { return vocab_[id]; }
 
-std::optional<string> IndexImpl::idToOptionalString(WordVocabIndex id) const {
-  return textVocab_.indexToOptionalString(id);
+// ___________________________________________________________________________
+std::string_view IndexImpl::indexToString(WordVocabIndex id) const {
+  return textVocab_[id];
 }
 
 // ___________________________________________________________________________
@@ -1367,46 +1358,41 @@ vector<float> IndexImpl::getMultiplicities(
 
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  std::optional<Id> col0Id = col0String.toValueId(getVocab());
-  std::optional<Id> col1Id =
-      col1String.has_value() ? col1String.value().get().toValueId(getVocab())
-                             : std::nullopt;
-  if (!col0Id.has_value() || (col1String.has_value() && !col1Id.has_value())) {
-    size_t numColumns = col1String.has_value() ? 1 : 2;
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     cancellationHandle->throwIfCancelled();
-    return IdTable{numColumns + additionalColumns.size(), allocator_};
+    return IdTable{
+        scanSpecificationAsTc.numColumns() + additionalColumns.size(),
+        allocator_};
   }
-  return scan(col0Id.value(), col1Id, permutation, additionalColumns,
+  return scan(scanSpecification.value(), permutation, additionalColumns,
               cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
 IdTable IndexImpl::scan(
-    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
-  return getPermutation(p).scan({col0Id, col1Id, std::nullopt},
-                                additionalColumns, cancellationHandle,
-                                limitOffset);
+  return getPermutation(p).scan(scanSpecification, additionalColumns,
+                                cancellationHandle, limitOffset);
 }
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
-    const TripleComponent& col0, const TripleComponent& col1,
+    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
     const Permutation::Enum& permutation) const {
-  std::optional<Id> col0Id = col0.toValueId(getVocab());
-  std::optional<Id> col1Id = col1.toValueId(getVocab());
-  if (!col0Id.has_value() || !col1Id.has_value()) {
+  const Permutation& p = getPermutation(permutation);
+  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
+  if (!scanSpecification.has_value()) {
     return 0;
   }
-  const Permutation& p = getPermutation(permutation);
-  return p.getResultSizeOfScan({col0Id.value(), col1Id.value(), std::nullopt});
+  return p.getResultSizeOfScan(scanSpecification.value());
 }
 
 // _____________________________________________________________________________

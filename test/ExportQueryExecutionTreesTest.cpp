@@ -214,7 +214,7 @@ static std::string makeXMLHeader(
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Integers) {
+TEST(ExportQueryExecutionTrees, Integers) {
   std::string kg =
       "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
@@ -280,7 +280,7 @@ TEST(ExportQueryExecutionTree, Integers) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Bool) {
+TEST(ExportQueryExecutionTrees, Bool) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
 
@@ -334,7 +334,7 @@ TEST(ExportQueryExecutionTree, Bool) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UnusedVariable) {
+TEST(ExportQueryExecutionTrees, UnusedVariable) {
   std::string kg = "<s> <p> true . <s> <p> false.";
   std::string query = "SELECT ?o WHERE {?s ?p ?x} ORDER BY ?s";
   std::string expectedXml = makeXMLHeader({"o"}) + R"(
@@ -370,7 +370,7 @@ TEST(ExportQueryExecutionTree, UnusedVariable) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Floats) {
+TEST(ExportQueryExecutionTrees, Floats) {
   std::string kg =
       "<s> <p> 42.2 . <s> <p> -42019234865.781e12 . <s> <p> "
       "4.012934858173560e-12";
@@ -438,7 +438,7 @@ TEST(ExportQueryExecutionTree, Floats) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Dates) {
+TEST(ExportQueryExecutionTrees, Dates) {
   std::string kg =
       "<s> <p> "
       "\"1950-01-01T00:00:00\"^^<http://www.w3.org/2001/XMLSchema#dateTime>.";
@@ -497,7 +497,7 @@ TEST(ExportQueryExecutionTree, Dates) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, Entities) {
+TEST(ExportQueryExecutionTrees, Entities) {
   std::string kg = "PREFIX qlever: <http://qlever.com/> \n <s> <p> qlever:o";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -544,7 +544,7 @@ TEST(ExportQueryExecutionTree, Entities) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
+TEST(ExportQueryExecutionTrees, LiteralWithLanguageTag) {
   std::string kg = "<s> <p> \"\"\"Some\"Where\tOver,\"\"\"@en-ca.";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -593,7 +593,7 @@ TEST(ExportQueryExecutionTree, LiteralWithLanguageTag) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
+TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
   std::string kg = "<s> <p> \"something\"^^<www.example.org/bim>";
   std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -641,7 +641,7 @@ TEST(ExportQueryExecutionTree, LiteralWithDatatype) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TestWithIriEscaped) {
+TEST(ExportQueryExecutionTrees, TestWithIriEscaped) {
   std::string kg = "<s> <p> <https://\\u0009:\\u0020)\\u000AtestIriKg>";
   std::string objectQuery = "SELECT ?o WHERE { ?s ?p ?o }";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -685,7 +685,7 @@ testIriKg</uri></binding>
   runConstructQueryTestCase(testCaseConstruct);
 }
 
-TEST(ExportQueryExecutionTree, TestWithIriExtendedEscaped) {
+TEST(ExportQueryExecutionTrees, TestWithIriExtendedEscaped) {
   std::string kg =
       "<s> <p>"
       "<iriescaped\\u0001o\\u0002e\\u0003i\\u0004o\\u0005u\\u0006e\\u00"
@@ -758,7 +758,7 @@ TEST(ExportQueryExecutionTree, TestWithIriExtendedEscaped) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TestIriWithEscapedIriString) {
+TEST(ExportQueryExecutionTrees, TestIriWithEscapedIriString) {
   std::string kg = "<s> <p> \" hallo\\n\\t welt\"";
   std::string objectQuery =
       "SELECT ?o WHERE { "
@@ -803,7 +803,7 @@ TEST(ExportQueryExecutionTree, TestIriWithEscapedIriString) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, UndefinedValues) {
+TEST(ExportQueryExecutionTrees, UndefinedValues) {
   std::string kg = "<s> <p> <o>";
   std::string query =
       "SELECT ?o WHERE {?s <p> <o> OPTIONAL {?s <p2> ?o}} ORDER BY ?o";
@@ -842,7 +842,7 @@ TEST(ExportQueryExecutionTree, UndefinedValues) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BlankNode) {
+TEST(ExportQueryExecutionTrees, BlankNode) {
   std::string kg = "<s> <p> _:blank";
   std::string objectQuery = "SELECT ?o WHERE {?s ?p ?o } ORDER BY ?o";
   std::string expectedXml = makeXMLHeader({"o"}) +
@@ -868,7 +868,7 @@ TEST(ExportQueryExecutionTree, BlankNode) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, TextIndex) {
+TEST(ExportQueryExecutionTrees, TextIndex) {
   std::string kg = "<s> <p> \"alpha beta\". <s2> <p2> \"alphax betax\". ";
   std::string objectQuery =
       "SELECT ?o WHERE {<s> <p> ?t. ?text ql:contains-entity ?t .?text "
@@ -894,7 +894,7 @@ TEST(ExportQueryExecutionTree, TextIndex) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, MultipleVariables) {
+TEST(ExportQueryExecutionTrees, MultipleVariables) {
   std::string kg = "<s> <p> <o>";
   std::string objectQuery = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string expectedXml = makeXMLHeader({"p", "o"}) +
@@ -931,7 +931,7 @@ TEST(ExportQueryExecutionTree, MultipleVariables) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, BinaryExport) {
+TEST(ExportQueryExecutionTrees, BinaryExport) {
   std::string kg = "<s> <p> 31 . <s> <o> 42";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string result =
@@ -956,7 +956,7 @@ TEST(ExportQueryExecutionTree, BinaryExport) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTree, CornerCases) {
+TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string kg = "<s> <p> <o>";
   std::string query = "SELECT ?p ?o WHERE {<s> ?p ?o } ORDER BY ?p ?o";
   std::string constructQuery =
