@@ -38,18 +38,18 @@ void SpatialJoin::parseMaxDistance() {
   std::string errormessage =
       "parsing of the maximum distance for the "
       "SpatialJoin operation was not possible";
-  if (input.substr(0, MAX_DIST_IN_METERS.size()) == MAX_DIST_IN_METERS &&
-      input[input.size() - 1] == '>') {
+  auto throwIfNotADigit = [&](const char a) {
+    if (!isdigit(a)) {
+      AD_THROW(errormessage);
+    }
+  };
+  if (input.starts_with(MAX_DIST_IN_METERS) && input[input.size() - 1] == '>') {
     try {
       std::string number =
           input.substr(MAX_DIST_IN_METERS.size(),
                        input.size() - MAX_DIST_IN_METERS.size() -
                            1);  // -1: compensate for >
-      for (size_t i = 0; i < number.size(); i++) {
-        if (!isdigit(number.at(i))) {
-          AD_THROW(errormessage);
-        }
-      }
+      std::ranges::for_each(number, throwIfNotADigit);
       maxDist_ = std::stoll(number);
     } catch (const std::exception& e) {
       LOG(INFO) << "exception: " << e.what() << std::endl;
@@ -80,7 +80,7 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
 }
 
 // ____________________________________________________________________________
-bool SpatialJoin::isConstructed() {
+bool SpatialJoin::isConstructed() const {
   if (childLeft_ && childRight_) {
     return true;
   }
@@ -111,7 +111,6 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  // return "Descriptor of SpatialJoin";
   return "SpatialJoin: " + triple_.value().s_.getVariable().name() +
          " max distance of " + std::to_string(maxDist_) + " to " +
          triple_.value().o_.getVariable().name();
@@ -145,7 +144,16 @@ size_t SpatialJoin::getResultWidth() const {
 // ____________________________________________________________________________
 size_t SpatialJoin::getCostEstimate() {
   if (childLeft_ && childRight_) {
-    return childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+    size_t inputEstimate =
+        childLeft_->getSizeEstimate() * childRight_->getSizeEstimate();
+    if (useBaselineAlgorithm_) {
+      return inputEstimate * inputEstimate;
+    } else {
+      // TODO check after implementation, if it is correct, for now it remains
+      // here because otherwise SonarQube complains about costEstimate and
+      // sizeEstimate having the same implementation
+      return inputEstimate * log(inputEstimate);
+    }
   }
   return 1;  // dummy return, as the class does not have its children yet
 }
@@ -199,16 +207,12 @@ float SpatialJoin::getMultiplicity(size_t col) {
 
 // ____________________________________________________________________________
 bool SpatialJoin::knownEmptyResult() {
-  if (childLeft_) {
-    if (childLeft_->knownEmptyResult()) {
-      return true;
-    }
+  if (childLeft_ && childLeft_->knownEmptyResult()) {
+    return true;
   }
 
-  if (childRight_) {
-    if (childRight_->knownEmptyResult()) {
-      return true;
-    }
+  if (childRight_ && childRight_->knownEmptyResult()) {
+    return true;
   }
 
   // return false if either both children don't have an empty result, only one
@@ -230,39 +234,46 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 long long SpatialJoin::getMaxDist() const { return maxDist_; }
 
 // ____________________________________________________________________________
-Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
-  auto betweenQuotes = [](std::string extractFrom) {
-    // returns everything between the first two quotes. If the string does not
-    // contain two quotes, the string is returned as a whole
-    //
-    size_t pos1 = extractFrom.find("\"", 0);
-    size_t pos2 = extractFrom.find("\"", pos1 + 1);
-    if (pos1 != std::string::npos && pos2 != std::string::npos) {
-      return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
-    } else {
-      return extractFrom;
-    }
+std::string SpatialJoin::betweenQuotes(std::string extractFrom) {
+  // returns everything between the first two quotes. If the string does
+  // not contain two quotes, the string is returned as a whole
+  //
+  size_t pos1 = extractFrom.find("\"", 0);
+  size_t pos2 = extractFrom.find("\"", pos1 + 1);
+  if (pos1 != std::string::npos && pos2 != std::string::npos) {
+    return extractFrom.substr(pos1 + 1, pos2 - pos1 - 1);
+  } else {
+    return extractFrom;
+  }
+}
+
+// ____________________________________________________________________________
+long long SpatialJoin::computeDist(const IdTable* resLeft,
+                                   const IdTable* resRight, size_t rowLeft,
+                                   size_t rowRight, ColumnIndex leftPointCol,
+                                   ColumnIndex rightPointCol) {
+  auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
+    return ExportQueryExecutionTrees::idToStringAndType(
+               getExecutionContext()->getIndex(), restable->at(row, col), {})
+        .value()
+        .first;
   };
 
-  auto computeDist = [&](const IdTable* resLeft, const IdTable* resRight,
-                         size_t rowLeft, size_t rowRight,
-                         ColumnIndex leftPointCol, ColumnIndex rightPointCol) {
-    auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
-      return ExportQueryExecutionTrees::idToStringAndType(
-                 getExecutionContext()->getIndex(), restable->at(row, col), {})
-          .value()
-          .first;
-    };
+  std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
+  std::string point2 = getPoint(resRight, rowRight, rightPointCol);
 
-    std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
-    std::string point2 = getPoint(resRight, rowRight, rightPointCol);
+  point1 = betweenQuotes(point1);
+  point2 = betweenQuotes(point2);
+  double dist = ad_utility::detail::wktDistImpl(point1, point2);
+  return static_cast<long long>(dist * 1000);  // convert to meters
+}
 
-    point1 = betweenQuotes(point1);
-    point2 = betweenQuotes(point2);
-    double dist = ad_utility::detail::wktDistImpl(point1, point2);
-    return static_cast<long long>(dist * 1000);  // convert to meters
-  };
-
+// ____________________________________________________________________________
+void SpatialJoin::addResultTableEntry(IdTable* result,
+                                      const IdTable* resultLeft,
+                                      const IdTable* resultRight,
+                                      size_t rowLeft, size_t rowRight,
+                                      long long distance) {
   // this lambda function copies elements from copyFrom
   // into the table res. It copies them into the row
   // rowIndRes and column column colIndRes. It returns the column number
@@ -278,16 +289,35 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return colIndRes;
   };
 
-  std::shared_ptr<const Result> resLeft_ = childLeft_->getResult();
-  std::shared_ptr<const Result> resRight_ = childRight_->getResult();
-  const IdTable* resLeft = &resLeft_->idTable();
-  const IdTable* resRight = &resRight_->idTable();
+  auto resrow = result->numRows();
+  result->emplace_back();
+  // add columns to result table
+  size_t rescol = 0;
+  rescol = addColumns(result, resultLeft, resrow, rescol, rowLeft);
+  rescol = addColumns(result, resultRight, resrow, rescol, rowRight);
+
+  if (addDistToResult_) {
+    result->at(resrow, rescol) = ValueId::makeFromInt(distance);
+    // rescol isn't used after that in this function, but future updates,
+    // which add additional columns, would need to remember to increase
+    // rescol at this place otherwise. If they forget to do this, the
+    // distance column will be overwritten, the variableToColumnMap will
+    // not work and so on
+    rescol += 1;
+  }
+}
+
+// ____________________________________________________________________________
+Result SpatialJoin::baselineAlgorithm() {
+  std::shared_ptr<const Result> resTableLeft = childLeft_->getResult();
+  std::shared_ptr<const Result> resTableRight = childRight_->getResult();
+  const IdTable* resLeft = &resTableLeft->idTable();
+  const IdTable* resRight = &resTableRight->idTable();
   size_t numColumns = getResultWidth();
   IdTable result{numColumns, _executionContext->getAllocator()};
 
   // cartesian product with a distance of at most maxDist between the two
   // objects
-  size_t resrow = 0;
   auto varColMapLeft =
       childLeft_->getRootOperation()->getExternallyVisibleVariableColumns();
   auto varColMapRight =
@@ -298,26 +328,25 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
       varColMapRight[rightChildVariable_.value()].columnIndex_;
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
-      size_t rescol = 0;
       long long dist = computeDist(resLeft, resRight, rowLeft, rowRight,
                                    leftJoinCol, rightJoinCol);
       if (dist <= maxDist_) {
-        result.emplace_back();
-        
-        // add columns to result table
-        rescol = addColumns(&result, resLeft, resrow, rescol, rowLeft);
-        rescol = addColumns(&result, resRight, resrow, rescol, rowRight);
-
-        if (addDistToResult_) {
-          result.at(resrow, rescol) = ValueId::makeFromInt(dist);
-          rescol += 1;
-        }
-
-        resrow += 1;
+        addResultTableEntry(&result, resLeft, resRight, rowLeft, rowRight,
+                            dist);
       }
     }
   }
   return Result(std::move(result), std::vector<ColumnIndex>{}, LocalVocab{});
+}
+
+// ____________________________________________________________________________
+Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
+  if (useBaselineAlgorithm_) {
+    return std::move(baselineAlgorithm());
+  } else {
+    return Result{IdTable{0, _executionContext->getAllocator()},
+                  std::vector<ColumnIndex>{}, LocalVocab{}};
+  }
 }
 
 // ____________________________________________________________________________
@@ -350,8 +379,8 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // in case a result table contains entries, which aren't contained
     // in the varColMap
     for (size_t i = 0; i < varColsRightVec.size(); i++) {
-      variableToColumnMap[varColsRightVec.at(i).first] =
-          makeCol(ColumnIndex{sizeLeft + varColsRightVec.at(i).second.columnIndex_});
+      variableToColumnMap[varColsRightVec.at(i).first] = makeCol(
+          ColumnIndex{sizeLeft + varColsRightVec.at(i).second.columnIndex_});
     }
     if (addDistToResult_) {
       variableToColumnMap[Variable{nameDistanceInternal_}] =

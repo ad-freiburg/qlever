@@ -58,21 +58,25 @@ class SpatialJoin : public Operation {
   // is returned. This function is needed in the QueryPlanner, so that the
   // QueryPlanner stops trying to add children, after the SpatialJoin is
   // already constructed
-  bool isConstructed();
+  bool isConstructed() const;
 
   // this function is used to give the maximum distance for testing purposes
   long long getMaxDist() const;
 
-  const std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() {
+  std::shared_ptr<QueryExecutionTree> onlyForTestingGetLeftChild() const {
     return childLeft_;
   }
 
-  const std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() {
+  std::shared_ptr<QueryExecutionTree> onlyForTestingGetRightChild() const {
     return childRight_;
   }
 
   void onlyForTestingSetAddDistToResult(bool addDistToResult) {
     addDistToResult_ = addDistToResult;
+  }
+
+  void onlyForBenchmarkingSetUseBaselineAlgorithm(bool useBaselineAlgorithm) {
+    useBaselineAlgorithm_ = useBaselineAlgorithm;
   }
 
   const string& getInternalDistanceName() const {
@@ -81,6 +85,14 @@ class SpatialJoin : public Operation {
 
  private:
   void parseMaxDistance();
+  std::string betweenQuotes(std::string extractFrom);
+  long long computeDist(const IdTable* resLeft, const IdTable* resRight,
+                        size_t rowLeft, size_t rowRight,
+                        ColumnIndex leftPointCol, ColumnIndex rightPointCol);
+  void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
+                           const IdTable* resultRight, size_t rowLeft,
+                           size_t rowRight, long long distance);
+  Result baselineAlgorithm();
   std::optional<Variable> leftChildVariable_ = std::nullopt;
   std::optional<Variable> rightChildVariable_ = std::nullopt;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
@@ -92,4 +104,5 @@ class SpatialJoin : public Operation {
   // between the two objects
   bool addDistToResult_ = true;
   const string nameDistanceInternal_ = "?distOfTheTwoObjectsAddedInternally";
+  bool useBaselineAlgorithm_ = true;
 };
