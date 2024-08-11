@@ -192,9 +192,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
       child = childRight_;
       column -= childLeft_->getResultWidth();
     }
-    auto distinctnessChild = getDistinctness(
-        child, column);  // TODO fix mistake of col for right child (subtract
-                         // resultwidth of left child)
+    auto distinctnessChild = getDistinctness(child, column);
     return getSizeEstimate() / distinctnessChild;
   } else {
     return 1;
