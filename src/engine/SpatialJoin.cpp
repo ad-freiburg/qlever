@@ -175,33 +175,29 @@ float SpatialJoin::getMultiplicity(size_t col) {
     return size / multiplicity;
   };
 
-  if (childLeft_ && childRight_) {
-    auto varColsLeftMap = childLeft_->getVariableColumns();
-    auto varColsRightMap = childRight_->getVariableColumns();
-    auto varColMap = computeVariableToColumnMap();
-    auto colVarMap = copySortedByColumnIndex(varColMap);
-    Variable var = colVarMap.at(col).first;
-    auto left = varColsLeftMap.find(var);
-    auto right = varColsRightMap.find(var);
+  if (col >= getResultWidth()) {
+    AD_FAIL();
+  }
 
-    if (var.name() == nameDistanceInternal_) {
+  if (childLeft_ && childRight_) {
+    std::shared_ptr<QueryExecutionTree> child;
+    size_t column = col;
+    if (addDistToResult_ && col == getResultWidth() - 1) {
       // as each distance is very likely to be unique (even if only after
       // a few decimal places), no multiplicities are assumed
       return 1;
-    } else if (left != varColsLeftMap.end()) {
-      auto distinctnessChild =
-          getDistinctness(childLeft_, left->second.columnIndex_);
-      return getSizeEstimate() / distinctnessChild;
-    } else if (right != varColsRightMap.end()) {
-      auto distinctnessChild =
-          getDistinctness(childRight_, right->second.columnIndex_);
-      return getSizeEstimate() / distinctnessChild;
+    } else if (col < childLeft_->getResultWidth()) {
+      child = childLeft_;
     } else {
-      AD_FAIL();  // this should not be reachable
+      child = childRight_;
+      column -= childLeft_->getResultWidth();
     }
-    return 1;  // to prevent compiler warning
+    auto distinctnessChild = getDistinctness(
+        child, column);  // TODO fix mistake of col for right child (subtract
+                         // resultwidth of left child)
+    return getSizeEstimate() / distinctnessChild;
   } else {
-    return 1;  // dummy return, as the class does not have its children yet
+    return 1;
   }
 }
 
