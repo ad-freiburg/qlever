@@ -4,7 +4,7 @@
 #ifndef QLEVER_LAZY_JSON_PARSER_H_
 #define QLEVER_LAZY_JSON_PARSER_H_
 
-#include "util/json.h"
+#include "util/Generator.h"
 
 namespace ad_utility {
 /*
@@ -16,19 +16,29 @@ namespace ad_utility {
  */
 class LazyJsonParser {
  public:
-  explicit LazyJsonParser(std::vector<std::string> arrayPath);
+  // Parse partial json chunks yielding them reconstructed.
+  [[nodiscard]] static cppcoro::generator<std::string> parse(
+      cppcoro::generator<std::string> partJson,
+      const std::vector<std::string>& arrayPath) {
+    LazyJsonParser p(arrayPath);
+    for (const auto& chunk : partJson) {
+      co_yield p.parseChunk(chunk);
+    }
+  }
 
-  // TODO<unexenu> this should take a generator as argument instead
-  static std::string parse(const std::string& s,
-                           const std::vector<std::string>& arrayPath) {
+  // As above just on a single string.
+  [[nodiscard]] static std::string parse(
+      const std::string& s, const std::vector<std::string>& arrayPath) {
     LazyJsonParser p(arrayPath);
     return p.parseChunk(s);
   }
 
+ private:
+  explicit LazyJsonParser(std::vector<std::string> arrayPath);
+
   // Parses a chunk of JSON data and returns it with reconstructed structure.
   std::string parseChunk(const std::string& inStr);
 
- private:
   // Checks if the current path is the arrayPath.
   bool isInArrayPath() const { return curPath_ == arrayPath_; }
 

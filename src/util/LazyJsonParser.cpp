@@ -6,6 +6,7 @@
 
 namespace ad_utility {
 
+// ____________________________________________________________________________
 LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
     : arrayPath_(arrayPath),
       prefixInArray_(absl::StrCat(
@@ -16,6 +17,7 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
           "[")),
       suffixInArray_(absl::StrCat("]", std::string(arrayPath.size(), '}'))) {}
 
+// ____________________________________________________________________________
 std::string LazyJsonParser::parseChunk(const std::string& inStr) {
   size_t idx = input_.size();
   absl::StrAppend(&input_, inStr);
@@ -95,6 +97,7 @@ std::string LazyJsonParser::parseChunk(const std::string& inStr) {
   return res;
 }
 
+// ____________________________________________________________________________
 size_t LazyJsonParser::parseArrayPath(size_t& idx) {
   size_t lastObjectEnd = 0;
   for (; idx < input_.size(); ++idx) {
@@ -131,6 +134,7 @@ size_t LazyJsonParser::parseArrayPath(size_t& idx) {
   return lastObjectEnd;
 }
 
+// ____________________________________________________________________________
 void LazyJsonParser::parseString(size_t& idx) {
   for (; idx < input_.size(); ++idx) {
     if (isEscaped_) {

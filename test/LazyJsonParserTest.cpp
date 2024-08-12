@@ -8,7 +8,6 @@
 #include "util/LazyJsonParser.h"
 
 using ad_utility::LazyJsonParser;
-using nlohmann::json;
 
 TEST(parseTest, parse) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
@@ -23,64 +22,62 @@ TEST(parseTest, parse) {
   // CHECK 2: Handle invalid JSON.
   EXPECT_NO_THROW(LazyJsonParser::parse("[{x}]", arrayPath));
   EXPECT_NO_THROW(LazyJsonParser::parse("]{\"s\"}}[]", {}));
-}
 
-TEST(parseTest, parseChunk) {
-  const std::vector<std::string> arrayPath = {"results", "bindings"};
+  // Check if the parser yields the expected results when parsing each char
+  // individually.
+  auto expectYields = [&arrayPath](const std::string& s,
+                                   const std::vector<std::string>& exp) {
+    auto yieldChars =
+        [](const std::string& s) -> cppcoro::generator<std::string> {
+      for (auto& c : s) {
+        co_yield std::string(1, c);
+      }
+    };
+    auto parsedResult = LazyJsonParser::parse(yieldChars(s), arrayPath);
 
-  // Let the parser parse each char of s individually, expect to return the
-  // expected result when called to parse the last char.
-  auto expectYieldOnLastChar = [](LazyJsonParser& p, const std::string& s,
-                                  const std::string& exp) {
-    for (size_t i = 0; i < s.size() - 1; ++i) {
-      EXPECT_EQ(p.parseChunk(s.substr(i, 1)), "");
+    size_t expIdx = 0;
+    for (const auto& y : parsedResult) {
+      if (!y.empty()) {
+        ASSERT_TRUE(expIdx < exp.size());
+        ASSERT_EQ(y, exp[expIdx]);
+        ++expIdx;
+      }
     }
-    EXPECT_EQ(p.parseChunk(s.substr(s.size() - 1, 1)), exp);
+    EXPECT_EQ(expIdx, exp.size());
   };
 
-  // CHECK 1: Normal result split at every char.
-  const std::string result1a =
-      "{\"head\": {\"vars\": [\"x\", \"y\"]}, \"results\": {\"bindings\": ["
-      "{\"x\": {\"value\": 1, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}, "
-      "\"y\": {\"value\": 2, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}},";
+  // CHECK 3: Normal result split at every char.
+  const std::string result3a =
+      R"({"head": {"vars": ["x", "y"]}, "results": {"bindings": ["
+      "{"x": {"value": 1, "datatype": "
+      ""http://www.w3.org/2001/XMLSchema#integer"}, "
+      ""y": {"value": 2, "datatype": "
+      ""http://www.w3.org/2001/XMLSchema#integer"}},)";
 
-  const std::string result1b =
-      "{\"x\": {\"value\": 3, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}, "
-      "\"y\": {\"value\": 4, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}}]}}";
+  const std::string result3b =
+      R"({"x": {"value": 3, "datatype": ")
+      ""http://www.w3.org/2001/XMLSchema#integer"}, "
+      ""y": {"value": 4, "datatype": "
+      ""http://www.w3.org/2001/XMLSchema#integer"}}]}})";
 
-  LazyJsonParser p2(arrayPath);
+  expectYields(absl::StrCat(result3a, result3b),
+               {absl::StrCat(result3a.substr(0, result3a.size() - 1), "]}}"),
+                absl::StrCat(R"({"results": {"bindings": [)", result3b)});
 
-  expectYieldOnLastChar(
-      p2, result1a,
-      absl::StrCat(result1a.substr(0, result1a.size() - 1), "]}}"));
-  expectYieldOnLastChar(
-      p2, result1b, absl::StrCat("{\"results\": {\"bindings\": [", result1b));
-
-  // CHECK 2: Result with changed order of results-/head object.
+  // CHECK 4: Result with changed order of results-/head object.
   // Also added another key-value pair in the results path and nested arrays.
-  const std::string result2a =
-      "{\"results\": {\"bindings\": ["
-      "{\"x\": {\"value\": 5, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}, "
-      "\"y\": {\"value\": 6, \"datatype\": "
-      "\"http://www.w3.org/2001/XMLSchema#integer\"}},";
-  const std::string result2b = "[[1,2], [3,4]]";
-  const std::string result2c =
-      "], \"key\": [[1,2], [3,4]]}, "
-      "\"head\": {\"vars\": [\"x\", \"y\"]}}";
+  const std::string result4a =
+      R"({"results": {"bindings": ["
+      "{"x": {"value": 5, "datatype": "
+      ""http://www.w3.org/2001/XMLSchema#integer"}, "
+      ""y": {"value": 6, "datatype": "
+      ""http://www.w3.org/2001/XMLSchema#integer"}},)";
+  const std::string result4b =
+      R"([[1,2], [3,4]]"
+      "], "key": [[1,2], [3,4]]}, "
+      ""head": {"vars": ["x", "y"]}})";
 
-  LazyJsonParser p3(arrayPath);
-  expectYieldOnLastChar(
-      p3, result2a,
-      absl::StrCat(result2a.substr(0, result2a.size() - 1), "]}}"));
-
-  expectYieldOnLastChar(p3, result2b, "");
-
-  expectYieldOnLastChar(
-      p3, result2c,
-      absl::StrCat("{\"results\": {\"bindings\": [", result2b, result2c));
+  expectYields(result4a + result4b,
+               {absl::StrCat(result4a.substr(0, result4a.size() - 1), "]}}"),
+                absl::StrCat(R"({"results": {"bindings": [)", result4b)});
 }
