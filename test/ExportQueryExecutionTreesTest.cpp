@@ -101,10 +101,6 @@ void runSelectQueryTestCase(
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, csv, useTextIndex),
       testCase.resultCsv);
-  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
-                testCase.kg, testCase.query, sparqlJson, useTextIndex)),
-            testCase.resultSparqlJSON);
-
   auto qleverJSONResult =
       runJSONQuery(testCase.kg, testCase.query, qleverJson, useTextIndex);
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
@@ -116,6 +112,10 @@ void runSelectQueryTestCase(
   auto sparqlJSONResult =
       runJSONQuery(testCase.kg, testCase.query, sparqlJson, useTextIndex);
   EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
+
+  EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
+                testCase.kg, testCase.query, sparqlJson, useTextIndex)),
+            testCase.resultSparqlJSON);
 
   // TODO<joka921> Use this for proper testing etc.
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,

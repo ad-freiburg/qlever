@@ -621,13 +621,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
-  co_yield absl::StrCat(
-      R"({"head":{"vars":[)",
-      absl::StrJoin(vars, ",",
-                    [](std::string* out, const std::string& s) {
-                      absl::StrAppend(out, "\"", s, "\"");
-                    }),
-      R"(]},"results":{"bindings":[)");
+  co_yield absl::StrCat("{\"head\":{\"vars\":[\"", absl::StrJoin(vars, "\",\""),
+                        "\"]},\"results\":{\"bindings\":[");
 
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
@@ -640,6 +635,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     nlohmann::ordered_json binding = {};
     for (const auto& column : columns) {
       const auto& currentId = idTable(i, column->columnIndex_);
+      const auto& optionalValue = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, result->localVocab());
       auto optionalStringAndType = idToStringAndType(
           qet.getQec()->getIndex(), currentId, result->localVocab());
 
