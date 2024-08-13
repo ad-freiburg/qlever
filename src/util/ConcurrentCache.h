@@ -100,10 +100,11 @@ class ResultInProgress {
   // have called or will call getResult(). Check that none of the other threads
   // waiting for the result have already finished or were aborted.
   void finish(shared_ptr<Value> result) {
-    std::lock_guard lockGuard(_mutex);
+    std::unique_lock lockGuard(_mutex);
     AD_CONTRACT_CHECK(_status == Status::IN_PROGRESS);
     _status = Status::FINISHED;
     _result = std::move(result);
+    lockGuard.unlock();
     _conditionVariable.notify_all();
   }
 
@@ -113,8 +114,9 @@ class ResultInProgress {
   // will terminate.
   void abort() {
     AD_CONTRACT_CHECK(_status == Status::IN_PROGRESS);
-    std::lock_guard lockGuard(_mutex);
+    std::unique_lock lockGuard(_mutex);
     _status = Status::ABORTED;
+    lockGuard.unlock();
     _conditionVariable.notify_all();
   }
 
