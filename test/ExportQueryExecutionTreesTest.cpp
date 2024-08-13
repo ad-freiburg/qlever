@@ -13,7 +13,6 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
-using namespace std::chrono_literals;
 using ::testing::HasSubstr;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -1080,9 +1079,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(idTable), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-
-  std::chrono::milliseconds time = 0ms;
-  auto generator = ExportQueryExecutionTrees::getIdTables(result, time);
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1092,8 +1089,6 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
-
-  EXPECT_EQ(time, 0ms);
 }
 
 // _____________________________________________________________________________
@@ -1116,8 +1111,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
-  auto generator = ExportQueryExecutionTrees::getIdTables(result, time);
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1137,38 +1131,6 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 }
 
 // _____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, getIdTablesTimingInfoIsCorrect) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-
-    std::this_thread::sleep_for(1ms);
-
-    co_yield std::move(idTable1);
-  }();
-
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time = 0ms;
-  auto generator = ExportQueryExecutionTrees::getIdTables(result, time);
-
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(iterator->size(), 1);
-  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(1));
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
-
-#ifdef _QLEVER_NO_TIMING_TESTS
-  EXPECT_GE(time, 1ms);
-#else
-  EXPECT_EQ(time, 1ms);
-#endif
-}
-
-// _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
     IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
@@ -1182,9 +1144,8 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 1, ._offset = 1}, result, time);
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1215,9 +1176,8 @@ TEST(ExportQueryExecutionTrees,
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result, time);
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1252,9 +1212,8 @@ TEST(ExportQueryExecutionTrees,
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3}, result, time);
+      LimitOffsetClause{._limit = 3}, result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1293,9 +1252,8 @@ TEST(ExportQueryExecutionTrees,
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 3, ._offset = 1}, result, time);
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
@@ -1342,9 +1300,8 @@ TEST(ExportQueryExecutionTrees,
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
       [](const auto&) { return false; }, [](auto) {});
-  std::chrono::milliseconds time;
   auto generator = ExportQueryExecutionTrees::getRowIndices(
-      LimitOffsetClause{._limit = 5, ._offset = 2}, result, time);
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
