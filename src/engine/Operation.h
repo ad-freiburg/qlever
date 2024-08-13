@@ -263,7 +263,7 @@ class Operation {
   ProtoResult runComputation(const ad_utility::Timer& timer,
                              ComputationMode computationMode, bool isRoot);
 
-  CacheValue runComputationAndTransformToCache(ad_utility::Timer& timer,
+  CacheValue runComputationAndTransformToCache(const ad_utility::Timer& timer,
                                                ComputationMode computationMode,
                                                const std::string& cacheKey,
                                                bool pinned, bool isRoot);

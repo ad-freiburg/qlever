@@ -138,7 +138,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndTransformToCache(
-    ad_utility::Timer& timer, ComputationMode computationMode,
+    const ad_utility::Timer& timer, ComputationMode computationMode,
     const std::string& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = Result::fromProtoResult(
