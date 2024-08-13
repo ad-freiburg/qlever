@@ -117,7 +117,8 @@ class ExportQueryExecutionTrees {
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> resultTable,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle,
+      std::chrono::milliseconds& totalTime);
 
   /**
    * @brief Convert an `IdTable` (typically from a query result) to a JSON array
@@ -137,14 +138,16 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes& columns,
       std::shared_ptr<const Result> resultTable,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle,
+      std::chrono::milliseconds& totalTime);
 
   // ___________________________________________________________________________
   static nlohmann::json constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
+      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle,
+      std::chrono::milliseconds& totalTime);
 
   // Generate an RDF graph for a CONSTRUCT query.
   static cppcoro::generator<QueryExecutionTree::StringTriple>
@@ -152,7 +155,8 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
-      CancellationHandle cancellationHandle);
+      CancellationHandle cancellationHandle,
+      std::chrono::milliseconds& totalTime);
 
   // ___________________________________________________________________________
   static nlohmann::json selectQueryResultToSparqlJSON(
@@ -183,15 +187,18 @@ class ExportQueryExecutionTrees {
     const IdTable& idTable_;
   };
 
-  static cppcoro::generator<const IdTable&> getIdTables(const Result& result);
+  static cppcoro::generator<const IdTable&> getIdTables(
+      const Result& result, std::chrono::milliseconds& totalTime);
   // Return a range that contains the indices of the rows that have to be
   // exported from the `idTable` given the `LimitOffsetClause`. It takes into
   // account the LIMIT, the OFFSET, and the actual size of the `idTable`
   static cppcoro::generator<IndexWithTable> getRowIndices(
-      LimitOffsetClause limitOffset, const Result& result);
+      LimitOffsetClause limitOffset, const Result& result,
+      std::chrono::milliseconds& totalTime);
 
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
+  FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesTimingInfoIsCorrect);
   FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);
   FRIEND_TEST(ExportQueryExecutionTrees,
               ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped);

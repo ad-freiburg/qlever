@@ -71,7 +71,8 @@ void Operation::recursivelySetTimeConstraint(
 
 // _____________________________________________________________________________
 ProtoResult Operation::runComputation(ad_utility::Timer& timer,
-                                      ComputationMode computationMode) {
+                                      ComputationMode computationMode,
+                                      bool isRoot) {
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
@@ -100,9 +101,20 @@ ProtoResult Operation::runComputation(ad_utility::Timer& timer,
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
   } else {
-    // TODO<RobinTF> check if this is sufficient here or we need more of
-    // `updateRuntimeInformationOnSuccess` functionality here.
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+    result.runOnNewChunkComputed([this, isRoot](
+                                     const IdTable& idTable,
+                                     std::chrono::milliseconds duration) {
+      runtimeInfo().totalTime_ += duration;
+      runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
+      runtimeInfo().numRows_ = idTable.numRows();
+      runtimeInfo().numCols_ = idTable.numColumns();
+      LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
+                 << " x " << idTable.numColumns() << std::endl;
+      if (isRoot) {
+        signalQueryUpdate();
+      }
+    });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
   // already perform it. An example for an operation that directly computes
@@ -127,25 +139,19 @@ ProtoResult Operation::runComputation(ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndTransformToCache(
     ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey, bool pinned) {
+    const std::string& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = Result::fromProtoResult(
-      runComputation(timer, computationMode),
+      runComputation(timer, computationMode, isRoot),
       [&cache](const IdTable& idTable) {
         return cache.getMaxSizeSingleEntry() >= CacheValue::getSize(idTable);
       },
-      [this, &cache, cacheKey, pinned](Result aggregatedResult) {
+      [runtimeInfo = getRuntimeInfoPointer(), &cache, cacheKey,
+       pinned](Result aggregatedResult) {
         cache.tryInsertIfNotPresent(
             pinned, cacheKey,
-            CacheValue{std::move(aggregatedResult), runtimeInfo()});
+            CacheValue{std::move(aggregatedResult), *runtimeInfo});
       });
-  /*
-        TODO<RobinTF> incorporate time calculations and query updates.
-        runtimeInfo().totalTime_ += duration;
-        if (isRoot) {
-          signalQueryUpdate();
-        }
-   */
   if (result.isDataEvaluated()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
@@ -188,9 +194,10 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
+                       isRoot]() {
       return runComputationAndTransformToCache(timer, computationMode, cacheKey,
-                                               pinResult);
+                                               pinResult, isRoot);
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {
@@ -210,10 +217,9 @@ std::shared_ptr<const Result> Operation::getResult(
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(
-        result, result._resultPointer->resultTable().isDataEvaluated()
-                    ? timer.msecs()
-                    : result._resultPointer->runtimeInfo().totalTime_);
+    if (result._resultPointer->resultTable().isDataEvaluated()) {
+      updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
 
     return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
@@ -303,10 +309,9 @@ void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   const auto& result = resultAndCacheStatus._resultPointer->resultTable();
+  AD_CONTRACT_CHECK(result.isDataEvaluated());
   updateRuntimeInformationOnSuccess(
-      // TODO<RobinTF> find a better representation for "unknown" than 0.
-      result.isDataEvaluated() ? result.idTable().size() : 0,
-      resultAndCacheStatus._cacheStatus, duration,
+      result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 

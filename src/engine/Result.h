@@ -152,6 +152,9 @@ class ProtoResult {
   // check is successful.
   void checkDefinedness(const VariableToColumnMap& varColMap);
 
+  void runOnNewChunkComputed(
+      std::function<void(const IdTable&, std::chrono::milliseconds)> function);
+
  private:
   // Get the information, which columns stores how many entries of each
   // datatype.

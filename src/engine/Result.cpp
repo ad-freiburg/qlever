@@ -169,6 +169,24 @@ void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
 }
 
 // _____________________________________________________________________________
+void ProtoResult::runOnNewChunkComputed(
+    std::function<void(const IdTable&, std::chrono::milliseconds)> function) {
+  AD_CONTRACT_CHECK(!storage_.isDataEvaluated());
+  auto generator =
+      [](cppcoro::generator<IdTable> original,
+         std::function<void(const IdTable&, std::chrono::milliseconds)>
+             function) -> cppcoro::generator<IdTable> {
+    ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
+    for (auto&& idTable : original) {
+      function(idTable, timer.msecs());
+      co_yield std::forward<IdTable>(idTable);
+      timer.start();
+    }
+  }(std::move(storage_.idTables()), std::move(function));
+  storage_.idTables() = std::move(generator);
+}
+
+// _____________________________________________________________________________
 auto ProtoResult::computeDatatypeCountsPerColumn(IdTable& idTable)
     -> DatatypeCountsPerColumn {
   DatatypeCountsPerColumn types;
@@ -243,6 +261,10 @@ Result Result::fromProtoResult(ProtoResult protoResult,
             } else {
               aggregate.emplace(newTable.clone());
             }
+            // TODO<RobinTF> Review question: Should we compute the sizes
+            // individually and add the result together to then check the size
+            // at the cost of a more complex/less generic interface to avoid
+            // filling up memory that might be deallocated soon after.
             return fitsInCache(aggregate.value());
           },
           [storeInCache = std::move(storeInCache),
