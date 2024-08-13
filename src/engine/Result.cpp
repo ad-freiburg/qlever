@@ -179,7 +179,7 @@ void ProtoResult::runOnNewChunkComputed(
     ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
     for (auto&& idTable : original) {
       function(idTable, timer.msecs());
-      co_yield std::forward<IdTable>(idTable);
+      co_yield std::move(idTable);
       timer.start();
     }
   }(std::move(storage_.idTables()), std::move(function));

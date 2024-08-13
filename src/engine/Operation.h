@@ -260,7 +260,7 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
-  ProtoResult runComputation(ad_utility::Timer& timer,
+  ProtoResult runComputation(const ad_utility::Timer& timer,
                              ComputationMode computationMode, bool isRoot);
 
   CacheValue runComputationAndTransformToCache(ad_utility::Timer& timer,

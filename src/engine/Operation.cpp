@@ -70,7 +70,7 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // _____________________________________________________________________________
-ProtoResult Operation::runComputation(ad_utility::Timer& timer,
+ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
                                       ComputationMode computationMode,
                                       bool isRoot) {
   checkCancellation();
