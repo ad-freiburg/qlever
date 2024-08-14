@@ -29,54 +29,54 @@ void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
 }
 
 // _____________________________________________________________________________
-ProtoResult::ProtoResult(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-                         SharedLocalVocabWrapper localVocab)
-    : storage_{StorageType{std::move(idTable), std::move(sortedBy),
-                           std::move(localVocab.localVocab_)}} {
-  AD_CONTRACT_CHECK(storage_.localVocab_ != nullptr);
-  validateIdTable(storage_.idTable(), storage_.sortedBy_);
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : data_{std::move(idTable)},
+      sortedBy_{std::move(sortedBy)},
+      localVocab_{std::move(localVocab.localVocab_)} {
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
+  validateIdTable(this->idTable(), sortedBy_);
 }
 
 // _____________________________________________________________________________
-ProtoResult::ProtoResult(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-                         LocalVocab&& localVocab)
-    : ProtoResult{std::move(idTable), std::move(sortedBy),
-                  SharedLocalVocabWrapper{std::move(localVocab)}} {}
+Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+               LocalVocab&& localVocab)
+    : Result{std::move(idTable), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-ProtoResult::ProtoResult(cppcoro::generator<IdTable> idTables,
-                         std::vector<ColumnIndex> sortedBy,
-                         SharedLocalVocabWrapper localVocab)
-    : storage_{
-          StorageType{[](auto idTables,
-                         auto sortedBy) mutable -> cppcoro::generator<IdTable> {
-                        for (IdTable& idTable : idTables) {
-                          validateIdTable(idTable, sortedBy);
-                          co_yield std::move(idTable);
-                        }
-                      }(std::move(idTables), sortedBy),
-                      std::move(sortedBy), std::move(localVocab.localVocab_)}} {
-  AD_CONTRACT_CHECK(storage_.localVocab_ != nullptr);
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy,
+               SharedLocalVocabWrapper localVocab)
+    : data_{[](auto idTables,
+               auto sortedBy) mutable -> cppcoro::generator<IdTable> {
+        for (IdTable& idTable : idTables) {
+          validateIdTable(idTable, sortedBy);
+          co_yield std::move(idTable);
+        }
+      }(std::move(idTables), sortedBy)},
+      sortedBy_{std::move(sortedBy)},
+      localVocab_{std::move(localVocab.localVocab_)} {
+  AD_CONTRACT_CHECK(localVocab_ != nullptr);
 }
 
 // _____________________________________________________________________________
-ProtoResult::ProtoResult(cppcoro::generator<IdTable> idTables,
-                         std::vector<ColumnIndex> sortedBy,
-                         LocalVocab&& localVocab)
-    : ProtoResult{std::move(idTables), std::move(sortedBy),
-                  SharedLocalVocabWrapper{std::move(localVocab)}} {}
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
+    : Result{std::move(idTables), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-void ProtoResult::applyLimitOffset(
+void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
     std::function<void(std::chrono::milliseconds)> limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
-  if (storage_.isDataEvaluated()) {
+  if (isDataEvaluated()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    modifyIdTable(storage_.idTable(), limitOffset);
+    modifyIdTable(std::get<IdTable>(data_), limitOffset);
     limitTimeCallback(limitTimer.msecs());
   } else {
     auto generator =
@@ -104,15 +104,14 @@ void ProtoResult::applyLimitOffset(
           break;
         }
       }
-    }(std::move(storage_.idTables()), limitOffset,
-        std::move(limitTimeCallback));
-    storage_.idTables() = std::move(generator);
+    }(std::move(idTables()), limitOffset, std::move(limitTimeCallback));
+    data_ = std::move(generator);
   }
 }
 
 // _____________________________________________________________________________
-void ProtoResult::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
-  if (storage_.isDataEvaluated()) {
+void Result::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
+  if (isDataEvaluated()) {
     uint64_t numRows = idTable().numRows();
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
@@ -128,13 +127,13 @@ void ProtoResult::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
         co_yield std::move(idTable);
       }
       AD_CONTRACT_CHECK(!limit.has_value() || elementCount <= limit.value());
-    }(std::move(storage_.idTables()), limitOffset);
-    storage_.idTables() = std::move(generator);
+    }(std::move(idTables()), limitOffset);
+    data_ = std::move(generator);
   }
 }
 
 // _____________________________________________________________
-void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
+void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
     DatatypeCountsPerColumn datatypeCountsPerColumn =
         computeDatatypeCountsPerColumn(idTable);
@@ -148,7 +147,7 @@ void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
     });
   };
   if (isDataEvaluated()) {
-    AD_EXPENSIVE_CHECK(performCheck(varColMap, storage_.idTable()));
+    AD_EXPENSIVE_CHECK(performCheck(varColMap, std::get<IdTable>(data_)));
   } else {
     auto generator = [](cppcoro::generator<IdTable> original,
                         VariableToColumnMap varColMap,
@@ -163,15 +162,15 @@ void ProtoResult::checkDefinedness(const VariableToColumnMap& varColMap) {
         }
         co_yield std::move(idTable);
       }
-    }(std::move(storage_.idTables()), varColMap, std::move(performCheck));
-    storage_.idTables() = std::move(generator);
+    }(std::move(idTables()), varColMap, std::move(performCheck));
+    data_ = std::move(generator);
   }
 }
 
 // _____________________________________________________________________________
-void ProtoResult::runOnNewChunkComputed(
+void Result::runOnNewChunkComputed(
     std::function<void(const IdTable&, std::chrono::milliseconds)> function) {
-  AD_CONTRACT_CHECK(!storage_.isDataEvaluated());
+  AD_CONTRACT_CHECK(!isDataEvaluated());
   auto generator =
       [](cppcoro::generator<IdTable> original,
          std::function<void(const IdTable&, std::chrono::milliseconds)>
@@ -182,12 +181,12 @@ void ProtoResult::runOnNewChunkComputed(
       co_yield std::move(idTable);
       timer.start();
     }
-  }(std::move(storage_.idTables()), std::move(function));
-  storage_.idTables() = std::move(generator);
+  }(std::move(idTables()), std::move(function));
+  data_ = std::move(generator);
 }
 
 // _____________________________________________________________________________
-auto ProtoResult::computeDatatypeCountsPerColumn(IdTable& idTable)
+auto Result::computeDatatypeCountsPerColumn(IdTable& idTable)
     -> DatatypeCountsPerColumn {
   DatatypeCountsPerColumn types;
   types.resize(idTable.numColumns());
@@ -202,8 +201,8 @@ auto ProtoResult::computeDatatypeCountsPerColumn(IdTable& idTable)
 }
 
 // _____________________________________________________________________________
-void ProtoResult::validateIdTable(const IdTable& idTable,
-                                  const std::vector<ColumnIndex>& sortedBy) {
+void Result::validateIdTable(const IdTable& idTable,
+                             const std::vector<ColumnIndex>& sortedBy) {
   AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy, [&idTable](size_t numCols) {
     return numCols < idTable.numColumns();
   }));
@@ -221,70 +220,50 @@ void ProtoResult::validateIdTable(const IdTable& idTable,
 }
 
 // _____________________________________________________________________________
-const IdTable& ProtoResult::idTable() const { return storage_.idTable(); }
-
-// _____________________________________________________________________________
-bool ProtoResult::isDataEvaluated() const noexcept {
-  return storage_.isDataEvaluated();
+const IdTable& Result::idTable() const {
+  AD_CONTRACT_CHECK(isDataEvaluated());
+  return std::get<IdTable>(data_);
 }
-
-// _____________________________________________________________________________
-Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-               LocalVocabPtr localVocab)
-    : storage_{StorageType{std::move(idTable), std::move(sortedBy),
-                           std::move(localVocab)}} {}
-
-// _____________________________________________________________________________
-Result::Result(cppcoro::generator<IdTable> idTables,
-               std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
-    : storage_{StorageType{std::move(idTables), std::move(sortedBy),
-                           std::move(localVocab)}} {}
-
-// _____________________________________________________________________________
-Result Result::fromProtoResult(
-    ProtoResult protoResult,
-    std::function<bool(const std::optional<IdTable>&, const IdTable&)>
-        fitInCache,
-    std::function<void(Result)> storeInCache) {
-  if (protoResult.isDataEvaluated()) {
-    return Result{std::move(protoResult.storage_.idTable()),
-                  std::move(protoResult.storage_.sortedBy_),
-                  std::move(protoResult.storage_.localVocab_)};
-  }
-  auto sortedByCopy = protoResult.storage_.sortedBy_;
-  auto localVocabReference = protoResult.storage_.localVocab_;
-  return Result{
-      ad_utility::wrapGeneratorWithCache(
-          std::move(protoResult.storage_.idTables()),
-          [fitInCache = std::move(fitInCache)](
-              std::optional<IdTable>& aggregate, const IdTable& newTable) {
-            bool doBothFitInCache = fitInCache(aggregate, newTable);
-            if (doBothFitInCache) {
-              if (aggregate.has_value()) {
-                aggregate.value().insertAtEnd(newTable);
-              } else {
-                aggregate.emplace(newTable.clone());
-              }
-            }
-            return doBothFitInCache;
-          },
-          [storeInCache = std::move(storeInCache),
-           sortedByCopy = std::move(sortedByCopy),
-           localVocabReference =
-               std::move(localVocabReference)](IdTable idTable) mutable {
-            storeInCache(Result{std::move(idTable), std::move(sortedByCopy),
-                                std::move(localVocabReference)});
-          }),
-      std::move(protoResult.storage_.sortedBy_),
-      std::move(protoResult.storage_.localVocab_)};
-}
-
-// _____________________________________________________________________________
-const IdTable& Result::idTable() const { return storage_.idTable(); }
 
 // _____________________________________________________________________________
 cppcoro::generator<IdTable>& Result::idTables() const {
-  return storage_.idTables();
+  AD_CONTRACT_CHECK(!isDataEvaluated());
+  return std::get<cppcoro::generator<IdTable>>(data_);
+}
+
+// _____________________________________________________________________________
+bool Result::isDataEvaluated() const noexcept {
+  return std::holds_alternative<IdTable>(data_);
+}
+
+// _____________________________________________________________________________
+void Result::cacheDuringConsumption(
+    std::function<bool(const std::optional<IdTable>&, const IdTable&)>
+        fitInCache,
+    std::function<void(Result)> storeInCache) {
+  if (isDataEvaluated()) {
+    return;
+  }
+
+  data_ = ad_utility::wrapGeneratorWithCache(
+      std::move(idTables()),
+      [fitInCache = std::move(fitInCache)](std::optional<IdTable>& aggregate,
+                                           const IdTable& newTable) {
+        bool doBothFitInCache = fitInCache(aggregate, newTable);
+        if (doBothFitInCache) {
+          if (aggregate.has_value()) {
+            aggregate.value().insertAtEnd(newTable);
+          } else {
+            aggregate.emplace(newTable.clone());
+          }
+        }
+        return doBothFitInCache;
+      },
+      [storeInCache = std::move(storeInCache), sortedBy = sortedBy_,
+       localVocab = localVocab_](IdTable idTable) mutable {
+        storeInCache(Result{std::move(idTable), std::move(sortedBy),
+                            SharedLocalVocabWrapper{std::move(localVocab)}});
+      });
 }
 
 // _____________________________________________________________________________
@@ -296,11 +275,6 @@ auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
 
 // _____________________________________________________________________________
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
-
-// _____________________________________________________________________________
-bool Result::isDataEvaluated() const noexcept {
-  return storage_.isDataEvaluated();
-}
 
 // _____________________________________________________________________________
 void Result::logResultSize() const {

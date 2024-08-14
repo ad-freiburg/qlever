@@ -1076,9 +1076,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   idTable.push_back({Id::makeFromInt(42)});
   idTable.push_back({Id::makeFromInt(1337)});
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(idTable), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(idTable), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1108,9 +1106,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1141,9 +1137,7 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
     co_yield std::move(idTable1);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
@@ -1173,9 +1167,7 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
@@ -1209,9 +1201,7 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result);
 
@@ -1249,9 +1239,7 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable2);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
@@ -1297,9 +1285,7 @@ TEST(ExportQueryExecutionTrees,
     co_yield std::move(idTable3);
   }();
 
-  Result result = Result::fromProtoResult(
-      ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&, const auto&) { return false; }, [](auto) {});
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 

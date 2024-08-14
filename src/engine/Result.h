@@ -17,14 +17,16 @@
 #include "parser/data/LimitOffsetClause.h"
 #include "util/CacheableGenerator.h"
 
-template <typename IdTableType, typename GeneratorType>
-class ResultStorage {
-  friend class ProtoResult;
-  friend class Result;
-
-  using Data = std::variant<IdTableType, GeneratorType>;
-  // The actual entries.
-  Data data_;
+// The result of an `Operation`. This is the class QLever uses for all
+// intermediate or final results when processing a SPARQL query. The actual data
+// is either a table and contained in the member `idTable()` or can be consumed
+// through a generator via `idTables()` when it is supposed to be lazily
+// evaluated.
+class Result {
+ private:
+  using Data = std::variant<IdTable, cppcoro::generator<IdTable>>;
+  // The actual entries. Needs to be mutable in order to consume a const entry.
+  mutable Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
@@ -33,42 +35,6 @@ class ResultStorage {
   // The local vocabulary of the result.
   std::shared_ptr<const LocalVocab> localVocab_ =
       std::make_shared<const LocalVocab>();
-
-  ResultStorage(Data data, std::vector<ColumnIndex> sortedBy,
-                std::shared_ptr<const LocalVocab> localVocab)
-      : data_{std::move(data)},
-        sortedBy_{std::move(sortedBy)},
-        localVocab_{std::move(localVocab)} {}
-
-  bool isDataEvaluated() const noexcept {
-    return std::holds_alternative<IdTableType>(data_);
-  }
-
-  IdTableType& idTable() {
-    AD_CONTRACT_CHECK(isDataEvaluated());
-    return std::get<IdTableType>(data_);
-  }
-
-  const IdTableType& idTable() const {
-    AD_CONTRACT_CHECK(isDataEvaluated());
-    return std::get<IdTableType>(data_);
-  }
-
-  GeneratorType& idTables() {
-    AD_CONTRACT_CHECK(!isDataEvaluated());
-    return std::get<GeneratorType>(data_);
-  }
-
-  const GeneratorType& idTables() const {
-    AD_CONTRACT_CHECK(!isDataEvaluated());
-    return std::get<GeneratorType>(data_);
-  }
-};
-
-class ProtoResult {
-  friend class Result;
-  using StorageType = ResultStorage<IdTable, cppcoro::generator<IdTable>>;
-  StorageType storage_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
 
@@ -91,7 +57,6 @@ class ProtoResult {
     std::shared_ptr<const LocalVocab> localVocab_;
     explicit SharedLocalVocabWrapper(LocalVocabPtr localVocab)
         : localVocab_{std::move(localVocab)} {}
-    friend ProtoResult;
     friend class Result;
 
    public:
@@ -103,6 +68,20 @@ class ProtoResult {
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
 
+  // For each column in the result (the entries in the outer `vector`) and for
+  // each `Datatype` (the entries of the inner `array`), store the information
+  // how many entries of that datatype are stored in the column.
+  using DatatypeCountsPerColumn = std::vector<
+      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
+
+  // Get the information, which columns stores how many entries of each
+  // datatype.
+  static DatatypeCountsPerColumn computeDatatypeCountsPerColumn(
+      IdTable& idTable);
+
+  static void validateIdTable(const IdTable& idTable,
+                              const std::vector<ColumnIndex>& sortedBy);
+
  public:
   // Construct from the given arguments (see above) and check the following
   // invariants: `localVocab` must not be `nullptr` and each entry of `sortedBy`
@@ -113,28 +92,21 @@ class ProtoResult {
   // The first overload of the constructor is for local vocabs that are shared
   // with another `Result` via the `getSharedLocalVocab...` methods below.
   // The second overload is for newly created local vocabularies.
-  ProtoResult(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              SharedLocalVocabWrapper localVocab);
-  ProtoResult(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-              LocalVocab&& localVocab);
-  ProtoResult(cppcoro::generator<IdTable> idTables,
-              std::vector<ColumnIndex> sortedBy,
-              SharedLocalVocabWrapper localVocab);
-  ProtoResult(cppcoro::generator<IdTable> idTables,
-              std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         SharedLocalVocabWrapper localVocab);
+  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
+         LocalVocab&& localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+  // Prevent accidental copying of a result table.
+  Result(const Result& other) = delete;
+  Result& operator=(const Result& other) = delete;
 
- public:
-  ProtoResult(const ProtoResult& other) = delete;
-  ProtoResult& operator=(const ProtoResult& other) = delete;
-
-  ProtoResult(ProtoResult&& other) = default;
-  ProtoResult& operator=(ProtoResult&& other) = default;
-
-  // For each column in the result (the entries in the outer `vector`) and for
-  // each `Datatype` (the entries of the inner `array`), store the information
-  // how many entries of that datatype are stored in the column.
-  using DatatypeCountsPerColumn = std::vector<
-      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
+  // Moving of a result table is OK.
+  Result(Result&& other) = default;
+  Result& operator=(Result&& other) = default;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
   // Note: If additional members and invariants are added to the class (for
@@ -155,50 +127,10 @@ class ProtoResult {
   void runOnNewChunkComputed(
       std::function<void(const IdTable&, std::chrono::milliseconds)> function);
 
- private:
-  // Get the information, which columns stores how many entries of each
-  // datatype.
-  static DatatypeCountsPerColumn computeDatatypeCountsPerColumn(
-      IdTable& idTable);
-
-  static void validateIdTable(const IdTable& idTable,
-                              const std::vector<ColumnIndex>& sortedBy);
-
- public:
-  const IdTable& idTable() const;
-
-  bool isDataEvaluated() const noexcept;
-};
-
-// The result of an `Operation`. This is the class QLever uses for all
-// intermediate or final results when processing a SPARQL query. The actual data
-// is always a table and contained in the member `idTable()`.
-class Result {
- private:
-  using StorageType = ResultStorage<IdTable, cppcoro::generator<IdTable>>;
-  mutable StorageType storage_;
-
-  using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
-
-  using SharedLocalVocabWrapper = ProtoResult::SharedLocalVocabWrapper;
-
-  Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
-         LocalVocabPtr localVocab);
-  Result(cppcoro::generator<IdTable> idTables,
-         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
-
- public:
-  // Prevent accidental copying of a result table.
-  Result(const Result& other) = delete;
-  Result& operator=(const Result& other) = delete;
-
-  // Moving of a result table is OK.
-  Result(Result&& other) = default;
-  Result& operator=(Result&& other) = default;
-
-  static Result fromProtoResult(ProtoResult protoResult,
-                                std::function<bool(const std::optional<IdTable>&, const IdTable&)> fitInCache,
-                                std::function<void(Result)> storeInCache);
+  void cacheDuringConsumption(
+      std::function<bool(const std::optional<IdTable>&, const IdTable&)>
+          fitInCache,
+      std::function<void(Result)> storeInCache);
 
   // Const access to the underlying `IdTable`.
   const IdTable& idTable() const;
@@ -207,9 +139,7 @@ class Result {
   cppcoro::generator<IdTable>& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
-  const std::vector<ColumnIndex>& sortedBy() const {
-    return storage_.sortedBy_;
-  }
+  const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
 
   // Get the local vocabulary of this result, used for lookup only.
   //
@@ -222,12 +152,12 @@ class Result {
   // Filter::computeFilterImpl (evaluationContext)
   // Variable::evaluate (idToStringAndType)
   //
-  const LocalVocab& localVocab() const { return *storage_.localVocab_; }
+  const LocalVocab& localVocab() const { return *localVocab_; }
 
   // Get the local vocab as a shared pointer to const. This can be used if one
   // result has the same local vocab as one of its child results.
   SharedLocalVocabWrapper getSharedLocalVocab() const {
-    return SharedLocalVocabWrapper{storage_.localVocab_};
+    return SharedLocalVocabWrapper{localVocab_};
   }
 
   // Like `getSharedLocalVocabFrom`, but takes more than one result and merges
@@ -241,7 +171,7 @@ class Result {
   static SharedLocalVocabWrapper getMergedLocalVocab(R&& subResults) {
     std::vector<const LocalVocab*> vocabs;
     for (const Result& table : subResults) {
-      vocabs.push_back(std::to_address(table.storage_.localVocab_));
+      vocabs.push_back(std::to_address(table.localVocab_));
     }
     return SharedLocalVocabWrapper{LocalVocab::merge(vocabs)};
   }
@@ -262,3 +192,7 @@ class Result {
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
 };
+
+// Class alias to conceptually differentiate between Results that produce
+// values and Results meant to be consumed.
+using ProtoResult = Result;
