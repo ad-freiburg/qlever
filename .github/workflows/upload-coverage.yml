@@ -64,7 +64,7 @@ jobs:
         # be overwritten. We then move all the files back into the working
         # directory such that Codecov will pick them up properly.
       - name: "Checkout"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{env.original_github_repository}}
           submodules: "recursive"
