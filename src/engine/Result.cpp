@@ -13,20 +13,27 @@
 #include "util/Timer.h"
 
 // _____________________________________________________________________________
-void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
-  std::ranges::for_each(
-      idTable.getColumns(),
-      [offset = limitOffset.actualOffset(idTable.numRows()),
-       upperBound =
-           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
-        std::shift_left(column.begin(), column.begin() + upperBound, offset);
-      });
-  // Resize the `IdTable` if necessary.
-  size_t targetSize = limitOffset.actualSize(idTable.numRows());
-  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
-  idTable.resize(targetSize);
-  idTable.shrinkToFit();
+string Result::asDebugString() const {
+  std::ostringstream os;
+  os << "First (up to) 5 rows of result with size:\n";
+  for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
+    for (size_t j = 0; j < idTable().numColumns(); ++j) {
+      os << idTable()(i, j) << '\t';
+    }
+    os << '\n';
+  }
+  return std::move(os).str();
 }
+
+// _____________________________________________________________________________
+auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
+    -> SharedLocalVocabWrapper {
+  return getMergedLocalVocab(
+      std::array{std::cref(result1), std::cref(result2)});
+}
+
+// _____________________________________________________________________________
+LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
@@ -65,6 +72,22 @@ Result::Result(cppcoro::generator<IdTable> idTables,
                std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab)
     : Result{std::move(idTables), std::move(sortedBy),
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
+void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
+  std::ranges::for_each(
+      idTable.getColumns(),
+      [offset = limitOffset.actualOffset(idTable.numRows()),
+       upperBound =
+           limitOffset.upperBound(idTable.numRows())](std::span<Id> column) {
+        std::shift_left(column.begin(), column.begin() + upperBound, offset);
+      });
+  // Resize the `IdTable` if necessary.
+  size_t targetSize = limitOffset.actualSize(idTable.numRows());
+  AD_CORRECTNESS_CHECK(targetSize <= idTable.numRows());
+  idTable.resize(targetSize);
+  idTable.shrinkToFit();
+}
 
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
@@ -132,6 +155,21 @@ void Result::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
   }
 }
 
+// _____________________________________________________________________________
+auto Result::computeDatatypeCountsPerColumn(IdTable& idTable)
+    -> DatatypeCountsPerColumn {
+  DatatypeCountsPerColumn types;
+  types.resize(idTable.numColumns());
+  for (size_t i = 0; i < idTable.numColumns(); ++i) {
+    const auto& col = idTable.getColumn(i);
+    auto& datatypes = types.at(i);
+    for (Id id : col) {
+      ++datatypes[static_cast<size_t>(id.getDatatype())];
+    }
+  }
+  return types;
+}
+
 // _____________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
@@ -183,21 +221,6 @@ void Result::runOnNewChunkComputed(
     }
   }(std::move(idTables()), std::move(function));
   data_ = std::move(generator);
-}
-
-// _____________________________________________________________________________
-auto Result::computeDatatypeCountsPerColumn(IdTable& idTable)
-    -> DatatypeCountsPerColumn {
-  DatatypeCountsPerColumn types;
-  types.resize(idTable.numColumns());
-  for (size_t i = 0; i < idTable.numColumns(); ++i) {
-    const auto& col = idTable.getColumn(i);
-    auto& datatypes = types.at(i);
-    for (Id id : col) {
-      ++datatypes[static_cast<size_t>(id.getDatatype())];
-    }
-  }
-  return types;
 }
 
 // _____________________________________________________________________________
@@ -267,16 +290,6 @@ void Result::cacheDuringConsumption(
 }
 
 // _____________________________________________________________________________
-auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
-    -> SharedLocalVocabWrapper {
-  return getMergedLocalVocab(
-      std::array{std::cref(result1), std::cref(result2)});
-}
-
-// _____________________________________________________________________________
-LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
-
-// _____________________________________________________________________________
 void Result::logResultSize() const {
   if (isDataEvaluated()) {
     LOG(INFO) << "Result has size " << idTable().size() << " x "
@@ -284,17 +297,4 @@ void Result::logResultSize() const {
   } else {
     LOG(INFO) << "Result has unknown size (not computed yet)" << std::endl;
   }
-}
-
-// _____________________________________________________________________________
-string Result::asDebugString() const {
-  std::ostringstream os;
-  os << "First (up to) 5 rows of result with size:\n";
-  for (size_t i = 0; i < std::min<size_t>(5, idTable().size()); ++i) {
-    for (size_t j = 0; j < idTable().numColumns(); ++j) {
-      os << idTable()(i, j) << '\t';
-    }
-    os << '\n';
-  }
-  return std::move(os).str();
 }

@@ -32,11 +32,10 @@ class Result {
   // Empty if the result is not sorted on any column.
   std::vector<ColumnIndex> sortedBy_;
 
-  // The local vocabulary of the result.
-  std::shared_ptr<const LocalVocab> localVocab_ =
-      std::make_shared<const LocalVocab>();
-
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
+
+  // The local vocabulary of the result.
+  LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
 
   // Note: If additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
@@ -108,22 +107,6 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
-  // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
-  // Note: If additional members and invariants are added to the class (for
-  // example information about the datatypes in each column) make sure that
-  // those are still correct after performing this operation.
-  void applyLimitOffset(
-      const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::milliseconds)> limitTimeCallback);
-
-  void enforceLimitOffset(const LimitOffsetClause& limitOffset);
-
-  // Check that if the `varColMap` guarantees that a column is always defined
-  // (i.e. that is contains no single undefined value) that there are indeed no
-  // undefined values in the `data_` of this result. Return `true` iff the
-  // check is successful.
-  void checkDefinedness(const VariableToColumnMap& varColMap);
-
   void runOnNewChunkComputed(
       std::function<void(const IdTable&, std::chrono::milliseconds)> function);
 
@@ -191,6 +174,22 @@ class Result {
 
   // The first rows of the result and its total size (for debugging).
   string asDebugString() const;
+
+  // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
+  // Note: If additional members and invariants are added to the class (for
+  // example information about the datatypes in each column) make sure that
+  // those are still correct after performing this operation.
+  void applyLimitOffset(
+      const LimitOffsetClause& limitOffset,
+      std::function<void(std::chrono::milliseconds)> limitTimeCallback);
+
+  void enforceLimitOffset(const LimitOffsetClause& limitOffset);
+
+  // Check that if the `varColMap` guarantees that a column is always defined
+  // (i.e. that is contains no single undefined value) that there are indeed no
+  // undefined values in the `data_` of this result. Return `true` iff the
+  // check is successful.
+  void checkDefinedness(const VariableToColumnMap& varColMap);
 };
 
 // Class alias to conceptually differentiate between Results that produce
