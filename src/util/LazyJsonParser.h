@@ -1,8 +1,10 @@
 // Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
+// Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
-#ifndef QLEVER_LAZY_JSON_PARSER_H_
-#define QLEVER_LAZY_JSON_PARSER_H_
+#pragma once
+
+#include <variant>
 
 #include "util/Generator.h"
 
@@ -16,8 +18,8 @@ namespace ad_utility {
  */
 class LazyJsonParser {
  public:
-  // Parse partial json chunks yielding them reconstructed.
-  [[nodiscard]] static cppcoro::generator<std::string> parse(
+  // Parse chunks of json-strings yielding them reconstructed.
+  static cppcoro::generator<std::string> parse(
       cppcoro::generator<std::string> partJson,
       const std::vector<std::string>& arrayPath) {
     LazyJsonParser p(arrayPath);
@@ -27,8 +29,8 @@ class LazyJsonParser {
   }
 
   // As above just on a single string.
-  [[nodiscard]] static std::string parse(
-      const std::string& s, const std::vector<std::string>& arrayPath) {
+  static std::string parse(const std::string& s,
+                           const std::vector<std::string>& arrayPath) {
     LazyJsonParser p(arrayPath);
     return p.parseChunk(s);
   }
@@ -37,34 +39,57 @@ class LazyJsonParser {
   explicit LazyJsonParser(std::vector<std::string> arrayPath);
 
   // Parses a chunk of JSON data and returns it with reconstructed structure.
-  std::string parseChunk(const std::string& inStr);
+  std::string parseChunk(std::string_view inStr);
 
-  // Checks if the current path is the arrayPath.
-  bool isInArrayPath() const { return curPath_ == arrayPath_; }
+  // Parses literals in the input.
+  void parseLiteral(size_t& idx);
 
-  // Parses strings in the input.
-  void parseString(size_t& idx);
+  // Parse the different sections before/in/after the arrayPath.
+  void parseBeforeArrayPath(size_t& idx);
+  void parseInArrayPath(size_t& idx, size_t& materializeEnd);
+  void parseAfterArrayPath(size_t& idx, size_t& materializeEnd);
 
-  // Parses the arrayPath.
-  size_t parseArrayPath(size_t& idx);
+  // Attempts to add a key to the current Path, based on strStart/strEnd.
+  void tryAddKeyToPath();
 
+  // Constructs the result to be returned after parsing a chunk.
+  std::string constructResultFromParsedChunk(size_t materializeEnd);
+
+  // Context for the 3 parsing sections.
+  struct BeforeArrayPath {
+    size_t strStart_{0};
+    size_t strEnd_{0};
+    std::vector<std::string> curPath_;
+  };
+  struct InArrayPath {
+    int openBracketsAndBraces_{0};
+  };
+  struct AfterArrayPath {
+    size_t remainingBraces;
+  };
+  std::variant<BeforeArrayPath, InArrayPath, AfterArrayPath> state_{
+      BeforeArrayPath()};
+
+  // Current (not yet materialized) input-string.
   std::string input_;
+
+  // If the next character is escaped or not.
   bool isEscaped_{false};
-  bool inString_{false};
-  bool inArrayPath_{false};
-  int openBracesInArrayPath_{0};
+
+  // If the parser is currently positioned within a literal.
+  bool inLiteral_{false};
+
+  // Open Brackets: required for nested arrays.
   int openBrackets_{0};
+
+  // Counter for the so far returned results.
   unsigned int yieldCount_{0};
 
-  size_t strStart_{0};
-  size_t strEnd_{0};
-
-  std::vector<std::string> curPath_;
+  // Key-path to the array containing many elements.
   const std::vector<std::string> arrayPath_;
 
+  // Precomputed prefix/suffix used to construct results.
   const std::string prefixInArray_;
   const std::string suffixInArray_;
 };
 }  // namespace ad_utility
-
-#endif  // QLEVER_LAZY_JSON_PARSER_H_

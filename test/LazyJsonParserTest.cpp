@@ -1,5 +1,6 @@
 // Copyright 2024, University of Freiburg,
 // Chair of Algorithms and Data Structures.
+// Author: Moritz Dom (domm@informatik.uni-freiburg.de)
 
 #include <gtest/gtest.h>
 
@@ -19,9 +20,8 @@ TEST(parseTest, parse) {
                 arrayPath),
             "{\"results\": {\"bindings\": [{\"x\": {\"\"value\"\": 1}}]}}");
 
-  // CHECK 2: Handle invalid JSON.
-  EXPECT_NO_THROW(LazyJsonParser::parse("[{x}]", arrayPath));
-  EXPECT_NO_THROW(LazyJsonParser::parse("]{\"s\"}}[]", {}));
+  // CHECK 2: Empty ArrayPath
+  EXPECT_EQ(LazyJsonParser::parse("[1,2,3]", {}), "[1,2,3]");
 
   // Check if the parser yields the expected results when parsing each char
   // individually.
@@ -48,17 +48,17 @@ TEST(parseTest, parse) {
 
   // CHECK 3: Normal result split at every char.
   const std::string result3a =
-      R"({"head": {"vars": ["x", "y"]}, "results": {"bindings": ["
-      "{"x": {"value": 1, "datatype": "
-      ""http://www.w3.org/2001/XMLSchema#integer"}, "
-      ""y": {"value": 2, "datatype": "
-      ""http://www.w3.org/2001/XMLSchema#integer"}},)";
+      R"({"head": {"vars": ["x", "y"]}, "results": {"bindings": [)"
+      R"({"x": {"value": 1, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}, )"
+      R"("y": {"value": 2, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}},)";
 
   const std::string result3b =
-      R"({"x": {"value": 3, "datatype": ")
-      ""http://www.w3.org/2001/XMLSchema#integer"}, "
-      ""y": {"value": 4, "datatype": "
-      ""http://www.w3.org/2001/XMLSchema#integer"}}]}})";
+      R"({"x": {"value": 3, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}, )"
+      R"("y": {"value": 4, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}}]}})";
 
   expectYields(absl::StrCat(result3a, result3b),
                {absl::StrCat(result3a.substr(0, result3a.size() - 1), "]}}"),
@@ -67,15 +67,14 @@ TEST(parseTest, parse) {
   // CHECK 4: Result with changed order of results-/head object.
   // Also added another key-value pair in the results path and nested arrays.
   const std::string result4a =
-      R"({"results": {"bindings": ["
-      "{"x": {"value": 5, "datatype": "
-      ""http://www.w3.org/2001/XMLSchema#integer"}, "
-      ""y": {"value": 6, "datatype": "
-      ""http://www.w3.org/2001/XMLSchema#integer"}},)";
-  const std::string result4b =
-      R"([[1,2], [3,4]]"
-      "], "key": [[1,2], [3,4]]}, "
-      ""head": {"vars": ["x", "y"]}})";
+      R"({"results": {"bindings": [)"
+      R"({"x": {"value": 5, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}, )"
+      R"("y": {"value": 6, "datatype": )"
+      R"("http://www.w3.org/2001/XMLSchema#integer"}},)";
+  const std::string result4b = R"([[1,2], [3,4]])"
+                               R"(], "key": [[1,2], [3,4]]}, )"
+                               R"("head": {"vars": ["x", "y"]}})";
 
   expectYields(result4a + result4b,
                {absl::StrCat(result4a.substr(0, result4a.size() - 1), "]}}"),
