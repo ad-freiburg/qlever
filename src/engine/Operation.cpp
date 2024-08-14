@@ -150,7 +150,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
        pinned](Result aggregatedResult) {
         cache.tryInsertIfNotPresent(
             pinned, cacheKey,
-            CacheValue{std::move(aggregatedResult), *runtimeInfo});
+            std::make_shared<CacheValue>(std::move(aggregatedResult),
+                                         *runtimeInfo));
       });
   if (result.isDataEvaluated()) {
     auto resultNumRows = result.idTable().size();

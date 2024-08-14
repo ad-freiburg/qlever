@@ -208,15 +208,15 @@ class ConcurrentCache {
                            suitedForCache);
   }
 
-  void tryInsertIfNotPresent(bool pinned, const Key& key, Value value) {
+  void tryInsertIfNotPresent(bool pinned, const Key& key,
+                             std::shared_ptr<Value> value) {
     auto lockPtr = _cacheAndInProgressMap.wlock();
     if (pinned) {
       if (!lockPtr->_cache.containsAndMakePinnedIfExists(key)) {
-        lockPtr->_cache.insertPinned(key,
-                                     std::make_shared<Value>(std::move(value)));
+        lockPtr->_cache.insertPinned(key, std::move(value));
       }
     } else if (!lockPtr->_cache.contains(key)) {
-      lockPtr->_cache.insert(key, std::make_shared<Value>(std::move(value)));
+      lockPtr->_cache.insert(key, std::move(value));
     }
   }
 
@@ -385,11 +385,12 @@ class ConcurrentCache {
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
         if (suitedForCache(*result)) {
           moveFromInProgressToCache(key, result);
+          // Signal other threads who are waiting for the results.
+          resultInProgress->finish(result);
         } else {
           _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
+          resultInProgress->finish(nullptr);
         }
-        // Signal other threads who are waiting for the results.
-        resultInProgress->finish(result);
         // result was not cached
         return {std::move(result), CacheStatus::computed};
       } catch (...) {
@@ -404,16 +405,13 @@ class ConcurrentCache {
       // return the result, we do not count this case as "cached" as we had to
       // wait.
       auto resultPointer = resultInProgress->getResult();
-      if (resultPointer) {
-        return {std::move(resultPointer), CacheStatus::computed};
+      if (!resultPointer) {
+        // Fallback computation
+        auto mutablePointer = make_shared<Value>(computeFunction());
+        tryInsertIfNotPresent(pinned, key, mutablePointer);
+        resultPointer = std::move(mutablePointer);
       }
-      // TODO<RobinTF> there's a small chance this will hang indefinitely if
-      // other processes keep submitting non-cacheable entries before this
-      // thread can acquire the lock to compute the entry on its own.
-
-      // Retry if computed entry unsuited for caching
-      return computeOnceImpl(pinned, key, computeFunction, false,
-                             suitedForCache);
+      return {std::move(resultPointer), CacheStatus::computed};
     }
   }
 
