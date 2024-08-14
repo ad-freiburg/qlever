@@ -137,7 +137,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 }
 
 // _____________________________________________________________________________
-CacheValue Operation::runComputationAndTransformToCache(
+CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
     const std::string& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
@@ -196,8 +196,8 @@ std::shared_ptr<const Result> Operation::getResult(
             });
     auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
                        isRoot]() {
-      return runComputationAndTransformToCache(timer, computationMode, cacheKey,
-                                               pinResult, isRoot);
+      return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
+                                              pinResult, isRoot);
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {
