@@ -143,8 +143,13 @@ CacheValue Operation::runComputationAndPrepareForCache(
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = Result::fromProtoResult(
       runComputation(timer, computationMode, isRoot),
-      [&cache](const IdTable& idTable) {
-        return cache.getMaxSizeSingleEntry() >= CacheValue::getSize(idTable);
+      [&cache](const std::optional<IdTable>& currentIdTable,
+               const IdTable& newIdTable) {
+        auto currentSize = currentIdTable.has_value()
+                               ? CacheValue::getSize(currentIdTable.value())
+                               : 0_B;
+        return cache.getMaxSizeSingleEntry() >=
+               currentSize + CacheValue::getSize(newIdTable);
       },
       [runtimeInfo = getRuntimeInfoPointer(), &cache, cacheKey,
        pinned](Result aggregatedResult) {

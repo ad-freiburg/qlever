@@ -241,9 +241,11 @@ Result::Result(cppcoro::generator<IdTable> idTables,
                            std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-Result Result::fromProtoResult(ProtoResult protoResult,
-                               std::function<bool(const IdTable&)> fitsInCache,
-                               std::function<void(Result)> storeInCache) {
+Result Result::fromProtoResult(
+    ProtoResult protoResult,
+    std::function<bool(const std::optional<IdTable>&, const IdTable&)>
+        fitInCache,
+    std::function<void(Result)> storeInCache) {
   if (protoResult.isDataEvaluated()) {
     return Result{std::move(protoResult.storage_.idTable()),
                   std::move(protoResult.storage_.sortedBy_),
@@ -254,18 +256,17 @@ Result Result::fromProtoResult(ProtoResult protoResult,
   return Result{
       ad_utility::wrapGeneratorWithCache(
           std::move(protoResult.storage_.idTables()),
-          [fitsInCache = std::move(fitsInCache)](
+          [fitInCache = std::move(fitInCache)](
               std::optional<IdTable>& aggregate, const IdTable& newTable) {
-            if (aggregate.has_value()) {
-              aggregate.value().insertAtEnd(newTable);
-            } else {
-              aggregate.emplace(newTable.clone());
+            bool doBothFitInCache = fitInCache(aggregate, newTable);
+            if (doBothFitInCache) {
+              if (aggregate.has_value()) {
+                aggregate.value().insertAtEnd(newTable);
+              } else {
+                aggregate.emplace(newTable.clone());
+              }
             }
-            // TODO<RobinTF> Review question: Should we compute the sizes
-            // individually and add the result together to then check the size
-            // at the cost of a more complex/less generic interface to avoid
-            // filling up memory that might be deallocated soon after.
-            return fitsInCache(aggregate.value());
+            return doBothFitInCache;
           },
           [storeInCache = std::move(storeInCache),
            sortedByCopy = std::move(sortedByCopy),

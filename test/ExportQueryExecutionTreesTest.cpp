@@ -1078,7 +1078,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(idTable), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1110,7 +1110,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
@@ -1143,7 +1143,7 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
@@ -1175,7 +1175,7 @@ TEST(ExportQueryExecutionTrees,
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
@@ -1211,7 +1211,7 @@ TEST(ExportQueryExecutionTrees,
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result);
 
@@ -1251,7 +1251,7 @@ TEST(ExportQueryExecutionTrees,
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
@@ -1299,7 +1299,7 @@ TEST(ExportQueryExecutionTrees,
 
   Result result = Result::fromProtoResult(
       ProtoResult{std::move(tableGenerator), {}, LocalVocab{}},
-      [](const auto&) { return false; }, [](auto) {});
+      [](const auto&, const auto&) { return false; }, [](auto) {});
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 

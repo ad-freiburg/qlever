@@ -197,7 +197,7 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   static Result fromProtoResult(ProtoResult protoResult,
-                                std::function<bool(const IdTable&)> fitsInCache,
+                                std::function<bool(const std::optional<IdTable>&, const IdTable&)> fitInCache,
                                 std::function<void(Result)> storeInCache);
 
   // Const access to the underlying `IdTable`.
