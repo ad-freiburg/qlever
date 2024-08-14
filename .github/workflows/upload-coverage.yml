@@ -28,7 +28,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: 'Download artifact'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         # The following script is taken from the link stated at the
         # beginning of this file. It manually downloads an artifact
         # from another workflow.
@@ -73,7 +73,7 @@ jobs:
       - name: "Move qlever sources up"
         run: mv qlever-source/* .
       - name: "Upload coverage report"
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: coverage.lcov
           # Note: technically, a `token` is not required for codecov.io when
