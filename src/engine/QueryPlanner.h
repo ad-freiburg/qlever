@@ -445,6 +445,11 @@ class QueryPlanner {
       const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
       const TripleGraph& tg) const;
 
+  std::vector<QueryPlanner::SubtreePlan> runGreedyPlanningOnConnectedComponent(
+      std::vector<SubtreePlan> connectedComponent,
+      const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+      const TripleGraph& tg) const;
+
   // Creates a SubtreePlan for the given text leaf node in the triple graph.
   // While doing this the TextLimitMetaObjects are created and updated according
   // to the text leaf node.
@@ -529,8 +534,12 @@ class QueryPlanner {
    * sorting by the cache key when comparing equally cheap indices, else the
    * first element that has the minimum index is returned.
    */
-  [[nodiscard]] size_t findCheapestExecutionTree(
+  size_t findCheapestExecutionTree(
       const std::vector<SubtreePlan>& lastRow) const;
+  static size_t findSmallestExecutionTree(
+      const std::vector<SubtreePlan>& lastRow);
+  static size_t findUniqueNodeIds(
+      const std::vector<SubtreePlan>& connectedComponent);
 
   /// if this Planner is not associated with a queryExecutionContext we are only
   /// in the unit test mode

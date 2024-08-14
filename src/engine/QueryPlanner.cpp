@@ -33,6 +33,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "global/RuntimeParameters.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 
@@ -1194,6 +1195,19 @@ void QueryPlanner::applyTextLimitsIfPossible(
 }
 
 // _____________________________________________________________________________
+size_t QueryPlanner::findUniqueNodeIds(
+    const std::vector<SubtreePlan>& connectedComponent) {
+  ad_utility::HashSet<uint64_t> uniqueNodeIds;
+  // TODO<joka921> Assert that all the node IDs only consist of a single
+  // element. Or even better: Do a bitwise or and then count the number of set
+  // bits...
+  std::ranges::copy(connectedComponent | std::views::transform(
+                                             &SubtreePlan::_idsOfIncludedNodes),
+                    std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
+  return uniqueNodeIds.size();
+}
+
+// _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     std::vector<SubtreePlan> connectedComponent,
@@ -1206,16 +1220,12 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   dpTab.push_back(std::move(connectedComponent));
   applyFiltersIfPossible<false>(dpTab.back(), filters);
   applyTextLimitsIfPossible(dpTab.back(), textLimits, false);
-  ad_utility::HashSet<uint64_t> uniqueNodeIds;
-  std::ranges::copy(
-      dpTab.back() | std::views::transform(&SubtreePlan::_idsOfIncludedNodes),
-      std::inserter(uniqueNodeIds, uniqueNodeIds.end()));
-  size_t numSeeds = uniqueNodeIds.size();
+  size_t numSeeds = findUniqueNodeIds(dpTab.back());
 
   for (size_t k = 2; k <= numSeeds; ++k) {
     LOG(TRACE) << "Producing plans that unite " << k << " triples."
                << std::endl;
-    dpTab.emplace_back(vector<SubtreePlan>());
+    dpTab.emplace_back();
     for (size_t i = 1; i * 2 <= k; ++i) {
       checkCancellation();
       auto newPlans = merge(dpTab[i - 1], dpTab[k - i - 1], tg);
@@ -1228,6 +1238,38 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
     AD_CORRECTNESS_CHECK(!dpTab[k - 1].empty());
   }
   return std::move(dpTab.back());
+}
+
+// _____________________________________________________________________________
+std::vector<QueryPlanner::SubtreePlan>
+QueryPlanner::runGreedyPlanningOnConnectedComponent(
+    std::vector<SubtreePlan> connectedComponent,
+    const vector<SparqlFilter>& filters, const TextLimitMap& textLimits,
+    const TripleGraph& tg) const {
+  auto& result = connectedComponent;
+  applyFiltersIfPossible<true>(result, filters);
+  applyTextLimitsIfPossible(result, textLimits, true);
+  size_t numSeeds = findUniqueNodeIds(result);
+
+  while (numSeeds > 1) {
+    checkCancellation();
+    auto newPlans = merge(result, result, tg);
+    applyFiltersIfPossible<true>(newPlans, filters);
+    applyTextLimitsIfPossible(newPlans, textLimits, true);
+    auto smallestIdx = findSmallestExecutionTree(newPlans);
+    auto& cheapestNewTree = newPlans.at(smallestIdx);
+    size_t oldSize = result.size();
+    std::erase_if(result, [&cheapestNewTree](const auto& plan) {
+      // TODO<joka921> We can also assert some other invariants here.
+      return (cheapestNewTree._idsOfIncludedNodes & plan._idsOfIncludedNodes) !=
+             0;
+    });
+    result.push_back(std::move(cheapestNewTree));
+    AD_CORRECTNESS_CHECK(result.size() < oldSize);
+    numSeeds--;
+  }
+  // TODO<joka921> Assert that all seeds are covered by the result.
+  return std::move(result);
 }
 
 // _____________________________________________________________________________
@@ -1247,9 +1289,13 @@ vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     components[componentIndices.at(i)].push_back(std::move(initialPlans.at(i)));
   }
   vector<vector<SubtreePlan>> lastDpRowFromComponents;
+  bool useGreedyPlanning = RuntimeParameters().get<"use-greedy-planning">();
   for (auto& component : components | std::views::values) {
-    lastDpRowFromComponents.push_back(runDynamicProgrammingOnConnectedComponent(
-        std::move(component), filters, textLimits, tg));
+    auto impl = useGreedyPlanning
+                    ? &QueryPlanner::runGreedyPlanningOnConnectedComponent
+                    : &QueryPlanner::runDynamicProgrammingOnConnectedComponent;
+    lastDpRowFromComponents.push_back(
+        std::invoke(impl, this, std::move(component), filters, textLimits, tg));
     checkCancellation();
   }
   size_t numConnectedComponents = lastDpRowFromComponents.size();
@@ -1588,6 +1634,21 @@ size_t QueryPlanner::findCheapestExecutionTree(
     } else {
       return aCost < bCost;
     }
+  };
+  return std::min_element(lastRow.begin(), lastRow.end(), compare) -
+         lastRow.begin();
+};
+
+// _________________________________________________________________________________
+size_t QueryPlanner::findSmallestExecutionTree(
+    const std::vector<SubtreePlan>& lastRow) {
+  AD_CONTRACT_CHECK(!lastRow.empty());
+  // TODO<joka921> Precompute the sizes and costs. (or check if they are
+  // cached).
+  auto compare = [](const auto& a, const auto& b) {
+    auto aSize = a.getSizeEstimate(), bSize = b.getSizeEstimate();
+    auto aCost = a.getCostEstimate(), bCost = b.getCostEstimate();
+    return std::tie(aSize, aCost) < std::tie(bSize, bCost);
   };
   return std::min_element(lastRow.begin(), lastRow.end(), compare) -
          lastRow.begin();
