@@ -107,7 +107,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
                                      std::chrono::milliseconds duration) {
       runtimeInfo().totalTime_ += duration;
       runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
-      runtimeInfo().numRows_ = idTable.numRows();
+      runtimeInfo().numRows_ += idTable.numRows();
       runtimeInfo().numCols_ = idTable.numColumns();
       LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                  << " x " << idTable.numColumns() << std::endl;

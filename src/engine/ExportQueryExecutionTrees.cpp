@@ -663,11 +663,6 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
       qet.getResult(query._limitOffset._limit.has_value());
   result->logResultSize();
 
-  std::optional<size_t> resultSize =
-      query.hasSelectClause() && result->isDataEvaluated()
-          ? std::optional{result->idTable().size()}
-          : std::nullopt;
-
   nlohmann::json j;
 
   j["query"] = query._originalString;
@@ -698,7 +693,9 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
   auto timeResultComputation =
       timeUntilFunctionCall + runtimeInformation.totalTime_;
 
-  j["resultsize"] = resultSize.value_or(j["res"].size());
+  size_t resultSize = runtimeInformation.numRows_;
+
+  j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
   j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
   j["time"]["computeResult"] =
       std::to_string(timeResultComputation.count()) + "ms";
