@@ -1143,7 +1143,14 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  auto range = iterator->view_;
+  auto rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1173,11 +1180,18 @@ TEST(ExportQueryExecutionTrees,
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
+  auto range = iterator->view_;
+  auto rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
+
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(5));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1207,15 +1221,22 @@ TEST(ExportQueryExecutionTrees,
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(1));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+  auto range = iterator->view_;
+  auto rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(1));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
+
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1245,15 +1266,29 @@ TEST(ExportQueryExecutionTrees,
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(2));
+
+  auto range = iterator->view_;
+  auto rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
+
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
+
+  ++rangeIterator;
+  ASSERT_EQ(rangeIterator, range.end());
 
   ++iterator;
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+  range = iterator->view_;
+  rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1291,23 +1326,44 @@ TEST(ExportQueryExecutionTrees,
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(3));
+
+  auto range = iterator->view_;
+  auto rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(4));
+
+  range = iterator->view_;
+  rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
+
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(5));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(5));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(6));
+  range = iterator->view_;
+  rangeIterator = range.begin();
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(6));
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(iterator->idTable_.at(iterator->index_)[0], Id::makeFromInt(7));
+  ++rangeIterator;
+  ASSERT_NE(rangeIterator, range.end());
+  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(7));
+
+  ++rangeIterator;
+  EXPECT_EQ(rangeIterator, range.end());
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());

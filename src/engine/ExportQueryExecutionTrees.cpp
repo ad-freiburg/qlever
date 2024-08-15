@@ -28,19 +28,25 @@ cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
 // Return a range that contains the indices of the rows that have to be exported
 // from the `idTable` given the `LimitOffsetClause`. It takes into account the
 // LIMIT, the OFFSET, and the actual size of the `idTable`
-cppcoro::generator<ExportQueryExecutionTrees::IndexWithTable>
+cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result) {
+  if (limitOffset._limit.value_or(1) == 0) {
+    co_return;
+  }
   for (const IdTable& idTable : getIdTables(result)) {
     uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
     uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
-    for (size_t index = currentOffset; index < upperBound; index++) {
-      co_yield {index, idTable};
+    if (currentOffset != upperBound) {
+      co_yield {idTable, std::views::iota(currentOffset, upperBound)};
     }
     limitOffset._offset -= currentOffset;
     if (limitOffset._limit.has_value()) {
       limitOffset._limit =
           limitOffset._limit.value() - (upperBound - currentOffset);
+    }
+    if (limitOffset._limit.value_or(1) == 0) {
+      break;
     }
   }
 }
@@ -52,22 +58,24 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
-  for (auto [i, idTable] : getRowIndices(limitAndOffset, *result)) {
-    ConstructQueryExportContext context{i, idTable, result->localVocab(),
-                                        qet.getVariableColumns(),
-                                        qet.getQec()->getIndex()};
-    using enum PositionInTriple;
-    for (const auto& triple : constructTriples) {
-      auto subject = triple[0].evaluate(context, SUBJECT);
-      auto predicate = triple[1].evaluate(context, PREDICATE);
-      auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
-        continue;
+  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (size_t i : range) {
+      ConstructQueryExportContext context{i, idTable, result->localVocab(),
+                                          qet.getVariableColumns(),
+                                          qet.getQec()->getIndex()};
+      using enum PositionInTriple;
+      for (const auto& triple : constructTriples) {
+        auto subject = triple[0].evaluate(context, SUBJECT);
+        auto predicate = triple[1].evaluate(context, PREDICATE);
+        auto object = triple[2].evaluate(context, OBJECT);
+        if (!subject.has_value() || !predicate.has_value() ||
+            !object.has_value()) {
+          continue;
+        }
+        co_yield {std::move(subject.value()), std::move(predicate.value()),
+                  std::move(object.value())};
+        cancellationHandle->throwIfCancelled();
       }
-      co_yield {std::move(subject.value()), std::move(predicate.value()),
-                std::move(object.value())};
-      cancellationHandle->throwIfCancelled();
     }
   }
 }
@@ -135,31 +143,33 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   AD_CORRECTNESS_CHECK(result != nullptr);
   nlohmann::json json = nlohmann::json::array();
 
-  for (auto [rowIndex, idTable] : getRowIndices(limitAndOffset, *result)) {
-    // We need the explicit `array` constructor for the special case of zero
-    // variables.
-    json.push_back(nlohmann::json::array());
-    auto& row = json.back();
-    for (const auto& opt : columns) {
-      if (!opt) {
-        row.emplace_back(nullptr);
-        continue;
+  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (size_t rowIndex : range) {
+      // We need the explicit `array` constructor for the special case of zero
+      // variables.
+      json.push_back(nlohmann::json::array());
+      auto& row = json.back();
+      for (const auto& opt : columns) {
+        if (!opt) {
+          row.emplace_back(nullptr);
+          continue;
+        }
+        const auto& currentId = idTable(rowIndex, opt->columnIndex_);
+        const auto& optionalStringAndXsdType = idToStringAndType(
+            qet.getQec()->getIndex(), currentId, result->localVocab());
+        if (!optionalStringAndXsdType.has_value()) {
+          row.emplace_back(nullptr);
+          continue;
+        }
+        const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
+        if (xsdType) {
+          row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+        } else {
+          row.emplace_back(stringValue);
+        }
       }
-      const auto& currentId = idTable(rowIndex, opt->columnIndex_);
-      const auto& optionalStringAndXsdType = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalStringAndXsdType.has_value()) {
-        row.emplace_back(nullptr);
-        continue;
-      }
-      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
-      if (xsdType) {
-        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
-      } else {
-        row.emplace_back(stringValue);
-      }
+      cancellationHandle->throwIfCancelled();
     }
-    cancellationHandle->throwIfCancelled();
   }
   return json;
 }
@@ -375,32 +385,34 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     return b;
   };
 
-  for (auto [rowIndex, idTable] : getRowIndices(limitAndOffset, *result)) {
-    // TODO: ordered_json` entries are ordered alphabetically, but insertion
-    // order would be preferable.
-    nlohmann::ordered_json binding;
-    for (const auto& column : columns) {
-      const auto& currentId = idTable(rowIndex, column->columnIndex_);
-      const auto& optionalValue = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalValue.has_value()) {
-        continue;
+  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (size_t rowIndex : range) {
+      // TODO: ordered_json` entries are ordered alphabetically, but insertion
+      // order would be preferable.
+      nlohmann::ordered_json binding;
+      for (const auto& column : columns) {
+        const auto& currentId = idTable(rowIndex, column->columnIndex_);
+        const auto& optionalValue = idToStringAndType(
+            qet.getQec()->getIndex(), currentId, result->localVocab());
+        if (!optionalValue.has_value()) {
+          continue;
+        }
+        const auto& [stringValue, xsdType] = optionalValue.value();
+        nlohmann::ordered_json b;
+        if (!xsdType) {
+          // No xsdType, this means that `stringValue` is a plain string literal
+          // or entity.
+          b = stringToBinding(stringValue);
+        } else {
+          b["value"] = stringValue;
+          b["type"] = "literal";
+          b["datatype"] = xsdType;
+        }
+        binding[column->variable_] = std::move(b);
       }
-      const auto& [stringValue, xsdType] = optionalValue.value();
-      nlohmann::ordered_json b;
-      if (!xsdType) {
-        // No xsdType, this means that `stringValue` is a plain string literal
-        // or entity.
-        b = stringToBinding(stringValue);
-      } else {
-        b["value"] = stringValue;
-        b["type"] = "literal";
-        b["datatype"] = xsdType;
-      }
-      binding[column->variable_] = std::move(b);
+      bindings.emplace_back(std::move(binding));
+      cancellationHandle->throwIfCancelled();
     }
-    bindings.emplace_back(std::move(binding));
-    cancellationHandle->throwIfCancelled();
   }
   resultJson["results"]["bindings"] = std::move(bindings);
   return resultJson;
@@ -450,15 +462,17 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (auto [i, idTable] : getRowIndices(limitAndOffset, *result)) {
-      for (const auto& columnIndex : selectedColumnIndices) {
-        if (columnIndex.has_value()) {
-          co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
-                                        i, columnIndex.value().columnIndex_)),
-                                    sizeof(Id)};
+    for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+      for (size_t i : range) {
+        for (const auto& columnIndex : selectedColumnIndices) {
+          if (columnIndex.has_value()) {
+            co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
+                                          i, columnIndex.value().columnIndex_)),
+                                      sizeof(Id)};
+          }
         }
+        cancellationHandle->throwIfCancelled();
       }
-      cancellationHandle->throwIfCancelled();
     }
     co_return;
   }
@@ -478,22 +492,24 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (auto [i, idTable] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-      if (selectedColumnIndices[j].has_value()) {
-        const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val.columnIndex_);
-        auto optionalStringAndType =
-            idToStringAndType<format == MediaType::csv>(
-                qet.getQec()->getIndex(), id, result->localVocab(),
-                escapeFunction);
-        if (optionalStringAndType.has_value()) [[likely]] {
-          co_yield optionalStringAndType.value().first;
+  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (size_t i : range) {
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (selectedColumnIndices[j].has_value()) {
+          const auto& val = selectedColumnIndices[j].value();
+          Id id = idTable(i, val.columnIndex_);
+          auto optionalStringAndType =
+              idToStringAndType<format == MediaType::csv>(
+                  qet.getQec()->getIndex(), id, result->localVocab(),
+                  escapeFunction);
+          if (optionalStringAndType.has_value()) [[likely]] {
+            co_yield optionalStringAndType.value().first;
+          }
         }
+        co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
       }
-      co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
+      cancellationHandle->throwIfCancelled();
     }
-    cancellationHandle->throwIfCancelled();
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
@@ -601,18 +617,20 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (auto [i, idTable] : getRowIndices(limitAndOffset, *result)) {
-    co_yield "\n  <result>";
-    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-      if (selectedColumnIndices[j].has_value()) {
-        const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val.columnIndex_);
-        co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
-                                result->localVocab());
+  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (size_t i : range) {
+      co_yield "\n  <result>";
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (selectedColumnIndices[j].has_value()) {
+          const auto& val = selectedColumnIndices[j].value();
+          Id id = idTable(i, val.columnIndex_);
+          co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
+                                  result->localVocab());
+        }
       }
+      co_yield "\n  </result>";
+      cancellationHandle->throwIfCancelled();
     }
-    co_yield "\n  </result>";
-    cancellationHandle->throwIfCancelled();
   }
   co_yield "\n</results>";
   co_yield "\n</sparql>";

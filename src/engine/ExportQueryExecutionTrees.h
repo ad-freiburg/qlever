@@ -178,16 +178,16 @@ class ExportQueryExecutionTrees {
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
 
-  struct IndexWithTable {
-    size_t index_;
+  struct TableWithRange {
     const IdTable& idTable_;
+    std::ranges::iota_view<size_t, size_t> view_;
   };
 
   static cppcoro::generator<const IdTable&> getIdTables(const Result& result);
   // Return a range that contains the indices of the rows that have to be
   // exported from the `idTable` given the `LimitOffsetClause`. It takes into
   // account the LIMIT, the OFFSET, and the actual size of the `idTable`
-  static cppcoro::generator<IndexWithTable> getRowIndices(
+  static cppcoro::generator<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result);
 
   FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
