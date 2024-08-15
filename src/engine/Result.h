@@ -113,7 +113,7 @@ class Result {
   // timing information on how long it took to compute this new chunk.
   // `onGeneratorFinished` is guaranteed to be called eventually as long as the
   // generator is consumed at least partially, with `true` if an exception
-  // occured during consumption or with `false` when the generator is done
+  // occurred during consumption or with `false` when the generator is done
   // processing or abandoned and destroyed.
   //
   // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
