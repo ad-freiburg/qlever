@@ -105,9 +105,10 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
         [this, overlap = 0us](const IdTable& idTable,
                               std::chrono::microseconds duration) mutable {
           overlap += duration;
-          runtimeInfo().totalTime_ +=
+          auto msPrecision =
               std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
-          overlap -= runtimeInfo().totalTime_;
+          runtimeInfo().totalTime_ += msPrecision;
+          overlap -= msPrecision;
           runtimeInfo().originalOperationTime_ =
               runtimeInfo().getOperationTime();
           runtimeInfo().numRows_ += idTable.numRows();
@@ -131,9 +132,10 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
         _limit, [runtimeInfo = getRuntimeInfoPointer(),
                  overlap = 0us](std::chrono::microseconds limitTime) mutable {
           overlap += limitTime;
-          runtimeInfo->totalTime_ =
+          auto msPrecision =
               std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
-          overlap -= runtimeInfo->totalTime_;
+          runtimeInfo->totalTime_ += msPrecision;
+          overlap -= msPrecision;
           runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
         });
   } else {
