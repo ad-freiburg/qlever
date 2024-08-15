@@ -11,6 +11,11 @@
 
 namespace ad_utility {
 
+// Wrap the given `generator` inside another generator that aggregates a cache
+// by calling `aggregator` on every iteration of the inner `generator` until it
+// returns false. If the `aggregator` returns false, the cached value is
+// discarded. If the cached value is still present once the generator is fully
+// consumed, `onFullyCached` is called with the cached value.
 template <typename T>
 cppcoro::generator<T> wrapGeneratorWithCache(
     cppcoro::generator<T> generator,
@@ -18,15 +23,15 @@ cppcoro::generator<T> wrapGeneratorWithCache(
         aggregator,
     InvocableWithExactReturnType<void, T> auto onFullyCached) {
   std::optional<T> aggregatedData{};
-  bool aggregate = true;
+  bool shouldBeAggregated = true;
   for (auto&& element : generator) {
-    if (aggregate) {
-      aggregate = aggregator(aggregatedData, element);
-      if (!aggregate) {
+    if (shouldBeAggregated) {
+      shouldBeAggregated = aggregator(aggregatedData, element);
+      if (!shouldBeAggregated) {
         aggregatedData.reset();
       }
     }
-    co_yield AD_FWD(element);
+    co_yield std::move(element);
   }
   if (aggregatedData.has_value()) {
     onFullyCached(std::move(aggregatedData).value());

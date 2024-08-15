@@ -180,9 +180,9 @@ class ConcurrentCache {
    * @param onlyReadFromCache If true, then the result will only be returned if
    * it is contained in the cache. Otherwise `nullptr` with a cache status of
    * `notInCacheNotComputed` will be returned.
-   * @return A shared_ptr to the computation result.
-   * @param suitedForCache Predicate function that will be applied to newly
-   * computed value to check if it is suited for caching.
+   * @param suitableForCache Predicate function that will be applied to newly
+   * computed value to check if it is suitable for caching. Only if it returns
+   * true the result will be cached.
    * @return A `ResultAndCacheStatus` shared_ptr to the computation result.
    *
    */
@@ -191,9 +191,9 @@ class ConcurrentCache {
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
       bool onlyReadFromCache,
       const InvocableWithConvertibleReturnType<bool, const Value&> auto&
-          suitedForCache) {
+          suitableForCache) {
     return computeOnceImpl(false, key, computeFunction, onlyReadFromCache,
-                           suitedForCache);
+                           suitableForCache);
   }
 
   /// Similar to computeOnce, with the following addition: After the call
@@ -208,15 +208,19 @@ class ConcurrentCache {
                            suitedForCache);
   }
 
+  // Insert `value` into the cache, if the `key` is not already present. In case
+  // `pinned` is true and the key is already present, the existing value is
+  // pinned in case it is not pinned yet.
   void tryInsertIfNotPresent(bool pinned, const Key& key,
                              std::shared_ptr<Value> value) {
     auto lockPtr = _cacheAndInProgressMap.wlock();
+    auto& cache = lockPtr->_cache;
     if (pinned) {
-      if (!lockPtr->_cache.containsAndMakePinnedIfExists(key)) {
-        lockPtr->_cache.insertPinned(key, std::move(value));
+      if (!cache.containsAndMakePinnedIfExists(key)) {
+        cache.insertPinned(key, std::move(value));
       }
-    } else if (!lockPtr->_cache.contains(key)) {
-      lockPtr->_cache.insert(key, std::move(value));
+    } else if (!cache.contains(key)) {
+      cache.insert(key, std::move(value));
     }
   }
 
@@ -340,7 +344,7 @@ class ConcurrentCache {
       const InvocableWithConvertibleReturnType<Value> auto& computeFunction,
       bool onlyReadFromCache,
       const InvocableWithConvertibleReturnType<bool, const Value&> auto&
-          suitedForCache) {
+          suitableForCache) {
     using std::make_shared;
     bool mustCompute;
     shared_ptr<ResultInProgress> resultInProgress;
@@ -383,11 +387,12 @@ class ConcurrentCache {
       try {
         // The actual computation
         shared_ptr<Value> result = make_shared<Value>(computeFunction());
-        if (suitedForCache(*result)) {
+        if (suitableForCache(*result)) {
           moveFromInProgressToCache(key, result);
           // Signal other threads who are waiting for the results.
           resultInProgress->finish(result);
         } else {
+          AD_CONTRACT_CHECK(!pinned);
           _cacheAndInProgressMap.wlock()->_inProgress.erase(key);
           resultInProgress->finish(nullptr);
         }
@@ -408,7 +413,11 @@ class ConcurrentCache {
       if (!resultPointer) {
         // Fallback computation
         auto mutablePointer = make_shared<Value>(computeFunction());
-        tryInsertIfNotPresent(pinned, key, mutablePointer);
+        if (suitableForCache(*mutablePointer)) {
+          tryInsertIfNotPresent(pinned, key, mutablePointer);
+        } else {
+          AD_CONTRACT_CHECK(!pinned);
+        }
         resultPointer = std::move(mutablePointer);
       }
       return {std::move(resultPointer), CacheStatus::computed};
