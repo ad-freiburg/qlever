@@ -108,7 +108,7 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   void runOnNewChunkComputed(
-      std::function<void(const IdTable&, std::chrono::milliseconds)> function);
+      std::function<void(const IdTable&, std::chrono::microseconds)> function);
 
   void cacheDuringConsumption(
       std::function<bool(const std::optional<IdTable>&, const IdTable&)>
@@ -181,7 +181,7 @@ class Result {
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::milliseconds)> limitTimeCallback);
+      std::function<void(std::chrono::microseconds)> limitTimeCallback);
 
   void enforceLimitOffset(const LimitOffsetClause& limitOffset);
 

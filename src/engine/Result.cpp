@@ -92,7 +92,7 @@ void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::milliseconds)> limitTimeCallback) {
+    std::function<void(std::chrono::microseconds)> limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
@@ -104,7 +104,7 @@ void Result::applyLimitOffset(
   } else {
     auto generator =
         [](cppcoro::generator<IdTable> original, LimitOffsetClause limitOffset,
-           std::function<void(std::chrono::milliseconds)> limitTimeCallback)
+           std::function<void(std::chrono::microseconds)> limitTimeCallback)
         -> cppcoro::generator<IdTable> {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
@@ -119,7 +119,7 @@ void Result::applyLimitOffset(
           limitOffset._limit.value() -=
               limitOffset.actualSize(originalSize - offsetDelta);
         }
-        limitTimeCallback(limitTimer.msecs());
+        limitTimeCallback(limitTimer.value());
         if (limitOffset._offset == 0) {
           co_yield std::move(idTable);
         }
@@ -207,15 +207,15 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 
 // _____________________________________________________________________________
 void Result::runOnNewChunkComputed(
-    std::function<void(const IdTable&, std::chrono::milliseconds)> function) {
+    std::function<void(const IdTable&, std::chrono::microseconds)> function) {
   AD_CONTRACT_CHECK(!isDataEvaluated());
   auto generator =
       [](cppcoro::generator<IdTable> original,
-         std::function<void(const IdTable&, std::chrono::milliseconds)>
+         std::function<void(const IdTable&, std::chrono::microseconds)>
              function) -> cppcoro::generator<IdTable> {
     ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
     for (auto&& idTable : original) {
-      function(idTable, timer.msecs());
+      function(idTable, timer.value());
       co_yield std::move(idTable);
       timer.start();
     }

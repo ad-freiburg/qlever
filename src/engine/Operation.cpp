@@ -102,19 +102,23 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
                                       timer.msecs(), std::nullopt);
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
-    result.runOnNewChunkComputed([this, isRoot](
-                                     const IdTable& idTable,
-                                     std::chrono::milliseconds duration) {
-      runtimeInfo().totalTime_ += duration;
-      runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
-      runtimeInfo().numRows_ += idTable.numRows();
-      runtimeInfo().numCols_ = idTable.numColumns();
-      LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
-                 << " x " << idTable.numColumns() << std::endl;
-      if (isRoot) {
-        signalQueryUpdate();
-      }
-    });
+    result.runOnNewChunkComputed(
+        [this, isRoot, counter = 0us](
+            const IdTable& idTable,
+            std::chrono::microseconds duration) mutable {
+          counter += duration;
+          runtimeInfo().totalTime_ =
+              std::chrono::duration_cast<std::chrono::milliseconds>(counter);
+          runtimeInfo().originalOperationTime_ =
+              runtimeInfo().getOperationTime();
+          runtimeInfo().numRows_ += idTable.numRows();
+          runtimeInfo().numCols_ = idTable.numColumns();
+          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
+                     << " x " << idTable.numColumns() << std::endl;
+          if (isRoot) {
+            signalQueryUpdate();
+          }
+        });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
   // already perform it. An example for an operation that directly computes
@@ -126,10 +130,13 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // limits and offsets.
   if (!supportsLimit()) {
     runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0}, true);
-    result.applyLimitOffset(_limit, [runtimeInfo = getRuntimeInfoPointer()](
-                                        std::chrono::milliseconds limitTime) {
-      runtimeInfo->totalTime_ += limitTime;
-    });
+    result.applyLimitOffset(
+        _limit, [runtimeInfo = getRuntimeInfoPointer(),
+                 counter = 0us](std::chrono::microseconds limitTime) mutable {
+          counter += limitTime;
+          runtimeInfo->totalTime_ =
+              std::chrono::duration_cast<std::chrono::milliseconds>(counter);
+        });
   } else {
     result.enforceLimitOffset(_limit);
   }
