@@ -182,7 +182,7 @@ class ExportQueryExecutionTrees {
   // access the `IdTable` with.
   struct TableWithRange {
     const IdTable& idTable_;
-    std::ranges::iota_view<size_t, size_t> view_;
+    std::ranges::iota_view<uint64_t, uint64_t> view_;
   };
 
   // Yield all `IdTables` provided by the given `result`.

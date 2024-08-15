@@ -38,8 +38,7 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
     uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
     if (currentOffset != upperBound) {
-      co_yield TableWithRange{idTable,
-                              std::views::iota(currentOffset, upperBound)};
+      co_yield {idTable, std::views::iota(currentOffset, upperBound)};
     }
     limitOffset._offset -= currentOffset;
     if (limitOffset._limit.has_value()) {
@@ -60,7 +59,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t i : range) {
+    for (uint64_t i : range) {
       ConstructQueryExportContext context{i, idTable, result->localVocab(),
                                           qet.getVariableColumns(),
                                           qet.getQec()->getIndex()};
@@ -145,7 +144,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   nlohmann::json json = nlohmann::json::array();
 
   for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t rowIndex : range) {
+    for (uint64_t rowIndex : range) {
       // We need the explicit `array` constructor for the special case of zero
       // variables.
       json.push_back(nlohmann::json::array());
@@ -387,7 +386,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
   };
 
   for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t rowIndex : range) {
+    for (uint64_t rowIndex : range) {
       // TODO: ordered_json` entries are ordered alphabetically, but insertion
       // order would be preferable.
       nlohmann::ordered_json binding;
@@ -464,7 +463,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
     for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-      for (size_t i : range) {
+      for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
             co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
@@ -494,7 +493,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
   for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t i : range) {
+    for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
           const auto& val = selectedColumnIndices[j].value();
@@ -619,7 +618,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
   for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
-    for (size_t i : range) {
+    for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
