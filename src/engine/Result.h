@@ -107,19 +107,41 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
+  // Wrap the generator stored in `data_` within a new generator that calls
+  // `onNewChunk` every time a new `IdTable` is yielded by the original
+  // generator and passed this new `IdTable` along with microsecond precision
+  // timing information on how long it took to compute this new chunk.
+  // `onGeneratorFinished` is guaranteed to be called eventually as long as the
+  // generator is consumed at least partially, with `true` if an exception
+  // occured during consumption or with `false` when the generator is done
+  // processing or abandoned and destroyed.
+  //
+  // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
+  // wrong variant.
   void runOnNewChunkComputed(
       std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
       std::function<void(bool)> onGeneratorFinished);
 
+  // Wrap the generator stored in `data_` within a new generator that aggregates
+  // the entries yielded by the generator into a cacheable `IdTable`. Once
+  // `fitInCache` returns false, thus indicating that both passed arguments
+  // together would be too large to be cached, this cached value is discarded.
+  // If this cached value still exists when the generator is fully consumed a
+  // new `Result` is created with this value and passed to `storeInCache`.
+  //
+  // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
+  // wrong variant.
   void cacheDuringConsumption(
       std::function<bool(const std::optional<IdTable>&, const IdTable&)>
           fitInCache,
       std::function<void(Result)> storeInCache);
 
-  // Const access to the underlying `IdTable`.
+  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
+  // if the underlying `data_` member holds the wrong variant.
   const IdTable& idTable() const;
 
-  // Access to the underlying `IdTable`s.
+  // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
+  // if the underlying `data_` member holds the wrong variant.
   cppcoro::generator<IdTable>& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
@@ -165,6 +187,7 @@ class Result {
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
 
+  // Return true if `data_` holds an `IdTable`, false otherwise.
   bool isDataEvaluated() const noexcept;
 
   // Log the size of this result. We call this at several places in
@@ -177,19 +200,31 @@ class Result {
   string asDebugString() const;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
-  // Note: If additional members and invariants are added to the class (for
+  // This also applies if `data_` holds a generator yielding `IdTable`s, where
+  // this is applied respectively.
+  // `limitTimeCallback` is called whenever an `IdTable` is resized with the
+  // number of microseconds it took to perform this operation.
+  // Note: If  additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
       std::function<void(std::chrono::microseconds)> limitTimeCallback);
 
+  // Check if the operation did fulfill its contract and only returns as many
+  // elements as requested by the provided `limitOffset`. Throw an
+  // `ad_utility::Exception` otherwise. When `data_` holds a generator, this
+  // behaviour applies analogously when consuming the generator.
+  // This member function provides an alternative to `applyLimitOffset` that
+  // resizes the result if the operation doesn't support this on its own.
   void enforceLimitOffset(const LimitOffsetClause& limitOffset);
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no
-  // undefined values in the `data_` of this result. Return `true` iff the
-  // check is successful.
+  // undefined values in the `data_` of this result. Do nothing iff the check is
+  // successful. Throw an `ad_utility::Exception` otherwise. When `data_` holds
+  // a generator, this behaviour applies analogously when consuming the
+  // generator.
   void checkDefinedness(const VariableToColumnMap& varColMap);
 };
 

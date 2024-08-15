@@ -260,9 +260,15 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
+  // Perform the expensive computation modeled by the subclass of this
+  // `Operation`. The value provided by `computationMode` decides if lazy
+  // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
+  // an `ad_utility::Exception`.
   ProtoResult runComputation(const ad_utility::Timer& timer,
                              ComputationMode computationMode);
 
+  // Call `runComputationAndPrepareForCache` and transform it into a value that
+  // could be inserted into the cache.
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
                                               const std::string& cacheKey,

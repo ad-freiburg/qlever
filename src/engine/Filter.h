@@ -60,10 +60,14 @@ class Filter : public Operation {
 
   ProtoResult computeResult(bool requestLaziness) override;
 
+  // Perform the actual filter operation of the data provided by
+  // `evaluationContext`.
   template <size_t WIDTH>
   IdTable computeFilterImpl(
       sparqlExpression::EvaluationContext& evaluationContext);
 
+  // Run `computeFilterImpl` once for every `IdTable` yielded by `subResult` if
+  // it is lazily evaluated.
   cppcoro::generator<IdTable> filterInChunks(
       std::shared_ptr<const Result> subRes);
 };

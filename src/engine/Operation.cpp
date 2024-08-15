@@ -72,6 +72,7 @@ void Operation::recursivelySetTimeConstraint(
 // _____________________________________________________________________________
 ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
                                       ComputationMode computationMode) {
+  AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
