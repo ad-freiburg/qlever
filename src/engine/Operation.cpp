@@ -102,9 +102,11 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, overlap = 0us](const IdTable& idTable,
-                              std::chrono::microseconds duration) mutable {
+        [this, overlap = 0us, timeSizeUpdate = 0us](
+            const IdTable& idTable,
+            std::chrono::microseconds duration) mutable {
           overlap += duration;
+          timeSizeUpdate += duration;
           auto msPrecision =
               std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
           runtimeInfo().totalTime_ += msPrecision;
@@ -115,6 +117,15 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
           runtimeInfo().numCols_ = idTable.numColumns();
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
+          if (timeSizeUpdate > 50ms) {
+            timeSizeUpdate = 0us;
+            signalQueryUpdate();
+          }
+        },
+        [this](bool failed) {
+          if (failed) {
+            runtimeInfo().status_ = RuntimeInformation::failed;
+          }
           signalQueryUpdate();
         });
   }

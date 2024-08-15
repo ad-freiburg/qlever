@@ -108,7 +108,8 @@ class Result {
   Result& operator=(Result&& other) = default;
 
   void runOnNewChunkComputed(
-      std::function<void(const IdTable&, std::chrono::microseconds)> function);
+      std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+      std::function<void(bool)> onGeneratorFinished);
 
   void cacheDuringConsumption(
       std::function<bool(const std::optional<IdTable>&, const IdTable&)>

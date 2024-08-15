@@ -207,19 +207,33 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 
 // _____________________________________________________________________________
 void Result::runOnNewChunkComputed(
-    std::function<void(const IdTable&, std::chrono::microseconds)> function) {
+    std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+    std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isDataEvaluated());
   auto generator =
       [](cppcoro::generator<IdTable> original,
          std::function<void(const IdTable&, std::chrono::microseconds)>
-             function) -> cppcoro::generator<IdTable> {
-    ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
-    for (auto&& idTable : original) {
-      function(idTable, timer.value());
-      co_yield std::move(idTable);
-      timer.start();
+             onNewChunk,
+         std::function<void(bool)> onGeneratorFinished)
+      -> cppcoro::generator<IdTable> {
+    // Call this within destructor to make sure it is also called when an
+    // operation stops iterating before reaching the end.
+    absl::Cleanup cleanup{
+        [&onGeneratorFinished]() { onGeneratorFinished(false); }};
+    try {
+      ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
+      for (auto&& idTable : original) {
+        onNewChunk(idTable, timer.value());
+        co_yield std::move(idTable);
+        timer.start();
+      }
+    } catch (...) {
+      std::move(cleanup).Cancel();
+      onGeneratorFinished(true);
+      throw;
     }
-  }(std::move(idTables()), std::move(function));
+  }(std::move(idTables()), std::move(onNewChunk),
+      std::move(onGeneratorFinished));
   data_ = std::move(generator);
 }
 

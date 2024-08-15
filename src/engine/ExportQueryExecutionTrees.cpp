@@ -38,7 +38,8 @@ ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
     uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
     uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
     if (currentOffset != upperBound) {
-      co_yield {idTable, std::views::iota(currentOffset, upperBound)};
+      co_yield TableWithRange{idTable,
+                              std::views::iota(currentOffset, upperBound)};
     }
     limitOffset._offset -= currentOffset;
     if (limitOffset._limit.has_value()) {
@@ -677,8 +678,9 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
   auto timeUntilFunctionCall = requestTimer.msecs();
-  std::shared_ptr<const Result> result =
-      qet.getResult(query._limitOffset._limit.has_value());
+  // Always request lazy if possible, the lower memory footprint outvalues the
+  // potential overhead of generators.
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
 
   nlohmann::json j;
