@@ -68,5 +68,5 @@ class Variable {
     out->append(variable.name());
   }
 
-  static bool isLegalVariableName(std::string_view var);
+  static bool isValidVariableName(std::string_view var);
 };
