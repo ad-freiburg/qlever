@@ -71,8 +71,7 @@ void Operation::recursivelySetTimeConstraint(
 
 // _____________________________________________________________________________
 ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
-                                      ComputationMode computationMode,
-                                      bool isRoot) {
+                                      ComputationMode computationMode) {
   checkCancellation();
   runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
   signalQueryUpdate();
@@ -143,9 +142,9 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
 // _____________________________________________________________________________
 CacheValue Operation::runComputationAndPrepareForCache(
     const ad_utility::Timer& timer, ComputationMode computationMode,
-    const std::string& cacheKey, bool pinned, bool isRoot) {
+    const std::string& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
-  auto result = runComputation(timer, computationMode, isRoot);
+  auto result = runComputation(timer, computationMode);
   if (!result.isDataEvaluated()) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
@@ -207,10 +206,9 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult,
-                       isRoot]() {
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
       return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
-                                              pinResult, isRoot);
+                                              pinResult);
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {
