@@ -102,11 +102,12 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, counter = 0us](const IdTable& idTable,
+        [this, overlap = 0us](const IdTable& idTable,
                               std::chrono::microseconds duration) mutable {
-          counter += duration;
-          runtimeInfo().totalTime_ =
-              std::chrono::duration_cast<std::chrono::milliseconds>(counter);
+          overlap += duration;
+          runtimeInfo().totalTime_ +=
+              std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
+          overlap -= runtimeInfo().totalTime_;
           runtimeInfo().originalOperationTime_ =
               runtimeInfo().getOperationTime();
           runtimeInfo().numRows_ += idTable.numRows();
@@ -128,10 +129,12 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
     runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0}, true);
     result.applyLimitOffset(
         _limit, [runtimeInfo = getRuntimeInfoPointer(),
-                 counter = 0us](std::chrono::microseconds limitTime) mutable {
-          counter += limitTime;
+                 overlap = 0us](std::chrono::microseconds limitTime) mutable {
+          overlap += limitTime;
           runtimeInfo->totalTime_ =
-              std::chrono::duration_cast<std::chrono::milliseconds>(counter);
+              std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
+          overlap -= runtimeInfo->totalTime_;
+          runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
         });
   } else {
     result.enforceLimitOffset(_limit);
