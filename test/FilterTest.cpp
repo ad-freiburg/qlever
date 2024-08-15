@@ -109,7 +109,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
        "Expression ?x"}};
 
   auto result = filter.getResult(false, ComputationMode::LAZY_IF_SUPPORTED);
-  ASSERT_FALSE(result->isDataEvaluated());
+  ASSERT_FALSE(result->isFullyMaterialized());
   auto& generator = result->idTables();
 
   auto iterator = generator.begin();
@@ -158,7 +158,7 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
        "Expression ?x"}};
 
   auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
-  ASSERT_TRUE(result->isDataEvaluated());
+  ASSERT_TRUE(result->isFullyMaterialized());
   EXPECT_THAT(result->idTable(),
               ElementsAre(makeRow(true), makeRow(true), makeRow(true),
                           makeRow(true), makeRow(true)));

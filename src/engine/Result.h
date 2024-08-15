@@ -188,7 +188,7 @@ class Result {
   LocalVocab getCopyOfLocalVocab() const;
 
   // Return true if `data_` holds an `IdTable`, false otherwise.
-  bool isDataEvaluated() const noexcept;
+  bool isFullyMaterialized() const noexcept;
 
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
@@ -217,7 +217,7 @@ class Result {
   // behaviour applies analogously when consuming the generator.
   // This member function provides an alternative to `applyLimitOffset` that
   // resizes the result if the operation doesn't support this on its own.
-  void enforceLimitOffset(const LimitOffsetClause& limitOffset);
+  void assertThatLimitWasRespected(const LimitOffsetClause& limitOffset);
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no

@@ -55,8 +55,7 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
 Result::Result(cppcoro::generator<IdTable> idTables,
                std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
-    : data_{[](auto idTables,
-               auto sortedBy) mutable -> cppcoro::generator<IdTable> {
+    : data_{[](auto idTables, auto sortedBy) -> cppcoro::generator<IdTable> {
         for (IdTable& idTable : idTables) {
           validateIdTable(idTable, sortedBy);
           co_yield std::move(idTable);
@@ -74,7 +73,8 @@ Result::Result(cppcoro::generator<IdTable> idTables,
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
-void modifyIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
+// Apply `LimitOffsetClause` to given `IdTable`.
+void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   std::ranges::for_each(
       idTable.getColumns(),
       [offset = limitOffset.actualOffset(idTable.numRows()),
@@ -97,9 +97,9 @@ void Result::applyLimitOffset(
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
-  if (isDataEvaluated()) {
+  if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-    modifyIdTable(std::get<IdTable>(data_), limitOffset);
+    resizeIdTable(std::get<IdTable>(data_), limitOffset);
     limitTimeCallback(limitTimer.msecs());
   } else {
     auto generator =
@@ -112,7 +112,7 @@ void Result::applyLimitOffset(
       for (auto&& idTable : original) {
         ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
         size_t originalSize = idTable.numRows();
-        modifyIdTable(idTable, limitOffset);
+        resizeIdTable(idTable, limitOffset);
         uint64_t offsetDelta = limitOffset.actualOffset(originalSize);
         limitOffset._offset -= offsetDelta;
         if (limitOffset._limit.has_value()) {
@@ -133,8 +133,8 @@ void Result::applyLimitOffset(
 }
 
 // _____________________________________________________________________________
-void Result::enforceLimitOffset(const LimitOffsetClause& limitOffset) {
-  if (isDataEvaluated()) {
+void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
+  if (isFullyMaterialized()) {
     uint64_t numRows = idTable().numRows();
     auto limit = limitOffset._limit;
     AD_CONTRACT_CHECK(!limit.has_value() || numRows <= limit.value());
@@ -184,7 +184,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
              !hasUndefined;
     });
   };
-  if (isDataEvaluated()) {
+  if (isFullyMaterialized()) {
     AD_EXPENSIVE_CHECK(performCheck(varColMap, std::get<IdTable>(data_)));
   } else {
     auto generator = [](cppcoro::generator<IdTable> original,
@@ -209,7 +209,7 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
 void Result::runOnNewChunkComputed(
     std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
-  AD_CONTRACT_CHECK(!isDataEvaluated());
+  AD_CONTRACT_CHECK(!isFullyMaterialized());
   auto generator =
       [](cppcoro::generator<IdTable> original,
          std::function<void(const IdTable&, std::chrono::microseconds)>
@@ -258,18 +258,18 @@ void Result::validateIdTable(const IdTable& idTable,
 
 // _____________________________________________________________________________
 const IdTable& Result::idTable() const {
-  AD_CONTRACT_CHECK(isDataEvaluated());
+  AD_CONTRACT_CHECK(isFullyMaterialized());
   return std::get<IdTable>(data_);
 }
 
 // _____________________________________________________________________________
 cppcoro::generator<IdTable>& Result::idTables() const {
-  AD_CONTRACT_CHECK(!isDataEvaluated());
+  AD_CONTRACT_CHECK(!isFullyMaterialized());
   return std::get<cppcoro::generator<IdTable>>(data_);
 }
 
 // _____________________________________________________________________________
-bool Result::isDataEvaluated() const noexcept {
+bool Result::isFullyMaterialized() const noexcept {
   return std::holds_alternative<IdTable>(data_);
 }
 
@@ -278,7 +278,7 @@ void Result::cacheDuringConsumption(
     std::function<bool(const std::optional<IdTable>&, const IdTable&)>
         fitInCache,
     std::function<void(Result)> storeInCache) {
-  AD_CONTRACT_CHECK(!isDataEvaluated());
+  AD_CONTRACT_CHECK(!isFullyMaterialized());
   data_ = ad_utility::wrapGeneratorWithCache(
       std::move(idTables()),
       [fitInCache = std::move(fitInCache)](std::optional<IdTable>& aggregate,
@@ -302,7 +302,7 @@ void Result::cacheDuringConsumption(
 
 // _____________________________________________________________________________
 void Result::logResultSize() const {
-  if (isDataEvaluated()) {
+  if (isFullyMaterialized()) {
     LOG(INFO) << "Result has size " << idTable().size() << " x "
               << idTable().numColumns() << std::endl;
   } else {

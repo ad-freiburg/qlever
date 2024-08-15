@@ -79,7 +79,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   ProtoResult result =
       computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
   AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
-                    result.isDataEvaluated());
+                    result.isFullyMaterialized());
 
   checkCancellation();
   if constexpr (ad_utility::areExpensiveChecksEnabled) {
@@ -96,7 +96,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // correct runtimeInfo. The children of the runtime info are already set
   // correctly because the result was computed, so we can pass `nullopt` as
   // the last argument.
-  if (result.isDataEvaluated()) {
+  if (result.isFullyMaterialized()) {
     updateRuntimeInformationOnSuccess(result.idTable().size(),
                                       ad_utility::CacheStatus::computed,
                                       timer.msecs(), std::nullopt);
@@ -151,7 +151,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
           runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
         });
   } else {
-    result.enforceLimitOffset(_limit);
+    result.assertThatLimitWasRespected(_limit);
   }
   return result;
 }
@@ -162,7 +162,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
     const std::string& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
-  if (!result.isDataEvaluated()) {
+  if (!result.isFullyMaterialized()) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize = cache.getMaxSizeSingleEntry()](
@@ -181,7 +181,7 @@ CacheValue Operation::runComputationAndPrepareForCache(
                                            *runtimeInfo));
         });
   }
-  if (result.isDataEvaluated()) {
+  if (result.isFullyMaterialized()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
     LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
@@ -229,7 +229,7 @@ std::shared_ptr<const Result> Operation::getResult(
     };
 
     auto suitedForCache = [](const CacheValue& cacheValue) {
-      return cacheValue.resultTable().isDataEvaluated();
+      return cacheValue.resultTable().isFullyMaterialized();
     };
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
@@ -245,7 +245,7 @@ std::shared_ptr<const Result> Operation::getResult(
       return nullptr;
     }
 
-    if (result._resultPointer->resultTable().isDataEvaluated()) {
+    if (result._resultPointer->resultTable().isFullyMaterialized()) {
       updateRuntimeInformationOnSuccess(result, timer.msecs());
     }
 
@@ -337,7 +337,7 @@ void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   const auto& result = resultAndCacheStatus._resultPointer->resultTable();
-  AD_CONTRACT_CHECK(result.isDataEvaluated());
+  AD_CONTRACT_CHECK(result.isFullyMaterialized());
   updateRuntimeInformationOnSuccess(
       result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());

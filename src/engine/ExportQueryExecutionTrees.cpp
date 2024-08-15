@@ -16,7 +16,7 @@
 
 cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
     const Result& result) {
-  if (result.isDataEvaluated()) {
+  if (result.isFullyMaterialized()) {
     co_yield result.idTable();
   } else {
     for (const IdTable& idTable : result.idTables()) {

@@ -49,7 +49,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Filter result computation..." << endl;
   checkCancellation();
 
-  if (subRes->isDataEvaluated()) {
+  if (subRes->isFullyMaterialized()) {
     sparqlExpression::EvaluationContext evaluationContext(
         *getExecutionContext(), _subtree->getVariableColumns(),
         subRes->idTable(), getExecutionContext()->getAllocator(),
