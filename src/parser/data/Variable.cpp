@@ -15,8 +15,8 @@
 // ___________________________________________________________________________
 Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
   if (checkName) {
-    AD_CONTRACT_CHECK(isLegalVariableName(_name), [this]() {
-      return absl::StrCat("\"", _name, "\" is not a legal SPARQL variable");
+    AD_CONTRACT_CHECK(isValidVariableName(_name), [this]() {
+      return absl::StrCat("\"", _name, "\" is not a valid SPARQL variable");
     });
   }
   // normalize notation for consistency
@@ -86,7 +86,7 @@ Variable Variable::getMatchingWordVariable(std::string_view term) const {
 }
 
 // _____________________________________________________________________________
-bool Variable::isLegalVariableName(std::string_view var) {
+bool Variable::isValidVariableName(std::string_view var) {
   sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
   try {
     auto [result, remaining] =

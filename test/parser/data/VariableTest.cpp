@@ -11,11 +11,10 @@
 TEST(Variable, legalAndIllegalNames) {
   EXPECT_NO_THROW(Variable("?x"));
   EXPECT_NO_THROW(Variable("$x"));
-
   EXPECT_NO_THROW(Variable("?ql_matching_word_thür"));
 
   // No leading ? or $
-  auto matcher = ::testing::HasSubstr("not a legal SPARQL variable");
+  auto matcher = ::testing::HasSubstr("not a valid SPARQL variable");
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("x"), matcher);
   AD_EXPECT_THROW_WITH_MESSAGE(Variable("?x spaceInVar"), matcher);
 }
