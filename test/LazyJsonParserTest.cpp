@@ -79,4 +79,20 @@ TEST(parseTest, parse) {
   expectYields(result4a + result4b,
                {absl::StrCat(result4a.substr(0, result4a.size() - 1), "]}}"),
                 absl::StrCat(R"({"results": {"bindings": [)", result4b)});
+
+  // CHECK 4: Throw when exceeding input size limit.
+  // parseLiteral
+  EXPECT_ANY_THROW(LazyJsonParser::parse(
+      absl::StrCat(R"({"key":")", std::string(1'000'000, '0'), R"(")"), {}));
+  // BeforeArrayPath
+  EXPECT_ANY_THROW(LazyJsonParser::parse(
+      absl::StrCat(R"({"key":)", std::string(1'000'000, 0), R"(})"), {}));
+  // InArrayPath
+  EXPECT_ANY_THROW(LazyJsonParser::parse(
+      absl::StrCat(R"({"head"[)", std::string(1'000'000, 0), R"()"), {"head"}));
+  // AfterArrayPath
+  EXPECT_ANY_THROW(
+      LazyJsonParser::parse(absl::StrCat(R"({"head":[],"key":")",
+                                         std::string(1'000'000, '0'), R"("})"),
+                            {"head"}));
 }

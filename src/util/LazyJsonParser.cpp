@@ -29,15 +29,17 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
 std::string LazyJsonParser::parseChunk(std::string_view inStr) {
   size_t idx = input_.size();
   absl::StrAppend(&input_, inStr);
+
+  // End-index (exclusive) of the current `input_` to construct a result.
   size_t materializeEnd = 0;
 
-  // If the previous chunk ended within a Literal, we need to finish parsing it.
+  // If the previous chunk ended within a Literal, finish parsing it.
   if (inLiteral_) {
     parseLiteral(idx);
     ++idx;
   }
 
-  // Resume parsing in the current section.
+  // Resume parsing the current section.
   while (idx < input_.size()) {
     switch (state_.index()) {
       case 0:
@@ -45,9 +47,16 @@ std::string LazyJsonParser::parseChunk(std::string_view inStr) {
         break;
       case 1:
         parseInArrayPath(idx, materializeEnd);
+        if (arrayPath_.empty() &&
+            std::holds_alternative<AfterArrayPath>(state_)) {
+          materializeEnd = idx;
+        }
         break;
       case 2:
         parseAfterArrayPath(idx, materializeEnd);
+        break;
+      default:
+        AD_FAIL();
         break;
     }
   }
@@ -67,18 +76,22 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
   }
 
   for (; idx < input_.size(); ++idx) {
+    if (idx > 1'000'000) {
+      throw std::runtime_error(
+          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
+    }
     if (isEscaped_) {
       isEscaped_ = false;
       continue;
     }
     switch (input_[idx]) {
       case '"':
+        // End of literal.
         if (std::holds_alternative<BeforeArrayPath>(state_)) {
           std::get<BeforeArrayPath>(state_).strEnd_ = idx;
         }
         inLiteral_ = false;
         return;
-        break;
       case '\\':
         isEscaped_ = true;
         break;
@@ -94,15 +107,19 @@ void LazyJsonParser::parseBeforeArrayPath(size_t& idx) {
   auto& state = std::get<BeforeArrayPath>(state_);
 
   for (; idx < input_.size(); ++idx) {
+    if (idx > 1'000'000) {
+      throw std::runtime_error(
+          "Ill-formed JSON: Header size exceeds 1 Megabyte.");
+    }
     switch (input_[idx]) {
       case '{':
-        tryAddKeyToPath();
+        state.tryAddKeyToPath(input_);
         break;
       case '[':
-        if (openBrackets_ == 0) {
-          tryAddKeyToPath();
+        if (state.openBrackets_ == 0) {
+          state.tryAddKeyToPath(input_);
         }
-        ++openBrackets_;
+        ++state.openBrackets_;
         if (state.curPath_ == arrayPath_) {
           // Reached arrayPath.
           state_ = InArrayPath();
@@ -111,8 +128,8 @@ void LazyJsonParser::parseBeforeArrayPath(size_t& idx) {
         }
         break;
       case ']':
-        --openBrackets_;
-        if (openBrackets_ == 0 && !state.curPath_.empty()) {
+        --state.openBrackets_;
+        if (state.openBrackets_ == 0 && !state.curPath_.empty()) {
           state.curPath_.pop_back();
         }
         break;
@@ -136,6 +153,10 @@ void LazyJsonParser::parseInArrayPath(size_t& idx, size_t& materializeEnd) {
   auto& state = std::get<InArrayPath>(state_);
 
   for (; idx < input_.size(); ++idx) {
+    if (idx - materializeEnd > 1'000'000) {
+      throw std::runtime_error(
+          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
+    }
     switch (input_[idx]) {
       case '{':
       case '[':
@@ -147,11 +168,8 @@ void LazyJsonParser::parseInArrayPath(size_t& idx, size_t& materializeEnd) {
       case ']':
         if (state.openBracketsAndBraces_ == 0) {
           // End of ArrayPath reached.
-          state_ = AfterArrayPath(arrayPath_.size());
+          state_ = AfterArrayPath{.remainingBraces_ = arrayPath_.size()};
           ++idx;
-          if (arrayPath_.empty()) {
-            materializeEnd = idx;
-          }
           return;
         }
         --state.openBracketsAndBraces_;
@@ -176,13 +194,17 @@ void LazyJsonParser::parseAfterArrayPath(size_t& idx, size_t& materializeEnd) {
   auto& state = std::get<AfterArrayPath>(state_);
 
   for (; idx < input_.size(); ++idx) {
+    if (idx - materializeEnd > 1'000'000) {
+      throw std::runtime_error(
+          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
+    }
     switch (input_[idx]) {
       case '{':
-        state.remainingBraces += 1;
+        state.remainingBraces_ += 1;
         break;
       case '}':
-        state.remainingBraces -= 1;
-        if (state.remainingBraces == 0) {
+        state.remainingBraces_ -= 1;
+        if (state.remainingBraces_ == 0) {
           // End reached.
           materializeEnd = idx + 1;
         }
@@ -220,12 +242,9 @@ std::string LazyJsonParser::constructResultFromParsedChunk(
 }
 
 // ____________________________________________________________________________
-void LazyJsonParser::tryAddKeyToPath() {
-  AD_CORRECTNESS_CHECK(std::holds_alternative<BeforeArrayPath>(state_));
-  auto& state = std::get<BeforeArrayPath>(state_);
-  if (state.strEnd_ != 0) {
-    state.curPath_.emplace_back(
-        input_.substr(state.strStart_, state.strEnd_ - state.strStart_));
+void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
+  if (strEnd_ != 0) {
+    curPath_.emplace_back(input.substr(strStart_, strEnd_ - strStart_));
   }
 }
 

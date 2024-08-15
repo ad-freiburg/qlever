@@ -21,7 +21,7 @@ class LazyJsonParser {
   // Parse chunks of json-strings yielding them reconstructed.
   static cppcoro::generator<std::string> parse(
       cppcoro::generator<std::string> partJson,
-      const std::vector<std::string>& arrayPath) {
+      std::vector<std::string> arrayPath) {
     LazyJsonParser p(arrayPath);
     for (const auto& chunk : partJson) {
       co_yield p.parseChunk(chunk);
@@ -49,23 +49,28 @@ class LazyJsonParser {
   void parseInArrayPath(size_t& idx, size_t& materializeEnd);
   void parseAfterArrayPath(size_t& idx, size_t& materializeEnd);
 
-  // Attempts to add a key to the current Path, based on strStart/strEnd.
-  void tryAddKeyToPath();
-
   // Constructs the result to be returned after parsing a chunk.
   std::string constructResultFromParsedChunk(size_t materializeEnd);
 
   // Context for the 3 parsing sections.
   struct BeforeArrayPath {
+    // Indices of the latest parsed literal, used to add keys to the curPath_.
     size_t strStart_{0};
     size_t strEnd_{0};
     std::vector<std::string> curPath_;
+    // Open Brackets counter to track nested arrays.
+    int openBrackets_{0};
+
+    // Attempts to add a key to the current Path, based on strStart/strEnd.
+    void tryAddKeyToPath(std::string_view input);
   };
   struct InArrayPath {
+    // Track brackets/braces to find the end of the array.
     int openBracketsAndBraces_{0};
   };
   struct AfterArrayPath {
-    size_t remainingBraces;
+    // Remaining braces until the end of the input-object.
+    size_t remainingBraces_;
   };
   std::variant<BeforeArrayPath, InArrayPath, AfterArrayPath> state_{
       BeforeArrayPath()};
@@ -78,9 +83,6 @@ class LazyJsonParser {
 
   // If the parser is currently positioned within a literal.
   bool inLiteral_{false};
-
-  // Open Brackets: required for nested arrays.
-  int openBrackets_{0};
 
   // Counter for the so far returned results.
   unsigned int yieldCount_{0};
