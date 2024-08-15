@@ -1,8 +1,8 @@
 FROM ubuntu:24.04 AS base
 LABEL maintainer="Johannes Kalmbach <kalmbacj@informatik.uni-freiburg.de>"
-ENV LANG C.UTF-8
-ENV LC_ALL C.UTF-8
-ENV LC_CTYPE C.UTF-8
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV LC_CTYPE=C.UTF-8
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install -y software-properties-common && add-apt-repository -y ppa:mhier/libboost-latest
 
