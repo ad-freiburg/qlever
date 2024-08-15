@@ -264,10 +264,7 @@ void Result::cacheDuringConsumption(
     std::function<bool(const std::optional<IdTable>&, const IdTable&)>
         fitInCache,
     std::function<void(Result)> storeInCache) {
-  if (isDataEvaluated()) {
-    return;
-  }
-
+  AD_CONTRACT_CHECK(!isDataEvaluated());
   data_ = ad_utility::wrapGeneratorWithCache(
       std::move(idTables()),
       [fitInCache = std::move(fitInCache)](std::optional<IdTable>& aggregate,

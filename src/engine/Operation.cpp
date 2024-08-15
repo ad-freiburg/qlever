@@ -103,9 +103,8 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, isRoot, counter = 0us](
-            const IdTable& idTable,
-            std::chrono::microseconds duration) mutable {
+        [this, counter = 0us](const IdTable& idTable,
+                              std::chrono::microseconds duration) mutable {
           counter += duration;
           runtimeInfo().totalTime_ =
               std::chrono::duration_cast<std::chrono::milliseconds>(counter);
@@ -115,9 +114,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
           runtimeInfo().numCols_ = idTable.numColumns();
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
-          if (isRoot) {
-            signalQueryUpdate();
-          }
+          signalQueryUpdate();
         });
   }
   // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
@@ -149,22 +146,25 @@ CacheValue Operation::runComputationAndPrepareForCache(
     const std::string& cacheKey, bool pinned, bool isRoot) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode, isRoot);
-  result.cacheDuringConsumption(
-      [&cache](const std::optional<IdTable>& currentIdTable,
-               const IdTable& newIdTable) {
-        auto currentSize = currentIdTable.has_value()
-                               ? CacheValue::getSize(currentIdTable.value())
-                               : 0_B;
-        return cache.getMaxSizeSingleEntry() >=
-               currentSize + CacheValue::getSize(newIdTable);
-      },
-      [runtimeInfo = getRuntimeInfoPointer(), &cache, cacheKey,
-       pinned](Result aggregatedResult) {
-        cache.tryInsertIfNotPresent(
-            pinned, cacheKey,
-            std::make_shared<CacheValue>(std::move(aggregatedResult),
-                                         *runtimeInfo));
-      });
+  if (!result.isDataEvaluated()) {
+    AD_CONTRACT_CHECK(!pinned);
+    result.cacheDuringConsumption(
+        [maxSize = cache.getMaxSizeSingleEntry()](
+            const std::optional<IdTable>& currentIdTable,
+            const IdTable& newIdTable) {
+          auto currentSize = currentIdTable.has_value()
+                                 ? CacheValue::getSize(currentIdTable.value())
+                                 : 0_B;
+          return maxSize >= currentSize + CacheValue::getSize(newIdTable);
+        },
+        [runtimeInfo = getRuntimeInfoPointer(), &cache,
+         cacheKey](Result aggregatedResult) {
+          cache.tryInsertIfNotPresent(
+              false, cacheKey,
+              std::make_shared<CacheValue>(std::move(aggregatedResult),
+                                           *runtimeInfo));
+        });
+  }
   if (result.isDataEvaluated()) {
     auto resultNumRows = result.idTable().size();
     auto resultNumCols = result.idTable().numColumns();
