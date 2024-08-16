@@ -23,7 +23,14 @@ struct SortTriple {
       return c2 < 0;
     }
     auto c3 = std::invoke(compare, a[i2], b[i2]);
-    return c3 < 0;
+    if (c3 != 0) {
+      return c3 < 0;
+    }
+    // If the triples are equal, we compare by the Graph column. This is
+    // necessary to handle UPDATEs correctly.
+    static constexpr auto g = ADDITIONAL_COLUMN_GRAPH_ID;
+    auto cGraph = std::invoke(compare, a[g], b[g]);
+    return cGraph < 0;
   }
 
   // Value that is strictly smaller than any input element.

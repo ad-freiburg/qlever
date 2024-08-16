@@ -12,10 +12,6 @@ static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
 void PatternCreator::processTriple(
     std::array<Id, NumColumnsIndexBuilding> triple,
     bool ignoreTripleForPatterns) {
-  if (ignoreTripleForPatterns) {
-    tripleBuffer_.emplace_back(triple, ignoreTripleForPatterns);
-    return;
-  }
   if (!currentSubject_.has_value()) {
     // This is the very first triple.
     currentSubject_ = triple[0];
