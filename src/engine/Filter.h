@@ -66,8 +66,7 @@ class Filter : public Operation {
   IdTable computeFilterImpl(
       sparqlExpression::EvaluationContext& evaluationContext);
 
-  // Run `computeFilterImpl` once for every `IdTable` yielded by `subResult` if
-  // it is lazily evaluated.
-  cppcoro::generator<IdTable> filterInChunks(
-      std::shared_ptr<const Result> subRes);
+  // Run `computeFilterImpl` on the provided IdTable
+  IdTable filterIdTable(const std::shared_ptr<const Result>& subRes,
+                        const IdTable& idTable);
 };

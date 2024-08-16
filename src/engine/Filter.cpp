@@ -50,46 +50,39 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   checkCancellation();
 
   if (subRes->isFullyMaterialized()) {
-    sparqlExpression::EvaluationContext evaluationContext(
-        *getExecutionContext(), _subtree->getVariableColumns(),
-        subRes->idTable(), getExecutionContext()->getAllocator(),
-        subRes->localVocab(), cancellationHandle_, deadline_);
-
-    // TODO<joka921> This should be a mandatory argument to the
-    // EvaluationContext constructor.
-    evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
-
-    size_t width = evaluationContext._inputTable.numColumns();
-    IdTable result = CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
-                                     evaluationContext);
+    IdTable result = filterIdTable(subRes, subRes->idTable());
     LOG(DEBUG) << "Filter result computation done." << endl;
-    checkCancellation();
 
     return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
   }
-  return {filterInChunks(subRes), resultSortedOn(),
-          subRes->getSharedLocalVocab()};
+  auto localVocab = subRes->getSharedLocalVocab();
+  return {[](auto subRes, auto* self) -> cppcoro::generator<IdTable> {
+            for (IdTable& idTable : subRes->idTables()) {
+              IdTable result = self->filterIdTable(subRes, idTable);
+              LOG(DEBUG) << "Filter result chunk done." << endl;
+              co_yield result;
+            }
+          }(std::move(subRes), this),
+          resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________
-cppcoro::generator<IdTable> Filter::filterInChunks(
-    std::shared_ptr<const Result> subRes) {
-  for (const IdTable& idTable : subRes->idTables()) {
-    sparqlExpression::EvaluationContext evaluationContext(
-        *getExecutionContext(), _subtree->getVariableColumns(), idTable,
-        getExecutionContext()->getAllocator(), subRes->localVocab(),
-        cancellationHandle_, deadline_);
+IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
+                              const IdTable& idTable) {
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
+      getExecutionContext()->getAllocator(), subRes->localVocab(),
+      cancellationHandle_, deadline_);
 
-    // TODO<joka921> This should be a mandatory argument to the
-    // EvaluationContext constructor.
-    evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
+  // TODO<joka921> This should be a mandatory argument to the
+  // EvaluationContext constructor.
+  evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
 
-    size_t width = evaluationContext._inputTable.numColumns();
-    co_yield CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
-                             evaluationContext);
-    LOG(DEBUG) << "Filter result chunk done." << endl;
-    checkCancellation();
-  }
+  size_t width = evaluationContext._inputTable.numColumns();
+  IdTable result = CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
+                                   evaluationContext);
+  checkCancellation();
+  return result;
 }
 
 // _____________________________________________________________________________

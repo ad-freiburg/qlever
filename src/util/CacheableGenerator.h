@@ -24,14 +24,14 @@ cppcoro::generator<T> wrapGeneratorWithCache(
     InvocableWithExactReturnType<void, T> auto onFullyCached) {
   std::optional<T> aggregatedData{};
   bool shouldBeAggregated = true;
-  for (auto&& element : generator) {
+  for (T& element : generator) {
     if (shouldBeAggregated) {
       shouldBeAggregated = aggregator(aggregatedData, element);
       if (!shouldBeAggregated) {
         aggregatedData.reset();
       }
     }
-    co_yield std::move(element);
+    co_yield element;
   }
   if (aggregatedData.has_value()) {
     onFullyCached(std::move(aggregatedData).value());

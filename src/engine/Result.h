@@ -24,9 +24,16 @@
 // evaluated.
 class Result {
  private:
-  using Data = std::variant<IdTable, cppcoro::generator<IdTable>>;
-  // The actual entries. Needs to be mutable in order to consume a const entry.
-  mutable Data data_;
+  // Needs to be mutable in order to be consumable from a const result.
+  struct GenContainer {
+    mutable cppcoro::generator<IdTable> generator_;
+    mutable bool consumed_ = false;
+    explicit GenContainer(cppcoro::generator<IdTable> generator)
+        : generator_{std::move(generator)} {}
+  };
+  using Data = std::variant<IdTable, GenContainer>;
+  // The actual entries.
+  Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.

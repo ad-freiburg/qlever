@@ -58,7 +58,7 @@ ExportQueryExecutionTrees::constructQueryResultToTriples(
     const ad_utility::sparql_types::Triples& constructTriples,
     LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
-  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       ConstructQueryExportContext context{i, idTable, result->localVocab(),
                                           qet.getVariableColumns(),
@@ -143,7 +143,7 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   AD_CORRECTNESS_CHECK(result != nullptr);
   nlohmann::json json = nlohmann::json::array();
 
-  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t rowIndex : range) {
       // We need the explicit `array` constructor for the special case of zero
       // variables.
@@ -385,7 +385,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     return b;
   };
 
-  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t rowIndex : range) {
       // TODO: ordered_json` entries are ordered alphabetically, but insertion
       // order would be preferable.
@@ -462,7 +462,8 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (const auto& [idTable, range] :
+         getRowIndices(limitAndOffset, *result)) {
       for (uint64_t i : range) {
         for (const auto& columnIndex : selectedColumnIndices) {
           if (columnIndex.has_value()) {
@@ -492,7 +493,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
         if (selectedColumnIndices[j].has_value()) {
@@ -617,7 +618,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (auto [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     for (uint64_t i : range) {
       co_yield "\n  <result>";
       for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
