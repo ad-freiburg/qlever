@@ -130,7 +130,7 @@ ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  if (numVariables_ < 3) {
+  if (numVariables_ < 3 || !additionalColumns().empty()) {
     idTable = index.scan(getScanSpecification(), permutation_,
                          additionalColumns(), cancellationHandle_, getLimit());
   } else {
