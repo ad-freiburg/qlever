@@ -741,7 +741,8 @@ class IndexImpl {
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
+  // * `isQleverInternalTriple` a callable that takes an `Id` and returns true
+  // iff
   //    the corresponding IRI was internally added by QLever and not part of the
   //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
@@ -756,13 +757,14 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, BlocksOfTriples sortedTriples,
+      size_t numColumns, auto& isInternalTriple, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, auto& isInternalTriple,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
@@ -770,7 +772,8 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+  void createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
@@ -825,5 +828,6 @@ class IndexImpl {
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
-  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator);
+  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
+                       auto isQleverInternalTriple);
 };
