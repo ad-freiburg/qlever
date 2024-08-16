@@ -95,7 +95,13 @@ size_t IndexScan::getResultWidth() const {
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
-  return std::vector<ColumnIndex>{resAsView.begin(), resAsView.end()};
+  std::vector<ColumnIndex> result{resAsView.begin(), resAsView.end()};
+  for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+    if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
+      result.push_back(numVariables_ + i);
+    }
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
