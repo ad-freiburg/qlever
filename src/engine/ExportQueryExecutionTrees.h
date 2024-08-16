@@ -55,6 +55,13 @@ class ExportQueryExecutionTrees {
       const ad_utility::Timer& requestTimer, MediaType mediaType,
       CancellationHandle cancellationHandle);
 
+  // Same as above, but returning the result in QLeverJSON format as streamable
+  // generator.
+  static cppcoro::generator<std::string> computeResultAsQLeverJSONStream(
+      const ParsedQuery& query, const QueryExecutionTree& qet,
+      const ad_utility::Timer& requestTimer,
+      CancellationHandle cancellationHandle);
+
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
   // used to resolve `Id`s with datatype `LocalVocabIndex`. The `escapeFunction`
@@ -119,9 +126,16 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
+  static cppcoro::generator<std::string>
+  selectQueryResultBindingsToQLeverJSONStream(
+      const QueryExecutionTree& qet,
+      const parsedQuery::SelectClause& selectClause,
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const Result> result,
+      CancellationHandle cancellationHandle);
   /**
-   * @brief Convert an `IdTable` (typically from a query result) to a JSON array
-   *   In the `QLeverJSON` format. This function is called by
+   * @brief Convert an `IdTable` (typically from a query result) to a JSON
+   * array In the `QLeverJSON` format. This function is called by
    *  `computeQueryResultAsQLeverJSON` to obtain the "actual" query results
    * (without the meta data)
    * @param qet The `QueryExecutionTree` of the query.
@@ -139,8 +153,21 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
+  static cppcoro::generator<std::string> idTableToQLeverJSONArrayStream(
+      const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
+      const QueryExecutionTree::ColumnIndicesAndTypes columns,
+      std::shared_ptr<const Result> result,
+      CancellationHandle cancellationHandle);
+
   // ___________________________________________________________________________
   static nlohmann::json constructQueryResultBindingsToQLeverJSON(
+      const QueryExecutionTree& qet,
+      const ad_utility::sparql_types::Triples& constructTriples,
+      const LimitOffsetClause& limitAndOffset,
+      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
+
+  static cppcoro::generator<std::string>
+  constructQueryResultBindingsToQLeverJSONStream(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,

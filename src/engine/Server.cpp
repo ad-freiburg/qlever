@@ -539,10 +539,16 @@ auto Server::setupCancellationHandle(
 Awaitable<void> Server::sendStreamableResponse(
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
     MediaType mediaType, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet,
+    const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
     SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
-      plannedQuery.parsedQuery_, qet, mediaType, std::move(cancellationHandle));
+  auto responseGenerator =
+      mediaType == MediaType::qleverJson
+          ? ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
+                plannedQuery.parsedQuery_, qet, requestTimer,
+                std::move(cancellationHandle))
+          : ExportQueryExecutionTrees::computeResultAsStream(
+                plannedQuery.parsedQuery_, qet, mediaType,
+                std::move(cancellationHandle));
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -720,23 +726,12 @@ boost::asio::awaitable<void> Server::processQuery(
       case octetStream:
       case sparqlXml:
       case turtle:
+      case sparqlJson:
+      case qleverJson:
         co_await sendStreamableResponse(request, send, mediaType.value(),
-                                        plannedQuery.value(), qet,
+                                        plannedQuery.value(), qet, requestTimer,
                                         cancellationHandle);
         break;
-      case qleverJson:
-      case sparqlJson: {
-        // Normal case: JSON response
-        auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, mediaType,
-             &cancellationHandle] {
-              return ExportQueryExecutionTrees::computeResultAsJSON(
-                  plannedQuery.value().parsedQuery_, qet, requestTimer,
-                  mediaType.value(), cancellationHandle);
-            },
-            cancellationHandle);
-        co_await sendJson(std::move(responseString), responseStatus);
-      } break;
       default:
         // This should never happen, because we have carefully restricted the
         // subset of mediaTypes that can occur here.

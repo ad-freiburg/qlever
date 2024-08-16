@@ -31,10 +31,16 @@ std::string runQueryStreamableResult(const std::string& kg,
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
-  auto tsvGenerator = ExportQueryExecutionTrees::computeResultAsStream(
-      pq, qet, mediaType, std::move(cancellationHandle));
+  auto strGenerator =
+      mediaType == ad_utility::MediaType::qleverJson
+          ? ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
+                pq, qet, ad_utility::Timer(ad_utility::Timer::Started),
+                std::move(cancellationHandle))
+          : ExportQueryExecutionTrees::computeResultAsStream(
+                pq, qet, mediaType, std::move(cancellationHandle));
+
   std::string result;
-  for (const auto& block : tsvGenerator) {
+  for (const auto& block : strGenerator) {
     result += block;
   }
   return result;
@@ -103,11 +109,18 @@ void runSelectQueryTestCase(
       testCase.resultCsv);
   auto qleverJSONResult =
       runJSONQuery(testCase.kg, testCase.query, qleverJson, useTextIndex);
+
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
   // variables).
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+
+  auto qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, useTextIndex));
+  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
+  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
 
   auto sparqlJSONResult =
       runJSONQuery(testCase.kg, testCase.query, sparqlJson, useTextIndex);
@@ -137,6 +150,14 @@ void runConstructQueryTestCase(
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
+  LOG(INFO) << qleverJSONResult.dump() << '\n';
+  LOG(INFO) << runQueryStreamableResult(testCase.kg, testCase.query, qleverJson)
+            << '\n';
+  auto qleverJSONStreamResult = nlohmann::json::parse(
+      runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
+  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
+  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
+  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
 }
@@ -962,10 +983,6 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   std::string constructQuery =
       "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o } ORDER BY ?p ?o";
 
-  // JSON is not streamable.
-  ASSERT_THROW(
-      runQueryStreamableResult(kg, query, ad_utility::MediaType::qleverJson),
-      ad_utility::Exception);
   // Turtle is not supported for SELECT queries.
   ASSERT_THROW(
       runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),

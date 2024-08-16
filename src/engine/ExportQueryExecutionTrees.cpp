@@ -105,6 +105,28 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
   return jsonArray;
 }
 
+// _____________________________________________________________________________
+cppcoro::generator<std::string>
+ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSONStream(
+    const QueryExecutionTree& qet,
+    const ad_utility::sparql_types::Triples& constructTriples,
+    const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
+    CancellationHandle cancellationHandle) {
+  size_t tripleCount = getRowIndices(limitAndOffset, *res).size();
+  auto generator = constructQueryResultToTriples(qet, constructTriples,
+                                                 limitAndOffset, std::move(res),
+                                                 std::move(cancellationHandle));
+  co_yield "[";
+  for (auto& triple : generator) {
+    --tripleCount;
+    auto jsonTriple = nlohmann::json::array({std::move(triple.subject_),
+                                             std::move(triple.predicate_),
+                                             std::move(triple.object_)});
+    co_yield absl::StrCat(jsonTriple.dump(), tripleCount > 0 ? "," : "");
+  }
+  co_yield "]";
+}
+
 // __________________________________________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
@@ -142,6 +164,50 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     cancellationHandle->throwIfCancelled();
   }
   return json;
+}
+
+// __________________________________________________________________________________________________________
+cppcoro::generator<std::string>
+ExportQueryExecutionTrees::idTableToQLeverJSONArrayStream(
+    const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
+    const QueryExecutionTree::ColumnIndicesAndTypes columns,
+    std::shared_ptr<const Result> result,
+    CancellationHandle cancellationHandle) {
+  AD_CORRECTNESS_CHECK(result != nullptr);
+  const IdTable& data = result->idTable();
+
+  co_yield "[";
+
+  const auto rowIndices = getRowIndices(limitAndOffset, *result);
+  for (size_t rowIndex : rowIndices) {
+    // We need the explicit `array` constructor for the special case of zero
+    // variables.
+    nlohmann::json row = nlohmann::json::array();
+    for (const auto& opt : columns) {
+      if (!opt) {
+        row.emplace_back(nullptr);
+        continue;
+      }
+      const auto& currentId = data(rowIndex, opt->columnIndex_);
+      const auto& optionalStringAndXsdType = idToStringAndType(
+          qet.getQec()->getIndex(), currentId, result->localVocab());
+      if (!optionalStringAndXsdType.has_value()) {
+        row.emplace_back(nullptr);
+        continue;
+      }
+      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
+      if (xsdType) {
+        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+      } else {
+        row.emplace_back(stringValue);
+      }
+    }
+    std::string rowStr = row.dump();
+    co_yield absl::StrCat(rowIndex != rowIndices[0] ? "," : "", rowStr);
+    cancellationHandle->throwIfCancelled();
+  }
+
+  co_yield "]";
 }
 
 // ___________________________________________________________________________
@@ -270,8 +336,16 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
 
 // Take a string from the vocabulary, deduce the type and
 // return a JSON dict that describes the binding.
-static nlohmann::json stringToBinding(std::string_view entitystr) {
+static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
+                                             const char* xsdType) {
   nlohmann::ordered_json b;
+  if (xsdType) {
+    b["value"] = entitystr;
+    b["type"] = "literal";
+    b["datatype"] = xsdType;
+    return b;
+  }
+
   // The string is an IRI or literal.
   if (entitystr.starts_with('<')) {
     // Strip the <> surrounding the iri.
@@ -369,17 +443,7 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
         continue;
       }
       const auto& [stringValue, xsdType] = optionalValue.value();
-      nlohmann::ordered_json b;
-      if (!xsdType) {
-        // No xsdType, this means that `stringValue` is a plain string literal
-        // or entity.
-        b = stringToBinding(stringValue);
-      } else {
-        b["value"] = stringValue;
-        b["type"] = "literal";
-        b["datatype"] = xsdType;
-      }
-      binding[column->variable_] = std::move(b);
+      binding[column->variable_] = stringAndTypeToBinding(stringValue, xsdType);
     }
     bindings.emplace_back(std::move(binding));
     cancellationHandle->throwIfCancelled();
@@ -403,6 +467,24 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
   return idTableToQLeverJSONArray(qet, limitAndOffset, selectedColumnIndices,
                                   std::move(result),
                                   std::move(cancellationHandle));
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<std::string>
+ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSONStream(
+    const QueryExecutionTree& qet,
+    const parsedQuery::SelectClause& selectClause,
+    const LimitOffsetClause& limitAndOffset,
+    std::shared_ptr<const Result> result,
+    CancellationHandle cancellationHandle) {
+  AD_CORRECTNESS_CHECK(result != nullptr);
+  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
+  QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
+      qet.selectedVariablesToColumnIndices(selectClause, true);
+
+  return idTableToQLeverJSONArrayStream(
+      qet, limitAndOffset, selectedColumnIndices, std::move(result),
+      std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -621,8 +703,9 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
 
   auto vars = selectClause.getSelectedVariablesAsStrings();
   std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
-  co_yield absl::StrCat("{\"head\":{\"vars\":[\"", absl::StrJoin(vars, "\",\""),
-                        "\"]},\"results\":{\"bindings\":[");
+  nlohmann::json jsonVars = vars;
+  co_yield absl::StrCat(R"({"head":{"vars":)", jsonVars.dump(),
+                        R"(},"results":{"bindings":[)");
 
   QueryExecutionTree::ColumnIndicesAndTypes columns =
       qet.selectedVariablesToColumnIndices(selectClause, false);
@@ -635,27 +718,13 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     nlohmann::ordered_json binding = {};
     for (const auto& column : columns) {
       const auto& currentId = idTable(i, column->columnIndex_);
-      const auto& optionalValue = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
       auto optionalStringAndType = idToStringAndType(
           qet.getQec()->getIndex(), currentId, result->localVocab());
-
       if (!optionalStringAndType) {
         continue;
       }
-
       const auto& [stringValue, xsdType] = optionalStringAndType.value();
-      nlohmann::ordered_json b;
-      if (!xsdType) {
-        // No xsdType, this means that `stringValue` is a plain string literal
-        // or entity.
-        b = stringToBinding(stringValue);
-      } else {
-        b["value"] = stringValue;
-        b["type"] = "literal";
-        b["datatype"] = xsdType;
-      }
-      binding[column->variable_] = std::move(b);
+      binding[column->variable_] = stringAndTypeToBinding(stringValue, xsdType);
     }
     co_yield absl::StrCat(i == 0 ? "" : ",", binding.dump());
     cancellationHandle->throwIfCancelled();
@@ -815,4 +884,67 @@ nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
     e.setOperation("Query export");
     throw;
   }
+}
+
+// _____________________________________________________________________________
+cppcoro::generator<std::string>
+ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
+    const ParsedQuery& query, const QueryExecutionTree& qet,
+    const ad_utility::Timer& requestTimer,
+    CancellationHandle cancellationHandle) {
+  std::shared_ptr<const Result> result = qet.getResult();
+  result->logResultSize();
+  auto timeResultComputation = requestTimer.msecs();
+
+  nlohmann::json jsonPrefix;
+
+  jsonPrefix["query"] = query._originalString;
+  jsonPrefix["status"] = "OK";
+  jsonPrefix["warnings"] = qet.collectWarnings();
+  if (query.hasSelectClause()) {
+    jsonPrefix["selected"] =
+        query.selectClause().getSelectedVariablesAsStrings();
+  } else {
+    jsonPrefix["selected"] =
+        std::vector<std::string>{"?subject", "?predicate", "?object"};
+  }
+
+  jsonPrefix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  runtimeInformation.addLimitOffsetRow(
+      query._limitOffset, std::chrono::milliseconds::zero(), false);
+  jsonPrefix["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInformation);
+
+  std::string prefixStr = jsonPrefix.dump();
+  co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
+                        R"(,"res":)");
+
+  auto bindings =
+      query.hasSelectClause()
+          ? selectQueryResultBindingsToQLeverJSONStream(
+                qet, query.selectClause(), query._limitOffset,
+                std::move(result), std::move(cancellationHandle))
+          : constructQueryResultBindingsToQLeverJSONStream(
+                qet, query.constructClause().triples_, query._limitOffset,
+                std::move(result), std::move(cancellationHandle));
+
+  size_t resultSize = 0;
+  for (std::string& b : bindings) {
+    co_yield b;
+    ++resultSize;
+  }
+  // Both `*ToQleverJSONStream` methods called above yield the 2 surrounding
+  // array brackets and each binding individually.
+  resultSize -= 2;
+
+  nlohmann::json jsonSuffix;
+  jsonSuffix["resultsize"] = resultSize;
+  jsonSuffix["time"]["total"] =
+      std::to_string(requestTimer.msecs().count()) + "ms";
+  jsonSuffix["time"]["computeResult"] =
+      std::to_string(timeResultComputation.count()) + "ms";
+
+  co_yield absl::StrCat(",", jsonSuffix.dump().substr(1));
 }
