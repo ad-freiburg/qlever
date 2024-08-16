@@ -228,8 +228,10 @@ class QueryPlanner {
 
   std::optional<size_t> textLimit_ = std::nullopt;
 
+  using GraphIri = std::optional<TripleComponent::Iri>;
   [[nodiscard]] std::vector<QueryPlanner::SubtreePlan> optimize(
-      ParsedQuery::GraphPattern* rootPattern);
+      ParsedQuery::GraphPattern* rootPattern,
+      const GraphIri& graphIri = std::nullopt);
 
   // Add all the possible index scans for the triple represented by the node.
   // The triple is "ordinary" in the sense that it is neither a text triple with
@@ -268,7 +270,7 @@ class QueryPlanner {
   [[nodiscard]] PlansAndFilters seedWithScansAndText(
       const TripleGraph& tg,
       const vector<vector<QueryPlanner::SubtreePlan>>& children,
-      TextLimitMap& textLimits);
+      TextLimitMap& textLimits, const GraphIri& graphIri);
 
   /**
    * @brief Returns a parsed query for the property path.
@@ -436,7 +438,8 @@ class QueryPlanner {
    */
   [[nodiscard]] vector<vector<SubtreePlan>> fillDpTab(
       const TripleGraph& graph, std::vector<SparqlFilter> fs,
-      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children);
+      TextLimitMap& textLimits, const vector<vector<SubtreePlan>>& children,
+      const GraphIri& graphIri);
 
   // Internal subroutine of `fillDpTab` that  only works on a single connected
   // component of the input. Throws if the subtrees in the `connectedComponent`
@@ -462,6 +465,7 @@ class QueryPlanner {
     QueryPlanner& planner_;
     ParsedQuery::GraphPattern* rootPattern_;
     QueryExecutionContext* qec_;
+    QueryPlanner::GraphIri graphIri_;
 
     // Used to store the set of candidate plans for the already processed parts
     // of the graph pattern. Each row stores different plans for the same graph
@@ -481,8 +485,12 @@ class QueryPlanner {
 
     // ________________________________________________________________________
     GraphPatternPlanner(QueryPlanner& planner,
-                        ParsedQuery::GraphPattern* rootPattern)
-        : planner_{planner}, rootPattern_{rootPattern}, qec_{planner._qec} {}
+                        ParsedQuery::GraphPattern* rootPattern,
+                        QueryPlanner::GraphIri graphIri)
+        : planner_{planner},
+          rootPattern_{rootPattern},
+          qec_{planner._qec},
+          graphIri_{std::move(graphIri)} {}
 
     // This function is called for each of the graph patterns that are contained
     // in the `rootPattern_`. It dispatches to the various `visit...`functions

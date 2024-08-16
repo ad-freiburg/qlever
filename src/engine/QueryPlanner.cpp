@@ -195,8 +195,8 @@ QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
 
 // _____________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
-    ParsedQuery::GraphPattern* rootPattern) {
-  QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern};
+    ParsedQuery::GraphPattern* rootPattern, const GraphIri& graphIri) {
+  QueryPlanner::GraphPatternPlanner optimizer{*this, rootPattern, graphIri};
   for (auto& child : rootPattern->_graphPatterns) {
     child.visit([&optimizer](auto& arg) {
       return optimizer.graphPatternOperationVisitor(arg);
@@ -657,7 +657,7 @@ void QueryPlanner::seedFromOrdinaryTriple(
 auto QueryPlanner::seedWithScansAndText(
     const QueryPlanner::TripleGraph& tg,
     const vector<vector<QueryPlanner::SubtreePlan>>& children,
-    TextLimitMap& textLimits) -> PlansAndFilters {
+    TextLimitMap& textLimits, const GraphIri& graphIri) -> PlansAndFilters {
   PlansAndFilters result;
   vector<SubtreePlan>& seeds = result.plans_;
   // add all child plans as seeds
@@ -673,6 +673,13 @@ auto QueryPlanner::seedWithScansAndText(
     }
     idShift++;
   }
+
+  auto relevantGraphs = activeDatasetClauses_.defaultGraphs_;
+  if (graphIri.has_value()) {
+    relevantGraphs.clear();
+    relevantGraphs.insert(graphIri.value());
+  }
+
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
     const TripleGraph::Node& node = *tg._nodeMap.find(i)->second;
 
@@ -707,52 +714,48 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto makeGraphFilter =
-        [](const Variable& var,
-           const ad_utility::HashSet<TripleComponent::Iri>& iris) {
-          std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
-          auto lhs =
-              std::make_unique<sparqlExpression::VariableExpression>(var);
-          for (auto& iri : iris) {
-            ptrs.push_back(
-                std::make_unique<sparqlExpression::IriExpression>(iri));
+    auto makeGraphFilter = [&relevantGraphs](const Variable& var) {
+      std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
+      auto lhs = std::make_unique<sparqlExpression::VariableExpression>(var);
+      for (auto& iri : relevantGraphs) {
+        ptrs.push_back(std::make_unique<sparqlExpression::IriExpression>(iri));
+      }
+
+      auto expr = std::make_unique<sparqlExpression::InExpression>(
+          std::move(lhs), std::move(ptrs));
+      return sparqlExpression::SparqlExpressionPimpl{std::move(expr),
+                                                     "FILTER BY GRAPH ID"};
+    };
+    auto addIndexScan =
+        [this, pushPlan, node, &makeGraphFilter, &relevantGraphs](
+            Permutation::Enum permutation,
+            std::optional<SparqlTripleSimple> triple = std::nullopt) {
+          if (!triple.has_value()) {
+            triple = node.triple_.getSimple();
           }
 
-          auto expr = std::make_unique<sparqlExpression::InExpression>(
-              std::move(lhs), std::move(ptrs));
-          return sparqlExpression::SparqlExpressionPimpl{std::move(expr),
-                                                         "FILTER BY GRAPH ID"};
-        };
-    auto addIndexScan = [this, pushPlan, node, &makeGraphFilter](
-                            Permutation::Enum permutation,
-                            std::optional<SparqlTripleSimple> triple =
-                                std::nullopt) {
-      if (!triple.has_value()) {
-        triple = node.triple_.getSimple();
-      }
+          std::optional<Variable> graphVariable;
+          if (!relevantGraphs.empty()) {
+            graphVariable = generateUniqueVarName();
+            triple->additionalScanColumns_.emplace_back(
+                ADDITIONAL_COLUMN_GRAPH_ID, graphVariable.value());
+          }
+          auto scanPlan = [&]() {
+            return makeSubtreePlan<IndexScan>(_qec, permutation,
+                                              std::move(triple.value()));
+          };
 
-      std::optional<Variable> graphVariable;
-      if (!activeDatasetClauses_.defaultGraphs_.empty()) {
-        graphVariable = generateUniqueVarName();
-        triple->additionalScanColumns_.emplace_back(ADDITIONAL_COLUMN_GRAPH_ID,
-                                                    graphVariable.value());
-      }
-      auto scanPlan = [&]() {
-        return makeSubtreePlan<IndexScan>(_qec, permutation,
-                                          std::move(triple.value()));
-      };
-      if (activeDatasetClauses_.defaultGraphs_.empty()) {
-        pushPlan(scanPlan());
-        return;
-      } else {
-        auto plan = scanPlan();
-        plan = makeSubtreePlan<Filter>(
-            _qec, std::move(plan._qet),
-            makeGraphFilter(graphVariable.value(),
-                            activeDatasetClauses_.defaultGraphs_));
-        pushPlan(std::move(plan));
-      }
-    };
+          if (relevantGraphs.empty()) {
+            pushPlan(scanPlan());
+            return;
+          } else {
+            auto plan = scanPlan();
+            plan =
+                makeSubtreePlan<Filter>(_qec, std::move(plan._qet),
+                                        makeGraphFilter(graphVariable.value()));
+            pushPlan(std::move(plan));
+          }
+        };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));
@@ -1279,9 +1282,10 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
 vector<vector<QueryPlanner::SubtreePlan>> QueryPlanner::fillDpTab(
     const QueryPlanner::TripleGraph& tg, vector<SparqlFilter> filters,
     TextLimitMap& textLimits,
-    const vector<vector<QueryPlanner::SubtreePlan>>& children) {
+    const vector<vector<QueryPlanner::SubtreePlan>>& children,
+    const GraphIri& graphIri) {
   auto [initialPlans, additionalFilters] =
-      seedWithScansAndText(tg, children, textLimits);
+      seedWithScansAndText(tg, children, textLimits, graphIri);
   std::ranges::move(additionalFilters, std::back_inserter(filters));
   if (filters.size() > 64) {
     AD_THROW("At most 64 filters allowed at the moment.");
@@ -2029,7 +2033,12 @@ void QueryPlanner::GraphPatternPlanner::graphPatternOperationVisitor(Arg& arg) {
   using SubtreePlan = QueryPlanner::SubtreePlan;
   if constexpr (std::is_same_v<T, p::Optional> ||
                 std::is_same_v<T, p::GroupGraphPattern>) {
-    auto candidates = planner_.optimize(&arg._child);
+    std::optional<TripleComponent::Iri> graphIri = std::nullopt;
+    if constexpr (std::is_same_v<T, p::GroupGraphPattern>) {
+      graphIri = arg._graphIri;
+    }
+
+    auto candidates = planner_.optimize(&arg._child, graphIri);
     if constexpr (std::is_same_v<T, p::Optional>) {
       for (auto& c : candidates) {
         c.type = SubtreePlan::OPTIONAL;

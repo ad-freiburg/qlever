@@ -752,8 +752,16 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
 
 // ____________________________________________________________________________
 parsedQuery::GraphPatternOperation Visitor::visit(
-    const Parser::GraphGraphPatternContext* ctx) {
-  reportNotSupported(ctx, "Named Graphs (FROM, GRAPH) are");
+    Parser::GraphGraphPatternContext* ctx) {
+  auto varOrIri = visit(ctx->varOrIri());
+  if (std::holds_alternative<Variable>(varOrIri)) {
+    reportNotSupported(ctx, "GRAPH clauses with a variable are");
+  }
+  AD_CORRECTNESS_CHECK(std::holds_alternative<Iri>(varOrIri));
+  auto& iri = std::get<Iri>(varOrIri);
+  auto group = visit(ctx->groupGraphPattern());
+  return parsedQuery::GroupGraphPattern{
+      std::move(group), TripleComponent::Iri::fromIriref(iri.toSparql())};
 }
 
 // Parsing for the `expression` rule.

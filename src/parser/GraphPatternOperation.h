@@ -74,6 +74,7 @@ struct Values {
 /// `GraphPattern`.
 struct GroupGraphPattern {
   GraphPattern _child;
+  std::optional<TripleComponent::Iri> _graphIri;
 };
 
 /// An `OPTIONAL` clause.
