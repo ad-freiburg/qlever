@@ -237,7 +237,7 @@ class TurtleParser : public TurtleParserBase {
     }
   }
 
-  bool statement();
+  virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
@@ -404,7 +404,7 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  protected:
-  bool statement();
+  bool statement() override;
 
  private:
   bool nQuadSubject();
