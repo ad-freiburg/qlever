@@ -425,7 +425,7 @@ bool NQuadParser<T>::nQuadPredicate() {
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
   if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
-    this->activeSubject_ = std::move(this->lastParseResult_);
+    this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }
   return false;
