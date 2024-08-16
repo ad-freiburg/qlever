@@ -165,7 +165,7 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
   }
 }
 
-// _____________________________________________________________
+// _____________________________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
     return std::ranges::all_of(map, [&](const auto& varAndCol) {
