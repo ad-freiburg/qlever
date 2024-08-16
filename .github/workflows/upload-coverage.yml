@@ -75,11 +75,7 @@ jobs:
       - name: "Upload coverage report"
         uses: codecov/codecov-action@v4
         with:
-          file: coverage.lcov
-          # Note: technically, a `token` is not required for codecov.io when
-          # uploading from a public repository, but specifying it avoids the
-          # nasty spurious failures due to Github's rate limit for codecov's
-          # public default token.
+          files: coverage.lcov
           token: ${{ secrets.CODECOV_TOKEN }}
           fail_ci_if_error: true
           # Since this workflow runs on the master branch and not in a PR
