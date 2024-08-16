@@ -58,24 +58,49 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
   return {indexBuilderData, std::move(firstSorter)};
 }
-
+// _____________________________________________________________________________
 std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
-    const std::string& filename) {
-  auto setTokenizer = [this,
-                       &filename]<template <typename> typename ParserTemplate>()
-      -> std::unique_ptr<TurtleParserBase> {
+    const std::string& filename, Index::Filetype type) {
+  using Res = std::unique_ptr<TurtleParserBase>;
+
+  auto tokenize = [this](auto f) -> Res {
     if (onlyAsciiTurtlePrefixes_) {
-      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
+      return f.template operator()<TokenizerCtre>();
     } else {
-      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
+      return f.template operator()<Tokenizer>();
     }
   };
+  auto typeDispatch = [type](auto f) {
+    return [type, f]<typename TokenizerT>() -> Res {
+      if (type == Index::Filetype::Turtle) {
+        return f.template operator()<TurtleParser, TokenizerT>();
+      } else {
+        return f.template operator()<NQuadParser, TokenizerT>();
+      }
+    };
+  };
 
-  if (useParallelParser_) {
-    return setTokenizer.template operator()<TurtleParallelParser>();
-  } else {
-    return setTokenizer.template operator()<TurtleStreamParser>();
-  }
+  auto chooseParallel = [this](auto f) {
+    return [this,
+            f]<template <typename> typename ParserImpl, typename TokenizerT>()
+               -> Res {
+      if (useParallelParser_) {
+        return f.template
+        operator()<TurtleParallelParser, ParserImpl, TokenizerT>();
+      } else {
+        return f
+            .template operator()<TurtleStreamParser, ParserImpl, TokenizerT>();
+      }
+    };
+  };
+
+  auto make = [&filename]<template <typename> typename ParserTemplate,
+                          template <typename> typename ParserImpl,
+                          typename TokenizerT>() -> Res {
+    return std::make_unique<ParserTemplate<ParserImpl<TokenizerT>>>(filename);
+  };
+
+  return tokenize(typeDispatch(chooseParallel(make)));
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -248,7 +273,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
+  Id internalGraph = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -259,7 +284,7 @@ IndexImpl::buildOspWithPatterns(
   return thirdSorter;
 }
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename) {
+void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -270,7 +295,7 @@ void IndexImpl::createFromFile(const string& filename) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeTurtleParser(filename));
+      createIdTriplesAndVocab(makeTurtleParser(filename, type));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -1436,7 +1461,7 @@ namespace {
 template <size_t idx>
 constexpr auto makeNumDistinctIdsCounter = [](size_t& numDistinctIds) {
   return [lastId = std::optional<Id>{}, &numDistinctIds,
-          internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
+          internalGraph = qlever::specialIds().at(INTERNAL_GRAPH_IRI)](
              const auto& triple) mutable {
     const auto& id = triple[idx];
     if (id != lastId && triple[ADDITIONAL_COLUMN_GRAPH_ID] != internalGraph) {
@@ -1459,7 +1484,7 @@ void IndexImpl::createPSOAndPOS(size_t numColumns,
   size_t numTriplesTotal = 0;
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
                              internalGraph =
-                                 qlever::specialIds.at(INTERNAL_GRAPH_IRI)](
+                                 qlever::specialIds().at(INTERNAL_GRAPH_IRI)](
                                 const auto& triple) mutable {
     ++numTriplesTotal;
     numTriplesNormal += static_cast<size_t>(
@@ -1498,7 +1523,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
         onDiskBase_ + ".index.patterns",
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
-                                 internalGraph = qlever::specialIds.at(
+                                 internalGraph = qlever::specialIds().at(
                                      INTERNAL_GRAPH_IRI)](const auto& triple) {
       bool ignoreForPatterns =
           triple[ADDITIONAL_COLUMN_GRAPH_ID] == internalGraph;

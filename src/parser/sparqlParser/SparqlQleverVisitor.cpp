@@ -282,7 +282,7 @@ void Visitor::visit(Parser::NamedGraphClauseContext*) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SourceSelectorContext*) {
+TripleComponent::Iri Visitor::visit(Parser::SourceSelectorContext*) {
   // This rule is only indirectly used by the `DatasetClause` rule which also is
   // not supported and should already have thrown an exception.
   AD_FAIL();
@@ -1048,7 +1048,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+    return TurtleStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(
@@ -1916,8 +1916,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
-        visit(ctx->rdfLiteral()));
+    auto tripleComponent =
+        TurtleStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            visit(ctx->rdfLiteral()));
     AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {
@@ -2400,7 +2401,7 @@ TripleComponent SparqlQleverVisitor::visitGraphTerm(
     if constexpr (std::is_same_v<T, Variable>) {
       return element;
     } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
-      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      return TurtleStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           element.toSparql());
     } else {
       return element.toSparql();

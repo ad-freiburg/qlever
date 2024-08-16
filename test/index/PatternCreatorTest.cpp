@@ -19,7 +19,7 @@ ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;
 
-static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+static const Id hasPatternId = qlever::specialIds().at(HAS_PATTERN_PREDICATE);
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
@@ -154,7 +154,7 @@ void assertPatternContents(const std::string& filename,
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
   auto pat = hasPatternId;
-  // auto pred = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
+  // auto pred = qlever::specialIds().at(HAS_PREDICATE_PREDICATE);
   TripleVec expectedTriples;
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});

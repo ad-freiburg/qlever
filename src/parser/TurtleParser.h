@@ -42,7 +42,7 @@ struct TurtleTriple {
   TripleComponent subject_;
   TripleComponent::Iri predicate_;
   TripleComponent object_;
-  TripleComponent graphIri_ = qlever::specialIds.at(DEFAULT_GRAPH_IRI);
+  TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
   bool operator==(const TurtleTriple&) const = default;
 };
@@ -398,7 +398,7 @@ class TurtleParser : public TurtleParserBase {
 template <class Tokenizer_T>
 class NQuadParser : public TurtleParser<Tokenizer_T> {
   static inline const TripleComponent defautlGraphIri_ =
-      qlever::specialIds.at(DEFAULT_GRAPH_IRI);
+      qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   TripleComponent activeObject_;
   TripleComponent activeGraphLabel_;
   using Base = TurtleParser<Tokenizer_T>;
@@ -421,7 +421,7 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-template <class Parser>
+template <std::derived_from<TurtleParserBase> Parser>
 class TurtleStringParser : public Parser {
  public:
   using Parser::getLine;

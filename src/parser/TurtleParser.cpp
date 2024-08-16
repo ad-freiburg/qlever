@@ -551,7 +551,7 @@ template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     std::string_view normalizedLiteralContent,
     const TripleComponent::Iri& typeIri) {
-  TurtleStringParser<T> parser;
+  TurtleStringParser<TurtleParser<T>> parser;
 
   return literalAndDatatypeToTripleComponentImpl(normalizedLiteralContent,
                                                  typeIri, &parser);
