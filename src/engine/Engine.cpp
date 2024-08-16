@@ -5,6 +5,7 @@
 #include "engine/Engine.h"
 
 #include "engine/CallFixedSize.h"
+#include "util/ChunkedForLoop.h"
 
 // The actual implementation of sorting an `IdTable` according to the
 // `sortCols`.
@@ -48,4 +49,33 @@ void Engine::sort(IdTable& idTable, const std::vector<ColumnIndex>& sortCols) {
                                 Engine::sort<I>(&idTable, comparison);
                               });
   }
+}
+
+// ___________________________________________________________________________
+size_t Engine::countDistinct(const IdTable& input,
+                             const std::function<void()>& checkCancellation) {
+  AD_EXPENSIVE_CHECK(
+      std::ranges::is_sorted(input, std::ranges::lexicographical_compare),
+      "Input to Engine::countDistinct must be sorted");
+  if (input.empty()) {
+    return 0;
+  }
+  // Store whether the `i`-th entry in the `input` is equal to the `i+1`-th
+  // entry in the columns that have already been checked.
+  std::vector<char, ad_utility::AllocatorWithLimit<char>> counter(
+      input.numRows() - 1, static_cast<char>(true), input.getAllocator());
+
+  // For each column, set the entries in `counter` to 0 where there's a
+  // mismatch.
+  for (const auto& col : input.getColumns()) {
+    ad_utility::chunkedForLoop<100'000>(
+        0ULL, input.numRows() - 1,
+        [&counter, &col](size_t i) {
+          counter[i] &= static_cast<char>(col[i] == col[i + 1]);
+        },
+        [&checkCancellation]() { checkCancellation(); });
+  }
+
+  auto numDuplicates = std::accumulate(counter.begin(), counter.end(), 0ULL);
+  return input.numRows() - numDuplicates;
 }

@@ -50,9 +50,13 @@ struct TestContext {
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
-      *qec,       varToColMap,
-      table,      qec->getAllocator(),
-      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
+      *qec,
+      varToColMap,
+      table,
+      qec->getAllocator(),
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
 

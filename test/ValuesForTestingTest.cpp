@@ -25,9 +25,9 @@ TEST(ValuesForTesting, valuesForTesting) {
   ASSERT_EQ(v.getMultiplicity(0), 42.0);
   ASSERT_EQ(v.getMultiplicity(1), 84.0);
 
-  ASSERT_THAT(
-      v.getCacheKey(),
-      ::testing::StartsWith("Values for testing with 2 columns. V:3 V:12"));
+  ASSERT_THAT(v.getCacheKey(),
+              ::testing::StartsWith(
+                  "Values for testing with 2 columns and 3 rows. V:3 V:12"));
   ASSERT_THAT(v.getCacheKey(), ::testing::EndsWith("Supports limit: 0"));
   ASSERT_EQ(v.getDescriptor(), "explicit values for testing");
   ASSERT_TRUE(v.resultSortedOn().empty());
@@ -35,4 +35,14 @@ TEST(ValuesForTesting, valuesForTesting) {
 
   auto result = v.getResult();
   ASSERT_EQ(result->idTable(), table);
+}
+
+// ____________________________________________________________________________
+TEST(ValuesForTesting, cornerCasesCacheKey) {
+  auto empty = makeIdTableFromVector({});
+  auto neutral = makeIdTableFromVector({{}});
+
+  ValuesForTesting vEmpty{getQec(), empty.clone(), {}};
+  ValuesForTesting vNeutral{getQec(), neutral.clone(), {}};
+  EXPECT_NE(vEmpty.getCacheKey(), vNeutral.getCacheKey());
 }

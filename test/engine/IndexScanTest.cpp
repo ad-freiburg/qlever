@@ -380,3 +380,67 @@ TEST(IndexScan, additionalColumn) {
       {{getId("<x>"), getId("<z>"), I(0), I(NO_PATTERN)}});
   EXPECT_THAT(res.idTable(), ::testing::ElementsAreArray(exp));
 }
+
+TEST(IndexScan, getResultSizeOfScan) {
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.");
+  auto getId = makeGetId(qec->getIndex());
+  [[maybe_unused]] auto x = getId("<x>");
+  [[maybe_unused]] auto p = getId("<p>");
+  [[maybe_unused]] auto s1 = getId("<s1>");
+  [[maybe_unused]] auto s2 = getId("<s2>");
+  [[maybe_unused]] auto p2 = getId("<p2>");
+  using V = Variable;
+  using I = TripleComponent::Iri;
+
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, V("?y"), V{"?z"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    // Note: this currently also contains the (internal) triple for the
+    // `ql:has-pattern` relation of `<x>`.
+    EXPECT_EQ(scan.getSizeEstimate(), 4);
+  }
+  {
+    SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<p>"), V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 2);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  V{"?y"}};
+    IndexScan scan{qec, Permutation::Enum::PSO, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 2);
+  }
+  {
+    SparqlTripleSimple scanTriple{V("?x"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+  }
+  // 0 variables
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 1);
+    EXPECT_ANY_THROW(scan.getMultiplicity(0));
+    auto res = scan.computeResultOnlyForTesting();
+    ASSERT_EQ(res.idTable().numRows(), 1);
+    ASSERT_EQ(res.idTable().numColumns(), 0);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x2>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<s1>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 0);
+  }
+  {
+    SparqlTripleSimple scanTriple{I::fromIriref("<x>"), I::fromIriref("<p>"),
+                                  I::fromIriref("<p>")};
+    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+    EXPECT_EQ(scan.getSizeEstimate(), 0);
+    EXPECT_ANY_THROW(scan.getMultiplicity(0));
+    auto res = scan.computeResultOnlyForTesting();
+    ASSERT_EQ(res.idTable().numRows(), 0);
+    ASSERT_EQ(res.idTable().numColumns(), 0);
+  }
+}
