@@ -6,13 +6,13 @@ add_subdirectory(util)
 # Link binary ${basename} against `gmock_main`, the threading library, the
 # general test utilities and all libraries that are specified as additional
 # arguments.
-function (linkTest basename)
+function(linkTest basename)
     qlever_target_link_libraries(${basename} ${ARGN} GTest::gtest GTest::gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
 endfunction()
 
-# Add the exectutable ${basename} that is compiled from the source file
+# Add the executable ${basename} that is compiled from the source file
 # "${basename}".cpp
-function (addTest basename)
+function(addTest basename)
     add_executable(${basename} "${basename}.cpp")
 endfunction()
 
@@ -43,23 +43,23 @@ if (SINGLE_TEST_BINARY)
     qlever_target_link_libraries(QLeverAllUnitTestsMain gtest gmock_main testUtil ${CMAKE_THREAD_LIBS_INIT})
     gtest_discover_tests(QLeverAllUnitTestsMain QLeverAllUnitTestsMain PROPERTIES RUN_SERIAL
             TRUE)
-else()
+else ()
     message(STATUS "The tests are split over multiple binaries")
 
-endif()
+endif ()
 # Usage: `addAndLinkTest(basename, [additionalLibraries...]`
 # Add a GTest/GMock test case that is called `basename` and compiled from a file called
 # `basename.cpp`. All tests are linked against `gmock_main` and the threading library.
 # additional libraries against which the test case has to be linked can be specified as
 # additional arguments after the `basename`
 function(addLinkAndDiscoverTest basename)
-  if (SINGLE_TEST_BINARY)
-      target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-      qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-  else()
-    addTest(${basename})
-    linkAndDiscoverTest(${basename} ${ARGN})
-  endif()
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTest(${basename} ${ARGN})
+    endif ()
 
 endfunction()
 
@@ -68,13 +68,13 @@ endfunction()
 # (without any of the other test cases running in parallel). This can be
 # required e.g. if several tests cases write to the same file.
 function(addLinkAndDiscoverTestSerial basename)
-  if (SINGLE_TEST_BINARY)
-    target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
-    qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
-  else()
-    addTest(${basename})
-    linkAndDiscoverTestSerial(${basename} ${ARGN})
-  endif()
+    if (SINGLE_TEST_BINARY)
+        target_sources(QLeverAllUnitTestsMain PUBLIC ${basename}.cpp)
+        qlever_target_link_libraries(QLeverAllUnitTestsMain ${ARGN})
+    else ()
+        addTest(${basename})
+        linkAndDiscoverTestSerial(${basename} ${ARGN})
+    endif ()
 endfunction()
 
 # Only compile and link the test, but do not run it.
@@ -94,6 +94,8 @@ addLinkAndDiscoverTest(SparqlParserTest parser engine sparqlExpressions)
 
 addLinkAndDiscoverTest(StringUtilsTest util)
 
+addLinkAndDiscoverTest(CryptographicHashUtilsTest util)
+
 addLinkAndDiscoverTest(CacheTest)
 
 addLinkAndDiscoverTest(ConcurrentCacheTest)
@@ -111,6 +113,10 @@ addLinkAndDiscoverTest(IndexMetaDataTest index)
 # makes it impossible to run the test cases for the Index class in parallel.
 # TODO<qup42, joka921> fix this
 addLinkAndDiscoverTestSerial(IndexTest index)
+
+addLinkAndDiscoverTest(LocatedTriplesTest index)
+
+addLinkAndDiscoverTestSerial(IdTripleTest index)
 
 addLinkAndDiscoverTest(EngineTest engine)
 
@@ -140,10 +146,10 @@ addLinkAndDiscoverTest(UnionTest engine)
 if (SINGLE_TEST_BINARY)
     target_sources(QLeverAllUnitTestsMain PUBLIC TokenTest.cpp TokenTestCtreHelper.cpp)
     qlever_target_link_libraries(QLeverAllUnitTestsMain parser re2 util)
-else()
+else ()
     add_executable(TokenTest TokenTest.cpp TokenTestCtreHelper.cpp)
     linkAndDiscoverTest(TokenTest parser re2 util)
-endif()
+endif ()
 
 addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
 
@@ -207,19 +213,10 @@ addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
-addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
-
-addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
-
-addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
@@ -248,7 +245,9 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateTest util parser)
+addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
+
+addLinkAndDiscoverTest(DurationTest util)
 
 addLinkAndDiscoverTest(TripleComponentTest parser)
 
@@ -292,13 +291,17 @@ addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
 
+addLinkAndDiscoverTestSerial(NowDatetimeExpressionTest index)
+
+addLinkAndDiscoverTestSerial(LanguageExpressionsTest index)
+
 addLinkAndDiscoverTestSerial(SortTest engine)
 
 addLinkAndDiscoverTestSerial(OrderByTest engine)
 
 addLinkAndDiscoverTestSerial(ValuesForTestingTest index)
 
-addLinkAndDiscoverTestSerial(ExportQueryExecutionTreeTest index engine parser)
+addLinkAndDiscoverTestSerial(ExportQueryExecutionTreesTest index engine parser)
 
 addLinkAndDiscoverTestSerial(AggregateExpressionTest parser sparqlExpressions index engine)
 
@@ -389,3 +392,5 @@ addLinkAndDiscoverTest(JThreadTest)
 addLinkAndDiscoverTest(ChunkedForLoopTest)
 
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
+
+addLinkAndDiscoverTest(CopyableSynchronizationTest)

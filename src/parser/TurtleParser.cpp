@@ -9,8 +9,10 @@
 
 #include <cstring>
 
+#include "parser/NormalizedString.h"
 #include "parser/RdfEscaping.h"
 #include "util/Conversions.h"
+#include "util/DateYearDuration.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 
 using namespace std::chrono_literals;
@@ -365,92 +367,194 @@ bool TurtleParser<T>::doubleParse() {
   }
 }
 
+template <typename T>
+bool NQuadParser<T>::statement() {
+  if (!nQuadSubject()) {
+    return false;
+  }
+  this->check(nQuadPredicate() && nQuadObject());
+  if (!nQuadGraphLabel()) {
+    activeGraphLabel_ = defautlGraphIri_;
+  }
+  this->check(this->template skip<TurtleTokenId::Dot>());
+  if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
+    this->triples_.emplace_back(
+        std::move(this->activeSubject_), std::move(this->activePredicate_),
+        std::move(activeObject_), std::move(activeGraphLabel_));
+  }
+  this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
+  return true;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadLiteral() {
+  // TODO<joka921> Disallow multiline literals;
+  return Base::rdfLiteral();
+}
+
+template <typename T>
+bool NQuadParser<T>::getLine(TurtleTriple* triple) {
+  if (statement()) {
+    // TODO<joka921> For NQuads it would suffice to only store a simple triple.
+    *triple = std::move(this->triples_.back());
+    this->triples_.clear();
+    return true;
+  } else {
+    return false;
+  }
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadSubject() {
+  if (Base::iriref() || Base::blankNodeLabel()) {
+    this->activeSubject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadPredicate() {
+  if (Base::iriref()) {
+    this->activePredicate_ = std::move(this->lastParseResult_.getIri());
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadObject() {
+  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+    this->activeSubject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadGraphLabel() {
+  if (Base::iriref() || Base::blankNodeLabel()) {
+    activeGraphLabel_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
 // ______________________________________________________________________
 template <class T>
 bool TurtleParser<T>::rdfLiteral() {
   if (!stringParse()) {
     return false;
   }
+
   auto previous = lastParseResult_.getLiteral();
   if (langtag()) {
     previous.addLanguageTag(lastParseResult_.getString());
     lastParseResult_ = std::move(previous);
-    return true;
-    // TODO<joka921> this allows spaces here since the ^^ is unique in the
-    // sparql syntax. is this correct?
   } else if (skip<TurtleTokenId::DoubleCircumflex>() && check(iri())) {
-    auto typeIri = std::move(lastParseResult_.getIri());
-    std::string_view type = asStringViewUnsafe(typeIri.getContent());
-    std::string_view strippedLiteral =
-        asStringViewUnsafe(previous.getContent());
-    try {
-      // TODO<joka921> clean this up by moving the check for the types to a
-      // separate module.
-      if (type == XSD_INT_TYPE || type == XSD_INTEGER_TYPE ||
-          type == XSD_NON_POSITIVE_INTEGER_TYPE ||
-          type == XSD_NEGATIVE_INTEGER_TYPE || type == XSD_LONG_TYPE ||
-          type == XSD_SHORT_TYPE || type == XSD_BYTE_TYPE ||
-          type == XSD_NON_NEGATIVE_INTEGER_TYPE ||
-          type == XSD_UNSIGNED_LONG_TYPE || type == XSD_UNSIGNED_INT_TYPE ||
-          type == XSD_UNSIGNED_SHORT_TYPE ||
-          type == XSD_POSITIVE_INTEGER_TYPE) {
-        parseIntegerConstant(strippedLiteral);
-      } else if (type == XSD_BOOLEAN_TYPE) {
-        if (strippedLiteral == "true") {
-          lastParseResult_ = true;
-        } else if (strippedLiteral == "false") {
-          lastParseResult_ = false;
-        } else {
-          LOG(DEBUG)
-              << strippedLiteral
-              << " could not be parsed as a boolean object of type " << type
-              << ". It is treated as a plain string literal without datatype "
-                 "instead"
-              << std::endl;
-          lastParseResult_ = std::move(previous);
-        }
-      } else if (type == XSD_DECIMAL_TYPE || type == XSD_DOUBLE_TYPE ||
-                 type == XSD_FLOAT_TYPE) {
-        parseDoubleConstant(strippedLiteral);
-      } else if (type == XSD_DATETIME_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseXsdDatetime(strippedLiteral);
-      } else if (type == XSD_DATE_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseXsdDate(strippedLiteral);
-      } else if (type == XSD_GYEARMONTH_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseGYearMonth(strippedLiteral);
-      } else if (type == XSD_GYEAR_TYPE) {
-        lastParseResult_ = DateOrLargeYear::parseGYear(strippedLiteral);
-      } else {
-        previous.addDatatype(typeIri);
-        lastParseResult_ = std::move(previous);
-      }
-      return true;
-    } catch (const DateParseException&) {
-      LOG(DEBUG)
-          << strippedLiteral << " could not be parsed as a date object of type "
-          << type
-          << ". It is treated as a plain string literal without datatype "
-             "instead"
-          << std::endl;
-      lastParseResult_ = std::move(previous);
-      return true;
-    } catch (const DateOutOfRangeException& ex) {
-      LOG(DEBUG)
-          << strippedLiteral
-          << " could not be parsed as a date object for the following reason: "
-          << ex.what()
-          << ". It is treated as a plain string literal without datatype "
-             "instead"
-          << std::endl;
-      lastParseResult_ = std::move(previous);
-      return true;
-    } catch (const std::exception& e) {
-      raise(e.what());
-    }
-  } else {
-    // It is okay to neither have a langtag nor an XSD datatype.
-    return true;
+    literalAndDatatypeToTripleComponentImpl(
+        asStringViewUnsafe(previous.getContent()), lastParseResult_.getIri(),
+        this);
   }
+
+  // It is okay to neither have a langtag nor an XSD datatype.
+  return true;
+}
+
+// ______________________________________________________________________
+template <class T>
+TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponentImpl(
+    std::string_view normalizedLiteralContent,
+    const TripleComponent::Iri& typeIri, TurtleParser<T>* parser) {
+  auto literal = TripleComponent::Literal::literalWithNormalizedContent(
+      asNormalizedStringViewUnsafe(normalizedLiteralContent));
+  std::string_view type = asStringViewUnsafe(typeIri.getContent());
+
+  try {
+    if (ad_utility::contains(integerDatatypes_, type)) {
+      parser->parseIntegerConstant(normalizedLiteralContent);
+    } else if (type == XSD_BOOLEAN_TYPE) {
+      if (normalizedLiteralContent == "true") {
+        parser->lastParseResult_ = true;
+      } else if (normalizedLiteralContent == "false") {
+        parser->lastParseResult_ = false;
+      } else {
+        LOG(DEBUG)
+            << normalizedLiteralContent
+            << " could not be parsed as a boolean object of type " << type
+            << ". It is treated as a plain string literal without datatype "
+               "instead"
+            << std::endl;
+        parser->lastParseResult_ = std::move(literal);
+      }
+    } else if (ad_utility::contains(floatDatatypes_, type)) {
+      parser->parseDoubleConstant(normalizedLiteralContent);
+    } else if (type == XSD_DATETIME_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseXsdDatetime(normalizedLiteralContent);
+    } else if (type == XSD_DATE_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseXsdDate(normalizedLiteralContent);
+    } else if (type == XSD_GYEARMONTH_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseGYearMonth(normalizedLiteralContent);
+    } else if (type == XSD_GYEAR_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseGYear(normalizedLiteralContent);
+    } else if (type == XSD_DAYTIME_DURATION_TYPE) {
+      parser->lastParseResult_ =
+          DateYearOrDuration::parseXsdDayTimeDuration(normalizedLiteralContent);
+    } else {
+      literal.addDatatype(typeIri);
+      parser->lastParseResult_ = std::move(literal);
+    }
+  } catch (const DateParseException&) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as a date object of type " << type
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const DateOutOfRangeException& ex) {
+    LOG(DEBUG)
+        << normalizedLiteralContent
+        << " could not be parsed as a date object for the following reason: "
+        << ex.what()
+        << ". It is treated as a plain string literal without datatype "
+           "instead"
+        << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const DurationParseException&) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as a duration object of type " << type
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const DurationOverflowException& ex) {
+    LOG(DEBUG) << normalizedLiteralContent
+               << " could not be parsed as duration object for the following "
+                  "reason: "
+               << ex.what()
+               << ". It is treated as a plain string literal without datatype "
+                  "instead"
+               << std::endl;
+    parser->lastParseResult_ = std::move(literal);
+  } catch (const std::exception& e) {
+    parser->raise(e.what());
+  }
+  return parser->lastParseResult_;
+}
+
+// ______________________________________________________________________
+template <class T>
+TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
+    std::string_view normalizedLiteralContent,
+    const TripleComponent::Iri& typeIri) {
+  TurtleStringParser<TurtleParser<T>> parser;
+
+  return literalAndDatatypeToTripleComponentImpl(normalizedLiteralContent,
+                                                 typeIri, &parser);
 }
 
 // ______________________________________________________________________
@@ -572,8 +676,8 @@ bool TurtleParser<T>::blankNodeLabel() {
   if (res) {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
-    // removes the leading `_:` which will be added againg by the `BlankNode`
-    // constructor
+    // removes the leading `_:` which will be added again by the `BlankNode`
+    // constructor.
     lastParseResult_ =
         BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
   }
@@ -697,7 +801,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
   byteVec_ = std::move(buf);
   tok_.reset(byteVec_.data(), byteVec_.size());
 
-  LOG(TRACE) << "Succesfully decompressed next batch of " << nextBytes.size()
+  LOG(TRACE) << "Successfully decompressed next batch of " << nextBytes.size()
              << " << bytes to parser\n";
 
   // repair the backup state, its pointers might have changed due to
@@ -734,14 +838,14 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
            !isParserExhausted_) {
       bool parsedStatement;
       std::optional<ParseException> ex;
-      // If this buffer reads from an mmaped file, then exceptions are
+      // If this buffer reads from a memory-mapped file, then exceptions are
       // immediately rethrown. If we are reading from a stream in chunks of
       // bytes, we can try again with a larger buffer.
       try {
         // variable parsedStatement will be true iff a statement can
         // successfully be parsed
-        parsedStatement = this->statement();
-      } catch (const typename TurtleParser<T>::ParseException& p) {
+        parsedStatement = T::statement();
+      } catch (const typename T::ParseException& p) {
         parsedStatement = false;
         ex = p;
       }
@@ -751,7 +855,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
         // try to parse with a larger buffer and repeat the reading process
         // (maybe the failure was due to statements crossing our block).
         if (resetStateAndRead(&b)) {
-          // we have succesfully extended our buffer
+          // we have successfully extended our buffer
           if (byteVec_.size() > BZIP2_MAX_TOTAL_BUFFER_SIZE) {
             auto d = tok_.view();
             LOG(ERROR) << "Could not parse " << PARSER_MIN_TRIPLES_AT_ONCE
@@ -982,7 +1086,11 @@ TurtleParallelParser<T>::~TurtleParallelParser() {
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
-template class TurtleStreamParser<Tokenizer>;
-template class TurtleStreamParser<TokenizerCtre>;
-template class TurtleParallelParser<Tokenizer>;
-template class TurtleParallelParser<TokenizerCtre>;
+template class TurtleStreamParser<TurtleParser<Tokenizer>>;
+template class TurtleStreamParser<TurtleParser<TokenizerCtre>>;
+template class TurtleParallelParser<TurtleParser<Tokenizer>>;
+template class TurtleParallelParser<TurtleParser<TokenizerCtre>>;
+template class TurtleStreamParser<NQuadParser<Tokenizer>>;
+template class TurtleStreamParser<NQuadParser<TokenizerCtre>>;
+template class TurtleParallelParser<NQuadParser<Tokenizer>>;
+template class TurtleParallelParser<NQuadParser<TokenizerCtre>>;

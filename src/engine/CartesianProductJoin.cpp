@@ -132,10 +132,11 @@ void CartesianProductJoin::writeResultColumn(std::span<Id> targetColumn,
   }
 }
 // ____________________________________________________________________________
-ResultTable CartesianProductJoin::computeResult() {
+ProtoResult CartesianProductJoin::computeResult(
+    [[maybe_unused]] bool requestLaziness) {
   IdTable result{getExecutionContext()->getAllocator()};
   result.setNumColumns(getResultWidth());
-  std::vector<std::shared_ptr<const ResultTable>> subResults;
+  std::vector<std::shared_ptr<const Result>> subResults;
 
   // We don't need to fully materialize the child results if we have a LIMIT
   // specified and an OFFSET of 0.
@@ -153,29 +154,51 @@ ResultTable CartesianProductJoin::computeResult() {
       child.setLimit(limitIfPresent.value());
     }
     subResults.push_back(child.getResult());
+
+    const auto& table = subResults.back()->idTable();
     // Early stopping: If one of the results is empty, we can stop early.
-    if (subResults.back()->size() == 0) {
+    if (table.empty()) {
       break;
+    }
+
+    // If one of the children is the neutral element (because of a triple with
+    // zero variables), we can simply ignore it here.
+    if (table.numRows() == 1 && table.numColumns() == 0) {
+      subResults.pop_back();
+      continue;
     }
     // Example for the following calculation: If we have a LIMIT of 1000 and
     // the first child already has a result of size 100, then the second child
     // needs to evaluate only its first 10 results. The +1 is because integer
     // divisions are rounded down by default.
     if (limitIfPresent.has_value()) {
-      limitIfPresent.value()._limit =
-          limitIfPresent.value()._limit.value() / subResults.back()->size() + 1;
+      limitIfPresent.value()._limit = limitIfPresent.value()._limit.value() /
+                                          subResults.back()->idTable().size() +
+                                      1;
     }
   }
 
+  // TODO<joka921> Find a solution to cheaply handle the case, that only a
+  // single result is left. This can probably be done by using the
+  // `ProtoResult`.
+
   auto sizesView = std::views::transform(
-      subResults, [](const auto& child) { return child->size(); });
+      subResults, [](const auto& child) { return child->idTable().size(); });
   auto totalResultSize = std::accumulate(sizesView.begin(), sizesView.end(),
                                          1UL, std::multiplies{});
 
   size_t totalSizeIncludingLimit = getLimit().actualSize(totalResultSize);
   size_t offset = getLimit().actualOffset(totalResultSize);
 
-  result.resize(totalSizeIncludingLimit);
+  try {
+    result.resize(totalSizeIncludingLimit);
+  } catch (
+      const ad_utility::detail::AllocationExceedsLimitException& exception) {
+    throw std::runtime_error{
+        "The memory limit was exceeded during the computation of a "
+        "cross-product. Check if this cross-product is intentional or if you "
+        "have mistyped a variable name."};
+  }
 
   if (totalSizeIncludingLimit != 0) {
     // A `groupSize` of N means that each row of the current result is copied N
@@ -202,7 +225,7 @@ ResultTable CartesianProductJoin::computeResult() {
   auto subResultsDeref = std::views::transform(
       subResults, [](auto& x) -> decltype(auto) { return *x; });
   return {std::move(result), resultSortedOn(),
-          ResultTable::getMergedLocalVocab(subResultsDeref)};
+          Result::getMergedLocalVocab(subResultsDeref)};
 }
 
 // ____________________________________________________________________________

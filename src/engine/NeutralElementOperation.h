@@ -40,7 +40,7 @@ class NeutralElementOperation : public Operation {
   };
 
  private:
-  ResultTable computeResult() override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     IdTable idTable{getExecutionContext()->getAllocator()};
     idTable.setNumColumns(0);
     idTable.resize(1);

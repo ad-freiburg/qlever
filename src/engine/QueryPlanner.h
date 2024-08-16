@@ -5,23 +5,20 @@
 //   2018-     Johannes Kalmbach (kalmbach@informatik.uni-freiburg.de)
 
 #pragma once
-#include <set>
+
 #include <vector>
 
-#include "absl/strings/str_join.h"
-#include "absl/strings/str_split.h"
 #include "engine/CheckUsePatternTrick.h"
-#include "engine/Filter.h"
 #include "engine/QueryExecutionTree.h"
 #include "parser/GraphPattern.h"
 #include "parser/ParsedQuery.h"
-
-using std::vector;
 
 class QueryPlanner {
   using TextLimitMap =
       ad_utility::HashMap<Variable, parsedQuery::TextLimitMetaObject>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
+  template <typename T>
+  using vector = std::vector<T>;
 
   ParsedQuery::DatasetClauses activeDatasetClauses_;
 
@@ -138,7 +135,7 @@ class QueryPlanner {
                                                     std::move(operation))} {}
 
     std::shared_ptr<QueryExecutionTree> _qet;
-    std::shared_ptr<ResultTable> _cachedResult;
+    std::shared_ptr<Result> _cachedResult;
     uint64_t _idsOfIncludedNodes = 0;
     uint64_t _idsOfIncludedFilters = 0;
     uint64_t idsOfIncludedTextLimits_ = 0;
@@ -149,7 +146,7 @@ class QueryPlanner {
     size_t getSizeEstimate() const;
   };
 
-  // A helper class to find connected componenents of an RDF query using DFS.
+  // A helper class to find connected components of an RDF query using DFS.
   class QueryGraph {
    private:
     // A simple class to represent a graph node as well as some data for a DFS.
@@ -332,6 +329,10 @@ class QueryPlanner {
   [[nodiscard]] static std::optional<SubtreePlan>
   createJoinWithHasPredicateScan(
       SubtreePlan a, SubtreePlan b,
+      const std::vector<std::array<ColumnIndex, 2>>& jcs);
+
+  [[nodiscard]] static std::optional<SubtreePlan> createJoinWithService(
+      const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(

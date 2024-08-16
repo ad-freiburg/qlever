@@ -102,7 +102,7 @@ std::string getMessageImpl(
 }
 
 // Helper function used to format the arguments passed to `AD_CONTRACT_CHECK`
-// etc. Return "<concatentation of `getMessageImpl(messages)...`>" followed by
+// etc. Return "<concatenation of `getMessageImpl(messages)...`>" followed by
 // a full stop and space if there is at least one message.
 std::string concatMessages(auto&&... messages) {
   if constexpr (sizeof...(messages) == 0) {
@@ -172,10 +172,11 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 namespace ad_utility {
 static constexpr bool areExpensiveChecksEnabled = true;
 }
-#define AD_EXPENSIVE_CHECK(condition) AD_CORRECTNESS_CHECK(condition)
+#define AD_EXPENSIVE_CHECK(condition, ...) \
+  AD_CORRECTNESS_CHECK(condition, __VA_ARGS__)
 #else
 namespace ad_utility {
 static constexpr bool areExpensiveChecksEnabled = false;
 }
-#define AD_EXPENSIVE_CHECK(condition) void(0)
+#define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif

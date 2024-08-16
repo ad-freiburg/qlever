@@ -77,7 +77,9 @@ string GroupBy::getCacheKeyImpl() const {
 }
 
 string GroupBy::getDescriptor() const {
-  // TODO<C++23>:: Use std::views::join_with.
+  if (_groupByVariables.empty()) {
+    return "GroupBy (implicit)";
+  }
   return "GroupBy on " +
          absl::StrJoin(_groupByVariables, " ", &Variable::AbslFormatter);
 }
@@ -125,7 +127,7 @@ vector<ColumnIndex> GroupBy::computeSortColumns(
 // ____________________________________________________________________
 VariableToColumnMap GroupBy::computeVariableToColumnMap() const {
   VariableToColumnMap result;
-  // The returned columns are all groupByVariables followed by aggregrates.
+  // The returned columns are all groupByVariables followed by aggregates.
   const auto& subtreeVars = _subtree->getVariableColumns();
   size_t colIndex = 0;
   for (const auto& var : _groupByVariables) {
@@ -222,9 +224,9 @@ void GroupBy::processGroup(
  * @param blockEnd Where the group ends.
  * @param input The input Table.
  * @param result
- * @param inTable The input ResultTable, which is required for its local
+ * @param inTable The input Result, which is required for its local
  *                vocabulary
- * @param outTable The output ResultTable, the vocabulary of which needs to be
+ * @param outTable The output Result, the vocabulary of which needs to be
  *                 expanded for GROUP_CONCAT aggregates
  * @param distinctHashSet An empty hash set. This is only passed in as an
  *                        argument to allow for efficient reusage of its
@@ -247,7 +249,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
       getExecutionContext()->getAllocator(), *outLocalVocab,
-      cancellationHandle_);
+      cancellationHandle_, deadline_);
 
   // In a GROUP BY evaluation, the expressions need to know which variables are
   // grouped, and to which columns the results of the aliases are written. The
@@ -309,7 +311,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   *dynResult = std::move(result).toDynamic();
 }
 
-ResultTable GroupBy::computeResult() {
+ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
   IdTable idTable{getExecutionContext()->getAllocator()};
@@ -335,7 +337,7 @@ ResultTable GroupBy::computeResult() {
   auto hashMapOptimizationParams =
       checkIfHashMapOptimizationPossible(aggregates);
 
-  std::shared_ptr<const ResultTable> subresult;
+  std::shared_ptr<const Result> subresult;
   if (hashMapOptimizationParams.has_value()) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
@@ -1224,7 +1226,8 @@ void GroupBy::createResultFromHashMap(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *result,
-      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
+      deadline_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};
@@ -1295,7 +1298,8 @@ void GroupBy::computeGroupByForHashMapOptimization(
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), subresult,
-      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_);
+      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
+      deadline_);
 
   evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
       _groupByVariables.begin(), _groupByVariables.end()};

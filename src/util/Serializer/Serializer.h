@@ -144,7 +144,7 @@ static constexpr bool SerializerMatchesConstness =
   requires(Constraint) void serialize(S& serializer, T&& arg)
 
 /// Similar to `AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT` but only for
-/// `WriteSerializer`s. For an exmple usage see `SerializeVector.h`
+/// `WriteSerializer`s. For an example usage see `SerializeVector.h`
 #define AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT_WRITE(Constraint)       \
   template <ad_utility::serialization::WriteSerializer S, typename T> \
   requires(Constraint) void serialize(S& serializer, T&& arg)

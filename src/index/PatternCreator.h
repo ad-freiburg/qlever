@@ -113,8 +113,8 @@ class PatternCreator {
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
   TripleSorter tripleSorter_;
 
-  // The predicates which have already occured in one of the patterns. Needed to
-  // count the number of distinct predicates.
+  // The predicates which have already occurred in one of the patterns. Needed
+  // to count the number of distinct predicates.
   ad_utility::HashSet<Pattern::value_type> distinctPredicates_;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
@@ -145,7 +145,7 @@ class PatternCreator {
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
   void processTriple(std::array<Id, NumColumnsIndexBuilding> triple,
-                     bool ignoreForPatterns);
+                     bool ignoreTripleForPatterns);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note
@@ -178,6 +178,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
+  PatternID finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

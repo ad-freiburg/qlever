@@ -17,7 +17,8 @@ ParsedQuery SparqlParser::parseQuery(std::string query) {
   // Note: `AntlrParser::query` is a method of `AntlrParser` (which is an alias
   // for `SparqlAutomaticParser`) that returns the `QueryContext*` for the whole
   // query.
-  auto resultOfParseAndRemainingText = p.parseTypesafe(&AntlrParser::query);
+  auto resultOfParseAndRemainingText =
+      p.parseTypesafe(&AntlrParser::queryOrUpdate);
   // The query rule ends with <EOF> so the parse always has to consume the whole
   // input. If this is not the case a ParseException should have been thrown at
   // an earlier point.

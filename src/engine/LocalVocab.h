@@ -14,13 +14,15 @@
 #include "global/Id.h"
 #include "parser/LiteralOrIri.h"
 
-// A class for maintaing a local vocabulary with contiguous (local) IDs. This is
-// meant for words that are not part of the normal vocabulary (constructed from
-// the input data at indexing time).
+// A class for maintaining a local vocabulary with contiguous (local) IDs. This
+// is meant for words that are not part of the normal vocabulary (constructed
+// from the input data at indexing time).
 //
+
 class LocalVocab {
  private:
-  using LiteralOrIri = ad_utility::triple_component::LiteralOrIri;
+  using Entry = LocalVocabEntry;
+  using LiteralOrIri = LocalVocabEntry;
   // A map of the words in the local vocabulary to their local IDs. This is a
   // node hash map because we need the addresses of the words (which are of type
   // `LiteralOrIri`) to remain stable over their lifetime in the hash map

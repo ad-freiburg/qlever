@@ -292,7 +292,7 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
     // If necessary create an empty `BasicGraphPattern` at the end to which we
     // can append a triple.
     // TODO<joka921> It might be beneficial to place this triple not at the
-    // end but close to other occurences of `variable`.
+    // end but close to other occurrences of `variable`.
     if (_graphPatterns.empty() ||
         !std::holds_alternative<parsedQuery::BasicGraphPattern>(
             _graphPatterns.back())) {

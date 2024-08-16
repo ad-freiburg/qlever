@@ -129,6 +129,6 @@ if [ $i -ge 60 ]; then
   exit 1
 fi
 
-echo "ServerMain was succesfully started, running queries ..."
+echo "ServerMain was successfully started, running queries ..."
 $PYTHON_BINARY "$PROJECT_DIR/e2e/queryit.py" "$PROJECT_DIR/e2e/scientists_queries.yaml" "http://localhost:9099" | tee "$BINARY_DIR/query_log.txt" || bail "Querying Server failed"
 popd

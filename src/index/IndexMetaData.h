@@ -1,6 +1,7 @@
 // Copyright 2015, University of Freiburg,
 // Chair of Algorithms and Data Structures.
 // Author: Björn Buchhold (buchhold@informatik.uni-freiburg.de)
+
 #pragma once
 
 #include <stdio.h>
@@ -13,14 +14,14 @@
 #include <utility>
 #include <vector>
 
-#include "../global/Id.h"
-#include "../util/File.h"
-#include "../util/HashMap.h"
-#include "../util/MmapVector.h"
-#include "../util/ReadableNumberFact.h"
-#include "../util/Serializer/Serializer.h"
-#include "./MetaDataHandler.h"
-#include "CompressedRelation.h"
+#include "global/Id.h"
+#include "index/CompressedRelation.h"
+#include "index/MetaDataHandler.h"
+#include "util/File.h"
+#include "util/HashMap.h"
+#include "util/MmapVector.h"
+#include "util/ReadableNumberFact.h"
+#include "util/Serializer/Serializer.h"
 
 using std::array;
 using std::pair;
@@ -109,8 +110,8 @@ class IndexMetaData {
 
   // `isPersistentMetaData` is true when we do not need to add relation meta
   // data to data_, but assume that it is already contained in data_. This must
-  // be a compile time parameter because we have to avoid instantation of member
-  // function set() when `MapType` is read only  (e.g., when based on
+  // be a compile time parameter because we have to avoid instantiation of
+  // member function set() when `MapType` is read only  (e.g., when based on
   // MmapVectorView).
   template <bool isPersistentMetaData = false>
   void add(AddType addedValue);
@@ -131,7 +132,7 @@ class IndexMetaData {
     static const bool value = std::is_same<MetaWrapperMmap, T>::value ||
                               std::is_same<MetaWrapperMmapView, T>::value;
   };
-  // Compile time information whether this instatiation if MMapBased or not
+  // Compile time information whether this instantiation if MMapBased or not
   static constexpr bool isMmapBased_ = IsMmapBased<MapType>::value;
 
   // This magic number is written when serializing the IndexMetaData to a file.
@@ -218,7 +219,8 @@ template <class MapType>
 ad_utility::File& operator<<(ad_utility::File& f,
                              const IndexMetaData<MapType>& imd);
 
-// aliases for easier use in Index class
+// Aliases for easier use in classes that build or query permutations, like
+// `IndexImpl`.
 using MetaWrapperMmap =
     MetaDataWrapperDense<ad_utility::MmapVector<CompressedRelationMetadata>>;
 using MetaWrapperMmapView = MetaDataWrapperDense<

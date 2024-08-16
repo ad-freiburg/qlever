@@ -129,8 +129,8 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
   /*
   Trying to add a configuration option, whose entire path is a prefix of the
   path of an already added sub manager, should cause an exception. After all,
-  this would imply, that the sub manger is part of this new option. Which is not
-  supported at the moment.
+  this would imply, that the sub manager is part of this new option. Which is
+  not supported at the moment.
   */
   config.addSubManager({"sub"s, "manager"s})
       .addOption("someOpt"s, "", &notUsed, 42);
@@ -139,8 +139,8 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 
   /*
   Trying to add a configuration option, who contains the entire path of an
-  already added sub manger as prefix, should cause an exception. After all, such
-  recursive builds should have been done on `C++` level, not json level.
+  already added sub manager as prefix, should cause an exception. After all,
+  such recursive builds should have been done on `C++` level, not json level.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addOption({"sub"s, "manager"s, "someOption"s}, "", &notUsed, 42),
@@ -148,7 +148,7 @@ TEST(ConfigManagerTest, AddConfigurationOptionExceptionTest) {
 
   /*
   Trying to add a configuration option, whose path is the path of an already
-  added sub manger, should cause an exception.
+  added sub manager, should cause an exception.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addOption({"sub"s, "manager"s}, "", &notUsed, 42),
@@ -178,7 +178,7 @@ TEST(ConfigManagerTest, AddConfigurationOptionFalseExceptionTest) {
   The reasons, why it's not allowed, are basically the same.
 
   In the past, it was possible to cause path collisions even though there
-  weren't any, by having paths, which json pointer representation fullfilled the
+  weren't any, by having paths, which json pointer representation fulfilled the
   conditions for one of the cases. For example: It should be possible, to have
   one option under `[prefixes]` and one under
   `[prefixes-eternal]`. But, because `/prefixes` is a prefix of
@@ -261,8 +261,8 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
 
   /*
   Trying to add a sub manager, whose entire path is a prefix of the path of an
-  already added sub manger, should cause an exception. After all, such recursive
-  builds should have been done on `C++` level, not json level.
+  already added sub manager, should cause an exception. After all, such
+  recursive builds should have been done on `C++` level, not json level.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addSubManager({"Shared_part"s, "Unique_part_1"s}),
@@ -280,7 +280,7 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
           R"('\[Shared_part\]\[Unique_part_1\]\[Sense_of_existence\]\[Answer\]\[42\]')"));
 
   /*
-  Trying to add a sub manger, whose entire path is a prefix of the path of an
+  Trying to add a sub manager, whose entire path is a prefix of the path of an
   already added config option, should cause an exception. After all, such
   recursive builds should have been done on `C++` level, not json level.
   */
@@ -291,8 +291,8 @@ TEST(ConfigManagerTest, addSubManagerExceptionTest) {
   /*
   Trying to add a sub manager, who contains the entire path of an already added
   config option as prefix, should cause an exception.
-  After all, this would imply, that the sub manger is part of this option. Which
-  is not supported at the moment.
+  After all, this would imply, that the sub manager is part of this option.
+  Which is not supported at the moment.
   */
   AD_EXPECT_THROW_WITH_MESSAGE(
       config.addSubManager({"some"s, "option"s, "manager"s}),
@@ -330,7 +330,7 @@ TEST(ConfigManagerTest, AddSubManagerFalseExceptionTest) {
   The reasons, why it's not allowed, are basically the same.
 
   In the past, it was possible to cause path collisions even though there
-  weren't any, by having paths, which json pointer representation fullfilled the
+  weren't any, by having paths, which json pointer representation fulfilled the
   conditions for one of the cases. For example: It should be possible, to have
   one sub manager under `[prefixes]` and one under
   `[prefixes-eternal]`. But, because `/prefixes` is a prefix of
@@ -1034,7 +1034,7 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
         return (one && !two && !three) || (!one && two && !three) ||
                (!one && !two && three);
       },
-      "Exactly one bool must be choosen.", "", boolOneOption, boolTwoOption,
+      "Exactly one bool must be chosen.", "", boolOneOption, boolTwoOption,
       boolThreeOption);
   checkValidator(
       m,
@@ -1042,7 +1042,7 @@ TEST(ConfigManagerTest, HumanReadableAddValidator) {
           R"--({"numberInRange" : 60, "boolOne": true, "boolTwo": false, "boolThree": false})--"),
       nlohmann::json::parse(
           R"--({"numberInRange" : 60, "boolOne": true, "boolTwo": true, "boolThree": false})--"),
-      "Exactly one bool must be choosen.");
+      "Exactly one bool must be chosen.");
 }
 
 // Human readable examples for `addOptionValidator` with `Validator` functions.
@@ -1094,7 +1094,7 @@ TEST(ConfigManagerTest, HumanReadableAddOptionValidator) {
 /*
 @brief Generate an informative validator name in the form of `Config manager
 validator<x> y`. With `x` being the list of function argument types and `y` an
-unqiue number id.
+unique number id.
 
 @tparam Ts The types of the function arguments of the validator function.
 
@@ -1167,7 +1167,7 @@ void doValidatorTest(
   /*
   @brief Adjust `variant` argument for `createDummyValueForValidator` and
   `generateDummyNonExceptionValidatorFunction`.
-  The bool type in those helper functions needs special handeling, because it
+  The bool type in those helper functions needs special handling, because it
   only has two values and can't fulfill the invariant, that
   `createDummyValueForValidator` and
   `generateDummyNonExceptionValidatorFunction` should fulfill.
@@ -1218,7 +1218,7 @@ void doValidatorTest(
   /*
   @brief Test all validator functions generated by `addValidatorToConfigManager`
   for a given range of `variant` and a specific configuration of `Ts`. Note:
-  This is for specificly for testing the validators generated by calling
+  This is for specifically for testing the validators generated by calling
   `addValidatorToConfigManager` with a all values in `[variantStart,
   variantEnd)` as `variant` and all other arguments unchanged.
 
@@ -1633,8 +1633,8 @@ void doValidatorTest(
           ConfigManager& managerToAddValidatorTo,
           ConstConfigOptionProxy<std::string> option,
           const nlohmann::json::json_pointer& pathToOption) {
-        // The value, which causes the automaticly generated validator with the
-        // given variant to fail.
+        // The value, which causes the automatically generated validator with
+        // the given variant to fail.
         const std::string& failValue =
             createDummyValueForValidator<std::string>(variantNumber);
 
@@ -1695,7 +1695,7 @@ void doValidatorTest(
       nlohmann::json::json_pointer("/some/manager/someValue1"));
 
   /*
-  Reseting `mValidatorSubValidatorOption1`, so that the validator, that was
+  Resetting `mValidatorSubValidatorOption1`, so that the validator, that was
   added via `doExceptionMessageTest`, not longer fails.
 
   We can not use an r-value nlohmann json object for this, because there is no
@@ -2475,7 +2475,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
 
   /*
   Generate the `ConfigOption`, together with their validators. Note: We do not
-  need working `ConfigOption`. As long as they exists, everythings fine.
+  need working `ConfigOption`. As long as they exists, everything fine.
   */
   const auto configOptionKeysAndValidators{createKeyAndValidatorPairVector(
       []() {
@@ -2486,7 +2486,7 @@ TEST(ConfigManagerTest, ConfigurationDocValidatorAssignment) {
 
   /*
   Generate the `ConfigManager`, together with their validators. Note: We do not
-  need working `ConfigManager`. As long as they exists, everythings fine.
+  need working `ConfigManager`. As long as they exists, everything fine.
   */
   const auto configManagerKeysAndValidators{createKeyAndValidatorPairVector(
       []() { return ConfigManager{}; }, NUM_CONFIG_MANAGER)};

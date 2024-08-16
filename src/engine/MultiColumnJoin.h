@@ -63,7 +63,7 @@ class MultiColumnJoin : public Operation {
       IdTable* resultMightBeUnsorted);
 
  private:
-  ResultTable computeResult() override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 

@@ -81,8 +81,8 @@ struct FirstWrapper : public std::type_identity<T> {};
 /// The concept is fulfilled iff `T` is an instantiation of `TemplatedType`.
 /// Examples:
 ///
-/// isInstantiation<std::vector, std::vector<int>> == true;
-/// isInstantiation<std::vector, const std::vector<int>&> == false;
+/// isInstantiation<std::vector<int>, std::vector> == true;
+/// isInstantiation<const std::vector<int>&, std::vector> == false;
 template <typename T, template <typename...> typename TemplatedType>
 concept isInstantiation =
     detail::IsInstantiationOf<TemplatedType>::template Instantiation<T>::value;
@@ -115,7 +115,7 @@ constexpr static bool isArray = false;
 template <typename T, size_t N>
 constexpr static bool isArray<std::array<T, N>> = true;
 
-// `SimilarToArray` is also true for `std::aray<...>&`, etc.
+// `SimilarToArray` is also true for `std::array<...>&`, etc.
 template <typename T>
 concept SimilarToArray = isArray<std::decay_t<T>>;
 
