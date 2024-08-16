@@ -33,6 +33,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"

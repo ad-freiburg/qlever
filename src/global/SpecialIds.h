@@ -29,35 +29,21 @@ inline const ad_utility::HashMap<std::string, Id>& specialIds() {
     // have the `Undefined` datatype, but none of them is equal to the "actual"
     // UNDEF value.
     auto values = std::views::values(result);
+    // TODO<joka921> Reinstate (see above)
+    /*
     auto undefTypeButNotUndefValue = [](Id id) {
       return id != Id::makeUndefined() &&
              id.getDatatype() == Datatype::Undefined;
     };
-    // TODO<joka921> Reinstate (see above)
-    // AD_CORRECTNESS_CHECK(
-    //    std::ranges::all_of(values, undefTypeButNotUndefValue));
+    AD_CORRECTNESS_CHECK(
+       std::ranges::all_of(values, undefTypeButNotUndefValue));
+    */
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
     return result;
   }();
   return ids;
 };
-// Perform the following checks: All the special IDs are unique, all of them
-// have the `Undefined` datatype, but none of them is equal to the "actual"
-// UNDEF value.
-auto values = std::views::values(result);
-auto undefTypeButNotUndefValue = [](Id id) {
-  return id != Id::makeUndefined() && id.getDatatype() == Datatype::Undefined;
-};
-// TODO<joka921> Reinstate (see above)
-// AD_CORRECTNESS_CHECK(std::ranges::all_of(values,
-// undefTypeButNotUndefValue));
-ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
-AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
-return result;
-}
-();
-
 // Return the [lowerBound, upperBound) for the special Ids.
 // This range can be used to filter them out in cases where we want to ignore
 // triples that were added by QLever for internal reasons.

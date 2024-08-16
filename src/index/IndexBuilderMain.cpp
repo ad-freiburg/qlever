@@ -223,7 +223,8 @@ int main(int argc, char** argv) {
                    << " (using the Turtle parser)" << std::endl;
         index.createFromFile(inputFile, Index::Filetype::Turtle);
       } else if (filetype == "nquad") {
-        LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile << std::endl;
+        LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
+                   << std::endl;
         index.createFromFile(inputFile, Index::Filetype::NQuad);
       } else {
         LOG(ERROR) << "File format must be one of: nt ttl nquad" << std::endl;

@@ -63,12 +63,6 @@ auto idGenerator(S input, size_t targetSize, const EvaluationContext* context) {
   return sparqlExpression::detail::makeGenerator(std::move(input), targetSize,
                                                  context);
 }
-// Same for the `SetOfIntervals` class.
-auto idGenerator(ad_utility::SetOfIntervals variable, size_t targetSize,
-                 const EvaluationContext* context) {
-  return sparqlExpression::detail::makeGenerator(std::move(variable),
-                                                 targetSize, context);
-}
 
 // Return a pair of generators that generate the values from `value1` and
 // `value2`. The type of generators is chosen to meet the needs of comparing
@@ -436,80 +430,6 @@ auto InExpression::getEstimatesForFilterExpression(
     const std::optional<Variable>& firstSortedVariable) const -> Estimates {
   return getEstimatesForFilterExpressionImpl(
       inputSizeEstimate, reductionFactorEquals, children_, firstSortedVariable);
-}
-
-// _____________________________________________________________________________
-ExpressionResult InExpression::evaluate(
-    sparqlExpression::EvaluationContext* context) const {
-  auto lhs = children_.at(0)->evaluate(context);
-  auto resultSize = context->_isPartOfGroupBy ? 1 : context->size();
-  VectorWithMemoryLimit<Id> result(resultSize, Id::makeFromBool(false),
-                                   context->_allocator);
-  for (const auto& child : children_ | std::views::drop(1)) {
-    auto rhs = child->evaluate(context);
-    // `resA` and `resB` are variants, so we need `std::visit`.
-    auto visitor = [context](const auto& a, auto b) -> ExpressionResult {
-      return evaluateRelationalExpression<Comparison::EQ>(a, std::move(b),
-                                                          context);
-    };
-    auto subRes = std::visit(visitor, lhs, std::move(rhs));
-    if (std::holds_alternative<Id>(subRes)) {
-      auto res = std::get<Id>(subRes);
-      // TODO<joka921> Verify that this in fact works.
-      std::ranges::for_each(result, [res](Id& id) {
-        id = Id::fromBits(id.getBits() | res.getBits());
-      });
-    } else if (std::holds_alternative<ad_utility::SetOfIntervals>(subRes)) {
-      auto bitVec = ad_utility::SetOfIntervals::toBitVector(
-          std::get<ad_utility::SetOfIntervals>(subRes), result.size());
-      for (size_t i = 0; i < result.size(); ++i) {
-        result[i] = Id::fromBits(result[i].getBits() | bitVec[i]);
-      }
-    } else {
-      AD_CORRECTNESS_CHECK(
-          std::holds_alternative<VectorWithMemoryLimit<Id>>(subRes));
-      const auto& res = std::get<VectorWithMemoryLimit<Id>>(subRes);
-      AD_CORRECTNESS_CHECK(result.size() == res.size());
-      for (size_t i = 0; i < result.size(); ++i) {
-        result[i] = Id::fromBits(result[i].getBits() | res[i].getBits());
-      }
-    }
-  }
-
-  // A single result can be returned as a constant value, this is currently
-  // required by HAVING expressions etc.
-  if (result.size() == 1) {
-    return result.at(0);
-  } else {
-    return result;
-  }
-}
-
-// _____________________________________________________________________________
-std::span<SparqlExpression::Ptr> InExpression::childrenImpl() {
-  return children_;
-}
-
-// _____________________________________________________________________________
-string InExpression::getCacheKey(const VariableToColumnMap& varColMap) const {
-  // TODO<Joka921> proper cache key;
-  (void)varColMap;
-  std::stringstream result;
-  result << "IN Expression with";
-  for (const auto& child : children_) {
-    result << ' ' << child->getCacheKey(varColMap);
-  }
-  return std::move(result).str();
-}
-
-// _____________________________________________________________________________
-auto InExpression::getEstimatesForFilterExpression(
-    uint64_t inputSizeEstimate,
-    const std::optional<Variable>& firstSortedVariable) const -> Estimates {
-  (void)firstSortedVariable;
-  (void)inputSizeEstimate;
-  // TODO<joka921> We probably can identify some cheaper cases here.
-  return {};
 }
 
 // Explicit instantiations

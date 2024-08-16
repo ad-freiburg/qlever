@@ -1168,9 +1168,12 @@ TEST(SparqlParser, SelectQuery) {
       contains(
           "The target ?y of an AS clause was already used in the query body."));
 
-  // Datasets are not supported.
+  // TODO<joka921> These are now supported... add the corresponding tests
+
+  /*
   expectSelectQueryFails("SELECT * FROM <defaultDataset> WHERE { ?x ?y ?z }",
                          contains("FROM clauses are currently not supported"));
+                         */
 }
 
 TEST(SparqlParser, ConstructQuery) {
@@ -1208,12 +1211,15 @@ TEST(SparqlParser, ConstructQuery) {
                        m::ConstructQuery({{Var{"?a"}, Iri{"<foo>"}, Var{"?b"}}},
                                          m::GraphPattern()));
   // Datasets are not supported.
+  // TODO<joka921> These are now supported
+  /*
   expectConstructQueryFails(
       "CONSTRUCT { } FROM <foo> WHERE { ?a ?b ?c }",
       contains("FROM clauses are currently not supported by QLever."));
   expectConstructQueryFails(
       "CONSTRUCT FROM <foo> WHERE { }",
       contains("FROM clauses are currently not supported by QLever."));
+      */
 
   // GROUP BY and ORDER BY, but the ordered variable is not grouped
   expectConstructQueryFails(
