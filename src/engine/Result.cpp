@@ -6,7 +6,8 @@
 
 #include "engine/Result.h"
 
-#include "engine/LocalVocab.h"
+#include <absl/cleanup/cleanup.h>
+
 #include "util/CacheableGenerator.h"
 #include "util/Exception.h"
 #include "util/Log.h"
@@ -42,7 +43,7 @@ Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
       sortedBy_{std::move(sortedBy)},
       localVocab_{std::move(localVocab.localVocab_)} {
   AD_CONTRACT_CHECK(localVocab_ != nullptr);
-  validateIdTable(this->idTable(), sortedBy_);
+  assertSortOrderIsRespected(this->idTable(), sortedBy_);
 }
 
 // _____________________________________________________________________________
@@ -57,8 +58,16 @@ Result::Result(cppcoro::generator<IdTable> idTables,
                SharedLocalVocabWrapper localVocab)
     : data_{GenContainer{
           [](auto idTables, auto sortedBy) -> cppcoro::generator<IdTable> {
+            std::optional<IdTable::row_type> previousId = std::nullopt;
             for (IdTable& idTable : idTables) {
-              validateIdTable(idTable, sortedBy);
+              if (idTable.size() > 0) {
+                if (previousId.has_value()) {
+                  AD_EXPENSIVE_CHECK(!compareRowsByJoinColumns(sortedBy)(
+                      idTable.at(0), previousId.value()));
+                }
+                previousId = idTable.at(idTable.size() - 1);
+              }
+              assertSortOrderIsRespected(idTable, sortedBy);
               co_yield std::move(idTable);
             }
           }(std::move(idTables), sortedBy)}},
@@ -156,33 +165,17 @@ void Result::assertThatLimitWasRespected(const LimitOffsetClause& limitOffset) {
   }
 }
 
-// _____________________________________________________________________________
-auto Result::computeDatatypeCountsPerColumn(IdTable& idTable)
-    -> DatatypeCountsPerColumn {
-  DatatypeCountsPerColumn types;
-  types.resize(idTable.numColumns());
-  for (size_t i = 0; i < idTable.numColumns(); ++i) {
-    const auto& col = idTable.getColumn(i);
-    auto& datatypes = types.at(i);
-    for (Id id : col) {
-      ++datatypes[static_cast<size_t>(id.getDatatype())];
-    }
-  }
-  return types;
-}
-
 // _____________________________________________________________
 void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
   auto performCheck = [](const auto& map, IdTable& idTable) {
-    DatatypeCountsPerColumn datatypeCountsPerColumn =
-        computeDatatypeCountsPerColumn(idTable);
     return std::ranges::all_of(map, [&](const auto& varAndCol) {
       const auto& [columnIndex, mightContainUndef] = varAndCol.second;
-      bool hasUndefined =
-          datatypeCountsPerColumn.at(columnIndex)
-              .at(static_cast<size_t>(Datatype::Undefined)) != 0;
-      return mightContainUndef == ColumnIndexAndTypeInfo::PossiblyUndefined ||
-             !hasUndefined;
+      if (mightContainUndef == ColumnIndexAndTypeInfo::AlwaysDefined) {
+        return std::ranges::all_of(idTable.getColumn(columnIndex), [](Id id) {
+          return id.getDatatype() != Datatype::Undefined;
+        });
+      }
+      return true;
     });
   };
   if (isFullyMaterialized()) {
@@ -219,9 +212,9 @@ void Result::runOnNewChunkComputed(
         [&onGeneratorFinished]() { onGeneratorFinished(false); }};
     try {
       ad_utility::timer::Timer timer{ad_utility::timer::Timer::Started};
-      for (auto&& idTable : original) {
+      for (IdTable& idTable : original) {
         onNewChunk(idTable, timer.value());
-        co_yield std::move(idTable);
+        co_yield idTable;
         timer.start();
       }
     } catch (...) {
@@ -235,22 +228,28 @@ void Result::runOnNewChunkComputed(
 }
 
 // _____________________________________________________________________________
-void Result::validateIdTable(const IdTable& idTable,
-                             const std::vector<ColumnIndex>& sortedBy) {
-  AD_CONTRACT_CHECK(std::ranges::all_of(sortedBy, [&idTable](size_t numCols) {
-    return numCols < idTable.numColumns();
-  }));
+auto Result::compareRowsByJoinColumns(
+    const std::vector<ColumnIndex>& sortedBy) {
+  return [&sortedBy](const auto& row1, const auto& row2) {
+    for (ColumnIndex col : sortedBy) {
+      if (row1[col] != row2[col]) {
+        return row1[col] < row2[col];
+      }
+    }
+    return false;
+  };
+}
 
-  [[maybe_unused]] auto compareRowsByJoinColumns =
-      [&sortedBy](const auto& row1, const auto& row2) {
-        for (size_t col : sortedBy) {
-          if (row1[col] != row2[col]) {
-            return row1[col] < row2[col];
-          }
-        }
-        return false;
-      };
-  AD_EXPENSIVE_CHECK(std::ranges::is_sorted(idTable, compareRowsByJoinColumns));
+// _____________________________________________________________________________
+void Result::assertSortOrderIsRespected(
+    const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy) {
+  AD_CONTRACT_CHECK(
+      std::ranges::all_of(sortedBy, [&idTable](ColumnIndex colIndex) {
+        return colIndex < idTable.numColumns();
+      }));
+
+  AD_EXPENSIVE_CHECK(
+      std::ranges::is_sorted(idTable, compareRowsByJoinColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________

@@ -15,7 +15,6 @@
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
 #include "parser/data/LimitOffsetClause.h"
-#include "util/CacheableGenerator.h"
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
@@ -74,19 +73,14 @@ class Result {
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
 
-  // For each column in the result (the entries in the outer `vector`) and for
-  // each `Datatype` (the entries of the inner `array`), store the information
-  // how many entries of that datatype are stored in the column.
-  using DatatypeCountsPerColumn = std::vector<
-      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
+  // Helper function for `assertSortOrderIsRespected` that returns a lambda that
+  // ensures the sorting order based on `sortedBy`.
+  static auto compareRowsByJoinColumns(
+      const std::vector<ColumnIndex>& sortedBy);
 
-  // Get the information, which columns stores how many entries of each
-  // datatype.
-  static DatatypeCountsPerColumn computeDatatypeCountsPerColumn(
-      IdTable& idTable);
-
-  static void validateIdTable(const IdTable& idTable,
-                              const std::vector<ColumnIndex>& sortedBy);
+  // Check if sort order promised by `sortedBy` is kept within `idTable`.
+  static void assertSortOrderIsRespected(
+      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
