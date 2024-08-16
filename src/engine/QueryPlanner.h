@@ -522,7 +522,7 @@ class QueryPlanner {
     // It is called when a non-commuting pattern (like OPTIONAL or BIND) is
     // encountered. We then first optimize the previous candidates using this
     // function, and then combine the result with the OPTIONAL etc. clause.
-    void optimizeCommutatively();
+    void optimizeCommutatively(const GraphIri& graphIri);
 
     // Find a single best candidate for a given graph pattern.
     SubtreePlan optimizeSingle(const auto& pattern) {

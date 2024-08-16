@@ -206,7 +206,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::optimize(
   // one last pass in case the last one was not an optional
   // if the last child was not an optional clause we still have unjoined
   // candidates. Do one last pass over them.
-  optimizer.optimizeCommutatively();
+  optimizer.optimizeCommutatively(graphIri);
   auto& candidatePlans = optimizer.candidatePlans_;
 
   // it might be, that we have not yet applied all the filters
@@ -1998,7 +1998,7 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // For OPTIONAL or MINUS, optimization "across" the OPTIONAL or MINUS is
   // forbidden. Optimize all previously collected candidates, and then perform
   // an optional or minus join.
-  optimizeCommutatively();
+  optimizeCommutatively(std::nullopt);
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   std::vector<SubtreePlan> nextCandidates;
   // For each candidate plan, and each plan from the OPTIONAL or MINUS, create
@@ -2115,7 +2115,7 @@ void QueryPlanner::GraphPatternPlanner::visitBind(const parsedQuery::Bind& v) {
   boundVariables_.insert(v._target);
 
   // Assumption for now: BIND does not commute. This is always safe.
-  optimizeCommutatively();
+  optimizeCommutatively(std::nullopt);
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   auto lastRow = std::move(candidatePlans_.at(0));
   candidatePlans_.at(0).clear();
@@ -2214,12 +2214,14 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 // _______________________________________________________________
 
 // _______________________________________________________________
-void QueryPlanner::GraphPatternPlanner::optimizeCommutatively() {
+void QueryPlanner::GraphPatternPlanner::optimizeCommutatively(
+    const GraphIri& graphIri) {
   auto tg = planner_.createTripleGraph(&candidateTriples_);
-  auto lastRow = planner_
-                     .fillDpTab(tg, rootPattern_->_filters,
-                                rootPattern_->textLimits_, candidatePlans_)
-                     .back();
+  auto lastRow =
+      planner_
+          .fillDpTab(tg, rootPattern_->_filters, rootPattern_->textLimits_,
+                     candidatePlans_, graphIri)
+          .back();
   candidateTriples_._triples.clear();
   candidatePlans_.clear();
   candidatePlans_.push_back(std::move(lastRow));
