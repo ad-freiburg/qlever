@@ -756,13 +756,14 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, BlocksOfTriples sortedTriples,
+      size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, BlocksOfTriples sortedTriples,
+  void createOSPAndOPS(size_t numColumns, auto& isInternalId,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Create the PSO and POS permutations. Additionally, count the number of
@@ -770,7 +771,8 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, BlocksOfTriples sortedTriples,
+  void createPSOAndPOS(size_t numColumns, auto& isInternalId,
+                       BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
   // Set up one of the permutation sorters with the appropriate memory limit.
@@ -825,5 +827,6 @@ class IndexImpl {
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
   std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
-  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator);
+  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
+                       auto isQLeverInternalId);
 };
