@@ -37,6 +37,18 @@ auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
+auto compareRowsByJoinColumns(const std::vector<ColumnIndex>& sortedBy) {
+  return [&sortedBy](const auto& row1, const auto& row2) {
+    for (ColumnIndex col : sortedBy) {
+      if (row1[col] != row2[col]) {
+        return row1[col] < row2[col];
+      }
+    }
+    return false;
+  };
+}
+
+// _____________________________________________________________________________
 Result::Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
                SharedLocalVocabWrapper localVocab)
     : data_{std::move(idTable)},
@@ -225,19 +237,6 @@ void Result::runOnNewChunkComputed(
   }(std::move(idTables()), std::move(onNewChunk),
       std::move(onGeneratorFinished));
   data_.emplace<GenContainer>(std::move(generator));
-}
-
-// _____________________________________________________________________________
-auto Result::compareRowsByJoinColumns(
-    const std::vector<ColumnIndex>& sortedBy) {
-  return [&sortedBy](const auto& row1, const auto& row2) {
-    for (ColumnIndex col : sortedBy) {
-      if (row1[col] != row2[col]) {
-        return row1[col] < row2[col];
-      }
-    }
-    return false;
-  };
 }
 
 // _____________________________________________________________________________

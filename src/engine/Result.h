@@ -73,11 +73,6 @@ class Result {
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
 
-  // Helper function for `assertSortOrderIsRespected` that returns a lambda that
-  // ensures the sorting order based on `sortedBy`.
-  static auto compareRowsByJoinColumns(
-      const std::vector<ColumnIndex>& sortedBy);
-
   // Check if sort order promised by `sortedBy` is kept within `idTable`.
   static void assertSortOrderIsRespected(
       const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
