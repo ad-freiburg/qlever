@@ -205,4 +205,6 @@ class ExportQueryExecutionTrees {
               ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial);
   FRIEND_TEST(ExportQueryExecutionTrees,
               ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureGeneratorIsNotConsumedWhenNotRequired);
 };

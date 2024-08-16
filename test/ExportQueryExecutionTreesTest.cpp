@@ -1368,3 +1368,49 @@ TEST(ExportQueryExecutionTrees,
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
 }
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
+  {
+    auto throwingGenerator = []() -> cppcoro::generator<IdTable> {
+      ADD_FAILURE() << "Generator was started" << std::endl;
+      throw std::runtime_error("Generator was started");
+      co_return;
+    }();
+
+    Result result{std::move(throwingGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+    EXPECT_NO_THROW({
+      for ([[maybe_unused]] const auto& info : generator) {
+      }
+    });
+  }
+
+  {
+    auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
+      IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
+      idTable1.push_back({Id::makeFromInt(1)});
+
+      co_yield std::move(idTable1);
+
+      ADD_FAILURE() << "Generator was resumed" << std::endl;
+      throw std::runtime_error("Generator was resumed");
+    }();
+
+    Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
+    bool executed = false;
+    EXPECT_NO_THROW({
+      for (const auto& [idTable, range] : generator) {
+        for (uint64_t i : range) {
+          executed = true;
+          EXPECT_EQ(idTable.at(i)[0], Id::makeFromInt(1));
+        }
+      }
+    });
+
+    EXPECT_TRUE(executed);
+  }
+}
