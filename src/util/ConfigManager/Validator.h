@@ -30,7 +30,7 @@ concept ValidatorFunction =
     RegularInvocableWithSimilarReturnType<Func, bool, const ParameterTypes&...>;
 
 // Simple struct, that holds an error message. For use as the return type of
-// invocable object, that fullfill `ExceptionValidator`.
+// invocable object, that fulfill `ExceptionValidator`.
 struct ErrorMessage {
  private:
   std::string message_;
@@ -100,7 +100,7 @@ class ConfigOptionValidatorManager {
   */
   std::function<void(void)> wrappedValidatorFunction_;
 
-  // A descripton of the invariant, this validator imposes.
+  // A description of the invariant, this validator imposes.
   std::string descriptor_;
 
   // Pointer to the `configOption`, that will be checked.

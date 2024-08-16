@@ -69,7 +69,7 @@ TEST(LRUCacheTest, testSimpleMapUsage) {
   ASSERT_EQ(*cache["5"], "xxxxx");
   // Non-existing elements must yield shared_ptr<const Value>(nullptr)
   // this bool converts to false
-  ASSERT_FALSE(cache["non-existant"]);
+  ASSERT_FALSE(cache["non-existent"]);
 }
 // _____________________________________________________________________________
 TEST(LRUCacheTest, testSimpleMapUsageWithDrop) {
@@ -133,7 +133,7 @@ TEST(LRUCacheTest, testDecreasingCapacity) {
   cache.insert("9", "xxxxxxxxx");
   cache.setMaxNumEntries(2);
   ASSERT_EQ(*cache["9"], "xxxxxxxxx");  // freshly inserted
-  ASSERT_EQ(*cache["5"], "xxxxx");      // second leat recently used
+  ASSERT_EQ(*cache["5"], "xxxxx");      // second least recently used
   ASSERT_FALSE(cache["1"]);
   ASSERT_FALSE(cache["2"]);
   ASSERT_FALSE(cache["3"]);

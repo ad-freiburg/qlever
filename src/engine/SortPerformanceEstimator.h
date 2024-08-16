@@ -43,11 +43,19 @@ class SortPerformanceEstimator {
       size_t maxNumberOfElementsToSort);
 
   /// Set up the sort estimates. This will take some time. Only samples, that
-  /// can be allocated by the allocator and that have less thatn
+  /// can be allocated by the allocator and that have less than
   /// `maxNumberOfElementsToSort` elements will actually be measured.
   void computeEstimatesExpensively(
       const ad_utility::AllocatorWithLimit<Id>& allocator,
       size_t maxNumberOfElementsToSort);
+
+  // Throw an exception if the estimated time to sort an IdTable with the given
+  // number of rows and columns is larger than `deadline - now()` *
+  // `RuntimeParameters(sort-estimate-cancellaction-factor)`. The exception
+  // message will include the `operationDescriptor`.
+  void throwIfEstimateTooLong(size_t numRows, size_t numColumns,
+                              std::chrono::steady_clock::time_point deadline,
+                              std::string_view operationDescriptor) const;
 
  private:
   // The number of columns for which we will sample the sorting time as a base
@@ -61,7 +69,7 @@ class SortPerformanceEstimator {
   static constexpr size_t NUM_SAMPLES_COLS = sampleValuesCols.size();
   static constexpr size_t NUM_SAMPLES_ROWS = sampleValuesRows.size();
 
-  // The time in seconds for the samples that are sorted during initializtion.
+  // The time in seconds for the samples that are sorted during initialization.
   // _samples[i][j] is the measured time it takes to sort an IdTable with
   // sampleValuesRows[i] rows and sampleValuesCols[j] columns.
   // The values are default-initialized to 0.

@@ -32,16 +32,17 @@ auto lit = ad_utility::testing::tripleComponentLiteral;
 auto makeTestScanWidthOne = [](const IndexImpl& index) {
   return [&index](const TripleComponent& c0, const TripleComponent& c1,
                   Permutation::Enum permutation, const VectorTable& expected,
+                  Permutation::ColumnIndices additionalColumns = {},
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable result = index.scan(
-        c0, std::cref(c1), permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+    IdTable result =
+        index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
+                   std::make_shared<ad_utility::CancellationHandle<>>());
+    ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
   };
 };
-
 // Return a lambda that runs a scan for a fixed element `c0`
 // on the `permutation` (e.g. a fixed P in the PSO permutation)
 // of the `index` and checks whether the result of the
@@ -52,9 +53,10 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol = index.scan(
-        c0, std::nullopt, permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+    IdTable wol =
+        index.scan({c0, std::nullopt, std::nullopt}, permutation,
+                   Permutation::ColumnIndicesRef{},
+                   std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -132,6 +134,10 @@ TEST(IndexTest, createFromTurtleTest) {
         // subject that appears with <b2>.
         auto testOne = makeTestScanWidthOne(index);
         testOne(iri("<b2>"), iri("<c2>"), Permutation::PSO, {});
+        // An empty scan result must still have the correct number of columns.
+        testOne(iri("<notExisting>"), iri("<alsoNotExisting>"),
+                Permutation::PSO, {},
+                {ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN});
       }
     }
     {
@@ -418,19 +424,13 @@ TEST(IndexTest, getIgnoredIdRanges) {
   // The range of all entities that start with
   // "<http://qlever.cs.uni-freiburg.de/builtin-functions/"
   auto internalEntities = std::pair{en, increment(qlLangtag)};
+
   // The range of all entities that start with @ (like `@en@<label>`)
   auto predicatesWithLangtag = std::pair{enLabel, increment(enLabel)};
   // The range of all literals;
   auto literals = std::pair{firstLiteral, increment(lastLiteral)};
   // Nothing in the external vocabulary for this test.
   //
-  // TODO: Also have words in the external vocabulary for this test. This
-  // requires making getQec() easier to use when setting only few of the many
-  // default arguments to other values.
-  auto firstIdExternalVocabulary = Id::makeFromVocabIndex(
-      VocabIndex::make(index.getVocab().getInternalVocab().size()));
-  auto emptyRangeExternalVocabulary =
-      std::pair{firstIdExternalVocabulary, firstIdExternalVocabulary};
 
   auto specialIds = qlever::getBoundsForSpecialIds();
   {
@@ -444,8 +444,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, x, x}));
     EXPECT_THAT(ranges,
                 UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds, emptyRangeExternalVocabulary,
-                                     emptyRangeExternalVocabulary));
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::PSO);
@@ -458,8 +457,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, x, x}));
     EXPECT_THAT(ranges,
                 UnorderedElementsAre(internalEntities, predicatesWithLangtag,
-                                     specialIds, emptyRangeExternalVocabulary,
-                                     emptyRangeExternalVocabulary));
+                                     specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SOP);
@@ -467,9 +465,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, firstLiteral, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
     EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literals, specialIds,
-                                     emptyRangeExternalVocabulary,
-                                     emptyRangeExternalVocabulary));
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::SPO);
@@ -477,17 +473,14 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, label, firstLiteral}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
     EXPECT_THAT(ranges,
-                UnorderedElementsAre(internalEntities, literals, specialIds,
-                                     emptyRangeExternalVocabulary,
-                                     emptyRangeExternalVocabulary));
+                UnorderedElementsAre(internalEntities, literals, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OSP);
     ASSERT_TRUE(lambda(std::array{firstLiteral, x, enLabel}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, x, label}));
     ASSERT_FALSE(lambda(std::array{x, x, label}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds,
-                                             emptyRangeExternalVocabulary));
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
   {
     auto [ranges, lambda] = index.getIgnoredIdRanges(Permutation::OPS);
@@ -496,8 +489,7 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_FALSE(lambda(std::array{x, label, x}));
     auto hasPattern = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
     ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
-    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds,
-                                             emptyRangeExternalVocabulary));
+    EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }
 }
 

@@ -3,7 +3,7 @@ Thoughts on open TODOS:
 TODO: Evaluate filters as early as possible.
 - A filter with one variable is essentially another relation on that var.
 - A filter with two variables will be applied as soon as both nodes are collapsed
-Right now Filters with two varibales are implemented but they are processed in the end.
+Right now Filters with two variables are implemented but they are processed in the end.
 This is possibly not optimal. Think of:
 
 ?x mother ?m
@@ -78,7 +78,7 @@ FOR THE SIMPLE CASE
 
 ?x -- ?c [word]
 
-SOLUTION: no longer as weired semantics.
+SOLUTION: no longer as weird semantics.
 need to collapse the smallest subtrees behind the variable first,
 then use the words as extra info during the final consume.
 
@@ -131,7 +131,7 @@ PROBLEM3: Two different results. With co-occurring entity and without depending 
 I WANT:
 Due to problem3, I do NOT create execution trees for context nodes (easy to detect).
 Depending on the rest of the query graph / tree, there cannot be one optimal operation to compute the context node's result.
-When consuming a context node, into a higher up, I create a TEXT OEPRATION forEntity.
+When consuming a context node, into a higher up, I create a TEXT OPERATION forEntity.
 This will be a consumption of an <in-context> edge with target context-node.
 I will later add <has-context> relations that can also consume context nodes.
 Those will create a TEXT OPERATION forContexts and a context->document mapping (easy Broccoli style with ranges).

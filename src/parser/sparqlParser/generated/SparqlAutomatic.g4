@@ -38,11 +38,14 @@
 
 grammar SparqlAutomatic;
 
-query
-    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause EOF
+// query and update are disjoint in the grammar;
+// add a common parent for easier parsing
+queryOrUpdate: (query | update) EOF
     ;
 
-//updateUnit : update;
+query
+    : prologue (selectQuery | constructQuery | describeQuery | askQuery) valuesClause
+    ;
 
 prologue
     : (baseDecl | prefixDecl)*
@@ -146,7 +149,51 @@ textLimitClause
 
 valuesClause : ( VALUES dataBlock )?;
 
- // omitted rules 29 - 50 which are there for unsupported query types ( not select)
+update: prologue (update1 (';' update)? )? ;
+
+update1: load | clear | drop | add | move | copy | create | insertData | deleteData | deleteWhere | modify ;
+
+load: LOAD SILENT? iri (INTO graphRef)? ;
+
+clear: CLEAR SILENT? graphRefAll ;
+
+drop: DROP SILENT? graphRefAll ;
+
+create: CREATE SILENT? graphRef ;
+
+add: ADD SILENT? graphOrDefault TO graphOrDefault ;
+
+move: MOVE SILENT? graphOrDefault TO graphOrDefault ;
+
+copy: COPY SILENT? graphOrDefault TO graphOrDefault ;
+
+insertData: INSERT DATA quadData ;
+
+deleteData: DELETE DATA quadData ;
+
+deleteWhere: DELETE WHERE quadPattern ;
+
+modify: (WITH iri)? ( deleteClause insertClause? | insertClause ) usingClause* WHERE groupGraphPattern ;
+
+deleteClause: DELETE quadPattern ;
+
+insertClause: INSERT quadPattern ;
+
+usingClause: USING (IRI | NAMED iri) ;
+
+graphOrDefault: DEFAULT | GRAPH iri ;
+
+graphRef: GRAPH iri ;
+
+graphRefAll: graphRef | DEFAULT | NAMED | ALL ;
+
+quadPattern: '{' quads '}' ;
+
+quadData: '{' quads '}' ;
+
+quads: triplesTemplate? ( quadsNotTriples '.'? triplesTemplate? )* ;
+
+quadsNotTriples: GRAPH varOrIri '{' triplesTemplate? '}' ;
 
 triplesTemplate: triplesSameSubject ( '.' triplesTemplate? )?;
 
@@ -286,7 +333,7 @@ tupleWithPath
 /*
 * We need an extra rule for this since otherwise ANTLR gives us no easy way to
 * treat the verbPaths/verbSimples above as a single list in the correct order as we lose
-* the order between the separe verbPath/verbSimple lists.
+* the order between the separate verbPath/verbSimple lists.
 */
 verbPathOrSimple
     : (verbPath | verbSimple)
@@ -419,7 +466,7 @@ valueLogical
     ;
 
 relationalExpression
-    : numericExpression ( '=' numericExpression | '!=' numericExpression |  '<' numericExpression | '>' numericExpression | '<=' numericExpression | '>=' numericExpression | IN expressionList | NOT IN expressionList)?
+    : numericExpression ( '=' numericExpression | '!=' numericExpression |  '<' numericExpression | '>' numericExpression | '<=' numericExpression | '>=' numericExpression | IN expressionList | (notToken = NOT) IN expressionList)?
     ;
 
 numericExpression
@@ -632,10 +679,12 @@ TEXTLIMIT: T E X T L I M I T;
 VALUES : V A L U E S;
 LOAD : L O A D;
 SILENT : S I L E N T;
+INTO: I N T O;
 CLEAR : C L E A R;
 DROP : D R O P;
 CREATE: C R E A T E;
 ADD: A D D;
+TO: T O;
 DATA: D A T A;
 MOVE: M O V E;
 COPY: C O P Y;
@@ -692,7 +741,7 @@ UUID : U U I D;
 STRUUID : S T R U U I D;
 SHA1 : S H A '1';
 SHA256 : S H A '256';
-SHA384 : S H A '382';
+SHA384 : S H A '384';
 SHA512 : S H A '512';
 MD5 : M D '5';
 COALESCE : C O A L E S C E;

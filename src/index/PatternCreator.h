@@ -13,7 +13,6 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
-#include "index/ConstantsIndexBuilding.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
@@ -72,8 +71,7 @@ class PatternCreator {
  public:
   using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
   using OSPSorter4Cols =
-      ad_utility::CompressedExternalIdTableSorter<SortByOSP,
-                                                  NumColumnsIndexBuilding + 1>;
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
 
   // Combine all the triples that this pattern creator creates.
   struct TripleSorter {
@@ -107,14 +105,14 @@ class PatternCreator {
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
   struct TripleAndIsInternal {
-    std::array<Id, NumColumnsIndexBuilding> triple_;
+    std::array<Id, 3> triple_;
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
   TripleSorter tripleSorter_;
 
-  // The predicates which have already occured in one of the patterns. Needed to
-  // count the number of distinct predicates.
+  // The predicates which have already occurred in one of the patterns. Needed
+  // to count the number of distinct predicates.
   ad_utility::HashSet<Pattern::value_type> distinctPredicates_;
 
   // The number of distinct subjects and distinct subject-predicate pairs.
@@ -144,8 +142,7 @@ class PatternCreator {
   // This function has to be called for all the triples in the SPO permutation
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
-  void processTriple(std::array<Id, NumColumnsIndexBuilding> triple,
-                     bool ignoreForPatterns);
+  void processTriple(std::array<Id, 3> triple, bool ignoreTripleForPatterns);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note
@@ -178,6 +175,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
+  PatternID finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 

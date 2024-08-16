@@ -4,8 +4,8 @@
 
 #include <gtest/gtest.h>
 
-#include "../src/index/vocabulary/VocabularyInMemory.h"
 #include "./VocabularyTestHelpers.h"
+#include "index/vocabulary/VocabularyInMemory.h"
 using Vocab = VocabularyInMemory;
 
 namespace {

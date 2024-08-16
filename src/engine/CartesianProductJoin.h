@@ -2,9 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_CARTESIANPRODUCTJOIN_H
-#define QLEVER_CARTESIANPRODUCTJOIN_H
-
+#pragma once
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -72,17 +70,17 @@ class CartesianProductJoin : public Operation {
  protected:
   // Don't promise any sorting of the result.
   // TODO<joka921> Depending on the implementation we could propagate sorted
-  // columsn from either the first or the last input, but it is questionable if
+  // columns from either the first or the last input, but it is questionable if
   // there would be any real benefit from this and it would only increase the
   // complexity of the query planning and required testing.
   vector<ColumnIndex> resultSortedOn() const override { return {}; }
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  ResultTable computeResult() override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
-  // `targetColumn`. Repeat until the `targetColumn` is copletely filled. Skip
+  // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
   // the first `offset` write operations to the `targetColumn`. Call
   // `checkCancellation` after each write. If `StaticGroupSize != 0`, then the
   // group size is known at compile time which allows for more efficient loop
@@ -92,5 +90,3 @@ class CartesianProductJoin : public Operation {
                          std::span<const Id> inputColumn, size_t groupSize,
                          size_t offset);
 };
-
-#endif  // QLEVER_CARTESIANPRODUCTJOIN_H

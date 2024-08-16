@@ -187,7 +187,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithoutGenerators) {
 // The overloads that take generators for creating the content of the join
 // columns.
 TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
-  // Creates a 'generator', that counts one up, everytime it's called.
+  // Creates a 'generator', that counts one up, every time it's called.
   auto createCountUpGenerator = []() {
     return [i = 0]() mutable { return ad_utility::testing::VocabId(i++); };
   };
@@ -284,7 +284,7 @@ TEST(IdTableHelpersTest, createRandomlyFilledIdTableWithGeneratos) {
 
 TEST(IdTableHelpersTest, generateIdTable) {
   /*
-  Creates a 'generator', that returns a row of the given lenght, were every
+  Creates a 'generator', that returns a row of the given length, were every
   entry contains the same number. The number starts with 0 and goes on up
   with every call.
   */

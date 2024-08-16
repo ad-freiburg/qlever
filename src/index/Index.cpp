@@ -68,13 +68,13 @@ size_t Index::getCardinality(Id id, Permutation::Enum p) const {
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(VocabIndex id) const {
-  return pimpl_->idToOptionalString(id);
+std::string Index::indexToString(VocabIndex id) const {
+  return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
-std::optional<std::string> Index::idToOptionalString(WordVocabIndex id) const {
-  return pimpl_->idToOptionalString(id);
+std::string_view Index::indexToString(WordVocabIndex id) const {
+  return pimpl_->indexToString(id);
 }
 
 // ____________________________________________________________________________
@@ -276,26 +276,27 @@ vector<float> Index::getMultiplicities(const TripleComponent& key,
 
 // ____________________________________________________________________________
 IdTable Index::scan(
-    const TripleComponent& col0String,
-    std::optional<std::reference_wrapper<const TripleComponent>> col1String,
+    const ScanSpecificationAsTripleComponent& scanSpecification,
     Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->scan(col0String, col1String, p, additionalColumns,
-                      std::move(cancellationHandle));
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
+  return pimpl_->scan(scanSpecification, p, additionalColumns,
+                      cancellationHandle, limitOffset);
 }
 
 // ____________________________________________________________________________
 IdTable Index::scan(
-    Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+    const ScanSpecification& scanSpecification, Permutation::Enum p,
     Permutation::ColumnIndicesRef additionalColumns,
-    const ad_utility::SharedCancellationHandle& cancellationHandle) const {
-  return pimpl_->scan(col0Id, col1Id, p, additionalColumns,
-                      std::move(cancellationHandle));
+    const ad_utility::SharedCancellationHandle& cancellationHandle,
+    const LimitOffsetClause& limitOffset) const {
+  return pimpl_->scan(scanSpecification, p, additionalColumns,
+                      cancellationHandle, limitOffset);
 }
 
 // ____________________________________________________________________________
-size_t Index::getResultSizeOfScan(const TripleComponent& col0String,
-                                  const TripleComponent& col1String,
-                                  const Permutation::Enum& permutation) const {
-  return pimpl_->getResultSizeOfScan(col0String, col1String, permutation);
+size_t Index::getResultSizeOfScan(
+    const ScanSpecificationAsTripleComponent& scanSpecification,
+    const Permutation::Enum& permutation) const {
+  return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
 }

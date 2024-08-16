@@ -8,6 +8,7 @@
 
 #include "global/Constants.h"
 #include "index/IndexMetaData.h"
+#include "parser/data/LimitOffsetClause.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
 #include "util/Log.h"
@@ -37,8 +38,6 @@ class Permutation {
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  using ScanSpecification = CompressedRelationReader::ScanSpecification;
-
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);
@@ -58,7 +57,8 @@ class Permutation {
   // `CompressedRelationMetaData::scan`.
   IdTable scan(const ScanSpecification& scanSpec,
                ColumnIndicesRef additionalColumns,
-               const CancellationHandle& cancellationHandle) const;
+               const CancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // For a given relation, determine the `col1Id`s and their counts. This is
   // used for `computeGroupByObjectWithCount`. The `col0Id` must have metadata
@@ -89,8 +89,8 @@ class Permutation {
   IdTableGenerator lazyScan(
       const ScanSpecification& scanSpec,
       std::optional<std::vector<CompressedBlockMetadata>> blocks,
-      ColumnIndicesRef additionalColumns,
-      CancellationHandle cancellationHandle) const;
+      ColumnIndicesRef additionalColumns, CancellationHandle cancellationHandle,
+      const LimitOffsetClause& limitOffset = {}) const;
 
   std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
 

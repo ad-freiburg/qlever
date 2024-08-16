@@ -18,7 +18,7 @@ namespace ad_utility {
 // Compute `base ^ exponent` where `^` denotes exponentiation. This is consteval
 // because for all runtime calls, a better optimized algorithm from the standard
 // library should be chosen.
-// TODO<joka921> why can't this be consteval when the result is boudn to a
+// TODO<joka921> why can't this be consteval when the result is bound to a
 // `constexpr` variable?
 constexpr auto pow(auto base, int exponent) {
   if (exponent < 0) {

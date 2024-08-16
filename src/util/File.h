@@ -222,7 +222,7 @@ Stream makeFilestream(const std::filesystem::path& path, auto&&... args) {
 }  // namespace detail
 
 // Open and return a std::ifstream from a given filename and optional
-// additionals `args`. Throw an exception stating the filename and the absolute
+// additional `args`. Throw an exception stating the filename and the absolute
 // path when the file can't be opened.
 std::ifstream makeIfstream(const std::filesystem::path& path, auto&&... args) {
   return detail::makeFilestream<std::ifstream, false>(path, AD_FWD(args)...);

@@ -1,6 +1,7 @@
 // Copyright 2018, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+// Authors: Florian Kramer (florian.kramer@mail.uni-freiburg.de)
+//          Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #include <gmock/gmock.h>
 
@@ -12,6 +13,7 @@
 #include "engine/GroupBy.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/NeutralElementOperation.h"
 #include "engine/QueryPlanner.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
@@ -193,7 +195,7 @@ TEST_F(GroupByTest, doGroupBy) {
       {ParsedQuery::AggregateType::AVG, 3, 22, nullptr},
       {ParsedQuery::AggregateType::AVG, 4, 23, nullptr}};
 
-  ResultTable outTable{allocator()};
+  Result outTable{allocator()};
 
   // This is normally done when calling computeResult in the GroupBy
   // operation.
@@ -454,10 +456,10 @@ struct GroupByOptimizations : ::testing::Test {
   }
 
   static SparqlExpressionPimpl makeGroupConcatPimpl(
-      const Variable& var, const std::string& seperator = " ") {
+      const Variable& var, const std::string& separator = " ") {
     return SparqlExpressionPimpl{
         std::make_unique<GroupConcatExpression>(
-            false, makeVariableExpression(var), seperator),
+            false, makeVariableExpression(var), separator),
         "GROUP_CONCAT(?someVariable)"};
   }
 
@@ -1226,7 +1228,7 @@ TEST_F(GroupByOptimizations, hashMapOptimizationGroupConcatIndex) {
   auto groupConcatExpression2 = makeGroupConcatPimpl(varY, ",");
   auto aliasGC2 = Alias{groupConcatExpression2, varW};
 
-  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;seperator=",") as ?w)
+  // SELECT (GROUP_CONCAT(?y) as ?z) (GROUP_CONCAT(?y;separator=",") as ?w)
   // WHERE {...} GROUP BY ?x
   GroupBy groupBy{qec, variablesOnlyX, {aliasGC1, aliasGC2}, subtreeWithSort};
   auto result = groupBy.getResult();
@@ -1931,4 +1933,16 @@ TEST(GroupBy, AddedHavingRows) {
   auto i = IntId;
   auto expected = makeIdTableFromVector({{i(0), i(3), Id::makeFromBool(true)}});
   EXPECT_EQ(table, expected);
+}
+
+TEST(GroupBy, Descriptor) {
+  // Group by with variables
+  auto* qec = ad_utility::testing::getQec();
+  auto subtree = ad_utility::makeExecutionTree<ValuesForTesting>(
+      qec, makeIdTableFromVector({{3}}),
+      std::vector<std::optional<Variable>>{Variable{"?a"}});
+  GroupBy groupBy{qec, {Variable{"?a"}}, {}, subtree};
+  EXPECT_EQ(groupBy.getDescriptor(), "GroupBy on ?a");
+  GroupBy groupBy2{qec, {}, {}, subtree};
+  EXPECT_EQ(groupBy2.getDescriptor(), "GroupBy (implicit)");
 }

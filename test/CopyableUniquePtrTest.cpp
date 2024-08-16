@@ -75,7 +75,7 @@ TEST(CopyableUniquePtr, CopyAndMoveConstructor) {
   {
     ad_utility::CopyableUniquePtr<int> nonEmptyPointer(
         ad_utility::make_copyable_unique<int>(42));
-    // Saving the adress of the int object, so that we can later check, that
+    // Saving the address of the int object, so that we can later check, that
     // it was actually moved.
     int* const intAdress = nonEmptyPointer.get();
 
