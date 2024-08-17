@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include "Permutation.h"
 #include "engine/LocalVocab.h"
 #include "global/IdTriple.h"
 #include "index/Index.h"
@@ -39,24 +40,23 @@ class DeltaTriples {
   LocalVocab localVocab_;
 
   // The positions of the delta triples in each of the six permutations.
-  LocatedTriplesPerBlock locatedTriplesPerBlockInPSO_;
-  LocatedTriplesPerBlock locatedTriplesPerBlockInPOS_;
-  LocatedTriplesPerBlock locatedTriplesPerBlockInSPO_;
-  LocatedTriplesPerBlock locatedTriplesPerBlockInSOP_;
-  LocatedTriplesPerBlock locatedTriplesPerBlockInOSP_;
-  LocatedTriplesPerBlock locatedTriplesPerBlockInOPS_;
+  std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
+      locatedTriplesPerBlock_;
 
   FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
 
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
   struct LocatedTripleHandles {
-    LocatedTriples::iterator forPSO_;
-    LocatedTriples::iterator forPOS_;
-    LocatedTriples::iterator forSPO_;
-    LocatedTriples::iterator forSOP_;
-    LocatedTriples::iterator forOPS_;
-    LocatedTriples::iterator forOSP_;
+    using It = LocatedTriples::iterator;
+    static_assert(static_cast<int>(Permutation::Enum::PSO) == 0);
+    static_assert(static_cast<int>(Permutation::Enum::POS) == 1);
+    static_assert(static_cast<int>(Permutation::Enum::SPO) == 2);
+    static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
+    static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
+    static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
+    static_assert(Permutation::ALL.size() == 6);
+    std::array<It, Permutation::ALL.size()> handles_;
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
   };
@@ -74,7 +74,7 @@ class DeltaTriples {
   LocalVocab& localVocab() { return localVocab_; }
   const LocalVocab& localVocab() const { return localVocab_; }
 
-  // Clear `_triplesAdded` and `_triplesSubtracted` and all associated data
+  // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
   // structures.
   void clear();
 

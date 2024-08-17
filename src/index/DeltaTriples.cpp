@@ -15,34 +15,16 @@
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
     Permutation::Enum permutation) {
-  switch (permutation) {
-    case Permutation::PSO:
-      return forPSO_;
-    case Permutation::POS:
-      return forPOS_;
-    case Permutation::SPO:
-      return forSPO_;
-    case Permutation::SOP:
-      return forSOP_;
-    case Permutation::OSP:
-      return forOSP_;
-    case Permutation::OPS:
-      return forOPS_;
-    default:
-      AD_FAIL();
-  }
+  return handles_[static_cast<int>(permutation)];
 }
 
 // ____________________________________________________________________________
 void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
-  locatedTriplesPerBlockInPSO_.clear();
-  locatedTriplesPerBlockInPOS_.clear();
-  locatedTriplesPerBlockInSPO_.clear();
-  locatedTriplesPerBlockInSOP_.clear();
-  locatedTriplesPerBlockInOSP_.clear();
-  locatedTriplesPerBlockInOPS_.clear();
+  for (auto& perm : Permutation::ALL) {
+    getLocatedTriplesPerBlock(perm).clear();
+  }
 }
 
 // ____________________________________________________________________________
@@ -149,41 +131,11 @@ void DeltaTriples::deleteTriples(
 // ____________________________________________________________________________
 const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
-  switch (permutation) {
-    case Permutation::PSO:
-      return locatedTriplesPerBlockInPSO_;
-    case Permutation::POS:
-      return locatedTriplesPerBlockInPOS_;
-    case Permutation::SPO:
-      return locatedTriplesPerBlockInSPO_;
-    case Permutation::SOP:
-      return locatedTriplesPerBlockInSOP_;
-    case Permutation::OSP:
-      return locatedTriplesPerBlockInOSP_;
-    case Permutation::OPS:
-      return locatedTriplesPerBlockInOPS_;
-    default:
-      AD_FAIL();
-  }
+  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
 }
 
 // ____________________________________________________________________________
 LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) {
-  switch (permutation) {
-    case Permutation::PSO:
-      return locatedTriplesPerBlockInPSO_;
-    case Permutation::POS:
-      return locatedTriplesPerBlockInPOS_;
-    case Permutation::SPO:
-      return locatedTriplesPerBlockInSPO_;
-    case Permutation::SOP:
-      return locatedTriplesPerBlockInSOP_;
-    case Permutation::OSP:
-      return locatedTriplesPerBlockInOSP_;
-    case Permutation::OPS:
-      return locatedTriplesPerBlockInOPS_;
-    default:
-      AD_FAIL();
-  }
+  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
 }
