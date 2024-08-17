@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
+#include <util/Parameters.h>
 
 #include <atomic>
 #include <chrono>
@@ -14,9 +15,12 @@
 #include "util/ConcurrentCache.h"
 #include "util/DefaultValueSizeGetter.h"
 #include "util/Timer.h"
+#include "util/jthread.h"
 
 using namespace std::literals;
 using namespace std::chrono_literals;
+using namespace ad_utility::memory_literals;
+using ::testing::Pointee;
 
 class ConcurrentSignal {
   std::atomic_flag flag_;
@@ -322,4 +326,124 @@ TEST(ConcurrentCache, cacheStatusToString) {
   auto outOfBounds = static_cast<ad_utility::CacheStatus>(
       static_cast<int>(notInCacheAndNotComputed) + 1);
   EXPECT_ANY_THROW(toString(outOfBounds));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
+  SimpleConcurrentLruCache cache{};
+
+  cache.clearAll();
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return false; });
+
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return false; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, ifUnsuitableForCacheAndPinnedThrowsException) {
+  SimpleConcurrentLruCache cache{};
+
+  cache.clearAll();
+
+  EXPECT_THROW(
+      cache.computeOncePinned(
+          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache,
+     ifUnsuitableWhenWaitingForPendingComputationAndPinnedThrowsException) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  EXPECT_THROW(
+      cache.computeOncePinned(
+          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
+      ad_utility::Exception);
+  EXPECT_TRUE(finished);
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
+  SimpleConcurrentLruCache cache{};
+
+  cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("abc"));
+
+  auto value = cache.getIfContained(0);
+  ASSERT_NE(value, std::nullopt);
+  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
+  EXPECT_NE(cache.nonPinnedSize(), 0_B);
+  EXPECT_EQ(cache.pinnedSize(), 0_B);
+
+  cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("def"));
+
+  value = cache.getIfContained(0);
+  ASSERT_NE(value, std::nullopt);
+  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
+  EXPECT_NE(cache.nonPinnedSize(), 0_B);
+  EXPECT_EQ(cache.pinnedSize(), 0_B);
+
+  cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("ghi"));
+
+  value = cache.getIfContained(0);
+  ASSERT_NE(value, std::nullopt);
+  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
+  EXPECT_EQ(cache.nonPinnedSize(), 0_B);
+  EXPECT_NE(cache.pinnedSize(), 0_B);
+
+  cache.clearAll();
+
+  cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("jkl"));
+
+  value = cache.getIfContained(0);
+  ASSERT_NE(value, std::nullopt);
+  EXPECT_THAT(value.value()._resultPointer, Pointee("jkl"s));
+  EXPECT_EQ(cache.nonPinnedSize(), 0_B);
+  EXPECT_NE(cache.pinnedSize(), 0_B);
 }
