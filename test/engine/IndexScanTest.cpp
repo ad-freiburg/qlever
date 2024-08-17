@@ -444,3 +444,44 @@ TEST(IndexScan, getResultSizeOfScan) {
     ASSERT_EQ(res.idTable().numColumns(), 0);
   }
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultCanBeConsumedLazily) {
+  using V = Variable;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto getId = makeGetId(qec->getIndex());
+  auto x = getId("<x>");
+  auto p = getId("<p>");
+  auto s1 = getId("<s1>");
+  auto s2 = getId("<s2>");
+  auto p2 = getId("<p2>");
+  SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  std::vector<IdTable::row_type> resultValues;
+
+  for (IdTable& idTable : result.idTables()) {
+    for (IdTable::row_type row : idTable) {
+      resultValues.push_back(row);
+    }
+  }
+
+  ASSERT_EQ(resultValues.size(), 3);
+  ASSERT_EQ(resultValues[0].numColumns(), 3);
+  ASSERT_EQ(resultValues[1].numColumns(), 3);
+  ASSERT_EQ(resultValues[2].numColumns(), 3);
+
+  EXPECT_EQ(resultValues[0][2], x);
+  EXPECT_EQ(resultValues[0][0], p);
+  EXPECT_EQ(resultValues[0][1], s1);
+  EXPECT_EQ(resultValues[1][2], x);
+  EXPECT_EQ(resultValues[1][0], p);
+  EXPECT_EQ(resultValues[1][1], s2);
+  EXPECT_EQ(resultValues[2][2], x);
+  EXPECT_EQ(resultValues[2][0], p2);
+  EXPECT_EQ(resultValues[2][1], s1);
+}
