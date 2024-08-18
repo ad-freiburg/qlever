@@ -199,13 +199,15 @@ class Result {
   // This also applies if `data_` holds a generator yielding `IdTable`s, where
   // this is applied respectively.
   // `limitTimeCallback` is called whenever an `IdTable` is resized with the
-  // number of microseconds it took to perform this operation.
+  // number of microseconds it took to perform this operation and the freshly
+  // resized `IdTable` as const reference.
   // Note: If  additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those are still correct after performing this operation.
   void applyLimitOffset(
       const LimitOffsetClause& limitOffset,
-      std::function<void(std::chrono::microseconds)> limitTimeCallback);
+      std::function<void(std::chrono::microseconds, const IdTable&)>
+          limitTimeCallback);
 
   // Check if the operation did fulfill its contract and only returns as many
   // elements as requested by the provided `limitOffset`. Throw an

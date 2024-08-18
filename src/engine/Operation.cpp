@@ -70,6 +70,23 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // _____________________________________________________________________________
+void Operation::updateRuntimeStats(bool applyToFilter, uint64_t numRows,
+                                   uint64_t numCols,
+                                   std::chrono::milliseconds duration) {
+  auto& rti = applyToFilter || !externalFilterApplied_
+                  ? runtimeInfo()
+                  : *runtimeInfo().children_.at(0);
+  rti.totalTime_ += duration;
+  rti.originalOperationTime_ = rti.getOperationTime();
+  rti.numRows_ += numRows;
+  rti.numCols_ = numCols;
+  if (!applyToFilter && externalFilterApplied_) {
+    runtimeInfo().totalTime_ += duration;
+    runtimeInfo().originalOperationTime_ = rti.getOperationTime();
+  }
+}
+
+// _____________________________________________________________________________
 ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
                                       ComputationMode computationMode) {
   AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
@@ -110,12 +127,9 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
           timeSizeUpdate += duration;
           auto msPrecision =
               std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
-          runtimeInfo().totalTime_ += msPrecision;
+          updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
+                             msPrecision);
           overlap -= msPrecision;
-          runtimeInfo().originalOperationTime_ =
-              runtimeInfo().getOperationTime();
-          runtimeInfo().numRows_ += idTable.numRows();
-          runtimeInfo().numCols_ = idTable.numColumns();
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
           if (timeSizeUpdate > 50ms) {
@@ -139,16 +153,18 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // export, allowing the cache to reuse the same operation for different
   // limits and offsets.
   if (!supportsLimit()) {
-    runtimeInfo().addLimitOffsetRow(_limit, std::chrono::milliseconds{0}, true);
+    runtimeInfo().addLimitOffsetRow(_limit, true);
+    AD_CONTRACT_CHECK(!externalFilterApplied_);
+    externalFilterApplied_ = _limit._limit.has_value() || _limit._offset != 0;
     result.applyLimitOffset(
-        _limit, [runtimeInfo = getRuntimeInfoPointer(),
-                 overlap = 0us](std::chrono::microseconds limitTime) mutable {
+        _limit, [this, overlap = 0us](std::chrono::microseconds limitTime,
+                                      const IdTable& idTable) mutable {
           overlap += limitTime;
           auto msPrecision =
               std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
-          runtimeInfo->totalTime_ += msPrecision;
+          updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                             msPrecision);
           overlap -= msPrecision;
-          runtimeInfo->originalOperationTime_ = runtimeInfo->getOperationTime();
         });
   } else {
     result.assertThatLimitWasRespected(_limit);

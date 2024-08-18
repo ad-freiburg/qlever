@@ -260,6 +260,12 @@ class Operation {
   //! Compute the result of the query-subtree rooted at this element..
   virtual ProtoResult computeResult(bool requestLaziness) = 0;
 
+  // Update the runtime information of this operation according to the given
+  // arguments, considering the possibility that the initial runtime information
+  // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
+  void updateRuntimeStats(bool applyToFilter, uint64_t numRows,
+                          uint64_t numCols, std::chrono::milliseconds duration);
+
   // Perform the expensive computation modeled by the subclass of this
   // `Operation`. The value provided by `computationMode` decides if lazy
   // results are preferred. It must not be `ONLY_IF_CACHED`, this will lead to
@@ -373,4 +379,5 @@ class Operation {
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
+  bool externalFilterApplied_ = false;
 };

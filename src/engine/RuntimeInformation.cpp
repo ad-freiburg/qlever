@@ -219,7 +219,6 @@ void to_json(nlohmann::ordered_json& j,
 
 // __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
-                                           Milliseconds timeForLimit,
                                            bool fullResultIsNotCached) {
   bool hasLimit = l._limit.has_value();
   bool hasOffset = l._offset != 0;
@@ -233,7 +232,6 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   numRows_ = l.actualSize(actualOperation->numRows_);
   details_.clear();
   cacheStatus_ = ad_utility::CacheStatus::computed;
-  totalTime_ += timeForLimit;
   actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
                              fullResultIsNotCached);
   actualOperation->eraseDetail("limit");

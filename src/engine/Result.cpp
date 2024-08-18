@@ -114,7 +114,8 @@ void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
 // _____________________________________________________________________________
 void Result::applyLimitOffset(
     const LimitOffsetClause& limitOffset,
-    std::function<void(std::chrono::microseconds)> limitTimeCallback) {
+    std::function<void(std::chrono::microseconds, const IdTable&)>
+        limitTimeCallback) {
   // Apply the OFFSET clause. If the offset is `0` or the offset is larger
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
@@ -122,12 +123,12 @@ void Result::applyLimitOffset(
   if (isFullyMaterialized()) {
     ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
     resizeIdTable(std::get<IdTable>(data_), limitOffset);
-    limitTimeCallback(limitTimer.msecs());
+    limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
     auto generator =
         [](cppcoro::generator<IdTable> original, LimitOffsetClause limitOffset,
-           std::function<void(std::chrono::microseconds)> limitTimeCallback)
-        -> cppcoro::generator<IdTable> {
+           std::function<void(std::chrono::microseconds, const IdTable&)>
+               limitTimeCallback) -> cppcoro::generator<IdTable> {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
@@ -141,7 +142,7 @@ void Result::applyLimitOffset(
           limitOffset._limit.value() -=
               limitOffset.actualSize(originalSize - offsetDelta);
         }
-        limitTimeCallback(limitTimer.value());
+        limitTimeCallback(limitTimer.value(), idTable);
         if (limitOffset._offset == 0) {
           co_yield idTable;
         }
