@@ -3,7 +3,6 @@
 // Author: Johannes Kalmbach (joka921) <kalmbach@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
-#include <gtest/gtest.h>
 
 #include "engine/NeutralElementOperation.h"
 #include "engine/ValuesForTesting.h"
@@ -220,4 +219,427 @@ TEST(Operation, createRuntimInfoFromEstimates) {
   operation.createRuntimeInfoFromEstimates(nullptr);
   EXPECT_EQ(operation.runtimeInfo().details_["limit"], 12);
   EXPECT_EQ(operation.runtimeInfo().details_["offset"], 3);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, lazilyEvaluatedOperationIsNotCached) {
+  using V = Variable;
+  auto qec = getQec();
+  SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  qec->getQueryTreeCache().clearAll();
+  auto result = scan.getResult(true, ComputationMode::LAZY_IF_SUPPORTED);
+  ASSERT_NE(result, nullptr);
+  EXPECT_FALSE(result->isFullyMaterialized());
+
+  EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
+  EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, updateRuntimeStatsWorksCorrectly) {
+  auto qec = getQec();
+  auto idTable = makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}});
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTable), {Variable{"?x"}, Variable{"?y"}}};
+
+  auto& rti = valuesForTesting.runtimeInfo();
+
+  // Test operation with built-in filter
+  valuesForTesting.externalFilterApplied_ = false;
+  valuesForTesting.updateRuntimeStats(false, 11, 13, 17ms);
+
+  EXPECT_EQ(rti.numCols_, 13);
+  EXPECT_EQ(rti.numRows_, 11);
+  EXPECT_EQ(rti.totalTime_, 17ms);
+  EXPECT_EQ(rti.originalTotalTime_, 17ms);
+  EXPECT_EQ(rti.originalOperationTime_, 17ms);
+
+  // Test built-in filter
+  valuesForTesting.externalFilterApplied_ = false;
+  valuesForTesting.updateRuntimeStats(true, 5, 3, 7ms);
+
+  EXPECT_EQ(rti.numCols_, 13);
+  EXPECT_EQ(rti.numRows_, 11);
+  EXPECT_EQ(rti.totalTime_, 17ms + 7ms);
+  EXPECT_EQ(rti.originalTotalTime_, 17ms + 7ms);
+  EXPECT_EQ(rti.originalOperationTime_, 17ms + 7ms);
+
+  rti.children_ = {std::make_shared<RuntimeInformation>()};
+  rti.numCols_ = 0;
+  rti.numRows_ = 0;
+  rti.totalTime_ = 0ms;
+  rti.originalOperationTime_ = 0ms;
+  auto& childRti = *rti.children_.at(0);
+
+  // Test operation with external filter
+  valuesForTesting.externalFilterApplied_ = true;
+  valuesForTesting.updateRuntimeStats(false, 31, 37, 41ms);
+
+  EXPECT_EQ(rti.numCols_, 0);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(rti.totalTime_, 41ms);
+  EXPECT_EQ(rti.originalTotalTime_, 41ms);
+  EXPECT_EQ(rti.originalOperationTime_, 0ms);
+
+  EXPECT_EQ(childRti.numCols_, 37);
+  EXPECT_EQ(childRti.numRows_, 31);
+  EXPECT_EQ(childRti.totalTime_, 41ms);
+  EXPECT_EQ(childRti.originalTotalTime_, 41ms);
+  EXPECT_EQ(childRti.originalOperationTime_, 41ms);
+
+  // Test external filter
+  valuesForTesting.externalFilterApplied_ = true;
+  valuesForTesting.updateRuntimeStats(true, 19, 23, 29ms);
+
+  EXPECT_EQ(rti.numCols_, 23);
+  EXPECT_EQ(rti.numRows_, 19);
+  EXPECT_EQ(rti.totalTime_, 41ms + 29ms);
+  EXPECT_EQ(rti.originalTotalTime_, 41ms + 29ms);
+  EXPECT_EQ(rti.originalOperationTime_, 29ms);
+
+  EXPECT_EQ(childRti.numCols_, 37);
+  EXPECT_EQ(childRti.numRows_, 31);
+  EXPECT_EQ(childRti.totalTime_, 41ms);
+  EXPECT_EQ(childRti.originalTotalTime_, 41ms);
+  EXPECT_EQ(childRti.originalOperationTime_, 41ms);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
+  auto qec = getQec();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  EXPECT_THROW(
+      valuesForTesting.runComputation(timer, ComputationMode::ONLY_IF_CACHED),
+      ad_utility::Exception);
+
+  auto result = valuesForTesting.runComputation(
+      timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().totalTime_, 0ms);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().originalTotalTime_, 0ms);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().originalOperationTime_, 0ms);
+
+  auto& idTables = result.idTables();
+
+  auto iterator = idTables.begin();
+  ASSERT_NE(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 2);
+
+  ++iterator;
+  ASSERT_EQ(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 2);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
+  bool signaledUpdate = false;
+  Index index = makeTestIndex(
+      "ensureFailedStatusIsSetWhenGeneratorThrowsException", std::nullopt, true,
+      true, true, ad_utility::MemorySize::bytes(16), false);
+  QueryResultCache cache{};
+  QueryExecutionContext context{
+      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{}, [&](std::string) { signaledUpdate = true; }};
+  AlwaysFailLazyOperation operation{&context};
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            RuntimeInformation::Status::lazilyMaterialized);
+
+  EXPECT_THROW(result.idTables().begin(), std::runtime_error);
+
+  EXPECT_EQ(operation.runtimeInfo().status_,
+            RuntimeInformation::Status::failed);
+  EXPECT_TRUE(signaledUpdate);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, testSubMillisecondsIncrementsAreStillTracked) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  auto idTable = makeIdTableFromVector({{}});
+  CustomGeneratorOperation operation{
+      getQec(), [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
+        std::this_thread::sleep_for(300us);
+        co_yield idTable.clone();
+        std::this_thread::sleep_for(300us);
+        co_yield idTable.clone();
+        std::this_thread::sleep_for(500us);
+        co_yield idTable.clone();
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
+
+  auto& idTables = result.idTables();
+
+  auto iterator = idTables.begin();
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
+  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(operation.runtimeInfo().totalTime_, 1ms);
+  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 1ms);
+  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 1ms);
+
+  ++iterator;
+  ASSERT_EQ(iterator, idTables.end());
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  uint32_t updateCallCounter = 0;
+  auto idTable = makeIdTableFromVector({{}});
+  Index index = makeTestIndex(
+      "ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd", std::nullopt, true,
+      true, true, ad_utility::MemorySize::bytes(16), false);
+  QueryResultCache cache{};
+  QueryExecutionContext context{
+      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+  CustomGeneratorOperation operation{
+      &context, [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
+        std::this_thread::sleep_for(50ms);
+        co_yield idTable.clone();
+        // This one should not trigger because it's below the 50ms threshold
+        std::this_thread::sleep_for(30ms);
+        co_yield idTable.clone();
+        std::this_thread::sleep_for(30ms);
+        co_yield idTable.clone();
+        // This one should not trigger directly, but trigger because it's the
+        // last one
+        std::this_thread::sleep_for(30ms);
+        co_yield idTable.clone();
+      }(idTable)};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+  auto result =
+      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(updateCallCounter, 1);
+
+  auto& idTables = result.idTables();
+
+  auto iterator = idTables.begin();
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(updateCallCounter, 2);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(updateCallCounter, 2);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(updateCallCounter, 3);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+  EXPECT_EQ(updateCallCounter, 3);
+
+  ++iterator;
+  ASSERT_EQ(iterator, idTables.end());
+  EXPECT_EQ(updateCallCounter, 4);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption) {
+  uint32_t updateCallCounter = 0;
+  auto idTable = makeIdTableFromVector({{}});
+  Index index = makeTestIndex(
+      "ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption", std::nullopt,
+      true, true, true, ad_utility::MemorySize::bytes(16), false);
+  QueryResultCache cache{};
+  QueryExecutionContext context{
+      index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
+      SortPerformanceEstimator{}, [&](std::string) { ++updateCallCounter; }};
+  CustomGeneratorOperation operation{
+      &context, [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
+        co_yield idTable.clone();
+        co_yield idTable.clone();
+      }(idTable)};
+
+  {
+    ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+    auto result =
+        operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+    EXPECT_EQ(updateCallCounter, 1);
+    auto& idTables = result.idTables();
+    // Only consume partially
+    auto iterator = idTables.begin();
+    ASSERT_NE(iterator, idTables.end());
+    EXPECT_EQ(updateCallCounter, 1);
+  }
+
+  // Destructor of result should call this function
+  EXPECT_EQ(updateCallCounter, 2);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
+  auto qec = getQec();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+
+  valuesForTesting.setLimit({._limit = 1, ._offset = 1});
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  auto result = valuesForTesting.runComputation(
+      timer, ComputationMode::LAZY_IF_SUPPORTED);
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 0);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 0);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 0);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 0);
+
+  auto& idTables = result.idTables();
+
+  auto iterator = idTables.begin();
+  ASSERT_NE(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 0);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 1);
+
+  ++iterator;
+  ASSERT_NE(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 3);
+
+  ++iterator;
+  ASSERT_EQ(iterator, idTables.end());
+
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
+  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 3);
+}
+
+// _____________________________________________________________________________
+TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+
+  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  }
+
+  auto aggregatedValue = qec->getQueryTreeCache().getIfContained("test");
+  ASSERT_TRUE(aggregatedValue.has_value());
+
+  ASSERT_TRUE(aggregatedValue.value()._resultPointer);
+  auto newRuntimeInfo = aggregatedValue.value()._resultPointer->runtimeInfo();
+  auto& oldRuntimeInfo = valuesForTesting.runtimeInfo();
+  EXPECT_EQ(newRuntimeInfo.descriptor_, oldRuntimeInfo.descriptor_);
+  EXPECT_EQ(newRuntimeInfo.numCols_, oldRuntimeInfo.numCols_);
+  EXPECT_EQ(newRuntimeInfo.numRows_, oldRuntimeInfo.numRows_);
+  EXPECT_EQ(newRuntimeInfo.totalTime_, oldRuntimeInfo.totalTime_);
+  EXPECT_EQ(newRuntimeInfo.originalTotalTime_,
+            oldRuntimeInfo.originalTotalTime_);
+  EXPECT_EQ(newRuntimeInfo.originalOperationTime_,
+            oldRuntimeInfo.originalOperationTime_);
+  EXPECT_EQ(newRuntimeInfo.status_,
+            RuntimeInformation::Status::fullyMaterialized);
+
+  const auto& aggregatedResult =
+      aggregatedValue.value()._resultPointer->resultTable();
+  ASSERT_TRUE(aggregatedResult.isFullyMaterialized());
+
+  const auto& idTable = aggregatedResult.idTable();
+  ASSERT_EQ(idTable.numColumns(), 2);
+  ASSERT_EQ(idTable.numRows(), 3);
+
+  EXPECT_EQ(idTable, makeIdTableFromVector({{3, 4}, {7, 8}, {9, 123}}));
+}
+
+// _____________________________________________________________________________
+TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  auto originalSize = qec->getQueryTreeCache().getMaxSizeSingleEntry();
+
+  // Too small for storage
+  qec->getQueryTreeCache().setMaxSizeSingleEntry(1_B);
+
+  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+  qec->getQueryTreeCache().setMaxSizeSingleEntry(originalSize);
+
+  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  }
+
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
 }

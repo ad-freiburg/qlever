@@ -397,4 +397,4 @@ addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
 addLinkAndDiscoverTest(CacheableGeneratorTest)
 
-addLinkAndDiscoverTest(FilterTest)
+addLinkAndDiscoverTest(FilterTest engine)

@@ -11,70 +11,7 @@
 
 using ::testing::ElementsAre;
 
-class LazyValueOperation : public Operation {
- public:
-  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getDescriptor() const override { return "Descriptor"; }
-  size_t getResultWidth() const override { return 0; }
-  size_t getCostEstimate() override { return 0; }
-  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
-  float getMultiplicity(size_t) override { return 1; }
-  bool knownEmptyResult() override { return false; }
-  [[nodiscard]] vector<ColumnIndex> resultSortedOn() const override {
-    return {};
-  }
-  VariableToColumnMap computeVariableToColumnMap() const override {
-    return {{Variable{"?x"},
-             ColumnIndexAndTypeInfo{
-                 0, ColumnIndexAndTypeInfo::UndefStatus::AlwaysDefined}}};
-  }
-
-  std::vector<IdTable> idTables_;
-
-  explicit LazyValueOperation(QueryExecutionContext* qec,
-                              std::vector<IdTable> idTables)
-      : Operation{qec}, idTables_{std::move(idTables)} {
-    AD_CONTRACT_CHECK(!idTables_.empty());
-  }
-
-  string getCacheKeyImpl() const override {
-    std::ostringstream stream;
-    for (const IdTable& idTable : idTables_) {
-      for (const auto& row : idTable) {
-        stream << "{ ";
-        for (const auto& cell : row) {
-          stream << cell << ' ';
-        }
-        stream << "}\n";
-      }
-    }
-    return std::move(stream).str();
-  }
-
-  ProtoResult computeResult(bool requestLaziness) override {
-    if (requestLaziness) {
-      std::vector<IdTable> clones;
-      clones.reserve(idTables_.size());
-      for (const IdTable& idTable : idTables_) {
-        clones.push_back(idTable.clone());
-      }
-      auto generator = [](auto idTables) -> cppcoro::generator<IdTable> {
-        for (IdTable& idTable : idTables) {
-          co_yield std::move(idTable);
-        }
-      }(std::move(clones));
-      return {std::move(generator), resultSortedOn(), LocalVocab{}};
-    }
-    IdTable aggregateTable{idTables_.at(0).numColumns(),
-                           idTables_.at(0).getAllocator()};
-    for (const IdTable& idTable : idTables_) {
-      aggregateTable.insertAtEnd(idTable);
-    }
-    return {std::move(aggregateTable), resultSortedOn(), LocalVocab{}};
-  }
-};
-
-IdTable makeIdTable(std::initializer_list<bool> bools) {
+IdTable makeIdTable(std::vector<bool> bools) {
   IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
   for (bool b : bools) {
     idTable.push_back({Id::makeFromBool(b)});
@@ -99,9 +36,9 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   idTables.push_back(makeIdTable({false, false, false}));
   idTables.push_back(makeIdTable({true}));
 
-  LazyValueOperation values{qec, std::move(idTables)};
+  ValuesForTesting values{qec, std::move(idTables), {Variable{"?x"}}};
   QueryExecutionTree subTree{
-      qec, std::make_shared<LazyValueOperation>(std::move(values))};
+      qec, std::make_shared<ValuesForTesting>(std::move(values))};
   Filter filter{
       qec,
       std::make_shared<QueryExecutionTree>(std::move(subTree)),
@@ -148,9 +85,9 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   idTables.push_back(makeIdTable({false, false, false}));
   idTables.push_back(makeIdTable({true}));
 
-  LazyValueOperation values{qec, std::move(idTables)};
+  ValuesForTesting values{qec, std::move(idTables), {Variable{"?x"}}};
   QueryExecutionTree subTree{
-      qec, std::make_shared<LazyValueOperation>(std::move(values))};
+      qec, std::make_shared<ValuesForTesting>(std::move(values))};
   Filter filter{
       qec,
       std::make_shared<QueryExecutionTree>(std::move(subTree)),

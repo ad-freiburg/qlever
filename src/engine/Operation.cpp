@@ -77,12 +77,16 @@ void Operation::updateRuntimeStats(bool applyToFilter, uint64_t numRows,
                   ? runtimeInfo()
                   : *runtimeInfo().children_.at(0);
   rti.totalTime_ += duration;
+  rti.originalTotalTime_ = rti.totalTime_;
   rti.originalOperationTime_ = rti.getOperationTime();
-  rti.numRows_ += numRows;
-  rti.numCols_ = numCols;
+  if (!applyToFilter || externalFilterApplied_) {
+    rti.numRows_ += numRows;
+    rti.numCols_ = numCols;
+  }
   if (!applyToFilter && externalFilterApplied_) {
     runtimeInfo().totalTime_ += duration;
-    runtimeInfo().originalOperationTime_ = rti.getOperationTime();
+    runtimeInfo().originalTotalTime_ = runtimeInfo().totalTime_;
+    runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
   }
 }
 
@@ -191,10 +195,12 @@ CacheValue Operation::runComputationAndPrepareForCache(
         },
         [runtimeInfo = getRuntimeInfoPointer(), &cache,
          cacheKey](Result aggregatedResult) {
+          auto copy = *runtimeInfo;
+          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
           cache.tryInsertIfNotPresent(
               false, cacheKey,
               std::make_shared<CacheValue>(std::move(aggregatedResult),
-                                           *runtimeInfo));
+                                           std::move(copy)));
         });
   }
   if (result.isFullyMaterialized()) {

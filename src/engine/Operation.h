@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <gtest/gtest_prod.h>
+
 #include <iomanip>
 #include <memory>
 
@@ -380,4 +382,15 @@ class Operation {
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
   bool externalFilterApplied_ = false;
+  FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
+  FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
+  FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);
+  FRIEND_TEST(Operation, testSubMillisecondsIncrementsAreStillTracked);
+  FRIEND_TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd);
+  FRIEND_TEST(Operation,
+              ensureSignalUpdateIsCalledAtTheEndOfPartialConsumption);
+  FRIEND_TEST(Operation,
+              verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly);
+  FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
 };

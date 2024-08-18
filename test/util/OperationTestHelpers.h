@@ -85,4 +85,54 @@ class ShallowParentOperation : public Operation {
   }
 };
 
+class AlwaysFailLazyOperation : public Operation {
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  string getCacheKeyImpl() const override { return "AlwaysFailLazyOperation"; }
+  string getDescriptor() const override {
+    return "AlwaysFailLazyOperationDescriptor";
+  }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  using Operation::Operation;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+    return {[]() -> cppcoro::generator<IdTable> {
+              throw std::runtime_error{"AlwaysFailLazyOperation"};
+              // Required so that the exception only occurs within the generator
+              co_return;
+            }(),
+            resultSortedOn(), LocalVocab{}};
+  }
+};
+
+class CustomGeneratorOperation : public Operation {
+  cppcoro::generator<IdTable> generator_;
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  string getCacheKeyImpl() const override { return "CustomGeneratorOperation"; }
+  string getDescriptor() const override {
+    return "CustomGeneratorOperationDescriptor";
+  }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  CustomGeneratorOperation(QueryExecutionContext* context,
+                           cppcoro::generator<IdTable> generator)
+      : Operation{context}, generator_{std::move(generator)} {}
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+    return {std::move(generator_), resultSortedOn(), LocalVocab{}};
+  }
+};
+
 #endif  // QLEVER_OPERATIONTESTHELPERS_H
