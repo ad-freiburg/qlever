@@ -656,28 +656,33 @@ bool TurtleParser<T>::pnameLnRelaxed() {
 // _____________________________________________________________________
 template <class T>
 bool TurtleParser<T>::iriref() {
+  // First make a cheap and simple check if we find `<...>` in the current
+  // line (we don't care about the characters in between). If not, this is
+  // certainly not an IRI reference.
+  tok_.skipWhitespaceAndComments();
+  auto view = tok_.view();
+  if (!view.starts_with('<')) {
+    return false;
+  }
+  auto endPos = view.find_first_of(">\n");
+  if (endPos == string::npos || view[endPos] != '>') {
+    return false;
+  }
+  // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
+  // standard-conform. If not, we output a warning and try to parse it in a more
+  // relaxed way.
   if constexpr (UseRelaxedParsing) {
-    // Manually check if the input starts with "<" and then find the next ">"
-    // this might accept invalid irirefs but is faster than checking the
-    // complete regexes.
-    tok_.skipWhitespaceAndComments();
-    auto view = tok_.view();
-    if (view.starts_with('<')) {
-      auto endPos = view.find_first_of("> \n");
-      if (endPos == string::npos || view[endPos] != '>') {
-        raise("Parsing IRI ref (IRI without prefix) failed");
-      } else {
-        tok_.remove_prefix(endPos + 1);
-        lastParseResult_ =
-            TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
-        return true;
-      }
-    } else {
-      return false;
-    }
+    tok_.remove_prefix(endPos + 1);
+    lastParseResult_ =
+        TripleComponent::Iri::fromIriref(view.substr(0, endPos + 1));
+    return true;
   } else {
     if (!parseTerminal<TurtleTokenId::Iriref>()) {
-      return false;
+      LOG(WARN) << "IRI ref not standard-conform: "
+                << view.substr(0, endPos + 1) << std::endl;
+      if (!parseTerminal<TurtleTokenId::IrirefRelaxed>()) {
+        return false;
+      }
     }
     lastParseResult_ =
         TripleComponent::Iri::fromIriref(lastParseResult_.getString());
