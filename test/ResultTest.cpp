@@ -457,6 +457,9 @@ TEST(Result, verifyAssertThatLimitWasRespectedDoesThrowIfLimitWasNotRespected) {
 // _____________________________________________________________________________
 TEST(Result,
      verifyCheckDefinednessDoesThrowIfColumnIsNotDefinedWhenClaimingItIs) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
+  }
   auto correctTable1 = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
   auto correctTable2 =
       makeIdTableFromVector({{0, Id::makeUndefined()}, {1, 6}, {2, 5}, {3, 4}});
@@ -506,53 +509,39 @@ TEST(Result,
     Result result{wrongTable3.clone(), {}, LocalVocab{}};
     EXPECT_THROW(result.checkDefinedness(map), ad_utility::Exception);
   }
-  {
-    for (auto& generator : getAllSubSplits(correctTable1)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
-    }
+  for (auto& generator : getAllSubSplits(correctTable1)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
   }
-  {
-    for (auto& generator : getAllSubSplits(correctTable2)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
-    }
+  for (auto& generator : getAllSubSplits(correctTable2)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
   }
-  {
-    for (auto& generator : getAllSubSplits(correctTable3)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
-    }
+  for (auto& generator : getAllSubSplits(correctTable3)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
   }
-  {
-    for (auto& generator : getAllSubSplits(correctTable4)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
-    }
+  for (auto& generator : getAllSubSplits(correctTable4)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
   }
-  {
-    for (auto& generator : getAllSubSplits(wrongTable1)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
-    }
+  for (auto& generator : getAllSubSplits(wrongTable1)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
   }
-  {
-    for (auto& generator : getAllSubSplits(wrongTable2)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
-    }
+  for (auto& generator : getAllSubSplits(wrongTable2)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
   }
-  {
-    for (auto& generator : getAllSubSplits(wrongTable3)) {
-      Result result{std::move(generator), {}, LocalVocab{}};
-      result.checkDefinedness(map);
-      EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
-    }
+  for (auto& generator : getAllSubSplits(wrongTable3)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.checkDefinedness(map);
+    EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
   }
 }

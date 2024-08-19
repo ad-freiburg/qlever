@@ -371,6 +371,65 @@ TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
 }
 
 // _____________________________________________________________________________
+TEST(ConcurrentCache, isCachedIfSuitableWhenWaitingForPendingComputation) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return true; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 1);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+  EXPECT_TRUE(cache.cacheContains(0));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache,
+     isCachedIfSuitableWhenWaitingForPendingComputationPinned) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOncePinned(
+      0, []() { return "abc"; }, false, [](const auto&) { return true; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 1);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+  EXPECT_TRUE(cache.cacheContains(0));
+}
+
+// _____________________________________________________________________________
 TEST(ConcurrentCache, ifUnsuitableForCacheAndPinnedThrowsException) {
   SimpleConcurrentLruCache cache{};
 

@@ -485,3 +485,20 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
   EXPECT_EQ(resultValues[2][0], p2);
   EXPECT_EQ(resultValues[2][1], s1);
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  for ([[maybe_unused]] IdTable& idTable : result.idTables()) {
+    ADD_FAILURE() << "Generator should be empty" << std::endl;
+  }
+}
