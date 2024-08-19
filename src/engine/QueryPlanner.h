@@ -214,15 +214,23 @@ class QueryPlanner {
   [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
 
   using Vertex = const SubtreePlan*;
-  using Vertices = ad_utility::HashSet<Vertex>;
+  struct VertexEq {
+    bool operator()(Vertex a, Vertex b) const {
+      return a->_idsOfIncludedNodes == b->_idsOfIncludedNodes;
+    }
+  };
+  struct VertexHash {
+    size_t operator()(Vertex a) const {
+      return std::hash<size_t>{}(a->_idsOfIncludedNodes);
+    }
+  };
+  using Vertices = ad_utility::HashSet<Vertex, VertexHash, VertexEq>;
   using Graph = std::vector<Vertex>;
 
-  static size_t QueryPlanner::countSubgraphs(const Graph& graph, size_t budget);
-  static size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
-                                                        Vertices& subgraph,
-                                                        Vertices& ignored,
-                                                        size_t c,
-                                                        size_t budget);
+  static size_t countSubgraphs(Graph graph, size_t budget);
+  static size_t countSubgraphsRecursively(const Graph& graph,
+                                          Vertices& subgraph, Vertices& ignored,
+                                          size_t c, size_t budget);
 
  private:
   QueryExecutionContext* _qec;
@@ -367,8 +375,8 @@ class QueryPlanner {
   [[nodiscard]] bool connected(const SubtreePlan& a, const SubtreePlan& b,
                                const TripleGraph& graph) const;
 
-  [[nodiscard]] std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
-      const SubtreePlan& a, const SubtreePlan& b) const;
+  static std::vector<std::array<ColumnIndex, 2>> getJoinColumns(
+      const SubtreePlan& a, const SubtreePlan& b);
 
   [[nodiscard]] string getPruningKey(
       const SubtreePlan& plan,
