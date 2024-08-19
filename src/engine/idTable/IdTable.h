@@ -301,7 +301,7 @@ class IdTable {
   T& operator()(size_t row, size_t column) requires(!isView) {
     AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
       return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
-                          numColumns(), ", ", numStaticColumns)
+                          numColumns(), ", ", numStaticColumns);
     });
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
