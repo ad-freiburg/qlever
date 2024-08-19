@@ -8,7 +8,6 @@
 
 #include <ranges>
 
-#include "engine/QueryExecutionTree.h"
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"

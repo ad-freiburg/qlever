@@ -31,11 +31,11 @@ std::string runQueryStreamableResult(const std::string& kg,
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
+  ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator =
       mediaType == ad_utility::MediaType::qleverJson
           ? ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
-                pq, qet, ad_utility::Timer(ad_utility::Timer::Started),
-                std::move(cancellationHandle))
+                pq, qet, timer, std::move(cancellationHandle))
           : ExportQueryExecutionTrees::computeResultAsStream(
                 pq, qet, mediaType, std::move(cancellationHandle));
 
