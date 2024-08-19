@@ -469,7 +469,6 @@ nlohmann::json Server::composeCacheStatsJson() const {
   // converter.
   result["non-pinned-size"] = cache_.nonPinnedSize().getBytes();
   result["pinned-size"] = cache_.pinnedSize().getBytes();
-  result["num-pinned-index-scan-sizes"] = cache_.pinnedSizes().rlock()->size();
   return result;
 }
 

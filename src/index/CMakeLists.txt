@@ -5,5 +5,5 @@ add_library(index
         LocatedTriples.cpp Permutation.cpp TextMetaData.cpp
         DocsDB.cpp FTSAlgorithms.cpp
         PrefixHeuristic.cpp CompressedRelation.cpp
-        PatternCreator.cpp)
+        PatternCreator.cpp ScanSpecification.cpp)
 qlever_target_link_libraries(index util parser vocabulary compilationInfo ${STXXL_LIBRARIES})

@@ -88,25 +88,6 @@ std::shared_ptr<const Result> Operation::getResult(
   const bool pinResult =
       _executionContext->_pinSubtrees || pinFinalResultButNotSubtrees;
 
-  // When we pin the final result but no subtrees, we need to remember the sizes
-  // of all involved index scans that have only one free variable. Note that
-  // these index scans are executed already during query planning because they
-  // have to be executed anyway, for any query plan. If we don't remember these
-  // sizes here, future queries that take the result from the cache would redo
-  // these index scans. Note that we do not need to remember the multiplicity
-  // (and distinctness) because the multiplicity for an index scan with a single
-  // free variable is always 1.
-  if (pinFinalResultButNotSubtrees) {
-    auto lock =
-        getExecutionContext()->getQueryTreeCache().pinnedSizes().wlock();
-    forAllDescendants([&lock](QueryExecutionTree* child) {
-      if (child->getRootOperation()->isIndexScanWithNumVariables(1)) {
-        (*lock)[child->getRootOperation()->getCacheKey()] =
-            child->getSizeEstimate();
-      }
-    });
-  }
-
   try {
     // In case of an exception, create the correct runtime info, no matter which
     // exception handler is called.
@@ -270,7 +251,7 @@ void Operation::updateRuntimeInformationOnSuccess(
 
 // ____________________________________________________________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const ConcurrentLruCache ::ResultAndCacheStatus& resultAndCacheStatus,
+    const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
   updateRuntimeInformationOnSuccess(
       *resultAndCacheStatus._resultPointer->resultTable(),

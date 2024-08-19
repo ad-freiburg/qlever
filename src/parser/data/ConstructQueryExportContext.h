@@ -18,7 +18,8 @@ enum struct PositionInTriple : int { SUBJECT, PREDICATE, OBJECT };
 // All the data that is needed to evaluate an element in a construct query.
 struct ConstructQueryExportContext {
   const size_t _row;
-  const Result& _res;
+  const IdTable& idTable_;
+  const LocalVocab& localVocab_;
   const VariableToColumnMap& _variableColumns;
   const Index& _qecIndex;
 };

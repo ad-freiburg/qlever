@@ -122,7 +122,6 @@ class IndexImpl {
       UNCOMPRESSED_BLOCKSIZE_COMPRESSED_METADATA_PER_COLUMN;
   json configurationJson_;
   Index::Vocab vocab_;
-  size_t totalVocabularySize_ = 0;
   Index::TextVocab textVocab_;
 
   TextMetaData textMeta_;
@@ -148,6 +147,13 @@ class IndexImpl {
   NumNormalAndInternal numObjects_;
   NumNormalAndInternal numTriples_;
   string indexId_;
+
+  // Global static pointers to the currently active index and comparator.
+  // Those are used to compare LocalVocab entries with each other as well as
+  // with Vocab entries.
+  static inline const IndexImpl* globalSingletonIndex_ = nullptr;
+  static inline const TripleComponentComparator* globalSingletonComparator_ =
+      nullptr;
   /**
    * @brief Maps pattern ids to sets of predicate ids.
    */
@@ -187,6 +193,21 @@ class IndexImpl {
   auto& OPS() { return ops_; }
   const auto& OSP() const { return osp_; }
   auto& OSP() { return osp_; }
+
+  static const IndexImpl& staticGlobalSingletonIndex() {
+    AD_CORRECTNESS_CHECK(globalSingletonIndex_ != nullptr);
+    return *globalSingletonIndex_;
+  }
+
+  static const TripleComponentComparator& staticGlobalSingletonComparator() {
+    AD_CORRECTNESS_CHECK(globalSingletonComparator_ != nullptr);
+    return *globalSingletonComparator_;
+  }
+
+  void setGlobalIndexAndComparatorOnlyForTesting() const {
+    globalSingletonIndex_ = this;
+    globalSingletonComparator_ = &vocab_.getCaseComparator();
+  }
 
   // For a given `Permutation::Enum` (e.g. `PSO`) return the corresponding
   // `Permutation` object by reference (`pso_`).
@@ -248,11 +269,11 @@ class IndexImpl {
   size_t getCardinality(const TripleComponent& comp,
                         Permutation::Enum permutation) const;
 
-  // TODO<joka921> Once we have an overview over the folding this logic should
-  // probably not be in the index class.
-  std::optional<string> idToOptionalString(VocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string indexToString(VocabIndex id) const;
 
-  std::optional<string> idToOptionalString(WordVocabIndex id) const;
+  // ___________________________________________________________________________
+  std::string_view indexToString(WordVocabIndex id) const;
 
  private:
   // ___________________________________________________________________________
@@ -397,24 +418,22 @@ class IndexImpl {
   vector<float> getMultiplicities(Permutation::Enum permutation) const;
 
   // _____________________________________________________________________________
-  IdTable scan(
-      const TripleComponent& col0String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      const Permutation::Enum& permutation,
-      Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle,
-      const LimitOffsetClause& limitOffset = {}) const;
-
-  // _____________________________________________________________________________
-  IdTable scan(Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
+  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
+               const Permutation::Enum& permutation,
                Permutation::ColumnIndicesRef additionalColumns,
                const ad_utility::SharedCancellationHandle& cancellationHandle,
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(const TripleComponent& col0,
-                             const TripleComponent& col1,
-                             const Permutation::Enum& permutation) const;
+  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
+
+  // _____________________________________________________________________________
+  size_t getResultSizeOfScan(
+      const ScanSpecificationAsTripleComponent& scanSpecification,
+      const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions

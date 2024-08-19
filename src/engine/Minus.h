@@ -72,7 +72,7 @@ class Minus : public Operation {
       const IdTableView<A_WIDTH>& a, const IdTableView<B_WIDTH>& b, size_t ia,
       size_t ib, const vector<std::array<ColumnIndex, 2>>& matchedColumns);
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   VariableToColumnMap computeVariableToColumnMap() const override;
 };
