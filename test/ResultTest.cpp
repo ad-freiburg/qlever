@@ -95,6 +95,9 @@ TEST(Result, verifyIdTablesThrowsWhenFullyMaterialized) {
 // _____________________________________________________________________________
 TEST(Result,
      verifyAssertSortOrderIsRespectedThrowsWhenNotSortedAndSucceedsWhenSorted) {
+  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
+    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
+  }
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   EXPECT_NO_THROW((Result{idTable.clone(), {}, LocalVocab{}}));
@@ -158,6 +161,38 @@ TEST(Result,
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         consumeGenerator(result.idTables()),
         ::testing::HasSubstr("compareRowsByJoinColumns"),
+        ad_utility::Exception);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Result,
+     verifyAnErrorIsThrownIfSortedByHasHigherIndicesThanTheTableHasColumns) {
+  auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      (Result{idTable.clone(), {3}, LocalVocab{}}),
+      ::testing::HasSubstr("colIndex < idTable.numColumns()"),
+      ad_utility::Exception);
+
+  for (auto& generator : getAllSubSplits(idTable)) {
+    Result result{std::move(generator), {3}, LocalVocab{}};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        consumeGenerator(result.idTables()),
+        ::testing::HasSubstr("colIndex < idTable.numColumns()"),
+        ad_utility::Exception);
+  }
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      (Result{idTable.clone(), {2, 1337}, LocalVocab{}}),
+      ::testing::HasSubstr("colIndex < idTable.numColumns()"),
+      ad_utility::Exception);
+
+  for (auto& generator : getAllSubSplits(idTable)) {
+    Result result{std::move(generator), {2, 1337}, LocalVocab{}};
+    AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+        consumeGenerator(result.idTables()),
+        ::testing::HasSubstr("colIndex < idTable.numColumns()"),
         ad_utility::Exception);
   }
 }
