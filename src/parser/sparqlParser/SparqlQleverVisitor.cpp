@@ -290,7 +290,10 @@ void Visitor::visit(Parser::SourceSelectorContext*) {
 
 // ____________________________________________________________________________________
 Variable Visitor::visit(Parser::VarContext* ctx) {
-  return Variable{ctx->getText()};
+  // `false` for the second argument means: The variable name is already
+  // validated by the grammar, no need to check it again (which would lead to an
+  // infinite loop here).
+  return Variable{ctx->getText(), false};
 }
 
 // ____________________________________________________________________________________

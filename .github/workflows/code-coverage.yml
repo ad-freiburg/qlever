@@ -108,7 +108,7 @@ jobs:
         mv ${{ github.workspace}}/build/test/coverage.lcov coverage-report
     - name: Upload coverage artifact
       if: github.event_name == 'pull_request'
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: coverage-report
         path: coverage-report/

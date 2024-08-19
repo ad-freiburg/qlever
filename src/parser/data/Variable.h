@@ -16,10 +16,15 @@ struct ConstructQueryExportContext;
 enum struct PositionInTriple : int;
 
 class Variable {
- public:
+ private:
   std::string _name;
 
-  explicit Variable(std::string name);
+ public:
+  // Create the variable from the given `name` (which must include the leading ?
+  // or $). If `checkName` is set, then the variable name will be validated by
+  // the SPARQL parser and an `AD_CONTRACT_CHECK` will fail if the name is not
+  // valid.
+  explicit Variable(std::string name, bool checkName = true);
 
   // TODO<joka921> There are several similar variants of this function across
   // the codebase. Unify them!
@@ -62,4 +67,6 @@ class Variable {
   static void AbslFormatter(std::string* out, const Variable& variable) {
     out->append(variable.name());
   }
+
+  static bool isValidVariableName(std::string_view var);
 };
