@@ -1478,7 +1478,7 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
                              &isInternalTriple](const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += !static_cast<size_t>(isInternalTriple(triple));
+    numTriplesNormal += static_cast<size_t>(!isInternalTriple(triple));
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter =
