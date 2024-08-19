@@ -132,8 +132,7 @@ template <size_t numColumns>
 constexpr auto makePermutationFirstThirdSwitched = []() {
   static_assert(numColumns >= 3);
   std::array<ColumnIndex, numColumns> permutation{};
-  std::ranges::generate(permutation,
-                        [x = ColumnIndex{0}]() mutable { return x++; });
+  std::iota(permutation.begin(), permutation.end(), ColumnIndex{0});
   std::swap(permutation[0], permutation[2]);
   return permutation;
 };
@@ -980,6 +979,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // The following lambda deals with triple elements that might be strings
   // (literals or IRIs) as well as values that can be decoded into the IRI
   // directly. These currently are the object and the graph ID of the triple.
+  // The `index` is the index of the element within the triple. For example if
+  // the `getter` is `subject_` then the index has to be `0`.
   auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
     // If the object of the triple can be directly folded into an ID, do so.
     // Note that the actual folding is done by the `TripleComponent`.

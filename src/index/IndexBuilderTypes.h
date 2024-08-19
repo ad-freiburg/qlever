@@ -248,9 +248,9 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
+    auto internalGraphId = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
     return [&map = *itemArray[idx], indexPtr,
-            internalGraph](ad_utility::Rvalue auto&& tr) {
+            internalGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
@@ -276,13 +276,13 @@ auto getIdMapLambdas(
         // extra triple <subject> @language@<predicate> <object>
         // The additional triples all have the graph ID of the internal graph.
         res[1].emplace(
-            Arr{spoIds[0], langTaggedPredId, spoIds[2], internalGraph});
+            Arr{spoIds[0], langTaggedPredId, spoIds[2], internalGraphId});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(
                                    LANGUAGE_PREDICATE)}),
-                           langTagId, internalGraph});
+                           langTagId, internalGraphId});
       }
       return res;
     };

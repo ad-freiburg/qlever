@@ -185,7 +185,8 @@ static constexpr int DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE = 5;
 constexpr std::chrono::milliseconds DESIRED_CANCELLATION_CHECK_INTERVAL{50};
 
 // In all permutations, the graph ID of the triple is stored as the fourth
-// entry.
+// entry. During the index building it is important that this is the first
+// column after the "actual" triple.
 constexpr size_t ADDITIONAL_COLUMN_GRAPH_ID = 3;
 
 // In the PSO and PSO permutations the patterns of the subject and object are

@@ -262,10 +262,9 @@ inline void writeMappedIdsToExtVec(
     std::unique_ptr<TripleVec>* writePtr) {
   auto& vec = *(*writePtr);
   for (const auto& curTriple : input) {
-    static constexpr size_t NumCols = NumColumnsIndexBuilding;
-    std::array<Id, NumCols> mappedTriple;
+    std::array<Id, NumColumnsIndexBuilding> mappedTriple;
     // for all triple elements find their mapping from partial to global ids
-    for (size_t k = 0; k < NumCols; ++k) {
+    for (size_t k = 0; k < NumColumnsIndexBuilding; ++k) {
       if (curTriple[k].getDatatype() != Datatype::VocabIndex) {
         mappedTriple[k] = curTriple[k];
         continue;
