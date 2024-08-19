@@ -55,8 +55,8 @@ class LazyJsonParser {
   // Context for the 3 parsing sections.
   struct BeforeArrayPath {
     // Indices of the latest parsed literal, used to add keys to the curPath_.
-    size_t strStart_{0};
-    size_t strEnd_{0};
+    size_t litStart_{0};
+    size_t litLength_{0};
     std::vector<std::string> curPath_;
     // Open Brackets counter to track nested arrays.
     int openBrackets_{0};

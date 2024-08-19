@@ -57,7 +57,6 @@ std::string LazyJsonParser::parseChunk(std::string_view inStr) {
         break;
       default:
         AD_FAIL();
-        break;
     }
   }
 
@@ -70,7 +69,7 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
   if (input_[idx] == '"' && !inLiteral_) {
     ++idx;
     if (std::holds_alternative<BeforeArrayPath>(state_)) {
-      std::get<BeforeArrayPath>(state_).strStart_ = idx;
+      std::get<BeforeArrayPath>(state_).litStart_ = idx;
     }
     inLiteral_ = true;
   }
@@ -88,7 +87,8 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
       case '"':
         // End of literal.
         if (std::holds_alternative<BeforeArrayPath>(state_)) {
-          std::get<BeforeArrayPath>(state_).strEnd_ = idx;
+          std::get<BeforeArrayPath>(state_).litLength_ =
+              idx - std::get<BeforeArrayPath>(state_).litStart_;
         }
         inLiteral_ = false;
         return;
@@ -226,6 +226,9 @@ std::string LazyJsonParser::constructResultFromParsedChunk(
     return res;
   }
 
+  // Don't yield before arrayPath.
+  AD_CORRECTNESS_CHECK(!std::holds_alternative<BeforeArrayPath>(state_));
+
   if (yieldCount_ > 0) {
     res = prefixInArray_;
   }
@@ -243,8 +246,10 @@ std::string LazyJsonParser::constructResultFromParsedChunk(
 
 // ____________________________________________________________________________
 void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
-  if (strEnd_ != 0) {
-    curPath_.emplace_back(input.substr(strStart_, strEnd_ - strStart_));
+  if (litLength_ > 0) {
+    curPath_.emplace_back(input.substr(litStart_, litLength_));
+    // The marked literal got consumed/added as key -> reset litLength_.
+    litLength_ = 0;
   }
 }
 
