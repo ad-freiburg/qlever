@@ -8,11 +8,12 @@
 
 #include <ranges>
 
+#include "engine/QueryExecutionTree.h"
 #include "parser/RdfEscaping.h"
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
-// __________________________________________________________________________
+// _____________________________________________________________________________
 namespace {
 // Return a range that contains the indices of the rows that have to be exported
 // from the `idTable` given the `LimitOffsetClause`. It takes into account the
@@ -127,7 +128,39 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSONStream(
   co_yield "]";
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
+// Create the row indicated by rowIndex from IdTable in QLeverJSON format.
+nlohmann::json idTableToQLeverJSONRow(
+    const QueryExecutionTree& qet,
+    const QueryExecutionTree::ColumnIndicesAndTypes& columns,
+    const LocalVocab& localVocab, const size_t rowIndex, const IdTable& data) {
+  // We need the explicit `array` constructor for the special case of zero
+  // variables.
+  auto row = nlohmann::json::array();
+  for (const auto& opt : columns) {
+    if (!opt) {
+      row.emplace_back(nullptr);
+      continue;
+    }
+    const auto& currentId = data(rowIndex, opt->columnIndex_);
+    const auto& optionalStringAndXsdType =
+        ExportQueryExecutionTrees::idToStringAndType(qet.getQec()->getIndex(),
+                                                     currentId, localVocab);
+    if (!optionalStringAndXsdType.has_value()) {
+      row.emplace_back(nullptr);
+      continue;
+    }
+    const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
+    if (xsdType) {
+      row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
+    } else {
+      row.emplace_back(stringValue);
+    }
+  }
+  return row;
+}
+
+// _____________________________________________________________________________
 nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes& columns,
@@ -138,35 +171,14 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
   nlohmann::json json = nlohmann::json::array();
 
   for (size_t rowIndex : getRowIndices(limitAndOffset, *result)) {
-    // We need the explicit `array` constructor for the special case of zero
-    // variables.
-    json.push_back(nlohmann::json::array());
-    auto& row = json.back();
-    for (const auto& opt : columns) {
-      if (!opt) {
-        row.emplace_back(nullptr);
-        continue;
-      }
-      const auto& currentId = data(rowIndex, opt->columnIndex_);
-      const auto& optionalStringAndXsdType = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalStringAndXsdType.has_value()) {
-        row.emplace_back(nullptr);
-        continue;
-      }
-      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
-      if (xsdType) {
-        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
-      } else {
-        row.emplace_back(stringValue);
-      }
-    }
+    json.emplace_back(idTableToQLeverJSONRow(qet, columns, result->localVocab(),
+                                             rowIndex, data));
     cancellationHandle->throwIfCancelled();
   }
   return json;
 }
 
-// __________________________________________________________________________________________________________
+// _____________________________________________________________________________
 cppcoro::generator<std::string>
 ExportQueryExecutionTrees::idTableToQLeverJSONArrayStream(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
@@ -180,28 +192,9 @@ ExportQueryExecutionTrees::idTableToQLeverJSONArrayStream(
 
   const auto rowIndices = getRowIndices(limitAndOffset, *result);
   for (size_t rowIndex : rowIndices) {
-    // We need the explicit `array` constructor for the special case of zero
-    // variables.
-    nlohmann::json row = nlohmann::json::array();
-    for (const auto& opt : columns) {
-      if (!opt) {
-        row.emplace_back(nullptr);
-        continue;
-      }
-      const auto& currentId = data(rowIndex, opt->columnIndex_);
-      const auto& optionalStringAndXsdType = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalStringAndXsdType.has_value()) {
-        row.emplace_back(nullptr);
-        continue;
-      }
-      const auto& [stringValue, xsdType] = optionalStringAndXsdType.value();
-      if (xsdType) {
-        row.emplace_back('"' + stringValue + "\"^^<" + xsdType + '>');
-      } else {
-        row.emplace_back(stringValue);
-      }
-    }
+    auto row = idTableToQLeverJSONRow(qet, columns, result->localVocab(),
+                                      rowIndex, data);
+
     std::string rowStr = row.dump();
     co_yield absl::StrCat(rowIndex != rowIndices[0] ? "," : "", rowStr);
     cancellationHandle->throwIfCancelled();
@@ -210,7 +203,7 @@ ExportQueryExecutionTrees::idTableToQLeverJSONArrayStream(
   co_yield "]";
 }
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
   using enum Datatype;
@@ -313,13 +306,13 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
     std::identity&& escapeFunction);
 
-// ___________________________________________________________________________
+// _____________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
@@ -334,6 +327,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              const LocalVocab& localVocab,
                                              std::identity&& escapeFunction);
 
+// _____________________________________________________________________________
 // Take a string from the vocabulary, deduce the type and
 // return a JSON dict that describes the binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
@@ -942,9 +936,9 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
   nlohmann::json jsonSuffix;
   jsonSuffix["resultsize"] = resultSize;
   jsonSuffix["time"]["total"] =
-      std::to_string(requestTimer.msecs().count()) + "ms";
+      absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =
-      std::to_string(timeResultComputation.count()) + "ms";
+      absl::StrCat(timeResultComputation.count(), "ms");
 
   co_yield absl::StrCat(",", jsonSuffix.dump().substr(1));
 }
