@@ -664,7 +664,7 @@ bool TurtleParser<T>::iriref() {
   if (!view.starts_with('<')) {
     return false;
   }
-  auto endPos = view.find_first_of(">\n");
+  auto endPos = view.find_first_of("<>\"\n", 1);
   if (endPos == string::npos || view[endPos] != '>') {
     return false;
   }
