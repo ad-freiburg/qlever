@@ -1240,6 +1240,67 @@ QueryPlanner::runDynamicProgrammingOnConnectedComponent(
   return std::move(dpTab.back());
 }
 
+using Vertex = const QueryPlanner::SubtreePlan*;
+using Vertices = ad_utility::HashSet<Vertex>;
+using Graph = std::vector<Vertex>;
+
+size_t QueryPlanner::countSubgraphs(const Graph& graph, size_t budget) {
+  size_t c = 0;
+  for (size_t i = 0; i < graph.size(); ++i) {
+    ++c;
+    if (c > budget) {
+      return c;
+    }
+    Vertices subgraph{graph[i]};
+    Vertices ignored;
+    for (size_t k = 0; k < i; ++k) {
+      ignored.insert(graph[k]);
+    }
+    c = countSubgraphsRecursively(graph, subgraph, ignored, c, budget);
+  }
+}
+size_t QueryPlanner::countSubgraphsRecursively(const Graph& graph,
+                                               Vertices& subgraph,
+                                               Vertices& ignored, size_t c,
+                                               size_t budget) {
+  std::vector<Vertex> NeighborsOfS;
+  for (const auto& v : graph) {
+    if (ignored.contains(v)) {
+      continue;
+    }
+    if (subgraph.contains([&v](const auto& el) {
+          return !QueryPlanner::getJoinColumns(*v, *el).empty();
+        })) {
+      NeighborsOfS.push_back(v);
+    }
+  }
+  if (NeighborsOfS.size() > 60) {
+    return budget + 1;
+  }
+  size_t upperBound = 1ull << NeighborsOfS.size();
+
+  auto newIgnored = ignored;
+  for (const auto& el : NeighborsOfS) {
+    newIgnored.insert(el);
+  }
+  // TODO<joka921> iterate over all Subsets.
+  for (size_t i = 0; i < upperBound; ++i) {
+    ++c;
+    if (c > budget) {
+      return c;
+    }
+    // TODO<joka921> This can probably be done more efficiently...
+    auto newSubgraph = subgraph;
+    for (size_t k = 0; k < NeighborsOfS.size(); ++k) {
+      if (1 << k & i) {
+        newSubgraph.insert(NeighborsOfS[i]);
+      }
+    }
+    c = countSubgraphsRecursively(graph, newSubgraph, newIgnored, c, budget);
+  }
+  return c;
+}
+
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan>
 QueryPlanner::runGreedyPlanningOnConnectedComponent(
