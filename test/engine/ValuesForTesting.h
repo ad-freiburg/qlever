@@ -15,7 +15,7 @@
 // operation.
 class ValuesForTesting : public Operation {
  private:
-  std::vector<IdTable> table_;
+  std::vector<IdTable> tables_;
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
   // Those can be manually overwritten for testing using the respective getters.
@@ -33,7 +33,7 @@ class ValuesForTesting : public Operation {
                             LocalVocab localVocab = LocalVocab{},
                             std::optional<float> multiplicity = std::nullopt)
       : Operation{ctx},
-        table_{},
+        tables_{},
         variables_{std::move(variables)},
         supportsLimit_{supportsLimit},
         sizeEstimate_{table.numRows()},
@@ -42,13 +42,13 @@ class ValuesForTesting : public Operation {
         localVocab_{std::move(localVocab)},
         multiplicity_{multiplicity} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
-    table_.push_back(std::move(table));
+    tables_.push_back(std::move(table));
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables)
       : Operation{ctx},
-        table_{std::move(tables)},
+        tables_{std::move(tables)},
         variables_{std::move(variables)},
         supportsLimit_{false},
         sizeEstimate_{0},
@@ -56,11 +56,12 @@ class ValuesForTesting : public Operation {
         resultSortedColumns_{},
         localVocab_{LocalVocab{}},
         multiplicity_{std::nullopt} {
-    AD_CONTRACT_CHECK(std::ranges::all_of(table_, [this](const IdTable& table) {
-      return variables_.size() == table.numColumns();
-    }));
+    AD_CONTRACT_CHECK(
+        std::ranges::all_of(tables_, [this](const IdTable& table) {
+          return variables_.size() == table.numColumns();
+        }));
     size_t totalRows = 0;
-    for (const IdTable& idTable : table_) {
+    for (const IdTable& idTable : tables_) {
       totalRows += idTable.numRows();
     }
     sizeEstimate_ = totalRows;
@@ -77,8 +78,8 @@ class ValuesForTesting : public Operation {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
       std::vector<IdTable> clones;
-      clones.reserve(table_.size());
-      for (const IdTable& idTable : table_) {
+      clones.reserve(tables_.size());
+      for (const IdTable& idTable : tables_) {
         clones.push_back(idTable.clone());
       }
       auto generator = [](auto idTables) -> cppcoro::generator<IdTable> {
@@ -89,16 +90,16 @@ class ValuesForTesting : public Operation {
       return {std::move(generator), resultSortedOn(), localVocab_.clone()};
     }
     std::optional<IdTable> optionalTable;
-    if (table_.size() > 1) {
-      IdTable aggregateTable{table_.at(0).numColumns(),
-                             table_.at(0).getAllocator()};
-      for (const IdTable& idTable : table_) {
+    if (tables_.size() > 1) {
+      IdTable aggregateTable{tables_.at(0).numColumns(),
+                             tables_.at(0).getAllocator()};
+      for (const IdTable& idTable : tables_) {
         aggregateTable.insertAtEnd(idTable);
       }
       optionalTable = std::move(aggregateTable);
     }
     auto table = optionalTable.has_value() ? std::move(optionalTable).value()
-                                           : table_.at(0).clone();
+                                           : tables_.at(0).clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),
                   table.end());
@@ -113,15 +114,15 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    auto numRowsView = table_ | std::views::transform(&IdTable::numRows);
+    auto numRowsView = tables_ | std::views::transform(&IdTable::numRows);
     auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
-    auto numCols = table_.empty() ? 0 : table_.at(0).numColumns();
+    auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
     str << "Values for testing with " << numCols << " columns and "
         << totalNumRows << " rows. ";
     if (totalNumRows > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {
-      for (const IdTable& idTable : table_) {
+      for (const IdTable& idTable : tables_) {
         for (size_t i = 0; i < idTable.numColumns(); ++i) {
           for (Id entry : idTable.getColumn(i)) {
             str << entry << ' ';
@@ -139,7 +140,7 @@ class ValuesForTesting : public Operation {
   }
 
   size_t getResultWidth() const override {
-    return table_.empty() ? 0 : table_.at(0).numColumns();
+    return tables_.empty() ? 0 : tables_.at(0).numColumns();
   }
 
   vector<ColumnIndex> resultSortedOn() const override {
@@ -162,7 +163,10 @@ class ValuesForTesting : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  bool knownEmptyResult() override { return table_.empty(); }
+  bool knownEmptyResult() override {
+    return std::ranges::all_of(
+        tables_, [](const IdTable& table) { return table.empty(); });
+  }
 
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
@@ -172,7 +176,7 @@ class ValuesForTesting : public Operation {
         continue;
       }
       bool containsUndef =
-          std::ranges::any_of(table_, [&i](const IdTable& table) {
+          std::ranges::any_of(tables_, [&i](const IdTable& table) {
             return std::ranges::any_of(table.getColumn(i),
                                        [](Id id) { return id.isUndefined(); });
           });
