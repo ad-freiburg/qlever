@@ -70,7 +70,8 @@ struct PatternStatistics {
 /// these predicates.
 class PatternCreator {
  public:
-  using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
+  using PSOSorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
   using OSPSorter4Cols =
       ad_utility::CompressedExternalIdTableSorter<SortByOSP,
                                                   NumColumnsIndexBuilding + 1>;
