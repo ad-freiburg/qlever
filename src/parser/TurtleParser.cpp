@@ -666,7 +666,9 @@ bool TurtleParser<T>::iriref() {
   }
   auto endPos = view.find_first_of("<>\"\n", 1);
   if (endPos == string::npos || view[endPos] != '>') {
-    return false;
+    raise(
+        "Unterminated IRI reference (found '<' but no '>' before "
+        "one of the following characters: <, \", newline)");
   }
   // In relaxed mode, that is all we check. Otherwise, we check if the IRI is
   // standard-conform. If not, we output a warning and try to parse it in a more
