@@ -362,15 +362,16 @@ TEST(Result, verifyCacheDuringConsumptionRespectsPassedParameters) {
 
 // _____________________________________________________________________________
 TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
-  auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
-  LimitOffsetClause limitOffset{2, 1};
+  auto idTable =
+      makeIdTableFromVector({{0, 9}, {1, 8}, {2, 7}, {3, 6}, {4, 5}});
+  LimitOffsetClause limitOffset{2, 2};
   {
     uint32_t callCounter = 0;
     Result result{idTable.clone(), {}, LocalVocab{}};
     result.applyLimitOffset(
         limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
           // NOTE: duration can't be tested here, processors are too fast
-          auto comparisonTable = makeIdTableFromVector({{1, 6}, {2, 5}});
+          auto comparisonTable = makeIdTableFromVector({{2, 7}, {3, 6}});
           EXPECT_EQ(innerTable, comparisonTable);
           EXPECT_EQ(innerTable.numColumns(), 2);
           EXPECT_EQ(innerTable.numRows(), 2);
@@ -389,9 +390,11 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
           for (const auto& row : innerTable) {
             ASSERT_EQ(row.size(), 2);
             EXPECT_NE(row[0].getVocabIndex().get(), 0);
-            EXPECT_NE(row[0].getVocabIndex().get(), 3);
-            EXPECT_NE(row[1].getVocabIndex().get(), 7);
-            EXPECT_NE(row[1].getVocabIndex().get(), 4);
+            EXPECT_NE(row[0].getVocabIndex().get(), 1);
+            EXPECT_NE(row[0].getVocabIndex().get(), 4);
+            EXPECT_NE(row[1].getVocabIndex().get(), 9);
+            EXPECT_NE(row[1].getVocabIndex().get(), 8);
+            EXPECT_NE(row[1].getVocabIndex().get(), 5);
           }
           totalRows += innerTable.size();
           colSizes.push_back(innerTable.numColumns());
