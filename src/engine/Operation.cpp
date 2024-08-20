@@ -72,7 +72,7 @@ void Operation::recursivelySetTimeConstraint(
 // _____________________________________________________________________________
 void Operation::updateRuntimeStats(bool applyToFilter, uint64_t numRows,
                                    uint64_t numCols,
-                                   std::chrono::milliseconds duration) {
+                                   std::chrono::milliseconds duration) const {
   auto& rti = applyToFilter || !externalFilterApplied_
                   ? runtimeInfo()
                   : *runtimeInfo().children_.at(0);

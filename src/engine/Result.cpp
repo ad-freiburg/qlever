@@ -72,7 +72,7 @@ Result::Result(cppcoro::generator<IdTable> idTables,
           [](auto idTables, auto sortedBy) -> cppcoro::generator<IdTable> {
             std::optional<IdTable::row_type> previousId = std::nullopt;
             for (IdTable& idTable : idTables) {
-              if (idTable.size() > 0) {
+              if (!idTable.empty()) {
                 if (previousId.has_value()) {
                   AD_EXPENSIVE_CHECK(!compareRowsByJoinColumns(sortedBy)(
                       idTable.at(0), previousId.value()));
@@ -125,10 +125,9 @@ void Result::applyLimitOffset(
     resizeIdTable(std::get<IdTable>(data_), limitOffset);
     limitTimeCallback(limitTimer.msecs(), idTable());
   } else {
-    auto generator =
-        [](cppcoro::generator<IdTable> original, LimitOffsetClause limitOffset,
-           std::function<void(std::chrono::microseconds, const IdTable&)>
-               limitTimeCallback) -> cppcoro::generator<IdTable> {
+    auto generator = [](cppcoro::generator<IdTable> original,
+                        LimitOffsetClause limitOffset,
+                        auto limitTimeCallback) -> cppcoro::generator<IdTable> {
       if (limitOffset._limit.value_or(1) == 0) {
         co_return;
       }
@@ -213,12 +212,8 @@ void Result::runOnNewChunkComputed(
     std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
     std::function<void(bool)> onGeneratorFinished) {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
-  auto generator =
-      [](cppcoro::generator<IdTable> original,
-         std::function<void(const IdTable&, std::chrono::microseconds)>
-             onNewChunk,
-         std::function<void(bool)> onGeneratorFinished)
-      -> cppcoro::generator<IdTable> {
+  auto generator = [](cppcoro::generator<IdTable> original, auto onNewChunk,
+                      auto onGeneratorFinished) -> cppcoro::generator<IdTable> {
     // Call this within destructor to make sure it is also called when an
     // operation stops iterating before reaching the end.
     absl::Cleanup cleanup{
@@ -236,7 +231,7 @@ void Result::runOnNewChunkComputed(
       throw;
     }
   }(std::move(idTables()), std::move(onNewChunk),
-      std::move(onGeneratorFinished));
+                                                std::move(onGeneratorFinished));
   data_.emplace<GenContainer>(std::move(generator));
 }
 

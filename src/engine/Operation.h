@@ -266,7 +266,8 @@ class Operation {
   // arguments, considering the possibility that the initial runtime information
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
   void updateRuntimeStats(bool applyToFilter, uint64_t numRows,
-                          uint64_t numCols, std::chrono::milliseconds duration);
+                          uint64_t numCols,
+                          std::chrono::milliseconds duration) const;
 
   // Perform the expensive computation modeled by the subclass of this
   // `Operation`. The value provided by `computationMode` decides if lazy
