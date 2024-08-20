@@ -33,29 +33,23 @@ namespace ad_utility::vocabulary_merger {
 VocabularyMetaData mergeVocabulary(const std::string& basename, size_t numFiles,
                                    WordComparator auto comparator,
                                    WordCallback auto& internalWordCallback,
-                                   WordCallback auto& externalWordCallback,
                                    ad_utility::MemorySize memoryToUse) {
   VocabularyMerger merger;
   return merger.mergeVocabulary(basename, numFiles, std::move(comparator),
-                                internalWordCallback, externalWordCallback,
-                                memoryToUse);
+                                internalWordCallback, memoryToUse);
 }
 
 // _________________________________________________________________
-auto VocabularyMerger::mergeVocabulary(
-    const std::string& basename, size_t numFiles,
-    WordComparator auto comparator, WordCallback auto& internalVocabularyAction,
-    WordCallback auto& externalVocabularyAction,
-    ad_utility::MemorySize memoryToUse) -> VocabularyMetaData {
+auto VocabularyMerger::mergeVocabulary(const std::string& basename,
+                                       size_t numFiles,
+                                       WordComparator auto comparator,
+                                       WordCallback auto& wordCallback,
+                                       ad_utility::MemorySize memoryToUse)
+    -> VocabularyMetaData {
   // Return true iff p1 >= p2 according to the lexicographic order of the IRI
-  // or literal. All internal IRIs or literals come before all external ones.
-  // TODO<joka921> Change this as soon as we have Interleaved Ids via the
-  // MilestoneIdManager
+  // or literal.
   auto lessThan = [&comparator](const TripleComponentWithIndex& t1,
                                 const TripleComponentWithIndex& t2) {
-    if (t1.isExternal() != t2.isExternal()) {
-      return t2.isExternal();
-    }
     return comparator(t1.iriOrLiteral_, t2.iriOrLiteral_);
   };
   auto lessThanForQueue = [&lessThan](const QueueWord& p1,
@@ -107,11 +101,9 @@ auto VocabularyMerger::mergeVocabulary(
     if (sortedBuffer.size() >= bufferSize_) {
       // Wait for the (asynchronous) writing of the last batch of words, and
       // trigger the (again asynchronous) writing of the next batch.
-      auto writeTask = [this, buffer = std::move(sortedBuffer),
-                        &internalVocabularyAction, &externalVocabularyAction,
+      auto writeTask = [this, buffer = std::move(sortedBuffer), &wordCallback,
                         &lessThan, &progressBar]() {
-        this->writeQueueWordsToIdVec(buffer, internalVocabularyAction,
-                                     externalVocabularyAction, lessThan,
+        this->writeQueueWordsToIdVec(buffer, wordCallback, lessThan,
                                      progressBar);
       };
       sortedBuffer.clear();
@@ -136,8 +128,7 @@ auto VocabularyMerger::mergeVocabulary(
 
   // Handle remaining words in the buffer
   if (!sortedBuffer.empty()) {
-    writeQueueWordsToIdVec(sortedBuffer, internalVocabularyAction,
-                           externalVocabularyAction, lessThan, progressBar);
+    writeQueueWordsToIdVec(sortedBuffer, wordCallback, lessThan, progressBar);
   }
   LOG(INFO) << progressBar.getFinalProgressString() << std::flush;
 
@@ -149,9 +140,7 @@ auto VocabularyMerger::mergeVocabulary(
 
 // ________________________________________________________________________________
 void VocabularyMerger::writeQueueWordsToIdVec(
-    const std::vector<QueueWord>& buffer,
-    WordCallback auto& internalVocabularyAction,
-    WordCallback auto& externalVocabularyAction,
+    const std::vector<QueueWord>& buffer, WordCallback auto& wordCallback,
     std::predicate<TripleComponentWithIndex,
                    TripleComponentWithIndex> auto const& lessThan,
     ad_utility::ProgressBar& progressBar) {
@@ -188,11 +177,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
         ++metaData_.numBlankNodesTotal_;
       } else {
-        if (!nextWord.isExternal()) {
-          internalVocabularyAction(nextWord.iriOrLiteral());
-        } else {
-          externalVocabularyAction(nextWord.iriOrLiteral());
-        }
+        wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
 
         metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
                                                      nextWord.index_);
@@ -203,6 +188,11 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
       }
+    } else {
+      // If a word appears with different values for `isExternal`, then we
+      // externalize it.
+      bool& external = lastTripleComponent_.value().isExternal();
+      external = external || top.isExternal();
     }
     const auto& word = lastTripleComponent_.value();
     Id targetId =

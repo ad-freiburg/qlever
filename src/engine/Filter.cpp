@@ -43,7 +43,7 @@ string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-Result Filter::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Filter::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult();
   LOG(DEBUG) << "Filter result computation..." << endl;
@@ -67,7 +67,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab(), cancellationHandle_);
+      inputResultTable.localVocab(), cancellationHandle_, deadline_);
 
   // TODO<joka921> This should be a mandatory argument to the EvaluationContext
   // constructor.

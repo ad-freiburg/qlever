@@ -36,10 +36,10 @@ class Iri {
   const std::string& toStringRepresentation() const;
   std::string& toStringRepresentation();
 
-  // Create a new iri given an iri with brackets
+  // Create a new `Iri` given an iri string with brackets.
   static Iri fromIriref(std::string_view stringWithBrackets);
 
-  // create a new iri given an iri without brackets
+  // Create a new `Iri` given an iri string without brackets.
   static Iri fromIrirefWithoutBrackets(std::string_view stringWithoutBrackets);
 
   // Create a new iri given a prefix iri and its suffix

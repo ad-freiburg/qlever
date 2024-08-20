@@ -1,4 +1,4 @@
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include <cstdlib>
 #include <ctime>
@@ -43,10 +43,11 @@ class MergeVocabularyTest : public ::testing::Test {
   std::string _path1;
   // the base directory for our test
   std::string _basePath;
-  // path to expected vocabulary text file
-  std::string _pathVocabExp;
-  // path to expected external vocabulary text file
-  std::string _pathExternalVocabExp;
+
+  // The bool means "is in the external vocabulary and not in the internal
+  // vocabulary".
+  using ExpectedVocabulary = std::vector<std::pair<std::string, bool>>;
+  ExpectedVocabulary expectedMergedVocabulary_;
 
   // two std::vectors where we store the expected mapping
   // form partial to global ids;
@@ -74,27 +75,25 @@ class MergeVocabularyTest : public ::testing::Test {
     // make paths absolute under created tmp directory
     _path0 = _basePath + _path0;
     _path1 = _basePath + _path1;
-    _pathVocabExp = _basePath + std::string(".vocabExp");
-    _pathExternalVocabExp = _basePath + std::string("externalTextFileExp");
 
     // these will be the contents of partial vocabularies, second element of
     // pair is the correct Id which is expected from mergeVocabulary
     std::vector<TripleComponentWithIndex> words0{
-        {"\"ape\"", false, 0},    {"\"gorilla\"", false, 2},
-        {"\"monkey\"", false, 3}, {"_:blank", false, 0},
-        {"_:blunk", false, 1},    {"\"bla\"", true, 5}};
+        {"\"ape\"", false, 0},     {"\"bla\"", true, 2},
+        {"\"gorilla\"", false, 3}, {"\"monkey\"", false, 4},
+        {"_:blank", false, 0},     {"_:blunk", false, 1}};
     std::vector<TripleComponentWithIndex> words1{
         {"\"bear\"", false, 1},
-        {"\"monkey\"", false, 3},
-        {"\"zebra\"", false, 4},
+        {"\"monkey\"", true, 4},
+        {"\"zebra\"", false, 5},
         {"_:blunk", false, 1},
     };
 
-    // write expected vocabulary files
-    std::ofstream expVoc(_pathVocabExp);
-    std::ofstream expExtVoc(_pathExternalVocabExp);
-    expVoc << "\"ape\"\n\"bear\"\n\"gorilla\"\n\"monkey\"\n\"zebra\"\n";
-    expExtVoc << "\"bla\"\n";
+    // Note that the word "monkey" appears in both vocabularies, buth with
+    // different settings for `isExternal`. In this case it is externalized.
+    expectedMergedVocabulary_ = ExpectedVocabulary{
+        {"\"ape\"", false},     {"\"bear\"", false},  {"\"bla\"", true},
+        {"\"gorilla\"", false}, {"\"monkey\"", true}, {"\"zebra\"", false}};
 
     // open files for partial Vocabularies
     ad_utility::serialization::FileWriteSerializer partial0(_path0);
@@ -132,20 +131,6 @@ class MergeVocabularyTest : public ::testing::Test {
     // harder to debug test failures
   }
 
-  // returns true if and only if the files with names n1 and n2 exist, can be
-  // opened for reading and are bytewise equal.
-  bool areBinaryFilesEqual(const std::string& n1, const std::string& n2) {
-    auto p1 = readAllBytes(n1);
-    auto p2 = readAllBytes(n2);
-    auto s1 = p1.first;
-    auto s2 = p2.first;
-    auto& f1 = p1.second;
-    auto& f2 = p2.second;
-
-    return (s1 && s2 && f1.size() == f2.size() &&
-            std::equal(f1.begin(), f1.end(), f2.begin()));
-  }
-
   // read all bytes from a file (e.g. to check equality of small test files)
   static std::pair<bool, std::vector<char>> readAllBytes(
       const std::string& filename) {
@@ -169,21 +154,18 @@ class MergeVocabularyTest : public ::testing::Test {
 TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // mergeVocabulary only gets name of directory and number of files.
   VocabularyMetaData res;
+  std::vector<std::pair<std::string, bool>> mergeResult;
   {
-    auto file = ad_utility::makeOfstream(_basePath + INTERNAL_VOCAB_SUFFIX);
-    auto internalVocabularyAction = [&file](const auto& word) {
-      file << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    };
-    auto fileExternal =
-        ad_utility::makeOfstream(_basePath + EXTERNAL_VOCAB_SUFFIX);
-    auto externalVocabularyAction = [&fileExternal](const auto& word) {
-      fileExternal << RdfEscaping::escapeNewlinesAndBackslashes(word) << '\n';
-    };
-
+    auto internalVocabularyAction =
+        [&mergeResult](const auto& word, [[maybe_unused]] bool isExternal) {
+          mergeResult.emplace_back(word, isExternal);
+        };
     res = mergeVocabulary(_basePath, 2, TripleComponentComparator(),
-                          internalVocabularyAction, externalVocabularyAction,
-                          1_GB);
+                          internalVocabularyAction, 1_GB);
   }
+
+  EXPECT_THAT(mergeResult,
+              ::testing::ElementsAreArray(expectedMergedVocabulary_));
 
   // No language tags in text file
   ASSERT_EQ(res.langTaggedPredicates_.begin(), Id::makeUndefined());
@@ -191,12 +173,7 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
   // Also no internal entities there.
   ASSERT_EQ(res.internalEntities_.begin(), Id::makeUndefined());
   ASSERT_EQ(res.internalEntities_.end(), Id::makeUndefined());
-  // check that (external) vocabulary has the right form.
-  ASSERT_TRUE(
-      areBinaryFilesEqual(_pathVocabExp, _basePath + INTERNAL_VOCAB_SUFFIX));
-  ASSERT_TRUE(areBinaryFilesEqual(_pathExternalVocabExp,
-                                  _basePath + EXTERNAL_VOCAB_SUFFIX));
-
+  // Check that vocabulary has the right form.
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));
   IdPairMMapVecView mapping1(_basePath + PARTIAL_MMAP_IDS + std::to_string(1));

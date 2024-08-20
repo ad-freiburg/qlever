@@ -185,6 +185,7 @@ TEST(DayTimeDuration, DurationOverflowException) {
   }
 }
 
+namespace {
 //______________________________________________________________________________
 // Given that we have a slightly different approach for retrieving the
 // individual units in DayTimeDuration (see getValues()) from the total
@@ -216,6 +217,7 @@ DayTimeDuration::DurationValue toAndFromMilliseconds(int days, int hours,
   seconds = remainingMilliseconds / 1000.0;
   return {days, hours, minutes, seconds};
 }
+}  // anonymous namespace
 
 //______________________________________________________________________________
 TEST(DayTimeDuration, checkInternalConversionForLargeValues) {
@@ -281,6 +283,8 @@ TEST(DayTimeDuration, testDayTimeDurationOverflow) {
       DayTimeDuration::parseXsdDayTimeDuration("P1000000DT11346848H121M61.22S"),
       DurationOverflowException);
 }
+
+namespace {
 
 //______________________________________________________________________________
 ad_utility::SlowRandomIntGenerator randomSign{0, 1};
@@ -353,6 +357,7 @@ void testSorting(std::vector<DayTimeDuration> durations) {
   std::sort(durationsCopy.begin(), durationsCopy.end(), compareDurationLess);
   ASSERT_EQ(durations, durationsCopy);
 }
+}  // anonymous namespace
 
 //______________________________________________________________________________
 TEST(DayTimeDuration, testOrderOnBytes) {

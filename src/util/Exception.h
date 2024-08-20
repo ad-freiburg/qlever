@@ -172,10 +172,11 @@ inline void adCorrectnessCheckImpl(bool condition, std::string_view message,
 namespace ad_utility {
 static constexpr bool areExpensiveChecksEnabled = true;
 }
-#define AD_EXPENSIVE_CHECK(condition) AD_CORRECTNESS_CHECK(condition)
+#define AD_EXPENSIVE_CHECK(condition, ...) \
+  AD_CORRECTNESS_CHECK(condition, __VA_ARGS__)
 #else
 namespace ad_utility {
 static constexpr bool areExpensiveChecksEnabled = false;
 }
-#define AD_EXPENSIVE_CHECK(condition) void(0)
+#define AD_EXPENSIVE_CHECK(condition, ...) void(0)
 #endif
