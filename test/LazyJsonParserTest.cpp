@@ -16,17 +16,15 @@ TEST(parseTest, parse) {
   // CHECK 1: Expected results for empty or complete results.
   EXPECT_EQ(LazyJsonParser::parse("", arrayPath), "");
   EXPECT_EQ(LazyJsonParser::parse(
-                "{\"results\": {\"bindings\": [{\"x\": {\"\"value\"\": 1}}]}}",
+                R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})",
                 arrayPath),
-            "{\"results\": {\"bindings\": [{\"x\": {\"\"value\"\": 1}}]}}");
-
-  // CHECK 2: Empty ArrayPath
-  EXPECT_EQ(LazyJsonParser::parse("[1,2,3]", {}), "[1,2,3]");
+            R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})");
 
   // Check if the parser yields the expected results when parsing each char
   // individually.
-  auto expectYields = [&arrayPath](const std::string& s,
-                                   const std::vector<std::string>& exp) {
+  auto expectYields = [](const std::string& s,
+                         const std::vector<std::string>& exp,
+                         const std::vector<std::string>& arrayPath) {
     auto yieldChars =
         [](const std::string& s) -> cppcoro::generator<std::string> {
       for (auto& c : s) {
@@ -46,9 +44,13 @@ TEST(parseTest, parse) {
     EXPECT_EQ(expIdx, exp.size());
   };
 
+  // CHECK 2: Empty ArrayPath
+  expectYields("[1,2,3]", {"[1]", "[2]", "[3]"}, {});
+
   // CHECK 3: Normal result split at every char.
   const std::string result3a =
-      R"({"head": {"vars": ["x", "y"]}, "results": {"bindings": [)"
+      R"({"head": {"vars": ["x", "y"], "nested arrays": [[1,2,3], [4,5,6]]},)"
+      R"("results": {"bindings": [)"
       R"({"x": {"value": 1, "datatype": )"
       R"("http://www.w3.org/2001/XMLSchema#integer"}, )"
       R"("y": {"value": 2, "datatype": )"
@@ -62,7 +64,8 @@ TEST(parseTest, parse) {
 
   expectYields(absl::StrCat(result3a, result3b),
                {absl::StrCat(result3a.substr(0, result3a.size() - 1), "]}}"),
-                absl::StrCat(R"({"results": {"bindings": [)", result3b)});
+                absl::StrCat(R"({"results": {"bindings": [)", result3b)},
+               arrayPath);
 
   // CHECK 4: Result with changed order of results-/head object.
   // Also added another key-value pair in the results path and nested arrays.
@@ -78,7 +81,8 @@ TEST(parseTest, parse) {
 
   expectYields(result4a + result4b,
                {absl::StrCat(result4a.substr(0, result4a.size() - 1), "]}}"),
-                absl::StrCat(R"({"results": {"bindings": [)", result4b)});
+                absl::StrCat(R"({"results": {"bindings": [)", result4b)},
+               arrayPath);
 
   // CHECK 4: Throw when exceeding input size limit.
   // parseLiteral
@@ -86,13 +90,18 @@ TEST(parseTest, parse) {
       absl::StrCat(R"({"key":")", std::string(1'000'000, '0'), R"(")"), {}));
   // BeforeArrayPath
   EXPECT_ANY_THROW(LazyJsonParser::parse(
-      absl::StrCat(R"({"key":)", std::string(1'000'000, 0), R"(})"), {}));
+      absl::StrCat(R"({"key":)", std::string(1'000'000, 0), R"(})"),
+      arrayPath));
   // InArrayPath
   EXPECT_ANY_THROW(LazyJsonParser::parse(
-      absl::StrCat(R"({"head"[)", std::string(1'000'000, 0), R"()"), {"head"}));
+      absl::StrCat(R"({"head":[)", std::string(1'000'000, 0)), {"head"}));
   // AfterArrayPath
   EXPECT_ANY_THROW(
-      LazyJsonParser::parse(absl::StrCat(R"({"head":[],"key":")",
-                                         std::string(1'000'000, '0'), R"("})"),
+      LazyJsonParser::parse(absl::StrCat(R"({"head":[],"key": )",
+                                         std::string(1'000'000, '0'), R"(})"),
                             {"head"}));
+
+  // CHECK 5: Cornercases
+  EXPECT_NO_THROW(LazyJsonParser::parse("[1,2,3]", arrayPath));
+  EXPECT_NO_THROW(LazyJsonParser::parse("{}", arrayPath));
 }

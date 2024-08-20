@@ -67,10 +67,14 @@ class LazyJsonParser {
   struct InArrayPath {
     // Track brackets/braces to find the end of the array.
     int openBracketsAndBraces_{0};
+    // Start index of the ArrayPath to measure the size of the first element.
+    size_t arrayStartIdx_{0};
   };
   struct AfterArrayPath {
     // Remaining braces until the end of the input-object.
     size_t remainingBraces_;
+    // End index of the ArrayPath to measure the size of the "suffix".
+    size_t arrayEndIdx_{0};
   };
   std::variant<BeforeArrayPath, InArrayPath, AfterArrayPath> state_{
       BeforeArrayPath()};
