@@ -700,7 +700,7 @@ TEST(TurtleParserTest, iriref) {
   auto runTestsForParser = [](auto parser) {
     std::string iriref_1 = "<fine>";
     std::string iriref_2 = "<okay ish>";
-    std::string iriref_3 = "<not\x19okay>";
+    std::string iriref_3 = "<not\x19okay_for_RE2>";
     std::string iriref_4 = "<throws\"exception>";
     std::string iriref_5 = "no iriref at all";
     // The first IRI ref is fine for both parsers.
@@ -714,15 +714,21 @@ TEST(TurtleParserTest, iriref) {
     ASSERT_TRUE(parser.iriref());
     ASSERT_EQ(parser.lastParseResult_, iri(iriref_2));
     std::string warning = testing::internal::GetCapturedStdout();
-    if constexpr (std::is_same_v<decltype(parser), Re2Parser>) {
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      EXPECT_EQ(warning, "");
+    } else {
       EXPECT_THAT(warning, ::testing::HasSubstr("not standard-conform"));
       EXPECT_THAT(warning, ::testing::HasSubstr(iriref_2));
-    } else {
-      EXPECT_EQ(warning, "");
     }
-    // The third IRI ref is not accepted by either parser.
+    // The third IRI ref is accepted by the CtreParser, but not by the
+    // Re2Parser.
     parser.setInputStream(iriref_3);
-    ASSERT_FALSE(parser.iriref());
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      ASSERT_TRUE(parser.iriref());
+      ASSERT_EQ(parser.lastParseResult_, iri(iriref_3));
+    } else {
+      ASSERT_FALSE(parser.iriref());
+    }
     // The fourth IRI ref throws an exception when parsed (because " is
     // encountered before the closing >).
     parser.setInputStream(iriref_4);
