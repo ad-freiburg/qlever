@@ -771,6 +771,17 @@ TEST(QueryPlanner, TransitivePathBindRight) {
       ad_utility::testing::getQec("<x> <p> <o>. <x2> <p> <o2>"));
 }
 
+TEST(QueryPlanner, SpatialJoin) {
+  auto scan = h::IndexScanFromStrings;
+  h::expect(
+      "SELECT ?x ?y WHERE {"
+      "?x <p> ?y."
+      "?a <p> ?b."
+      "?y <max-distance-in-meters:1> ?b }",
+      h::SpatialJoin(
+          1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, BindAtBeginningOfQuery) {
   h::expect(
