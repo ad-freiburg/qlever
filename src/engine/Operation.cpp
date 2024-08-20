@@ -70,20 +70,22 @@ void Operation::recursivelySetTimeConstraint(
 }
 
 // _____________________________________________________________________________
-void Operation::updateRuntimeStats(bool applyToFilter, uint64_t numRows,
+void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
                                    uint64_t numCols,
-                                   std::chrono::milliseconds duration) const {
-  auto& rti = applyToFilter || !externalFilterApplied_
-                  ? runtimeInfo()
-                  : *runtimeInfo().children_.at(0);
+                                   std::chrono::microseconds duration) const {
+  bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
+  auto& rti =
+      isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
   rti.totalTime_ += duration;
   rti.originalTotalTime_ = rti.totalTime_;
   rti.originalOperationTime_ = rti.getOperationTime();
-  if (!applyToFilter || externalFilterApplied_) {
+  // Don't update the number of rows/cols twice if the rti for the limit and the
+  // rti for the actual operation are the same.
+  if (!applyToLimit || externalLimitApplied_) {
     rti.numRows_ += numRows;
     rti.numCols_ = numCols;
   }
-  if (!applyToFilter && externalFilterApplied_) {
+  if (isRtiWrappedInLimit) {
     runtimeInfo().totalTime_ += duration;
     runtimeInfo().originalTotalTime_ = runtimeInfo().totalTime_;
     runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
@@ -124,18 +126,14 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   } else {
     runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
     result.runOnNewChunkComputed(
-        [this, overlap = 0us, timeSizeUpdate = 0us](
+        [this, timeSizeUpdate = 0us](
             const IdTable& idTable,
             std::chrono::microseconds duration) mutable {
-          overlap += duration;
-          timeSizeUpdate += duration;
-          auto msPrecision =
-              std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
           updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
-                             msPrecision);
-          overlap -= msPrecision;
+                             duration);
           LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
                      << " x " << idTable.numColumns() << std::endl;
+          timeSizeUpdate += duration;
           if (timeSizeUpdate > 50ms) {
             timeSizeUpdate = 0us;
             signalQueryUpdate();
@@ -158,18 +156,13 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   // limits and offsets.
   if (!supportsLimit()) {
     runtimeInfo().addLimitOffsetRow(_limit, true);
-    AD_CONTRACT_CHECK(!externalFilterApplied_);
-    externalFilterApplied_ = _limit._limit.has_value() || _limit._offset != 0;
-    result.applyLimitOffset(
-        _limit, [this, overlap = 0us](std::chrono::microseconds limitTime,
-                                      const IdTable& idTable) mutable {
-          overlap += limitTime;
-          auto msPrecision =
-              std::chrono::duration_cast<std::chrono::milliseconds>(overlap);
-          updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
-                             msPrecision);
-          overlap -= msPrecision;
-        });
+    AD_CONTRACT_CHECK(!externalLimitApplied_);
+    externalLimitApplied_ = _limit._limit.has_value() || _limit._offset != 0;
+    result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
+                                           const IdTable& idTable) {
+      updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                         limitTime);
+    });
   } else {
     result.assertThatLimitWasRespected(_limit);
   }
@@ -378,7 +371,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0ms);
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
   signalQueryUpdate();
 }

@@ -247,7 +247,7 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   auto& rti = valuesForTesting.runtimeInfo();
 
   // Test operation with built-in filter
-  valuesForTesting.externalFilterApplied_ = false;
+  valuesForTesting.externalLimitApplied_ = false;
   valuesForTesting.updateRuntimeStats(false, 11, 13, 17ms);
 
   EXPECT_EQ(rti.numCols_, 13);
@@ -257,7 +257,7 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   EXPECT_EQ(rti.originalOperationTime_, 17ms);
 
   // Test built-in filter
-  valuesForTesting.externalFilterApplied_ = false;
+  valuesForTesting.externalLimitApplied_ = false;
   valuesForTesting.updateRuntimeStats(true, 5, 3, 7ms);
 
   EXPECT_EQ(rti.numCols_, 13);
@@ -274,7 +274,7 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   auto& childRti = *rti.children_.at(0);
 
   // Test operation with external filter
-  valuesForTesting.externalFilterApplied_ = true;
+  valuesForTesting.externalLimitApplied_ = true;
   valuesForTesting.updateRuntimeStats(false, 31, 37, 41ms);
 
   EXPECT_EQ(rti.numCols_, 0);
@@ -290,7 +290,7 @@ TEST(Operation, updateRuntimeStatsWorksCorrectly) {
   EXPECT_EQ(childRti.originalOperationTime_, 41ms);
 
   // Test external filter
-  valuesForTesting.externalFilterApplied_ = true;
+  valuesForTesting.externalLimitApplied_ = true;
   valuesForTesting.updateRuntimeStats(true, 19, 23, 29ms);
 
   EXPECT_EQ(rti.numCols_, 23);
@@ -379,54 +379,6 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   EXPECT_EQ(operation.runtimeInfo().status_,
             RuntimeInformation::Status::failed);
   EXPECT_TRUE(signaledUpdate);
-}
-
-// _____________________________________________________________________________
-TEST(Operation, testSubMillisecondsIncrementsAreStillTracked) {
-#ifdef _QLEVER_NO_TIMING_TESTS
-  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
-#endif
-  auto idTable = makeIdTableFromVector({{}});
-  CustomGeneratorOperation operation{
-      getQec(), [](const IdTable& idTable) -> cppcoro::generator<IdTable> {
-        std::this_thread::sleep_for(300us);
-        co_yield idTable.clone();
-        std::this_thread::sleep_for(300us);
-        co_yield idTable.clone();
-        std::this_thread::sleep_for(500us);
-        co_yield idTable.clone();
-      }(idTable)};
-
-  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
-  auto result =
-      operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
-
-  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
-
-  auto& idTables = result.idTables();
-
-  auto iterator = idTables.begin();
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(operation.runtimeInfo().totalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 0ms);
-  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 0ms);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(operation.runtimeInfo().totalTime_, 1ms);
-  EXPECT_EQ(operation.runtimeInfo().originalTotalTime_, 1ms);
-  EXPECT_EQ(operation.runtimeInfo().originalOperationTime_, 1ms);
-
-  ++iterator;
-  ASSERT_EQ(iterator, idTables.end());
 }
 
 // _____________________________________________________________________________

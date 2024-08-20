@@ -130,37 +130,37 @@ TEST(Result,
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       (Result{idTable.clone(), {1}, LocalVocab{}}),
-      ::testing::HasSubstr("compareRowsByJoinColumns"), ad_utility::Exception);
+      ::testing::HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {1}, LocalVocab{}};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         consumeGenerator(result.idTables()),
-        ::testing::HasSubstr("compareRowsByJoinColumns"),
+        ::testing::HasSubstr("compareRowsBySortColumns"),
         ad_utility::Exception);
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       (Result{idTable.clone(), {1, 0}, LocalVocab{}}),
-      ::testing::HasSubstr("compareRowsByJoinColumns"), ad_utility::Exception);
+      ::testing::HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {1, 0}, LocalVocab{}};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         consumeGenerator(result.idTables()),
-        ::testing::HasSubstr("compareRowsByJoinColumns"),
+        ::testing::HasSubstr("compareRowsBySortColumns"),
         ad_utility::Exception);
   }
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       (Result{idTable.clone(), {2, 1}, LocalVocab{}}),
-      ::testing::HasSubstr("compareRowsByJoinColumns"), ad_utility::Exception);
+      ::testing::HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {2, 1}, LocalVocab{}};
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
         consumeGenerator(result.idTables()),
-        ::testing::HasSubstr("compareRowsByJoinColumns"),
+        ::testing::HasSubstr("compareRowsBySortColumns"),
         ad_utility::Exception);
   }
 }

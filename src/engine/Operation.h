@@ -265,9 +265,14 @@ class Operation {
   // Update the runtime information of this operation according to the given
   // arguments, considering the possibility that the initial runtime information
   // was replaced by calling `RuntimeInformation::addLimitOffsetRow`.
-  void updateRuntimeStats(bool applyToFilter, uint64_t numRows,
-                          uint64_t numCols,
-                          std::chrono::milliseconds duration) const;
+  // `applyToLimit` indicates if the stats should be applied to the runtime
+  // information of the limit, or the runtime information of the actual
+  // operation. If `supportsLimit() == true`, then the operation does already
+  // track the limit stats correctly and there's no need to keep track of both.
+  // Otherwise `externalLimitApplied_` decides how stat tracking should be
+  // handled.
+  void updateRuntimeStats(bool applyToLimit, uint64_t numRows, uint64_t numCols,
+                          std::chrono::microseconds duration) const;
 
   // Perform the expensive computation modeled by the subclass of this
   // `Operation`. The value provided by `computationMode` decides if lazy
@@ -276,8 +281,8 @@ class Operation {
   ProtoResult runComputation(const ad_utility::Timer& timer,
                              ComputationMode computationMode);
 
-  // Call `runComputationAndPrepareForCache` and transform it into a value that
-  // could be inserted into the cache.
+  // Call `runComputation` and transform it into a value that could be inserted
+  // into the cache.
   CacheValue runComputationAndPrepareForCache(const ad_utility::Timer& timer,
                                               ComputationMode computationMode,
                                               const std::string& cacheKey,
@@ -382,7 +387,11 @@ class Operation {
   // Store the list of columns by which the result is sorted.
   mutable std::optional<vector<ColumnIndex>> _resultSortedColumns =
       std::nullopt;
-  bool externalFilterApplied_ = false;
+
+  // True if this operation does not support limits/offsets natively and a
+  // limit/offset is applied post computation.
+  bool externalLimitApplied_ = false;
+
   FRIEND_TEST(Operation, updateRuntimeStatsWorksCorrectly);
   FRIEND_TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations);
   FRIEND_TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException);

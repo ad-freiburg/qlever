@@ -37,7 +37,7 @@ auto Result::getMergedLocalVocab(const Result& result1, const Result& result2)
 LocalVocab Result::getCopyOfLocalVocab() const { return localVocab().clone(); }
 
 // _____________________________________________________________________________
-auto compareRowsByJoinColumns(const std::vector<ColumnIndex>& sortedBy) {
+auto compareRowsBySortColumns(const std::vector<ColumnIndex>& sortedBy) {
   return [&sortedBy](const auto& row1, const auto& row2) {
     for (ColumnIndex col : sortedBy) {
       if (row1[col] != row2[col]) {
@@ -74,7 +74,7 @@ Result::Result(cppcoro::generator<IdTable> idTables,
             for (IdTable& idTable : idTables) {
               if (!idTable.empty()) {
                 if (previousId.has_value()) {
-                  AD_EXPENSIVE_CHECK(!compareRowsByJoinColumns(sortedBy)(
+                  AD_EXPENSIVE_CHECK(!compareRowsBySortColumns(sortedBy)(
                       idTable.at(0), previousId.value()));
                 }
                 previousId = idTable.at(idTable.size() - 1);
@@ -244,7 +244,7 @@ void Result::assertSortOrderIsRespected(
       }));
 
   AD_EXPENSIVE_CHECK(
-      std::ranges::is_sorted(idTable, compareRowsByJoinColumns(sortedBy)));
+      std::ranges::is_sorted(idTable, compareRowsBySortColumns(sortedBy)));
 }
 
 // _____________________________________________________________________________
@@ -257,8 +257,7 @@ const IdTable& Result::idTable() const {
 cppcoro::generator<IdTable>& Result::idTables() const {
   AD_CONTRACT_CHECK(!isFullyMaterialized());
   const auto& container = std::get<GenContainer>(data_);
-  AD_CONTRACT_CHECK(!container.consumed_);
-  container.consumed_ = true;
+  AD_CONTRACT_CHECK(!container.consumed_->exchange(true));
   return container.generator_;
 }
 

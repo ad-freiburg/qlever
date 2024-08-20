@@ -59,7 +59,6 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
   return {[](auto subRes, auto* self) -> cppcoro::generator<IdTable> {
             for (IdTable& idTable : subRes->idTables()) {
               IdTable result = self->filterIdTable(subRes, idTable);
-              LOG(DEBUG) << "Filter result chunk done." << endl;
               co_yield result;
             }
           }(std::move(subRes), this),

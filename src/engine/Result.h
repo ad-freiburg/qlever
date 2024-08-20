@@ -26,7 +26,8 @@ class Result {
   // Needs to be mutable in order to be consumable from a const result.
   struct GenContainer {
     mutable cppcoro::generator<IdTable> generator_;
-    mutable bool consumed_ = false;
+    mutable std::unique_ptr<std::atomic_bool> consumed_ =
+        std::make_unique<std::atomic_bool>(false);
     explicit GenContainer(cppcoro::generator<IdTable> generator)
         : generator_{std::move(generator)} {}
   };
