@@ -717,7 +717,7 @@ TEST(TurtleParserTest, iriref) {
     if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
       EXPECT_EQ(warning, "");
     } else {
-      EXPECT_THAT(warning, ::testing::HasSubstr("not standard-conform"));
+      EXPECT_THAT(warning, ::testing::HasSubstr("not standard-compliant"));
       EXPECT_THAT(warning, ::testing::HasSubstr(iriref_2));
     }
     // The third IRI ref is accepted by the CtreParser, but not by the
