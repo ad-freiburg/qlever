@@ -700,8 +700,9 @@ TEST(TurtleParserTest, iriref) {
   auto runTestsForParser = [](auto parser) {
     std::string iriref_1 = "<fine>";
     std::string iriref_2 = "<okay ish>";
-    std::string iriref_3 = "<throws\"exception>";
-    std::string iriref_4 = "no iriref at all";
+    std::string iriref_3 = "<not\x19okay>";
+    std::string iriref_4 = "<throws\"exception>";
+    std::string iriref_5 = "no iriref at all";
     // The first IRI ref is fine for both parsers.
     parser.setInputStream(iriref_1);
     ASSERT_TRUE(parser.iriref());
@@ -719,11 +720,15 @@ TEST(TurtleParserTest, iriref) {
     } else {
       EXPECT_EQ(warning, "");
     }
-    // The third IRI ref throws a exception when parsed.
+    // The third IRI ref is not accepted by either parser.
     parser.setInputStream(iriref_3);
-    ASSERT_THROW(parser.iriref(), TurtleParser<Tokenizer>::ParseException);
-    // The fourth IRI ref is not recognized as an IRI ref.
+    ASSERT_FALSE(parser.iriref());
+    // The fourth IRI ref throws an exception when parsed (because " is
+    // encountered before the closing >).
     parser.setInputStream(iriref_4);
+    ASSERT_THROW(parser.iriref(), TurtleParser<Tokenizer>::ParseException);
+    // The fifth IRI ref is not recognized as an IRI ref.
+    parser.setInputStream(iriref_5);
     ASSERT_FALSE(parser.iriref());
   };
   // Run tests for both parsers and reset std::cout.
