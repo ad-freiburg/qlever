@@ -73,10 +73,10 @@ std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
   auto typeDispatch = [type](auto f) {
     return [type, f]<typename TokenizerT>() -> Res {
       if (type == Index::Filetype::Turtle) {
-        LOG(INFO) << "Use a turtle parser" << std::endl;
+        LOG(INFO) << "Use the Turtle parser" << std::endl;
         return f.template operator()<TurtleParser, TokenizerT>();
       } else {
-        LOG(INFO) << "Use an nquad parser" << std::endl;
+        LOG(INFO) << "Use the N-Quads parser" << std::endl;
         return f.template operator()<NQuadParser, TokenizerT>();
       }
     };

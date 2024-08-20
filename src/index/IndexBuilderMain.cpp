@@ -89,7 +89,7 @@ int main(int argc, char** argv) {
       "will read from stdin.");
   add("file-format,F", po::value(&filetype),
       "The format of the input file with the knowledge graph data. Must be one "
-      "of [nt|ttl|nquad]. If not set, QLever will try to deduce it from the "
+      "of [nt|ttl|nq]. If not set, QLever will try to deduce it from the "
       "filename suffix.");
   add("kg-index-name,K", po::value(&kbIndexName),
       "The name of the knowledge graph index (default: basename of "
@@ -198,7 +198,7 @@ int main(int argc, char** argv) {
           filetype = "ttl";
           filetypeDeduced = true;
         } else if (inputFile.ends_with(".nq")) {
-          filetype = "nquad";
+          filetype = "nq";
           filetypeDeduced = true;
         } else {
           LOG(INFO) << "Unknown or missing extension of input file, assuming: "
@@ -222,12 +222,12 @@ int main(int argc, char** argv) {
         LOG(DEBUG) << "Parsing uncompressed N-Triples from: " << inputFile
                    << " (using the Turtle parser)" << std::endl;
         index.createFromFile(inputFile, Index::Filetype::Turtle);
-      } else if (filetype == "nquad") {
+      } else if (filetype == "nq") {
         LOG(DEBUG) << "Parsing uncompressed N-Quads from: " << inputFile
                    << std::endl;
         index.createFromFile(inputFile, Index::Filetype::NQuad);
       } else {
-        LOG(ERROR) << "File format must be one of: nt ttl nquad" << std::endl;
+        LOG(ERROR) << "File format must be one of: nt ttl nq" << std::endl;
         std::cerr << boostOptions << std::endl;
         exit(1);
       }
