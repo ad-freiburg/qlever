@@ -150,9 +150,6 @@ void runConstructQueryTestCase(
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
-  LOG(INFO) << qleverJSONResult.dump() << '\n';
-  LOG(INFO) << runQueryStreamableResult(testCase.kg, testCase.query, qleverJson)
-            << '\n';
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
@@ -659,6 +656,52 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
       }(),
   };
   runConstructQueryTestCase(testCaseConstruct);
+}
+
+// ____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, LiteralCornercases) {
+  auto runTestCaseWithLiteral = [](std::string literal) {
+    const std::string innerValue = literal.substr(1, literal.rfind("\"") - 1);
+    const std::string suffixValue = literal.substr(literal.rfind("\"") + 1);
+    std::string kg = absl::StrCat("<s> <p> ", literal);
+    std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+    std::string expectedXml = absl::StrCat(makeXMLHeader({"o"}),
+                                           R"(
+  <result>
+    <binding name="o"><literal>)",
+                                           innerValue, R"(</literal></binding>
+  </result>)",
+                                           xmlTrailer);
+    TestCaseSelectQuery testCase{kg, query, 1,
+                                 // TSV
+                                 absl::StrCat("?o\n", literal, "\n"),
+                                 // CSV
+                                 absl::StrCat("o\n", innerValue, "\n"),
+                                 makeExpectedQLeverJSON({literal}),
+                                 makeExpectedSparqlJSON({makeJSONBinding(
+                                     std::nullopt, "literal", innerValue)}),
+                                 expectedXml};
+    runSelectQueryTestCase(testCase);
+    TestCaseConstructQuery testCaseConstruct{
+        kg,
+        "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+        1,
+        // TSV
+        absl::StrCat("<s>\t<p>\t", literal, "\n"),
+        // CSV
+        absl::StrCat("<s>,<p>,\"\"\"", innerValue, "\"\"", suffixValue, "\"\n"),
+        // Turtle
+        absl::StrCat("<s> <p> ", literal, " .\n"),
+        [&literal]() {
+          nlohmann::json j;
+          j.push_back(std::vector{"<s>"s, "<p>"s, literal});
+          return j;
+        }(),
+    };
+    runConstructQueryTestCase(testCaseConstruct);
+  };
+
+  runTestCaseWithLiteral("\"something\"");
 }
 
 // ____________________________________________________________________________

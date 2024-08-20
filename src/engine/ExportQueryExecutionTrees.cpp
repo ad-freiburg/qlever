@@ -112,19 +112,15 @@ ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSONStream(
     const ad_utility::sparql_types::Triples& constructTriples,
     const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
     CancellationHandle cancellationHandle) {
-  size_t tripleCount = getRowIndices(limitAndOffset, *res).size();
   auto generator = constructQueryResultToTriples(qet, constructTriples,
                                                  limitAndOffset, std::move(res),
                                                  std::move(cancellationHandle));
-  co_yield "[";
   for (auto& triple : generator) {
-    --tripleCount;
-    auto jsonTriple = nlohmann::json::array({std::move(triple.subject_),
-                                             std::move(triple.predicate_),
-                                             std::move(triple.object_)});
-    co_yield absl::StrCat(jsonTriple.dump(), tripleCount > 0 ? "," : "");
+    auto binding = nlohmann::json::array({std::move(triple.subject_),
+                                          std::move(triple.predicate_),
+                                          std::move(triple.object_)});
+    co_yield binding.dump();
   }
-  co_yield "]";
 }
 
 // _____________________________________________________________________________
@@ -179,27 +175,19 @@ nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
 
 // _____________________________________________________________________________
 cppcoro::generator<std::string>
-ExportQueryExecutionTrees::idTableToQLeverJSONArrayStream(
+ExportQueryExecutionTrees::idTableToQLeverJSONBindingsStream(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
     const QueryExecutionTree::ColumnIndicesAndTypes columns,
     std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  const IdTable& data = result->idTable();
-
-  co_yield "[";
-
   const auto rowIndices = getRowIndices(limitAndOffset, *result);
   for (size_t rowIndex : rowIndices) {
-    auto row = idTableToQLeverJSONRow(qet, columns, result->localVocab(),
-                                      rowIndex, data);
-
-    std::string rowStr = row.dump();
-    co_yield absl::StrCat(rowIndex != rowIndices[0] ? "," : "", rowStr);
+    co_yield idTableToQLeverJSONRow(qet, columns, result->localVocab(),
+                                    rowIndex, result->idTable())
+        .dump();
     cancellationHandle->throwIfCancelled();
   }
-
-  co_yield "]";
 }
 
 // _____________________________________________________________________________
@@ -327,8 +315,6 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
                                              std::identity&& escapeFunction);
 
 // _____________________________________________________________________________
-// Take a string from the vocabulary, deduce the type and
-// return a JSON dict that describes the binding.
 static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
                                              const char* xsdType) {
   nlohmann::ordered_json b;
@@ -372,7 +358,6 @@ static nlohmann::json stringAndTypeToBinding(std::string_view entitystr,
         datatype.remove_prefix(quotePos + 4);
         datatype.remove_suffix(1);
         b["datatype"] = datatype;
-        ;
       }
     }
   }
@@ -475,7 +460,7 @@ ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSONStream(
   QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  return idTableToQLeverJSONArrayStream(
+  return idTableToQLeverJSONBindingsStream(
       qet, limitAndOffset, selectedColumnIndices, std::move(result),
       std::move(cancellationHandle));
 }
@@ -607,7 +592,7 @@ static std::string idToXMLBinding(std::string_view variable, Id id,
                  escape(innerValue), "</literal>"sv);
         } else {
           // A plain literal that contains neither a language tag nor a datatype
-          append("<literal>"sv, escape(innerValue), "</literal>sv");
+          append("<literal>"sv, escape(innerValue), "</literal>"sv);
         }
       }
     }
@@ -912,7 +897,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
 
   std::string prefixStr = jsonPrefix.dump();
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
-                        R"(,"res":)");
+                        R"(,"res":[)");
 
   auto bindings =
       query.hasSelectClause()
@@ -925,12 +910,12 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
 
   size_t resultSize = 0;
   for (std::string& b : bindings) {
+    if (resultSize > 0) [[likely]] {
+      co_yield ",";
+    }
     co_yield b;
     ++resultSize;
   }
-  // Both `*ToQleverJSONStream` methods called above yield the 2 surrounding
-  // array brackets and each binding individually.
-  resultSize -= 2;
 
   nlohmann::json jsonSuffix;
   jsonSuffix["resultsize"] = resultSize;
@@ -939,5 +924,5 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
   jsonSuffix["time"]["computeResult"] =
       absl::StrCat(timeResultComputation.count(), "ms");
 
-  co_yield absl::StrCat(",", jsonSuffix.dump().substr(1));
+  co_yield absl::StrCat("],", jsonSuffix.dump().substr(1));
 }

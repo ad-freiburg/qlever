@@ -55,8 +55,7 @@ class ExportQueryExecutionTrees {
       const ad_utility::Timer& requestTimer, MediaType mediaType,
       CancellationHandle cancellationHandle);
 
-  // Same as above, but returning the result in QLeverJSON format as streamable
-  // generator.
+  // Same as above, but returning the result in QLeverJSON format as generator.
   static cppcoro::generator<std::string> computeResultAsQLeverJSONStream(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
@@ -126,6 +125,7 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
+  // Same as above, but only returns the bindings as generator.
   static cppcoro::generator<std::string>
   selectQueryResultBindingsToQLeverJSONStream(
       const QueryExecutionTree& qet,
@@ -153,7 +153,7 @@ class ExportQueryExecutionTrees {
       std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
-  static cppcoro::generator<std::string> idTableToQLeverJSONArrayStream(
+  static cppcoro::generator<std::string> idTableToQLeverJSONBindingsStream(
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result,
@@ -166,6 +166,7 @@ class ExportQueryExecutionTrees {
       const LimitOffsetClause& limitAndOffset,
       std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
 
+  // Same as above, but only returns the bindings as generator.
   static cppcoro::generator<std::string>
   constructQueryResultBindingsToQLeverJSONStream(
       const QueryExecutionTree& qet,
