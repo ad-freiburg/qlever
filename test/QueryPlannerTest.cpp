@@ -780,8 +780,63 @@ TEST(QueryPlanner, SpatialJoin) {
       "?x <p> ?y."
       "?a <p> ?b."
       "?y <max-distance-in-meters:1> ?b }",
-      h::SpatialJoin(
-          1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+      h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b")));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?x <p> ?y."
+          "?a <p> ?b."
+          "?y <max-distance-in-meters:1> ?b ."
+          "?y <a> ?b}",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex(
+          "Currently, if both sides of a SpatialJoin are variables, then the"
+          "SpatialJoin must be the only connection between these variables"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?y <p> ?b."
+          "?y <max-distance-in-meters:1> ?b }",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex(
+          "Currently, if both sides of a SpatialJoin are variables, then the"
+          "SpatialJoin must be the only connection between these variables"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?x <p> ?y."
+          "?y <max-distance-in-meters:1> <a> }",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex("Currently, SpatialJoin needs two variables"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?x <p> ?y."
+          "<a> <max-distance-in-meters:1> ?y }",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex("Currently, SpatialJoin needs two variables"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?y <max-distance-in-meters:1> ?b }",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex(
+          "SpatialJoin needs two variables, but at least one is missing"));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect(
+          "SELECT ?x ?y WHERE {"
+          "?x <p> ?y."
+          "?a <p> ?b."
+          "?y <max-distance-in-meters:-1> ?b }",
+          h::SpatialJoin(1, scan("?x", "<p>", "?y"), scan("?a", "<p>", "?b"))),
+      ::testing::ContainsRegex("parsing of the maximum distance for the "
+                               "SpatialJoin operation was not possible"));
 }
 
 // __________________________________________________________________________

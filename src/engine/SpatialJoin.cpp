@@ -90,7 +90,7 @@ bool SpatialJoin::isConstructed() const {
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   if (!(childLeft_ && childRight_)) {
-    AD_THROW("SpatialJoin needs two variables");
+    AD_THROW("SpatialJoin needs two variables, but at least one is missing");
   }
 
   return {childLeft_.get(), childRight_.get()};

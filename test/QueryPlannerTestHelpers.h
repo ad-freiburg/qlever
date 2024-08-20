@@ -265,7 +265,8 @@ inline auto TransitivePath =
 
 // Match a SpatialJoin operation
 inline auto SpatialJoin =
-    [](long long maxDist, const std::same_as<QetMatcher> auto&... childMatchers) {
+    [](long long maxDist,
+       const std::same_as<QetMatcher> auto&... childMatchers) {
       return RootOperation<::SpatialJoin>(
           AllOf(Property("getChildren", &Operation::getChildren,
                          ElementsAre(Pointee(childMatchers)...)),
