@@ -393,6 +393,7 @@ class TurtleParser : public TurtleParserBase {
   FRIEND_TEST(TurtleParserTest, booleanLiteral);
   FRIEND_TEST(TurtleParserTest, booleanLiteralLongForm);
   FRIEND_TEST(TurtleParserTest, collection);
+  FRIEND_TEST(TurtleParserTest, iriref);
 };
 
 /**
