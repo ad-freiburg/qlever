@@ -1,0 +1,1 @@
+addLinkAndDiscoverTest(VariableTest)
