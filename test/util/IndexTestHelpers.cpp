@@ -61,8 +61,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
   auto checkSingleElement = [&cancellationDummy, &hasPatternId](
                                 const Index& index, size_t patternIdx, Id id) {
     auto scanResultHasPattern =
-        index.scan({hasPatternId, id, std::nullopt}, Permutation::Enum::PSO, {},
-                   cancellationDummy);
+        index.scan(ScanSpecification{hasPatternId, id, std::nullopt},
+                   Permutation::Enum::PSO, {}, cancellationDummy);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -80,19 +80,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
-            {col0Id, std::nullopt, std::nullopt}, permutation,
+            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto patternIdx =
-              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN - 1].getInt();
+          auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
-          auto patternIdxObject =
-              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN - 1].getInt();
+          auto patternIdxObject = row[3].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };
