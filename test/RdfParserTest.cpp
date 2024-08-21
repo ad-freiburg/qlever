@@ -9,13 +9,13 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "parser/TurtleParser.h"
+#include "parser/RdfParser.h"
 #include "util/Conversions.h"
 
 using std::string;
 using namespace std::literals;
-using Re2Parser = TurtleStringParser<TurtleParser<Tokenizer>>;
-using CtreParser = TurtleStringParser<TurtleParser<TokenizerCtre>>;
+using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
+using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -748,7 +748,7 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(const std::string& filename,
                                         bool useBatchInterface) {
   Parser parserChild{filename};
-  TurtleParserBase& parser = parserChild;
+  RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
   if (useBatchInterface) {
@@ -770,23 +770,23 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
 auto forAllParallelParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleParallelParser<TurtleParser<Tokenizer>>>(
+  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
       true, args...);
-  function.template operator()<TurtleParallelParser<TurtleParser<Tokenizer>>>(
+  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
       false, args...);
-  function.template
-  operator()<TurtleParallelParser<TurtleParser<TokenizerCtre>>>(true, args...);
-  function.template
-  operator()<TurtleParallelParser<TurtleParser<TokenizerCtre>>>(false, args...);
+  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
+      true, args...);
+  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
+      false, args...);
 }
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleStreamParser<TurtleParser<Tokenizer>>>(
+  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
       true, args...);
-  function.template operator()<TurtleStreamParser<TurtleParser<Tokenizer>>>(
+  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
       false, args...);
-  function.template operator()<TurtleStreamParser<TurtleParser<TokenizerCtre>>>(
+  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
       true, args...);
-  function.template operator()<TurtleStreamParser<TurtleParser<TokenizerCtre>>>(
+  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
       false, args...);
   forAllParallelParsers(function, args...);
 }
@@ -966,9 +966,9 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
 
 // _____________________________________________________________________________
 TEST(TurtleParserTest, nQuadParser) {
-  auto parser = TurtleStringParser<NQuadParser<Tokenizer>>();
+  auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
   parser.setInputStream(
-      "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" <g2> .");
+      "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 .");
   auto triples = parser.parseAndReturnAllTriples();
   auto iri = ad_utility::testing::iri;
   auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -976,11 +976,11 @@ TEST(TurtleParserTest, nQuadParser) {
   expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
   auto internalGraphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
   expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank", internalGraphId);
-  expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"), iri("<g2>"));
+  expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"), "_:u_blank2");
   EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
 
   auto expectParsingFails = [](const std::string& input) {
-    auto parser = TurtleStringParser<NQuadParser<Tokenizer>>();
+    auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
     parser.setInputStream(input);
     EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
   };

@@ -1011,7 +1011,7 @@ TEST(SparqlParser, RDFLiteral) {
                    "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"s);
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
-  // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
+  // RdfStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
   expectRDFLiteral(
       "\"1950-01-01T00:00:00\"^^xsd:dateTime",

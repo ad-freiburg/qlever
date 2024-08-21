@@ -8,7 +8,7 @@ add_library(parser
         sparqlParser/SparqlQleverVisitor.cpp
         SparqlParser.cpp
         ParsedQuery.cpp
-        TurtleParser.cpp
+        RdfParser.cpp
         Tokenizer.cpp
         ContextFileParser.cpp
         TurtleTokenId.h
