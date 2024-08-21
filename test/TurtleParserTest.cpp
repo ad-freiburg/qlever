@@ -70,7 +70,7 @@ auto checkParseResult =
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
   os << "( " << tr.subject_ << " " << tr.predicate_.toStringRepresentation()
-     << " " << tr.object_ << ")";
+     << " " << tr.object_ << " " << tr.graphIri_ << ")";
   return os;
 }
 TEST(TurtleParserTest, prefixedName) {
@@ -914,4 +914,33 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
   }();
   FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser, input);
+}
+
+// _____________________________________________________________________________
+TEST(TurtleParserTest, nQuadParser) {
+  auto parser = TurtleStringParser<NQuadParser<Tokenizer>>();
+  parser.setInputStream(
+      "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" <g2> .");
+  auto triples = parser.parseAndReturnAllTriples();
+  auto iri = ad_utility::testing::iri;
+  auto lit = ad_utility::testing::tripleComponentLiteral;
+  std::vector<TurtleTriple> expected;
+  expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
+  auto internalGraphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank", internalGraphId);
+  expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"), iri("<g2>"));
+  EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
+
+  auto expectParsingFails = [](const std::string& input) {
+    auto parser = TurtleStringParser<NQuadParser<Tokenizer>>();
+    parser.setInputStream(input);
+    EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
+  };
+
+  expectParsingFails("<x> <y> <z> <g>");  // missing dot after last triple
+  expectParsingFails("<x> 3 <z> <g> .");  // predicate must be an iriref
+  expectParsingFails("3 <x> <z> <g> .");  // predicate must be an iriref
+  expectParsingFails(
+      "<x> <y> '''literalIllegal''' <g> .");  // No multiline literals in NQuad
+                                              // format.
 }

@@ -388,8 +388,8 @@ bool NQuadParser<T>::statement() {
 
 template <typename T>
 bool NQuadParser<T>::nQuadLiteral() {
-  // TODO<joka921> Disallow multiline literals;
-  return Base::rdfLiteral();
+  // Disallow multiline literals;
+  return Base::rdfLiteralImpl(false);
 }
 
 template <typename T>
@@ -425,7 +425,7 @@ bool NQuadParser<T>::nQuadPredicate() {
 template <typename T>
 bool NQuadParser<T>::nQuadObject() {
   if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
-    this->activeSubject_ = std::move(this->lastParseResult_);
+    this->activeObject_ = std::move(this->lastParseResult_);
     return true;
   }
   return false;
@@ -442,8 +442,8 @@ bool NQuadParser<T>::nQuadGraphLabel() {
 
 // ______________________________________________________________________
 template <class T>
-bool TurtleParser<T>::rdfLiteral() {
-  if (!stringParse()) {
+bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
+  if (!stringParseImpl(allowMultilineLiterals)) {
     return false;
   }
 
@@ -573,7 +573,7 @@ bool TurtleParser<T>::booleanLiteral() {
 
 // ______________________________________________________________________
 template <class T>
-bool TurtleParser<T>::stringParse() {
+bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   // manually parse strings for efficiency
   auto view = tok_.view();
   size_t startPos = 0;
@@ -584,6 +584,9 @@ bool TurtleParser<T>::stringParse() {
     if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
+      if (!allowMultilineLiterals && q.size() > 1) {
+        return false;
+      }
       endPos = view.find(q, startPos);
       while (endPos != string::npos) {
         if (view[endPos - 1] == '\\') {

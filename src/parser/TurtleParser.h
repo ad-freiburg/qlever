@@ -237,7 +237,7 @@ class TurtleParser : public TurtleParserBase {
     }
   }
 
-  bool statement();
+  virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
@@ -286,11 +286,18 @@ class TurtleParser : public TurtleParserBase {
   bool blankNode();
   bool collection();
   bool literal();
-  bool rdfLiteral();
+  // The `Impl` indirection is for easier testing in `TurtleParserTest.cpp`
+  bool rdfLiteralImpl(bool allowMultilineStrings);
+  bool rdfLiteral() {
+    // Turtle allows for multiline strings.
+    return rdfLiteralImpl(true);
+  }
   bool numericLiteral();
   bool booleanLiteral();
   bool prefixedName();
-  bool stringParse();
+  // The `Impl` indirection is for easier testing in `TurtleParserTest.cpp`
+  bool stringParseImpl(bool allowMultilineStrings);
+  bool stringParse() { return stringParseImpl(true); }
 
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
@@ -404,7 +411,7 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   using Base = TurtleParser<Tokenizer_T>;
 
  protected:
-  bool statement();
+  bool statement() override;
 
  private:
   bool nQuadSubject();
