@@ -73,13 +73,16 @@ TEST(HttpServer, HttpTest) {
             {
               HttpClient httpClient("localhost",
                                     std::to_string(httpServer.getPort()));
-              ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
-                                                        "target1", handle)),
+              ASSERT_EQ(toString(httpClient
+                                     .sendRequest(verb::get, "localhost",
+                                                  "target1", handle)
+                                     .second),
                         "GET\ntarget1\n");
-              ASSERT_EQ(
-                  toString(httpClient.sendRequest(verb::post, "localhost",
-                                                  "target1", handle, "body1")),
-                  "POST\ntarget1\nbody1");
+              ASSERT_EQ(toString(httpClient
+                                     .sendRequest(verb::post, "localhost",
+                                                  "target1", handle, "body1")
+                                     .second),
+                        "POST\ntarget1\nbody1");
             }
           }
         });
@@ -90,11 +93,15 @@ TEST(HttpServer, HttpTest) {
     // fine with the server after we have communicated with it for one session).
     {
       HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
-                                                "target2", handle)),
-                "GET\ntarget2\n");
-      ASSERT_EQ(toString(httpClient.sendRequest(verb::post, "localhost",
-                                                "target2", handle, "body2")),
+      ASSERT_EQ(
+          toString(
+              httpClient.sendRequest(verb::get, "localhost", "target2", handle)
+                  .second),
+          "GET\ntarget2\n");
+      ASSERT_EQ(toString(httpClient
+                             .sendRequest(verb::post, "localhost", "target2",
+                                          handle, "body2")
+                             .second),
                 "POST\ntarget2\nbody2");
     }
 
@@ -124,10 +131,11 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get)),
+      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get).second),
                 "GET\n/target\n");
       ASSERT_EQ(
-          toString(sendHttpOrHttpsRequest(url, handle, verb::post, "body")),
+          toString(
+              sendHttpOrHttpsRequest(url, handle, verb::post, "body").second),
           "POST\n/target\nbody");
     }
 
