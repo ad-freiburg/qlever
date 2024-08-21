@@ -16,6 +16,23 @@ using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
 using ad_utility::CancellationState;
 
+namespace {
+// Helper function to perform actions at various stages of a generator
+template <typename T>
+auto expectAtEachStageOfGenerator(
+    cppcoro::generator<T> generator,
+    std::vector<std::function<void()>> functions,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto locationTrace = generateLocationTrace(l);
+  size_t index = 0;
+  for ([[maybe_unused]] T& _ : generator) {
+    functions.at(index)();
+    ++index;
+  }
+  EXPECT_EQ(index, functions.size());
+}
+}  // namespace
+
 // ________________________________________________
 TEST(OperationTest, limitIsRepresentedInCacheKey) {
   NeutralElementOperation n{getQec()};
@@ -323,37 +340,35 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
   auto result = valuesForTesting.runComputation(
       timer, ComputationMode::LAZY_IF_SUPPORTED);
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().totalTime_, 0ms);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().originalTotalTime_, 0ms);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().originalOperationTime_, 0ms);
+  auto& rti = valuesForTesting.runtimeInfo();
+
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.totalTime_, 0ms);
+  EXPECT_EQ(rti.originalTotalTime_, 0ms);
+  EXPECT_EQ(rti.originalOperationTime_, 0ms);
 
   auto& idTables = result.idTables();
 
   auto iterator = idTables.begin();
   ASSERT_NE(iterator, idTables.end());
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numCols_, 2);
+  EXPECT_EQ(rti.numRows_, 1);
 
   ++iterator;
   ASSERT_NE(iterator, idTables.end());
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 2);
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numCols_, 2);
+  EXPECT_EQ(rti.numRows_, 2);
 
   ++iterator;
   ASSERT_EQ(iterator, idTables.end());
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 2);
+  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.numCols_, 2);
+  EXPECT_EQ(rti.numRows_, 2);
 }
 
 // _____________________________________________________________________________
@@ -366,7 +381,7 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   QueryExecutionContext context{
       index, &cache, makeAllocator(ad_utility::MemorySize::megabytes(100)),
       SortPerformanceEstimator{}, [&](std::string) { signaledUpdate = true; }};
-  AlwaysFailLazyOperation operation{&context};
+  AlwaysFailOperation operation{&context};
   ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
@@ -416,26 +431,14 @@ TEST(Operation, ensureSignalUpdateIsOnlyCalledEvery50msAndAtTheEnd) {
 
   EXPECT_EQ(updateCallCounter, 1);
 
-  auto& idTables = result.idTables();
+  expectAtEachStageOfGenerator(std::move(result.idTables()),
+                               {
+                                   [&]() { EXPECT_EQ(updateCallCounter, 2); },
+                                   [&]() { EXPECT_EQ(updateCallCounter, 2); },
+                                   [&]() { EXPECT_EQ(updateCallCounter, 3); },
+                                   [&]() { EXPECT_EQ(updateCallCounter, 3); },
+                               });
 
-  auto iterator = idTables.begin();
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(updateCallCounter, 2);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(updateCallCounter, 2);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(updateCallCounter, 3);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-  EXPECT_EQ(updateCallCounter, 3);
-
-  ++iterator;
-  ASSERT_EQ(iterator, idTables.end());
   EXPECT_EQ(updateCallCounter, 4);
 }
 
@@ -489,36 +492,32 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   auto result = valuesForTesting.runComputation(
       timer, ComputationMode::LAZY_IF_SUPPORTED);
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 0);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 0);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 0);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 0);
+  auto& rti = valuesForTesting.runtimeInfo();
+  auto& childRti = *rti.children_.at(0);
 
-  auto& idTables = result.idTables();
+  EXPECT_EQ(rti.numCols_, 0);
+  EXPECT_EQ(rti.numRows_, 0);
+  EXPECT_EQ(childRti.numCols_, 0);
+  EXPECT_EQ(childRti.numRows_, 0);
 
-  auto iterator = idTables.begin();
-  ASSERT_NE(iterator, idTables.end());
+  expectAtEachStageOfGenerator(std::move(result.idTables()),
+                               {[&]() {
+                                  EXPECT_EQ(rti.numCols_, 2);
+                                  EXPECT_EQ(rti.numRows_, 0);
+                                  EXPECT_EQ(childRti.numCols_, 2);
+                                  EXPECT_EQ(childRti.numRows_, 1);
+                                },
+                                [&]() {
+                                  EXPECT_EQ(rti.numCols_, 2);
+                                  EXPECT_EQ(rti.numRows_, 1);
+                                  EXPECT_EQ(childRti.numCols_, 2);
+                                  EXPECT_EQ(childRti.numRows_, 3);
+                                }});
 
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 0);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 1);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 3);
-
-  ++iterator;
-  ASSERT_EQ(iterator, idTables.end());
-
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().numRows_, 1);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numCols_, 2);
-  EXPECT_EQ(valuesForTesting.runtimeInfo().children_.at(0)->numRows_, 3);
+  EXPECT_EQ(rti.numCols_, 2);
+  EXPECT_EQ(rti.numRows_, 1);
+  EXPECT_EQ(childRti.numCols_, 2);
+  EXPECT_EQ(childRti.numRows_, 3);
 }
 
 // _____________________________________________________________________________
@@ -544,18 +543,17 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
   ASSERT_TRUE(aggregatedValue.has_value());
 
   ASSERT_TRUE(aggregatedValue.value()._resultPointer);
-  auto newRuntimeInfo = aggregatedValue.value()._resultPointer->runtimeInfo();
-  auto& oldRuntimeInfo = valuesForTesting.runtimeInfo();
-  EXPECT_EQ(newRuntimeInfo.descriptor_, oldRuntimeInfo.descriptor_);
-  EXPECT_EQ(newRuntimeInfo.numCols_, oldRuntimeInfo.numCols_);
-  EXPECT_EQ(newRuntimeInfo.numRows_, oldRuntimeInfo.numRows_);
-  EXPECT_EQ(newRuntimeInfo.totalTime_, oldRuntimeInfo.totalTime_);
-  EXPECT_EQ(newRuntimeInfo.originalTotalTime_,
-            oldRuntimeInfo.originalTotalTime_);
-  EXPECT_EQ(newRuntimeInfo.originalOperationTime_,
-            oldRuntimeInfo.originalOperationTime_);
-  EXPECT_EQ(newRuntimeInfo.status_,
-            RuntimeInformation::Status::fullyMaterialized);
+
+  auto newRti = aggregatedValue.value()._resultPointer->runtimeInfo();
+  auto& oldRti = valuesForTesting.runtimeInfo();
+
+  EXPECT_EQ(newRti.descriptor_, oldRti.descriptor_);
+  EXPECT_EQ(newRti.numCols_, oldRti.numCols_);
+  EXPECT_EQ(newRti.numRows_, oldRti.numRows_);
+  EXPECT_EQ(newRti.totalTime_, oldRti.totalTime_);
+  EXPECT_EQ(newRti.originalTotalTime_, oldRti.originalTotalTime_);
+  EXPECT_EQ(newRti.originalOperationTime_, oldRti.originalOperationTime_);
+  EXPECT_EQ(newRti.status_, RuntimeInformation::Status::fullyMaterialized);
 
   const auto& aggregatedResult =
       aggregatedValue.value()._resultPointer->resultTable();

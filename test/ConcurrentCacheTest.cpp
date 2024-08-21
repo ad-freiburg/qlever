@@ -14,6 +14,7 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 #include "util/DefaultValueSizeGetter.h"
+#include "util/GTestHelpers.h"
 #include "util/Timer.h"
 #include "util/jthread.h"
 
@@ -81,6 +82,7 @@ namespace {
 auto returnTrue = [](const auto&) { return true; };
 }  // namespace
 
+// _____________________________________________________________________________
 TEST(ConcurrentCache, sequentialComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t{ad_utility::Timer::Started};
@@ -396,6 +398,7 @@ TEST(ConcurrentCache, isCachedIfSuitableWhenWaitingForPendingComputation) {
   EXPECT_EQ(cache.numNonPinnedEntries(), 1);
   EXPECT_EQ(cache.numPinnedEntries(), 0);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+  EXPECT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   EXPECT_TRUE(cache.cacheContains(0));
 }
 
@@ -404,6 +407,8 @@ TEST(ConcurrentCache,
      isCachedIfSuitableWhenWaitingForPendingComputationPinned) {
   SimpleConcurrentLruCache cache{};
 
+  // Simulate a computation with the same cache key that is currently in
+  // progress so the new computation waits for the result.
   auto resultInProgress = std::make_shared<
       ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
 
@@ -470,39 +475,52 @@ TEST(ConcurrentCache,
 
 // _____________________________________________________________________________
 TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
+  auto hasValue = [](std::string value) {
+    using namespace ::testing;
+    using CS = SimpleConcurrentLruCache::ResultAndCacheStatus;
+    return Optional(
+        Field("_resultPointer", &CS::_resultPointer, Pointee(value)));
+  };
+
   SimpleConcurrentLruCache cache{};
+
+  auto expectContainsSingleEntry =
+      [&](bool pinned, ad_utility::source_location l =
+                           ad_utility::source_location::current()) {
+        using namespace ::testing;
+        auto trace = generateLocationTrace(l);
+        if (pinned) {
+          EXPECT_NE(cache.pinnedSize(), 0_B);
+          EXPECT_EQ(cache.nonPinnedSize(), 0_B);
+        } else {
+          EXPECT_EQ(cache.pinnedSize(), 0_B);
+          EXPECT_NE(cache.nonPinnedSize(), 0_B);
+        }
+      };
 
   cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("abc"));
 
   auto value = cache.getIfContained(0);
-  ASSERT_NE(value, std::nullopt);
-  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
-  EXPECT_NE(cache.nonPinnedSize(), 0_B);
-  EXPECT_EQ(cache.pinnedSize(), 0_B);
+  EXPECT_THAT(value, hasValue("abc"));
+  expectContainsSingleEntry(false);
 
   cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("def"));
 
   value = cache.getIfContained(0);
-  ASSERT_NE(value, std::nullopt);
-  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
-  EXPECT_NE(cache.nonPinnedSize(), 0_B);
-  EXPECT_EQ(cache.pinnedSize(), 0_B);
+  EXPECT_THAT(value, hasValue("abc"));
+  expectContainsSingleEntry(false);
 
   cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("ghi"));
 
   value = cache.getIfContained(0);
-  ASSERT_NE(value, std::nullopt);
-  EXPECT_THAT(value.value()._resultPointer, Pointee("abc"s));
-  EXPECT_EQ(cache.nonPinnedSize(), 0_B);
-  EXPECT_NE(cache.pinnedSize(), 0_B);
+  EXPECT_THAT(value, hasValue("abc"s));
+  expectContainsSingleEntry(true);
 
   cache.clearAll();
 
   cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("jkl"));
 
   value = cache.getIfContained(0);
-  ASSERT_NE(value, std::nullopt);
-  EXPECT_THAT(value.value()._resultPointer, Pointee("jkl"s));
-  EXPECT_EQ(cache.nonPinnedSize(), 0_B);
-  EXPECT_NE(cache.pinnedSize(), 0_B);
+  EXPECT_THAT(value, hasValue("jkl"s));
+  expectContainsSingleEntry(true);
 }

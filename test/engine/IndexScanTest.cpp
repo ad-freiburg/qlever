@@ -462,28 +462,14 @@ TEST(IndexScan, computeResultCanBeConsumedLazily) {
 
   ASSERT_FALSE(result.isFullyMaterialized());
 
-  std::vector<IdTable::row_type> resultValues;
+  IdTable resultTable{3, ad_utility::makeUnlimitedAllocator<Id>()};
 
   for (IdTable& idTable : result.idTables()) {
-    for (IdTable::row_type row : idTable) {
-      resultValues.push_back(row);
-    }
+    resultTable.insertAtEnd(idTable);
   }
 
-  ASSERT_EQ(resultValues.size(), 3);
-  ASSERT_EQ(resultValues[0].numColumns(), 3);
-  ASSERT_EQ(resultValues[1].numColumns(), 3);
-  ASSERT_EQ(resultValues[2].numColumns(), 3);
-
-  EXPECT_EQ(resultValues[0][2], x);
-  EXPECT_EQ(resultValues[0][0], p);
-  EXPECT_EQ(resultValues[0][1], s1);
-  EXPECT_EQ(resultValues[1][2], x);
-  EXPECT_EQ(resultValues[1][0], p);
-  EXPECT_EQ(resultValues[1][1], s2);
-  EXPECT_EQ(resultValues[2][2], x);
-  EXPECT_EQ(resultValues[2][0], p2);
-  EXPECT_EQ(resultValues[2][1], s1);
+  EXPECT_EQ(resultTable,
+            makeIdTableFromVector({{p, s1, x}, {p, s2, x}, {p2, s1, x}}));
 }
 
 // _____________________________________________________________________________

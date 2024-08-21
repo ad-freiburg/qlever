@@ -7,34 +7,38 @@
 #include "engine/Filter.h"
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
+#include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using ::testing::ElementsAre;
+using ::testing::Eq;
 
-IdTable makeIdTable(std::vector<bool> bools) {
-  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
-  for (bool b : bools) {
-    idTable.push_back({Id::makeFromBool(b)});
+namespace {
+// Shorthand for makeFromBool
+ValueId asBool(bool value) { return Id::makeFromBool(value); }
+
+// Convert a generator to a vector for easier comparison in assertions
+std::vector<IdTable> toVector(cppcoro::generator<IdTable> generator) {
+  std::vector<IdTable> result;
+  for (auto& table : generator) {
+    result.push_back(std::move(table));
   }
-  return idTable;
+  return result;
 }
-
-columnBasedIdTable::Row<Id> makeRow(bool b) {
-  columnBasedIdTable::Row<Id> row{1};
-  row[0] = Id::makeFromBool(b);
-  return row;
-}
+}  // namespace
 
 // _____________________________________________________________________________
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
-  idTables.push_back(makeIdTable({true, true, false, false, true}));
-  idTables.push_back(makeIdTable({true, false}));
-  idTables.push_back(makeIdTable({}));
-  idTables.push_back(makeIdTable({false, false, false}));
-  idTables.push_back(makeIdTable({true}));
+  idTables.push_back(makeIdTableFromVector(
+      {{true}, {true}, {false}, {false}, {true}}, asBool));
+  idTables.push_back(makeIdTableFromVector({{true}, {false}}, asBool));
+  idTables.push_back(IdTable{1, ad_utility::makeUnlimitedAllocator<Id>()});
+  idTables.push_back(
+      makeIdTableFromVector({{false}, {false}, {false}}, asBool));
+  idTables.push_back(makeIdTableFromVector({{true}}, asBool));
 
   ValuesForTesting values{qec, std::move(idTables), {Variable{"?x"}}};
   QueryExecutionTree subTree{
@@ -49,29 +53,17 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   ASSERT_FALSE(result->isFullyMaterialized());
   auto& generator = result->idTables();
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_THAT(*iterator,
-              ElementsAre(makeRow(true), makeRow(true), makeRow(true)));
+  auto referenceTable1 =
+      makeIdTableFromVector({{true}, {true}, {true}}, asBool);
+  auto referenceTable2 = makeIdTableFromVector({{true}}, asBool);
+  IdTable referenceTable3{0, ad_utility::makeUnlimitedAllocator<Id>()};
 
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_THAT(*iterator, ElementsAre(makeRow(true)));
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_THAT(*iterator, ElementsAre());
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_THAT(*iterator, ElementsAre());
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_THAT(*iterator, ElementsAre(makeRow(true)));
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(toVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2)),
+                          Eq(std::cref(referenceTable3)),
+                          Eq(std::cref(referenceTable3)),
+                          Eq(std::cref(referenceTable2))));
 }
 
 // _____________________________________________________________________________
@@ -79,11 +71,13 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
-  idTables.push_back(makeIdTable({true, true, false, false, true}));
-  idTables.push_back(makeIdTable({true, false}));
-  idTables.push_back(makeIdTable({}));
-  idTables.push_back(makeIdTable({false, false, false}));
-  idTables.push_back(makeIdTable({true}));
+  idTables.push_back(makeIdTableFromVector(
+      {{true}, {true}, {false}, {false}, {true}}, asBool));
+  idTables.push_back(makeIdTableFromVector({{true}, {false}}, asBool));
+  idTables.push_back(IdTable{1, ad_utility::makeUnlimitedAllocator<Id>()});
+  idTables.push_back(
+      makeIdTableFromVector({{false}, {false}, {false}}, asBool));
+  idTables.push_back(makeIdTableFromVector({{true}}, asBool));
 
   ValuesForTesting values{qec, std::move(idTables), {Variable{"?x"}}};
   QueryExecutionTree subTree{
@@ -96,7 +90,8 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
 
   auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
   ASSERT_TRUE(result->isFullyMaterialized());
-  EXPECT_THAT(result->idTable(),
-              ElementsAre(makeRow(true), makeRow(true), makeRow(true),
-                          makeRow(true), makeRow(true)));
+
+  EXPECT_EQ(
+      result->idTable(),
+      makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
 }

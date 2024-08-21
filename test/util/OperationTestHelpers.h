@@ -85,11 +85,12 @@ class ShallowParentOperation : public Operation {
   }
 };
 
-class AlwaysFailLazyOperation : public Operation {
+// Operation that will throw on `computeResult` for testing.
+class AlwaysFailOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { return "AlwaysFailLazyOperation"; }
+  string getCacheKeyImpl() const override { AD_CONTRACT_CHECK(false); }
   string getDescriptor() const override {
-    return "AlwaysFailLazyOperationDescriptor";
+    return "AlwaysFailOperationDescriptor";
   }
   size_t getResultWidth() const override { return 0; }
   size_t getCostEstimate() override { return 0; }
@@ -101,9 +102,12 @@ class AlwaysFailLazyOperation : public Operation {
 
  public:
   using Operation::Operation;
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult(bool requestLaziness) override {
+    if (!requestLaziness) {
+      throw std::runtime_error{"AlwaysFailOperation"};
+    }
     return {[]() -> cppcoro::generator<IdTable> {
-              throw std::runtime_error{"AlwaysFailLazyOperation"};
+              throw std::runtime_error{"AlwaysFailOperation"};
               // Required so that the exception only occurs within the generator
               co_return;
             }(),
@@ -111,10 +115,12 @@ class AlwaysFailLazyOperation : public Operation {
   }
 };
 
+// Lazy operation that will yield a result with a custom generator you can
+// provide via the constructor.
 class CustomGeneratorOperation : public Operation {
   cppcoro::generator<IdTable> generator_;
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { return "CustomGeneratorOperation"; }
+  string getCacheKeyImpl() const override { AD_CONTRACT_CHECK(false); }
   string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";
   }
@@ -130,7 +136,8 @@ class CustomGeneratorOperation : public Operation {
   CustomGeneratorOperation(QueryExecutionContext* context,
                            cppcoro::generator<IdTable> generator)
       : Operation{context}, generator_{std::move(generator)} {}
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult(bool requestLaziness) override {
+    AD_CONTRACT_CHECK(requestLaziness);
     return {std::move(generator_), resultSortedOn(), LocalVocab{}};
   }
 };

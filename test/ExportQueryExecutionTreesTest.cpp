@@ -9,10 +9,13 @@
 #include "engine/QueryPlanner.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
+using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::HasSubstr;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -208,6 +211,18 @@ static std::string makeXMLHeader(
 
 // The end of a SPARQL XML export.
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
+
+// Template is only required because inner class is not visible
+template <typename T>
+std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
+  std::vector<IdTable> result;
+  for (const auto& [idTable, range] : generator) {
+    result.emplace_back(idTable.numColumns(), idTable.getAllocator());
+    result.back().insertAtEnd(idTable.begin() + *range.begin(),
+                              idTable.begin() + *(range.end() - 1) + 1);
+  }
+  return result;
+}
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Integers) {
@@ -1072,18 +1087,14 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
-  IdTable idTable{1, ad_utility::makeUnlimitedAllocator<Id>()};
-  idTable.push_back({Id::makeFromInt(42)});
-  idTable.push_back({Id::makeFromInt(1337)});
+  auto idTable = makeIdTableFromVector({{42}, {1337}});
 
   Result result{std::move(idTable), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(iterator->size(), 2);
-  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
-  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+  EXPECT_EQ(*iterator, makeIdTableFromVector({{42}, {1337}}));
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1092,18 +1103,11 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
 
-    co_yield std::move(idTable1);
-
-    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable2.push_back({Id::makeFromInt(42)});
-    idTable2.push_back({Id::makeFromInt(1337)});
-
-    co_yield std::move(idTable2);
+    IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
+    co_yield idTable2;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
@@ -1111,16 +1115,11 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 
   auto iterator = generator.begin();
   ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(iterator->size(), 3);
-  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(1));
-  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(2));
-  EXPECT_EQ(iterator->at(2)[0], Id::makeFromInt(3));
+  ASSERT_EQ(*iterator, makeIdTableFromVector({{1}, {2}, {3}}));
 
   ++iterator;
   ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(iterator->size(), 2);
-  EXPECT_EQ(iterator->at(0)[0], Id::makeFromInt(42));
-  EXPECT_EQ(iterator->at(1)[0], Id::makeFromInt(1337));
+  ASSERT_EQ(*iterator, makeIdTableFromVector({{42}, {1337}}));
 
   ++iterator;
   EXPECT_EQ(iterator, generator.end());
@@ -1129,244 +1128,110 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
-
-    co_yield std::move(idTable1);
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 1, ._offset = 1}, result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-
-  auto range = iterator->view_;
-  auto rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  auto referenceTable = makeIdTableFromVector({{2}});
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable))));
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
 
-    co_yield std::move(idTable1);
-
-    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable2.push_back({Id::makeFromInt(4)});
-    idTable2.push_back({Id::makeFromInt(5)});
-
-    co_yield std::move(idTable2);
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
+  auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
 
-  auto range = iterator->view_;
-  auto rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(5));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
 
-    co_yield std::move(idTable1);
-
-    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable2.push_back({Id::makeFromInt(4)});
-    idTable2.push_back({Id::makeFromInt(5)});
-
-    co_yield std::move(idTable2);
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3}, result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
+  auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
 
-  auto range = iterator->view_;
-  auto rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(1));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
 
-    co_yield std::move(idTable1);
-
-    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable2.push_back({Id::makeFromInt(4)});
-    idTable2.push_back({Id::makeFromInt(5)});
-
-    co_yield std::move(idTable2);
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 3, ._offset = 1}, result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
+  auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}});
 
-  auto range = iterator->view_;
-  auto rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(2));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
-
-  ++rangeIterator;
-  ASSERT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-
-  range = iterator->view_;
-  rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2))));
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees,
      ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
   auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable1.push_back({Id::makeFromInt(1)});
-    idTable1.push_back({Id::makeFromInt(2)});
-    idTable1.push_back({Id::makeFromInt(3)});
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
 
-    co_yield std::move(idTable1);
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
 
-    IdTable idTable2{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable2.push_back({Id::makeFromInt(4)});
-    idTable2.push_back({Id::makeFromInt(5)});
-
-    co_yield std::move(idTable2);
-
-    IdTable idTable3{1, ad_utility::makeUnlimitedAllocator<Id>()};
-    idTable3.push_back({Id::makeFromInt(6)});
-    idTable3.push_back({Id::makeFromInt(7)});
-    idTable3.push_back({Id::makeFromInt(8)});
-    idTable3.push_back({Id::makeFromInt(9)});
-
-    co_yield std::move(idTable3);
+    IdTable idTable3 = makeIdTableFromVector({{6}, {7}, {8}, {9}});
+    co_yield idTable3;
   }();
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getRowIndices(
       LimitOffsetClause{._limit = 5, ._offset = 2}, result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
+  auto referenceTable1 = makeIdTableFromVector({{3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
+  auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
 
-  auto range = iterator->view_;
-  auto rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(3));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-
-  range = iterator->view_;
-  rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(4));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(5));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-
-  range = iterator->view_;
-  rangeIterator = range.begin();
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(6));
-
-  ++rangeIterator;
-  ASSERT_NE(rangeIterator, range.end());
-  EXPECT_EQ(iterator->idTable_.at(*rangeIterator)[0], Id::makeFromInt(7));
-
-  ++rangeIterator;
-  EXPECT_EQ(rangeIterator, range.end());
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2)),
+                          Eq(std::cref(referenceTable3))));
 }
 
 // _____________________________________________________________________________
@@ -1381,18 +1246,13 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     Result result{std::move(throwingGenerator), {}, LocalVocab{}};
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 0, ._offset = 0}, result);
-    EXPECT_NO_THROW({
-      for ([[maybe_unused]] const auto& info : generator) {
-      }
-    });
+    EXPECT_NO_THROW(convertToVector(std::move(generator)));
   }
 
   {
     auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
-      IdTable idTable1{1, ad_utility::makeUnlimitedAllocator<Id>()};
-      idTable1.push_back({Id::makeFromInt(1)});
-
-      co_yield std::move(idTable1);
+      IdTable idTable1 = makeIdTableFromVector({{1}});
+      co_yield idTable1;
 
       ADD_FAILURE() << "Generator was resumed" << std::endl;
       throw std::runtime_error("Generator was resumed");
@@ -1401,16 +1261,9 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
     auto generator = ExportQueryExecutionTrees::getRowIndices(
         LimitOffsetClause{._limit = 1, ._offset = 0}, result);
-    bool executed = false;
-    EXPECT_NO_THROW({
-      for (const auto& [idTable, range] : generator) {
-        for (uint64_t i : range) {
-          executed = true;
-          EXPECT_EQ(idTable.at(i)[0], Id::makeFromInt(1));
-        }
-      }
-    });
-
-    EXPECT_TRUE(executed);
+    IdTable referenceTable1 = makeIdTableFromVector({{1}});
+    std::vector<IdTable> tables;
+    EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
+    EXPECT_THAT(tables, ElementsAre(Eq(std::cref(referenceTable1))));
   }
 }
