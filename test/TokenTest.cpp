@@ -187,14 +187,30 @@ TEST(TokenizerTest, Entities) {
   string iriref2 = "<simple>";
   string iriref3 = "<unicode\uAA34\U000ABC34end>";
   string iriref4 = "<escaped\\uAA34\\U000ABC34end>";
-  string noIriref1 = "<\n>";
-  string noIriref2 = "< >";
+  string noIriref1 = "< >";
+  string noIriref2 = "<{}|^`>";
+  string noIriref4 = "<\">";
+  string noIriref3 = "<\n>";
+
+  // Strict Iriref parsing.
   ASSERT_TRUE(RE2::FullMatch(iriref1, t.Iriref, nullptr));
   ASSERT_TRUE(RE2::FullMatch(iriref2, t.Iriref, nullptr));
   ASSERT_TRUE(RE2::FullMatch(iriref3, t.Iriref, nullptr));
   ASSERT_TRUE(RE2::FullMatch(iriref4, t.Iriref, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noIriref1, t.Iriref, nullptr));
   ASSERT_FALSE(RE2::FullMatch(noIriref2, t.Iriref, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref3, t.Iriref, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref4, t.Iriref, nullptr));
+
+  // Relaxed Iriref parsing.
+  ASSERT_TRUE(RE2::FullMatch(iriref1, t.IrirefRelaxed, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref2, t.IrirefRelaxed, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref3, t.IrirefRelaxed, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(iriref4, t.IrirefRelaxed, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(noIriref1, t.IrirefRelaxed, nullptr));
+  ASSERT_TRUE(RE2::FullMatch(noIriref2, t.IrirefRelaxed, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref3, t.IrirefRelaxed, nullptr));
+  ASSERT_FALSE(RE2::FullMatch(noIriref4, t.IrirefRelaxed, nullptr));
 
   using H = TokenTestCtreHelper;
   ASSERT_TRUE(H::matchIriref(iriref1));
