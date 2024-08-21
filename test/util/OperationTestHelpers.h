@@ -88,7 +88,7 @@ class ShallowParentOperation : public Operation {
 // Operation that will throw on `computeResult` for testing.
 class AlwaysFailOperation : public Operation {
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { AD_CONTRACT_CHECK(false); }
+  string getCacheKeyImpl() const override { AD_FAIL(); }
   string getDescriptor() const override {
     return "AlwaysFailOperationDescriptor";
   }
@@ -120,7 +120,7 @@ class AlwaysFailOperation : public Operation {
 class CustomGeneratorOperation : public Operation {
   cppcoro::generator<IdTable> generator_;
   std::vector<QueryExecutionTree*> getChildren() override { return {}; }
-  string getCacheKeyImpl() const override { AD_CONTRACT_CHECK(false); }
+  string getCacheKeyImpl() const override { AD_FAIL(); }
   string getDescriptor() const override {
     return "CustomGeneratorOperationDescriptor";
   }

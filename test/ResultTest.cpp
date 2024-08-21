@@ -8,6 +8,9 @@
 #include "util/IdTableHelpers.h"
 
 using namespace std::chrono_literals;
+using testing::Combine;
+using ::testing::HasSubstr;
+using testing::Values;
 
 namespace {
 // Helper function to generate all possible splits of an IdTable in order to
@@ -94,55 +97,49 @@ TEST(Result, verifyIdTablesThrowsWhenFullyMaterialized) {
 
 // _____________________________________________________________________________
 using CIs = std::vector<ColumnIndex>;
-class ResultSortTestS : public testing::TestWithParam<CIs> {};
-class ResultSortTestF : public testing::TestWithParam<CIs> {};
+class ResultSortTest : public testing::TestWithParam<std::tuple<bool, CIs>> {};
 
-TEST_P(ResultSortTestS, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
+TEST_P(ResultSortTest, verifyAssertSortOrderIsRespectedSucceedsWhenSorted) {
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP_("Expensive checks are disabled, skipping test.");
   }
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
 
   for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), GetParam(), LocalVocab{}};
-    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
+    Result result{std::move(generator), std::get<1>(GetParam()), LocalVocab{}};
+    if (std::get<0>(GetParam())) {
+      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
+    } else {
+      AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+          consumeGenerator(result.idTables()),
+          HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
+    }
   }
 
-  EXPECT_NO_THROW((Result{std::move(idTable), GetParam(), LocalVocab{}}));
-}
-
-INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultSortTestS,
-                         testing::Values(CIs{}, CIs{0}, CIs{0, 1}, CIs{2, 0}));
-
-// _____________________________________________________________________________
-TEST_P(ResultSortTestF, verifyAssertSortOrderIsRespectedThrowsWhenNotSorted) {
-  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
-    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
-  }
-  auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
-
-  for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), GetParam(), LocalVocab{}};
+  if (std::get<0>(GetParam())) {
+    EXPECT_NO_THROW(
+        (Result{std::move(idTable), std::get<1>(GetParam()), LocalVocab{}}));
+  } else {
     AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-        consumeGenerator(result.idTables()),
-        ::testing::HasSubstr("compareRowsBySortColumns"),
-        ad_utility::Exception);
+        (Result{std::move(idTable), std::get<1>(GetParam()), LocalVocab{}}),
+        HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
   }
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      (Result{std::move(idTable), GetParam(), LocalVocab{}}),
-      ::testing::HasSubstr("compareRowsBySortColumns"), ad_utility::Exception);
 }
 
-INSTANTIATE_TEST_SUITE_P(FailureCases, ResultSortTestF,
-                         testing::Values(CIs{1}, CIs{1, 0}, CIs{2, 1}));
+INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultSortTest,
+                         Combine(Values(true),
+                                 Values(CIs{}, CIs{0}, CIs{0, 1}, CIs{2, 0})));
+
+INSTANTIATE_TEST_SUITE_P(FailureCases, ResultSortTest,
+                         Combine(Values(false),
+                                 Values(CIs{1}, CIs{1, 0}, CIs{2, 1})));
 
 // _____________________________________________________________________________
 TEST(Result,
      verifyAnErrorIsThrownIfSortedByHasHigherIndicesThanTheTableHasColumns) {
   auto idTable = makeIdTableFromVector({{1, 6, 0}, {2, 5, 0}, {3, 4, 0}});
   using ad_utility::Exception;
-  auto matcher = ::testing::HasSubstr("colIndex < idTable.numColumns()");
+  auto matcher = HasSubstr("colIndex < idTable.numColumns()");
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       (Result{idTable.clone(), {3}, LocalVocab{}}), matcher, Exception);
@@ -241,8 +238,7 @@ TEST(Result, verifyRunOnNewChunkCallsFinishOnError) {
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
       consumeGenerator(result.idTables()),
-      ::testing::HasSubstr("verifyRunOnNewChunkCallsFinishOnError"),
-      std::runtime_error);
+      HasSubstr("verifyRunOnNewChunkCallsFinishOnError"), std::runtime_error);
 
   EXPECT_EQ(callCounterGenerator, 0);
   EXPECT_EQ(callCounterFinished, 1);
@@ -406,51 +402,46 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
 
 // _____________________________________________________________________________
 using LIC = LimitOffsetClause;
-class ResultLimitTestS : public testing::TestWithParam<LimitOffsetClause> {};
-class ResultLimitTestF : public testing::TestWithParam<LimitOffsetClause> {};
+class ResultLimitTest : public testing::TestWithParam<std::tuple<bool, LIC>> {};
 
-TEST_P(ResultLimitTestS,
+TEST_P(ResultLimitTest,
        verifyAssertThatLimitWasRespectedDoesNotThrowIfLimitWasRespected) {
   auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
   {
     Result result{idTable.clone(), {}, LocalVocab{}};
-    EXPECT_NO_THROW(result.assertThatLimitWasRespected(GetParam()));
+    if (std::get<0>(GetParam())) {
+      EXPECT_NO_THROW(
+          result.assertThatLimitWasRespected(std::get<1>(GetParam())));
+    } else {
+      EXPECT_THROW(result.assertThatLimitWasRespected(std::get<1>(GetParam())),
+                   ad_utility::Exception);
+    }
   }
 
   for (auto& generator : getAllSubSplits(idTable)) {
     Result result{std::move(generator), {}, LocalVocab{}};
-    result.assertThatLimitWasRespected(GetParam());
-    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
+    result.assertThatLimitWasRespected(std::get<1>(GetParam()));
+
+    if (std::get<0>(GetParam())) {
+      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
+    } else {
+      EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
+    }
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultLimitTestS,
-                         testing::Values(LIC{}, LIC{4, 0}, LIC{4, 1337},
-                                         LIC{42, 0}, LIC{42, 1337}));
+INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultLimitTest,
+                         Combine(Values(true),
+                                 Values(LIC{}, LIC{4, 0}, LIC{4, 1337},
+                                        LIC{42, 0}, LIC{42, 1337})));
+
+INSTANTIATE_TEST_SUITE_P(FailureCases, ResultLimitTest,
+                         Combine(Values(false),
+                                 Values(LIC{3, 0}, LIC{3, 1}, LIC{3, 2})));
 
 // _____________________________________________________________________________
-TEST_P(ResultLimitTestF,
-       verifyAssertThatLimitWasRespectedDoesThrowIfLimitWasNotRespected) {
-  auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
-  {
-    Result result{idTable.clone(), {}, LocalVocab{}};
-    EXPECT_THROW(result.assertThatLimitWasRespected(GetParam()),
-                 ad_utility::Exception);
-  }
-
-  for (auto& generator : getAllSubSplits(idTable)) {
-    Result result{std::move(generator), {}, LocalVocab{}};
-    result.assertThatLimitWasRespected(GetParam());
-    EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(FailureCases, ResultLimitTestF,
-                         testing::Values(LIC{3, 0}, LIC{3, 1}, LIC{3, 2}));
-
-// _____________________________________________________________________________
-class ResultDefinednessTestS : public testing::TestWithParam<const IdTable*> {};
-class ResultDefinednessTestF : public testing::TestWithParam<const IdTable*> {};
+class ResultDefinednessTest
+    : public testing::TestWithParam<std::tuple<bool, const IdTable*>> {};
 
 auto u = Id::makeUndefined();
 auto correctTable1 = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
@@ -461,32 +452,7 @@ auto wrongTable1 = makeIdTableFromVector({{u, 7}, {1, 6}, {2, 5}, {3, 4}});
 auto wrongTable2 = makeIdTableFromVector({{u, 7}, {u, 6}, {u, 5}, {u, 4}});
 auto wrongTable3 = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {u, 4}});
 
-TEST_P(ResultDefinednessTestS,
-       verifyCheckDefinednessDoesNotThrowIfColumnIsDefined) {
-  if constexpr (!ad_utility::areExpensiveChecksEnabled) {
-    GTEST_SKIP_("Expensive checks are disabled, skipping test.");
-  }
-  VariableToColumnMap map{
-      {Variable{"?a"}, {0, ColumnIndexAndTypeInfo::AlwaysDefined}},
-      {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
-
-  {
-    Result result{GetParam()->clone(), {}, LocalVocab{}};
-    EXPECT_NO_THROW(result.checkDefinedness(map));
-  }
-  for (auto& generator : getAllSubSplits(*GetParam())) {
-    Result result{std::move(generator), {}, LocalVocab{}};
-    result.checkDefinedness(map);
-    EXPECT_NO_THROW(consumeGenerator(result.idTables()));
-  }
-}
-
-INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultDefinednessTestS,
-                         testing::Values(&correctTable1, &correctTable2,
-                                         &correctTable3, &correctTable4));
-
-// _____________________________________________________________________________
-TEST_P(ResultDefinednessTestF,
+TEST_P(ResultDefinednessTest,
        verifyCheckDefinednessDoesThrowIfColumnIsNotDefinedWhenClaimingItIs) {
   if constexpr (!ad_utility::areExpensiveChecksEnabled) {
     GTEST_SKIP_("Expensive checks are disabled, skipping test.");
@@ -496,16 +462,29 @@ TEST_P(ResultDefinednessTestF,
       {Variable{"?b"}, {1, ColumnIndexAndTypeInfo::PossiblyUndefined}}};
 
   {
-    Result result{GetParam()->clone(), {}, LocalVocab{}};
-    EXPECT_THROW(result.checkDefinedness(map), ad_utility::Exception);
+    Result result{std::get<1>(GetParam())->clone(), {}, LocalVocab{}};
+    if (std::get<0>(GetParam())) {
+      EXPECT_NO_THROW(result.checkDefinedness(map));
+    } else {
+      EXPECT_THROW(result.checkDefinedness(map), ad_utility::Exception);
+    }
   }
-  for (auto& generator : getAllSubSplits(*GetParam())) {
+  for (auto& generator : getAllSubSplits(*std::get<1>(GetParam()))) {
     Result result{std::move(generator), {}, LocalVocab{}};
     result.checkDefinedness(map);
-    EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
+    if (std::get<0>(GetParam())) {
+      EXPECT_NO_THROW(consumeGenerator(result.idTables()));
+    } else {
+      EXPECT_THROW(consumeGenerator(result.idTables()), ad_utility::Exception);
+    }
   }
 }
 
-INSTANTIATE_TEST_SUITE_P(FailureCases, ResultDefinednessTestF,
-                         testing::Values(&wrongTable1, &wrongTable2,
-                                         &wrongTable3));
+INSTANTIATE_TEST_SUITE_P(SuccessCases, ResultDefinednessTest,
+                         Combine(Values(true),
+                                 Values(&correctTable1, &correctTable2,
+                                        &correctTable3, &correctTable4)));
+
+INSTANTIATE_TEST_SUITE_P(
+    FailureCases, ResultDefinednessTest,
+    Combine(Values(false), Values(&wrongTable1, &wrongTable2, &wrongTable3)));

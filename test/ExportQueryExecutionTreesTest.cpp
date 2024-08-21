@@ -212,6 +212,16 @@ static std::string makeXMLHeader(
 // The end of a SPARQL XML export.
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
 
+// Helper function for easier testing of the `IdTable` generator.
+std::vector<IdTable> convertToVector(
+    cppcoro::generator<const IdTable&> generator) {
+  std::vector<IdTable> result;
+  for (const IdTable& idTable : generator) {
+    result.push_back(idTable.clone());
+  }
+  return result;
+}
+
 // Template is only required because inner class is not visible
 template <typename T>
 std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
@@ -1089,40 +1099,29 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto idTable = makeIdTableFromVector({{42}, {1337}});
 
-  Result result{std::move(idTable), {}, LocalVocab{}};
+  Result result{idTable.clone(), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  EXPECT_EQ(*iterator, makeIdTableFromVector({{42}, {1337}}));
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable))));
 }
 
 // _____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
-  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
-    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
-    co_yield idTable1;
+  IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+  IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
+  auto tableGenerator = [](IdTable idTableA,
+                           IdTable idTableB) -> cppcoro::generator<IdTable> {
+    co_yield idTableA;
 
-    IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
-    co_yield idTable2;
-  }();
+    co_yield idTableB;
+  }(idTable1.clone(), idTable2.clone());
 
   Result result{std::move(tableGenerator), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
-  auto iterator = generator.begin();
-  ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, makeIdTableFromVector({{1}, {2}, {3}}));
-
-  ++iterator;
-  ASSERT_NE(iterator, generator.end());
-  ASSERT_EQ(*iterator, makeIdTableFromVector({{42}, {1337}}));
-
-  ++iterator;
-  EXPECT_EQ(iterator, generator.end());
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable1)), Eq(std::cref(idTable2))));
 }
 
 // _____________________________________________________________________________

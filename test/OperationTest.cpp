@@ -12,9 +12,11 @@
 
 using namespace ad_utility::testing;
 using namespace ::testing;
+using ad_utility::CacheStatus;
 using ad_utility::CancellationException;
 using ad_utility::CancellationHandle;
 using ad_utility::CancellationState;
+using Status = RuntimeInformation::Status;
 
 namespace {
 // Helper function to perform actions at various stages of a generator
@@ -30,6 +32,14 @@ auto expectAtEachStageOfGenerator(
     ++index;
   }
   EXPECT_EQ(index, functions.size());
+}
+
+void expectRtiHasDimensions(
+    RuntimeInformation& rti, uint64_t cols, uint64_t rows,
+    ad_utility::source_location l = ad_utility::source_location::current()) {
+  auto locationTrace = generateLocationTrace(l);
+  EXPECT_EQ(rti.numCols_, cols);
+  EXPECT_EQ(rti.numRows_, rows);
 }
 }  // namespace
 
@@ -56,7 +66,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // The second `true` means "only read the result if it was cached".
   // We have just cleared the cache, and so this should return `nullptr`.
   EXPECT_EQ(n.getResult(true, ComputationMode::ONLY_IF_CACHED), nullptr);
-  EXPECT_EQ(n.runtimeInfo().status_, RuntimeInformation::Status::notStarted);
+  EXPECT_EQ(n.runtimeInfo().status_, Status::notStarted);
   // Nothing has been stored in the cache by this call.
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
@@ -65,9 +75,8 @@ TEST(OperationTest, getResultOnlyCached) {
   NeutralElementOperation n2{qec};
   auto result = n2.getResult();
   EXPECT_NE(result, nullptr);
-  EXPECT_EQ(n2.runtimeInfo().status_,
-            RuntimeInformation::Status::fullyMaterialized);
-  EXPECT_EQ(n2.runtimeInfo().cacheStatus_, ad_utility::CacheStatus::computed);
+  EXPECT_EQ(n2.runtimeInfo().status_, Status::fullyMaterialized);
+  EXPECT_EQ(n2.runtimeInfo().cacheStatus_, CacheStatus::computed);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 1);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 0);
 
@@ -75,8 +84,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // get exactly the same `shared_ptr` as with the previous call.
   NeutralElementOperation n3{qec};
   EXPECT_EQ(n3.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
-  EXPECT_EQ(n3.runtimeInfo().cacheStatus_,
-            ad_utility::CacheStatus::cachedNotPinned);
+  EXPECT_EQ(n3.runtimeInfo().cacheStatus_, CacheStatus::cachedNotPinned);
 
   // We can even use the `onlyReadFromCache` case to upgrade a non-pinned
   // cache-entry to a pinned cache entry
@@ -87,8 +95,7 @@ TEST(OperationTest, getResultOnlyCached) {
 
   // The cache status is `cachedNotPinned` because we found the element cached
   // but not pinned (it does reflect the status BEFORE the operation).
-  EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
-            ad_utility::CacheStatus::cachedNotPinned);
+  EXPECT_EQ(n4.runtimeInfo().cacheStatus_, CacheStatus::cachedNotPinned);
   EXPECT_EQ(qec->getQueryTreeCache().numNonPinnedEntries(), 0);
   EXPECT_EQ(qec->getQueryTreeCache().numPinnedEntries(), 1);
 
@@ -96,8 +103,7 @@ TEST(OperationTest, getResultOnlyCached) {
   // result.
   qecCopy._pinResult = false;
   EXPECT_EQ(n4.getResult(true, ComputationMode::ONLY_IF_CACHED), result);
-  EXPECT_EQ(n4.runtimeInfo().cacheStatus_,
-            ad_utility::CacheStatus::cachedPinned);
+  EXPECT_EQ(n4.runtimeInfo().cacheStatus_, CacheStatus::cachedPinned);
 
   // Clear the (global) cache again to not possibly interfere with other unit
   // tests.
@@ -342,33 +348,24 @@ TEST(Operation, verifyRuntimeInformationIsUpdatedForLazyOperations) {
 
   auto& rti = valuesForTesting.runtimeInfo();
 
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
   EXPECT_EQ(rti.totalTime_, 0ms);
   EXPECT_EQ(rti.originalTotalTime_, 0ms);
   EXPECT_EQ(rti.originalOperationTime_, 0ms);
 
-  auto& idTables = result.idTables();
+  expectAtEachStageOfGenerator(
+      std::move(result.idTables()),
+      {[&]() {
+         EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+         expectRtiHasDimensions(rti, 2, 1);
+       },
+       [&]() {
+         EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+         expectRtiHasDimensions(rti, 2, 2);
+       }});
 
-  auto iterator = idTables.begin();
-  ASSERT_NE(iterator, idTables.end());
-
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(rti.numCols_, 2);
-  EXPECT_EQ(rti.numRows_, 1);
-
-  ++iterator;
-  ASSERT_NE(iterator, idTables.end());
-
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(rti.numCols_, 2);
-  EXPECT_EQ(rti.numRows_, 2);
-
-  ++iterator;
-  ASSERT_EQ(iterator, idTables.end());
-
-  EXPECT_EQ(rti.status_, RuntimeInformation::Status::lazilyMaterialized);
-  EXPECT_EQ(rti.numCols_, 2);
-  EXPECT_EQ(rti.numRows_, 2);
+  EXPECT_EQ(rti.status_, Status::lazilyMaterialized);
+  expectRtiHasDimensions(rti, 2, 2);
 }
 
 // _____________________________________________________________________________
@@ -386,13 +383,11 @@ TEST(Operation, ensureFailedStatusIsSetWhenGeneratorThrowsException) {
   auto result =
       operation.runComputation(timer, ComputationMode::LAZY_IF_SUPPORTED);
 
-  EXPECT_EQ(operation.runtimeInfo().status_,
-            RuntimeInformation::Status::lazilyMaterialized);
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::lazilyMaterialized);
 
   EXPECT_THROW(result.idTables().begin(), std::runtime_error);
 
-  EXPECT_EQ(operation.runtimeInfo().status_,
-            RuntimeInformation::Status::failed);
+  EXPECT_EQ(operation.runtimeInfo().status_, Status::failed);
   EXPECT_TRUE(signaledUpdate);
 }
 
@@ -495,29 +490,21 @@ TEST(Operation, verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly) {
   auto& rti = valuesForTesting.runtimeInfo();
   auto& childRti = *rti.children_.at(0);
 
-  EXPECT_EQ(rti.numCols_, 0);
-  EXPECT_EQ(rti.numRows_, 0);
-  EXPECT_EQ(childRti.numCols_, 0);
-  EXPECT_EQ(childRti.numRows_, 0);
+  expectRtiHasDimensions(rti, 0, 0);
+  expectRtiHasDimensions(childRti, 0, 0);
 
   expectAtEachStageOfGenerator(std::move(result.idTables()),
                                {[&]() {
-                                  EXPECT_EQ(rti.numCols_, 2);
-                                  EXPECT_EQ(rti.numRows_, 0);
-                                  EXPECT_EQ(childRti.numCols_, 2);
-                                  EXPECT_EQ(childRti.numRows_, 1);
+                                  expectRtiHasDimensions(rti, 2, 0);
+                                  expectRtiHasDimensions(childRti, 2, 1);
                                 },
                                 [&]() {
-                                  EXPECT_EQ(rti.numCols_, 2);
-                                  EXPECT_EQ(rti.numRows_, 1);
-                                  EXPECT_EQ(childRti.numCols_, 2);
-                                  EXPECT_EQ(childRti.numRows_, 3);
+                                  expectRtiHasDimensions(rti, 2, 1);
+                                  expectRtiHasDimensions(childRti, 2, 3);
                                 }});
 
-  EXPECT_EQ(rti.numCols_, 2);
-  EXPECT_EQ(rti.numRows_, 1);
-  EXPECT_EQ(childRti.numCols_, 2);
-  EXPECT_EQ(childRti.numRows_, 3);
+  expectRtiHasDimensions(rti, 2, 1);
+  expectRtiHasDimensions(childRti, 2, 3);
 }
 
 // _____________________________________________________________________________
@@ -553,7 +540,7 @@ TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough) {
   EXPECT_EQ(newRti.totalTime_, oldRti.totalTime_);
   EXPECT_EQ(newRti.originalTotalTime_, oldRti.originalTotalTime_);
   EXPECT_EQ(newRti.originalOperationTime_, oldRti.originalOperationTime_);
-  EXPECT_EQ(newRti.status_, RuntimeInformation::Status::fullyMaterialized);
+  EXPECT_EQ(newRti.status_, Status::fullyMaterialized);
 
   const auto& aggregatedResult =
       aggregatedValue.value()._resultPointer->resultTable();

@@ -484,11 +484,14 @@ TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
 
   SimpleConcurrentLruCache cache{};
 
-  auto expectContainsSingleEntry =
-      [&](bool pinned, ad_utility::source_location l =
-                           ad_utility::source_location::current()) {
+  auto expectContainsSingleElementAtKey0 =
+      [&](bool pinned, std::string expected,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
         using namespace ::testing;
         auto trace = generateLocationTrace(l);
+        auto value = cache.getIfContained(0);
+        EXPECT_THAT(value, hasValue(expected));
         if (pinned) {
           EXPECT_NE(cache.pinnedSize(), 0_B);
           EXPECT_EQ(cache.nonPinnedSize(), 0_B);
@@ -500,27 +503,19 @@ TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
 
   cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("abc"));
 
-  auto value = cache.getIfContained(0);
-  EXPECT_THAT(value, hasValue("abc"));
-  expectContainsSingleEntry(false);
+  expectContainsSingleElementAtKey0(false, "abc");
 
   cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("def"));
 
-  value = cache.getIfContained(0);
-  EXPECT_THAT(value, hasValue("abc"));
-  expectContainsSingleEntry(false);
+  expectContainsSingleElementAtKey0(false, "abc");
 
   cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("ghi"));
 
-  value = cache.getIfContained(0);
-  EXPECT_THAT(value, hasValue("abc"s));
-  expectContainsSingleEntry(true);
+  expectContainsSingleElementAtKey0(true, "abc");
 
   cache.clearAll();
 
   cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("jkl"));
 
-  value = cache.getIfContained(0);
-  EXPECT_THAT(value, hasValue("jkl"s));
-  expectContainsSingleEntry(true);
+  expectContainsSingleElementAtKey0(true, "jkl");
 }
