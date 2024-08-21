@@ -23,6 +23,9 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
+using HttpOrHttpsResponse = std::pair<boost::beast::http::status,
+                                      cppcoro::generator<std::span<std::byte>>>;
+
 // A class for basic communication with a remote server via HTTP or HTTPS. For
 // now, contains functionality for setting up a connection, sending one or
 // several GET or POST requests (and getting the response), and closing the
@@ -43,7 +46,7 @@ class HttpClientImpl {
   // `http::verb::post`) and return the body of the response (possibly very
   // large) as an `cppcoro::generator<std::string_view>`. The same connection
   // can be used for multiple requests in a row.
-  cppcoro::generator<std::span<std::byte>> sendRequest(
+  HttpOrHttpsResponse sendRequest(
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
@@ -78,7 +81,7 @@ using HttpsClient =
 // URL and obtaining the result as a `cppcoro::generator<std::span<std::byte>>`.
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
 // `requestBody` is the payload sent for POST requests (default: empty).
-cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
+HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,

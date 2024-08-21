@@ -120,15 +120,22 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  cppcoro::generator<std::span<std::byte>> jsonByteResult = getResultFunction_(
+  HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
+  if (boost::beast::http::to_status_class(response.first) !=
+      boost::beast::http::status_class::successful) {
+    throw std::runtime_error(absl::StrCat(
+        "Service respondet with: ", static_cast<int>(response.first), ", ",
+        std::string(boost::beast::http::obsolete_reason(response.first))));
+  }
+
   std::basic_string<char, std::char_traits<char>,
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
-  for (std::span<std::byte> bytes : jsonByteResult) {
+  for (std::span<std::byte> bytes : response.second) {
     jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     checkCancellation();
   }
