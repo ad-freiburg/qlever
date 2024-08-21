@@ -694,6 +694,54 @@ TEST(TurtleParserTest, collection) {
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
 }
 
+// Test the parsing of an IRI reference.
+TEST(TurtleParserTest, iriref) {
+  // Run test for given parser.
+  auto runTestsForParser = [](auto parser) {
+    std::string iriref_1 = "<fine>";
+    std::string iriref_2 = "<okay ish>";
+    std::string iriref_3 = "<not\x19okay_for_RE2>";
+    std::string iriref_4 = "<throws\"exception>";
+    std::string iriref_5 = "no iriref at all";
+    // The first IRI ref is fine for both parsers.
+    parser.setInputStream(iriref_1);
+    ASSERT_TRUE(parser.iriref());
+    ASSERT_EQ(parser.lastParseResult_, iri(iriref_1));
+    // The second IRI ref is accepted by both parsers, but produces a
+    // warning for the Re2Parser.
+    testing::internal::CaptureStdout();
+    parser.setInputStream(iriref_2);
+    ASSERT_TRUE(parser.iriref());
+    ASSERT_EQ(parser.lastParseResult_, iri(iriref_2));
+    std::string warning = testing::internal::GetCapturedStdout();
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      EXPECT_EQ(warning, "");
+    } else {
+      EXPECT_THAT(warning, ::testing::HasSubstr("not standard-compliant"));
+      EXPECT_THAT(warning, ::testing::HasSubstr(iriref_2));
+    }
+    // The third IRI ref is accepted by the CtreParser, but not by the
+    // Re2Parser.
+    parser.setInputStream(iriref_3);
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      ASSERT_TRUE(parser.iriref());
+      ASSERT_EQ(parser.lastParseResult_, iri(iriref_3));
+    } else {
+      ASSERT_FALSE(parser.iriref());
+    }
+    // The fourth IRI ref throws an exception when parsed (because " is
+    // encountered before the closing >).
+    parser.setInputStream(iriref_4);
+    ASSERT_THROW(parser.iriref(), TurtleParser<Tokenizer>::ParseException);
+    // The fifth IRI ref is not recognized as an IRI ref.
+    parser.setInputStream(iriref_5);
+    ASSERT_FALSE(parser.iriref());
+  };
+  // Run tests for both parsers and reset std::cout.
+  runTestsForParser(Re2Parser{});
+  runTestsForParser(CtreParser{});
+}
+
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. Iff `useBatchInterface` then the `getBatch()` function is used
 // for parsing, else `getLine()` is used.
