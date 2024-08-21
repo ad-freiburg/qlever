@@ -370,7 +370,7 @@ TEST(IndexScan, additionalColumn) {
   ASSERT_THAT(scan.getExternallyVisibleVariableColumns(),
               ::testing::UnorderedElementsAreArray(expected));
   ASSERT_THAT(scan.getCacheKey(),
-              ::testing::ContainsRegex("Additional Columns: 3 4"));
+              ::testing::ContainsRegex("Additional Columns: 4 5"));
   auto res = scan.computeResultOnlyForTesting();
   auto getId = makeGetId(qec->getIndex());
   auto I = IntId;
