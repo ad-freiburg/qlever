@@ -56,8 +56,7 @@ static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
 static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
 static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
-// static const std::string DEFAULT_GRAPH_IRI =
-// makeInternalIri("default-graph");
+
 static constexpr std::string_view DEFAULT_GRAPH_IRI =
     "<http://qlever.cs.uni-freiburg.de/builtin-functions/default-graph>";
 static const std::string INTERNAL_GRAPH_IRI = makeInternalIri("internal-graph");
