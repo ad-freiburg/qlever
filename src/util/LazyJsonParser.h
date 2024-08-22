@@ -4,9 +4,11 @@
 
 #pragma once
 
+#include <optional>
 #include <variant>
 
 #include "util/Generator.h"
+#include "util/json.h"
 
 namespace ad_utility {
 /*
@@ -19,44 +21,48 @@ namespace ad_utility {
 class LazyJsonParser {
  public:
   // Parse chunks of json-strings yielding them reconstructed.
-  static cppcoro::generator<std::string> parse(
+  static cppcoro::generator<nlohmann::json> parse(
       cppcoro::generator<std::string> partJson,
       std::vector<std::string> arrayPath) {
     LazyJsonParser p(arrayPath);
     for (const auto& chunk : partJson) {
-      co_yield p.parseChunk(chunk);
+      if (auto res = p.parseChunk(chunk); res.has_value()) {
+        co_yield res;
+      }
     }
-  }
-
-  // As above just on a single string.
-  static std::string parse(const std::string& s,
-                           const std::vector<std::string>& arrayPath) {
-    LazyJsonParser p(arrayPath);
-    return p.parseChunk(s);
   }
 
  private:
   explicit LazyJsonParser(std::vector<std::string> arrayPath);
 
   // Parses a chunk of JSON data and returns it with reconstructed structure.
-  std::string parseChunk(std::string_view inStr);
+  std::optional<nlohmann::json> parseChunk(std::string_view inStr);
 
   // Parses literals in the input.
   void parseLiteral(size_t& idx);
 
-  // Parse the different sections before/in/after the arrayPath.
+  // The following 3 methods parse the different sections before/in/after the
+  // arrayPath starting at the given index `idx` on the `input_` string.
   void parseBeforeArrayPath(size_t& idx);
-  void parseInArrayPath(size_t& idx, size_t& materializeEnd);
-  void parseAfterArrayPath(size_t& idx, size_t& materializeEnd);
+
+  // Returns the index of the last `,` between array elements or 0.
+  size_t parseInArrayPath(size_t& idx);
+
+  // Returns the index after the input, when reading the input is complete.
+  std::optional<size_t> parseAfterArrayPath(size_t& idx);
 
   // Constructs the result to be returned after parsing a chunk.
-  std::string constructResultFromParsedChunk(size_t materializeEnd);
+  std::optional<nlohmann::json> constructResultFromParsedChunk(
+      size_t materializeEnd);
 
   // Context for the 3 parsing sections.
   struct BeforeArrayPath {
     // Indices of the latest parsed literal, used to add keys to the curPath_.
-    size_t litStart_{0};
-    size_t litLength_{0};
+    struct LiteralView {
+      size_t start_{0};
+      size_t length_{0};
+    };
+    std::optional<LiteralView> optLiteral_;
     std::vector<std::string> curPath_;
     // Open Brackets counter to track nested arrays.
     int openBrackets_{0};
@@ -67,14 +73,10 @@ class LazyJsonParser {
   struct InArrayPath {
     // Track brackets/braces to find the end of the array.
     int openBracketsAndBraces_{0};
-    // Start index of the ArrayPath to measure the size of the first element.
-    size_t arrayStartIdx_{0};
   };
   struct AfterArrayPath {
     // Remaining braces until the end of the input-object.
     size_t remainingBraces_;
-    // End index of the ArrayPath to measure the size of the "suffix".
-    size_t arrayEndIdx_{0};
   };
   std::variant<BeforeArrayPath, InArrayPath, AfterArrayPath> state_{
       BeforeArrayPath()};

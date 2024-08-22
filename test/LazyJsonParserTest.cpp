@@ -13,36 +13,36 @@ using ad_utility::LazyJsonParser;
 TEST(parseTest, parse) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
 
-  // CHECK 1: Expected results for empty or complete results.
-  EXPECT_EQ(LazyJsonParser::parse("", arrayPath), "");
-  EXPECT_EQ(LazyJsonParser::parse(
-                R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})",
-                arrayPath),
-            R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})");
-
+  auto yieldChars =
+      [](const std::string& s) -> cppcoro::generator<std::string> {
+    for (auto& c : s) {
+      co_yield std::string(1, c);
+    }
+  };
   // Check if the parser yields the expected results when parsing each char
   // individually.
-  auto expectYields = [](const std::string& s,
-                         const std::vector<std::string>& exp,
-                         const std::vector<std::string>& arrayPath) {
-    auto yieldChars =
-        [](const std::string& s) -> cppcoro::generator<std::string> {
-      for (auto& c : s) {
-        co_yield std::string(1, c);
-      }
-    };
+  auto expectYields = [&yieldChars](const std::string& s,
+                                    const std::vector<std::string>& exp,
+                                    const std::vector<std::string> arrayPath) {
     auto parsedResult = LazyJsonParser::parse(yieldChars(s), arrayPath);
 
     size_t expIdx = 0;
     for (const auto& y : parsedResult) {
       if (!y.empty()) {
         ASSERT_TRUE(expIdx < exp.size());
-        ASSERT_EQ(y, exp[expIdx]);
+        ASSERT_EQ(y, nlohmann::json::parse(exp[expIdx]));
         ++expIdx;
       }
     }
     EXPECT_EQ(expIdx, exp.size());
   };
+
+  // CHECK 1: Expected results for empty or complete results.
+  expectYields("", {}, arrayPath);
+
+  expectYields(R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})",
+               {R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})"},
+               arrayPath);
 
   // CHECK 2: Empty ArrayPath
   expectYields("[1,2,3]", {"[1]", "[2]", "[3]"}, {});
@@ -84,24 +84,9 @@ TEST(parseTest, parse) {
                 absl::StrCat(R"({"results": {"bindings": [)", result4b)},
                arrayPath);
 
-  // CHECK 4: Throw when exceeding input size limit.
-  // parseLiteral
-  EXPECT_ANY_THROW(LazyJsonParser::parse(
-      absl::StrCat(R"({"key":")", std::string(1'000'000, '0'), R"(")"), {}));
-  // BeforeArrayPath
-  EXPECT_ANY_THROW(LazyJsonParser::parse(
-      absl::StrCat(R"({"key":)", std::string(1'000'000, 0), R"(})"),
-      arrayPath));
-  // InArrayPath
-  EXPECT_ANY_THROW(LazyJsonParser::parse(
-      absl::StrCat(R"({"head":[)", std::string(1'000'000, 0)), {"head"}));
-  // AfterArrayPath
-  EXPECT_ANY_THROW(
-      LazyJsonParser::parse(absl::StrCat(R"({"head":[],"key": )",
-                                         std::string(1'000'000, '0'), R"(})"),
-                            {"head"}));
-
   // CHECK 5: Cornercases
-  EXPECT_NO_THROW(LazyJsonParser::parse("[1,2,3]", arrayPath));
-  EXPECT_NO_THROW(LazyJsonParser::parse("{}", arrayPath));
+  EXPECT_NO_THROW(expectYields("[1,2,3]", {}, arrayPath));
+  EXPECT_NO_THROW(expectYields("{}", {}, arrayPath));
+
+  EXPECT_ANY_THROW(expectYields(std::string(1'000'000, '0'), {}, arrayPath));
 }

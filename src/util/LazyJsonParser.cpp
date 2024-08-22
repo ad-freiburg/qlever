@@ -26,7 +26,8 @@ LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
       suffixInArray_(absl::StrCat("]", std::string(arrayPath_.size(), '}'))) {}
 
 // ____________________________________________________________________________
-std::string LazyJsonParser::parseChunk(std::string_view inStr) {
+std::optional<nlohmann::json> LazyJsonParser::parseChunk(
+    std::string_view inStr) {
   size_t idx = input_.size();
   absl::StrAppend(&input_, inStr);
 
@@ -40,21 +41,16 @@ std::string LazyJsonParser::parseChunk(std::string_view inStr) {
   }
 
   // Resume parsing the current section.
-  while (idx < input_.size()) {
-    switch (state_.index()) {
-      case 0:
-        parseBeforeArrayPath(idx);
-        break;
-      case 1:
-        parseInArrayPath(idx, materializeEnd);
-        if (arrayPath_.empty() &&
-            std::holds_alternative<AfterArrayPath>(state_)) {
-          materializeEnd = idx;
-        }
-        break;
-      case 2:
-        parseAfterArrayPath(idx, materializeEnd);
-        break;
+  if (std::holds_alternative<BeforeArrayPath>(state_)) {
+    parseBeforeArrayPath(idx);
+  }
+  if (std::holds_alternative<InArrayPath>(state_)) {
+    materializeEnd = parseInArrayPath(idx);
+  }
+  if (std::holds_alternative<AfterArrayPath>(state_)) {
+    std::optional<size_t> optEnd = parseAfterArrayPath(idx);
+    if (optEnd) {
+      materializeEnd = optEnd.value();
     }
   }
 
@@ -67,16 +63,13 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
   if (input_[idx] == '"' && !inLiteral_) {
     ++idx;
     if (std::holds_alternative<BeforeArrayPath>(state_)) {
-      std::get<BeforeArrayPath>(state_).litStart_ = idx;
+      std::get<BeforeArrayPath>(state_).optLiteral_ =
+          BeforeArrayPath::LiteralView{.start_ = idx};
     }
     inLiteral_ = true;
   }
 
   for (; idx < input_.size(); ++idx) {
-    if (idx > 1'000'000) {
-      throw std::runtime_error(
-          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
-    }
     if (isEscaped_) {
       isEscaped_ = false;
       continue;
@@ -85,8 +78,8 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
       case '"':
         // End of literal.
         if (std::holds_alternative<BeforeArrayPath>(state_)) {
-          std::get<BeforeArrayPath>(state_).litLength_ =
-              idx - std::get<BeforeArrayPath>(state_).litStart_;
+          std::get<BeforeArrayPath>(state_).optLiteral_->length_ =
+              idx - std::get<BeforeArrayPath>(state_).optLiteral_->start_;
         }
         inLiteral_ = false;
         return;
@@ -105,10 +98,6 @@ void LazyJsonParser::parseBeforeArrayPath(size_t& idx) {
   auto& state = std::get<BeforeArrayPath>(state_);
 
   for (; idx < input_.size(); ++idx) {
-    if (idx >= 1'000'000) {
-      throw std::runtime_error(
-          "Ill-formed JSON: Header size exceeds 1 Megabyte.");
-    }
     switch (input_[idx]) {
       case '{':
         state.tryAddKeyToPath(input_);
@@ -120,7 +109,7 @@ void LazyJsonParser::parseBeforeArrayPath(size_t& idx) {
         ++state.openBrackets_;
         if (state.curPath_ == arrayPath_) {
           // Reached arrayPath.
-          state_ = InArrayPath{.arrayStartIdx_ = idx};
+          state_ = InArrayPath();
           ++idx;
           return;
         }
@@ -146,15 +135,21 @@ void LazyJsonParser::parseBeforeArrayPath(size_t& idx) {
 }
 
 // ____________________________________________________________________________
-void LazyJsonParser::parseInArrayPath(size_t& idx, size_t& materializeEnd) {
+size_t LazyJsonParser::parseInArrayPath(size_t& idx) {
   AD_CORRECTNESS_CHECK(std::holds_alternative<InArrayPath>(state_));
   auto& state = std::get<InArrayPath>(state_);
+  size_t materializeEnd = 0;
+
+  auto exitArrayPath = [&]() {
+    state_ = AfterArrayPath{.remainingBraces_ = arrayPath_.size()};
+    ++idx;
+    if (arrayPath_.empty()) {
+      materializeEnd = idx;
+    }
+    return materializeEnd;
+  };
 
   for (; idx < input_.size(); ++idx) {
-    if (idx - std::max(state.arrayStartIdx_, materializeEnd) >= 1'000'000) {
-      throw std::runtime_error(
-          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
-    }
     switch (input_[idx]) {
       case '{':
       case '[':
@@ -166,19 +161,13 @@ void LazyJsonParser::parseInArrayPath(size_t& idx, size_t& materializeEnd) {
       case ']':
         if (state.openBracketsAndBraces_ == 0) {
           // End of ArrayPath reached.
-          state_ = AfterArrayPath{.remainingBraces_ = arrayPath_.size(),
-                                  .arrayEndIdx_ = idx};
-          ++idx;
-          return;
+          return exitArrayPath();
         }
         --state.openBracketsAndBraces_;
         break;
       case ',':
         if (state.openBracketsAndBraces_ == 0) {
           materializeEnd = idx;
-          // reset arrayStartIdx_ to its sentinel 0, as it's only needed/valid
-          // for the first element
-          state.arrayStartIdx_ = 0;
         }
         break;
       case '"':
@@ -188,18 +177,15 @@ void LazyJsonParser::parseInArrayPath(size_t& idx, size_t& materializeEnd) {
         break;
     }
   }
+  return materializeEnd;
 }
 
 // ____________________________________________________________________________
-void LazyJsonParser::parseAfterArrayPath(size_t& idx, size_t& materializeEnd) {
+std::optional<size_t> LazyJsonParser::parseAfterArrayPath(size_t& idx) {
   AD_CORRECTNESS_CHECK(std::holds_alternative<AfterArrayPath>(state_));
   auto& state = std::get<AfterArrayPath>(state_);
 
   for (; idx < input_.size(); ++idx) {
-    if (idx - state.arrayEndIdx_ > 1'000'000) {
-      throw std::runtime_error(
-          "Ill-formed JSON: Element size exceeds 1 Megabyte.");
-    }
     switch (input_[idx]) {
       case '{':
         state.remainingBraces_ += 1;
@@ -208,7 +194,7 @@ void LazyJsonParser::parseAfterArrayPath(size_t& idx, size_t& materializeEnd) {
         state.remainingBraces_ -= 1;
         if (state.remainingBraces_ == 0) {
           // End reached.
-          materializeEnd = idx + 1;
+          return idx + 1;
         }
         break;
       case '"':
@@ -218,40 +204,52 @@ void LazyJsonParser::parseAfterArrayPath(size_t& idx, size_t& materializeEnd) {
         break;
     }
   }
+  return std::nullopt;
 }
 
 // ____________________________________________________________________________
-std::string LazyJsonParser::constructResultFromParsedChunk(
+std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
     size_t materializeEnd) {
-  std::string res;
-  if (materializeEnd == 0) {
-    return res;
+  size_t nextChunkStart =
+      materializeEnd == 0 ? 0 : std::min(materializeEnd + 1, input_.size());
+  if (input_.size() - nextChunkStart >= 1'000'000) {
+    throw std::runtime_error("Ill formed Json.");
+  }
+  if (nextChunkStart == 0) {
+    return std::nullopt;
   }
 
-  // Don't yield before arrayPath.
-  AD_CORRECTNESS_CHECK(!std::holds_alternative<BeforeArrayPath>(state_));
-
+  std::string resStr;
   if (yieldCount_ > 0) {
-    res = prefixInArray_;
+    resStr = prefixInArray_;
   }
   ++yieldCount_;
 
-  absl::StrAppend(&res, input_.substr(0, materializeEnd));
-  input_ = input_.substr(std::min(materializeEnd + 1, input_.size()));
+  // materializeEnd either holds the index to a `,` between two elements in the
+  // arrayPath or the (non-existent) first-character after the input.
+  AD_CORRECTNESS_CHECK(
+      (std::holds_alternative<InArrayPath>(state_) &&
+       input_[materializeEnd] == ',') ||
+      (std::holds_alternative<AfterArrayPath>(state_) &&
+       std::get<AfterArrayPath>(state_).remainingBraces_ == 0 &&
+       input_.size() == materializeEnd));
+
+  absl::StrAppend(&resStr, input_.substr(0, materializeEnd));
+  input_ = input_.substr(nextChunkStart);
 
   if (std::holds_alternative<InArrayPath>(state_)) {
-    absl::StrAppend(&res, suffixInArray_);
+    absl::StrAppend(&resStr, suffixInArray_);
   }
 
-  return res;
+  return nlohmann::json::parse(resStr);
 }
 
 // ____________________________________________________________________________
 void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
-  if (litLength_ > 0) {
-    curPath_.emplace_back(input.substr(litStart_, litLength_));
-    // The marked literal got consumed/added as key -> reset litLength_.
-    litLength_ = 0;
+  if (optLiteral_) {
+    curPath_.emplace_back(
+        input.substr(optLiteral_->start_, optLiteral_->length_));
+    optLiteral_ = std::nullopt;
   }
 }
 
