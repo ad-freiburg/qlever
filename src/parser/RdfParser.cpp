@@ -396,18 +396,6 @@ bool NQuadParser<T>::nQuadLiteral() {
 
 // _____________________________________________________________________________
 template <typename T>
-bool NQuadParser<T>::getLine(TurtleTriple* triple) {
-  if (statement()) {
-    *triple = std::move(this->triples_.back());
-    this->triples_.clear();
-    return true;
-  } else {
-    return false;
-  }
-}
-
-// _____________________________________________________________________________
-template <typename T>
 bool NQuadParser<T>::nQuadSubject() {
   if (Base::iriref() || Base::blankNodeLabel()) {
     this->activeSubject_ = std::move(this->lastParseResult_);

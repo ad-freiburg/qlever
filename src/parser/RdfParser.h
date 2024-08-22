@@ -420,9 +420,6 @@ class NQuadParser : public TurtleParser<Tokenizer_T> {
   bool nQuadObject();
   bool nQuadGraphLabel();
   bool nQuadLiteral();
-
- public:
-  bool getLine(TurtleTriple* triple) override;
 };
 
 /**
