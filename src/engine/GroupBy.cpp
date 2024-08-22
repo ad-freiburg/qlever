@@ -407,8 +407,8 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
 // _____________________________________________________________________________
 bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
   // The child must be an `IndexScan` for this optimization.
-  auto* indexScan =
-      dynamic_cast<const IndexScan*>(_subtree->getRootOperation().get());
+  auto indexScan =
+      std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
 
   if (!indexScan) {
     return false;
@@ -457,8 +457,8 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
 // ____________________________________________________________________________
 bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   // The child must be an `IndexScan` with exactly two variables.
-  auto* indexScan =
-      dynamic_cast<IndexScan*>(_subtree->getRootOperation().get());
+  auto indexScan =
+      std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
   if (!indexScan || indexScan->numVariables() != 2) {
     return false;
   }
@@ -586,7 +586,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
     const QueryExecutionTree& tree, const Variable& variableByWhichToSort,
     const Variable& variableThatMustBeContained) {
   auto indexScan =
-      dynamic_cast<const IndexScan*>(tree.getRootOperation().get());
+      std::dynamic_pointer_cast<const IndexScan>(tree.getRootOperation());
 
   if (!indexScan || indexScan->getResultWidth() != 3) {
     return std::nullopt;
@@ -612,7 +612,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
 
 // ____________________________________________________________________________
 std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
-    const Join* join) {
+    const Operation& join) {
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
@@ -625,8 +625,8 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 
   // Determine if any of the two children of the join operation is a
   // triple with three variables that fulfills the condition.
-  auto* child1 = static_cast<const Operation*>(join)->getChildren().at(0);
-  auto* child2 = static_cast<const Operation*>(join)->getChildren().at(1);
+  auto* child1 = join.getChildren().at(0);
+  auto* child2 = join.getChildren().at(1);
 
   // TODO<joka921, C++23> Use `optional::or_else`
   auto permutation = getPermutationForThreeVariableTriple(
@@ -656,12 +656,12 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 
 // ____________________________________________________________________________
 bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
-  auto join = dynamic_cast<Join*>(_subtree->getRootOperation().get());
+  auto join = std::dynamic_pointer_cast<Join>(_subtree->getRootOperation());
   if (!join) {
     return false;
   }
 
-  auto optimizedAggregateData = checkIfJoinWithFullScan(join);
+  auto optimizedAggregateData = checkIfJoinWithFullScan(*join);
   if (!optimizedAggregateData.has_value()) {
     return false;
   }
@@ -743,8 +743,7 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
     return std::nullopt;
   }
 
-  if (auto sort = dynamic_cast<const Sort*>(_subtree->getRootOperation().get());
-      sort == nullptr) {
+  if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
     return std::nullopt;
   }
 
