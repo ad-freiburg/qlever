@@ -19,7 +19,8 @@ ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;
 
-static const Id hasPatternId = qlever::specialIds().at(HAS_PATTERN_PREDICATE);
+static const Id hasPatternId =
+    qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {

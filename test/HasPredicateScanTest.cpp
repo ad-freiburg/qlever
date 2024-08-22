@@ -181,7 +181,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, HAS_PATTERN_PREDICATE, V{"?predicate"}};
+  auto triple = SparqlTriple{V{"?x"}, std::string{HAS_PATTERN_PREDICATE},
+                             V{"?predicate"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
   auto patternTrick =
