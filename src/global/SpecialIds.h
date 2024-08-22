@@ -15,9 +15,11 @@ namespace qlever {
 // A mapping from special builtin IRIs that are not managed via the normal
 // vocabulary to the IDs that are used to represent them. These IDs all have the
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
-inline const ad_utility::HashMap<std::string, Id>& specialIds() {
+// TODO<joka921> Use ad_utility::HashMap again once the debugging in MacOs is
+// done.
+inline const std::unordered_map<std::string, Id>& specialIds() {
   static const auto ids = []() {
-    ad_utility::HashMap<std::string, Id> result{
+    std::unordered_map<std::string, Id> result{
         {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
         {HAS_PATTERN_PREDICATE, Id::fromBits(2)},
         {std::string{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},

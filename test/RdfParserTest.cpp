@@ -975,7 +975,8 @@ TEST(TurtleParserTest, nQuadParser) {
     auto lit = ad_utility::testing::tripleComponentLiteral;
     std::vector<TurtleTriple> expected;
     expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
-    auto internalGraphId = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+    auto internalGraphId =
+        qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
     expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank",
                           internalGraphId);
     expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"),
@@ -997,5 +998,5 @@ TEST(TurtleParserTest, nQuadParser) {
     // format.
   };
   runTestsForParser(RdfStringParser<NQuadParser<Tokenizer>>());
-  auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
+  runTestsForParser(RdfStringParser<NQuadParser<TokenizerCtre>>());
 }
