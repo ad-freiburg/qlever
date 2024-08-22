@@ -1913,3 +1913,11 @@ TEST(SparqlParser, GraphRef) {
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
 }
+
+TEST(SparqlParser, SourceSelector) {
+  // This will be implemented soon, but for now we test the failure for the
+  // coverage tool.
+  auto expectSelectorFails = ExpectParseFails<&Parser::sourceSelector>{};
+  auto unreachableMatcher = ::testing::HasSubstr("should be unreachable");
+  expectSelectorFails("<x>", unreachableMatcher);
+}

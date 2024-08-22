@@ -287,7 +287,7 @@ class TurtleParser : public RdfParserBase {
   bool blankNode();
   bool collection();
   bool literal();
-  // The `Impl` indirection is for easier testing in `TurtleParserTest.cpp`
+  // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
   bool rdfLiteralImpl(bool allowMultilineStrings);
   bool rdfLiteral() {
     // Turtle allows for multiline strings.
@@ -296,7 +296,7 @@ class TurtleParser : public RdfParserBase {
   bool numericLiteral();
   bool booleanLiteral();
   bool prefixedName();
-  // The `Impl` indirection is for easier testing in `TurtleParserTest.cpp`
+  // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
   bool stringParseImpl(bool allowMultilineStrings);
   bool stringParse() { return stringParseImpl(true); }
 
@@ -388,20 +388,20 @@ class TurtleParser : public RdfParserBase {
   void setBlankNodePrefixOnlyForTesting(size_t id) { blankNodePrefix_ = id; }
 
  protected:
-  FRIEND_TEST(TurtleParserTest, prefixedName);
-  FRIEND_TEST(TurtleParserTest, prefixID);
-  FRIEND_TEST(TurtleParserTest, stringParse);
-  FRIEND_TEST(TurtleParserTest, rdfLiteral);
-  FRIEND_TEST(TurtleParserTest, predicateObjectList);
-  FRIEND_TEST(TurtleParserTest, objectList);
-  FRIEND_TEST(TurtleParserTest, object);
-  FRIEND_TEST(TurtleParserTest, blankNode);
-  FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
-  FRIEND_TEST(TurtleParserTest, numericLiteral);
-  FRIEND_TEST(TurtleParserTest, booleanLiteral);
-  FRIEND_TEST(TurtleParserTest, booleanLiteralLongForm);
-  FRIEND_TEST(TurtleParserTest, collection);
-  FRIEND_TEST(TurtleParserTest, iriref);
+  FRIEND_TEST(RdfParserTest, prefixedName);
+  FRIEND_TEST(RdfParserTest, prefixID);
+  FRIEND_TEST(RdfParserTest, stringParse);
+  FRIEND_TEST(RdfParserTest, rdfLiteral);
+  FRIEND_TEST(RdfParserTest, predicateObjectList);
+  FRIEND_TEST(RdfParserTest, objectList);
+  FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodePropertyList);
+  FRIEND_TEST(RdfParserTest, numericLiteral);
+  FRIEND_TEST(RdfParserTest, booleanLiteral);
+  FRIEND_TEST(RdfParserTest, booleanLiteralLongForm);
+  FRIEND_TEST(RdfParserTest, collection);
+  FRIEND_TEST(RdfParserTest, iriref);
 };
 
 template <class Tokenizer_T>
@@ -520,17 +520,17 @@ class RdfStringParser : public Parser {
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
 
-  FRIEND_TEST(TurtleParserTest, prefixedName);
-  FRIEND_TEST(TurtleParserTest, prefixID);
-  FRIEND_TEST(TurtleParserTest, stringParse);
-  FRIEND_TEST(TurtleParserTest, rdfLiteral);
-  FRIEND_TEST(TurtleParserTest, predicateObjectList);
-  FRIEND_TEST(TurtleParserTest, objectList);
-  FRIEND_TEST(TurtleParserTest, object);
-  FRIEND_TEST(TurtleParserTest, blankNode);
-  FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
-  FRIEND_TEST(TurtleParserTest, DateLiterals);
-  FRIEND_TEST(TurtleParserTest, DayTimeDurationLiterals);
+  FRIEND_TEST(RdfParserTest, prefixedName);
+  FRIEND_TEST(RdfParserTest, prefixID);
+  FRIEND_TEST(RdfParserTest, stringParse);
+  FRIEND_TEST(RdfParserTest, rdfLiteral);
+  FRIEND_TEST(RdfParserTest, predicateObjectList);
+  FRIEND_TEST(RdfParserTest, objectList);
+  FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodePropertyList);
+  FRIEND_TEST(RdfParserTest, DateLiterals);
+  FRIEND_TEST(RdfParserTest, DayTimeDurationLiterals);
 };
 
 /**
