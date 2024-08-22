@@ -55,7 +55,8 @@ static const std::string INTERNAL_TEXT_MATCH_PREDICATE =
     makeInternalIri("text");
 static const std::string HAS_PREDICATE_PREDICATE =
     makeInternalIri("has-predicate");
-static const std::string HAS_PATTERN_PREDICATE = makeInternalIri("has-pattern");
+static constexpr std::string_view HAS_PATTERN_PREDICATE =
+    "<http:// qlever.cs.uni-freiburg.de/builtin-functions/has-pattern>";
 
 static constexpr std::string_view DEFAULT_GRAPH_IRI =
     "<http://qlever.cs.uni-freiburg.de/builtin-functions/default-graph>";
@@ -136,7 +137,7 @@ static const std::string ERROR_IGNORE_CASE_UNSUPPORTED =
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 static const std::string WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
-    "parsing for well-behaved TTL files";
+    "sparsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
 // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "

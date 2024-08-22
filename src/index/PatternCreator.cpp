@@ -6,7 +6,8 @@
 
 #include "global/SpecialIds.h"
 
-static const Id hasPatternId = qlever::specialIds().at(HAS_PATTERN_PREDICATE);
+static const Id hasPatternId =
+    qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
 
 // _________________________________________________________________________
 void PatternCreator::processTriple(

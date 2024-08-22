@@ -21,7 +21,7 @@ inline const std::unordered_map<std::string, Id>& specialIds() {
   static const auto ids = []() {
     std::unordered_map<std::string, Id> result{
         {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
-        {HAS_PATTERN_PREDICATE, Id::fromBits(2)},
+        {std::string{HAS_PATTERN_PREDICATE}, Id::fromBits(2)},
         {std::string{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},
         {INTERNAL_GRAPH_IRI, Id::fromBits(4)}};
 
