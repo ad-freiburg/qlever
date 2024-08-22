@@ -14,8 +14,10 @@
 #include <unordered_map>
 
 #include "CompilationInfo.h"
+#include "Index.h"
 #include "absl/strings/str_join.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -58,49 +60,29 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
   return {indexBuilderData, std::move(firstSorter)};
 }
+
 // _____________________________________________________________________________
 std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
-    const std::string& filename, Index::Filetype type) {
-  using Res = std::unique_ptr<RdfParserBase>;
-
-  auto re2OrCtre = [this](auto f) -> Res {
-    if (onlyAsciiTurtlePrefixes_) {
-      return f.template operator()<TokenizerCtre>();
-    } else {
-      return f.template operator()<Tokenizer>();
-    }
+    const std::string& filename, Index::Filetype type) const {
+  auto makeParserImpl =
+      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
+      -> std::unique_ptr<RdfParserBase> {
+    using TokenizerT =
+        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
+    using InnerParser =
+        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                           NQuadParser<TokenizerT>>;
+    using Parser =
+        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                           RdfStreamParser<InnerParser>>;
+    return std::make_unique<Parser>(filename);
   };
 
-  auto turtleOrNQuad = [type](auto f) {
-    return [type, f]<typename TokenizerT>() -> Res {
-      if (type == Index::Filetype::Turtle) {
-        return f.template operator()<TurtleParser, TokenizerT>();
-      } else {
-        return f.template operator()<NQuadParser, TokenizerT>();
-      }
-    };
-  };
-
-  auto parallelOrNot = [this](auto f) {
-    return [this,
-            f]<template <typename> typename ParserImpl, typename TokenizerT>()
-               -> Res {
-      if (useParallelParser_) {
-        return f
-            .template operator()<RdfParallelParser, ParserImpl, TokenizerT>();
-      } else {
-        return f.template operator()<RdfStreamParser, ParserImpl, TokenizerT>();
-      }
-    };
-  };
-
-  auto makeParser = [&filename]<template <typename> typename ParserTemplate,
-                                template <typename> typename ParserImpl,
-                                typename TokenizerT>() -> Res {
-    return std::make_unique<ParserTemplate<ParserImpl<TokenizerT>>>(filename);
-  };
-
-  return re2OrCtre(turtleOrNQuad(parallelOrNot(makeParser)));
+  return ad_utility::callFixedSize(
+      std::array{useParallelParser_ ? 1 : 0,
+                 type == Index::Filetype::Turtle ? 1 : 0,
+                 onlyAsciiTurtlePrefixes_ ? 1 : 0},
+      makeParserImpl);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.

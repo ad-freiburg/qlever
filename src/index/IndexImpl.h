@@ -474,7 +474,7 @@ class IndexImpl {
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
   std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
-                                               Index::Filetype type);
+                                               Index::Filetype type) const;
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
