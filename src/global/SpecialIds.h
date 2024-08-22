@@ -5,10 +5,15 @@
 #ifndef QLEVER_SPECIALIDS_H
 #define QLEVER_SPECIALIDS_H
 
+#include <absl/strings/str_cat.h>
+
+#include <exception>
+
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
+#include "util/SourceLocation.h"
 
 namespace qlever {
 
@@ -17,7 +22,23 @@ namespace qlever {
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
 // TODO<joka921> Use ad_utility::HashMap again once the debugging in MacOs is
 // done.
-inline const std::unordered_map<std::string, Id>& specialIds() {
+struct M : private std::unordered_map<std::string, Id> {
+  using Base = std::unordered_map<std::string, Id>;
+  M(Base b) : Base{std::move(b)} {}
+  using Base::contains;
+  Id at(std::string_view key,
+        ad_utility::source_location l =
+            ad_utility::source_location::current()) const {
+    auto it = Base::find(std::string{key});
+    if (it != Base::end()) {
+      return it->second;
+    }
+    throw std::runtime_error{
+        absl::StrCat("Key \"", key, "\" was not found, requested at ",
+                     l.file_name(), " in line ", l.line())};
+  }
+};
+inline const M& specialIds() {
   static const auto ids = []() {
     std::unordered_map<std::string, Id> result{
         {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
@@ -37,7 +58,7 @@ inline const std::unordered_map<std::string, Id>& specialIds() {
         std::ranges::all_of(values, undefTypeButNotUndefValue));
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
-    return result;
+    return M{std::move(result)};
   }();
   return ids;
 };
