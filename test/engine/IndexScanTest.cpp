@@ -444,3 +444,47 @@ TEST(IndexScan, getResultSizeOfScan) {
     ASSERT_EQ(res.idTable().numColumns(), 0);
   }
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultCanBeConsumedLazily) {
+  using V = Variable;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto getId = makeGetId(qec->getIndex());
+  auto x = getId("<x>");
+  auto p = getId("<p>");
+  auto s1 = getId("<s1>");
+  auto s2 = getId("<s2>");
+  auto p2 = getId("<p2>");
+  SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  IdTable resultTable{3, ad_utility::makeUnlimitedAllocator<Id>()};
+
+  for (IdTable& idTable : result.idTables()) {
+    resultTable.insertAtEnd(idTable);
+  }
+
+  EXPECT_EQ(resultTable,
+            makeIdTableFromVector({{p, s1, x}, {p, s2, x}, {p2, s1, x}}));
+}
+
+// _____________________________________________________________________________
+TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  SparqlTripleSimple scanTriple{V{"?x"}, I::fromIriref("<abcdef>"), V{"?z"}};
+  IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+
+  ProtoResult result = scan.computeResultOnlyForTesting(true);
+
+  ASSERT_FALSE(result.isFullyMaterialized());
+
+  for ([[maybe_unused]] IdTable& idTable : result.idTables()) {
+    ADD_FAILURE() << "Generator should be empty" << std::endl;
+  }
+}

@@ -122,9 +122,28 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
+
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
+cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
+  auto metadata = getMetadataForScan(*this);
+  if (!metadata.has_value()) {
+    co_return;
+  }
+  auto blocksSpan =
+      CompressedRelationReader::getBlocksFromMetadata(metadata.value());
+  std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
+                                              blocksSpan.end()};
+  for (IdTable& idTable : getLazyScan(*this, std::move(blocks))) {
+    co_yield std::move(idTable);
+  }
+}
+
+// _____________________________________________________________________________
+ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  if (requestLaziness) {
+    return {scanInChunks(), resultSortedOn(), LocalVocab{}};
+  }
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Permutation::Enum;
