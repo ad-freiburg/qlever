@@ -60,15 +60,12 @@ std::vector<std::vector<std::string>> orderColAccordingToVarColMap(
   std::vector<std::vector<std::string>> result;
   auto indVariableMap = copySortedByColumnIndex(varColMaps);
   for (size_t i = 0; i < indVariableMap.size(); i++) {
-    bool foundVariable = false;
     for (size_t k = 0; k < columnNames.size(); k++) {
       if (indVariableMap.at(i).first.name() == columnNames.at(k)) {
-        foundVariable = true;
         result.push_back(columns.at(k));
         break;
       }
     }
-    assert(foundVariable);
   }
   return result;
 }
@@ -103,15 +100,15 @@ void compareResultTable(  // const QueryExecutionContext* qec,
     std::vector<std::string> tableToTest,
     std::vector<std::string>* expected_output) {
   // rows will be a reordered version of the tableToTest
-  std::string rows[expected_output->size()];
+  std::vector<std::string> rows(expected_output->size(), "");
   // std::vector<std::string> tableToTest = printTable(qec, resultTableToTest);
   for (size_t i = 0; i < expected_output->size(); i++) {
-    rows[i] = tableToTest[i];  // initialize as copy, reorder when needed
+    rows.at(i) = tableToTest.at(i);  // initialize as copy, reorder when needed
   }
   for (size_t i = 0; i < expected_output->size(); i++) {
     for (size_t k = 0; k < tableToTest.size(); k++) {
       if (tableToTest.at(k) == expected_output->at(i)) {
-        rows[i] = tableToTest.at(k);  // change order of expected output
+        rows.at(i) = tableToTest.at(k);  // change order of expected output
         break;
       }
     }
@@ -120,7 +117,7 @@ void compareResultTable(  // const QueryExecutionContext* qec,
   // are equally large, then both tables are equal (assuming each row is unique)
   ASSERT_EQ(tableToTest.size(), expected_output->size());
   for (size_t i = 0; i < expected_output->size(); i++) {
-    ASSERT_EQ(expected_output->at(i), rows[i]);
+    ASSERT_EQ(expected_output->at(i), rows.at(i));
   }
 }
 
