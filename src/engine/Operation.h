@@ -177,7 +177,10 @@ class Operation {
 
   // Optimization for lazy operations where the very nature of the operation
   // makes it unlikely to ever fit in cache when completely materialized.
-  [[nodiscard]] virtual bool unlikelyToFitInCache() const { return false; }
+  virtual bool unlikelyToFitInCache(
+      [[maybe_unused]] ad_utility::MemorySize maxCacheableSize) const {
+    return false;
+  }
 
   // True iff this operation directly implement a `OFFSET` and `LIMIT` clause on
   // its result.

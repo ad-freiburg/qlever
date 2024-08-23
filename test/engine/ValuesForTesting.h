@@ -111,7 +111,9 @@ class ValuesForTesting : public Operation {
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
   }
-  bool unlikelyToFitInCache() const override { return unlikelyToFitInCache_; }
+  bool unlikelyToFitInCache(ad_utility::MemorySize) const override {
+    return unlikelyToFitInCache_;
+  }
   bool supportsLimit() const override { return supportsLimit_; }
 
  private:
