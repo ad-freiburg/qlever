@@ -99,8 +99,8 @@ class GroupBy : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  IdTable doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
-                    const vector<Aggregate>& aggregates, const IdTable* inTable,
+  IdTable doGroupBy(const IdTable& inTable, const vector<size_t>& groupByCols,
+                    const vector<Aggregate>& aggregates,
                     LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);

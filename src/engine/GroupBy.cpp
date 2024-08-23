@@ -181,7 +181,7 @@ size_t GroupBy::getCostEstimate() {
 
 template <size_t OUT_WIDTH>
 void GroupBy::processGroup(
-    const GroupBy::Aggregate& aggregate,
+    const Aggregate& aggregate,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, IdTableStatic<OUT_WIDTH>* result, size_t resultRow,
     size_t resultColumn, LocalVocab* localVocab) const {
@@ -234,21 +234,20 @@ void GroupBy::processGroup(
  */
 
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-IdTable GroupBy::doGroupBy(const IdTable& dynInput,
+IdTable GroupBy::doGroupBy(const IdTable& inTable,
                            const vector<size_t>& groupByCols,
                            const vector<Aggregate>& aggregates,
-                           const IdTable* inTable,
                            LocalVocab* outLocalVocab) const {
-  LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
+  LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
-  if (dynInput.empty()) {
+  if (inTable.empty()) {
     return dynResult;
   }
-  const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
+  const IdTableView<IN_WIDTH> input = inTable.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(dynResult).toStatic<OUT_WIDTH>();
 
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
+      *getExecutionContext(), _subtree->getVariableColumns(), inTable,
       getExecutionContext()->getAllocator(), *outLocalVocab,
       cancellationHandle_, deadline_);
 
@@ -271,7 +270,7 @@ IdTable GroupBy::doGroupBy(const IdTable& dynInput,
     for (size_t i = 0; i < groupByCols.size(); ++i) {
       result(rowIdx, i) = input(blockStart, groupByCols[i]);
     }
-    for (const GroupBy::Aggregate& a : aggregates) {
+    for (const Aggregate& a : aggregates) {
       processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
                               &result, rowIdx, a._outCol, outLocalVocab);
     }
@@ -392,10 +391,9 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = getResultWidth();
 
-  IdTable idTable =
-      CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy,
-                      this, subresult->idTable(), groupByCols, aggregates,
-                      &(subresult->idTable()), &localVocab);
+  IdTable idTable = CALL_FIXED_SIZE(
+      (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
+      subresult->idTable(), groupByCols, aggregates, &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
