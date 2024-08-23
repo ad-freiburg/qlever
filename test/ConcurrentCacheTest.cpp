@@ -387,8 +387,8 @@ TEST(ConcurrentCache, isCachedIfSuitableWhenWaitingForPendingComputation) {
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
-    resultInProgress->finish(nullptr);
     finished = true;
+    resultInProgress->finish(nullptr);
   }};
 
   auto result = cache.computeOnce(
@@ -420,8 +420,8 @@ TEST(ConcurrentCache,
 
   ad_utility::JThread thread{[&]() {
     std::this_thread::sleep_for(5ms);
-    resultInProgress->finish(nullptr);
     finished = true;
+    resultInProgress->finish(nullptr);
   }};
 
   auto result = cache.computeOncePinned(
