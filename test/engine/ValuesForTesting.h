@@ -15,7 +15,7 @@
 // operation.
 class ValuesForTesting : public Operation {
  private:
-  IdTable table_;
+  std::vector<IdTable> tables_;
   std::vector<std::optional<Variable>> variables_;
   bool supportsLimit_;
   // Those can be manually overwritten for testing using the respective getters.
@@ -33,15 +33,39 @@ class ValuesForTesting : public Operation {
                             LocalVocab localVocab = LocalVocab{},
                             std::optional<float> multiplicity = std::nullopt)
       : Operation{ctx},
-        table_{std::move(table)},
+        tables_{},
         variables_{std::move(variables)},
         supportsLimit_{supportsLimit},
-        sizeEstimate_{table_.numRows()},
-        costEstimate_{table_.numRows()},
+        sizeEstimate_{table.numRows()},
+        costEstimate_{table.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
         multiplicity_{multiplicity} {
-    AD_CONTRACT_CHECK(variables_.size() == table_.numColumns());
+    AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
+    tables_.push_back(std::move(table));
+  }
+  explicit ValuesForTesting(QueryExecutionContext* ctx,
+                            std::vector<IdTable> tables,
+                            std::vector<std::optional<Variable>> variables)
+      : Operation{ctx},
+        tables_{std::move(tables)},
+        variables_{std::move(variables)},
+        supportsLimit_{false},
+        sizeEstimate_{0},
+        costEstimate_{0},
+        resultSortedColumns_{},
+        localVocab_{LocalVocab{}},
+        multiplicity_{std::nullopt} {
+    AD_CONTRACT_CHECK(
+        std::ranges::all_of(tables_, [this](const IdTable& table) {
+          return variables_.size() == table.numColumns();
+        }));
+    size_t totalRows = 0;
+    for (const IdTable& idTable : tables_) {
+      totalRows += idTable.numRows();
+    }
+    sizeEstimate_ = totalRows;
+    costEstimate_ = totalRows;
   }
 
   // Accessors for the estimates for manual testing.
@@ -49,8 +73,33 @@ class ValuesForTesting : public Operation {
   size_t& costEstimate() { return costEstimate_; }
 
   // ___________________________________________________________________________
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
-    auto table = table_.clone();
+  ProtoResult computeResult(bool requestLaziness) override {
+    if (requestLaziness) {
+      // Not implemented yet
+      AD_CORRECTNESS_CHECK(!supportsLimit_);
+      std::vector<IdTable> clones;
+      clones.reserve(tables_.size());
+      for (const IdTable& idTable : tables_) {
+        clones.push_back(idTable.clone());
+      }
+      auto generator = [](auto idTables) -> cppcoro::generator<IdTable> {
+        for (IdTable& idTable : idTables) {
+          co_yield std::move(idTable);
+        }
+      }(std::move(clones));
+      return {std::move(generator), resultSortedOn(), localVocab_.clone()};
+    }
+    std::optional<IdTable> optionalTable;
+    if (tables_.size() > 1) {
+      IdTable aggregateTable{tables_.at(0).numColumns(),
+                             tables_.at(0).getAllocator()};
+      for (const IdTable& idTable : tables_) {
+        aggregateTable.insertAtEnd(idTable);
+      }
+      optionalTable = std::move(aggregateTable);
+    }
+    auto table = optionalTable.has_value() ? std::move(optionalTable).value()
+                                           : tables_.at(0).clone();
     if (supportsLimit_) {
       table.erase(table.begin() + getLimit().upperBound(table.size()),
                   table.end());
@@ -65,14 +114,19 @@ class ValuesForTesting : public Operation {
   // ___________________________________________________________________________
   string getCacheKeyImpl() const override {
     std::stringstream str;
-    str << "Values for testing with " << table_.numColumns() << " columns and "
-        << table_.numRows() << " rows. ";
-    if (table_.numRows() > 1000) {
+    auto numRowsView = tables_ | std::views::transform(&IdTable::numRows);
+    auto totalNumRows = std::reduce(numRowsView.begin(), numRowsView.end(), 0);
+    auto numCols = tables_.empty() ? 0 : tables_.at(0).numColumns();
+    str << "Values for testing with " << numCols << " columns and "
+        << totalNumRows << " rows. ";
+    if (totalNumRows > 1000) {
       str << ad_utility::FastRandomIntGenerator<int64_t>{}();
     } else {
-      for (size_t i = 0; i < table_.numColumns(); ++i) {
-        for (Id entry : table_.getColumn(i)) {
-          str << entry << ' ';
+      for (const IdTable& idTable : tables_) {
+        for (size_t i = 0; i < idTable.numColumns(); ++i) {
+          for (Id entry : idTable.getColumn(i)) {
+            str << entry << ' ';
+          }
         }
       }
     }
@@ -85,7 +139,9 @@ class ValuesForTesting : public Operation {
     return "explicit values for testing";
   }
 
-  size_t getResultWidth() const override { return table_.numColumns(); }
+  size_t getResultWidth() const override {
+    return tables_.empty() ? 0 : tables_.at(0).numColumns();
+  }
 
   vector<ColumnIndex> resultSortedOn() const override {
     return resultSortedColumns_;
@@ -107,7 +163,10 @@ class ValuesForTesting : public Operation {
 
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
-  bool knownEmptyResult() override { return table_.empty(); }
+  bool knownEmptyResult() override {
+    return std::ranges::all_of(
+        tables_, [](const IdTable& table) { return table.empty(); });
+  }
 
  private:
   VariableToColumnMap computeVariableToColumnMap() const override {
@@ -117,7 +176,10 @@ class ValuesForTesting : public Operation {
         continue;
       }
       bool containsUndef =
-          ad_utility::contains(table_.getColumn(i), Id::makeUndefined());
+          std::ranges::any_of(tables_, [&i](const IdTable& table) {
+            return std::ranges::any_of(table.getColumn(i),
+                                       [](Id id) { return id.isUndefined(); });
+          });
       using enum ColumnIndexAndTypeInfo::UndefStatus;
       m[variables_.at(i).value()] = ColumnIndexAndTypeInfo{
           i, containsUndef ? PossiblyUndefined : AlwaysDefined};

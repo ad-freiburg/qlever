@@ -20,31 +20,14 @@ namespace qlever {
 // A mapping from special builtin IRIs that are not managed via the normal
 // vocabulary to the IDs that are used to represent them. These IDs all have the
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
-// TODO<joka921> Use ad_utility::HashMap again once the debugging in MacOs is
-// done.
-struct M : private std::unordered_map<std::string, Id> {
-  using Base = std::unordered_map<std::string, Id>;
-  M(Base b) : Base{std::move(b)} {}
-  using Base::contains;
-  Id at(std::string_view key,
-        ad_utility::source_location l =
-            ad_utility::source_location::current()) const {
-    auto it = Base::find(std::string{key});
-    if (it != Base::end()) {
-      return it->second;
-    }
-    throw std::runtime_error{
-        absl::StrCat("Key \"", key, "\" was not found, requested at ",
-                     l.file_name(), " in line ", l.line())};
-  }
-};
-inline const M& specialIds() {
+inline const ad_utility::HashMap<std::string, Id>& specialIds() {
   static const auto ids = []() {
-    std::unordered_map<std::string, Id> result{
-        {HAS_PREDICATE_PREDICATE, Id::fromBits(1)},
-        {std::string{HAS_PATTERN_PREDICATE}, Id::fromBits(2)},
-        {std::string{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},
-        {INTERNAL_GRAPH_IRI, Id::fromBits(4)}};
+    using S = std::string;
+    ad_utility::HashMap<std::string, Id> result{
+        {S{HAS_PREDICATE_PREDICATE}, Id::fromBits(1)},
+        {S{HAS_PATTERN_PREDICATE}, Id::fromBits(2)},
+        {S{DEFAULT_GRAPH_IRI}, Id::fromBits(3)},
+        {S{INTERNAL_GRAPH_IRI}, Id::fromBits(4)}};
 
     // Perform the following checks: All the special IDs are unique, all of them
     // have the `Undefined` datatype, but none of them is equal to the "actual"
@@ -58,7 +41,7 @@ inline const M& specialIds() {
         std::ranges::all_of(values, undefTypeButNotUndefValue));
     ad_utility::HashSet<Id> uniqueIds(values.begin(), values.end());
     AD_CORRECTNESS_CHECK(uniqueIds.size() == result.size());
-    return M{std::move(result)};
+    return result;
   }();
   return ids;
 };

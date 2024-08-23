@@ -307,39 +307,19 @@ auto compareDurationLess = [](DayTimeDuration& d1,
   if (d1.isPositive() != d2.isPositive()) {
     return d1.isPositive() < d2.isPositive();
   }
+  auto tieValues = [](const DayTimeDuration& d) {
+    return std::tuple{d.getDays(), d.getHours(), d.getMinutes(),
+                      d.getSeconds()};
+  };
   // We have to differentiate here w.r.t. the sign, if the duration d1 is signed
   // negative, larger days, hours,... mean that the duration becomes smaller.
   // With a positive (signed) duration, smaller number for days, hours,...
   // imply a smaller duration. (when comparing to duration d2).
   if (d1.isPositive()) {
-    if (d1.getDays() != d2.getDays()) {
-      return d1.getDays() < d2.getDays();
-    }
-    if (d1.getHours() != d2.getHours()) {
-      return d1.getHours() < d2.getHours();
-    }
-    if (d1.getMinutes() != d1.getMinutes()) {
-      return d1.getMinutes() < d2.getMinutes();
-    }
-    if (d1.getSeconds() != d2.getSeconds()) {
-      return d1.getSeconds() < d2.getSeconds();
-    }
+    return tieValues(d1) < tieValues(d2);
   } else {
-    if (d1.getDays() != d2.getDays()) {
-      return d1.getDays() > d2.getDays();
-    }
-    if (d1.getHours() != d2.getHours()) {
-      return d1.getHours() > d2.getHours();
-    }
-    if (d1.getMinutes() != d1.getMinutes()) {
-      return d1.getMinutes() > d2.getMinutes();
-    }
-    if (d1.getSeconds() != d2.getSeconds()) {
-      return d1.getSeconds() > d2.getSeconds();
-    }
+    return tieValues(d1) > tieValues(d2);
   }
-  // When we reach this point here the values are equal.
-  return false;
 };
 
 std::vector<DayTimeDuration> getRandomDayTimeDurations(size_t n) {
@@ -361,7 +341,7 @@ void testSorting(std::vector<DayTimeDuration> durations) {
 
 //______________________________________________________________________________
 TEST(DayTimeDuration, testOrderOnBytes) {
-  auto durations = getRandomDayTimeDurations(1000);
+  auto durations = getRandomDayTimeDurations(10'000);
   testSorting(durations);
 }
 

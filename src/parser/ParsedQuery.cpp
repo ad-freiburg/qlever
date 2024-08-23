@@ -302,7 +302,8 @@ void ParsedQuery::GraphPattern::addLanguageFilter(const Variable& variable,
                   ._triples;
 
     auto langEntity = ad_utility::convertLangtagToEntityUri(langTag);
-    SparqlTriple triple(variable, PropertyPath::fromIri(LANGUAGE_PREDICATE),
+    SparqlTriple triple(variable,
+                        PropertyPath::fromIri(std::string{LANGUAGE_PREDICATE}),
                         langEntity);
     t.push_back(std::move(triple));
   }

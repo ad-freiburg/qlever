@@ -58,9 +58,15 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
+  // Perform the actual filter operation of the data provided by
+  // `evaluationContext`.
   template <size_t WIDTH>
-  void computeFilterImpl(IdTable* outputIdTable,
-                         const Result& inputResultTable);
+  IdTable computeFilterImpl(
+      sparqlExpression::EvaluationContext& evaluationContext);
+
+  // Run `computeFilterImpl` on the provided IdTable
+  IdTable filterIdTable(const std::shared_ptr<const Result>& subRes,
+                        const IdTable& idTable);
 };

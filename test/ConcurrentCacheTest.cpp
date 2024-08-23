@@ -2,7 +2,8 @@
 // Chair of Algorithms and Data Structures.
 // Author: Johannes Kalmbach (kalmbacj@informatik.uni-freiburg.de)
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
+#include <util/Parameters.h>
 
 #include <atomic>
 #include <chrono>
@@ -13,10 +14,14 @@
 #include "util/Cache.h"
 #include "util/ConcurrentCache.h"
 #include "util/DefaultValueSizeGetter.h"
+#include "util/GTestHelpers.h"
 #include "util/Timer.h"
+#include "util/jthread.h"
 
 using namespace std::literals;
 using namespace std::chrono_literals;
+using namespace ad_utility::memory_literals;
+using ::testing::Pointee;
 
 class ConcurrentSignal {
   std::atomic_flag flag_;
@@ -73,12 +78,17 @@ using SimpleConcurrentLruCache =
     ad_utility::ConcurrentCache<ad_utility::LRUCache<
         int, std::string, ad_utility::StringSizeGetter<std::string>>>;
 
+namespace {
+auto returnTrue = [](const auto&) { return true; };
+}  // namespace
+
+// _____________________________________________________________________________
 TEST(ConcurrentCache, sequentialComputation) {
   SimpleConcurrentLruCache a{3ul};
   ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOnce(3, waiting_function("3"s, 5));
+  auto result = a.computeOnce(3, waiting_function("3"s, 5), false, returnTrue);
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5ms);
@@ -90,7 +100,7 @@ TEST(ConcurrentCache, sequentialComputation) {
   t.reset();
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
-  auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 5), false, returnTrue);
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
@@ -107,7 +117,8 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
+  auto result =
+      a.computeOncePinned(3, waiting_function("3"s, 5), false, returnTrue);
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5ms);
@@ -120,7 +131,7 @@ TEST(ConcurrentCache, sequentialPinnedComputation) {
   t.start();
   // takes 0 msecs to compute, as the request is served from the cache.
   // we don't request a pin, but the original computation was pinned
-  auto result2 = a.computeOnce(3, waiting_function("3"s, 5));
+  auto result2 = a.computeOnce(3, waiting_function("3"s, 5), false, returnTrue);
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
@@ -137,7 +148,7 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   ad_utility::Timer t{ad_utility::Timer::Started};
   // Fake computation that takes 5ms and returns value "3", which is then
   // stored under key 3.
-  auto result = a.computeOnce(3, waiting_function("3"s, 5));
+  auto result = a.computeOnce(3, waiting_function("3"s, 5), false, returnTrue);
   ASSERT_EQ("3"s, *result._resultPointer);
   ASSERT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
   ASSERT_GE(t.msecs(), 5ms);
@@ -151,7 +162,8 @@ TEST(ConcurrentCache, sequentialPinnedUpgradeComputation) {
   // takes 0 msecs to compute, as the request is served from the cache.
   // request a pin, the result should be read from the cache and upgraded
   // to a pinned result.
-  auto result2 = a.computeOncePinned(3, waiting_function("3"s, 5));
+  auto result2 =
+      a.computeOncePinned(3, waiting_function("3"s, 5), false, returnTrue);
   // computing result again: still yields "3", was cached and takes 0
   // milliseconds (result is read from cache)
   ASSERT_EQ("3"s, *result2._resultPointer);
@@ -167,7 +179,8 @@ TEST(ConcurrentCache, concurrentComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal), false,
+                         returnTrue);
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal.hasStartedSignal_.wait();
@@ -195,7 +208,8 @@ TEST(ConcurrentCache, concurrentPinnedComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal));
+    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal), false,
+                               returnTrue);
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal.hasStartedSignal_.wait();
@@ -225,7 +239,8 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal), false,
+                         returnTrue);
   };
   auto resultFuture = std::async(std::launch::async, compute);
   signal.hasStartedSignal_.wait();
@@ -240,7 +255,8 @@ TEST(ConcurrentCache, concurrentPinnedUpgradeComputation) {
   // this call waits for the background task to compute, and then fetches the
   // result. After this call completes, nothing is in progress and the result
   // is cached.
-  auto result = a.computeOncePinned(3, waiting_function("3"s, 5));
+  auto result =
+      a.computeOncePinned(3, waiting_function("3"s, 5), false, returnTrue);
   ASSERT_EQ(0ul, a.numNonPinnedEntries());
   ASSERT_EQ(1ul, a.numPinnedEntries());
   ASSERT_TRUE(a.getStorage().wlock()->_inProgress.empty());
@@ -255,10 +271,12 @@ TEST(ConcurrentCache, abort) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&a, &signal]() {
-    return a.computeOnce(3, waiting_function("3"s, 5, &signal));
+    return a.computeOnce(3, waiting_function("3"s, 5, &signal), false,
+                         returnTrue);
   };
   auto computeWithError = [&a, &signal]() {
-    return a.computeOnce(3, wait_and_throw_function(5, &signal));
+    return a.computeOnce(3, wait_and_throw_function(5, &signal), false,
+                         returnTrue);
   };
   auto fut = std::async(std::launch::async, computeWithError);
   signal.hasStartedSignal_.wait();
@@ -279,10 +297,12 @@ TEST(ConcurrentCache, abortPinned) {
   auto a = SimpleConcurrentLruCache(3ul);
   StartStopSignal signal;
   auto compute = [&]() {
-    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal));
+    return a.computeOncePinned(3, waiting_function("3"s, 5, &signal), false,
+                               returnTrue);
   };
   auto computeWithError = [&a, &signal]() {
-    return a.computeOncePinned(3, wait_and_throw_function(5, &signal));
+    return a.computeOncePinned(3, wait_and_throw_function(5, &signal), false,
+                               returnTrue);
   };
   auto fut = std::async(std::launch::async, computeWithError);
   signal.hasStartedSignal_.wait();
@@ -308,4 +328,194 @@ TEST(ConcurrentCache, cacheStatusToString) {
   auto outOfBounds = static_cast<ad_utility::CacheStatus>(
       static_cast<int>(notInCacheAndNotComputed) + 1);
   EXPECT_ANY_THROW(toString(outOfBounds));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
+  SimpleConcurrentLruCache cache{};
+
+  cache.clearAll();
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return false; });
+
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return false; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, isCachedIfSuitableWhenWaitingForPendingComputation) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOnce(
+      0, []() { return "abc"; }, false, [](const auto&) { return true; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 1);
+  EXPECT_EQ(cache.numPinnedEntries(), 0);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+  EXPECT_EQ(result._cacheStatus, ad_utility::CacheStatus::computed);
+  EXPECT_TRUE(cache.cacheContains(0));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache,
+     isCachedIfSuitableWhenWaitingForPendingComputationPinned) {
+  SimpleConcurrentLruCache cache{};
+
+  // Simulate a computation with the same cache key that is currently in
+  // progress so the new computation waits for the result.
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  auto result = cache.computeOncePinned(
+      0, []() { return "abc"; }, false, [](const auto&) { return true; });
+
+  EXPECT_TRUE(finished);
+  EXPECT_EQ(cache.numNonPinnedEntries(), 0);
+  EXPECT_EQ(cache.numPinnedEntries(), 1);
+  EXPECT_THAT(result._resultPointer, Pointee("abc"s));
+  EXPECT_TRUE(cache.cacheContains(0));
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, ifUnsuitableForCacheAndPinnedThrowsException) {
+  SimpleConcurrentLruCache cache{};
+
+  cache.clearAll();
+
+  EXPECT_THROW(
+      cache.computeOncePinned(
+          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
+      ad_utility::Exception);
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache,
+     ifUnsuitableWhenWaitingForPendingComputationAndPinnedThrowsException) {
+  SimpleConcurrentLruCache cache{};
+
+  auto resultInProgress = std::make_shared<
+      ad_utility::ConcurrentCacheDetail::ResultInProgress<std::string>>();
+
+  cache.clearAll();
+  cache.getStorage().wlock()->_inProgress[0] =
+      std::pair(false, resultInProgress);
+
+  std::atomic_bool finished = false;
+
+  ad_utility::JThread thread{[&]() {
+    std::this_thread::sleep_for(5ms);
+    resultInProgress->finish(nullptr);
+    finished = true;
+  }};
+
+  EXPECT_THROW(
+      cache.computeOncePinned(
+          0, []() { return "abc"; }, false, [](const auto&) { return false; }),
+      ad_utility::Exception);
+  EXPECT_TRUE(finished);
+}
+
+// _____________________________________________________________________________
+TEST(ConcurrentCache, testTryInsertIfNotPresentDoesWorkCorrectly) {
+  auto hasValue = [](std::string value) {
+    using namespace ::testing;
+    using CS = SimpleConcurrentLruCache::ResultAndCacheStatus;
+    return Optional(
+        Field("_resultPointer", &CS::_resultPointer, Pointee(value)));
+  };
+
+  SimpleConcurrentLruCache cache{};
+
+  auto expectContainsSingleElementAtKey0 =
+      [&](bool pinned, std::string expected,
+          ad_utility::source_location l =
+              ad_utility::source_location::current()) {
+        using namespace ::testing;
+        auto trace = generateLocationTrace(l);
+        auto value = cache.getIfContained(0);
+        EXPECT_THAT(value, hasValue(expected));
+        if (pinned) {
+          EXPECT_NE(cache.pinnedSize(), 0_B);
+          EXPECT_EQ(cache.nonPinnedSize(), 0_B);
+        } else {
+          EXPECT_EQ(cache.pinnedSize(), 0_B);
+          EXPECT_NE(cache.nonPinnedSize(), 0_B);
+        }
+      };
+
+  cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("abc"));
+
+  expectContainsSingleElementAtKey0(false, "abc");
+
+  cache.tryInsertIfNotPresent(false, 0, std::make_shared<std::string>("def"));
+
+  expectContainsSingleElementAtKey0(false, "abc");
+
+  cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("ghi"));
+
+  expectContainsSingleElementAtKey0(true, "abc");
+
+  cache.clearAll();
+
+  cache.tryInsertIfNotPresent(true, 0, std::make_shared<std::string>("jkl"));
+
+  expectContainsSingleElementAtKey0(true, "jkl");
 }

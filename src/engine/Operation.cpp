@@ -69,6 +69,143 @@ void Operation::recursivelySetTimeConstraint(
   });
 }
 
+// _____________________________________________________________________________
+void Operation::updateRuntimeStats(bool applyToLimit, uint64_t numRows,
+                                   uint64_t numCols,
+                                   std::chrono::microseconds duration) const {
+  bool isRtiWrappedInLimit = !applyToLimit && externalLimitApplied_;
+  auto& rti =
+      isRtiWrappedInLimit ? *runtimeInfo().children_.at(0) : runtimeInfo();
+  rti.totalTime_ += duration;
+  rti.originalTotalTime_ = rti.totalTime_;
+  rti.originalOperationTime_ = rti.getOperationTime();
+  // Don't update the number of rows/cols twice if the rti for the limit and the
+  // rti for the actual operation are the same.
+  if (!applyToLimit || externalLimitApplied_) {
+    rti.numRows_ += numRows;
+    rti.numCols_ = numCols;
+  }
+  if (isRtiWrappedInLimit) {
+    runtimeInfo().totalTime_ += duration;
+    runtimeInfo().originalTotalTime_ = runtimeInfo().totalTime_;
+    runtimeInfo().originalOperationTime_ = runtimeInfo().getOperationTime();
+  }
+}
+
+// _____________________________________________________________________________
+ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
+                                      ComputationMode computationMode) {
+  AD_CONTRACT_CHECK(computationMode != ComputationMode::ONLY_IF_CACHED);
+  checkCancellation();
+  runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
+  signalQueryUpdate();
+  ProtoResult result =
+      computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
+  AD_CONTRACT_CHECK(computationMode == ComputationMode::LAZY_IF_SUPPORTED ||
+                    result.isFullyMaterialized());
+
+  checkCancellation();
+  if constexpr (ad_utility::areExpensiveChecksEnabled) {
+    // Compute the datatypes that occur in each column of the result.
+    // Also assert, that if a column contains UNDEF values, then the
+    // `mightContainUndef` flag for that columns is set.
+    // TODO<joka921> It is cheaper to move this calculation into the
+    // individual results, but that requires changes in each individual
+    // operation, therefore we currently only perform this expensive
+    // change in the DEBUG builds.
+    result.checkDefinedness(getExternallyVisibleVariableColumns());
+  }
+  // Make sure that the results that are written to the cache have the
+  // correct runtimeInfo. The children of the runtime info are already set
+  // correctly because the result was computed, so we can pass `nullopt` as
+  // the last argument.
+  if (result.isFullyMaterialized()) {
+    updateRuntimeInformationOnSuccess(result.idTable().size(),
+                                      ad_utility::CacheStatus::computed,
+                                      timer.msecs(), std::nullopt);
+  } else {
+    runtimeInfo().status_ = RuntimeInformation::lazilyMaterialized;
+    result.runOnNewChunkComputed(
+        [this, timeSizeUpdate = 0us](
+            const IdTable& idTable,
+            std::chrono::microseconds duration) mutable {
+          updateRuntimeStats(false, idTable.numRows(), idTable.numColumns(),
+                             duration);
+          LOG(DEBUG) << "Computed partial chunk of size " << idTable.numRows()
+                     << " x " << idTable.numColumns() << std::endl;
+          timeSizeUpdate += duration;
+          if (timeSizeUpdate > 50ms) {
+            timeSizeUpdate = 0us;
+            signalQueryUpdate();
+          }
+        },
+        [this](bool failed) {
+          if (failed) {
+            runtimeInfo().status_ = RuntimeInformation::failed;
+          }
+          signalQueryUpdate();
+        });
+  }
+  // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
+  // already perform it. An example for an operation that directly computes
+  // the Limit is a full index scan with three variables. Note that the
+  // `QueryPlanner` does currently only set the limit for operations that
+  // support it natively, except for operations in subqueries. This means
+  // that a lot of the time the limit is only artificially applied during
+  // export, allowing the cache to reuse the same operation for different
+  // limits and offsets.
+  if (!supportsLimit()) {
+    runtimeInfo().addLimitOffsetRow(_limit, true);
+    AD_CONTRACT_CHECK(!externalLimitApplied_);
+    externalLimitApplied_ = _limit._limit.has_value() || _limit._offset != 0;
+    result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
+                                           const IdTable& idTable) {
+      updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
+                         limitTime);
+    });
+  } else {
+    result.assertThatLimitWasRespected(_limit);
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+CacheValue Operation::runComputationAndPrepareForCache(
+    const ad_utility::Timer& timer, ComputationMode computationMode,
+    const std::string& cacheKey, bool pinned) {
+  auto& cache = _executionContext->getQueryTreeCache();
+  auto result = runComputation(timer, computationMode);
+  if (!result.isFullyMaterialized()) {
+    AD_CONTRACT_CHECK(!pinned);
+    result.cacheDuringConsumption(
+        [maxSize = cache.getMaxSizeSingleEntry()](
+            const std::optional<IdTable>& currentIdTable,
+            const IdTable& newIdTable) {
+          auto currentSize = currentIdTable.has_value()
+                                 ? CacheValue::getSize(currentIdTable.value())
+                                 : 0_B;
+          return maxSize >= currentSize + CacheValue::getSize(newIdTable);
+        },
+        [runtimeInfo = getRuntimeInfoPointer(), &cache,
+         cacheKey](Result aggregatedResult) {
+          auto copy = *runtimeInfo;
+          copy.status_ = RuntimeInformation::Status::fullyMaterialized;
+          cache.tryInsertIfNotPresent(
+              false, cacheKey,
+              std::make_shared<CacheValue>(std::move(aggregatedResult),
+                                           std::move(copy)));
+        });
+  }
+  if (result.isFullyMaterialized()) {
+    auto resultNumRows = result.idTable().size();
+    auto resultNumCols = result.idTable().numColumns();
+    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
+               << resultNumCols << std::endl;
+  }
+
+  return CacheValue{std::move(result), runtimeInfo()};
+}
+
 // ________________________________________________________________________
 std::shared_ptr<const Result> Operation::getResult(
     bool isRoot, ComputationMode computationMode) {
@@ -101,72 +238,33 @@ std::shared_ptr<const Result> Operation::getResult(
                 updateRuntimeInformationOnFailure(timer.msecs());
               }
             });
-    auto computeLambda = [this, &timer, computationMode] {
-      checkCancellation();
-      runtimeInfo().status_ = RuntimeInformation::Status::inProgress;
-      signalQueryUpdate();
-      Result result =
-          computeResult(computationMode == ComputationMode::LAZY_IF_SUPPORTED);
+    auto cacheSetup = [this, &timer, computationMode, &cacheKey, pinResult]() {
+      return runComputationAndPrepareForCache(timer, computationMode, cacheKey,
+                                              pinResult);
+    };
 
-      checkCancellation();
-      // Compute the datatypes that occur in each column of the result.
-      // Also assert, that if a column contains UNDEF values, then the
-      // `mightContainUndef` flag for that columns is set.
-      // TODO<joka921> It is cheaper to move this calculation into the
-      // individual results, but that requires changes in each individual
-      // operation, therefore we currently only perform this expensive
-      // change in the DEBUG builds.
-      AD_EXPENSIVE_CHECK(
-          result.checkDefinedness(getExternallyVisibleVariableColumns()));
-      // Make sure that the results that are written to the cache have the
-      // correct runtimeInfo. The children of the runtime info are already set
-      // correctly because the result was computed, so we can pass `nullopt` as
-      // the last argument.
-      updateRuntimeInformationOnSuccess(result,
-                                        ad_utility::CacheStatus::computed,
-                                        timer.msecs(), std::nullopt);
-      // Apply LIMIT and OFFSET, but only if the call to `computeResult` did not
-      // already perform it. An example for an operation that directly computes
-      // the Limit is a full index scan with three variables. Note that the
-      // `QueryPlanner` does currently only set the limit for operations that
-      // support it natively, except for operations in subqueries. This means
-      // that a lot of the time the limit is only artificially applied during
-      // export, allowing the cache to reuse the same operation for different
-      // limits and offsets.
-      if (!supportsLimit()) {
-        ad_utility::timer::Timer limitTimer{ad_utility::timer::Timer::Started};
-        // Note: both of the following calls have no effect and negligible
-        // runtime if neither a LIMIT nor an OFFSET were specified.
-        result.applyLimitOffset(_limit);
-        runtimeInfo().addLimitOffsetRow(_limit, limitTimer.msecs(), true);
-      } else {
-        auto numRows = result.idTable().numRows();
-        auto limit = _limit._limit;
-        AD_CONTRACT_CHECK(!limit.has_value() ||
-                          numRows <= static_cast<size_t>(limit.value()));
-      }
-      return CacheValue{std::move(result), runtimeInfo()};
+    auto suitedForCache = [](const CacheValue& cacheValue) {
+      return cacheValue.resultTable().isFullyMaterialized();
     };
 
     bool onlyReadFromCache = computationMode == ComputationMode::ONLY_IF_CACHED;
 
-    auto result = pinResult ? cache.computeOncePinned(cacheKey, computeLambda,
-                                                      onlyReadFromCache)
-                            : cache.computeOnce(cacheKey, computeLambda,
-                                                onlyReadFromCache);
+    auto result =
+        pinResult ? cache.computeOncePinned(cacheKey, cacheSetup,
+                                            onlyReadFromCache, suitedForCache)
+                  : cache.computeOnce(cacheKey, cacheSetup, onlyReadFromCache,
+                                      suitedForCache);
 
     if (result._resultPointer == nullptr) {
       AD_CORRECTNESS_CHECK(onlyReadFromCache);
       return nullptr;
     }
 
-    updateRuntimeInformationOnSuccess(result, timer.msecs());
-    auto resultNumRows = result._resultPointer->resultTable()->idTable().size();
-    auto resultNumCols =
-        result._resultPointer->resultTable()->idTable().numColumns();
-    LOG(DEBUG) << "Computed result of size " << resultNumRows << " x "
-               << resultNumCols << std::endl;
-    return result._resultPointer->resultTable();
+    if (result._resultPointer->resultTable().isFullyMaterialized()) {
+      updateRuntimeInformationOnSuccess(result, timer.msecs());
+    }
+
+    return result._resultPointer->resultTablePtr();
   } catch (ad_utility::CancellationException& e) {
     e.setOperation(getDescriptor());
     runtimeInfo().status_ = RuntimeInformation::Status::cancelled;
@@ -213,10 +311,10 @@ std::chrono::milliseconds Operation::remainingTime() const {
 
 // _______________________________________________________________________
 void Operation::updateRuntimeInformationOnSuccess(
-    const Result& resultTable, ad_utility::CacheStatus cacheStatus,
-    Milliseconds duration, std::optional<RuntimeInformation> runtimeInfo) {
+    size_t numRows, ad_utility::CacheStatus cacheStatus, Milliseconds duration,
+    std::optional<RuntimeInformation> runtimeInfo) {
   _runtimeInfo->totalTime_ = duration;
-  _runtimeInfo->numRows_ = resultTable.idTable().size();
+  _runtimeInfo->numRows_ = numRows;
   _runtimeInfo->cacheStatus_ = cacheStatus;
 
   _runtimeInfo->status_ = RuntimeInformation::Status::fullyMaterialized;
@@ -253,9 +351,10 @@ void Operation::updateRuntimeInformationOnSuccess(
 void Operation::updateRuntimeInformationOnSuccess(
     const QueryResultCache::ResultAndCacheStatus& resultAndCacheStatus,
     Milliseconds duration) {
+  const auto& result = resultAndCacheStatus._resultPointer->resultTable();
+  AD_CONTRACT_CHECK(result.isFullyMaterialized());
   updateRuntimeInformationOnSuccess(
-      *resultAndCacheStatus._resultPointer->resultTable(),
-      resultAndCacheStatus._cacheStatus, duration,
+      result.idTable().size(), resultAndCacheStatus._cacheStatus, duration,
       resultAndCacheStatus._resultPointer->runtimeInfo());
 }
 
@@ -272,7 +371,7 @@ void Operation::updateRuntimeInformationWhenOptimizedOut(
   auto timesOfChildren = _runtimeInfo->children_ |
                          std::views::transform(&RuntimeInformation::totalTime_);
   _runtimeInfo->totalTime_ =
-      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0ms);
+      std::reduce(timesOfChildren.begin(), timesOfChildren.end(), 0us);
 
   signalQueryUpdate();
 }
