@@ -314,13 +314,11 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
 ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-
-  if (computeOptimizedGroupByIfPossible(&idTable)) {
+  if (auto idTable = computeOptimizedGroupByIfPossible()) {
     // Note: The optimized group bys currently all include index scans and thus
     // can never produce local vocab entries. If this should ever change, then
     // we also have to take care of the local vocab here.
-    return {std::move(idTable), resultSortedOn(), LocalVocab{}};
+    return {std::move(idTable).value(), resultSortedOn(), LocalVocab{}};
   }
 
   std::vector<Aggregate> aggregates;
@@ -365,7 +363,7 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
   std::vector<size_t> groupByColumns;
 
-  idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   // parse the group by columns
   const auto& subtreeVarCols = _subtree->getVariableColumns();
@@ -405,33 +403,32 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
+std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() {
   // The child must be an `IndexScan` for this optimization.
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
 
   if (!indexScan) {
-    return false;
+    return std::nullopt;
   }
 
   if (indexScan->getResultWidth() <= 1 || !_groupByVariables.empty()) {
-    return false;
+    return std::nullopt;
   }
 
   // Alias must be a single count of a variable
   auto varAndDistinctness = getVariableForCountOfSingleAlias();
   if (!varAndDistinctness.has_value()) {
-    return false;
+    return std::nullopt;
   }
 
   // Distinct counts are only supported for triples with three variables.
   bool countIsDistinct = varAndDistinctness.value().isDistinct_;
   if (countIsDistinct && indexScan->getResultWidth() != 3) {
-    return false;
+    return std::nullopt;
   }
 
-  auto& table = *result;
-  table.setNumColumns(1);
+  IdTable table{1, getExecutionContext()->getAllocator()};
   table.emplace_back();
   // For `IndexScan`s with at least two variables the size estimates are
   // exact as they are read directly from the index metadata.
@@ -451,28 +448,28 @@ bool GroupBy::computeGroupByForSingleIndexScan(IdTable* result) {
     // additionally added triples.
     table(0, 0) = Id::makeFromInt(indexScan->getExactSize());
   }
-  return true;
+  return table;
 }
 
 // ____________________________________________________________________________
-bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
+std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
   if (!indexScan || indexScan->numVariables() != 2) {
-    return false;
+    return std::nullopt;
   }
   const auto& permutedTriple = indexScan->getPermutedTriple();
   const auto& vocabulary = getExecutionContext()->getIndex().getVocab();
   std::optional<Id> col0Id = permutedTriple[0]->toValueId(vocabulary);
   if (!col0Id.has_value()) {
-    return false;
+    return std::nullopt;
   }
 
   // There must be exactly one GROUP BY variable and the result of the index
   // scan must be sorted by it.
   if (_groupByVariables.size() != 1) {
-    return false;
+    return std::nullopt;
   }
   const auto& groupByVariable = _groupByVariables.at(0);
   AD_CORRECTNESS_CHECK(
@@ -488,7 +485,7 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
       countedVariable == *(permutedTriple[1]) ||
       countedVariable == *(permutedTriple[2]);
   if (!countedVariableIsOneOfIndexScanVariables) {
-    return false;
+    return std::nullopt;
   }
 
   // Compute the result and update the runtime information (we don't actually
@@ -496,18 +493,18 @@ bool GroupBy::computeGroupByObjectWithCount(IdTable* result) {
   const auto& permutation =
       getExecutionContext()->getIndex().getPimpl().getPermutation(
           indexScan->permutation());
-  *result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
-                                                    cancellationHandle_);
+  auto result = permutation.getDistinctCol1IdsAndCounts(col0Id.value(),
+                                                        cancellationHandle_);
   indexScan->updateRuntimeInformationWhenOptimizedOut(
       {}, RuntimeInformation::Status::optimizedOut);
 
-  return true;
+  return result;
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
+std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() {
   if (_groupByVariables.size() != 1) {
-    return false;
+    return std::nullopt;
   }
   const auto& groupByVariable = _groupByVariables.at(0);
 
@@ -517,7 +514,7 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
       *_subtree, groupByVariable, groupByVariable);
 
   if (!permutationEnum.has_value()) {
-    return false;
+    return std::nullopt;
   }
 
   // Check that all the aliases are non-distinct counts. We currently support
@@ -529,11 +526,11 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
     const auto& alias = _aliases[i];
     if (auto count = alias._expression.getVariableForCount()) {
       if (count.value().isDistinct_) {
-        return false;
+        return std::nullopt;
       }
       numCounts++;
     } else {
-      return false;
+      return std::nullopt;
     }
   }
 
@@ -546,14 +543,12 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
 
   // Prepare the `result`
   size_t numCols = numCounts + 1;
-  result->setNumColumns(numCols);
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
   // A nested lambda that computes the actual result. The outer lambda is
   // templated on the number of columns (1 or 2) and will be passed to
   // `callFixedSize`.
-  auto doComputationForNumberOfColumns = [&]<int NUM_COLS>(
-                                             IdTable* idTable) mutable {
+  auto doComputationForNumberOfColumns = [&]<int NUM_COLS>() mutable {
     auto ignoredRanges =
         getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
     const auto& permutation =
@@ -571,14 +566,13 @@ bool GroupBy::computeGroupByForFullIndexScan(IdTable* result) {
                                  });
     });
     table.resize(end.begin() - table.begin());
-    *idTable = std::move(table);
+    return table;
   };
-  ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns, result);
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
   // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
-  return true;
+  return ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns);
 }
 
 // ____________________________________________________________________________
@@ -655,15 +649,15 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 }
 
 // ____________________________________________________________________________
-bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
+std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() {
   auto join = std::dynamic_pointer_cast<Join>(_subtree->getRootOperation());
   if (!join) {
-    return false;
+    return std::nullopt;
   }
 
   auto optimizedAggregateData = checkIfJoinWithFullScan(*join);
   if (!optimizedAggregateData.has_value()) {
-    return false;
+    return std::nullopt;
   }
   const auto& [threeVarSubtree, subtree, permutation, columnIndex] =
       optimizedAggregateData.value();
@@ -675,12 +669,12 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
   join->updateRuntimeInformationWhenOptimizedOut(
       {subtree.getRootOperation()->getRuntimeInfoPointer(),
        threeVarSubtree.getRootOperation()->getRuntimeInfoPointer()});
-  result->setNumColumns(2);
+  IdTable result{2, getExecutionContext()->getAllocator()};
   if (subresult->idTable().size() == 0) {
-    return true;
+    return result;
   }
 
-  auto idTable = std::move(*result).toStatic<2>();
+  auto idTable = std::move(result).toStatic<2>();
   const auto& index = getExecutionContext()->getIndex();
 
   // TODO<joka921, C++23> Simplify the following pattern by using
@@ -717,23 +711,24 @@ bool GroupBy::computeGroupByForJoinWithFullScan(IdTable* result) {
     currentCount += currentCardinality;
   }
   pushRow();
-  *result = std::move(idTable).toDynamic();
-  return true;
+  return std::move(idTable).toDynamic();
 }
 
 // _____________________________________________________________________________
-bool GroupBy::computeOptimizedGroupByIfPossible(IdTable* result) {
-  if (computeGroupByForSingleIndexScan(result)) {
-    return true;
-  } else if (computeGroupByForFullIndexScan(result)) {
-    return true;
-  } else if (computeGroupByForJoinWithFullScan(result)) {
-    return true;
-  } else if (computeGroupByObjectWithCount(result)) {
-    return true;
-  } else {
-    return false;
+std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
+  if (auto result = computeGroupByForSingleIndexScan()) {
+    return result;
   }
+  if (auto result = computeGroupByForFullIndexScan()) {
+    return result;
+  }
+  if (auto result = computeGroupByForJoinWithFullScan()) {
+    return result;
+  }
+  if (auto result = computeGroupByObjectWithCount()) {
+    return result;
+  }
+  return std::nullopt;
 }
 
 // _____________________________________________________________________________

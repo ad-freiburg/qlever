@@ -115,11 +115,10 @@ class GroupBy : public Operation {
   // result of the GROUP BY can be computed directly from the index meta data.
   // See the functions below for examples and details.
   //
-  // This function takes an empty `result` as input and checks whether such a
-  // case applies. In this case the result is computed and stored in `result`
-  // and `true` is returned. If no such case applies, `false` is returned and
-  // `result` remains empty.
-  bool computeOptimizedGroupByIfPossible(IdTable* result);
+  // This function checks whether such a case applies. In this case the result
+  // is computed and returned wrapped in a optional. If no such case applies the
+  // optional remains empty.
+  std::optional<IdTable> computeOptimizedGroupByIfPossible();
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -131,9 +130,8 @@ class GroupBy : public Operation {
   // in the two variable case might also be the subject or object of the triple.
   // The COUNT may be computed on any of the variables in the triple. If the
   // query has that form, the result of the query (which consists of one line)
-  // is computed and stored in the `result` and `true` is returned. If not, the
-  // `result` is left untouched, and `false` is returned.
-  bool computeGroupByForSingleIndexScan(IdTable* result);
+  // is computed and returned. If not, an empty optional is returned.
+  std::optional<IdTable> computeGroupByForSingleIndexScan();
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -144,7 +142,7 @@ class GroupBy : public Operation {
   // NOTE: This is exactly what we need for a context-sensitive object AC query
   // without connected triples. The GROUP BY variable can also be omitted in
   // the SELECT clause.
-  bool computeGroupByObjectWithCount(IdTable* result);
+  std::optional<IdTable> computeGroupByObjectWithCount();
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -157,7 +155,7 @@ class GroupBy : public Operation {
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
   // the example it is possible to only select `?x` or to only select the
   // `COUNT`.
-  bool computeGroupByForFullIndexScan(IdTable* result);
+  std::optional<IdTable> computeGroupByForFullIndexScan();
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -169,7 +167,7 @@ class GroupBy : public Operation {
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
-  bool computeGroupByForJoinWithFullScan(IdTable* result);
+  std::optional<IdTable> computeGroupByForJoinWithFullScan();
 
   // Stores information required for substitution of an expression in an
   // expression tree.
