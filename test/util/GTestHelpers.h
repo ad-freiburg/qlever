@@ -50,18 +50,19 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                                               exceptionType)                  \
   try {                                                                       \
     statement;                                                                \
-    FAIL() << "No exception was thrown";                                      \
+    ADD_FAILURE() << "No exception was thrown";                               \
   } catch (const exceptionType& e) {                                          \
     EXPECT_THAT(e.what(), errorMessageMatcher)                                \
         << "The exception message does not match";                            \
   } catch (const std::conditional_t<                                          \
            ad_utility::isSimilar<exceptionType, std::exception>,              \
            ::NeverThrown, std::exception>& exception) {                       \
-    FAIL() << "The thrown exception was "                                     \
-           << ::testing::internal::GetTypeName(typeid(exception))             \
-           << ", expected " #exceptionType;                                   \
+    ADD_FAILURE() << "The thrown exception was "                              \
+                  << ::testing::internal::GetTypeName(typeid(exception))      \
+                  << ", expected " #exceptionType;                            \
   } catch (...) {                                                             \
-    FAIL() << "The thrown exception did not inherit from " #exceptionType;    \
+    ADD_FAILURE()                                                             \
+        << "The thrown exception did not inherit from " #exceptionType;       \
   }                                                                           \
   void()
 
