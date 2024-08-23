@@ -344,6 +344,29 @@ TEST(ConcurrentCache, isNotCachedIfUnsuitable) {
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
 }
 
+namespace {
+// A very particular helper for the following tests.
+// On construction, it captures the number of references to
+// the `inProgressMap` of the `cache` at the key `0`.
+// It then has a method to block until that use count changes,
+// which means that another thread is waiting for the same
+// result.
+struct UseCounter {
+  SimpleConcurrentLruCache& cache_;
+  long useCount_;
+  explicit UseCounter(SimpleConcurrentLruCache& cache)
+      : cache_{cache},
+        useCount_{
+            cache.getStorage().wlock()->_inProgress[0].second.use_count()} {}
+  void waitForChange() {
+    while (cache_.getStorage().wlock()->_inProgress[0].second.use_count() <=
+           useCount_) {
+      std::this_thread::sleep_for(1ms);
+    }
+  }
+};
+}  // namespace
+
 // _____________________________________________________________________________
 TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
   SimpleConcurrentLruCache cache{};
@@ -355,18 +378,15 @@ TEST(ConcurrentCache, isNotCachedIfUnsuitableWhenWaitingForPendingComputation) {
   cache.getStorage().wlock()->_inProgress[0] =
       std::pair(false, resultInProgress);
 
-  std::atomic_bool finished = false;
-
+  UseCounter useCounter{cache};
   ad_utility::JThread thread{[&]() {
-    std::this_thread::sleep_for(5ms);
+    useCounter.waitForChange();
     resultInProgress->finish(nullptr);
-    finished = true;
   }};
 
   auto result = cache.computeOnce(
       0, []() { return "abc"; }, false, [](const auto&) { return false; });
 
-  EXPECT_TRUE(finished);
   EXPECT_EQ(cache.numNonPinnedEntries(), 0);
   EXPECT_EQ(cache.numPinnedEntries(), 0);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
@@ -383,18 +403,15 @@ TEST(ConcurrentCache, isCachedIfSuitableWhenWaitingForPendingComputation) {
   cache.getStorage().wlock()->_inProgress[0] =
       std::pair(false, resultInProgress);
 
-  std::atomic_bool finished = false;
-
+  UseCounter useCounter{cache};
   ad_utility::JThread thread{[&]() {
-    std::this_thread::sleep_for(5ms);
+    useCounter.waitForChange();
     resultInProgress->finish(nullptr);
-    finished = true;
   }};
 
   auto result = cache.computeOnce(
       0, []() { return "abc"; }, false, [](const auto&) { return true; });
 
-  EXPECT_TRUE(finished);
   EXPECT_EQ(cache.numNonPinnedEntries(), 1);
   EXPECT_EQ(cache.numPinnedEntries(), 0);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
@@ -416,18 +433,15 @@ TEST(ConcurrentCache,
   cache.getStorage().wlock()->_inProgress[0] =
       std::pair(false, resultInProgress);
 
-  std::atomic_bool finished = false;
-
+  UseCounter useCounter{cache};
   ad_utility::JThread thread{[&]() {
-    std::this_thread::sleep_for(5ms);
+    useCounter.waitForChange();
     resultInProgress->finish(nullptr);
-    finished = true;
   }};
 
   auto result = cache.computeOncePinned(
       0, []() { return "abc"; }, false, [](const auto&) { return true; });
 
-  EXPECT_TRUE(finished);
   EXPECT_EQ(cache.numNonPinnedEntries(), 0);
   EXPECT_EQ(cache.numPinnedEntries(), 1);
   EXPECT_THAT(result._resultPointer, Pointee("abc"s));
@@ -458,19 +472,16 @@ TEST(ConcurrentCache,
   cache.getStorage().wlock()->_inProgress[0] =
       std::pair(false, resultInProgress);
 
-  std::atomic_bool finished = false;
-
+  UseCounter useCounter{cache};
   ad_utility::JThread thread{[&]() {
-    std::this_thread::sleep_for(5ms);
+    useCounter.waitForChange();
     resultInProgress->finish(nullptr);
-    finished = true;
   }};
 
   EXPECT_THROW(
       cache.computeOncePinned(
           0, []() { return "abc"; }, false, [](const auto&) { return false; }),
       ad_utility::Exception);
-  EXPECT_TRUE(finished);
 }
 
 // _____________________________________________________________________________
