@@ -143,14 +143,6 @@ class ExportQueryExecutionTrees {
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static nlohmann::json selectQueryResultToSparqlJSON(
-      const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> resultTable,
-      CancellationHandle cancellationHandle);
-
-  // ___________________________________________________________________________
   template <MediaType format>
   static ad_utility::streams::stream_generator constructQueryResultToStream(
       const QueryExecutionTree& qet,
