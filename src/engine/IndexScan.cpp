@@ -268,19 +268,10 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
   const IndexImpl& index = getIndex().getImpl();
-  std::optional<Id> col0Id;
-  if (numVariables_ < 3) {
-    col0Id = getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+  auto scanSpecification = getScanSpecification().toScanSpecification(index);
+  if (!scanSpecification.has_value()) {
+    return {};
   }
-  std::optional<Id> col1Id;
-  if (numVariables_ < 2) {
-    col1Id = getPermutedTriple()[1]->toValueId(index.getVocab()).value();
-  }
-
-  // This function is currently only called by the `getLazyScanForJoin...`
-  // functions. In these cases we always have at least one variable in each of
-  // the scans, because otherwise there would be no join column.
-  AD_CORRECTNESS_CHECK(numVariables_ >= 1);
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -290,7 +281,7 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           : std::nullopt;
 
   return index.getPermutation(permutation())
-      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
+      .lazyScan(std::move(scanSpecification).value(), std::move(actualBlocks),
                 additionalColumns(), cancellationHandle_, getLimit());
 };
 
