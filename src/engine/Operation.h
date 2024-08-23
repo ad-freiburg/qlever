@@ -406,4 +406,5 @@ class Operation {
               verifyLimitIsProperlyAppliedAndUpdatesRuntimeInfoCorrectly);
   FRIEND_TEST(Operation, ensureLazyOperationIsCachedIfSmallEnough);
   FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge);
+  FRIEND_TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache);
 };
