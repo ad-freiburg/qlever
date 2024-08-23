@@ -5,6 +5,7 @@
 #pragma once
 
 #include <absl/strings/str_replace.h>
+#include <gmock/gmock-spec-builders.h>
 
 #include <string_view>
 
@@ -327,8 +328,9 @@ constexpr std::array<char, sz + 1> catImpl(
 // zero byte at the end.
 template <ConstexprString... strings>
 constexpr auto constexprStrCatBufferImpl() {
-  constexpr size_t sz = (... + strings.size());
-  constexpr auto innerResult = catImpl<sz>(std::array{strings...});
+  constexpr size_t sz = (size_t{0} + ... + strings.size());
+  constexpr auto innerResult =
+      catImpl<sz>(std::array<ConstexprString, sizeof...(strings)>{strings...});
   return innerResult;
 }
 

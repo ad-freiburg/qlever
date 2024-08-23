@@ -347,8 +347,26 @@ TEST(StringUtilsTest, strLangTag) {
   ASSERT_TRUE(strIsLangTag("en"));
 }
 
-TEST(StringUtilsTest, constexprStrCatLocal) {
+// _____________________________________________________________________________
+TEST(StringUtilsTest, constexprStrCat) {
   using namespace std::string_view_literals;
+  ASSERT_EQ((constexprStrCat<>()), ""sv);
+  ASSERT_EQ((constexprStrCat<"">()), ""sv);
+  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
+  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
   ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
   static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+}
+
+// _____________________________________________________________________________
+TEST(StringUtilsTest, constexprStrCatImpl) {
+  // The coverage tools don't track the compile time usages of these internal
+  // helper functions, so we test them manually.
+  using namespace ad_utility::detail::constexpr_str_cat_impl;
+  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
+            (std::array{'h', 'i', '\0'}));
+
+  using C = ConstexprString;
+  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
+            (std::array{'h', 'i', '\0'}));
 }
