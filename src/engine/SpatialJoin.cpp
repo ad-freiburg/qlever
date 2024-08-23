@@ -29,7 +29,7 @@ SpatialJoin::SpatialJoin(
     leftChildVariable_ = triple_.value().s_.getVariable();
     rightChildVariable_ = triple_.value().o_.getVariable();
   } else {
-    AD_THROW("Currently, SpatialJoin needs two variables");  // TODO
+    AD_THROW("Currently, SpatialJoin needs two variables");
   }
 }
 
@@ -149,10 +149,10 @@ size_t SpatialJoin::getCostEstimate() {
     if (useBaselineAlgorithm_) {
       return inputEstimate * inputEstimate;
     } else {
-      // TODO check after implementation, if it is correct, for now it remains
+      // check after implementation, if it is correct, for now it remains
       // here because otherwise SonarQube complains about costEstimate and
       // sizeEstimate having the same implementation
-      return inputEstimate * log(inputEstimate);
+      return inputEstimate * static_cast<size_t>(log(inputEstimate));
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -172,7 +172,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
                             ColumnIndex ind) {
     auto size = (u_int)child->getSizeEstimate();
     auto multiplicity = child->getMultiplicity(ind);
-    return size / multiplicity;
+    return static_cast<float>(size) / multiplicity;
   };
 
   if (col >= getResultWidth()) {
@@ -193,7 +193,7 @@ float SpatialJoin::getMultiplicity(size_t col) {
       column -= childLeft_->getResultWidth();
     }
     auto distinctnessChild = getDistinctness(child, column);
-    return getSizeEstimate() / distinctnessChild;
+    return static_cast<float>(getSizeEstimate()) / distinctnessChild;
   } else {
     return 1;
   }
@@ -228,7 +228,7 @@ vector<ColumnIndex> SpatialJoin::resultSortedOn() const {
 long long SpatialJoin::getMaxDist() const { return maxDist_; }
 
 // ____________________________________________________________________________
-std::string SpatialJoin::betweenQuotes(std::string extractFrom) {
+std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
   // returns everything between the first two quotes. If the string does
   // not contain two quotes, the string is returned as a whole
   //
@@ -267,7 +267,7 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
                                       const IdTable* resultLeft,
                                       const IdTable* resultRight,
                                       size_t rowLeft, size_t rowRight,
-                                      long long distance) {
+                                      long long distance) const {
   // this lambda function copies elements from copyFrom
   // into the table res. It copies them into the row
   // rowIndRes and column column colIndRes. It returns the column number
@@ -297,7 +297,7 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
     // rescol at this place otherwise. If they forget to do this, the
     // distance column will be overwritten, the variableToColumnMap will
     // not work and so on
-    rescol += 1;
+    // rescol += 1;
   }
 }
 
@@ -336,7 +336,7 @@ Result SpatialJoin::baselineAlgorithm() {
 // ____________________________________________________________________________
 Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   if (useBaselineAlgorithm_) {
-    return std::move(baselineAlgorithm());
+    return baselineAlgorithm();
   } else {
     return Result{IdTable{0, _executionContext->getAllocator()},
                   std::vector<ColumnIndex>{}, LocalVocab{}};
@@ -366,16 +366,21 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     auto varColsRightVec = copySortedByColumnIndex(varColsRightMap);
     auto sizeLeft = childLeft_->getResultWidth();
     auto sizeRight = childRight_->getResultWidth();
-    for (size_t i = 0; i < varColsLeftVec.size(); i++) {
-      variableToColumnMap[varColsLeftVec.at(i).first] =
-          makeCol(ColumnIndex{varColsLeftVec.at(i).second.columnIndex_});
-    }
     // in case a result table contains entries, which aren't contained
     // in the varColMap
-    for (size_t i = 0; i < varColsRightVec.size(); i++) {
-      variableToColumnMap[varColsRightVec.at(i).first] = makeCol(
-          ColumnIndex{sizeLeft + varColsRightVec.at(i).second.columnIndex_});
-    }
+    std::ranges::for_each(
+        varColsLeftVec,
+        [&](std::pair<Variable, ColumnIndexAndTypeInfo> varColEntry) {
+          variableToColumnMap[varColEntry.first] =
+              makeCol(ColumnIndex{varColEntry.second.columnIndex_});
+        });
+    std::ranges::for_each(
+        varColsRightVec,
+        [&](std::pair<Variable, ColumnIndexAndTypeInfo> varColEntry) {
+          variableToColumnMap[varColEntry.first] =
+              makeCol(ColumnIndex{sizeLeft + varColEntry.second.columnIndex_});
+        });
+
     if (addDistToResult_) {
       variableToColumnMap[Variable{nameDistanceInternal_}] =
           makeCol(ColumnIndex{sizeLeft + sizeRight});

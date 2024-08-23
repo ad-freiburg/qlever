@@ -85,13 +85,13 @@ class SpatialJoin : public Operation {
 
  private:
   void parseMaxDistance();
-  std::string betweenQuotes(std::string extractFrom);
+  std::string betweenQuotes(std::string extractFrom) const;
   long long computeDist(const IdTable* resLeft, const IdTable* resRight,
                         size_t rowLeft, size_t rowRight,
                         ColumnIndex leftPointCol, ColumnIndex rightPointCol);
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
-                           size_t rowRight, long long distance);
+                           size_t rowRight, long long distance) const;
   Result baselineAlgorithm();
   std::optional<Variable> leftChildVariable_ = std::nullopt;
   std::optional<Variable> rightChildVariable_ = std::nullopt;
