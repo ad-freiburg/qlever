@@ -336,7 +336,7 @@ constexpr auto constexprStrCatBufferImpl() {
 // TODO<C++26> This can be a `static constexpr` variable inside the
 // `constexprStrCatBufferImpl()` function above.
 template <ConstexprString... strings>
-constexpr auto constexprStrCatBufferVar =
+constexpr inline auto constexprStrCatBufferVar =
     constexprStrCatBufferImpl<strings...>();
 }  // namespace detail::constexpr_str_cat_impl
 
@@ -355,8 +355,8 @@ constexpr std::string_view constexprStrCat() {
 // these overloads are missing in the STL
 // TODO they can be constexpr once the compiler completely supports C++20
 template <typename Char>
-inline std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
-                                          std::basic_string_view<Char> b) {
+std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
+                                   std::basic_string_view<Char> b) {
   std::basic_string<Char> res;
   res.reserve(a.size() + b.size());
   res += a;
