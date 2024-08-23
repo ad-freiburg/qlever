@@ -9,10 +9,13 @@
 #include "engine/QueryPlanner.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
+using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::HasSubstr;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -32,12 +35,8 @@ std::string runQueryStreamableResult(const std::string& kg,
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto strGenerator =
-      mediaType == ad_utility::MediaType::qleverJson
-          ? ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
-                pq, qet, timer, std::move(cancellationHandle))
-          : ExportQueryExecutionTrees::computeResultAsStream(
-                pq, qet, mediaType, std::move(cancellationHandle));
+  auto strGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      pq, qet, mediaType, timer, std::move(cancellationHandle));
 
   std::string result;
   for (const auto& block : strGenerator) {
@@ -62,8 +61,12 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
-  return ExportQueryExecutionTrees::computeResultAsJSON(
-      pq, qet, timer, mediaType, std::move(cancellationHandle));
+  std::string resStr;
+  for (auto c : ExportQueryExecutionTrees::computeResultAsStream(
+           pq, qet, mediaType, timer, std::move(cancellationHandle))) {
+    resStr += c;
+  }
+  return nlohmann::json::parse(resStr);
 }
 
 // A test case that tests the correct execution and exporting of a SELECT query
@@ -107,24 +110,14 @@ void runSelectQueryTestCase(
   EXPECT_EQ(
       runQueryStreamableResult(testCase.kg, testCase.query, csv, useTextIndex),
       testCase.resultCsv);
-  auto qleverJSONResult =
-      runJSONQuery(testCase.kg, testCase.query, qleverJson, useTextIndex);
 
+  auto qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, useTextIndex));
   // TODO<joka921> Test other members of the JSON result (e.g. the selected
   // variables).
   ASSERT_EQ(qleverJSONResult["query"], testCase.query);
   ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
   EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
-
-  auto qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
-      testCase.kg, testCase.query, qleverJson, useTextIndex));
-  ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
-
-  auto sparqlJSONResult =
-      runJSONQuery(testCase.kg, testCase.query, sparqlJson, useTextIndex);
-  EXPECT_EQ(sparqlJSONResult, testCase.resultSparqlJSON);
 
   EXPECT_EQ(nlohmann::json::parse(runQueryStreamableResult(
                 testCase.kg, testCase.query, sparqlJson, useTextIndex)),
@@ -146,10 +139,6 @@ void runConstructQueryTestCase(
             testCase.resultTsv);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, csv),
             testCase.resultCsv);
-  auto qleverJSONResult = runJSONQuery(testCase.kg, testCase.query, qleverJson);
-  ASSERT_EQ(qleverJSONResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONResult["resultsize"], testCase.resultSize);
-  EXPECT_EQ(qleverJSONResult["res"], testCase.resultQLeverJSON);
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
@@ -230,6 +219,28 @@ static std::string makeXMLHeader(
 
 // The end of a SPARQL XML export.
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
+
+// Helper function for easier testing of the `IdTable` generator.
+std::vector<IdTable> convertToVector(
+    cppcoro::generator<const IdTable&> generator) {
+  std::vector<IdTable> result;
+  for (const IdTable& idTable : generator) {
+    result.push_back(idTable.clone());
+  }
+  return result;
+}
+
+// Template is only required because inner class is not visible
+template <typename T>
+std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
+  std::vector<IdTable> result;
+  for (const auto& [idTable, range] : generator) {
+    result.emplace_back(idTable.numColumns(), idTable.getAllocator());
+    result.back().insertAtEnd(idTable.begin() + *range.begin(),
+                              idTable.begin() + *(range.end() - 1) + 1);
+  }
+  return result;
+}
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Integers) {
@@ -659,49 +670,49 @@ TEST(ExportQueryExecutionTrees, LiteralWithDatatype) {
 }
 
 // ____________________________________________________________________________
-TEST(ExportQueryExecutionTrees, LiteralCornercases) {
-  auto runTestCaseWithLiteral = [](std::string literal) {
-    const std::string innerValue = literal.substr(1, literal.rfind("\"") - 1);
-    const std::string suffixValue = literal.substr(literal.rfind("\"") + 1);
-    std::string kg = absl::StrCat("<s> <p> ", literal);
-    std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
-    std::string expectedXml = absl::StrCat(makeXMLHeader({"o"}),
-                                           R"(
+TEST(ExportQueryExecutionTrees, LiteralPlain) {
+  std::string kg = "<s> <p> \"something\"";
+  std::string query = "SELECT ?o WHERE {?s ?p ?o} ORDER BY ?o";
+  std::string expectedXml = makeXMLHeader({"o"}) +
+                            R"(
   <result>
-    <binding name="o"><literal>)",
-                                           innerValue, R"(</literal></binding>
-  </result>)",
-                                           xmlTrailer);
-    TestCaseSelectQuery testCase{kg, query, 1,
-                                 // TSV
-                                 absl::StrCat("?o\n", literal, "\n"),
-                                 // CSV
-                                 absl::StrCat("o\n", innerValue, "\n"),
-                                 makeExpectedQLeverJSON({literal}),
-                                 makeExpectedSparqlJSON({makeJSONBinding(
-                                     std::nullopt, "literal", innerValue)}),
-                                 expectedXml};
-    runSelectQueryTestCase(testCase);
-    TestCaseConstructQuery testCaseConstruct{
-        kg,
-        "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
-        1,
-        // TSV
-        absl::StrCat("<s>\t<p>\t", literal, "\n"),
-        // CSV
-        absl::StrCat("<s>,<p>,\"\"\"", innerValue, "\"\"", suffixValue, "\"\n"),
-        // Turtle
-        absl::StrCat("<s> <p> ", literal, " .\n"),
-        [&literal]() {
-          nlohmann::json j;
-          j.push_back(std::vector{"<s>"s, "<p>"s, literal});
-          return j;
-        }(),
-    };
-    runConstructQueryTestCase(testCaseConstruct);
-  };
+    <binding name="o"><literal>something</literal></binding>
+  </result>)" + xmlTrailer;
+  TestCaseSelectQuery testCase{kg, query, 1,
+                               // TSV
+                               "?o\n"
+                               "\"something\"\n",
+                               // CSV
+                               "o\n"
+                               "something\n",
+                               makeExpectedQLeverJSON({"\"something\""s}),
+                               makeExpectedSparqlJSON({makeJSONBinding(
+                                   std::nullopt, "literal", "something")}),
+                               expectedXml};
+  runSelectQueryTestCase(testCase);
+  testCase.kg = "<s> <x> <y>";
+  testCase.query =
+      "SELECT ?o WHERE { VALUES ?o {\"something\"}} "
+      "ORDER BY ?o";
+  runSelectQueryTestCase(testCase);
 
-  runTestCaseWithLiteral("\"something\"");
+  TestCaseConstructQuery testCaseConstruct{
+      kg,
+      "CONSTRUCT {?s ?p ?o} WHERE {?s ?p ?o} ORDER BY ?o",
+      1,
+      // TSV
+      "<s>\t<p>\t\"something\"\n",
+      // CSV
+      "<s>,<p>,\"\"\"something\"\"\"\n",
+      // Turtle
+      "<s> <p> \"something\" .\n",
+      []() {
+        nlohmann::json j;
+        j.push_back(std::vector{"<s>"s, "<p>"s, "\"something\""s});
+        return j;
+      }(),
+  };
+  runConstructQueryTestCase(testCaseConstruct);
 }
 
 // ____________________________________________________________________________
@@ -1030,9 +1041,6 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
   ASSERT_THROW(
       runQueryStreamableResult(kg, query, ad_utility::MediaType::turtle),
       ad_utility::Exception);
-  // TSV is not a `JSON` format
-  ASSERT_THROW(runJSONQuery(kg, query, ad_utility::MediaType::tsv),
-               ad_utility::Exception);
   // SPARQL JSON is not supported for construct queries.
   ASSERT_THROW(
       runJSONQuery(kg, constructQuery, ad_utility::MediaType::sparqlJson),
@@ -1074,32 +1082,6 @@ TEST(ExportQueryExecutionTrees, CornerCases) {
 using enum ad_utility::MediaType;
 
 // ____________________________________________________________________________
-
-class JsonMediaTypesFixture
-    : public ::testing::Test,
-      public ::testing::WithParamInterface<ad_utility::MediaType> {};
-
-TEST_P(JsonMediaTypesFixture, CancellationCancelsJson) {
-  auto cancellationHandle =
-      std::make_shared<ad_utility::CancellationHandle<>>();
-
-  auto* qec = ad_utility::testing::getQec(
-      "<s> <p> 42 . <s> <p> -42019234865781 . <s> <p> 4012934858173560");
-  QueryPlanner qp{qec, cancellationHandle};
-  auto pq = SparqlParser::parseQuery("SELECT * WHERE { ?x ?y ?z }");
-  auto qet = qp.createExecutionTree(pq);
-
-  cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
-      ExportQueryExecutionTrees::computeResultAsJSON(
-          pq, qet, ad_utility::Timer{ad_utility::Timer::Started}, GetParam(),
-          std::move(cancellationHandle)),
-      HasSubstr("Query export"), ad_utility::CancellationException);
-}
-INSTANTIATE_TEST_SUITE_P(JsonMediaTypes, JsonMediaTypesFixture,
-                         ::testing::Values(sparqlJson, qleverJson));
-
-// ____________________________________________________________________________
 class StreamableMediaTypesFixture
     : public ::testing::Test,
       public ::testing::WithParamInterface<ad_utility::MediaType> {};
@@ -1117,8 +1099,9 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
   auto qet = qp.createExecutionTree(pq);
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
+  ad_utility::Timer timer(ad_utility::Timer::Started);
   auto generator = ExportQueryExecutionTrees::computeResultAsStream(
-      pq, qet, GetParam(), std::move(cancellationHandle));
+      pq, qet, GetParam(), timer, std::move(cancellationHandle));
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(generator.begin(),
                                         HasSubstr("Stream query export"),
@@ -1133,3 +1116,175 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 
 // TODO<joka921> Unit tests that also test for the export of text records from
 // the text index and thus systematically fill the coverage gaps.
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
+  auto idTable = makeIdTableFromVector({{42}, {1337}});
+
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
+  IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+  IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
+  auto tableGenerator = [](IdTable idTableA,
+                           IdTable idTableB) -> cppcoro::generator<IdTable> {
+    co_yield idTableA;
+
+    co_yield idTableB;
+  }(idTable1.clone(), idTable2.clone());
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable1)), Eq(std::cref(idTable2))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+
+  auto referenceTable = makeIdTableFromVector({{2}});
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+
+    IdTable idTable3 = makeIdTableFromVector({{6}, {7}, {8}, {9}});
+    co_yield idTable3;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
+  auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2)),
+                          Eq(std::cref(referenceTable3))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
+  {
+    auto throwingGenerator = []() -> cppcoro::generator<IdTable> {
+      ADD_FAILURE() << "Generator was started" << std::endl;
+      throw std::runtime_error("Generator was started");
+      co_return;
+    }();
+
+    Result result{std::move(throwingGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+    EXPECT_NO_THROW(convertToVector(std::move(generator)));
+  }
+
+  {
+    auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
+      IdTable idTable1 = makeIdTableFromVector({{1}});
+      co_yield idTable1;
+
+      ADD_FAILURE() << "Generator was resumed" << std::endl;
+      throw std::runtime_error("Generator was resumed");
+    }();
+
+    Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
+    IdTable referenceTable1 = makeIdTableFromVector({{1}});
+    std::vector<IdTable> tables;
+    EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
+    EXPECT_THAT(tables, ElementsAre(Eq(std::cref(referenceTable1))));
+  }
+}

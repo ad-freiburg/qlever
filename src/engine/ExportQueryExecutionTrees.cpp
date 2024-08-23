@@ -12,41 +12,70 @@
 #include "util/ConstexprUtils.h"
 #include "util/http/MediaTypes.h"
 
-// _____________________________________________________________________________
-namespace {
+// __________________________________________________________________________
+
+cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
+    const Result& result) {
+  if (result.isFullyMaterialized()) {
+    co_yield result.idTable();
+  } else {
+    for (const IdTable& idTable : result.idTables()) {
+      co_yield idTable;
+    }
+  }
+}
+
 // Return a range that contains the indices of the rows that have to be exported
 // from the `idTable` given the `LimitOffsetClause`. It takes into account the
 // LIMIT, the OFFSET, and the actual size of the `idTable`
-auto getRowIndices(const LimitOffsetClause& limitOffset, const Result& result) {
-  const IdTable& idTable = result.idTable();
-  return std::views::iota(limitOffset.actualOffset(idTable.size()),
-                          limitOffset.upperBound(idTable.size()));
+cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
+ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
+                                         const Result& result) {
+  if (limitOffset._limit.value_or(1) == 0) {
+    co_return;
+  }
+  for (const IdTable& idTable : getIdTables(result)) {
+    uint64_t currentOffset = limitOffset.actualOffset(idTable.numRows());
+    uint64_t upperBound = limitOffset.upperBound(idTable.numRows());
+    if (currentOffset != upperBound) {
+      co_yield {idTable, std::views::iota(currentOffset, upperBound)};
+    }
+    limitOffset._offset -= currentOffset;
+    if (limitOffset._limit.has_value()) {
+      limitOffset._limit =
+          limitOffset._limit.value() - (upperBound - currentOffset);
+    }
+    if (limitOffset._limit.value_or(1) == 0) {
+      break;
+    }
+  }
 }
-}  // namespace
 
 // _____________________________________________________________________________
 cppcoro::generator<QueryExecutionTree::StringTriple>
 ExportQueryExecutionTrees::constructQueryResultToTriples(
     const QueryExecutionTree& qet,
     const ad_utility::sparql_types::Triples& constructTriples,
-    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
+    LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
-  for (size_t i : getRowIndices(limitAndOffset, *res)) {
-    ConstructQueryExportContext context{i, res->idTable(), res->localVocab(),
-                                        qet.getVariableColumns(),
-                                        qet.getQec()->getIndex()};
-    using enum PositionInTriple;
-    for (const auto& triple : constructTriples) {
-      auto subject = triple[0].evaluate(context, SUBJECT);
-      auto predicate = triple[1].evaluate(context, PREDICATE);
-      auto object = triple[2].evaluate(context, OBJECT);
-      if (!subject.has_value() || !predicate.has_value() ||
-          !object.has_value()) {
-        continue;
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (uint64_t i : range) {
+      ConstructQueryExportContext context{i, idTable, result->localVocab(),
+                                          qet.getVariableColumns(),
+                                          qet.getQec()->getIndex()};
+      using enum PositionInTriple;
+      for (const auto& triple : constructTriples) {
+        auto subject = triple[0].evaluate(context, SUBJECT);
+        auto predicate = triple[1].evaluate(context, PREDICATE);
+        auto object = triple[2].evaluate(context, OBJECT);
+        if (!subject.has_value() || !predicate.has_value() ||
+            !object.has_value()) {
+          continue;
+        }
+        co_yield {std::move(subject.value()), std::move(predicate.value()),
+                  std::move(object.value())};
+        cancellationHandle->throwIfCancelled();
       }
-      co_yield {std::move(subject.value()), std::move(predicate.value()),
-                std::move(object.value())};
-      cancellationHandle->throwIfCancelled();
     }
   }
 }
@@ -84,25 +113,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     }
     co_yield " .\n";
   }
-}
-
-// _____________________________________________________________________________
-nlohmann::json
-ExportQueryExecutionTrees::constructQueryResultBindingsToQLeverJSON(
-    const QueryExecutionTree& qet,
-    const ad_utility::sparql_types::Triples& constructTriples,
-    const LimitOffsetClause& limitAndOffset, std::shared_ptr<const Result> res,
-    CancellationHandle cancellationHandle) {
-  auto generator = constructQueryResultToTriples(qet, constructTriples,
-                                                 limitAndOffset, std::move(res),
-                                                 std::move(cancellationHandle));
-  std::vector<std::array<std::string, 3>> jsonArray;
-  for (auto& triple : generator) {
-    jsonArray.push_back({std::move(triple.subject_),
-                         std::move(triple.predicate_),
-                         std::move(triple.object_)});
-  }
-  return jsonArray;
 }
 
 // _____________________________________________________________________________
@@ -156,24 +166,6 @@ nlohmann::json idTableToQLeverJSONRow(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::idTableToQLeverJSONArray(
-    const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
-    const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-    std::shared_ptr<const Result> result,
-    CancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(result != nullptr);
-  const IdTable& data = result->idTable();
-  nlohmann::json json = nlohmann::json::array();
-
-  for (size_t rowIndex : getRowIndices(limitAndOffset, *result)) {
-    json.emplace_back(idTableToQLeverJSONRow(qet, columns, result->localVocab(),
-                                             rowIndex, data));
-    cancellationHandle->throwIfCancelled();
-  }
-  return json;
-}
-
-// _____________________________________________________________________________
 cppcoro::generator<std::string>
 ExportQueryExecutionTrees::idTableToQLeverJSONBindingsStream(
     const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
@@ -181,12 +173,13 @@ ExportQueryExecutionTrees::idTableToQLeverJSONBindingsStream(
     std::shared_ptr<const Result> result,
     CancellationHandle cancellationHandle) {
   AD_CORRECTNESS_CHECK(result != nullptr);
-  const auto rowIndices = getRowIndices(limitAndOffset, *result);
-  for (size_t rowIndex : rowIndices) {
-    co_yield idTableToQLeverJSONRow(qet, columns, result->localVocab(),
-                                    rowIndex, result->idTable())
-        .dump();
-    cancellationHandle->throwIfCancelled();
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (uint64_t rowIndex : range) {
+      co_yield idTableToQLeverJSONRow(qet, columns, result->localVocab(),
+                                      rowIndex, idTable)
+          .dump();
+      cancellationHandle->throwIfCancelled();
+    }
   }
 }
 
@@ -277,7 +270,7 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
     return std::pair{escapeFunction(word.toStringRepresentation()), nullptr};
   };
   switch (id.getDatatype()) {
-    case Datatype::WordVocabIndex: {
+    case WordVocabIndex: {
       std::string_view entity = index.indexToString(id.getWordVocabIndex());
       return std::pair{escapeFunction(std::string{entity}), nullptr};
     }
@@ -293,13 +286,13 @@ ExportQueryExecutionTrees::idToStringAndType(const Index& index, Id id,
       return idToStringAndTypeForEncodedValue(id);
   }
 }
-// _____________________________________________________________________________
+// ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, false, std::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
     std::identity&& escapeFunction);
 
-// _____________________________________________________________________________
+// ___________________________________________________________________________
 template std::optional<std::pair<std::string, const char*>>
 ExportQueryExecutionTrees::idToStringAndType<true, true, std::identity>(
     const Index& index, Id id, const LocalVocab& localVocab,
@@ -384,8 +377,6 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
 
   std::erase(columns, std::nullopt);
 
-  const IdTable& idTable = result->idTable();
-
   json resultJson;
   std::vector<std::string> selectedVars =
       selectClause.getSelectedVariablesAsStrings();
@@ -409,42 +400,81 @@ nlohmann::json ExportQueryExecutionTrees::selectQueryResultToSparqlJSON(
     return resultJson;
   }
 
-  for (size_t rowIndex : getRowIndices(limitAndOffset, *result)) {
-    // TODO: ordered_json` entries are ordered alphabetically, but insertion
-    // order would be preferable.
-    nlohmann::ordered_json binding;
-    for (const auto& column : columns) {
-      const auto& currentId = idTable(rowIndex, column->columnIndex_);
-      const auto& optionalValue = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalValue.has_value()) {
-        continue;
+  // Take a string from the vocabulary, deduce the type and
+  // return a JSON dict that describes the binding.
+  auto stringToBinding = [](std::string_view entitystr) -> nlohmann::json {
+    nlohmann::ordered_json b;
+    // The string is an IRI or literal.
+    if (entitystr.starts_with('<')) {
+      // Strip the <> surrounding the iri.
+      b["value"] = entitystr.substr(1, entitystr.size() - 2);
+      // Even if they are technically IRIs, the format needs the type to be
+      // "uri".
+      b["type"] = "uri";
+    } else if (entitystr.starts_with("_:")) {
+      b["value"] = entitystr.substr(2);
+      b["type"] = "bnode";
+    } else {
+      // TODO<joka921> This is probably not quite correct in the corner case
+      // that there are datatype IRIs which contain quotes.
+      size_t quotePos = entitystr.rfind('"');
+      if (quotePos == std::string::npos) {
+        // TEXT entries are currently not surrounded by quotes
+        b["value"] = entitystr;
+        b["type"] = "literal";
+      } else {
+        b["value"] = entitystr.substr(1, quotePos - 1);
+        b["type"] = "literal";
+        // Look for a language tag or type.
+        if (quotePos < entitystr.size() - 1 && entitystr[quotePos + 1] == '@') {
+          b["xml:lang"] = entitystr.substr(quotePos + 2);
+        } else if (quotePos < entitystr.size() - 2 &&
+                   entitystr[quotePos + 1] == '^') {
+          AD_CONTRACT_CHECK(entitystr[quotePos + 2] == '^');
+          std::string_view datatype{entitystr};
+          // remove the <angledBrackets> around the datatype IRI
+          AD_CONTRACT_CHECK(datatype.size() >= quotePos + 5);
+          datatype.remove_prefix(quotePos + 4);
+          datatype.remove_suffix(1);
+          b["datatype"] = datatype;
+          ;
+        }
       }
-      const auto& [stringValue, xsdType] = optionalValue.value();
-      binding[column->variable_] = stringAndTypeToBinding(stringValue, xsdType);
     }
-    bindings.emplace_back(std::move(binding));
-    cancellationHandle->throwIfCancelled();
+    return b;
+  };
+
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (uint64_t rowIndex : range) {
+      // TODO: ordered_json` entries are ordered alphabetically, but insertion
+      // order would be preferable.
+      nlohmann::ordered_json binding;
+      for (const auto& column : columns) {
+        const auto& currentId = idTable(rowIndex, column->columnIndex_);
+        const auto& optionalValue = idToStringAndType(
+            qet.getQec()->getIndex(), currentId, result->localVocab());
+        if (!optionalValue.has_value()) {
+          continue;
+        }
+        const auto& [stringValue, xsdType] = optionalValue.value();
+        nlohmann::ordered_json b;
+        if (!xsdType) {
+          // No xsdType, this means that `stringValue` is a plain string literal
+          // or entity.
+          b = stringToBinding(stringValue);
+        } else {
+          b["value"] = stringValue;
+          b["type"] = "literal";
+          b["datatype"] = xsdType;
+        }
+        binding[column->variable_] = std::move(b);
+      }
+      bindings.emplace_back(std::move(binding));
+      cancellationHandle->throwIfCancelled();
+    }
   }
   resultJson["results"]["bindings"] = std::move(bindings);
   return resultJson;
-}
-
-// _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::selectQueryResultBindingsToQLeverJSON(
-    const QueryExecutionTree& qet,
-    const parsedQuery::SelectClause& selectClause,
-    const LimitOffsetClause& limitAndOffset,
-    std::shared_ptr<const Result> result,
-    CancellationHandle cancellationHandle) {
-  AD_CORRECTNESS_CHECK(result != nullptr);
-  LOG(DEBUG) << "Resolving strings for finished binary result...\n";
-  QueryExecutionTree::ColumnIndicesAndTypes selectedColumnIndices =
-      qet.selectedVariablesToColumnIndices(selectClause, true);
-
-  return idTableToQLeverJSONArray(qet, limitAndOffset, selectedColumnIndices,
-                                  std::move(result),
-                                  std::move(cancellationHandle));
 }
 
 // _____________________________________________________________________________
@@ -488,18 +518,20 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, true);
 
-  const auto& idTable = result->idTable();
   // special case : binary export of IdTable
   if constexpr (format == MediaType::octetStream) {
-    for (size_t i : getRowIndices(limitAndOffset, *result)) {
-      for (const auto& columnIndex : selectedColumnIndices) {
-        if (columnIndex.has_value()) {
-          co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
-                                        i, columnIndex.value().columnIndex_)),
-                                    sizeof(Id)};
+    for (const auto& [idTable, range] :
+         getRowIndices(limitAndOffset, *result)) {
+      for (uint64_t i : range) {
+        for (const auto& columnIndex : selectedColumnIndices) {
+          if (columnIndex.has_value()) {
+            co_yield std::string_view{reinterpret_cast<const char*>(&idTable(
+                                          i, columnIndex.value().columnIndex_)),
+                                      sizeof(Id)};
+          }
         }
+        cancellationHandle->throwIfCancelled();
       }
-      cancellationHandle->throwIfCancelled();
     }
     co_return;
   }
@@ -519,22 +551,24 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
   constexpr auto& escapeFunction = format == MediaType::tsv
                                        ? RdfEscaping::escapeForTsv
                                        : RdfEscaping::escapeForCsv;
-  for (size_t i : getRowIndices(limitAndOffset, *result)) {
-    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-      if (selectedColumnIndices[j].has_value()) {
-        const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val.columnIndex_);
-        auto optionalStringAndType =
-            idToStringAndType<format == MediaType::csv>(
-                qet.getQec()->getIndex(), id, result->localVocab(),
-                escapeFunction);
-        if (optionalStringAndType.has_value()) [[likely]] {
-          co_yield optionalStringAndType.value().first;
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (uint64_t i : range) {
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (selectedColumnIndices[j].has_value()) {
+          const auto& val = selectedColumnIndices[j].value();
+          Id id = idTable(i, val.columnIndex_);
+          auto optionalStringAndType =
+              idToStringAndType<format == MediaType::csv>(
+                  qet.getQec()->getIndex(), id, result->localVocab(),
+                  escapeFunction);
+          if (optionalStringAndType.has_value()) [[likely]] {
+            co_yield optionalStringAndType.value().first;
+          }
         }
+        co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
       }
-      co_yield j + 1 < selectedColumnIndices.size() ? separator : '\n';
+      cancellationHandle->throwIfCancelled();
     }
-    cancellationHandle->throwIfCancelled();
   }
   LOG(DEBUG) << "Done creating readable result.\n";
 }
@@ -639,22 +673,23 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   co_yield "\n<results>";
 
   result->logResultSize();
-  const auto& idTable = result->idTable();
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
   // TODO<joka921> we could prefilter for the nonexisting variables.
-  for (size_t i : getRowIndices(limitAndOffset, *result)) {
-    co_yield "\n  <result>";
-    for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
-      if (selectedColumnIndices[j].has_value()) {
-        const auto& val = selectedColumnIndices[j].value();
-        Id id = idTable(i, val.columnIndex_);
-        co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
-                                result->localVocab());
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
+    for (uint64_t i : range) {
+      co_yield "\n  <result>";
+      for (size_t j = 0; j < selectedColumnIndices.size(); ++j) {
+        if (selectedColumnIndices[j].has_value()) {
+          const auto& val = selectedColumnIndices[j].value();
+          Id id = idTable(i, val.columnIndex_);
+          co_yield idToXMLBinding(val.variable_, id, qet.getQec()->getIndex(),
+                                  result->localVocab());
+        }
       }
+      co_yield "\n  </result>";
+      cancellationHandle->throwIfCancelled();
     }
-    co_yield "\n  </result>";
-    cancellationHandle->throwIfCancelled();
   }
   co_yield "\n</results>";
   co_yield "\n</sparql>";
@@ -677,8 +712,6 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
   auto selectedColumnIndices =
       qet.selectedVariablesToColumnIndices(selectClause, false);
 
-  const auto& idTable = result->idTable();
-
   auto vars = selectClause.getSelectedVariablesAsStrings();
   std::ranges::for_each(vars, [](std::string& var) { var = var.substr(1); });
   nlohmann::json jsonVars = vars;
@@ -692,26 +725,27 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
     co_yield "]}}";
     co_return;
   }
-  for (size_t i : getRowIndices(limitAndOffset, *result)) {
+  for (const auto& [idTable, range] : getRowIndices(limitAndOffset, *result)) {
     nlohmann::ordered_json binding = {};
-    for (const auto& column : columns) {
-      const auto& currentId = idTable(i, column->columnIndex_);
-      auto optionalStringAndType = idToStringAndType(
-          qet.getQec()->getIndex(), currentId, result->localVocab());
-      if (!optionalStringAndType) {
-        continue;
+    for (uint64_t i : range) {
+      for (const auto& column : columns) {
+        auto optionalStringAndType = idToStringAndType(
+            qet.getQec()->getIndex(), idTable(i, column->columnIndex_),
+            result->localVocab());
+        if (!optionalStringAndType) {
+          continue;
+        }
+        const auto& [stringValue, xsdType] = optionalStringAndType.value();
+        binding[column->variable_] =
+            stringAndTypeToBinding(stringValue, xsdType);
       }
-      const auto& [stringValue, xsdType] = optionalStringAndType.value();
-      binding[column->variable_] = stringAndTypeToBinding(stringValue, xsdType);
+      co_yield absl::StrCat(i == 0 ? "" : ",", binding.dump());
+      cancellationHandle->throwIfCancelled();
     }
-    co_yield absl::StrCat(i == 0 ? "" : ",", binding.dump());
-    cancellationHandle->throwIfCancelled();
   }
   co_yield "]}}";
   co_return;
 }
-
-// _____________________________________________________________________________
 
 // _____________________________________________________________________________
 template <ad_utility::MediaType format>
@@ -728,6 +762,8 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
     AD_THROW("Binary export is not supported for CONSTRUCT queries");
   } else if constexpr (format == MediaType::sparqlXml) {
     AD_THROW("XML export is currently not supported for CONSTRUCT queries");
+  } else if constexpr (format == MediaType::sparqlJson) {
+    AD_THROW("SparqlJSON export is not supported for CONSTRUCT queries");
   }
   result->logResultSize();
   constexpr auto& escapeFunction = format == MediaType::tsv
@@ -748,75 +784,30 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    const ad_utility::Timer& requestTimer,
-    CancellationHandle cancellationHandle) {
-  std::shared_ptr<const Result> result = qet.getResult();
-  result->logResultSize();
-  auto timeResultComputation = requestTimer.msecs();
-
-  size_t resultSize = result->idTable().size();
-
-  nlohmann::json j;
-
-  j["query"] = query._originalString;
-  j["status"] = "OK";
-  j["warnings"] = qet.collectWarnings();
-  if (query.hasSelectClause()) {
-    j["selected"] = query.selectClause().getSelectedVariablesAsStrings();
-  } else {
-    j["selected"] =
-        std::vector<std::string>{"?subject", "?predicate", "?object"};
-  }
-
-  j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
-  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  runtimeInformation.addLimitOffsetRow(
-      query._limitOffset, std::chrono::milliseconds::zero(), false);
-  j["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(runtimeInformation);
-
-  {
-    j["res"] =
-        query.hasSelectClause()
-            ? selectQueryResultBindingsToQLeverJSON(
-                  qet, query.selectClause(), query._limitOffset,
-                  std::move(result), std::move(cancellationHandle))
-            : constructQueryResultBindingsToQLeverJSON(
-                  qet, query.constructClause().triples_, query._limitOffset,
-                  std::move(result), std::move(cancellationHandle));
-  }
-  j["resultsize"] = query.hasSelectClause() ? resultSize : j["res"].size();
-  j["time"]["total"] = std::to_string(requestTimer.msecs().count()) + "ms";
-  j["time"]["computeResult"] =
-      std::to_string(timeResultComputation.count()) + "ms";
-
-  return j;
-}
-
-// _____________________________________________________________________________
 cppcoro::generator<std::string>
 ExportQueryExecutionTrees::computeResultAsStream(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    ad_utility::MediaType mediaType, CancellationHandle cancellationHandle) {
+    ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
+    CancellationHandle cancellationHandle) {
   auto compute = [&]<MediaType format> {
-    auto limitAndOffset = parsedQuery._limitOffset;
     return parsedQuery.hasSelectClause()
-               ? ExportQueryExecutionTrees::selectQueryResultToStream<format>(
-                     qet, parsedQuery.selectClause(), limitAndOffset,
+               ? selectQueryResultToStream<format>(
+                     qet, parsedQuery.selectClause(), parsedQuery._limitOffset,
                      std::move(cancellationHandle))
-               : ExportQueryExecutionTrees::constructQueryResultToStream<
-                     format>(qet, parsedQuery.constructClause().triples_,
-                             limitAndOffset, qet.getResult(),
-                             std::move(cancellationHandle));
+               : constructQueryResultToStream<format>(
+                     qet, parsedQuery.constructClause().triples_,
+                     parsedQuery._limitOffset, qet.getResult(),
+                     std::move(cancellationHandle));
   };
 
   using enum MediaType;
   auto inner =
-      ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
-                                  sparqlJson>(compute, mediaType);
+      mediaType == qleverJson
+          ? computeResultAsQLeverJSONStream(parsedQuery, qet, requestTimer,
+                                            std::move(cancellationHandle))
+          : ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle,
+                                        sparqlXml, sparqlJson>(compute,
+                                                               mediaType);
   try {
     for (auto& block : inner) {
       co_yield std::move(block);
@@ -828,44 +819,7 @@ ExportQueryExecutionTrees::computeResultAsStream(
 }
 
 // _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::computeSelectQueryResultAsSparqlJSON(
-    const ParsedQuery& query, const QueryExecutionTree& qet,
-    CancellationHandle cancellationHandle) {
-  if (!query.hasSelectClause()) {
-    AD_THROW(
-        "SPARQL-compliant JSON format is only supported for SELECT queries");
-  }
-  std::shared_ptr<const Result> result = qet.getResult();
-  result->logResultSize();
-  return selectQueryResultToSparqlJSON(qet, query.selectClause(),
-                                       query._limitOffset, std::move(result),
-                                       std::move(cancellationHandle));
-}
-
-// _____________________________________________________________________________
-nlohmann::json ExportQueryExecutionTrees::computeResultAsJSON(
-    const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-    const ad_utility::Timer& requestTimer, ad_utility::MediaType mediaType,
-    CancellationHandle cancellationHandle) {
-  try {
-    switch (mediaType) {
-      case ad_utility::MediaType::qleverJson:
-        return computeQueryResultAsQLeverJSON(parsedQuery, qet, requestTimer,
-                                              std::move(cancellationHandle));
-      case ad_utility::MediaType::sparqlJson:
-        return computeSelectQueryResultAsSparqlJSON(
-            parsedQuery, qet, std::move(cancellationHandle));
-      default:
-        AD_FAIL();
-    }
-  } catch (ad_utility::CancellationException& e) {
-    e.setOperation("Query export");
-    throw;
-  }
-}
-
-// _____________________________________________________________________________
-cppcoro::generator<std::string>
+ad_utility::streams::stream_generator
 ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
@@ -890,8 +844,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
   jsonPrefix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  runtimeInformation.addLimitOffsetRow(
-      query._limitOffset, std::chrono::milliseconds::zero(), false);
+  runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
   jsonPrefix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
 

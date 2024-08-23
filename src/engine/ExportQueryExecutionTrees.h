@@ -37,7 +37,8 @@ class ExportQueryExecutionTrees {
   // lazily computes the serialized result in large chunks of bytes.
   static cppcoro::generator<std::string> computeResultAsStream(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      MediaType mediaType, CancellationHandle cancellationHandle);
+      MediaType mediaType, const ad_utility::Timer& requestTimer,
+      CancellationHandle cancellationHandle);
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -50,16 +51,6 @@ class ExportQueryExecutionTrees {
   // The `requestTimer` is used to report timing statistics on the query. It
   // must have already run during the query planning to produce the expected
   // results.
-  static nlohmann::json computeResultAsJSON(
-      const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer, MediaType mediaType,
-      CancellationHandle cancellationHandle);
-
-  // Same as above, but returning the result in QLeverJSON format as generator.
-  static cppcoro::generator<std::string> computeResultAsQLeverJSONStream(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer,
-      CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -101,31 +92,13 @@ class ExportQueryExecutionTrees {
                                 const LocalVocab& localVocab);
 
  private:
-  // TODO<joka921> The following functions are all internally called by the
-  // two public functions above. All the code has been inside QLever for a long
-  // time (previously in the classes `QueryExecutionTree` and `Server`. Clean
-  // up their interfaces (are all these functions needed, or can some of them
-  // be merged).
-
-  // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
-  static nlohmann::json computeQueryResultAsQLeverJSON(
+  // TODO<unexenu>
+  static ad_utility::streams::stream_generator computeResultAsQLeverJSONStream(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
-  // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
-  static nlohmann::json computeSelectQueryResultAsSparqlJSON(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static nlohmann::json selectQueryResultBindingsToQLeverJSON(
-      const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> resultTable,
-      CancellationHandle cancellationHandle);
-
-  // Same as above, but only returns the bindings as generator.
   static cppcoro::generator<std::string>
   selectQueryResultBindingsToQLeverJSONStream(
       const QueryExecutionTree& qet,
@@ -147,12 +120,6 @@ class ExportQueryExecutionTrees {
    *        then the query result will be obtained via `qet->getResult()`.
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
-  static nlohmann::json idTableToQLeverJSONArray(
-      const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
-      const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-      std::shared_ptr<const Result> resultTable,
-      CancellationHandle cancellationHandle);
-
   static cppcoro::generator<std::string> idTableToQLeverJSONBindingsStream(
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
@@ -160,13 +127,6 @@ class ExportQueryExecutionTrees {
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static nlohmann::json constructQueryResultBindingsToQLeverJSON(
-      const QueryExecutionTree& qet,
-      const ad_utility::sparql_types::Triples& constructTriples,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> res, CancellationHandle cancellationHandle);
-
-  // Same as above, but only returns the bindings as generator.
   static cppcoro::generator<std::string>
   constructQueryResultBindingsToQLeverJSONStream(
       const QueryExecutionTree& qet,
@@ -205,4 +165,34 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       LimitOffsetClause limitAndOffset, CancellationHandle cancellationHandle);
+
+  // Helper type that contains an `IdTable` and a view with related indices to
+  // access the `IdTable` with.
+  struct TableWithRange {
+    const IdTable& idTable_;
+    std::ranges::iota_view<uint64_t, uint64_t> view_;
+  };
+
+  // Yield all `IdTables` provided by the given `result`.
+  static cppcoro::generator<const IdTable&> getIdTables(const Result& result);
+
+  // Return a range that contains the indices of the rows that have to be
+  // exported from the `idTable` given the `LimitOffsetClause`. It takes into
+  // account the LIMIT, the OFFSET, and the actual size of the `idTable`
+  static cppcoro::generator<TableWithRange> getRowIndices(
+      LimitOffsetClause limitOffset, const Result& result);
+
+  FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator);
+  FRIEND_TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator);
+  FRIEND_TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureCorrectSlicingOfIdTablesWhenLastIsSkipped);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial);
+  FRIEND_TEST(ExportQueryExecutionTrees,
+              ensureGeneratorIsNotConsumedWhenNotRequired);
 };

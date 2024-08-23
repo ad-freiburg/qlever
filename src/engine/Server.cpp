@@ -541,14 +541,9 @@ Awaitable<void> Server::sendStreamableResponse(
     MediaType mediaType, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
     SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator =
-      mediaType == MediaType::qleverJson
-          ? ExportQueryExecutionTrees::computeResultAsQLeverJSONStream(
-                plannedQuery.parsedQuery_, qet, requestTimer,
-                std::move(cancellationHandle))
-          : ExportQueryExecutionTrees::computeResultAsStream(
-                plannedQuery.parsedQuery_, qet, mediaType,
-                std::move(cancellationHandle));
+  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+      plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
+      std::move(cancellationHandle));
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -719,24 +714,16 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // This actually processes the query and sends the result in the requested
     // format.
-    switch (mediaType.value()) {
-      using enum MediaType;
-      case csv:
-      case tsv:
-      case octetStream:
-      case sparqlXml:
-      case turtle:
-      case sparqlJson:
-      case qleverJson:
-        co_await sendStreamableResponse(request, send, mediaType.value(),
-                                        plannedQuery.value(), qet, requestTimer,
-                                        cancellationHandle);
-        break;
-      default:
-        // This should never happen, because we have carefully restricted the
-        // subset of mediaTypes that can occur here.
-        AD_FAIL();
-    }
+    static constexpr std::array supportedTypes{
+        MediaType::csv,       MediaType::tsv,    MediaType::octetStream,
+        MediaType::sparqlXml, MediaType::turtle, MediaType::sparqlJson,
+        MediaType::qleverJson};
+    AD_CORRECTNESS_CHECK(
+        ad_utility::contains(supportedTypes, mediaType.value()));
+    co_await sendStreamableResponse(request, send, mediaType.value(),
+                                    plannedQuery.value(), qet, requestTimer,
+                                    cancellationHandle);
+
     // Print the runtime info. This needs to be done after the query
     // was computed.
 

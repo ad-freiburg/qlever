@@ -95,7 +95,13 @@ size_t IndexScan::getResultWidth() const {
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
-  return std::vector<ColumnIndex>{resAsView.begin(), resAsView.end()};
+  std::vector<ColumnIndex> result{resAsView.begin(), resAsView.end()};
+  for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+    if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
+      result.push_back(numVariables_ + i);
+    }
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -116,9 +122,28 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
+
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
+cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
+  auto metadata = getMetadataForScan(*this);
+  if (!metadata.has_value()) {
+    co_return;
+  }
+  auto blocksSpan =
+      CompressedRelationReader::getBlocksFromMetadata(metadata.value());
+  std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
+                                              blocksSpan.end()};
+  for (IdTable& idTable : getLazyScan(*this, std::move(blocks))) {
+    co_yield std::move(idTable);
+  }
+}
+
+// _____________________________________________________________________________
+ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  if (requestLaziness) {
+    return {scanInChunks(), resultSortedOn(), LocalVocab{}};
+  }
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Permutation::Enum;
