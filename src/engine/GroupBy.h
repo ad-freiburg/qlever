@@ -99,10 +99,9 @@ class GroupBy : public Operation {
                     size_t resultColumn, LocalVocab* localVocab) const;
 
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
-  void doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
-                 const vector<GroupBy::Aggregate>& aggregates,
-                 IdTable* dynResult, const IdTable* inTable,
-                 LocalVocab* outLocalVocab) const;
+  IdTable doGroupBy(const IdTable& dynInput, const vector<size_t>& groupByCols,
+                    const vector<Aggregate>& aggregates, const IdTable* inTable,
+                    LocalVocab* outLocalVocab) const;
 
   FRIEND_TEST(GroupByTest, doGroupBy);
 
@@ -254,8 +253,8 @@ class GroupBy : public Operation {
   // Create result IdTable by using a HashMap mapping groups to aggregation data
   // and subsequently calling `createResultFromHashMap`.
   template <size_t NUM_GROUP_COLUMNS>
-  void computeGroupByForHashMapOptimization(
-      IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
+  IdTable computeGroupByForHashMapOptimization(
+      std::vector<HashMapAliasInformation>& aggregateAliases,
       const IdTable& subresult, const std::vector<size_t>& columnIndices,
       LocalVocab* localVocab);
 
@@ -379,8 +378,7 @@ class GroupBy : public Operation {
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
-  void createResultFromHashMap(
-      IdTable* result,
+  IdTable createResultFromHashMap(
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       std::vector<HashMapAliasInformation>& aggregateAliases,
       LocalVocab* localVocab);

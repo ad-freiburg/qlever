@@ -234,17 +234,18 @@ void GroupBy::processGroup(
  */
 
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
-void GroupBy::doGroupBy(const IdTable& dynInput,
-                        const vector<size_t>& groupByCols,
-                        const vector<GroupBy::Aggregate>& aggregates,
-                        IdTable* dynResult, const IdTable* inTable,
-                        LocalVocab* outLocalVocab) const {
+IdTable GroupBy::doGroupBy(const IdTable& dynInput,
+                           const vector<size_t>& groupByCols,
+                           const vector<Aggregate>& aggregates,
+                           const IdTable* inTable,
+                           LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << dynInput.size() << std::endl;
+  IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
   if (dynInput.empty()) {
-    return;
+    return dynResult;
   }
   const IdTableView<IN_WIDTH> input = dynInput.asStaticView<IN_WIDTH>();
-  IdTableStatic<OUT_WIDTH> result = std::move(*dynResult).toStatic<OUT_WIDTH>();
+  IdTableStatic<OUT_WIDTH> result = std::move(dynResult).toStatic<OUT_WIDTH>();
 
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), *inTable,
@@ -279,8 +280,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
   if (groupByCols.empty()) {
     // The entire input is a single group
     processNextBlock(0, input.size());
-    *dynResult = std::move(result).toDynamic();
-    return;
+    return std::move(result).toDynamic();
   }
 
   // This stores the values of the group by numColumns for the current block. A
@@ -308,7 +308,7 @@ void GroupBy::doGroupBy(const IdTable& dynInput,
     }
   }
   processNextBlock(blockStart, input.size());
-  *dynResult = std::move(result).toDynamic();
+  return std::move(result).toDynamic();
 }
 
 ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
@@ -363,8 +363,6 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
 
   std::vector<size_t> groupByColumns;
 
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
-
   // parse the group by columns
   const auto& subtreeVarCols = _subtree->getVariableColumns();
   for (const auto& var : _groupByVariables) {
@@ -382,21 +380,22 @@ ProtoResult GroupBy::computeResult([[maybe_unused]] bool requestLaziness) {
     groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
-  size_t inWidth = subresult->idTable().numColumns();
-  size_t outWidth = idTable.numColumns();
-
   if (hashMapOptimizationParams.has_value()) {
-    CALL_FIXED_SIZE(groupByCols.size(),
-                    &GroupBy::computeGroupByForHashMapOptimization, this,
-                    &idTable, hashMapOptimizationParams->aggregateAliases_,
-                    subresult->idTable(), groupByCols, &localVocab);
+    IdTable idTable = CALL_FIXED_SIZE(
+        groupByCols.size(), &GroupBy::computeGroupByForHashMapOptimization,
+        this, hashMapOptimizationParams->aggregateAliases_,
+        subresult->idTable(), groupByCols, &localVocab);
 
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 
-  CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
-                  subresult->idTable(), groupByCols, aggregates, &idTable,
-                  &(subresult->idTable()), &localVocab);
+  size_t inWidth = subresult->idTable().numColumns();
+  size_t outWidth = getResultWidth();
+
+  IdTable idTable =
+      CALL_FIXED_SIZE((std::array{inWidth, outWidth}), &GroupBy::doGroupBy,
+                      this, subresult->idTable(), groupByCols, aggregates,
+                      &(subresult->idTable()), &localVocab);
 
   LOG(DEBUG) << "GroupBy result computation done." << std::endl;
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
@@ -1198,8 +1197,7 @@ void GroupBy::evaluateAlias(
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-void GroupBy::createResultFromHashMap(
-    IdTable* result,
+IdTable GroupBy::createResultFromHashMap(
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     std::vector<HashMapAliasInformation>& aggregateAliases,
     LocalVocab* localVocab) {
@@ -1210,16 +1208,17 @@ void GroupBy::createResultFromHashMap(
   runtimeInfo().addDetail("timeResultSorting", sortingTimer.msecs());
 
   size_t numberOfGroups = aggregationData.getNumberOfGroups();
-  result->resize(numberOfGroups);
+  IdTable result{getResultWidth(), getExecutionContext()->getAllocator()};
+  result.resize(numberOfGroups);
 
   // Copy grouped by values
   for (size_t idx = 0; idx < aggregationData.numOfGroupedColumns_; ++idx) {
-    std::ranges::copy(sortedKeys.at(idx), result->getColumn(idx).begin());
+    std::ranges::copy(sortedKeys.at(idx), result.getColumn(idx).begin());
   }
 
   // Initialize evaluation context
   sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), *result,
+      *getExecutionContext(), _subtree->getVariableColumns(), result,
       getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
       deadline_);
 
@@ -1239,12 +1238,13 @@ void GroupBy::createResultFromHashMap(
         std::min(i + GROUP_BY_HASH_MAP_BLOCK_SIZE, numberOfGroups);
 
     for (auto& alias : aggregateAliases) {
-      evaluateAlias(alias, result, evaluationContext, aggregationData,
+      evaluateAlias(alias, &result, evaluationContext, aggregationData,
                     localVocab);
     }
   }
   runtimeInfo().addDetail("timeEvaluationAndResults",
                           evaluationAndResultsTimer.msecs());
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -1277,8 +1277,8 @@ static constexpr auto makeProcessGroupsVisitor =
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-void GroupBy::computeGroupByForHashMapOptimization(
-    IdTable* result, std::vector<HashMapAliasInformation>& aggregateAliases,
+IdTable GroupBy::computeGroupByForHashMapOptimization(
+    std::vector<HashMapAliasInformation>& aggregateAliases,
     const IdTable& subresult, const std::vector<size_t>& columnIndices,
     LocalVocab* localVocab) {
   AD_CONTRACT_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
@@ -1349,8 +1349,7 @@ void GroupBy::computeGroupByForHashMapOptimization(
   runtimeInfo().addDetail("timeMapLookup", lookupTimer.msecs());
   runtimeInfo().addDetail("timeAggregation", aggregationTimer.msecs());
 
-  createResultFromHashMap(result, aggregationData, aggregateAliases,
-                          localVocab);
+  return createResultFromHashMap(aggregationData, aggregateAliases, localVocab);
 }
 
 // _____________________________________________________________________________
