@@ -34,7 +34,8 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, objectVariable});
+      SparqlTriple{subtreeVar, std::string{HAS_PATTERN_PREDICATE},
+                   objectVariable});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =

@@ -10,6 +10,7 @@
 
 #include "util/Algorithm.h"
 #include "util/Concepts.h"
+#include "util/ConstexprSmallString.h"
 #include "util/CtreHelpers.h"
 
 using std::string;
@@ -296,6 +297,58 @@ std::string insertThousandSeparator(const std::string_view str,
       });
   ostream << std::string_view(std::move(parseIterator), std::end(str));
   return ostream.str();
+}
+
+// The implementation of `constexprStrCat` below.
+namespace detail::constexpr_str_cat_impl {
+// We currently have a fixed upper bound of 100 characters on the inputs.
+// This can be changed once it becomes a problem. It would also be possible
+// to have flexible upper bounds, but this would make the implementation much
+// more complicated.
+using ConstexprString = ad_utility::ConstexprSmallString<100>;
+
+// Concatenate the elements of `arr` into a single array with an additional zero
+// byte at the end. `sz` must be the sum of the sizes in `arr`, else the
+// behavior is undefined.
+template <size_t sz, size_t numStrings>
+constexpr std::array<char, sz + 1> catImpl(
+    const std::array<ConstexprString, numStrings>& arr) {
+  std::array<char, sz + 1> buf{};
+  auto it = buf.begin();
+  for (const auto& str : arr) {
+    for (size_t i = 0; i < str.size(); ++i) {
+      *it = str[i];
+      ++it;
+    }
+  }
+  return buf;
+};
+// Concatenate the `strings` into a single `std::array<char>` with an additional
+// zero byte at the end.
+template <ConstexprString... strings>
+constexpr auto constexprStrCatBufferImpl() {
+  constexpr size_t sz = (... + strings.size());
+  constexpr auto innerResult = catImpl<sz>(std::array{strings...});
+  return innerResult;
+}
+
+// A constexpr variable that stores the concatenation of the `strings`.
+// TODO<C++26> This can be a `static constexpr` variable inside the
+// `constexprStrCatBufferImpl()` function above.
+template <ConstexprString... strings>
+constexpr auto constexprStrCatBufferVar =
+    constexprStrCatBufferImpl<strings...>();
+}  // namespace detail::constexpr_str_cat_impl
+
+// Return the concatenation of the `strings` as a `string_view`. Can be
+// evaluated at compile time. The buffer that backs the returned `string_view`
+// will be zero-terminated, so it is safe to pass pointers into the result into
+// legacy C-APIs.
+template <detail::constexpr_str_cat_impl::ConstexprString... strings>
+constexpr std::string_view constexprStrCat() {
+  const auto& b =
+      detail::constexpr_str_cat_impl::constexprStrCatBufferVar<strings...>;
+  return {b.data(), b.size() - 1};
 }
 }  // namespace ad_utility
 

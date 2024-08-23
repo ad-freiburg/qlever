@@ -12,12 +12,14 @@
 #include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
+using ad_utility::constexprStrCat;
 using ad_utility::getUTF8Substring;
 using ad_utility::strIsLangTag;
 using ad_utility::utf8ToLower;
@@ -343,4 +345,10 @@ TEST(StringUtilsTest, strLangTag) {
   ASSERT_TRUE(strIsLangTag("fr-BE-1606nict"));
   ASSERT_TRUE(strIsLangTag("de-CH-x-zh"));
   ASSERT_TRUE(strIsLangTag("en"));
+}
+
+TEST(StringUtilsTest, constexprStrCatLocal) {
+  using namespace std::string_view_literals;
+  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
+  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
 }

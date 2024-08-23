@@ -65,7 +65,8 @@ class HasPredicateScanTest : public ::testing::Test {
 TEST_F(HasPredicateScanTest, freeS) {
   // ?x ql:has-predicate <p>, expected result : <x> and <y>
   auto scan = HasPredicateScan{
-      qec, SparqlTriple{Variable{"?x"}, HAS_PREDICATE_PREDICATE, iri("<p>")}};
+      qec, SparqlTriple{Variable{"?x"}, std::string{HAS_PREDICATE_PREDICATE},
+                        iri("<p>")}};
   runTest(scan, {{x}, {y}});
 }
 
@@ -73,7 +74,8 @@ TEST_F(HasPredicateScanTest, freeS) {
 TEST_F(HasPredicateScanTest, freeO) {
   // <x> ql:has-predicate ?p, expected result : <p> and <p2>
   auto scan = HasPredicateScan{
-      qec, SparqlTriple{iri("<x>"), HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
+      qec, SparqlTriple{iri("<x>"), std::string{HAS_PREDICATE_PREDICATE},
+                        Variable{"?p"}}};
   runTest(scan, {{p}, {p2}});
 }
 
@@ -81,16 +83,16 @@ TEST_F(HasPredicateScanTest, freeO) {
 TEST_F(HasPredicateScanTest, fullScan) {
   // ?x ql:has-predicate ?y, expect the full mapping.
   auto scan = HasPredicateScan{
-      qec,
-      SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?p"}}};
+      qec, SparqlTriple{Variable{"?s"}, std::string{HAS_PREDICATE_PREDICATE},
+                        Variable{"?p"}}};
   runTest(scan, {{x, p}, {x, p2}, {y, p}, {y, p3}, {z, p3}});
 
   // Full scans with the same variable in the subject and object are not
   // supported.
   auto makeIllegalScan = [this] {
     return HasPredicateScan{
-        qec,
-        SparqlTriple{Variable{"?s"}, HAS_PREDICATE_PREDICATE, Variable{"?s"}}};
+        qec, SparqlTriple{Variable{"?s"}, std::string{HAS_PREDICATE_PREDICATE},
+                          Variable{"?s"}}};
   };
   AD_EXPECT_THROW_WITH_MESSAGE(
       makeIllegalScan(),
@@ -100,7 +102,7 @@ TEST_F(HasPredicateScanTest, fullScan) {
   // Triples without any variables also aren't supported currently.
   auto makeIllegalScan2 = [this] {
     return HasPredicateScan{
-        qec, SparqlTriple{"<x>", HAS_PREDICATE_PREDICATE, "<y>"}};
+        qec, SparqlTriple{"<x>", std::string{HAS_PREDICATE_PREDICATE}, "<y>"}};
   };
   EXPECT_ANY_THROW(makeIllegalScan2());
 }
@@ -181,7 +183,8 @@ TEST_F(HasPredicateScanTest, patternTrickAllEntities) {
    *   ?x ?predicate ?o
    * } GROUP BY ?predicate
    */
-  auto triple = SparqlTriple{V{"?x"}, HAS_PATTERN_PREDICATE, V{"?predicate"}};
+  auto triple = SparqlTriple{V{"?x"}, std::string{HAS_PATTERN_PREDICATE},
+                             V{"?predicate"}};
   auto indexScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO, triple);
   auto patternTrick =

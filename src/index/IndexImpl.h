@@ -685,7 +685,7 @@ class IndexImpl {
         getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
     auto taggedPredicatesRanges =
         getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
-    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    std::string internal{INTERNAL_ENTITIES_URI_PREFIX};
     internal[0] = ad_utility::triple_component::iriPrefixChar;
     auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 

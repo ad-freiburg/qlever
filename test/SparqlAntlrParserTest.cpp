@@ -870,7 +870,8 @@ TEST(SparqlParser, HavingCondition) {
 
 TEST(SparqlParser, GroupGraphPattern) {
   auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   auto expectGroupGraphPatternFails =
       ExpectParseFails<&Parser::groupGraphPattern>{{}};
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
@@ -941,8 +942,9 @@ TEST(SparqlParser, GroupGraphPattern) {
           m::Triples(
               {{Var{"?x"}, "<is-a>", lit("\"Actor\"")},
                {Var{"?y"}, "<is-a>", iri("<Actor>")},
-               {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
-               {Var{"?c"}, CONTAINS_WORD_PREDICATE, lit("\"coca* abuse\"")}})));
+               {Var{"?c"}, std::string{CONTAINS_ENTITY_PREDICATE}, Var{"?x"}},
+               {Var{"?c"}, std::string{CONTAINS_WORD_PREDICATE},
+                lit("\"coca* abuse\"")}})));
 
   // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(
@@ -1022,7 +1024,8 @@ TEST(SparqlParser, RDFLiteral) {
 TEST(SparqlParser, SelectQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
@@ -1176,7 +1179,8 @@ TEST(SparqlParser, SelectQuery) {
 TEST(SparqlParser, ConstructQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
   expectConstructQuery(
       "CONSTRUCT { } WHERE { ?a ?b ?c }",
@@ -1224,7 +1228,8 @@ TEST(SparqlParser, ConstructQuery) {
 
 TEST(SparqlParser, Query) {
   auto expectQuery = ExpectCompleteParse<&Parser::query>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
   // Test that `_originalString` is correctly set.
   expectQuery(
@@ -1824,7 +1829,8 @@ TEST(SparqlParser, updateQueryUnsupported) {
 
 TEST(SparqlParser, UpdateQuery) {
   auto expectUpdate = ExpectCompleteParse<&Parser::update>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
@@ -1897,7 +1903,8 @@ TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
   auto expectGraphOrDefault = ExpectCompleteParse<&Parser::graphOrDefault>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
   expectGraphOrDefault(
       "GRAPH <foo>",
@@ -1907,7 +1914,8 @@ TEST(SparqlParser, GraphOrDefault) {
 
 TEST(SparqlParser, GraphRef) {
   auto expectGraphRefAll = ExpectCompleteParse<&Parser::graphRefAll>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+      {{std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+        std::string{INTERNAL_PREDICATE_PREFIX_IRI}}}};
   expectGraphRefAll("DEFAULT", m::Variant<DEFAULT>());
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
