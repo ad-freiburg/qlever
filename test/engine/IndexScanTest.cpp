@@ -140,7 +140,7 @@ void testLazyScanForJoinWithColumn(
     column.push_back(entry.toValueId(qec->getIndex().getVocab()).value());
   }
 
-  auto lazyScan = IndexScan::lazyScanForJoinOfColumnWithScan(column, scan);
+  auto lazyScan = scan.lazyScanForJoinOfColumnWithScan(column);
   testLazyScan(std::move(lazyScan), scan, expectedRows);
 }
 
@@ -161,8 +161,7 @@ void testLazyScanWithColumnThrows(
   // We need this to suppress the warning about a [[nodiscard]] return value
   // being unused.
   auto makeScan = [&column, &s1]() {
-    [[maybe_unused]] auto scan =
-        IndexScan::lazyScanForJoinOfColumnWithScan(column, s1);
+    [[maybe_unused]] auto scan = s1.lazyScanForJoinOfColumnWithScan(column);
   };
   EXPECT_ANY_THROW(makeScan());
 }
