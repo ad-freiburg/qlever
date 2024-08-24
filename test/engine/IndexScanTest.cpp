@@ -494,52 +494,41 @@ TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
   using ad_utility::MemorySize;
   using V = Variable;
   using I = TripleComponent::Iri;
+  using enum Permutation::Enum;
   auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
   auto x = I::fromIriref("<x>");
   auto p = I::fromIriref("<p>");
   auto p2 = I::fromIriref("<p2>");
 
-  {
-    SparqlTripleSimple scanTriple{V{"?x"}, V{"?y"}, V{"?z"}};
-    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
+  auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
+                                        size_t numCols,
+                                        source_location l =
+                                            source_location::current()) {
+    auto locationTrace = generateLocationTrace(l);
 
     EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    EXPECT_TRUE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(3 * 3 * sizeof(Id) - 1)));
-    EXPECT_FALSE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(3 * 3 * sizeof(Id))));
+    size_t byteCount = numRows * numCols * sizeof(Id);
+    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
+    EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
+  };
+
+  {
+    IndexScan scan{qec, POS, {V{"?x"}, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 3);
   }
 
   {
-    SparqlTripleSimple scanTriple{x, V{"?y"}, V{"?z"}};
-    IndexScan scan{qec, Permutation::Enum::SPO, scanTriple};
-
-    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    EXPECT_TRUE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(3 * 2 * sizeof(Id) - 1)));
-    EXPECT_FALSE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(3 * 2 * sizeof(Id))));
+    IndexScan scan{qec, SPO, {x, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 2);
   }
 
   {
-    SparqlTripleSimple scanTriple{V{"?x"}, p, V{"?z"}};
-    IndexScan scan{qec, Permutation::Enum::POS, scanTriple};
-
-    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    EXPECT_TRUE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(2 * 2 * sizeof(Id) - 1)));
-    EXPECT_FALSE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(2 * 2 * sizeof(Id))));
+    IndexScan scan{qec, POS, {V{"?x"}, p, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 2, 2);
   }
 
   {
-    SparqlTripleSimple scanTriple{x, p2, V{"?z"}};
-    IndexScan scan{qec, Permutation::Enum::SPO, scanTriple};
-
-    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
-    EXPECT_TRUE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(1 * 1 * sizeof(Id) - 1)));
-    EXPECT_FALSE(
-        scan.unlikelyToFitInCache(MemorySize::bytes(1 * 1 * sizeof(Id))));
+    IndexScan scan{qec, SPO, {x, p2, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 1, 1);
   }
 }
