@@ -19,10 +19,10 @@ SpatialJoin::SpatialJoin(
   parseMaxDistance();
 
   if (childLeft) {
-    childLeft_ = childLeft.value();
+    childLeft_ = std::move(childLeft.value());
   }
   if (childRight) {
-    childRight_ = childRight.value();
+    childRight_ = std::move(childRight.value());
   }
 
   if (triple_.value().s_.isVariable() && triple_.value().o_.isVariable()) {
@@ -111,9 +111,9 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  return "SpatialJoin: " + triple_.value().s_.getVariable().name() +
-         " max distance of " + std::to_string(maxDist_) + " to " +
-         triple_.value().o_.getVariable().name();
+  return absl::StrCat("SpatialJoin: ", triple_.value().s_.getVariable().name(), 
+         " max distance of ", std::to_string(maxDist_), " to ", 
+         triple_.value().o_.getVariable().name());
 }
 
 // ____________________________________________________________________________
@@ -152,7 +152,7 @@ size_t SpatialJoin::getCostEstimate() {
       // check after implementation, if it is correct, for now it remains
       // here because otherwise SonarQube complains about costEstimate and
       // sizeEstimate having the same implementation
-      return inputEstimate * static_cast<size_t>(log(inputEstimate));
+      return inputEstimate * static_cast<size_t>(log(static_cast<double>(inputEstimate)));
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -245,7 +245,7 @@ std::string SpatialJoin::betweenQuotes(std::string extractFrom) const {
 long long SpatialJoin::computeDist(const IdTable* resLeft,
                                    const IdTable* resRight, size_t rowLeft,
                                    size_t rowRight, ColumnIndex leftPointCol,
-                                   ColumnIndex rightPointCol) {
+                                   ColumnIndex rightPointCol) const {
   auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
     return ExportQueryExecutionTrees::idToStringAndType(
                getExecutionContext()->getIndex(), restable->at(row, col), {})
@@ -370,13 +370,13 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // in the varColMap
     std::ranges::for_each(
         varColsLeftVec,
-        [&](std::pair<Variable, ColumnIndexAndTypeInfo> varColEntry) {
+        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
           variableToColumnMap[varColEntry.first] =
               makeCol(ColumnIndex{varColEntry.second.columnIndex_});
         });
     std::ranges::for_each(
         varColsRightVec,
-        [&](std::pair<Variable, ColumnIndexAndTypeInfo> varColEntry) {
+        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
           variableToColumnMap[varColEntry.first] =
               makeCol(ColumnIndex{sizeLeft + varColEntry.second.columnIndex_});
         });
