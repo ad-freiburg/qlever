@@ -369,4 +369,3 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_ANY_THROW(Service::bindingToTripleComponent(
       {{"type", "INVALID_TYPE"}, {"value", "v"}}));
 }
-
