@@ -580,3 +580,25 @@ TEST(Operation, checkLazyOperationIsNotCachedIfTooLarge) {
 
   EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
 }
+
+// _____________________________________________________________________________
+TEST(Operation, checkLazyOperationIsNotCachedIfUnlikelyToFitInCache) {
+  auto qec = getQec();
+  qec->getQueryTreeCache().clearAll();
+  std::vector<IdTable> idTablesVector{};
+  idTablesVector.push_back(makeIdTableFromVector({{3, 4}}));
+  idTablesVector.push_back(makeIdTableFromVector({{7, 8}, {9, 123}}));
+  ValuesForTesting valuesForTesting{
+      qec, std::move(idTablesVector), {Variable{"?x"}, Variable{"?y"}}, true};
+
+  ad_utility::Timer timer{ad_utility::Timer::InitialStatus::Started};
+
+  auto cacheValue = valuesForTesting.runComputationAndPrepareForCache(
+      timer, ComputationMode::LAZY_IF_SUPPORTED, "test", false);
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+
+  for ([[maybe_unused]] IdTable& _ : cacheValue.resultTable().idTables()) {
+  }
+
+  EXPECT_FALSE(qec->getQueryTreeCache().cacheContains("test"));
+}
