@@ -175,7 +175,8 @@ CacheValue Operation::runComputationAndPrepareForCache(
     const std::string& cacheKey, bool pinned) {
   auto& cache = _executionContext->getQueryTreeCache();
   auto result = runComputation(timer, computationMode);
-  if (!result.isFullyMaterialized()) {
+  if (!result.isFullyMaterialized() &&
+      !unlikelyToFitInCache(cache.getMaxSizeSingleEntry())) {
     AD_CONTRACT_CHECK(!pinned);
     result.cacheDuringConsumption(
         [maxSize = cache.getMaxSizeSingleEntry()](
