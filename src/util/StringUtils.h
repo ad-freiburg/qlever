@@ -354,8 +354,7 @@ constexpr std::string_view constexprStrCat() {
 }
 }  // namespace ad_utility
 
-// these overloads are missing in the STL
-// TODO they can be constexpr once the compiler completely supports C++20
+// A helper function for the `operator+` overloads below.
 template <typename Char>
 std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
                                    std::basic_string_view<Char> b) {
@@ -366,18 +365,22 @@ std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
   return res;
 }
 
+// These overloads of `operator+` between a `string` and a `string_view`  are
+// missing in the STL.
+// TODO they can be constexpr once the compiler completely supports C++20
 template <typename Char>
-inline std::basic_string<Char> operator+(const std::basic_string<Char>& a,
-                                         std::basic_string_view<Char> b) {
+std::basic_string<Char> operator+(const std::basic_string<Char>& a,
+                                  std::basic_string_view<Char> b) {
   return strCatImpl(std::basic_string_view<Char>{a}, b);
 }
 
 template <typename Char>
-inline std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
-                                         std::basic_string<Char> b) {
+std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
+                                  std::basic_string<Char> b) {
   return strCatImpl(a, std::basic_string_view<Char>{b});
 }
 
-inline std::string operator+(char c, std::string_view b) {
+template <typename Char>
+std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }
