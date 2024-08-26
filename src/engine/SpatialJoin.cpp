@@ -13,9 +13,10 @@ SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SparqlTriple triple,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec), triple_{std::move(triple)}, leftChildVariable_{triple_.s_.getVariable()},
-    rightChildVariable_{triple_.o_.getVariable()} {
-
+    : Operation(qec),
+      triple_{std::move(triple)},
+      leftChildVariable_{triple_.s_.getVariable()},
+      rightChildVariable_{triple_.o_.getVariable()} {
   parseMaxDistance();
 
   if (childLeft) {
@@ -40,7 +41,7 @@ void SpatialJoin::parseMaxDistance() {
       AD_THROW(errormessage);
     }
   };
-  
+
   if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     try {
       std::string number =
@@ -109,9 +110,9 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  return absl::StrCat("SpatialJoin: ", triple_.s_.getVariable().name(), 
-         " max distance of ", std::to_string(maxDist_), " to ", 
-         triple_.o_.getVariable().name());
+  return absl::StrCat("SpatialJoin: ", triple_.s_.getVariable().name(),
+                      " max distance of ", std::to_string(maxDist_), " to ",
+                      triple_.o_.getVariable().name());
 }
 
 // ____________________________________________________________________________
@@ -150,7 +151,8 @@ size_t SpatialJoin::getCostEstimate() {
       // check after implementation, if it is correct, for now it remains
       // here because otherwise SonarQube complains about costEstimate and
       // sizeEstimate having the same implementation
-      return inputEstimate * static_cast<size_t>(log(static_cast<double>(inputEstimate)));
+      return inputEstimate *
+             static_cast<size_t>(log(static_cast<double>(inputEstimate)));
     }
   }
   return 1;  // dummy return, as the class does not have its children yet
@@ -237,10 +239,11 @@ long long SpatialJoin::computeDist(const IdTable* resLeft,
                                    size_t rowRight, ColumnIndex leftPointCol,
                                    ColumnIndex rightPointCol) const {
   auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
-    return betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
-               getExecutionContext()->getIndex(), restable->at(row, col), {})
-        .value()
-        .first);
+    return betweenQuotes(
+        ExportQueryExecutionTrees::idToStringAndType(
+            getExecutionContext()->getIndex(), restable->at(row, col), {})
+            .value()
+            .first);
   };
 
   std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
@@ -295,11 +298,13 @@ Result SpatialJoin::baselineAlgorithm() {
     return &resTable->idTable();
   };
 
-  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child, Variable childVariable) {
-    auto varColMap = child->getRootOperation()->getExternallyVisibleVariableColumns();
+  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child,
+                       Variable childVariable) {
+    auto varColMap =
+        child->getRootOperation()->getExternallyVisibleVariableColumns();
     return varColMap[childVariable].columnIndex_;
   };
-  
+
   const IdTable* resLeft = getIdTable(childLeft_);
   const IdTable* resRight = getIdTable(childRight_);
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
@@ -350,20 +355,24 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
     // only the right child has been added
     variableToColumnMap[leftChildVariable_] = makeUndefCol(ColumnIndex{0});
   } else {
-    auto addColumns = [&](std::shared_ptr<QueryExecutionTree> child, size_t offset) {
+    auto addColumns = [&](std::shared_ptr<QueryExecutionTree> child,
+                          size_t offset) {
       auto varColsmap = child->getVariableColumns();
-      auto varColsVec =copySortedByColumnIndex(varColsmap);
+      auto varColsVec = copySortedByColumnIndex(varColsmap);
       std::ranges::for_each(
-        varColsVec,
-        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry){
-          if (varColEntry.second.mightContainUndef_ == ColumnIndexAndTypeInfo::AlwaysDefined) {
-            variableToColumnMap[varColEntry.first] = makeDefCol(ColumnIndex{offset + varColEntry.second.columnIndex_});
-          } else {
-            AD_CONTRACT_CHECK(varColEntry.second.mightContainUndef_ == ColumnIndexAndTypeInfo::PossiblyUndefined);
-            variableToColumnMap[varColEntry.first] = makeUndefCol(ColumnIndex{offset + varColEntry.second.columnIndex_});
-          }
-        }
-      );
+          varColsVec,
+          [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
+            if (varColEntry.second.mightContainUndef_ ==
+                ColumnIndexAndTypeInfo::AlwaysDefined) {
+              variableToColumnMap[varColEntry.first] = makeDefCol(
+                  ColumnIndex{offset + varColEntry.second.columnIndex_});
+            } else {
+              AD_CONTRACT_CHECK(varColEntry.second.mightContainUndef_ ==
+                                ColumnIndexAndTypeInfo::PossiblyUndefined);
+              variableToColumnMap[varColEntry.first] = makeUndefCol(
+                  ColumnIndex{offset + varColEntry.second.columnIndex_});
+            }
+          });
     };
 
     auto sizeLeft = childLeft_->getResultWidth();

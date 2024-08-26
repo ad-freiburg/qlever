@@ -85,7 +85,8 @@ static const std::string LANGUAGE_PREDICATE = makeInternalIri("langtag");
 // needs to be like this: <max-distance-in-meters:XXXX>, where XXXX needs to be
 // replaced by an integer number.
 static const std::string MAX_DIST_IN_METERS = "<max-distance-in-meters:";
-static constexpr auto MAX_DIST_IN_METERS_REGEX = ctll::fixed_string{"<max-distance-in-meters:[0-9]+>"};
+static constexpr auto MAX_DIST_IN_METERS_REGEX =
+    ctll::fixed_string{"<max-distance-in-meters:[0-9]+>"};
 
 // TODO<joka921> Move them to their own file, make them strings, remove
 // duplications, etc.

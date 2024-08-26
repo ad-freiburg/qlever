@@ -84,7 +84,8 @@ class SpatialJoin : public Operation {
   }
 
  private:
-  // helper function, which parses the max distance triple into a long long distance
+  // helper function, which parses the max distance triple into a long long
+  // distance
   void parseMaxDistance();
 
   // helper function which gets the coordinates from the coordinates string
@@ -95,17 +96,19 @@ class SpatialJoin : public Operation {
   // point comes from a different result table
   long long computeDist(const IdTable* resLeft, const IdTable* resRight,
                         size_t rowLeft, size_t rowRight,
-                        ColumnIndex leftPointCol, ColumnIndex rightPointCol) const;
-  
+                        ColumnIndex leftPointCol,
+                        ColumnIndex rightPointCol) const;
+
   // helper function, which adds row, which belongs to the result to the result
-  // table. As input it uses a row of the left and a row of the right child result table
+  // table. As input it uses a row of the left and a row of the right child
+  // result table
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, long long distance) const;
-  
+
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();
-  
+
   SparqlTriple triple_;
   Variable leftChildVariable_;
   Variable rightChildVariable_;
