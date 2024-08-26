@@ -125,9 +125,12 @@ class PatternCreator {
   // True if `finish()` was already called.
   bool isFinished_ = false;
 
+  // The ID of the predicate `ql:has-pattern`.
+  Id hasPatternPredicateId_;
+
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename,
+  explicit PatternCreator(const string& basename, Id hasPatternPredicateId,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
@@ -138,7 +141,7 @@ class PatternCreator {
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
                 basename + ".second-sorter.dat", memoryLimit / 2,
-                ad_utility::makeUnlimitedAllocator<Id>())} {
+                ad_utility::makeUnlimitedAllocator<Id>())}, hasPatternPredicateId_{hasPatternPredicateId} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
