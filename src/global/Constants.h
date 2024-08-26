@@ -37,9 +37,8 @@ constexpr inline size_t GALLOP_THRESHOLD = 1000;
 
 constexpr inline char INTERNAL_PREDICATE_PREFIX_NAME[] = "ql";
 
-constexpr ad_utility::detail::constexpr_str_cat_impl::ConstexprString
-    INTERNAL_PREDICATE_PREFIX =
-        "http://qlever.cs.uni-freiburg.de/builtin-functions/";
+constexpr inline char INTERNAL_PREDICATE_PREFIX[] =
+    "http://qlever.cs.uni-freiburg.de/builtin-functions/";
 
 // Return a IRI of the form
 // `<http://qlever.cs.uni-freiburg.de/builtin-functions/concatenationOfSuffixes>`
