@@ -370,13 +370,13 @@ std::basic_string<Char> strCatImpl(const std::basic_string_view<Char>& a,
 // TODO they can be constexpr once the compiler completely supports C++20
 template <typename Char>
 std::basic_string<Char> operator+(const std::basic_string<Char>& a,
-                                         std::basic_string_view<Char> b) {
+                                  std::basic_string_view<Char> b) {
   return strCatImpl(std::basic_string_view<Char>{a}, b);
 }
 
 template <typename Char>
 std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
-                                         std::basic_string<Char> b) {
+                                  std::basic_string<Char> b) {
   return strCatImpl(a, std::basic_string_view<Char>{b});
 }
 
