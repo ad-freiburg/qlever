@@ -298,8 +298,8 @@ Result SpatialJoin::baselineAlgorithm() {
     return &resTable->idTable();
   };
 
-  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child,
-                       Variable childVariable) {
+  auto getJoinCol = [](const std::shared_ptr<const QueryExecutionTree>& child,
+                       const Variable& childVariable) {
     auto varColMap =
         child->getRootOperation()->getExternallyVisibleVariableColumns();
     return varColMap[childVariable].columnIndex_;
@@ -333,8 +333,6 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
     return baselineAlgorithm();
   } else {
     AD_THROW("Not yet implemented");
-    return Result{IdTable{0, _executionContext->getAllocator()},
-                  std::vector<ColumnIndex>{}, LocalVocab{}};
   }
 }
 
@@ -361,7 +359,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
       auto varColsVec = copySortedByColumnIndex(varColsmap);
       std::ranges::for_each(
           varColsVec,
-          [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
+          [&](const std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
             if (varColEntry.second.mightContainUndef_ ==
                 ColumnIndexAndTypeInfo::AlwaysDefined) {
               variableToColumnMap[varColEntry.first] = makeDefCol(
