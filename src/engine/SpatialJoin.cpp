@@ -13,8 +13,8 @@ SpatialJoin::SpatialJoin(
     QueryExecutionContext* qec, SparqlTriple triple,
     std::optional<std::shared_ptr<QueryExecutionTree>> childLeft,
     std::optional<std::shared_ptr<QueryExecutionTree>> childRight)
-    : Operation(qec) {
-  triple_ = std::move(triple);
+    : Operation(qec), triple_{std::move(triple)}, leftChildVariable_{triple_.s_.getVariable()},
+    rightChildVariable_{triple_.o_.getVariable()} {
 
   parseMaxDistance();
 
@@ -25,16 +25,13 @@ SpatialJoin::SpatialJoin(
     childRight_ = std::move(childRight.value());
   }
 
-  if (triple_.value().s_.isVariable() && triple_.value().o_.isVariable()) {
-    leftChildVariable_ = triple_.value().s_.getVariable();
-    rightChildVariable_ = triple_.value().o_.getVariable();
-  } else {
-    AD_THROW("Currently, SpatialJoin needs two variables");
-  }
+  AD_CONTRACT_CHECK(triple_.s_.isVariable() && triple_.o_.isVariable(),
+                    "Currently, SpatialJoin needs two variables");
 }
 
+// ____________________________________________________________________________
 void SpatialJoin::parseMaxDistance() {
-  const std::string& input = triple_.value().p_._iri;
+  const std::string& input = triple_.p_._iri;
   std::string errormessage =
       "parsing of the maximum distance for the "
       "SpatialJoin operation was not possible";
@@ -43,7 +40,8 @@ void SpatialJoin::parseMaxDistance() {
       AD_THROW(errormessage);
     }
   };
-  if (input.starts_with(MAX_DIST_IN_METERS) && input[input.size() - 1] == '>') {
+  
+  if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     try {
       std::string number =
           input.substr(MAX_DIST_IN_METERS.size(),
@@ -69,10 +67,10 @@ std::shared_ptr<SpatialJoin> SpatialJoin::addChild(
     std::shared_ptr<QueryExecutionTree> child,
     const Variable& varOfChild) const {
   if (varOfChild == leftChildVariable_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
+    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_,
                                          std::move(child), childRight_);
   } else if (varOfChild == rightChildVariable_) {
-    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_.value(),
+    return std::make_shared<SpatialJoin>(getExecutionContext(), triple_,
                                          childLeft_, std::move(child));
   } else {
     AD_THROW("variable does not match");
@@ -90,7 +88,7 @@ bool SpatialJoin::isConstructed() const {
 // ____________________________________________________________________________
 std::vector<QueryExecutionTree*> SpatialJoin::getChildren() {
   if (!(childLeft_ && childRight_)) {
-    AD_THROW("SpatialJoin needs two variables, but at least one is missing");
+    AD_THROW("SpatialJoin needs two children, but at least one is missing");
   }
 
   return {childLeft_.get(), childRight_.get()};
@@ -111,9 +109,9 @@ string SpatialJoin::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 string SpatialJoin::getDescriptor() const {
-  return absl::StrCat("SpatialJoin: ", triple_.value().s_.getVariable().name(), 
+  return absl::StrCat("SpatialJoin: ", triple_.s_.getVariable().name(), 
          " max distance of ", std::to_string(maxDist_), " to ", 
-         triple_.value().o_.getVariable().name());
+         triple_.o_.getVariable().name());
 }
 
 // ____________________________________________________________________________
@@ -201,14 +199,6 @@ float SpatialJoin::getMultiplicity(size_t col) {
 
 // ____________________________________________________________________________
 bool SpatialJoin::knownEmptyResult() {
-  if (childLeft_ && childLeft_->knownEmptyResult()) {
-    return true;
-  }
-
-  if (childRight_ && childRight_->knownEmptyResult()) {
-    return true;
-  }
-
   // return false if either both children don't have an empty result, only one
   // child is available, which doesn't have a known empty result or neither
   // child is available
@@ -247,17 +237,14 @@ long long SpatialJoin::computeDist(const IdTable* resLeft,
                                    size_t rowRight, ColumnIndex leftPointCol,
                                    ColumnIndex rightPointCol) const {
   auto getPoint = [&](const IdTable* restable, size_t row, ColumnIndex col) {
-    return ExportQueryExecutionTrees::idToStringAndType(
+    return betweenQuotes(ExportQueryExecutionTrees::idToStringAndType(
                getExecutionContext()->getIndex(), restable->at(row, col), {})
         .value()
-        .first;
+        .first);
   };
 
   std::string point1 = getPoint(resLeft, rowLeft, leftPointCol);
   std::string point2 = getPoint(resRight, rowRight, rightPointCol);
-
-  point1 = betweenQuotes(point1);
-  point2 = betweenQuotes(point2);
   double dist = ad_utility::detail::wktDistImpl(point1, point2);
   return static_cast<long long>(dist * 1000);  // convert to meters
 }
@@ -303,23 +290,25 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
 
 // ____________________________________________________________________________
 Result SpatialJoin::baselineAlgorithm() {
-  std::shared_ptr<const Result> resTableLeft = childLeft_->getResult();
-  std::shared_ptr<const Result> resTableRight = childRight_->getResult();
-  const IdTable* resLeft = &resTableLeft->idTable();
-  const IdTable* resRight = &resTableRight->idTable();
+  auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
+    std::shared_ptr<const Result> resTable = child->getResult();
+    return &resTable->idTable();
+  };
+
+  auto getJoinCol = [](std::shared_ptr<QueryExecutionTree> child, Variable childVariable) {
+    auto varColMap = child->getRootOperation()->getExternallyVisibleVariableColumns();
+    return varColMap[childVariable].columnIndex_;
+  };
+  
+  const IdTable* resLeft = getIdTable(childLeft_);
+  const IdTable* resRight = getIdTable(childRight_);
+  ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
+  ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
   size_t numColumns = getResultWidth();
   IdTable result{numColumns, _executionContext->getAllocator()};
 
   // cartesian product with a distance of at most maxDist between the two
   // objects
-  auto varColMapLeft =
-      childLeft_->getRootOperation()->getExternallyVisibleVariableColumns();
-  auto varColMapRight =
-      childRight_->getRootOperation()->getExternallyVisibleVariableColumns();
-  ColumnIndex leftJoinCol =
-      varColMapLeft[leftChildVariable_.value()].columnIndex_;
-  ColumnIndex rightJoinCol =
-      varColMapRight[rightChildVariable_.value()].columnIndex_;
   for (size_t rowLeft = 0; rowLeft < resLeft->size(); rowLeft++) {
     for (size_t rowRight = 0; rowRight < resRight->size(); rowRight++) {
       long long dist = computeDist(resLeft, resRight, rowLeft, rowRight,
@@ -338,6 +327,7 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
   if (useBaselineAlgorithm_) {
     return baselineAlgorithm();
   } else {
+    AD_THROW("Not yet implemented");
     return Result{IdTable{0, _executionContext->getAllocator()},
                   std::vector<ColumnIndex>{}, LocalVocab{}};
   }
@@ -346,44 +336,44 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 // ____________________________________________________________________________
 VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
-  auto makeCol = makePossiblyUndefinedColumn;
+  auto makeUndefCol = makePossiblyUndefinedColumn;
+  auto makeDefCol = makeAlwaysDefinedColumn;
 
   if (!(childLeft_ || childRight_)) {
     // none of the children has been added
-    variableToColumnMap[leftChildVariable_.value()] = makeCol(ColumnIndex{0});
-    variableToColumnMap[rightChildVariable_.value()] = makeCol(ColumnIndex{1});
+    variableToColumnMap[leftChildVariable_] = makeUndefCol(ColumnIndex{0});
+    variableToColumnMap[rightChildVariable_] = makeUndefCol(ColumnIndex{1});
   } else if (childLeft_ && !childRight_) {
     // only the left child has been added
-    variableToColumnMap[rightChildVariable_.value()] = makeCol(ColumnIndex{1});
+    variableToColumnMap[rightChildVariable_] = makeUndefCol(ColumnIndex{1});
   } else if (!childLeft_ && childRight_) {
     // only the right child has been added
-    variableToColumnMap[leftChildVariable_.value()] = makeCol(ColumnIndex{0});
+    variableToColumnMap[leftChildVariable_] = makeUndefCol(ColumnIndex{0});
   } else {
-    // both children have been added to the Operation
-    auto varColsLeftMap = childLeft_->getVariableColumns();
-    auto varColsRightMap = childRight_->getVariableColumns();
-    auto varColsLeftVec = copySortedByColumnIndex(varColsLeftMap);
-    auto varColsRightVec = copySortedByColumnIndex(varColsRightMap);
+    auto addColumns = [&](std::shared_ptr<QueryExecutionTree> child, size_t offset) {
+      auto varColsmap = child->getVariableColumns();
+      auto varColsVec =copySortedByColumnIndex(varColsmap);
+      std::ranges::for_each(
+        varColsVec,
+        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry){
+          if (varColEntry.second.mightContainUndef_ == ColumnIndexAndTypeInfo::AlwaysDefined) {
+            variableToColumnMap[varColEntry.first] = makeDefCol(ColumnIndex{offset + varColEntry.second.columnIndex_});
+          } else {
+            AD_CONTRACT_CHECK(varColEntry.second.mightContainUndef_ == ColumnIndexAndTypeInfo::PossiblyUndefined);
+            variableToColumnMap[varColEntry.first] = makeUndefCol(ColumnIndex{offset + varColEntry.second.columnIndex_});
+          }
+        }
+      );
+    };
+
     auto sizeLeft = childLeft_->getResultWidth();
     auto sizeRight = childRight_->getResultWidth();
-    // in case a result table contains entries, which aren't contained
-    // in the varColMap
-    std::ranges::for_each(
-        varColsLeftVec,
-        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
-          variableToColumnMap[varColEntry.first] =
-              makeCol(ColumnIndex{varColEntry.second.columnIndex_});
-        });
-    std::ranges::for_each(
-        varColsRightVec,
-        [&](std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
-          variableToColumnMap[varColEntry.first] =
-              makeCol(ColumnIndex{sizeLeft + varColEntry.second.columnIndex_});
-        });
+    addColumns(childLeft_, 0);
+    addColumns(childRight_, sizeLeft);
 
     if (addDistToResult_) {
       variableToColumnMap[Variable{nameDistanceInternal_}] =
-          makeCol(ColumnIndex{sizeLeft + sizeRight});
+          makeDefCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }
 

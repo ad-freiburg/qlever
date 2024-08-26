@@ -1795,20 +1795,25 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     for (size_t i = 0; i < spatialJoin->getResultWidth(); i++) {
       // get variable at column 0 of the result table
       Variable var = varColsVec.at(i).first;
-      auto varChild = leftVarColMap.find(var);
+      auto varChildLeft = leftVarColMap.find(var);
+      auto varChildRight = rightVarColMap.find(var);
       auto inputChild = leftChild;
-      if (varChild == leftVarColMap.end()) {
-        varChild = rightVarColMap.find(var);
+      if (varChildLeft == leftVarColMap.end()) {
         inputChild = rightChild;
       }
-      if (varChild == rightVarColMap.end() &&
+      if (varChildRight == rightVarColMap.end() &&
           var.name() == spatialJoin->getInternalDistanceName()) {
         // as each distance is very likely to be unique (even if only after
         // a few decimal places), no multiplicities are assumed
         ASSERT_EQ(spatialJoin->getMultiplicity(i), 1);
       } else {
-        auto col_index = varChild->second.columnIndex_;
-        auto multiplicityChild = inputChild->getMultiplicity(col_index);
+        ColumnIndex colIndex;
+        if (inputChild == leftChild) {
+          colIndex = varChildLeft->second.columnIndex_;
+        } else {
+          colIndex = varChildRight->second.columnIndex_;
+        }
+        auto multiplicityChild = inputChild->getMultiplicity(colIndex);
         auto sizeEstimateChild = inputChild->getSizeEstimate();
         double distinctnessChild = sizeEstimateChild / multiplicityChild;
         auto mult = spatialJoin->getMultiplicity(i);

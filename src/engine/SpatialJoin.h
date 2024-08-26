@@ -106,11 +106,11 @@ class SpatialJoin : public Operation {
   // the baseline algorithm, which just checks every combination
   Result baselineAlgorithm();
   
-  std::optional<Variable> leftChildVariable_ = std::nullopt;
-  std::optional<Variable> rightChildVariable_ = std::nullopt;
+  SparqlTriple triple_;
+  Variable leftChildVariable_;
+  Variable rightChildVariable_;
   std::shared_ptr<QueryExecutionTree> childLeft_ = nullptr;
   std::shared_ptr<QueryExecutionTree> childRight_ = nullptr;
-  std::optional<SparqlTriple> triple_ = std::nullopt;
   long long maxDist_ = 0;  // max distance in meters
 
   // adds an extra column to the result, which contains the actual distance,
