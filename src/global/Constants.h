@@ -154,7 +154,7 @@ constexpr inline std::string_view ERROR_IGNORE_CASE_UNSUPPORTED =
     "\"locale\" key, otherwise \"en.US\" will be used as default";
 constexpr inline std::string_view WARNING_ASCII_ONLY_PREFIXES =
     "You specified \"ascii-prefixes-only = true\", which enables faster "
-    "sparsing for well-behaved TTL files";
+    "parsing for well-behaved TTL files";
 // " but only works correctly if there are no escape sequences in "
 // "prefixed names (e.g., rdfs:label\\,el is not allowed), no multiline "
 // "literals, and the regex \". *\\n\" only matches at the end of a triple. "

@@ -2,18 +2,12 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SPECIALIDS_H
-#define QLEVER_SPECIALIDS_H
-
-#include <absl/strings/str_cat.h>
-
-#include <exception>
+#pragma once
 
 #include "global/Constants.h"
 #include "global/Id.h"
 #include "util/HashMap.h"
 #include "util/HashSet.h"
-#include "util/SourceLocation.h"
 
 namespace qlever {
 
@@ -56,5 +50,3 @@ static constexpr std::pair<Id, Id> getBoundsForSpecialIds() {
   return {Id::fromBits(1), upperBound};
 }
 }  // namespace qlever
-
-#endif  // QLEVER_SPECIALIDS_H
