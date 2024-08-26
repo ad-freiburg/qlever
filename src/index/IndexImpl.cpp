@@ -1048,8 +1048,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    */
 
   {
-    std::string lang = LOCALE_DEFAULT_LANG;
-    std::string country = LOCALE_DEFAULT_COUNTRY;
+    std::string lang{LOCALE_DEFAULT_LANG};
+    std::string country{LOCALE_DEFAULT_COUNTRY};
     bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
     if (j.count("locale")) {
       lang = std::string{j["locale"]["language"]};
