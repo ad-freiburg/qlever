@@ -134,12 +134,9 @@ struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
-      : map_(alloc), minId_(minId), comparator_(cmp) {
-    for (const auto& [iri, internalId] : qlever::specialIds) {
-      // TODO<joka921> Continue
-    }
+      : map_(alloc), minId_(minId), comparator_(cmp) {}
 
-    /// Move the held HashMap out as soon as we are done inserting and only need
+  /// Move the held HashMap out as soon as we are done inserting and only need
   /// the actual vocabulary.
   ItemMapAndBuffer&& moveMap() && { return std::move(map_); }
 
@@ -177,8 +174,6 @@ struct alignas(256) ItemMapManager {
     return std::apply(
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
-
-  ad_utility::HashMap<Id, Id> internalIdMapping_;
   ItemMapAndBuffer map_;
   uint64_t minId_ = 0;
   const TripleComponentComparator* comparator_ = nullptr;
