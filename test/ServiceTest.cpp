@@ -69,22 +69,26 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-      return
+      auto body =
           [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
-            // Randomly slice the string to make tests more robust.
-            std::mt19937 rng{std::random_device{}()};
+        // Randomly slice the string to make tests more robust.
+        std::mt19937 rng{std::random_device{}()};
 
-            const std::string resultStr = result;
-            std::uniform_int_distribution<size_t> distribution{
-                0, resultStr.length() / 2};
+        const std::string resultStr = result;
+        std::uniform_int_distribution<size_t> distribution{
+            0, resultStr.length() / 2};
 
-            for (size_t start = 0; start < resultStr.length();) {
-              size_t size = distribution(rng);
-              std::string resultCopy{resultStr.substr(start, size)};
-              co_yield std::as_writable_bytes(std::span{resultCopy});
-              start += size;
-            }
-          }(predefinedResult);
+        for (size_t start = 0; start < resultStr.length();) {
+          size_t size = distribution(rng);
+          std::string resultCopy{resultStr.substr(start, size)};
+          co_yield std::as_writable_bytes(std::span{resultCopy});
+          start += size;
+        }
+      };
+      return std::pair(
+          StatusAndContentType{.status_ = boost::beast::http::status::ok,
+                               .contentType_ = "application/json"},
+          body(predefinedResult));
     };
   };
 
@@ -365,3 +369,4 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_ANY_THROW(Service::bindingToTripleComponent(
       {{"type", "INVALID_TYPE"}, {"value", "v"}}));
 }
+
