@@ -380,6 +380,7 @@ std::basic_string<Char> operator+(const std::basic_string_view<Char>& a,
   return strCatImpl(a, std::basic_string_view<Char>{b});
 }
 
-std::string operator+(char c, std::string_view b) {
+template <typename Char>
+std::string operator+(Char c, std::basic_string_view<Char> b) {
   return strCatImpl(std::string_view(&c, 1), b);
 }
