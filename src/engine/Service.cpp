@@ -125,13 +125,6 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
-  if (boost::beast::http::to_status_class(response.first) !=
-      boost::beast::http::status_class::successful) {
-    throw std::runtime_error(absl::StrCat(
-        "Service respondet with: ", static_cast<int>(response.first), ", ",
-        std::string(boost::beast::http::obsolete_reason(response.first))));
-  }
-
   std::basic_string<char, std::char_traits<char>,
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
@@ -140,12 +133,26 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
     checkCancellation();
   }
 
-  // Parse the received result.
   auto throwErrorWithContext = [&jsonStr](std::string_view sv) {
     throw std::runtime_error(absl::StrCat(
         sv,
         " First 100 bytes: ", std::string_view{jsonStr.data()}.substr(0, 100)));
   };
+
+  // Verify status and content-type of the response.
+  const auto& [status, contentType] = response.first;
+  if (status != boost::beast::http::status::ok) {
+    throwErrorWithContext(absl::StrCat(
+        "Service respondet with: ", static_cast<int>(status), ", ",
+        std::string(boost::beast::http::obsolete_reason(status)), "."));
+  }
+  if (contentType != "application/json") {
+    throwErrorWithContext(absl::StrCat(
+        "Expected content-type 'application/json', but received: '",
+        contentType, "'."));
+  }
+
+  // Parse the received result.
   std::vector<std::string> resVariables;
   std::vector<nlohmann::json> resBindings;
   try {

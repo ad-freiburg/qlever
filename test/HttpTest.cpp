@@ -60,7 +60,7 @@ TEST(HttpServer, HttpTest) {
         });
     httpServer.runInOwnThread();
 
-    // Create a client, and send a GET and a POST request in one session.
+    // Create a client, and send a GET request.
     // The constants in those test loops can be increased to find threading
     // issues using the thread sanitizer. However, these constants can't be
     // higher by default because the checks on GitHub actions will run forever
@@ -71,18 +71,15 @@ TEST(HttpServer, HttpTest) {
         threads.emplace_back([&]() {
           for (size_t j = 0; j < 20; ++j) {
             {
-              HttpClient httpClient("localhost",
-                                    std::to_string(httpServer.getPort()));
-              ASSERT_EQ(toString(httpClient
-                                     .sendRequest(verb::get, "localhost",
-                                                  "target1", handle)
-                                     .second),
-                        "GET\ntarget1\n");
-              ASSERT_EQ(toString(httpClient
-                                     .sendRequest(verb::post, "localhost",
-                                                  "target1", handle, "body1")
-                                     .second),
-                        "POST\ntarget1\nbody1");
+              auto httpClient = std::make_unique<HttpClient>(
+                  "localhost", std::to_string(httpServer.getPort()));
+
+              auto response =
+                  HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                          "localhost", "target1", handle);
+              ASSERT_EQ(response.first.status_, boost::beast::http::status::ok);
+              ASSERT_EQ(response.first.contentType_, "text/plain");
+              ASSERT_EQ(toString(std::move(response.second)), "GET\ntarget1\n");
             }
           }
         });
@@ -92,17 +89,14 @@ TEST(HttpServer, HttpTest) {
     // Do the same thing in a second session (to check if everything is still
     // fine with the server after we have communicated with it for one session).
     {
-      HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(
-          toString(
-              httpClient.sendRequest(verb::get, "localhost", "target2", handle)
-                  .second),
-          "GET\ntarget2\n");
-      ASSERT_EQ(toString(httpClient
-                             .sendRequest(verb::post, "localhost", "target2",
-                                          handle, "body2")
-                             .second),
-                "POST\ntarget2\nbody2");
+      auto httpClient = std::make_unique<HttpClient>(
+          "localhost", std::to_string(httpServer.getPort()));
+      auto response =
+          HttpClient::sendRequest(std::move(httpClient), verb::post,
+                                  "localhost", "target2", handle, "body2");
+      ASSERT_EQ(response.first.status_, boost::beast::http::status::ok);
+      ASSERT_EQ(response.first.contentType_, "text/plain");
+      ASSERT_EQ(toString(std::move(response.second)), "POST\ntarget2\nbody2");
     }
 
     // Test if websocket is correctly opened and closed
