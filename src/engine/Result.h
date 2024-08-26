@@ -7,6 +7,7 @@
 #pragma once
 
 #include <ranges>
+#include <variant>
 #include <vector>
 
 #include "engine/LocalVocab.h"
@@ -17,17 +18,29 @@
 
 // The result of an `Operation`. This is the class QLever uses for all
 // intermediate or final results when processing a SPARQL query. The actual data
-// is always a table and contained in the member `idTable()`.
+// is either a table and contained in the member `idTable()` or can be consumed
+// through a generator via `idTables()` when it is supposed to be lazily
+// evaluated.
 class Result {
  private:
+  // Needs to be mutable in order to be consumable from a const result.
+  struct GenContainer {
+    mutable cppcoro::generator<IdTable> generator_;
+    mutable std::unique_ptr<std::atomic_bool> consumed_ =
+        std::make_unique<std::atomic_bool>(false);
+    explicit GenContainer(cppcoro::generator<IdTable> generator)
+        : generator_{std::move(generator)} {}
+  };
+  using Data = std::variant<IdTable, GenContainer>;
   // The actual entries.
-  IdTable idTable_;
+  Data data_;
 
   // The column indices by which the result is sorted (primary sort key first).
   // Empty if the result is not sorted on any column.
   std::vector<ColumnIndex> sortedBy_;
 
   using LocalVocabPtr = std::shared_ptr<const LocalVocab>;
+
   // The local vocabulary of the result.
   LocalVocabPtr localVocab_ = std::make_shared<const LocalVocab>();
 
@@ -61,12 +74,9 @@ class Result {
               std::make_shared<const LocalVocab>(std::move(localVocab))} {}
   };
 
-  // For each column in the result (the entries in the outer `vector`) and for
-  // each `Datatype` (the entries of the inner `array`), store the information
-  // how many entries of that datatype are stored in the column.
-  using DatatypeCountsPerColumn = std::vector<
-      std::array<size_t, static_cast<size_t>(Datatype::MaxValue) + 1>>;
-  std::optional<DatatypeCountsPerColumn> datatypeCountsPerColumn_;
+  // Check if sort order promised by `sortedBy` is kept within `idTable`.
+  static void assertSortOrderIsRespected(
+      const IdTable& idTable, const std::vector<ColumnIndex>& sortedBy);
 
  public:
   // Construct from the given arguments (see above) and check the following
@@ -82,7 +92,10 @@ class Result {
          SharedLocalVocabWrapper localVocab);
   Result(IdTable idTable, std::vector<ColumnIndex> sortedBy,
          LocalVocab&& localVocab);
-
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
@@ -91,11 +104,42 @@ class Result {
   Result(Result&& other) = default;
   Result& operator=(Result&& other) = default;
 
-  // Default destructor.
-  virtual ~Result() = default;
+  // Wrap the generator stored in `data_` within a new generator that calls
+  // `onNewChunk` every time a new `IdTable` is yielded by the original
+  // generator and passed this new `IdTable` along with microsecond precision
+  // timing information on how long it took to compute this new chunk.
+  // `onGeneratorFinished` is guaranteed to be called eventually as long as the
+  // generator is consumed at least partially, with `true` if an exception
+  // occurred during consumption or with `false` when the generator is done
+  // processing or abandoned and destroyed.
+  //
+  // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
+  // wrong variant.
+  void runOnNewChunkComputed(
+      std::function<void(const IdTable&, std::chrono::microseconds)> onNewChunk,
+      std::function<void(bool)> onGeneratorFinished);
 
-  // Const access to the underlying `IdTable`.
+  // Wrap the generator stored in `data_` within a new generator that aggregates
+  // the entries yielded by the generator into a cacheable `IdTable`. Once
+  // `fitInCache` returns false, thus indicating that both passed arguments
+  // together would be too large to be cached, this cached value is discarded.
+  // If this cached value still exists when the generator is fully consumed a
+  // new `Result` is created with this value and passed to `storeInCache`.
+  //
+  // Throw an `ad_utility::Exception` if the underlying `data_` member holds the
+  // wrong variant.
+  void cacheDuringConsumption(
+      std::function<bool(const std::optional<IdTable>&, const IdTable&)>
+          fitInCache,
+      std::function<void(Result)> storeInCache);
+
+  // Const access to the underlying `IdTable`. Throw an `ad_utility::Exception`
+  // if the underlying `data_` member holds the wrong variant.
   const IdTable& idTable() const;
+
+  // Access to the underlying `IdTable`s. Throw an `ad_utility::Exception`
+  // if the underlying `data_` member holds the wrong variant.
+  cppcoro::generator<IdTable>& idTables() const;
 
   // Const access to the columns by which the `idTable()` is sorted.
   const std::vector<ColumnIndex>& sortedBy() const { return sortedBy_; }
@@ -140,6 +184,9 @@ class Result {
   // (which is not possible with `shareLocalVocabFrom`).
   LocalVocab getCopyOfLocalVocab() const;
 
+  // Return true if `data_` holds an `IdTable`, false otherwise.
+  bool isFullyMaterialized() const noexcept;
+
   // Log the size of this result. We call this at several places in
   // `Server::processQuery`. Ideally, this should only be called in one
   // place, but for now, this method at least makes sure that these log
@@ -150,24 +197,36 @@ class Result {
   string asDebugString() const;
 
   // Apply the `limitOffset` clause by shifting and then resizing the `IdTable`.
-  // Note: If additional members and invariants are added to the class (for
+  // This also applies if `data_` holds a generator yielding `IdTable`s, where
+  // this is applied respectively.
+  // `limitTimeCallback` is called whenever an `IdTable` is resized with the
+  // number of microseconds it took to perform this operation and the freshly
+  // resized `IdTable` as const reference.
+  // Note: If  additional members and invariants are added to the class (for
   // example information about the datatypes in each column) make sure that
   // those are still correct after performing this operation.
-  void applyLimitOffset(const LimitOffsetClause& limitOffset);
+  void applyLimitOffset(
+      const LimitOffsetClause& limitOffset,
+      std::function<void(std::chrono::microseconds, const IdTable&)>
+          limitTimeCallback);
 
-  // Get the information, which columns stores how many entries of each
-  // datatype. This information is computed on the first call to this function
-  // `O(num-entries-in-table)` and then cached for subsequent usages.
-  const DatatypeCountsPerColumn& getOrComputeDatatypeCountsPerColumn();
+  // Check if the operation did fulfill its contract and only returns as many
+  // elements as requested by the provided `limitOffset`. Throw an
+  // `ad_utility::Exception` otherwise. When `data_` holds a generator, this
+  // behaviour applies analogously when consuming the generator.
+  // This member function provides an alternative to `applyLimitOffset` that
+  // resizes the result if the operation doesn't support this on its own.
+  void assertThatLimitWasRespected(const LimitOffsetClause& limitOffset);
 
   // Check that if the `varColMap` guarantees that a column is always defined
   // (i.e. that is contains no single undefined value) that there are indeed no
-  // undefined values in the `_idTable` of this result. Return `true` iff the
-  // check is successful.
-  bool checkDefinedness(const VariableToColumnMap& varColMap);
+  // undefined values in the `data_` of this result. Do nothing iff the check is
+  // successful. Throw an `ad_utility::Exception` otherwise. When `data_` holds
+  // a generator, this behaviour applies analogously when consuming the
+  // generator.
+  void checkDefinedness(const VariableToColumnMap& varColMap);
 };
 
-// In the future (as soon as we implement lazy operations) the `ProtoResult` and
-// the `Result` will have different implementations. For now we simply use an
-// alias to reduce the size of the diff in the PRs for lazy operations.
+// Class alias to conceptually differentiate between Results that produce
+// values and Results meant to be consumed.
 using ProtoResult = Result;

@@ -633,8 +633,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
                               : joinColMap.permutationLeft())};
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
-  auto rightBlocksInternal = IndexScan::lazyScanForJoinOfColumnWithScan(
-      permutationIdTable.col(), scan);
+  auto rightBlocksInternal =
+      scan.lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());

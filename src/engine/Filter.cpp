@@ -43,41 +43,59 @@ string Filter::getDescriptor() const {
 }
 
 // _____________________________________________________________________________
-ProtoResult Filter::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Filter::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-result for Filter result computation..." << endl;
-  std::shared_ptr<const Result> subRes = _subtree->getResult();
+  std::shared_ptr<const Result> subRes = _subtree->getResult(requestLaziness);
   LOG(DEBUG) << "Filter result computation..." << endl;
   checkCancellation();
 
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(subRes->idTable().numColumns());
+  if (subRes->isFullyMaterialized()) {
+    IdTable result = filterIdTable(subRes, subRes->idTable());
+    LOG(DEBUG) << "Filter result computation done." << endl;
 
-  size_t width = idTable.numColumns();
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, &idTable, *subRes);
-  LOG(DEBUG) << "Filter result computation done." << endl;
+    return {std::move(result), resultSortedOn(), subRes->getSharedLocalVocab()};
+  }
+  auto localVocab = subRes->getSharedLocalVocab();
+  return {[](auto subRes, auto* self) -> cppcoro::generator<IdTable> {
+            for (IdTable& idTable : subRes->idTables()) {
+              IdTable result = self->filterIdTable(subRes, idTable);
+              co_yield result;
+            }
+          }(std::move(subRes), this),
+          resultSortedOn(), std::move(localVocab)};
+}
+
+// _____________________________________________________________________________
+IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
+                              const IdTable& idTable) {
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
+      getExecutionContext()->getAllocator(), subRes->localVocab(),
+      cancellationHandle_, deadline_);
+
+  // TODO<joka921> This should be a mandatory argument to the
+  // EvaluationContext constructor.
+  evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
+
+  size_t width = evaluationContext._inputTable.numColumns();
+  IdTable result = CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this,
+                                   evaluationContext);
   checkCancellation();
-
-  return {std::move(idTable), resultSortedOn(), subRes->getSharedLocalVocab()};
+  return result;
 }
 
 // _____________________________________________________________________________
 template <size_t WIDTH>
-void Filter::computeFilterImpl(IdTable* outputIdTable,
-                               const Result& inputResultTable) {
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(),
-      inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab(), cancellationHandle_, deadline_);
-
-  // TODO<joka921> This should be a mandatory argument to the EvaluationContext
-  // constructor.
-  evaluationContext._columnsByWhichResultIsSorted = inputResultTable.sortedBy();
+IdTable Filter::computeFilterImpl(
+    sparqlExpression::EvaluationContext& evaluationContext) {
+  IdTable idTable{getExecutionContext()->getAllocator()};
+  idTable.setNumColumns(evaluationContext._inputTable.numColumns());
 
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
-  const auto input = inputResultTable.idTable().asStaticView<WIDTH>();
-  auto output = std::move(*outputIdTable).toStatic<WIDTH>();
+  const auto input = evaluationContext._inputTable.asStaticView<WIDTH>();
+  auto output = std::move(idTable).toStatic<WIDTH>();
   // Clang 17 seems to incorrectly deduce the type, so try to trick it
   std::remove_const_t<decltype(output)>& output2 = output;
 
@@ -123,7 +141,7 @@ void Filter::computeFilterImpl(IdTable* outputIdTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  *outputIdTable = std::move(output).toDynamic();
+  return std::move(output).toDynamic();
 }
 
 // _____________________________________________________________________________

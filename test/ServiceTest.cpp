@@ -45,7 +45,11 @@ class ServiceTest : public ::testing::Test {
   // The code can be found in the history of this PR.
   static auto constexpr getResultFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         std::string predefinedResult) -> Service::GetResultFunction {
+         std::string predefinedResult,
+         StatusAndContentType responseInfo = {
+             .status_ = boost::beast::http::status::ok,
+             .contentType_ =
+                 "application/json"}) -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -85,10 +89,7 @@ class ServiceTest : public ::testing::Test {
           start += size;
         }
       };
-      return std::pair(
-          StatusAndContentType{.status_ = boost::beast::http::status::ok,
-                               .contentType_ = "application/json"},
-          body(predefinedResult));
+      return std::pair(responseInfo, body(predefinedResult));
     };
   };
 
@@ -163,15 +164,27 @@ TEST_F(ServiceTest, computeResult) {
 
   // Shorthand to run computeResult with the test parameters given above.
   auto runComputeResult =
-      [&](const std::string& result) -> std::shared_ptr<const Result> {
-    Service s{
-        testQec, parsedServiceClause,
-        getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
+      [&](const std::string& result,
+          StatusAndContentType statusAndContentType = {
+              .status_ = boost::beast::http::status::ok,
+              .contentType_ =
+                  "application/json"}) -> std::shared_ptr<const Result> {
+    Service s{testQec, parsedServiceClause,
+              getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                       statusAndContentType)};
     return s.getResult();
   };
 
-  // CHECK 1: Returned Result is no JSON, is empty or has invalid structure
-  // -> an exception should be thrown.
+  // CHECK 1: An exception shall be thrown, when
+  // Returned status-code isn't ok, contentType doesn't match
+  ASSERT_ANY_THROW(
+      runComputeResult("", {.status_ = boost::beast::http::status::bad_request,
+                            .contentType_ = "application/json"}));
+  ASSERT_ANY_THROW(
+      runComputeResult("", {.status_ = boost::beast::http::status::ok,
+                            .contentType_ = "wrong/type"}));
+
+  // or Result is no JSON, empty or has invalid structure
   ASSERT_ANY_THROW(
       runComputeResult("<?xml version=\"1.0\"?><sparql "
                        "xmlns=\"http://www.w3.org/2005/sparql-results#\">"));

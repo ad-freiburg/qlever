@@ -95,7 +95,13 @@ size_t IndexScan::getResultWidth() const {
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
   auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
-  return std::vector<ColumnIndex>{resAsView.begin(), resAsView.end()};
+  std::vector<ColumnIndex> result{resAsView.begin(), resAsView.end()};
+  for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+    if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
+      result.push_back(numVariables_ + i);
+    }
+  }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -116,9 +122,28 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
+
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
+cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
+  auto metadata = getMetadataForScan();
+  if (!metadata.has_value()) {
+    co_return;
+  }
+  auto blocksSpan =
+      CompressedRelationReader::getBlocksFromMetadata(metadata.value());
+  std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
+                                              blocksSpan.end()};
+  for (IdTable& idTable : getLazyScan(std::move(blocks))) {
+    co_yield std::move(idTable);
+  }
+}
+
+// _____________________________________________________________________________
+ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  if (requestLaziness) {
+    return {scanInChunks(), resultSortedOn(), LocalVocab{}};
+  }
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Permutation::Enum;
@@ -241,43 +266,34 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
 
 // ___________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
-    const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
-  const IndexImpl& index = s.getIndex().getImpl();
-  std::optional<Id> col0Id;
-  if (s.numVariables_ < 3) {
-    col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
+    std::vector<CompressedBlockMetadata> blocks) const {
+  const IndexImpl& index = getIndex().getImpl();
+  auto scanSpecification = getScanSpecification().toScanSpecification(index);
+  if (!scanSpecification.has_value()) {
+    return {};
   }
-  std::optional<Id> col1Id;
-  if (s.numVariables_ < 2) {
-    col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
-  }
-
-  // This function is currently only called by the `getLazyScanForJoin...`
-  // functions. In these cases we always have at least one variable in each of
-  // the scans, because otherwise there would be no join column.
-  AD_CORRECTNESS_CHECK(s.numVariables_ >= 1);
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto actualBlocks = s.getLimit().isUnconstrained()
+  auto actualBlocks = getLimit().isUnconstrained()
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
 
-  return index.getPermutation(s.permutation())
-      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
-                s.additionalColumns(), s.cancellationHandle_, s.getLimit());
+  return index.getPermutation(permutation())
+      .lazyScan(std::move(scanSpecification).value(), std::move(actualBlocks),
+                additionalColumns(), cancellationHandle_, getLimit());
 };
 
 // ________________________________________________________________
-std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
-    const IndexScan& s) {
-  const auto& index = s.getExecutionContext()->getIndex().getImpl();
-  auto scanSpec = s.getScanSpecification().toScanSpecification(index);
+std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
+    const {
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec = getScanSpecification().toScanSpecification(index);
   if (!scanSpec.has_value()) {
     return std::nullopt;
   }
-  return index.getPermutation(s.permutation())
+  return index.getPermutation(permutation())
       .getMetadataAndBlocks(scanSpec.value());
 };
 
@@ -315,8 +331,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   }
   AD_CONTRACT_CHECK(other2.size() == numTotal);
 
-  auto metaBlocks1 = getMetadataForScan(s1);
-  auto metaBlocks2 = getMetadataForScan(s2);
+  auto metaBlocks1 = s1.getMetadataForScan();
+  auto metaBlocks2 = s2.getMetadataForScan();
 
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
     return {{}};
@@ -324,7 +340,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
 
-  std::array result{getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
   result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
   return result;
@@ -332,11 +348,11 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
 // ________________________________________________________________
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
-    std::span<const Id> joinColumn, const IndexScan& s) {
+    std::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
-  AD_CORRECTNESS_CHECK(s.numVariables_ <= 3 && s.numVariables_ > 0);
+  AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
 
-  auto metaBlocks1 = getMetadataForScan(s);
+  auto metaBlocks1 = getMetadataForScan();
 
   if (!metaBlocks1.has_value()) {
     return {};
@@ -344,7 +360,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks1.value());
 
-  auto result = getLazyScan(s, blocks);
+  auto result = getLazyScan(blocks);
   result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
 }

@@ -55,16 +55,9 @@ struct TripleComponentWithIndex {
 };
 
 using TripleComponentOrId = std::variant<PossiblyExternalizedIriOrLiteral, Id>;
-// A triple that also knows for each entry, whether this entry should be
-// part of the external vocabulary.
-using Triple = std::array<TripleComponentOrId, 3>;
-
-// Convert a triple of `std::string` to a triple of `TripleComponents`. All
-// three entries will have `isExternal()==false` and an uninitialized ID.
-inline Triple makeTriple(std::array<std::string, 3>&& t) {
-  using T = PossiblyExternalizedIriOrLiteral;
-  return {T{t[0]}, T{t[1]}, T{t[2]}};
-}
+// A triple + GraphId that also knows for each entry, whether this entry should
+// be part of the external vocabulary.
+using Triple = std::array<TripleComponentOrId, NumColumnsIndexBuilding>;
 
 /// The index of a word and the corresponding `SplitVal`.
 struct LocalVocabIndexAndSplitVal {
@@ -177,8 +170,9 @@ struct alignas(256) ItemMapManager {
   }
 
   /// call getId for each of the Triple elements.
-  std::array<Id, 3> getId(const Triple& t) {
-    return {getId(t[0]), getId(t[1]), getId(t[2])};
+  std::array<Id, NumColumnsIndexBuilding> getId(const Triple& t) {
+    return std::apply(
+        [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
   ItemMapAndBuffer map_;
   uint64_t minId_ = 0;
@@ -242,7 +236,8 @@ auto getIdMapLambdas(
     itemArray[j]->getId(TripleComponent{
         ad_utility::triple_component::Iri::fromIriref(LANGUAGE_PREDICATE)});
   }
-  using OptionalIds = std::array<std::optional<std::array<Id, 3>>, 3>;
+  using OptionalIds =
+      std::array<std::optional<std::array<Id, NumColumnsIndexBuilding>>, 3>;
 
   /* given an index idx, returns a lambda that
    * - Takes a triple and a language tag
@@ -253,7 +248,9 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    return [&map = *itemArray[idx], indexPtr](ad_utility::Rvalue auto&& tr) {
+    auto internalGraphId = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
+    return [&map = *itemArray[idx], indexPtr,
+            internalGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
@@ -272,16 +269,20 @@ auto getIdMapLambdas(
         auto& spoIds = *res[0];  // ids of original triple
         // TODO replace the std::array by an explicit IdTriple class,
         //  then the emplace calls don't need the explicit type.
+        using Arr = std::array<Id, NumColumnsIndexBuilding>;
+        static_assert(NumColumnsIndexBuilding == 4,
+                      " The following lines probably have to be changed when "
+                      "the number of payload columns changes");
         // extra triple <subject> @language@<predicate> <object>
+        // The additional triples all have the graph ID of the internal graph.
         res[1].emplace(
-            std::array<Id, 3>{spoIds[0], langTaggedPredId, spoIds[2]});
+            Arr{spoIds[0], langTaggedPredId, spoIds[2], internalGraphId});
         // extra triple <object> ql:language-tag <@language>
-        res[2].emplace(std::array<Id, 3>{
-            spoIds[2],
-            map.getId(
-                TripleComponent{ad_utility::triple_component::Iri::fromIriref(
-                    LANGUAGE_PREDICATE)}),
-            langTagId});
+        res[2].emplace(Arr{spoIds[2],
+                           map.getId(TripleComponent{
+                               ad_utility::triple_component::Iri::fromIriref(
+                                   LANGUAGE_PREDICATE)}),
+                           langTagId, internalGraphId});
       }
       return res;
     };
