@@ -710,7 +710,9 @@ nlohmann::json ExportQueryExecutionTrees::computeQueryResultAsQLeverJSON(
       nlohmann::ordered_json(runtimeInformation);
 
   auto timeResultComputation =
-      timeUntilFunctionCall + runtimeInformation.totalTime_;
+      timeUntilFunctionCall +
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          runtimeInformation.totalTime_);
 
   size_t resultSize = runtimeInformation.numRows_;
 
