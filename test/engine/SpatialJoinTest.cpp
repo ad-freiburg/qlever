@@ -1,6 +1,9 @@
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <cstdlib>
+#include <fstream>
+#include <regex>
 
 #include "../util/IndexTestHelpers.h"
 #include "./../../src/global/ValueId.h"
@@ -14,22 +17,7 @@
 
 using namespace ad_utility::testing;
 
-// helper function in debugging for outputting stuff
-void print_vecs(std::vector<std::vector<std::string>> vec) {
-  for (size_t i = 0; i < vec.size(); i++) {
-    for (size_t k = 0; k < vec.at(i).size(); k++) {
-      std::cerr << vec.at(i).at(k) << " ";
-    }
-    std::cerr << std::endl;
-  }
-}
-
-// helper function in debugging for outputting stuff
-void print_vec(std::vector<std::string> vec) {
-  for (size_t i = 0; i < vec.size(); i++) {
-    std::cerr << vec.at(i) << std::endl;
-  }
-}
+namespace localTestHelpers {
 
 // helper function to create a vector of strings from a result table
 std::vector<std::string> printTable(const QueryExecutionContext* qec,
@@ -90,193 +78,128 @@ std::vector<std::string> createRowVectorFromColumnVector(
   return result;
 }
 
-// this function compares the ResultTable resultTableToTest with the
-// expected_output. It assumes, that all rows are unique. Therefore the tables
-// are equal, if each row of the expected_output is contained in the table and
-// the tables have the same size
-void compareResultTable(  // const QueryExecutionContext* qec,
-                          // const std::shared_ptr<const ResultTable>
-                          // resultTableToTest,
-    std::vector<std::string> tableToTest,
-    std::vector<std::string>* expected_output) {
-  // rows will be a reordered version of the tableToTest
-  std::vector<std::string> rows(expected_output->size(), "");
-  // std::vector<std::string> tableToTest = printTable(qec, resultTableToTest);
-  for (size_t i = 0; i < expected_output->size(); i++) {
-    rows.at(i) = tableToTest.at(i);  // initialize as copy, reorder when needed
-  }
-  for (size_t i = 0; i < expected_output->size(); i++) {
-    for (size_t k = 0; k < tableToTest.size(); k++) {
-      if (tableToTest.at(k) == expected_output->at(i)) {
-        rows.at(i) = tableToTest.at(k);  // change order of expected output
-        break;
-      }
-    }
-  }
-  // if all rows from the expected output are in the result table and the tables
-  // are equally large, then both tables are equal (assuming each row is unique)
-  ASSERT_EQ(tableToTest.size(), expected_output->size());
-  for (size_t i = 0; i < expected_output->size(); i++) {
-    ASSERT_EQ(expected_output->at(i), rows.at(i));
-  }
-}
-
-// create a small test dataset, which focuses on points as geometry objects
+// create a small test dataset, which focuses on points as geometry objects.
+// Note, that some of these objects have a polygon representation, but for
+// testing purposes, they get represented as a point here. I took those
+// points, such that it is obvious, which pair of objects should be included,
+// when the maximum distance is x meters. Please note, that these datapoints
+// are not copied from a real input file. Copying the query will therefore
+// likely not result in the same results as here (also the names, coordinates,
+// etc. might be different in the real datasets)
 std::string createSmallDatasetWithPoints() {
-  // note, that some of these objects have a polygon representation, but for
-  // testing purposes, they get represented as a point here. I took those
-  // points, such that it is obvious, which pair of objects should be included,
-  // when the maximum distance is x meters. Please note, that these datapoints
-  // are not copied from a real input file. Copying the query will therefore
-  // likely not result in the same results as here (also the names, coordinates,
-  // etc. might be different in the real datasets)
+  auto addPoint = [](std::string& kg, std::string number, std::string name,
+                     std::string point) {
+    kg += absl::StrCat("<node_", number, "> <name> ", name, " .<node_", number,
+                       "> <hasGeometry> <geometry", number, "> .<geometry",
+                       number, "> <asWKT> ", point, " .");
+  };
+  std::string kg2;
+  addPoint(kg2, "1", "\"Uni Freiburg TF\"", "\"POINT(7.83505 48.01267)\"");
+  addPoint(kg2, "2", "\"Minster Freiburg\"", "\"POINT(7.85298 47.99557)\"");
+  addPoint(kg2, "3", "\"London Eye\"", "\"POINT(-0.11957 51.50333)\"");
+  addPoint(kg2, "4", "\"Statue of liberty\"", "\"POINT(-74.04454 40.68925)\"");
+  addPoint(kg2, "5", "\"eiffel tower\"", "\"POINT(2.29451 48.85825)\"");
 
-  // Uni Freiburg TF, building 101
-  std::string kg = "<node_1> <name> \"Uni Freiburg TF\" .";
-  kg += "<node_1> <hasGeometry> <geometry1> .";
-  kg += "<geometry1> <asWKT> \"POINT(7.83505 48.01267)\" .";
-  // Minster Freiburg
-  kg += "<node_2> <name> \"Minster Freiburg\" .";
-  kg += "<node_2> <hasGeometry> <geometry2> .";
-  kg += "<geometry2> <asWKT> \"POINT(7.85298 47.99557)\" .";
-  // London Eye
-  kg += "<node_3> <name> \"London Eye\" .";
-  kg += "<node_3> <hasGeometry> <geometry3> .";
-  kg += "<geometry3> <asWKT> \"POINT(-0.11957 51.50333)\" .";
-  // statue of liberty
-  kg += "<node_4> <name> \"Statue of liberty\" .";
-  kg += "<node_4> <hasGeometry> <geometry4> .";
-  kg += "<geometry4> <asWKT> \"POINT(-74.04454 40.68925)\" .";
-  // eiffel tower
-  kg += "<node_5> <name> \"eiffel tower\" .";
-  kg += "<node_5> <hasGeometry> <geometry5> .";
-  kg += "<geometry5> <asWKT> \"POINT(2.29451 48.85825)\" .";
-  return kg;
+  return kg2;
 }
 
 // this function creates an input as a test set and returns it
-std::string createTestKnowledgeGraph(bool verbose) {
-  auto addPoint = [](string* kg, double lon, double lat) {
+void createTestKnowledgeGraph(std::string filename, bool verbose) {
+  auto addPoint = [](std::ofstream& kg, double lat, double lon) {
+    auto addLonLatLine = [](std::ofstream& kg, string name, double lat,
+                            double lon) {
+      kg << name;
+      kg << " geo:asWKT Point(";
+      kg << std::to_string(lat);
+      kg << " ";
+      kg << std::to_string(lon);
+      kg << ")^^geo:wktLiteral .\n";
+    };
+
+    auto addAdditionalInfo = [](std::ofstream& kg, string name, string lonOrLat,
+                                double lonOrLatValue) {
+      auto addTriple = [](std::ofstream& kg, string subject, string predicate,
+                          string object) {
+        kg << subject << " " << predicate << " " << object << " .\n";
+      };
+
+      double fraction = std::abs(lonOrLatValue - (int)lonOrLatValue);
+      string hasFractionalPart =
+          absl::StrCat("<", lonOrLat, "-has-fractional-part>");
+      string isDivisibleBy = absl::StrCat("<", lonOrLat, "-is-div-by>");
+      if (fraction > 0.49 && fraction < 0.51) {
+        addTriple(kg, name, hasFractionalPart, "<one-half>");
+      } else if (fraction > 0.33 && fraction < 0.34) {
+        addTriple(kg, name, hasFractionalPart, "<one-third>");
+      } else if (fraction > 0.66 && fraction < 0.67) {
+        addTriple(kg, name, hasFractionalPart, "<two-third>");
+      } else if (fraction < 0.01) {
+        if ((int)lonOrLatValue % 2 == 0) {
+          addTriple(kg, name, isDivisibleBy, "<two>");  // divisible by two
+        }
+        if ((int)lonOrLatValue % 3 == 0) {
+          addTriple(kg, name, isDivisibleBy, "<three>");  // divisible by three
+        }
+        if ((int)lonOrLatValue % 4 == 0) {
+          addTriple(kg, name, isDivisibleBy, "<four>");  // divisible by four
+        }
+        if ((int)lonOrLatValue % 5 == 0) {
+          addTriple(kg, name, isDivisibleBy, "<five>");  // divisible by five
+        }
+      }
+    };
+
     string name =
-        "Point_" + std::to_string(lon) + "_" + std::to_string(lat) + "";
-    *kg += "";
+        "Point_" + std::to_string(lat) + "_" + std::to_string(lon) + "";
 
-    *kg += name;
-    *kg += " geo:asWKT Point(";
-    *kg += std::to_string(lon);
-    *kg += " ";
-    *kg += std::to_string(lat);
-    *kg += ")^^geo:wktLiteral .\n";
-
-    double fraction = std::abs(lon - (int)lon);
-    if (fraction > 0.49 && fraction < 0.51) {
-      *kg += name;
-      *kg += " <lon-has-fractional-part> <one-half> .\n";
-    } else if (fraction > 0.33 && fraction < 0.34) {
-      *kg += name;
-      *kg += " <lon-has-fractional-part> <one-third> .\n";
-    } else if (fraction > 0.66 && fraction < 0.67) {
-      *kg += name;
-      *kg += " <lon-has-fractional-part> <two-third> .\n";
-    } else if (fraction < 0.01) {
-      if ((int)lon % 2 == 0) {
-        *kg += name;
-        *kg += " <lon-is-div-by> <two> .\n";  // divisible by two
-      }
-      if ((int)lon % 3 == 0) {
-        *kg += name;
-        *kg += " <lon-is-div-by> <three> .\n";  // divisible by three
-      }
-      if ((int)lon % 4 == 0) {
-        *kg += name;
-        *kg += " <lon-is-div-by> <four> .\n";  // divisible by four
-      }
-      if ((int)lon % 5 == 0) {
-        *kg += name;
-        *kg += " <lon-is-div-by> <five> .\n";  // divisible by five
-      }
-    }
-
-    fraction = std::abs(lat - (int)lat);
-    if (fraction > 0.49 && fraction < 0.51) {
-      *kg += name;
-      *kg += " <lat-has-fractional-part> <one-half> .\n";
-    } else if (fraction > 0.33 && fraction < 0.34) {
-      *kg += name;
-      *kg += " <lat-has-fractional-part> <one-third> .\n";
-    } else if (fraction > 0.66 && fraction < 0.67) {
-      *kg += name;
-      *kg += " <lat-has-fractional-part> <two-third> .\n";
-    } else if (fraction < 0.01) {
-      if ((int)lat % 2 == 0) {
-        *kg += name;
-        *kg += " <lat-is-div-by> <two> .\n";  // divisible by two
-      }
-      if ((int)lat % 3 == 0) {
-        *kg += name;
-        *kg += " <lat-is-div-by> <three> .\n";  // divisible by three
-      }
-      if ((int)lat % 4 == 0) {
-        *kg += name;
-        *kg += " <lat-is-div-by> <four> .\n";  // divisible by four
-      }
-      if ((int)lat % 5 == 0) {
-        *kg += name;
-        *kg += " <lat-is-div-by> <five> .\n";  // divisible by five
-      }
-    }
+    addLonLatLine(kg, name, lat, lon);
+    addAdditionalInfo(kg, name, "lat", lat);
+    addAdditionalInfo(kg, name, "lon", lon);
   };
 
-  string kg = "";  // knowledge graph
-  // for loop to iterate over the longitudes
-  for (int lon = -90; lon <= 90; lon++) {     // iterate over longitude
-    for (int lat = -180; lat < 180; lat++) {  // iterate over latitude
-      if (lon == -90 || lon == 90) {
+  std::ofstream kg(filename);              // file for the knowledge graph
+  for (int lat = -90; lat <= 90; lat++) {  // iterate over lonitude
+    std::cerr << lat << std::endl;
+    for (int lon = -180; lon < 180; lon++) {  // iterate over lonitude
+      if (lat == -90 || lat == 90) {
         // only add one point for the poles
-        addPoint(&kg, lon, 0);
+        addPoint(kg, lat, 0);
         break;
       }
 
-      addPoint(&kg, lon, lat);
-
       if (!verbose) {
-        if (lon % 2 == 1 || (lat > -160 && lat < -20) ||
-            (lat > 20 && lat < 160)) {
+        if (lat % 2 == 1 || (lon > -160 && lon < -20) ||
+            (lon > 20 && lon < 160)) {
+          addPoint(kg, lat, lon);
           continue;
         }
       }
 
-      addPoint(&kg, lon, lat + 1 / 3.0);
-      addPoint(&kg, lon, lat + 1 / 2.0);
-      addPoint(&kg, lon, lat + 2 / 3.0);
+      std::vector<double> latValues{static_cast<double>(lat), lat + 1 / 3.0,
+                                    lat + 1 / 2.0, lat + 2 / 3.0};
+      std::vector<double> lonValues{static_cast<double>(lon), lon + 1 / 3.0,
+                                    lon + 1 / 2.0, lon + 2 / 3.0};
 
-      addPoint(&kg, lon + 1 / 3.0, lat);
-      addPoint(&kg, lon + 1 / 3.0, lat + 1 / 3.0);
-      addPoint(&kg, lon + 1 / 3.0, lat + 1 / 2.0);
-      addPoint(&kg, lon + 1 / 3.0, lat + 2 / 3.0);
-
-      addPoint(&kg, lon + 1 / 2.0, lat);
-      addPoint(&kg, lon + 1 / 2.0, lat + 1 / 3.0);
-      addPoint(&kg, lon + 1 / 2.0, lat + 1 / 2.0);
-      addPoint(&kg, lon + 1 / 2.0, lat + 2 / 3.0);
-
-      addPoint(&kg, lon + 2 / 3.0, lat);
-      addPoint(&kg, lon + 2 / 3.0, lat + 1 / 3.0);
-      addPoint(&kg, lon + 2 / 3.0, lat + 1 / 2.0);
-      addPoint(&kg, lon + 2 / 3.0, lat + 2 / 3.0);
+      for (size_t i = 0; i < latValues.size(); i++) {
+        for (size_t k = 0; k < lonValues.size(); k++) {
+          addPoint(kg, latValues.at(i), lonValues.at(k));
+        }
+      }
     }
   }
-  return kg;
+  kg.close();
 }
+
+};  // namespace localTestHelpers
 
 namespace computeResultTest {
 
-std::shared_ptr<QueryExecutionTree> buildIndexScan(QueryExecutionContext* qec,
-                                                   TripleComponent subject,
-                                                   std::string predicate,
-                                                   TripleComponent object) {
+std::shared_ptr<QueryExecutionTree> buildIndexScan(
+    QueryExecutionContext* qec, std::array<std::string, 3> triple) {
+  TripleComponent subject{Variable{triple.at(0)}};
+  TripleComponent object{Variable{triple.at(2)}};
   return ad_utility::makeExecutionTree<IndexScan>(
-      qec, Permutation::Enum::PSO, SparqlTriple{subject, predicate, object});
+      qec, Permutation::Enum::PSO, SparqlTriple{subject, triple.at(1), object});
 }
 
 std::shared_ptr<QueryExecutionTree> buildJoin(
@@ -291,37 +214,24 @@ std::shared_ptr<QueryExecutionTree> buildJoin(
 }
 
 std::shared_ptr<QueryExecutionTree> buildMediumChild(
-    QueryExecutionContext* qec, std::string subject1_, std::string predicate1,
-    std::string object1_, std::string subject2_, std::string predicate2,
-    std::string object2_, std::string subject3_, std::string predicate3,
-    std::string object3_, std::string joinVariable1_,
-    std::string joinVariable2_) {
-  TripleComponent subject1{Variable{subject1_}};
-  TripleComponent subject2{Variable{subject2_}};
-  TripleComponent subject3{Variable{subject3_}};
-  TripleComponent object1{Variable{object1_}};
-  TripleComponent object2{Variable{object2_}};
-  TripleComponent object3{Variable{object3_}};
+    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
+    std::array<std::string, 3> triple2, std::array<std::string, 3> triple3,
+    std::string joinVariable1_, std::string joinVariable2_) {
   Variable joinVariable1{joinVariable1_};
   Variable joinVariable2{joinVariable2_};
-  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
-  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
-  auto scan3 = buildIndexScan(qec, subject3, predicate3, object3);
+  auto scan1 = buildIndexScan(qec, triple1);
+  auto scan2 = buildIndexScan(qec, triple2);
+  auto scan3 = buildIndexScan(qec, triple3);
   auto join = buildJoin(qec, scan1, scan2, joinVariable1);
   return buildJoin(qec, join, scan3, joinVariable2);
 }
 
 std::shared_ptr<QueryExecutionTree> buildSmallChild(
-    QueryExecutionContext* qec, std::string subject1_, std::string predicate1,
-    std::string object1_, std::string subject2_, std::string predicate2,
-    std::string object2_, std::string joinVariable_) {
-  TripleComponent subject1{Variable{subject1_}};
-  TripleComponent subject2{Variable{subject2_}};
-  TripleComponent object1{Variable{object1_}};
-  TripleComponent object2{Variable{object2_}};
+    QueryExecutionContext* qec, std::array<std::string, 3> triple1,
+    std::array<std::string, 3> triple2, std::string joinVariable_) {
   Variable joinVariable{joinVariable_};
-  auto scan1 = buildIndexScan(qec, subject1, predicate1, object1);
-  auto scan2 = buildIndexScan(qec, subject2, predicate2, object2);
+  auto scan1 = buildIndexScan(qec, triple1);
+  auto scan2 = buildIndexScan(qec, triple2);
   return buildJoin(qec, scan1, scan2, joinVariable);
 }
 
@@ -331,6 +241,14 @@ void createAndTestSpatialJoin(
     std::shared_ptr<QueryExecutionTree> rightChild, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutputUnorderedRows,
     std::vector<std::string> columnNames) {
+  // this function is like transposing a matrix. An entry which has been stored
+  // at (i, k) is now stored at (k, i). The reason this is needed is the
+  // following: this function receives the input as a vector of vector of
+  // strings. Each vector contains a vector, which contains a row of the result.
+  // This row contains all columns. After swapping, each vector contains a
+  // vector, which contains all entries of one column. As now each of the
+  // vectors contain only one column, we can later order them according to the
+  // variable to column map and then compare the result.
   auto swapColumns = [&](std::vector<std::vector<std::string>> toBeSwapped) {
     std::vector<std::vector<std::string>> result;
     bool firstIteration = true;
@@ -373,14 +291,15 @@ void createAndTestSpatialJoin(
   // prepare expected output
   // swap rows and columns to use the function orderColAccordingToVarColMap
   auto expectedMaxDistCols = swapColumns(expectedOutputUnorderedRows);
-  auto expectedOutputOrdered =
-      orderColAccordingToVarColMap(spatialJoin->computeVariableToColumnMap(),
-                                   expectedMaxDistCols, columnNames);
-  auto expectedOutput = createRowVectorFromColumnVector(expectedOutputOrdered);
+  auto expectedOutputOrdered = localTestHelpers::orderColAccordingToVarColMap(
+      spatialJoin->computeVariableToColumnMap(), expectedMaxDistCols,
+      columnNames);
+  auto expectedOutput =
+      localTestHelpers::createRowVectorFromColumnVector(expectedOutputOrdered);
 
   auto res = spatialJoin->computeResult(false);
-  auto vec = printTable(qec, &res);
-  compareResultTable(vec, &expectedOutput);
+  auto vec = localTestHelpers::printTable(qec, &res);
+  EXPECT_THAT(vec, ::testing::UnorderedElementsAreArray(expectedOutput));
 }
 
 // build the test using the small dataset. Let the SpatialJoin operation be the
@@ -400,22 +319,22 @@ void buildAndTestSmallTestSetLargeChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ===================== build the first child ===============================
-  auto leftChild =
-      buildMediumChild(qec, "?obj1", std::string{"<name>"}, "?name1", "?obj1",
-                       std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                       std::string{"<asWKT>"}, "?point1", "?obj1", "?geo1");
+  auto leftChild = buildMediumChild(
+      qec, {"?obj1", std::string{"<name>"}, "?name1"},
+      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+      {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
 
   // ======================= build the second child ============================
-  auto rightChild =
-      buildMediumChild(qec, "?obj2", std::string{"<name>"}, "?name2", "?obj2",
-                       std::string{"<hasGeometry>"}, "?geo2", "?geo2",
-                       std::string{"<asWKT>"}, "?point2", "?obj2", "?geo2");
+  auto rightChild = buildMediumChild(
+      qec, {"?obj2", std::string{"<name>"}, "?name2"},
+      {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+      {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
 
   createAndTestSpatialJoin(qec,
                            SparqlTriple{TripleComponent{Variable{"?point1"}},
@@ -437,18 +356,18 @@ void buildAndTestSmallTestSetSmallChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto leftChild = buildIndexScan(qec, obj1, std::string{"<asWKT>"}, point1);
-  auto rightChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
+  auto leftChild =
+      buildIndexScan(qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
+  auto rightChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   createAndTestSpatialJoin(
       qec, SparqlTriple{point1, maxDistanceInMetersString, point2}, leftChild,
@@ -470,21 +389,21 @@ void buildAndTestSmallTestSetDiffSizeChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames, bool bigChildLeft) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ========================= build big child =================================
-  auto bigChild =
-      buildMediumChild(qec, "?obj1", std::string{"<name>"}, "?name1", "?obj1",
-                       std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                       std::string{"<asWKT>"}, "?point1", "?obj1", "?geo1");
+  auto bigChild = buildMediumChild(
+      qec, {"?obj1", std::string{"<name>"}, "?name1"},
+      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+      {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
 
   // ========================= build small child ===============================
-  TripleComponent obj2{Variable{"?obj2"}};
   TripleComponent point2{Variable{"?point2"}};
-  auto smallChild = buildIndexScan(qec, obj2, std::string{"<asWKT>"}, point2);
+  auto smallChild =
+      buildIndexScan(qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   auto firstChild = bigChildLeft ? bigChild : smallChild;
   auto secondChild = bigChildLeft ? smallChild : bigChild;
@@ -1218,20 +1137,18 @@ void testAddChild(bool addLeftChildFirst) {
     }
   };
 
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
   auto leftChild = computeResultTest::buildIndexScan(
-      qec, obj1, std::string{"<asWKT>"}, point1);
+      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild = computeResultTest::buildIndexScan(
-      qec, obj2, std::string{"<asWKT>"}, point2);
+      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1278,20 +1195,18 @@ TEST(SpatialJoin, addChild) {
 }
 
 TEST(SpatialJoin, isConstructed) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
   auto leftChild = computeResultTest::buildIndexScan(
-      qec, obj1, std::string{"<asWKT>"}, point1);
+      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild = computeResultTest::buildIndexScan(
-      qec, obj2, std::string{"<asWKT>"}, point2);
+      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1315,20 +1230,18 @@ TEST(SpatialJoin, isConstructed) {
 }
 
 TEST(SpatialJoin, getChildren) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
   TripleComponent point1{Variable{"?point1"}};
   TripleComponent point2{Variable{"?point2"}};
   auto leftChild = computeResultTest::buildIndexScan(
-      qec, obj1, std::string{"<asWKT>"}, point1);
+      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild = computeResultTest::buildIndexScan(
-      qec, obj2, std::string{"<asWKT>"}, point2);
+      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
   SparqlTriple triple{point1, "<max-distance-in-meters:1000>", point2};
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1387,7 +1300,7 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
                                              bool addLeftChildFirst,
                                              size_t expectedResultWidth,
                                              bool testVarToColMap = false) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
@@ -1396,21 +1309,21 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   auto leftChild =
       leftSideBigChild
           ? computeResultTest::buildMediumChild(
-                qec, "?obj1", std::string{"<name>"}, "?name1", "?obj1",
-                std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                std::string{"<asWKT>"}, "?point1", "?obj1", "?geo1")
+                qec, {"?obj1", std::string{"<name>"}, "?name1"},
+                {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1")
           : computeResultTest::buildSmallChild(
-                qec, "?obj1", std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                std::string{"<asWKT>"}, "?point1", "?geo1");
+                qec, {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
   auto rightChild =
       rightSideBigChild
           ? computeResultTest::buildMediumChild(
-                qec, "?obj2", std::string{"<name>"}, "?name2", "?obj2",
-                std::string{"<hasGeometry>"}, "?geo2", "?geo2",
-                std::string{"<asWKT>"}, "?point2", "?obj2", "?geo2")
+                qec, {"?obj2", std::string{"<name>"}, "?name2"},
+                {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2")
           : computeResultTest::buildSmallChild(
-                qec, "?obj2", std::string{"<hasGeometry>"}, "?geo2", "?geo2",
-                std::string{"<asWKT>"}, "?point2", "?geo2");
+                qec, {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?geo2");
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
@@ -1528,7 +1441,7 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
     ASSERT_EQ(spatialJoin_->knownEmptyResult(), shouldBeEmpty);
   };
 
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
@@ -1537,21 +1450,21 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
   auto leftChild =
       leftSideEmptyChild
           ? computeResultTest::buildMediumChild(
-                qec, "?obj1", std::string{"<notExistingPredicate>"}, "?name1",
-                "?obj1", std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                std::string{"<asWKT>"}, "?point1", "?obj1", "?geo1")
+                qec, {"?obj1", std::string{"<notExistingPredicate>"}, "?name1"},
+                {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1")
           : computeResultTest::buildSmallChild(
-                qec, "?obj1", std::string{"<hasGeometry>"}, "?geo1", "?geo1",
-                std::string{"<asWKT>"}, "?point1", "?geo1");
+                qec, {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
   auto rightChild =
       rightSideEmptyChild
           ? computeResultTest::buildMediumChild(
-                qec, "?obj2", std::string{"<notExistingPredicate>"}, "?name2",
-                "?obj2", std::string{"<hasGeometry>"}, "?geo2", "?geo2",
-                std::string{"<asWKT>"}, "?point2", "?obj2", "?geo2")
+                qec, {"?obj2", std::string{"<notExistingPredicate>"}, "?name2"},
+                {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2")
           : computeResultTest::buildSmallChild(
-                qec, "?obj2", std::string{"<hasGeometry>"}, "?geo2", "?geo2",
-                std::string{"<asWKT>"}, "?point2", "?geo2");
+                qec, {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?geo2");
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
@@ -1600,7 +1513,7 @@ TEST(SpatialJoin, knownEmpyResult) {
 namespace resultSortedOn {
 
 TEST(SpatialJoin, resultSortedOn) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
 
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
@@ -1611,14 +1524,12 @@ TEST(SpatialJoin, resultSortedOn) {
                                         "<max-distance-in-meters:10000000>",
                                         TripleComponent{Variable{"?point2"}}};
 
-  TripleComponent subj1{Variable{"?geometry1"}};
   TripleComponent obj1{Variable{"?point1"}};
-  TripleComponent subj2{Variable{"?geometry2"}};
   TripleComponent obj2{Variable{"?point2"}};
-  auto leftChild =
-      computeResultTest::buildIndexScan(qec, subj1, "<asWKT>", obj1);
-  auto rightChild =
-      computeResultTest::buildIndexScan(qec, subj2, "<asWKT>", obj2);
+  auto leftChild = computeResultTest::buildIndexScan(
+      qec, {"?geometry1", "<asWKT>", "?point1"});
+  auto rightChild = computeResultTest::buildIndexScan(
+      qec, {"?geometry2", "<asWKT>", "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -1661,7 +1572,7 @@ TEST(SpatialJoin, getDescriptor) {
 }
 
 TEST(SpatialJoin, getCacheKeyImpl) {
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
   ad_utility::MemorySize blocksizePermutations = 16_MB;
   auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
   auto numTriples = qec->getIndex().numTriples().normal;
@@ -1670,14 +1581,10 @@ TEST(SpatialJoin, getCacheKeyImpl) {
   auto spatialJoinTriple = SparqlTriple{TripleComponent{Variable{"?point1"}},
                                         "<max-distance-in-meters:1000>",
                                         TripleComponent{Variable{"?point2"}}};
-  TripleComponent obj1{Variable{"?obj1"}};
-  TripleComponent obj2{Variable{"?obj2"}};
-  TripleComponent point1{Variable{"?point1"}};
-  TripleComponent point2{Variable{"?point2"}};
   auto leftChild = computeResultTest::buildIndexScan(
-      qec, obj1, std::string{"<asWKT>"}, point1);
+      qec, {"?obj1", std::string{"<asWKT>"}, "?point1"});
   auto rightChild = computeResultTest::buildIndexScan(
-      qec, obj2, std::string{"<asWKT>"}, point2);
+      qec, {"?obj2", std::string{"<asWKT>"}, "?point2"});
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,
@@ -1727,7 +1634,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     ASSERT_TRUE(value1 * 1.00001 > value2);
   };
 
-  std::string kg = createSmallDatasetWithPoints();
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
 
   // add multiplicities to test knowledge graph
   kg += "<node_1> <name> \"testing multiplicity\" .";
@@ -1744,9 +1651,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
                                         TripleComponent{Variable{"?point2"}}};
   // ===================== build the first child ===============================
   auto leftChild = computeResultTest::buildMediumChild(
-      qec, "?obj1", std::string{"<name>"}, "?name1", "?obj1",
-      std::string{"<hasGeometry>"}, "?geo1", "?geo1", std::string{"<asWKT>"},
-      "?point1", "?obj1", "?geo1");
+      qec, {"?obj1", std::string{"<name>"}, "?name1"},
+      {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
+      {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1");
   // result table of leftChild:
   // ?obj1    ?name1                    ?geo1       ?point1
   // node_1   Uni Freiburg TF           geometry1   Point(7.83505 48.01267)
@@ -1759,9 +1666,9 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   // ======================= build the second child ============================
   auto rightChild = computeResultTest::buildMediumChild(
-      qec, "?obj2", std::string{"<name>"}, "?name2", "?obj2",
-      std::string{"<hasGeometry>"}, "?geo2", "?geo2", std::string{"<asWKT>"},
-      "?point2", "?obj2", "?geo2");
+      qec, {"?obj2", std::string{"<name>"}, "?name2"},
+      {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
+      {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2");
   // result table of rightChild is identical to leftChild, see above
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
@@ -1848,7 +1755,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     // ======================== hard coded test ================================
     // here the child are only index scans, as they are perfectly predictable in
     // relation to size and multiplicity estimates
-    std::string kg = createSmallDatasetWithPoints();
+    std::string kg = localTestHelpers::createSmallDatasetWithPoints();
 
     // add multiplicities to test knowledge graph
     kg += "<geometry1> <asWKT> \"POINT(7.12345 48.12345)\".";
@@ -1868,10 +1775,10 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     TripleComponent obj1{Variable{"?point1"}};
     TripleComponent subj2{Variable{"?geometry2"}};
     TripleComponent obj2{Variable{"?point2"}};
-    auto leftChild =
-        computeResultTest::buildIndexScan(qec, subj1, "<asWKT>", obj1);
-    auto rightChild =
-        computeResultTest::buildIndexScan(qec, subj2, "<asWKT>", obj2);
+    auto leftChild = computeResultTest::buildIndexScan(
+        qec, {"?geometry1", "<asWKT>", "?point1"});
+    auto rightChild = computeResultTest::buildIndexScan(
+        qec, {"?geometry2", "<asWKT>", "?point2"});
 
     std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
         ad_utility::makeExecutionTree<SpatialJoin>(qec, spatialJoinTriple,

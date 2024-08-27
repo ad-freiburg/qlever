@@ -43,17 +43,11 @@ void SpatialJoin::parseMaxDistance() {
   };
 
   if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
-    try {
-      std::string number =
-          input.substr(MAX_DIST_IN_METERS.size(),
-                       input.size() - MAX_DIST_IN_METERS.size() -
-                           1);  // -1: compensate for >
-      std::ranges::for_each(number, throwIfNotADigit);
-      maxDist_ = std::stoll(number);
-    } catch (const std::exception& e) {
-      LOG(INFO) << "exception: " << e.what() << std::endl;
-      AD_THROW(errormessage);
-    }
+    std::string number = input.substr(
+        MAX_DIST_IN_METERS.size(),
+        input.size() - MAX_DIST_IN_METERS.size() - 1);  // -1: compensate for >
+    std::ranges::for_each(number, throwIfNotADigit);
+    maxDist_ = std::stoll(number);
   } else {
     AD_THROW(errormessage);
   }
