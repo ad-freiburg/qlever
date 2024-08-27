@@ -487,3 +487,47 @@ TEST(IndexScan, computeResultReturnsEmptyGeneratorIfScanIsEmpty) {
     ADD_FAILURE() << "Generator should be empty" << std::endl;
   }
 }
+
+// _____________________________________________________________________________
+TEST(IndexScan, unlikelyToFitInCacheCalculatesSizeCorrectly) {
+  using ad_utility::MemorySize;
+  using V = Variable;
+  using I = TripleComponent::Iri;
+  using enum Permutation::Enum;
+  auto qec = getQec("<x> <p> <s1>, <s2>. <x> <p2> <s1>.", true, false);
+  auto x = I::fromIriref("<x>");
+  auto p = I::fromIriref("<p>");
+  auto p2 = I::fromIriref("<p2>");
+
+  auto expectMaximumCacheableSize = [&](const IndexScan& scan, size_t numRows,
+                                        size_t numCols,
+                                        source_location l =
+                                            source_location::current()) {
+    auto locationTrace = generateLocationTrace(l);
+
+    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(0)));
+    size_t byteCount = numRows * numCols * sizeof(Id);
+    EXPECT_TRUE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount - 1)));
+    EXPECT_FALSE(scan.unlikelyToFitInCache(MemorySize::bytes(byteCount)));
+  };
+
+  {
+    IndexScan scan{qec, POS, {V{"?x"}, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 3);
+  }
+
+  {
+    IndexScan scan{qec, SPO, {x, V{"?y"}, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 3, 2);
+  }
+
+  {
+    IndexScan scan{qec, POS, {V{"?x"}, p, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 2, 2);
+  }
+
+  {
+    IndexScan scan{qec, SPO, {x, p2, V{"?z"}}};
+    expectMaximumCacheableSize(scan, 1, 1);
+  }
+}

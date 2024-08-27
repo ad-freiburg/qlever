@@ -91,6 +91,14 @@ class IndexScan final : public Operation {
     return numVariables() == target;
   }
 
+  // Full index scans will never be able to fit in the cache on datasets the
+  // size of wikidata, so we don't even need to try and waste performance.
+  bool unlikelyToFitInCache(
+      ad_utility::MemorySize maxCacheableSize) const override {
+    return ad_utility::MemorySize::bytes(getExactSize() * getResultWidth() *
+                                         sizeof(Id)) > maxCacheableSize;
+  }
+
   // An index scan can directly and efficiently support LIMIT and OFFSET
   [[nodiscard]] bool supportsLimit() const override { return true; }
 

@@ -2076,7 +2076,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));
-  } else if (functionName == "isiri") {
+  } else if (functionName == "isiri" || functionName == "isuri") {
     return createUnary(&makeIsIriExpression);
   } else if (functionName == "isblank") {
     return createUnary(&makeIsBlankExpression);

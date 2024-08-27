@@ -77,7 +77,7 @@ struct VocabularyMetaData {
   size_t numBlankNodesTotal_ = 0;
   IdRangeForPrefix langTaggedPredicates_{
       std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
+  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the

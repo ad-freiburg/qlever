@@ -21,6 +21,7 @@ class ValuesForTesting : public Operation {
   // Those can be manually overwritten for testing using the respective getters.
   size_t sizeEstimate_;
   size_t costEstimate_;
+  bool unlikelyToFitInCache_ = false;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -46,13 +47,15 @@ class ValuesForTesting : public Operation {
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables,
-                            std::vector<std::optional<Variable>> variables)
+                            std::vector<std::optional<Variable>> variables,
+                            bool unlikelyToFitInCache = false)
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
         supportsLimit_{false},
         sizeEstimate_{0},
         costEstimate_{0},
+        unlikelyToFitInCache_{unlikelyToFitInCache},
         resultSortedColumns_{},
         localVocab_{LocalVocab{}},
         multiplicity_{std::nullopt} {
@@ -107,6 +110,9 @@ class ValuesForTesting : public Operation {
                   table.begin() + getLimit().actualOffset(table.size()));
     }
     return {std::move(table), resultSortedOn(), localVocab_.clone()};
+  }
+  bool unlikelyToFitInCache(ad_utility::MemorySize) const override {
+    return unlikelyToFitInCache_;
   }
   bool supportsLimit() const override { return supportsLimit_; }
 
