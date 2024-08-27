@@ -89,4 +89,10 @@ TEST(parseTest, parse) {
   EXPECT_NO_THROW(expectYields("{}", {}, arrayPath));
 
   EXPECT_ANY_THROW(expectYields(std::string(1'000'000, '0'), {}, arrayPath));
+
+  // Ignore any input after the main object.
+  expectYields(
+      R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}}{"k": "v"})",
+      {R"({"results": {"bindings": [{"x": {"value": "\"esc\""}}]}})"},
+      arrayPath);
 }

@@ -15,6 +15,21 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
+cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
+    cppcoro::generator<std::string> partJson,
+    std::vector<std::string> arrayPath) {
+  LazyJsonParser p(arrayPath);
+  for (const auto& chunk : partJson) {
+    if (auto res = p.parseChunk(chunk); res.has_value()) {
+      co_yield res;
+      if (p.endReached_) {
+        co_return;
+      }
+    }
+  }
+}
+
+// ____________________________________________________________________________
 LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
     : arrayPath_(std::move(arrayPath)),
       prefixInArray_(absl::StrCat(
@@ -64,7 +79,7 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
     ++idx;
     if (std::holds_alternative<BeforeArrayPath>(state_)) {
       std::get<BeforeArrayPath>(state_).optLiteral_ =
-          BeforeArrayPath::LiteralView{.start_ = idx};
+          BeforeArrayPath::LiteralView{.start_ = idx, .length_ = 0};
     }
     inLiteral_ = true;
   }
@@ -78,8 +93,9 @@ void LazyJsonParser::parseLiteral(size_t& idx) {
       case '"':
         // End of literal.
         if (std::holds_alternative<BeforeArrayPath>(state_)) {
-          std::get<BeforeArrayPath>(state_).optLiteral_->length_ =
-              idx - std::get<BeforeArrayPath>(state_).optLiteral_->start_;
+          std::get<BeforeArrayPath>(state_).optLiteral_.value().length_ =
+              idx -
+              std::get<BeforeArrayPath>(state_).optLiteral_.value().start_;
         }
         inLiteral_ = false;
         return;
@@ -194,6 +210,7 @@ std::optional<size_t> LazyJsonParser::parseAfterArrayPath(size_t& idx) {
         state.remainingBraces_ -= 1;
         if (state.remainingBraces_ == 0) {
           // End reached.
+          endReached_ = true;
           return idx + 1;
         }
         break;
@@ -219,10 +236,7 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
     return std::nullopt;
   }
 
-  std::string resStr;
-  if (yieldCount_ > 0) {
-    resStr = prefixInArray_;
-  }
+  std::string resStr = yieldCount_ > 0 ? prefixInArray_ : "";
   ++yieldCount_;
 
   // materializeEnd either holds the index to a `,` between two elements in the
@@ -248,7 +262,7 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
 void LazyJsonParser::BeforeArrayPath::tryAddKeyToPath(std::string_view input) {
   if (optLiteral_) {
     curPath_.emplace_back(
-        input.substr(optLiteral_->start_, optLiteral_->length_));
+        input.substr(optLiteral_.value().start_, optLiteral_.value().length_));
     optLiteral_ = std::nullopt;
   }
 }

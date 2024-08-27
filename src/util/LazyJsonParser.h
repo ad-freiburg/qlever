@@ -23,14 +23,10 @@ class LazyJsonParser {
   // Parse chunks of json-strings yielding them reconstructed.
   static cppcoro::generator<nlohmann::json> parse(
       cppcoro::generator<std::string> partJson,
-      std::vector<std::string> arrayPath) {
-    LazyJsonParser p(arrayPath);
-    for (const auto& chunk : partJson) {
-      if (auto res = p.parseChunk(chunk); res.has_value()) {
-        co_yield res;
-      }
-    }
-  }
+      std::vector<std::string> arrayPath);
+
+  // Inidicates whether the end of the object is reached.
+  bool endReached_{false};
 
  private:
   explicit LazyJsonParser(std::vector<std::string> arrayPath);
