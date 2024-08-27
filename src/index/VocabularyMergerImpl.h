@@ -173,16 +173,16 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // Write the new word to the vocabulary.
       const auto& nextWord = lastTripleComponent_.value();
+      // TODO<joka921> Refactor the following block to make all the `metaData_`
+      // access more idiomatic.
       if (nextWord.isBlankNode()) {
         lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
         ++metaData_.numBlankNodesTotal_;
       } else {
         wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
 
-        metaData_.internalEntities_.addIfWordMatches(top.iriOrLiteral(),
+        metaData_.addInternalEntityIfMatches(top.iriOrLiteral(),
                                                      nextWord.index_);
-        metaData_.langTaggedPredicates_.addIfWordMatches(top.iriOrLiteral(),
-                                                         nextWord.index_);
         metaData_.numWordsTotal_++;
       }
       if (progressBar.update()) {

@@ -480,6 +480,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
+  hasPatternIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
@@ -1521,7 +1522,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns",
+        onDiskBase_ + ".index.patterns", hasPatternIdDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalTriple](const auto& triple) {
