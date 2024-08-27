@@ -77,9 +77,9 @@ TEST(HttpServer, HttpTest) {
               auto response =
                   HttpClient::sendRequest(std::move(httpClient), verb::get,
                                           "localhost", "target1", handle);
-              ASSERT_EQ(response.first.status_, boost::beast::http::status::ok);
-              ASSERT_EQ(response.first.contentType_, "text/plain");
-              ASSERT_EQ(toString(std::move(response.second)), "GET\ntarget1\n");
+              ASSERT_EQ(response.status_, boost::beast::http::status::ok);
+              ASSERT_EQ(response.contentType_, "text/plain");
+              ASSERT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
             }
           }
         });
@@ -94,9 +94,9 @@ TEST(HttpServer, HttpTest) {
       auto response =
           HttpClient::sendRequest(std::move(httpClient), verb::post,
                                   "localhost", "target2", handle, "body2");
-      ASSERT_EQ(response.first.status_, boost::beast::http::status::ok);
-      ASSERT_EQ(response.first.contentType_, "text/plain");
-      ASSERT_EQ(toString(std::move(response.second)), "POST\ntarget2\nbody2");
+      ASSERT_EQ(response.status_, boost::beast::http::status::ok);
+      ASSERT_EQ(response.contentType_, "text/plain");
+      ASSERT_EQ(toString(std::move(response.body_)), "POST\ntarget2\nbody2");
     }
 
     // Test if websocket is correctly opened and closed
@@ -125,11 +125,11 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get).second),
+      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get).body_),
                 "GET\n/target\n");
       ASSERT_EQ(
           toString(
-              sendHttpOrHttpsRequest(url, handle, verb::post, "body").second),
+              sendHttpOrHttpsRequest(url, handle, verb::post, "body").body_),
           "POST\n/target\nbody");
     }
 

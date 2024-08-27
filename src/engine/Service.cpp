@@ -128,7 +128,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   std::basic_string<char, std::char_traits<char>,
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
-  for (std::span<std::byte> bytes : response.second) {
+  for (std::span<std::byte> bytes : response.body_) {
     jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     checkCancellation();
   }
@@ -140,16 +140,16 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   };
 
   // Verify status and content-type of the response.
-  const auto& [status, contentType] = response.first;
-  if (status != boost::beast::http::status::ok) {
+  if (response.status_ != boost::beast::http::status::ok) {
     throwErrorWithContext(absl::StrCat(
-        "Service respondet with: ", static_cast<int>(status), ", ",
-        std::string(boost::beast::http::obsolete_reason(status)), "."));
+        "Service respondet with: ", static_cast<int>(response.status_), ", ",
+        std::string(boost::beast::http::obsolete_reason(response.status_)),
+        "."));
   }
-  if (contentType != "application/json") {
+  if (response.contentType_ != "application/json") {
     throwErrorWithContext(absl::StrCat(
         "Expected content-type 'application/json', but received: '",
-        contentType, "'."));
+        response.contentType_, "'."));
   }
 
   // Parse the received result.

@@ -23,13 +23,12 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
-struct StatusAndContentType {
+// Helper struct holding the response of a http/https request.
+struct HttpOrHttpsResponse {
   boost::beast::http::status status_;
   std::string contentType_;
+  cppcoro::generator<std::span<std::byte>> body_;
 };
-
-using HttpOrHttpsResponse =
-    std::pair<StatusAndContentType, cppcoro::generator<std::span<std::byte>>>;
 
 // A class for basic communication with a remote server via HTTP or HTTPS. For
 // now, contains functionality for setting up a connection, sending one or

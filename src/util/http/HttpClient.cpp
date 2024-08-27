@@ -123,10 +123,9 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   wait(http::async_read_header(*(client->stream_), buffer, *responseParser,
                                net::use_awaitable));
 
-  const StatusAndContentType statusAndContentType{
-      .status_ = responseParser->get().result(),
-      .contentType_ =
-          responseParser->get()[boost::beast::http::field::content_type]};
+  const auto status = responseParser->get().result();
+  const std::string contentType =
+      responseParser->get()[boost::beast::http::field::content_type];
 
   auto getContent = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
                        std::unique_ptr<http::response_parser<http::buffer_body>>
@@ -138,24 +137,22 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
       std::array<std::byte, 4096> staticBuffer;
       responseParser->get().body().data = staticBuffer.data();
       responseParser->get().body().size = staticBuffer.size();
-
       ad_utility::runAndWaitForAwaitable(
           ad_utility::interruptible(
-              std::move(http::async_read_some(*(client->stream_), buffer,
-                                              *responseParser,
-                                              net::use_awaitable)),
-              handle, std::move(ad_utility::source_location::current())),
+              http::async_read_some(*(client->stream_), buffer, *responseParser,
+                                    net::use_awaitable),
+              handle, ad_utility::source_location::current()),
           client->ioContext_);
-
       size_t remainingBytes = responseParser->get().body().size;
       co_yield std::span{staticBuffer}.first(staticBuffer.size() -
                                              remainingBytes);
     }
   };
 
-  return std::pair(statusAndContentType,
-                   getContent(std::move(client), std::move(responseParser),
-                              std::move(buffer), std::move(handle)));
+  return {.status_ = status,
+          .contentType_ = contentType,
+          .body_ = getContent(std::move(client), std::move(responseParser),
+                              std::move(buffer), std::move(handle))};
 }
 
 // ____________________________________________________________________________
@@ -202,17 +199,10 @@ HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const boost::beast::http::verb& method, std::string_view requestData,
     std::string_view contentTypeHeader, std::string_view acceptHeader) {
   auto sendRequest = [&]<typename Client>() -> HttpOrHttpsResponse {
-    return [](const ad_utility::httpUtils::Url& url,
-              ad_utility::SharedCancellationHandle handle,
-              const boost::beast::http::verb& method,
-              std::string_view requestData, std::string_view contentTypeHeader,
-              std::string_view acceptHeader) -> HttpOrHttpsResponse {
-      auto client = std::make_unique<Client>(url.host(), url.port());
-      return Client::sendRequest(std::move(client), method, url.host(),
-                                 url.target(), std::move(handle), requestData,
-                                 contentTypeHeader, acceptHeader);
-    }(url, std::move(handle), method, requestData, contentTypeHeader,
-                                             acceptHeader);
+    auto client = std::make_unique<Client>(url.host(), url.port());
+    return Client::sendRequest(std::move(client), method, url.host(),
+                               url.target(), std::move(handle), requestData,
+                               contentTypeHeader, acceptHeader);
   };
   if (url.protocol() == Url::Protocol::HTTP) {
     return sendRequest.operator()<HttpClient>();
