@@ -151,7 +151,7 @@ else ()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif ()
 
-addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -394,3 +394,9 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
+
+addLinkAndDiscoverTest(CacheableGeneratorTest)
+
+addLinkAndDiscoverTest(FilterTest engine)
+
+addLinkAndDiscoverTest(ResultTest engine)

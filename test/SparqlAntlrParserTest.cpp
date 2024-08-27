@@ -31,6 +31,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 
+namespace {
 using namespace sparqlParserHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
@@ -39,6 +40,10 @@ using Var = Variable;
 auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
+
+const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
+    {std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+     std::string{INTERNAL_PREDICATE_PREFIX_IRI}}};
 
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
@@ -146,6 +151,7 @@ using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::StrEq;
+}  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
   auto expectNumericLiteral = ExpectCompleteParse<&Parser::numericLiteral>{};
@@ -869,8 +875,8 @@ TEST(SparqlParser, HavingCondition) {
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
-  auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphPattern =
+      ExpectCompleteParse<&Parser::groupGraphPattern>{defaultPrefixMap};
   auto expectGroupGraphPatternFails =
       ExpectParseFails<&Parser::groupGraphPattern>{{}};
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
@@ -941,8 +947,9 @@ TEST(SparqlParser, GroupGraphPattern) {
           m::Triples(
               {{Var{"?x"}, "<is-a>", lit("\"Actor\"")},
                {Var{"?y"}, "<is-a>", iri("<Actor>")},
-               {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
-               {Var{"?c"}, CONTAINS_WORD_PREDICATE, lit("\"coca* abuse\"")}})));
+               {Var{"?c"}, std::string{CONTAINS_ENTITY_PREDICATE}, Var{"?x"}},
+               {Var{"?c"}, std::string{CONTAINS_WORD_PREDICATE},
+                lit("\"coca* abuse\"")}})));
 
   // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(
@@ -1011,7 +1018,7 @@ TEST(SparqlParser, RDFLiteral) {
                    "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"s);
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
-  // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
+  // RdfStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
   expectRDFLiteral(
       "\"1950-01-01T00:00:00\"^^xsd:dateTime",
@@ -1021,8 +1028,8 @@ TEST(SparqlParser, RDFLiteral) {
 
 TEST(SparqlParser, SelectQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectSelectQuery =
+      ExpectCompleteParse<&Parser::selectQuery>{defaultPrefixMap};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
@@ -1178,8 +1185,8 @@ TEST(SparqlParser, SelectQuery) {
 
 TEST(SparqlParser, ConstructQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectConstructQuery =
+      ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
   expectConstructQuery(
       "CONSTRUCT { } WHERE { ?a ?b ?c }",
@@ -1229,8 +1236,7 @@ TEST(SparqlParser, ConstructQuery) {
 }
 
 TEST(SparqlParser, Query) {
-  auto expectQuery = ExpectCompleteParse<&Parser::query>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
   // Test that `_originalString` is correctly set.
   expectQuery(
@@ -1431,6 +1437,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
+  expectBuiltInCall("ISUri(?x)", matchUnary(&makeIsIriExpression));
   expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
   expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
@@ -1829,14 +1836,13 @@ TEST(SparqlParser, updateQueryUnsupported) {
 }
 
 TEST(SparqlParser, UpdateQuery) {
-  auto expectUpdate = ExpectCompleteParse<&Parser::update>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   auto Literal = [](std::string s) {
-    return TripleComponent::Literal::fromStringRepresentation(s);
+    return TripleComponent::Literal::fromStringRepresentation(std::move(s));
   };
 
   expectUpdate("INSERT DATA { <a> <b> <c> }",
@@ -1902,8 +1908,8 @@ TEST(SparqlParser, EmptyQuery) {
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
-  auto expectGraphOrDefault = ExpectCompleteParse<&Parser::graphOrDefault>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphOrDefault =
+      ExpectCompleteParse<&Parser::graphOrDefault>{defaultPrefixMap};
   expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
   expectGraphOrDefault(
       "GRAPH <foo>",
@@ -1912,10 +1918,18 @@ TEST(SparqlParser, GraphOrDefault) {
 }
 
 TEST(SparqlParser, GraphRef) {
-  auto expectGraphRefAll = ExpectCompleteParse<&Parser::graphRefAll>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphRefAll =
+      ExpectCompleteParse<&Parser::graphRefAll>{defaultPrefixMap};
   expectGraphRefAll("DEFAULT", m::Variant<DEFAULT>());
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
+}
+
+TEST(SparqlParser, SourceSelector) {
+  // This will be implemented soon, but for now we test the failure for the
+  // coverage tool.
+  auto expectSelectorFails = ExpectParseFails<&Parser::sourceSelector>{};
+  auto unreachableMatcher = ::testing::HasSubstr("should be unreachable");
+  expectSelectorFails("<x>", unreachableMatcher);
 }

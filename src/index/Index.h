@@ -81,7 +81,7 @@ class Index {
   // setup by `createFromOnDiskIndex` after this call.
   enum class Filetype { Turtle, NQuad };
   void createFromFile(const std::string& filename,
-                      Filetype filetype = Filetype::NQuad);
+                      Filetype filetype = Filetype::Turtle);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via

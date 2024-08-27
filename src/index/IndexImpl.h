@@ -29,8 +29,8 @@
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ContextFileParser.h"
+#include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "parser/TurtleParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -170,6 +170,8 @@ class IndexImpl {
   Permutation ops_{Permutation::Enum::OPS, allocator_};
   Permutation osp_{Permutation::Enum::OSP, allocator_};
 
+  std::optional<Id> hasPatternIdDuringIndexBuilding_;
+  std::optional<Id> internalGraphIdDuringIndexBuilding_;
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
@@ -444,11 +446,11 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<TurtleParserBase> parser);
+      std::shared_ptr<RdfParserBase> parser);
 
   // ___________________________________________________________________
   IndexBuilderDataAsStxxlVector passFileForVocabulary(
-      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
+      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -473,8 +475,8 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<TurtleParserBase> makeTurtleParser(
-      const std::string& filename, Index::Filetype type);
+  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
+                                               Index::Filetype type) const;
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
@@ -685,7 +687,7 @@ class IndexImpl {
         getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
     auto taggedPredicatesRanges =
         getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
-    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    std::string internal{INTERNAL_ENTITIES_URI_PREFIX};
     internal[0] = ad_utility::triple_component::iriPrefixChar;
     auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 

@@ -9,14 +9,16 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "global/Constants.h"
 #include "index/Index.h"
+#include "parser/SparqlParserHelpers.h"
 #include "parser/data/ConstructQueryExportContext.h"
 
 // ___________________________________________________________________________
-Variable::Variable(std::string name) : _name{std::move(name)} {
-  // verify variable name starts with ? or $ and continues without any
-  // special characters. This is weaker than the SPARQL grammar,
-  // but it is close enough so that it will likely never cause issues.
-  AD_CONTRACT_CHECK(ctre::match<"[$?][\\w]+">(_name));
+Variable::Variable(std::string name, bool checkName) : _name{std::move(name)} {
+  if (checkName) {
+    AD_CONTRACT_CHECK(isValidVariableName(_name), [this]() {
+      return absl::StrCat("\"", _name, "\" is not a valid SPARQL variable");
+    });
+  }
   // normalize notation for consistency
   _name[0] = '?';
 }
@@ -81,4 +83,16 @@ Variable Variable::getScoreVariable(
 Variable Variable::getMatchingWordVariable(std::string_view term) const {
   return Variable{
       absl::StrCat(MATCHINGWORD_VARIABLE_PREFIX, name().substr(1), "_", term)};
+}
+
+// _____________________________________________________________________________
+bool Variable::isValidVariableName(std::string_view var) {
+  sparqlParserHelpers::ParserAndVisitor parserAndVisitor{std::string{var}};
+  try {
+    auto [result, remaining] =
+        parserAndVisitor.parseTypesafe(&SparqlAutomaticParser::var);
+    return remaining.empty();
+  } catch (...) {
+    return false;
+  }
 }

@@ -47,15 +47,16 @@ struct VocabularyMetaData {
     // For this to work, all the words that start with the `prefix_` have to
     // be passed in consecutively and their indices have to be consecutive
     // and ascending.
-    void addIfWordMatches(std::string_view word, size_t wordIndex) {
+    bool addIfWordMatches(std::string_view word, size_t wordIndex) {
       if (!word.starts_with(prefix_)) {
-        return;
+        return false;
       }
       if (!beginWasSeen_) {
         begin_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
         beginWasSeen_ = true;
       }
       end_ = Id::makeFromVocabIndex(VocabIndex::make(wordIndex + 1));
+      return true;
     }
 
     Id begin() const { return begin_; }
@@ -75,9 +76,27 @@ struct VocabularyMetaData {
   // The number of distinct blank nodes that were found and immediately
   // converted to an ID without becoming part of the vocabulary.
   size_t numBlankNodesTotal_ = 0;
+ private:
   IdRangeForPrefix langTaggedPredicates_{
       std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
+  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
+
+  ad_utility::HashMap<std::string, Id> specialIdMapping_;
+  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ = &qlever::specialIds();
+ public:
+  void addInternalEntityIfMatches(std::string_view word, size_t wordIndex) {
+    if (langTaggedPredicates_.addIfWordMatches(word, wordIndex)) {
+      return;
+    }
+    if (internalEntities_.addIfWordMatches(word, wordIndex)) {
+      if (auto it = globalSpecialIds_->find(word); it != globalSpecialIds_->end()) {
+        specialIdMapping_[std::string{word}] = Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
+      }
+    }
+  }
+  const auto& specialIdMapping() const {return specialIdMapping_;}
+  const auto& langTaggedPredicates() const {return langTaggedPredicates_;}
+  const auto& internalEntities() const {return internalEntities_;}
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the

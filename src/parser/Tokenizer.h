@@ -56,6 +56,7 @@ struct TurtleToken {
         StringLiteralLongQuote(grp(StringLiteralLongQuoteString)),
 
         Iriref(grp(IrirefString)),
+        IrirefRelaxed(grp(IrirefStringRelaxed)),
         PnameNS(grp(PnameNSString)),
         PnameLN(grp(PnameLNString)),
         PnLocal(grp(PnLocalString)),
@@ -126,6 +127,9 @@ struct TurtleToken {
   const string IrirefString =
       "<([^\\x00-\\x20<>\"{}|^`\\\\]|"s + UcharString + ")*>";
   const RE2 Iriref;
+  const string IrirefStringRelaxed =
+      "<([^\\x00-\\x19<>\"\\\\]|"s + UcharString + ")*>";
+  const RE2 IrirefRelaxed;
 
   const string PercentString = "%" + cls(HexString) + "{2}";
   // const RE2 Percent;

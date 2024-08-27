@@ -14,8 +14,10 @@
 #include <unordered_map>
 
 #include "CompilationInfo.h"
+#include "Index.h"
 #include "absl/strings/str_join.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -48,7 +50,7 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    std::shared_ptr<TurtleParserBase> parser) {
+    std::shared_ptr<RdfParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
 
@@ -58,51 +60,31 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
 
   return {indexBuilderData, std::move(firstSorter)};
 }
+
 // _____________________________________________________________________________
-std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
-    const std::string& filename, Index::Filetype type) {
-  using Res = std::unique_ptr<TurtleParserBase>;
-
-  auto tokenize = [this](auto f) -> Res {
-    if (onlyAsciiTurtlePrefixes_) {
-      return f.template operator()<TokenizerCtre>();
-    } else {
-      return f.template operator()<Tokenizer>();
-    }
-  };
-  auto typeDispatch = [type](auto f) {
-    return [type, f]<typename TokenizerT>() -> Res {
-      if (type == Index::Filetype::Turtle) {
-        LOG(INFO) << "Use the Turtle parser" << std::endl;
-        return f.template operator()<TurtleParser, TokenizerT>();
-      } else {
-        LOG(INFO) << "Use the N-Quads parser" << std::endl;
-        return f.template operator()<NQuadParser, TokenizerT>();
-      }
-    };
+std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+    const std::string& filename, Index::Filetype type) const {
+  auto makeRdfParserImpl =
+      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
+      -> std::unique_ptr<RdfParserBase> {
+    using TokenizerT =
+        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
+    using InnerParser =
+        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                           NQuadParser<TokenizerT>>;
+    using Parser =
+        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                           RdfStreamParser<InnerParser>>;
+    return std::make_unique<Parser>(filename);
   };
 
-  auto chooseParallel = [this](auto f) {
-    return [this,
-            f]<template <typename> typename ParserImpl, typename TokenizerT>()
-               -> Res {
-      if (useParallelParser_) {
-        return f.template
-        operator()<TurtleParallelParser, ParserImpl, TokenizerT>();
-      } else {
-        return f
-            .template operator()<TurtleStreamParser, ParserImpl, TokenizerT>();
-      }
-    };
-  };
-
-  auto make = [&filename]<template <typename> typename ParserTemplate,
-                          template <typename> typename ParserImpl,
-                          typename TokenizerT>() -> Res {
-    return std::make_unique<ParserTemplate<ParserImpl<TokenizerT>>>(filename);
-  };
-
-  return tokenize(typeDispatch(chooseParallel(make)));
+  // `callFixedSize` litfts runtime integers to compile time integers. We use it
+  // here to create the correct combinations of template arguments.
+  return ad_utility::callFixedSize(
+      std::array{useParallelParser_ ? 1 : 0,
+                 type == Index::Filetype::Turtle ? 1 : 0,
+                 onlyAsciiTurtlePrefixes_ ? 1 : 0},
+      makeRdfParserImpl);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -159,8 +141,7 @@ template <size_t numColumns>
 constexpr auto makePermutationFirstThirdSwitched = []() {
   static_assert(numColumns >= 3);
   std::array<ColumnIndex, numColumns> permutation{};
-  std::ranges::generate(permutation,
-                        [x = ColumnIndex{0}]() mutable { return x++; });
+  std::iota(permutation.begin(), permutation.end(), ColumnIndex{0});
   std::swap(permutation[0], permutation[2]);
   return permutation;
 };
@@ -277,7 +258,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
+  Id internalGraph = internalGraphIdDuringIndexBuilding_.value();
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -299,7 +280,7 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeTurtleParser(filename, type));
+      createIdTriplesAndVocab(makeRdfParser(filename, type));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -367,7 +348,7 @@ void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
 
 // _____________________________________________________________________________
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
-    std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
+    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
@@ -499,6 +480,8 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
+  hasPatternIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+  internalGraphIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;
@@ -554,6 +537,9 @@ IndexImpl::convertPartialToGlobalIds(
       // probably the mapping should also be defined as `HashMap<VocabIndex,
       // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
+        // Check that all the internal, special IDs which we have introduced
+        // for performance reasons are eliminated.
+        AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
       auto iterator = idMap.find(id);
@@ -1007,6 +993,8 @@ LangtagAndTriple IndexImpl::tripleToInternalRepresentation(
   // The following lambda deals with triple elements that might be strings
   // (literals or IRIs) as well as values that can be decoded into the IRI
   // directly. These currently are the object and the graph ID of the triple.
+  // The `index` is the index of the element within the triple. For example if
+  // the `getter` is `subject_` then the index has to be `0`.
   auto handleStringOrId = [&triple, &resultTriple](auto getter, size_t index) {
     // If the object of the triple can be directly folded into an ID, do so.
     // Note that the actual folding is done by the `TripleComponent`.
@@ -1074,8 +1062,8 @@ void IndexImpl::readIndexBuilderSettingsFromFile() {
    */
 
   {
-    std::string lang = LOCALE_DEFAULT_LANG;
-    std::string country = LOCALE_DEFAULT_COUNTRY;
+    std::string lang{LOCALE_DEFAULT_LANG};
+    std::string country{LOCALE_DEFAULT_COUNTRY};
     bool ignorePunctuation = LOCALE_DEFAULT_IGNORE_PUNCTUATION;
     if (j.count("locale")) {
       lang = std::string{j["locale"]["language"]};
@@ -1504,7 +1492,7 @@ void IndexImpl::createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
   auto countTriplesNormal = [&numTriplesNormal, &numTriplesTotal,
                              &isInternalTriple](const auto& triple) mutable {
     ++numTriplesTotal;
-    numTriplesNormal += !static_cast<size_t>(isInternalTriple(triple));
+    numTriplesNormal += static_cast<size_t>(!isInternalTriple(triple));
   };
   size_t numPredicatesNormal = 0;
   auto predicateCounter =
@@ -1538,7 +1526,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns",
+        onDiskBase_ + ".index.patterns", hasPatternIdDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalTriple](const auto& triple) {
