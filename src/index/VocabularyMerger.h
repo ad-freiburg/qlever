@@ -19,7 +19,8 @@
 using IdPairMMapVec = ad_utility::MmapVector<std::pair<Id, Id>>;
 using IdPairMMapVecView = ad_utility::MmapVectorView<std::pair<Id, Id>>;
 
-using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+using TripleVec =
+    ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
 
 namespace ad_utility::vocabulary_merger {
 // Concept for a callback that can be called with a `string_view` and a `bool`.
@@ -76,7 +77,7 @@ struct VocabularyMetaData {
   size_t numBlankNodesTotal_ = 0;
   IdRangeForPrefix langTaggedPredicates_{
       std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{INTERNAL_ENTITIES_URI_PREFIX};
+  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the

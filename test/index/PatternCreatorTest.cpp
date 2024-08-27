@@ -19,7 +19,8 @@ ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;
 
-static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+static const Id hasPatternId =
+    qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
@@ -57,16 +58,24 @@ TEST(PatternStatistics, Serialization) {
 
 // Create patterns from a small SPO-sorted sequence of triples.
 auto createExamplePatterns(PatternCreator& creator) {
-  using A = std::array<Id, 4>;
+  using A = std::array<Id, NumColumnsIndexBuilding + 1>;
   std::vector<A> expected;
 
   // push the `triple` with the `isIgnored` information to the pattern creator,
   // and expect that the triple gets the `patternIdx` assigned by pushing the
   // corresponding info to `expected`.
-  auto push = [&creator, &expected](std::array<Id, 3> triple,
-                                    bool isIgnoredTriple, size_t patternIdx) {
-    creator.processTriple(triple, isIgnoredTriple);
-    expected.push_back(A{triple[0], triple[1], triple[2], I(patternIdx)});
+  auto graphPayload = Id::makeFromInt(2365);
+  auto push = [&creator, &expected, graphPayload](std::array<Id, 3> triple,
+                                                  bool isIgnoredTriple,
+                                                  size_t patternIdx) {
+    const auto& [s, p, o] = triple;
+    auto withGraph = std::array{s, p, o, graphPayload};
+    static_assert(NumColumnsIndexBuilding == 4,
+                  "The following lines have to be changed once additional "
+                  "payload columns are added");
+    creator.processTriple(withGraph, isIgnoredTriple);
+    expected.push_back(
+        A{triple[0], triple[1], triple[2], graphPayload, I(patternIdx)});
   };
 
   // The first subject gets the first pattern. We have an ignored triple at the
@@ -100,10 +109,11 @@ auto createExamplePatterns(PatternCreator& creator) {
   std::ranges::sort(expected, SortByOSP{});
   auto tripleOutputs = std::move(creator).getTripleSorter();
   auto& triples = *tripleOutputs.triplesWithSubjectPatternsSortedByOsp_;
-  std::vector<std::array<Id, 4>> actual;
-  for (auto& block : triples.getSortedBlocks<4>()) {
+  static constexpr size_t numCols = NumColumnsIndexBuilding + 1;
+  std::vector<std::array<Id, numCols>> actual;
+  for (auto& block : triples.getSortedBlocks<numCols>()) {
     for (const auto& row : block) {
-      actual.push_back(static_cast<std::array<Id, 4>>(row));
+      actual.push_back(static_cast<std::array<Id, numCols>>(row));
     }
   }
   EXPECT_THAT(actual, ::testing::ElementsAreArray(expected));
@@ -145,7 +155,7 @@ void assertPatternContents(const std::string& filename,
   // it has no triples. Subjects 0 and 3 have the first pattern, subject 1 has
   // the second pattern.
   auto pat = hasPatternId;
-  // auto pred = qlever::specialIds.at(HAS_PREDICATE_PREDICATE);
+  // auto pred = qlever::specialIds().at(HAS_PREDICATE_PREDICATE);
   TripleVec expectedTriples;
   expectedTriples.push_back(std::array{V(0), pat, I(0)});
   expectedTriples.push_back(std::array{V(1), pat, I(1)});

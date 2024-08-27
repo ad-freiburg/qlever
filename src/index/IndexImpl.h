@@ -29,8 +29,8 @@
 #include "index/Vocabulary.h"
 #include "index/VocabularyMerger.h"
 #include "parser/ContextFileParser.h"
+#include "parser/RdfParser.h"
 #include "parser/TripleComponent.h"
-#include "parser/TurtleParser.h"
 #include "util/BufferedVector.h"
 #include "util/CancellationHandle.h"
 #include "util/File.h"
@@ -51,7 +51,6 @@ using std::vector;
 
 using json = nlohmann::json;
 
-static constexpr size_t NumColumnsIndexBuilding = 3;
 template <typename Comparator, size_t I = NumColumnsIndexBuilding>
 using ExternalSorter =
     ad_utility::CompressedExternalIdTableSorter<Comparator, I>;
@@ -71,7 +70,7 @@ struct IndexBuilderDataBase {
 // All the data from IndexBuilderDataBase and a stxxl::vector of (unsorted) ID
 // triples.
 struct IndexBuilderDataAsStxxlVector : IndexBuilderDataBase {
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec = ad_utility::CompressedExternalIdTable<4>;
   // All the triples as Ids.
   std::unique_ptr<TripleVec> idTriples;
   // The number of triples for each partial vocabulary. This also depends on the
@@ -93,7 +92,8 @@ struct IndexBuilderDataAsFirstPermutationSorter : IndexBuilderDataBase {
 
 class IndexImpl {
  public:
-  using TripleVec = ad_utility::CompressedExternalIdTable<3>;
+  using TripleVec =
+      ad_utility::CompressedExternalIdTable<NumColumnsIndexBuilding>;
   // Block Id, Context Id, Word Id, Score, entity
   using TextVec = stxxl::vector<
       tuple<TextBlockIndex, TextRecordIndex, WordOrEntityIndex, Score, bool>>;
@@ -219,7 +219,7 @@ class IndexImpl {
   // Will write vocabulary and on-disk index data.
   // !! The index can not directly be used after this call, but has to be setup
   // by createFromOnDiskIndex after this call.
-  void createFromFile(const string& filename);
+  void createFromFile(const string& filename, Index::Filetype type);
 
   // Creates an index object from an on disk index that has previously been
   // constructed. Read necessary meta data into memory and opens file handles.
@@ -444,11 +444,11 @@ class IndexImpl {
   // needed for index creation once the TripleVec is set up and it would be a
   // waste of RAM.
   IndexBuilderDataAsFirstPermutationSorter createIdTriplesAndVocab(
-      std::shared_ptr<TurtleParserBase> parser);
+      std::shared_ptr<RdfParserBase> parser);
 
   // ___________________________________________________________________
   IndexBuilderDataAsStxxlVector passFileForVocabulary(
-      std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial);
+      std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial);
 
   /**
    * @brief Everything that has to be done when we have seen all the triples
@@ -473,8 +473,8 @@ class IndexImpl {
   // configured to either parse in parallel or not, and to either use the
   // CTRE-based relaxed parser or not, depending on the settings of the
   // corresponding member variables.
-  std::unique_ptr<TurtleParserBase> makeTurtleParser(
-      const std::string& filename);
+  std::unique_ptr<RdfParserBase> makeRdfParser(const std::string& filename,
+                                               Index::Filetype type) const;
 
   std::unique_ptr<ad_utility::CompressedExternalIdTableSorterTypeErased>
   convertPartialToGlobalIds(TripleVec& data,
@@ -685,7 +685,7 @@ class IndexImpl {
         getVocab().prefixRanges(ad_utility::triple_component::literalPrefix);
     auto taggedPredicatesRanges =
         getVocab().prefixRanges(ad_utility::languageTaggedPredicatePrefix);
-    auto internal = INTERNAL_ENTITIES_URI_PREFIX;
+    std::string internal{INTERNAL_ENTITIES_URI_PREFIX};
     internal[0] = ad_utility::triple_component::iriPrefixChar;
     auto internalEntitiesRanges = getVocab().prefixRanges(internal);
 
@@ -741,7 +741,8 @@ class IndexImpl {
 
   // Functions to create the pairs of permutations during the index build. Each
   // of them takes the following arguments:
-  // * `isQleverInternalId` a callable that takes an `Id` and returns true iff
+  // * `isQleverInternalTriple` a callable that takes an `Id` and returns true
+  // iff
   //    the corresponding IRI was internally added by QLever and not part of the
   //    knowledge graph.
   // * `sortedInput`  The input, must be sorted by the first permutation in the
@@ -756,13 +757,13 @@ class IndexImpl {
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
   std::optional<PatternCreator::TripleSorter> createSPOAndSOP(
-      size_t numColumns, auto& isInternalId, BlocksOfTriples sortedTriples,
+      size_t numColumns, auto& isInternalTriple, BlocksOfTriples sortedTriples,
       NextSorter&&... nextSorter);
   // Create the OSP and OPS permutations. Additionally, count the number of
   // distinct objects and write it to the metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createOSPAndOPS(size_t numColumns, auto& isInternalId,
+  void createOSPAndOPS(size_t numColumns, auto& isInternalTriple,
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
@@ -771,7 +772,7 @@ class IndexImpl {
   // metadata.
   template <typename... NextSorter>
   requires(sizeof...(NextSorter) <= 1)
-  void createPSOAndPOS(size_t numColumns, auto& isInternalId,
+  void createPSOAndPOS(size_t numColumns, auto& isInternalTriple,
                        BlocksOfTriples sortedTriples,
                        NextSorter&&... nextSorter);
 
@@ -826,7 +827,7 @@ class IndexImpl {
   // subject pattern of the object (which is created by this function). Return
   // these five columns sorted by PSO, to be used as an input for building the
   // PSO and POS permutations.
-  std::unique_ptr<ExternalSorter<SortByPSO, 5>> buildOspWithPatterns(
-      PatternCreator::TripleSorter sortersFromPatternCreator,
-      auto isQLeverInternalId);
+  std::unique_ptr<ExternalSorter<SortByPSO, NumColumnsIndexBuilding + 2>>
+  buildOspWithPatterns(PatternCreator::TripleSorter sortersFromPatternCreator,
+                       auto isQleverInternalTriple);
 };

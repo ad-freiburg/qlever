@@ -45,7 +45,7 @@ class TripleComponent {
 
  private:
   // The underlying variant type.
-  using Variant = std::variant<std::string, double, int64_t, bool, UNDEF,
+  using Variant = std::variant<Id, std::string, double, int64_t, bool, UNDEF,
                                Variable, Literal, Iri, DateYearOrDuration>;
   Variant _variant;
 
@@ -196,8 +196,8 @@ class TripleComponent {
                                        : getIri().toStringRepresentation();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
-      } else if (qlever::specialIds.contains(content)) {
-        return qlever::specialIds.at(content);
+      } else if (qlever::specialIds().contains(content)) {
+        return qlever::specialIds().at(content);
       } else {
         return std::nullopt;
       }

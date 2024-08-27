@@ -9,10 +9,13 @@
 #include "engine/QueryPlanner.h"
 #include "parser/SparqlParser.h"
 #include "util/GTestHelpers.h"
+#include "util/IdTableHelpers.h"
 #include "util/IdTestHelpers.h"
 #include "util/IndexTestHelpers.h"
 
 using namespace std::string_literals;
+using ::testing::ElementsAre;
+using ::testing::Eq;
 using ::testing::HasSubstr;
 
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
@@ -208,6 +211,28 @@ static std::string makeXMLHeader(
 
 // The end of a SPARQL XML export.
 static const std::string xmlTrailer = "\n</results>\n</sparql>";
+
+// Helper function for easier testing of the `IdTable` generator.
+std::vector<IdTable> convertToVector(
+    cppcoro::generator<const IdTable&> generator) {
+  std::vector<IdTable> result;
+  for (const IdTable& idTable : generator) {
+    result.push_back(idTable.clone());
+  }
+  return result;
+}
+
+// Template is only required because inner class is not visible
+template <typename T>
+std::vector<IdTable> convertToVector(cppcoro::generator<T> generator) {
+  std::vector<IdTable> result;
+  for (const auto& [idTable, range] : generator) {
+    result.emplace_back(idTable.numColumns(), idTable.getAllocator());
+    result.back().insertAtEnd(idTable.begin() + *range.begin(),
+                              idTable.begin() + *(range.end() - 1) + 1);
+  }
+  return result;
+}
 
 // ____________________________________________________________________________
 TEST(ExportQueryExecutionTrees, Integers) {
@@ -1069,3 +1094,175 @@ INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
 
 // TODO<joka921> Unit tests that also test for the export of text records from
 // the text index and thus systematically fill the coverage gaps.
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
+  auto idTable = makeIdTableFromVector({{42}, {1337}});
+
+  Result result{idTable.clone(), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
+  IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+  IdTable idTable2 = makeIdTableFromVector({{42}, {1337}});
+  auto tableGenerator = [](IdTable idTableA,
+                           IdTable idTableB) -> cppcoro::generator<IdTable> {
+    co_yield idTableA;
+
+    co_yield idTableB;
+  }(idTable1.clone(), idTable2.clone());
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getIdTables(result);
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(idTable1)), Eq(std::cref(idTable2))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 1, ._offset = 1}, result);
+
+  auto referenceTable = makeIdTableFromVector({{2}});
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = std::nullopt, ._offset = 3}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenLastIsSkipped) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndSecondArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 3, ._offset = 1}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{2}, {3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees,
+     ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial) {
+  auto tableGenerator = []() -> cppcoro::generator<IdTable> {
+    IdTable idTable1 = makeIdTableFromVector({{1}, {2}, {3}});
+    co_yield idTable1;
+
+    IdTable idTable2 = makeIdTableFromVector({{4}, {5}});
+    co_yield idTable2;
+
+    IdTable idTable3 = makeIdTableFromVector({{6}, {7}, {8}, {9}});
+    co_yield idTable3;
+  }();
+
+  Result result{std::move(tableGenerator), {}, LocalVocab{}};
+  auto generator = ExportQueryExecutionTrees::getRowIndices(
+      LimitOffsetClause{._limit = 5, ._offset = 2}, result);
+
+  auto referenceTable1 = makeIdTableFromVector({{3}});
+  auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
+  auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
+
+  EXPECT_THAT(convertToVector(std::move(generator)),
+              ElementsAre(Eq(std::cref(referenceTable1)),
+                          Eq(std::cref(referenceTable2)),
+                          Eq(std::cref(referenceTable3))));
+}
+
+// _____________________________________________________________________________
+TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
+  {
+    auto throwingGenerator = []() -> cppcoro::generator<IdTable> {
+      ADD_FAILURE() << "Generator was started" << std::endl;
+      throw std::runtime_error("Generator was started");
+      co_return;
+    }();
+
+    Result result{std::move(throwingGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 0, ._offset = 0}, result);
+    EXPECT_NO_THROW(convertToVector(std::move(generator)));
+  }
+
+  {
+    auto throwAfterYieldGenerator = []() -> cppcoro::generator<IdTable> {
+      IdTable idTable1 = makeIdTableFromVector({{1}});
+      co_yield idTable1;
+
+      ADD_FAILURE() << "Generator was resumed" << std::endl;
+      throw std::runtime_error("Generator was resumed");
+    }();
+
+    Result result{std::move(throwAfterYieldGenerator), {}, LocalVocab{}};
+    auto generator = ExportQueryExecutionTrees::getRowIndices(
+        LimitOffsetClause{._limit = 1, ._offset = 0}, result);
+    IdTable referenceTable1 = makeIdTableFromVector({{1}});
+    std::vector<IdTable> tables;
+    EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
+    EXPECT_THAT(tables, ElementsAre(Eq(std::cref(referenceTable1))));
+  }
+}

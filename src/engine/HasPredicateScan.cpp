@@ -34,7 +34,8 @@ static constexpr auto makeJoin =
       subtree->getVariableAndInfoByColumnIndex(subtreeColIndex).first;
   auto hasPatternScan = ad_utility::makeExecutionTree<IndexScan>(
       qec, Permutation::Enum::PSO,
-      SparqlTriple{subtreeVar, HAS_PATTERN_PREDICATE, objectVariable});
+      SparqlTriple{subtreeVar, std::string{HAS_PATTERN_PREDICATE},
+                   objectVariable});
   auto joinedSubtree = ad_utility::makeExecutionTree<Join>(
       qec, std::move(subtree), std::move(hasPatternScan), subtreeColIndex, 0);
   auto column =
@@ -115,7 +116,7 @@ string HasPredicateScan::getDescriptor() const {
     case ScanType::FULL_SCAN:
       return "HasPredicateScan full scan";
     case ScanType::SUBQUERY_S:
-      return "HasPredicateScan with a subquery on " + subject_.toRdfLiteral();
+      return "HasPredicateScan with subquery";
     default:
       return "HasPredicateScan";
   }
@@ -260,13 +261,14 @@ ProtoResult HasPredicateScan::computeResult(
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  auto hasPattern = getExecutionContext()
-                        ->getIndex()
-                        .getImpl()
-                        .getPermutation(Permutation::Enum::PSO)
-                        .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                                   std::nullopt, std::nullopt},
-                                  std::nullopt, {}, cancellationHandle_);
+  auto hasPattern =
+      getExecutionContext()
+          ->getIndex()
+          .getImpl()
+          .getPermutation(Permutation::Enum::PSO)
+          .lazyScan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
+                     std::nullopt, std::nullopt},
+                    std::nullopt, {}, cancellationHandle_);
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -334,7 +336,7 @@ void HasPredicateScan::computeFreeO(
                         ->getIndex()
                         .getImpl()
                         .getPermutation(Permutation::Enum::PSO)
-                        .scan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                        .scan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
                                subjectAsId, std::nullopt},
                               {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);

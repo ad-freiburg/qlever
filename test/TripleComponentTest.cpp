@@ -160,7 +160,7 @@ TEST(TripleComponent, toValueId) {
 
   tc = iri(HAS_PATTERN_PREDICATE);
   ASSERT_EQ(tc.toValueId(vocab).value(),
-            qlever::specialIds.at(HAS_PATTERN_PREDICATE));
+            qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE}));
 }
 
 TEST(TripleComponent, settingVariablesAsStringsIsIllegal) {

@@ -8,8 +8,8 @@
 
 #include "./util/GTestHelpers.h"
 #include "global/Constants.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "util/DateYearDuration.h"
 #include "util/Random.h"
 
@@ -298,7 +298,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -412,7 +412,7 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
