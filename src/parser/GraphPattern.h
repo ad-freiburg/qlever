@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "parser/data/SparqlFilter.h"
+#include "parser/TripleComponent.h"
 
 namespace parsedQuery {
 
