@@ -261,13 +261,14 @@ ProtoResult HasPredicateScan::computeResult(
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
-  auto hasPattern = getExecutionContext()
-                        ->getIndex()
-                        .getImpl()
-                        .getPermutation(Permutation::Enum::PSO)
-                        .lazyScan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
-                                   std::nullopt, std::nullopt},
-                                  std::nullopt, {}, cancellationHandle_);
+  auto hasPattern =
+      getExecutionContext()
+          ->getIndex()
+          .getImpl()
+          .getPermutation(Permutation::Enum::PSO)
+          .lazyScan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
+                     std::nullopt, std::nullopt},
+                    std::nullopt, {}, cancellationHandle_);
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -335,7 +336,7 @@ void HasPredicateScan::computeFreeO(
                         ->getIndex()
                         .getImpl()
                         .getPermutation(Permutation::Enum::PSO)
-                        .scan({qlever::specialIds.at(HAS_PATTERN_PREDICATE),
+                        .scan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
                                subjectAsId, std::nullopt},
                               {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);

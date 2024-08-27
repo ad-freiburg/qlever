@@ -248,7 +248,7 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto internalGraphId = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
+    auto internalGraphId = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
     return [&map = *itemArray[idx], indexPtr,
             internalGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
