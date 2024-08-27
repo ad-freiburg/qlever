@@ -79,7 +79,9 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  void createFromFile(const std::string& filename);
+  enum class Filetype { Turtle, NQuad };
+  void createFromFile(const std::string& filename,
+                      Filetype filetype = Filetype::Turtle);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via

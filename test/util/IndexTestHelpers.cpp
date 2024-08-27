@@ -57,7 +57,8 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+  auto hasPatternId =
+      qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
   auto checkSingleElement = [&cancellationDummy, &hasPatternId](
                                 const Index& index, size_t patternIdx, Id id) {
     auto scanResultHasPattern =
