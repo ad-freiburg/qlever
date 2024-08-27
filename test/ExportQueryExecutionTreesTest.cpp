@@ -35,7 +35,7 @@ std::string runQueryStreamableResult(const std::string& kg,
   auto pq = SparqlParser::parseQuery(query);
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto strGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+  auto strGenerator = ExportQueryExecutionTrees::computeResult(
       pq, qet, mediaType, timer, std::move(cancellationHandle));
 
   std::string result;
@@ -62,7 +62,7 @@ nlohmann::json runJSONQuery(const std::string& kg, const std::string& query,
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer{ad_utility::Timer::Started};
   std::string resStr;
-  for (auto c : ExportQueryExecutionTrees::computeResultAsStream(
+  for (auto c : ExportQueryExecutionTrees::computeResult(
            pq, qet, mediaType, timer, std::move(cancellationHandle))) {
     resStr += c;
   }
@@ -1100,7 +1100,7 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto generator = ExportQueryExecutionTrees::computeResultAsStream(
+  auto generator = ExportQueryExecutionTrees::computeResult(
       pq, qet, GetParam(), timer, std::move(cancellationHandle));
 
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(generator.begin(),
@@ -1109,7 +1109,8 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
 }
 INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
                          ::testing::Values(turtle, sparqlXml, tsv, csv,
-                                           octetStream));
+                                           octetStream, sparqlJson,
+                                           qleverJson));
 
 // TODO<joka921> Unit tests for the more complex CONSTRUCT export (combination
 // between constants and stuff from the knowledge graph).

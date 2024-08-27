@@ -541,7 +541,7 @@ Awaitable<void> Server::sendStreamableResponse(
     MediaType mediaType, const PlannedQuery& plannedQuery,
     const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
     SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
+  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
       plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
       std::move(cancellationHandle));
 
@@ -714,12 +714,6 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // This actually processes the query and sends the result in the requested
     // format.
-    static constexpr std::array supportedTypes{
-        MediaType::csv,       MediaType::tsv,    MediaType::octetStream,
-        MediaType::sparqlXml, MediaType::turtle, MediaType::sparqlJson,
-        MediaType::qleverJson};
-    AD_CORRECTNESS_CHECK(
-        ad_utility::contains(supportedTypes, mediaType.value()));
     co_await sendStreamableResponse(request, send, mediaType.value(),
                                     plannedQuery.value(), qet, requestTimer,
                                     cancellationHandle);

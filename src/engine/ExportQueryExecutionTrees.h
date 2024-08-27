@@ -30,12 +30,13 @@ class ExportQueryExecutionTrees {
   // created by the `QueryPlanner`. The result is converted into a sequence of
   // bytes that represents the result of the computed query in the format
   // specified by the `mediaType`. Supported formats for this function are CSV,
-  // TSV, Turtle, Binary. Note that the Binary format can only be used with
-  // SELECT queries and the Turtle format can only be used with CONSTRUCT
-  // queries. Invalid `mediaType`s and invalid combinations of `mediaType` and
-  // the query type will throw. The result is returned as a `generator` that
-  // lazily computes the serialized result in large chunks of bytes.
-  static cppcoro::generator<std::string> computeResultAsStream(
+  // TSV, Turtle, Binary, SparqlJSON, QLeverJSON. Note that the Binary format
+  // can only be used with SELECT queries and the Turtle format can only be used
+  // with CONSTRUCT queries. Invalid `mediaType`s and invalid combinations of
+  // `mediaType` and the query type will throw. The result is returned as a
+  // `generator` that lazily computes the serialized result in large chunks of
+  // bytes.
+  static cppcoro::generator<std::string> computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
@@ -92,15 +93,15 @@ class ExportQueryExecutionTrees {
                                 const LocalVocab& localVocab);
 
  private:
-  // TODO<unexenu>
-  static ad_utility::streams::stream_generator computeResultAsQLeverJSONStream(
+  // Similar to `computeResult` but returns a stream in
+  // QLeverJSON-format.
+  static ad_utility::streams::stream_generator computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static cppcoro::generator<std::string>
-  selectQueryResultBindingsToQLeverJSONStream(
+  static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
@@ -120,7 +121,7 @@ class ExportQueryExecutionTrees {
    *        then the query result will be obtained via `qet->getResult()`.
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
-  static cppcoro::generator<std::string> idTableToQLeverJSONBindingsStream(
+  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
       const QueryExecutionTree::ColumnIndicesAndTypes columns,
       std::shared_ptr<const Result> result,
@@ -128,7 +129,7 @@ class ExportQueryExecutionTrees {
 
   // ___________________________________________________________________________
   static cppcoro::generator<std::string>
-  constructQueryResultBindingsToQLeverJSONStream(
+  constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
