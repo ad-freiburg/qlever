@@ -25,7 +25,7 @@ class LazyJsonParser {
       cppcoro::generator<std::string> partJson,
       std::vector<std::string> arrayPath);
 
-  // Inidicates whether the end of the object is reached.
+  // Indicates whether the end of the object has been reached.
   bool endReached_{false};
 
  private:
