@@ -19,8 +19,7 @@ ad_utility::MemorySize memForStxxl = 10_MB;
 
 using TripleVec = std::vector<std::array<Id, 3>>;
 
-static const Id hasPatternId =
-    qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
+static const Id hasPatternId = Id::makeFromVocabIndex(VocabIndex::make(120394835));
 
 // Convert a PSOSorter to a vector of triples for easier handling
 TripleVec getVectorFromSorter(PatternCreator::PSOSorter&& sorter) {
@@ -166,7 +165,7 @@ void assertPatternContents(const std::string& filename,
 
 TEST(PatternCreator, writeAndReadWithFinish) {
   std::string filename = "patternCreator.test.tmp";
-  PatternCreator creator{filename, memForStxxl};
+  PatternCreator creator{filename, hasPatternId, memForStxxl};
   auto hashPatternAsPSOPtr = createExamplePatterns(creator);
   creator.finish();
 

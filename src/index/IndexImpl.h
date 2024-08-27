@@ -171,6 +171,7 @@ class IndexImpl {
   Permutation osp_{Permutation::Enum::OSP, allocator_};
 
   std::optional<Id> hasPatternIdDuringIndexBuilding_;
+  std::optional<Id> internalGraphIdDuringIndexBuilding_;
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 

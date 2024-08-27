@@ -95,6 +95,8 @@ struct VocabularyMetaData {
     }
   }
   const auto& specialIdMapping() const {return specialIdMapping_;}
+  const auto& langTaggedPredicates() const {return langTaggedPredicates_;}
+  const auto& internalEntities() const {return internalEntities_;}
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the

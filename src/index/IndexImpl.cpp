@@ -258,7 +258,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
+  Id internalGraph = internalGraphIdDuringIndexBuilding_.value();
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -481,6 +481,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
   hasPatternIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+  internalGraphIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
             << std::endl;

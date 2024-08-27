@@ -168,11 +168,11 @@ TEST_F(MergeVocabularyTest, mergeVocabulary) {
               ::testing::ElementsAreArray(expectedMergedVocabulary_));
 
   // No language tags in text file
-  ASSERT_EQ(res.langTaggedPredicates_.begin(), Id::makeUndefined());
-  ASSERT_EQ(res.langTaggedPredicates_.end(), Id::makeUndefined());
+  ASSERT_EQ(res.langTaggedPredicates().begin(), Id::makeUndefined());
+  ASSERT_EQ(res.langTaggedPredicates().end(), Id::makeUndefined());
   // Also no internal entities there.
-  ASSERT_EQ(res.internalEntities_.begin(), Id::makeUndefined());
-  ASSERT_EQ(res.internalEntities_.end(), Id::makeUndefined());
+  ASSERT_EQ(res.internalEntities().begin(), Id::makeUndefined());
+  ASSERT_EQ(res.internalEntities().end(), Id::makeUndefined());
   // Check that vocabulary has the right form.
   IdPairMMapVecView mapping0(_basePath + PARTIAL_MMAP_IDS + std::to_string(0));
   ASSERT_TRUE(vocabTestCompare(mapping0, _expMapping0));

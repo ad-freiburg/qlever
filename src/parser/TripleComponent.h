@@ -196,8 +196,6 @@ class TripleComponent {
                                        : getIri().toStringRepresentation();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
-      } else if (qlever::specialIds().contains(content)) {
-        return qlever::specialIds().at(content);
       } else {
         return std::nullopt;
       }

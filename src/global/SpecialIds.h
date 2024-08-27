@@ -14,7 +14,7 @@ namespace qlever {
 // A mapping from special builtin IRIs that are not managed via the normal
 // vocabulary to the IDs that are used to represent them. These IDs all have the
 // `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
-inline const ad_utility::HashMap<std::string, Id>& specialIds() {
+inline const ad_utility::HashMap<std::string, Id>& specialIds()  {
   static const auto ids = []() {
     using S = std::string;
     ad_utility::HashMap<std::string, Id> result{
