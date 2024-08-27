@@ -537,6 +537,9 @@ IndexImpl::convertPartialToGlobalIds(
       // probably the mapping should also be defined as `HashMap<VocabIndex,
       // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
+        // Check that all the internal, special IDs which we have introduced
+        // for performance reasons are eliminated.
+        AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
       auto iterator = idMap.find(id);
