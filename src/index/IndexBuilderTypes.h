@@ -134,7 +134,14 @@ struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
-      : map_(alloc), minId_(minId), comparator_(cmp) {}
+      : map_(alloc), minId_(minId), comparator_(cmp) {
+    for (const auto& [specialIri, specialId]: qlever::specialIds()) {
+      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
+      auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
+      specialIdMapping_[specialId] = getId(std::move(key));
+    }
+
+  }
 
   /// Move the held HashMap out as soon as we are done inserting and only need
   /// the actual vocabulary.
@@ -144,7 +151,12 @@ struct alignas(256) ItemMapManager {
   /// next free ID to the string, store and return it.
   Id getId(const TripleComponentOrId& keyOrId) {
     if (std::holds_alternative<Id>(keyOrId)) {
-      return std::get<Id>(keyOrId);
+      auto id = std::get<Id>(keyOrId);
+      if (id.getDatatype() != Datatype::Undefined) {
+        return id;
+      } else {
+        return specialIdMapping_.at(id);
+      }
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     auto& map = map_.map_;
@@ -175,6 +187,7 @@ struct alignas(256) ItemMapManager {
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
   ItemMapAndBuffer map_;
+  ad_utility::HashMap<Id, Id> specialIdMapping_;
   uint64_t minId_ = 0;
   const TripleComponentComparator* comparator_ = nullptr;
 };
@@ -248,7 +261,8 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto internalGraphId = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
+    auto &map = *itemArray[idx];
+    auto internalGraphId = map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
     return [&map = *itemArray[idx], indexPtr,
             internalGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
