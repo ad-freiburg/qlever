@@ -768,7 +768,9 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     ++resultSize;
   }
 
-  auto timeResultComputation = std::chrono::duration_cast<std::chrono::milliseconds>(timeUntilFunctionCall + runtimeInformation.totalTime_);
+  auto timeResultComputation =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          timeUntilFunctionCall + runtimeInformation.totalTime_);
 
   nlohmann::json jsonSuffix;
   jsonSuffix["resultsize"] = resultSize;
