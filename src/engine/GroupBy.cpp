@@ -857,7 +857,10 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (expr->isDistinct()) return std::nullopt;
 
   // `expr` is not a nested aggregated
-  if (expr->children().front()->containsAggregate()) return std::nullopt;
+  if (!expr->children().empty() &&
+      expr->children().front()->containsAggregate()) {
+    return std::nullopt;
+  }
 
   using H = HashMapAggregateTypeWithData;
 
