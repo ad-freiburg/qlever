@@ -11,6 +11,7 @@
 #include "engine/Service.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -48,7 +49,7 @@ class ServiceTest : public ::testing::Test {
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
          std::string contentType =
-             "application/json") -> Service::GetResultFunction {
+             "application/sparql-results+json") -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -167,8 +168,8 @@ TEST_F(ServiceTest, computeResult) {
   auto runComputeResult =
       [&](const std::string& result,
           boost::beast::http::status status = boost::beast::http::status::ok,
-          std::string contentType =
-              "application/json") -> std::shared_ptr<const Result> {
+          std::string contentType = "application/sparql-results+json")
+      -> std::shared_ptr<const Result> {
     Service s{testQec, parsedServiceClause,
               getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                        status, contentType)};
@@ -177,25 +178,47 @@ TEST_F(ServiceTest, computeResult) {
 
   // CHECK 1: An exception shall be thrown, when
   // status-code isn't ok, contentType doesn't match
-  ASSERT_ANY_THROW(runComputeResult("", boost::beast::http::status::bad_request,
-                                    "application/json"));
-  ASSERT_ANY_THROW(
-      runComputeResult("", boost::beast::http::status::ok, "wrong/type"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::bad_request,
+                       "application/sparql-results+json"),
+      ::testing::HasSubstr(
+          "SERVICE respondet with HTTP status code: 400, Bad Request."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::ok, "wrong/type"),
+      ::testing::HasSubstr(
+          "QLever requires the endpoint of a SERVICE to send "
+          "the result as 'application/sparql-results+json' but "
+          "the endpoint sent 'wrong/type'."));
 
   // or Result is no JSON, empty or has invalid structure
-  ASSERT_ANY_THROW(
+  AD_EXPECT_THROW_WITH_MESSAGE(
       runComputeResult("<?xml version=\"1.0\"?><sparql "
-                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"));
-  ASSERT_ANY_THROW(runComputeResult("{}"));
-  ASSERT_ANY_THROW(runComputeResult("{\"invalid\": \"structure\"}"));
-  ASSERT_ANY_THROW(
+                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"),
+      ::testing::HasSubstr("Failed to parse the SERVICE result as JSON."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{}"),
+      ::testing::HasSubstr("Response from SPARQL endpoint is empty."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{\"invalid\": \"structure\"}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
       runComputeResult("{\"head\": {\"vars\": [1, 2, 3]},"
-                       "\"results\": {\"bindings\": {}}}"));
+                       "\"results\": {\"bindings\": {}}}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
-  ASSERT_ANY_THROW(runComputeResult(genJsonResult(
-      {"y", "x"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult(genJsonResult(
+          {"y", "x"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})),
+      ::testing::HasSubstr("Header row of JSON result for SERVICE query is "
+                           "\"?y ?x\", but expected \"?x ?y\"."));
 
   // CHECK 3: A result row of the returned JSON is missing a variable's value ->
   // undefined value

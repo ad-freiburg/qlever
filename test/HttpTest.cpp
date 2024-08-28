@@ -40,24 +40,32 @@ TEST(HttpServer, HttpTest) {
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
     // target (might be empty), and a copy of the request body (might be empty).
-    TestHttpServer httpServer(
-        [](auto request, auto&& send) -> boost::asio::awaitable<void> {
-          std::string methodName;
-          switch (request.method()) {
-            case boost::beast::http::verb::get:
-              methodName = "GET";
-              break;
-            case boost::beast::http::verb::post:
-              methodName = "POST";
-              break;
-            default:
-              methodName = "OTHER";
-          }
-          std::string response = absl::StrCat(
-              methodName, "\n", toStd(request.target()), "\n", request.body());
-          co_return co_await send(createOkResponse(
-              response, request, ad_utility::MediaType::textPlain));
-        });
+    TestHttpServer httpServer([](auto request,
+                                 auto&& send) -> boost::asio::awaitable<void> {
+      std::string methodName;
+      switch (request.method()) {
+        case boost::beast::http::verb::get:
+          methodName = "GET";
+          break;
+        case boost::beast::http::verb::post:
+          methodName = "POST";
+          break;
+        default:
+          methodName = "OTHER";
+      }
+
+      auto response = [](std::string methodName, std::string target,
+                         std::string body) -> cppcoro::generator<std::string> {
+        co_yield methodName;
+        co_yield "\n";
+        co_yield target;
+        co_yield "\n";
+        co_yield body;
+      }(methodName, std::string(toStd(request.target())), request.body());
+
+      co_return co_await send(createOkResponse(
+          std::move(response), request, ad_utility::MediaType::textPlain));
+    });
     httpServer.runInOwnThread();
 
     // Create a client, and send a GET request.
