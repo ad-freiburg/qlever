@@ -4,8 +4,7 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
-#ifndef QLEVER_INDEXBUILDERTYPES_H
-#define QLEVER_INDEXBUILDERTYPES_H
+#pragma once
 
 #include <memory_resource>
 
@@ -135,6 +134,8 @@ struct alignas(256) ItemMapManager {
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
       : map_(alloc), minId_(minId), comparator_(cmp) {
+    // Precompute the mapping from the `specialIds` to their norma IDs in the
+    // vocabulary. This makes resolving such IRIs much cheaper.
     for (const auto& [specialIri, specialId]: qlever::specialIds()) {
       auto iriref = TripleComponent::Iri::fromIriref(specialIri);
       auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
@@ -155,6 +156,7 @@ struct alignas(256) ItemMapManager {
       if (id.getDatatype() != Datatype::Undefined) {
         return id;
       } else {
+        // The only IDs with `Undefined` types ca be the `specialIds`.
         return specialIdMapping_.at(id);
       }
     }
@@ -262,6 +264,8 @@ auto getIdMapLambdas(
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
     auto &map = *itemArray[idx];
+    // Resolve the special `internalGraphId` to its actual ID. This is precomputed
+    // for efficiency gains.
     auto internalGraphId = map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
     return [&map = *itemArray[idx], indexPtr,
             internalGraphId](ad_utility::Rvalue auto&& tr) {
@@ -308,4 +312,3 @@ auto getIdMapLambdas(
       ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
-#endif  // QLEVER_INDEXBUILDERTYPES_H

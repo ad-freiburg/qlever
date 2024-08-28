@@ -92,7 +92,7 @@ auto VocabularyMerger::mergeVocabulary(const std::string& basename,
       ad_utility::parallelMultiwayMerge<QueueWord, true,
                                         decltype(sizeOfQueueWord)>(
           0.8 * memoryToUse, generators, lessThanForQueue);
-  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal_,
+  ad_utility::ProgressBar progressBar{metaData_.numWordsTotal(),
                                       "Words merged: "};
   for (QueueWord& currentWord : std::views::join(mergedWords)) {
     // Accumulate the globally ordered queue words in a buffer.
@@ -162,10 +162,8 @@ void VocabularyMerger::writeQueueWordsToIdVec(
                   << lastTripleComponent_->iriOrLiteral() << " and "
                   << top.iriOrLiteral() << std::endl;
       }
-      // TODO<joka921> Once we have interleaved IDs using the MilestoneIdManager
-      // we have to compute the correct Ids here.
       lastTripleComponent_ = TripleComponentWithIndex{
-          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal_};
+          top.iriOrLiteral(), top.isExternal(), metaData_.numWordsTotal()};
 
       // TODO<optimization> If we aim to further speed this up, we could
       // order all the write requests to _outfile _externalOutfile and all the
@@ -176,14 +174,10 @@ void VocabularyMerger::writeQueueWordsToIdVec(
       // TODO<joka921> Refactor the following block to make all the `metaData_`
       // access more idiomatic.
       if (nextWord.isBlankNode()) {
-        lastTripleComponent_->index_ = metaData_.numBlankNodesTotal_;
-        ++metaData_.numBlankNodesTotal_;
+        lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
       } else {
         wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
-
-        metaData_.addInternalEntityIfMatches(top.iriOrLiteral(),
-                                                     nextWord.index_);
-        metaData_.numWordsTotal_++;
+        metaData_.addWord(top.iriOrLiteral(), nextWord.index_);
       }
       if (progressBar.update()) {
         LOG(INFO) << progressBar.getProgressString() << std::flush;
