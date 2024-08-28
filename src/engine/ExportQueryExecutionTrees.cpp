@@ -722,9 +722,9 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
+  auto timeUntilFunctionCall = requestTimer.msecs();
   std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
-  auto timeUntilFunctionCall = requestTimer.msecs();
 
   nlohmann::json jsonPrefix;
 
