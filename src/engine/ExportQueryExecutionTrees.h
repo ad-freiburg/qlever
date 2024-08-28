@@ -30,14 +30,16 @@ class ExportQueryExecutionTrees {
   // created by the `QueryPlanner`. The result is converted into a sequence of
   // bytes that represents the result of the computed query in the format
   // specified by the `mediaType`. Supported formats for this function are CSV,
-  // TSV, Turtle, Binary. Note that the Binary format can only be used with
-  // SELECT queries and the Turtle format can only be used with CONSTRUCT
-  // queries. Invalid `mediaType`s and invalid combinations of `mediaType` and
-  // the query type will throw. The result is returned as a `generator` that
-  // lazily computes the serialized result in large chunks of bytes.
-  static cppcoro::generator<std::string> computeResultAsStream(
+  // TSV, Turtle, Binary, SparqlJSON, QLeverJSON. Note that the Binary format
+  // can only be used with SELECT queries and the Turtle format can only be used
+  // with CONSTRUCT queries. Invalid `mediaType`s and invalid combinations of
+  // `mediaType` and the query type will throw. The result is returned as a
+  // `generator` that lazily computes the serialized result in large chunks of
+  // bytes.
+  static cppcoro::generator<std::string> computeResult(
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      MediaType mediaType, CancellationHandle cancellationHandle);
+      MediaType mediaType, const ad_utility::Timer& requestTimer,
+      CancellationHandle cancellationHandle);
 
   // Compute the result of the given `parsedQuery` (created by the
   // `SparqlParser`) for which the `QueryExecutionTree` has been previously
@@ -50,10 +52,6 @@ class ExportQueryExecutionTrees {
   // The `requestTimer` is used to report timing statistics on the query. It
   // must have already run during the query planning to produce the expected
   // results.
-  static nlohmann::json computeResultAsJSON(
-      const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
-      const ad_utility::Timer& requestTimer, MediaType mediaType,
-      CancellationHandle cancellationHandle);
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is
@@ -95,33 +93,23 @@ class ExportQueryExecutionTrees {
                                 const LocalVocab& localVocab);
 
  private:
-  // TODO<joka921> The following functions are all internally called by the
-  // two public functions above. All the code has been inside QLever for a long
-  // time (previously in the classes `QueryExecutionTree` and `Server`. Clean
-  // up their interfaces (are all these functions needed, or can some of them
-  // be merged).
-
-  // Similar to `queryToJSON`, but always returns the `QLeverJSON` format.
-  static nlohmann::json computeQueryResultAsQLeverJSON(
+  // Similar to `computeResult` but returns a stream in
+  // QLeverJSON-format.
+  static ad_utility::streams::stream_generator computeResultAsQLeverJSON(
       const ParsedQuery& query, const QueryExecutionTree& qet,
       const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
-  // Similar to `queryToJSON`, but always returns the `SparqlJSON` format.
-  static nlohmann::json computeSelectQueryResultAsSparqlJSON(
-      const ParsedQuery& query, const QueryExecutionTree& qet,
-      CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static nlohmann::json selectQueryResultBindingsToQLeverJSON(
+  static cppcoro::generator<std::string> selectQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const parsedQuery::SelectClause& selectClause,
       const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> resultTable,
+      std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle);
-
   /**
-   * @brief Convert an `IdTable` (typically from a query result) to a JSON array
-   *   In the `QLeverJSON` format. This function is called by
+   * @brief Convert an `IdTable` (typically from a query result) to a JSON
+   * array In the `QLeverJSON` format. This function is called by
    *  `computeQueryResultAsQLeverJSON` to obtain the "actual" query results
    * (without the meta data)
    * @param qet The `QueryExecutionTree` of the query.
@@ -133,14 +121,15 @@ class ExportQueryExecutionTrees {
    *        then the query result will be obtained via `qet->getResult()`.
    * @return a 2D-Json array corresponding to the IdTable given the arguments
    */
-  static nlohmann::json idTableToQLeverJSONArray(
+  static cppcoro::generator<std::string> idTableToQLeverJSONBindings(
       const QueryExecutionTree& qet, const LimitOffsetClause& limitAndOffset,
-      const QueryExecutionTree::ColumnIndicesAndTypes& columns,
-      std::shared_ptr<const Result> resultTable,
+      const QueryExecutionTree::ColumnIndicesAndTypes columns,
+      std::shared_ptr<const Result> result,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________
-  static nlohmann::json constructQueryResultBindingsToQLeverJSON(
+  static cppcoro::generator<std::string>
+  constructQueryResultBindingsToQLeverJSON(
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       const LimitOffsetClause& limitAndOffset,
@@ -152,14 +141,6 @@ class ExportQueryExecutionTrees {
       const QueryExecutionTree& qet,
       const ad_utility::sparql_types::Triples& constructTriples,
       LimitOffsetClause limitAndOffset, std::shared_ptr<const Result> res,
-      CancellationHandle cancellationHandle);
-
-  // ___________________________________________________________________________
-  static nlohmann::json selectQueryResultToSparqlJSON(
-      const QueryExecutionTree& qet,
-      const parsedQuery::SelectClause& selectClause,
-      const LimitOffsetClause& limitAndOffset,
-      std::shared_ptr<const Result> resultTable,
       CancellationHandle cancellationHandle);
 
   // ___________________________________________________________________________

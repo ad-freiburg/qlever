@@ -20,8 +20,8 @@ Index::Index(Index&&) noexcept = default;
 Index::~Index() = default;
 
 // ____________________________________________________________________________
-void Index::createFromFile(const std::string& filename) {
-  pimpl_->createFromFile(filename);
+void Index::createFromFile(const std::string& filename, Filetype type) {
+  pimpl_->createFromFile(filename, type);
 }
 
 // ____________________________________________________________________________
