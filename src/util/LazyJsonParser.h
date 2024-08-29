@@ -22,20 +22,14 @@ class LazyJsonParser {
  public:
   // Parse chunks of json-strings yielding them reconstructed.
   static cppcoro::generator<nlohmann::json> parse(
-      cppcoro::generator<std::string> partJson,
+      cppcoro::generator<std::string> partialJson,
       std::vector<std::string> arrayPath);
-
-  // Indicates whether the end of the object has been reached.
-  bool endReached_{false};
 
  private:
   explicit LazyJsonParser(std::vector<std::string> arrayPath);
 
   // Parses a chunk of JSON data and returns it with reconstructed structure.
   std::optional<nlohmann::json> parseChunk(std::string_view inStr);
-
-  // Parses literals in the input.
-  void parseLiteral(size_t& idx);
 
   // The following 3 methods parse the different sections before/in/after the
   // arrayPath starting at the given index `idx` on the `input_` string.
@@ -46,6 +40,9 @@ class LazyJsonParser {
 
   // Returns the index after the input, when reading the input is complete.
   std::optional<size_t> parseAfterArrayPath(size_t& idx);
+
+  // Parses literals in the input.
+  void parseLiteral(size_t& idx);
 
   // Constructs the result to be returned after parsing a chunk.
   std::optional<nlohmann::json> constructResultFromParsedChunk(
@@ -85,6 +82,9 @@ class LazyJsonParser {
 
   // If the parser is currently positioned within a literal.
   bool inLiteral_{false};
+
+  // Indicates whether the end of the object has been reached.
+  bool endReached_{false};
 
   // Counter for the so far returned results.
   unsigned int yieldCount_{0};

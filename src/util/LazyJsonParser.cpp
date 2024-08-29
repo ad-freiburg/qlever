@@ -16,10 +16,10 @@ namespace ad_utility {
 
 // ____________________________________________________________________________
 cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
-    cppcoro::generator<std::string> partJson,
+    cppcoro::generator<std::string> partialJson,
     std::vector<std::string> arrayPath) {
-  LazyJsonParser p(arrayPath);
-  for (const auto& chunk : partJson) {
+  LazyJsonParser p(std::move(arrayPath));
+  for (const auto& chunk : partialJson) {
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
       if (p.endReached_) {
