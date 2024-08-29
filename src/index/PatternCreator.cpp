@@ -63,7 +63,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // subject has a pattern.
   if (!pattern.empty()) {
     auto additionalTriple =
-        std::array{subject, hasPatternPredicateId_, Id::makeFromInt(patternId)};
+        std::array{subject, idOfHasPattern_, Id::makeFromInt(patternId)};
     tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
     ++numDistinctSubjects_;
   }

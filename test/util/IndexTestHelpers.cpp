@@ -57,16 +57,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto hasPatternPredicate =
+  auto iriOfHasPattern =
       TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
-  auto checkSingleElement = [&cancellationDummy, &hasPatternPredicate](
+  auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern](
                                 const Index& index, size_t patternIdx, Id id) {
-    auto scanResultHasPattern =
-        index.scan(ScanSpecificationAsTripleComponent{hasPatternPredicate, id,
-                                                      std::nullopt}
-                       .toScanSpecification(index)
-                       .value(),
-                   Permutation::Enum::PSO, {}, cancellationDummy);
+    auto scanResultHasPattern = index.scan(
+        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
+        Permutation::Enum::PSO, {}, cancellationDummy);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);

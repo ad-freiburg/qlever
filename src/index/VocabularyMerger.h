@@ -43,10 +43,10 @@ struct VocabularyMetaData {
     explicit IdRangeForPrefix(std::string prefix)
         : prefix_{std::move(prefix)} {}
     // Check if `word` starts with the `prefix_`. If so, `wordIndex`
-    // will become part of the range that this struct represents.
-    // For this to work, all the words that start with the `prefix_` have to
-    // be passed in consecutively and their indices have to be consecutive
-    // and ascending.
+    // will become part of the range that this struct represents. The function
+    // returns `true` in this case, else `false`. For this to work, all the
+    // words that start with the `prefix_` have to be passed in consecutively
+    // and their indices have to be consecutive and ascending.
     bool addIfWordMatches(std::string_view word, size_t wordIndex) {
       if (!word.starts_with(prefix_)) {
         return false;
@@ -71,37 +71,43 @@ struct VocabularyMetaData {
     std::string prefix_;
     bool beginWasSeen_ = false;
   };
-  // The number of distinct words (size of the created vocabulary).
-  size_t numWordsTotal_ = 0;
-  // The number of distinct blank nodes that were found and immediately
-  // converted to an ID without becoming part of the vocabulary.
-  size_t numBlankNodesTotal_ = 0;
-
- private:
-  IdRangeForPrefix langTaggedPredicates_{
-      std::string{ad_utility::languageTaggedPredicatePrefix}};
-  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
-
-  ad_utility::HashMap<std::string, Id> specialIdMapping_;
-  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
-      &qlever::specialIds();
 
  public:
-  void addInternalEntityIfMatches(std::string_view word, size_t wordIndex) {
+  // This function has to be called for every *DISTINCT* word (IRI or literal,
+  // not blank nodes) and the index, which is assigned to this word by the merge
+  // procedure. It automatically updates the various prefix ranges, the total
+  // number of words, and the mapping of the special IDs.
+  void addWord(std::string_view word, size_t wordIndex) {
+    ++numWordsTotal_;
     if (langTaggedPredicates_.addIfWordMatches(word, wordIndex)) {
       return;
     }
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
-      if (auto it = globalSpecialIds_->find(word);
-          it != globalSpecialIds_->end()) {
+      if (globalSpecialIds_->contains(word)) {
         specialIdMapping_[std::string{word}] =
             Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
       }
     }
   }
+
+  // Return the index of the next blank node and increment the internal counter
+  // of blank nodes. This has to be called for every distinct blank node that
+  // is encountered.
+  size_t getNextBlankNodeIndex() {
+    auto res = numBlankNodesTotal_;
+    ++numBlankNodesTotal_;
+    return res;
+  }
+
+  // The mapping from the `qlever::specialIds` to their actual IDs.
+  // This is created on the fly by the calls to `addWord`.
   const auto& specialIdMapping() const { return specialIdMapping_; }
+  // The prefix range for the `@en@<predicate` style predicates.
   const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
+  // The prefix range for the internal IRIs in the `ql:` namespace.
   const auto& internalEntities() const { return internalEntities_; }
+  // The number of words for which `addWord()` has been called.
+  size_t numWordsTotal() const { return numWordsTotal_; }
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the
@@ -109,6 +115,20 @@ struct VocabularyMetaData {
   bool isQleverInternalId(Id id) const {
     return internalEntities_.contains(id) || langTaggedPredicates_.contains(id);
   }
+
+ private:
+  // The number of distinct words (size of the created vocabulary).
+  size_t numWordsTotal_ = 0;
+  // The number of distinct blank nodes that were found and immediately
+  // converted to an ID without becoming part of the vocabulary.
+  size_t numBlankNodesTotal_ = 0;
+  IdRangeForPrefix langTaggedPredicates_{
+      std::string{ad_utility::languageTaggedPredicatePrefix}};
+  IdRangeForPrefix internalEntities_{std::string{INTERNAL_ENTITIES_URI_PREFIX}};
+
+  ad_utility::HashMap<std::string, Id> specialIdMapping_;
+  const ad_utility::HashMap<std::string, Id>* globalSpecialIds_ =
+      &qlever::specialIds();
 };
 // _______________________________________________________________
 // Merge the partial vocabularies in the  binary files
