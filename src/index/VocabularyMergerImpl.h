@@ -171,8 +171,6 @@ void VocabularyMerger::writeQueueWordsToIdVec(
 
       // Write the new word to the vocabulary.
       const auto& nextWord = lastTripleComponent_.value();
-      // TODO<joka921> Refactor the following block to make all the `metaData_`
-      // access more idiomatic.
       if (nextWord.isBlankNode()) {
         lastTripleComponent_->index_ = metaData_.getNextBlankNodeIndex();
       } else {

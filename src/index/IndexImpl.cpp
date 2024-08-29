@@ -258,7 +258,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = internalGraphIdDuringIndexBuilding_.value();
+  Id internalGraph = idOfInternalGraphDuringIndexBuilding_.value();
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -480,8 +480,10 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
-  hasPatternIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
-  internalGraphIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
+  idOfHasPatternDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+  idOfInternalGraphDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
             << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
@@ -1526,7 +1528,8 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // For now (especially for testing) We build the new pattern format as well
     // as the old one to see that they match.
     PatternCreator patternCreator{
-        onDiskBase_ + ".index.patterns", hasPatternIdDuringIndexBuilding_.value(),
+        onDiskBase_ + ".index.patterns",
+        idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalTriple](const auto& triple) {

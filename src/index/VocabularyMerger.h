@@ -83,8 +83,7 @@ struct VocabularyMetaData {
       return;
     }
     if (internalEntities_.addIfWordMatches(word, wordIndex)) {
-      if (auto it = globalSpecialIds_->find(word);
-          it != globalSpecialIds_->end()) {
+      if (globalSpecialIds_->contains(word)) {
         specialIdMapping_[std::string{word}] =
             Id::makeFromVocabIndex(VocabIndex::make(wordIndex));
       }

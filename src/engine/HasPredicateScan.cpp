@@ -335,13 +335,14 @@ void HasPredicateScan::computeFreeO(
     IdTable* resultTable, Id subjectAsId,
     const CompactVectorOfStrings<Id>& patterns) const {
   const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec = ScanSpecificationAsTripleComponent{TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE),
-                                                     subjectAsId, std::nullopt}.toScanSpecification(index).value();
-  auto hasPattern =
-      index
-          .getPermutation(Permutation::Enum::PSO)
-          .scan(std::move(scanSpec),
-                    {}, cancellationHandle_);
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
+          std::nullopt}
+          .toScanSpecification(index)
+          .value();
+  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
+                        .scan(std::move(scanSpec), {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];

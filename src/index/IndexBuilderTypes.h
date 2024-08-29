@@ -136,12 +136,11 @@ struct alignas(256) ItemMapManager {
       : map_(alloc), minId_(minId), comparator_(cmp) {
     // Precompute the mapping from the `specialIds` to their norma IDs in the
     // vocabulary. This makes resolving such IRIs much cheaper.
-    for (const auto& [specialIri, specialId]: qlever::specialIds()) {
+    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
       auto iriref = TripleComponent::Iri::fromIriref(specialIri);
       auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
       specialIdMapping_[specialId] = getId(std::move(key));
     }
-
   }
 
   /// Move the held HashMap out as soon as we are done inserting and only need
@@ -263,13 +262,14 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto &map = *itemArray[idx];
-    // Resolve the special IDs of the default and internal graph to their actual IDs. This is precomputed
-    // for efficiency gains.
-    auto internalGraphId = map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
+    auto& map = *itemArray[idx];
+    // Resolve the special IDs of the default and internal graph to their actual
+    // IDs. This is precomputed for efficiency gains.
+    auto internalGraphId =
+        map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
     auto defaultGraphId = map.getId(qlever::specialIds().at(DEFAULT_GRAPH_IRI));
-    return [&map = *itemArray[idx], indexPtr,
-            internalGraphId, defaultGraphId](ad_utility::Rvalue auto&& tr) {
+    return [&map = *itemArray[idx], indexPtr, internalGraphId,
+            defaultGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
@@ -301,7 +301,8 @@ auto getIdMapLambdas(
         // language filters working in combination with named graphs and doesn't
         // add further inconsistencies.
         auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
-        auto addedTripleGraphId = tripleGraphId == defaultGraphId ? internalGraphId : tripleGraphId;
+        auto addedTripleGraphId =
+            tripleGraphId == defaultGraphId ? internalGraphId : tripleGraphId;
         res[1].emplace(
             Arr{spoIds[0], langTaggedPredId, spoIds[2], addedTripleGraphId});
         // extra triple <object> ql:language-tag <@language>

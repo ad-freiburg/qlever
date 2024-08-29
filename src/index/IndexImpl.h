@@ -173,8 +173,9 @@ class IndexImpl {
   // During the index building, store the IDs of the `ql:has-pattern` predicate
   // and of `ql:default-graph` as they are required to add additional triples
   // after the creation of the vocabulary is finished.
-  std::optional<Id> hasPatternIdDuringIndexBuilding_;
-  std::optional<Id> internalGraphIdDuringIndexBuilding_;
+  std::optional<Id> idOfHasPatternDuringIndexBuilding_;
+  std::optional<Id> idOfInternalGraphDuringIndexBuilding_;
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 
