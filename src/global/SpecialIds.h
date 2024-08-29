@@ -12,8 +12,8 @@
 namespace qlever {
 
 // A mapping from special builtin IRIs to special IDs. These IDs all have the
-// `Undefined` datatype s.t. they do not accidentally interfere
-// with other IDs.
+// `Undefined` datatype such that they do not accidentally interfere with other
+// IDs.
 // IMPORTANT: These IDs can only be used in the very first phase of index
 // building when handing triples from the parser to the index builder. The
 // `VocabularyMerger` assigns "normal" `VocabIndex` IDs for all the entries.
