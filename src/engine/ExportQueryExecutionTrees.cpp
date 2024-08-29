@@ -13,7 +13,6 @@
 #include "util/http/MediaTypes.h"
 
 // __________________________________________________________________________
-
 cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
     const Result& result) {
   if (result.isFullyMaterialized()) {
@@ -395,7 +394,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult();
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -544,7 +543,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       selectClause.getSelectedVariablesAsStrings();
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult();
+  std::shared_ptr<const Result> result = qet.getResult(true);
 
   // In the XML format, the variables don't include the question mark.
   auto varsWithoutQuestionMark = std::views::transform(
@@ -589,7 +588,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         CancellationHandle cancellationHandle) {
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult();
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -694,7 +693,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                      std::move(cancellationHandle))
                : constructQueryResultToStream<format>(
                      qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset, qet.getResult(),
+                     parsedQuery._limitOffset, qet.getResult(true),
                      std::move(cancellationHandle));
   };
 
@@ -723,9 +722,9 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ParsedQuery& query, const QueryExecutionTree& qet,
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
-  std::shared_ptr<const Result> result = qet.getResult();
+  auto timeUntilFunctionCall = requestTimer.msecs();
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
-  auto timeResultComputation = requestTimer.msecs();
 
   nlohmann::json jsonPrefix;
 
@@ -768,6 +767,10 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     co_yield b;
     ++resultSize;
   }
+
+  auto timeResultComputation =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          timeUntilFunctionCall + runtimeInformation.totalTime_);
 
   nlohmann::json jsonSuffix;
   jsonSuffix["resultsize"] = resultSize;
