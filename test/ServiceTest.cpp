@@ -182,7 +182,7 @@ TEST_F(ServiceTest, computeResult) {
       runComputeResult("", boost::beast::http::status::bad_request,
                        "application/sparql-results+json"),
       ::testing::HasSubstr(
-          "SERVICE respondet with HTTP status code: 400, Bad Request."));
+          "SERVICE responded with HTTP status code: 400, Bad Request."));
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       runComputeResult("", boost::beast::http::status::ok, "wrong/type"),

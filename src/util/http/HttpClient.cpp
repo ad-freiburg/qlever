@@ -127,11 +127,11 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
   const std::string contentType =
       responseParser->get()[boost::beast::http::field::content_type];
 
-  auto getContent = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
-                       std::unique_ptr<http::response_parser<http::buffer_body>>
-                           responseParser,
-                       beast::flat_buffer buffer,
-                       ad_utility::SharedCancellationHandle handle)
+  auto getBody = [](std::unique_ptr<HttpClientImpl<StreamType>> client,
+                    std::unique_ptr<http::response_parser<http::buffer_body>>
+                        responseParser,
+                    beast::flat_buffer buffer,
+                    ad_utility::SharedCancellationHandle handle)
       -> cppcoro::generator<std::span<std::byte>> {
     while (!responseParser->is_done()) {
       std::array<std::byte, 4096> staticBuffer;
@@ -151,8 +151,8 @@ HttpOrHttpsResponse HttpClientImpl<StreamType>::sendRequest(
 
   return {.status_ = status,
           .contentType_ = contentType,
-          .body_ = getContent(std::move(client), std::move(responseParser),
-                              std::move(buffer), std::move(handle))};
+          .body_ = getBody(std::move(client), std::move(responseParser),
+                           std::move(buffer), std::move(handle))};
 }
 
 // ____________________________________________________________________________

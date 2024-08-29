@@ -134,16 +134,16 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 
   auto throwErrorWithContext = [&jsonStr, &serviceUrl](std::string_view sv) {
-    throw std::runtime_error(
-        absl::StrCat("Error while executing a SERVICE request to <",
-                     serviceUrl.asString(), ">: ", sv, ". First 100 bytes: ",
-                     std::string_view{jsonStr.data()}.substr(0, 100)));
+    throw std::runtime_error(absl::StrCat(
+        "Error while executing a SERVICE request to <", serviceUrl.asString(),
+        ">: ", sv, ". First 100 bytes of the response: ",
+        std::string_view{jsonStr.data()}.substr(0, 100)));
   };
 
   // Verify status and content-type of the response.
   if (response.status_ != boost::beast::http::status::ok) {
     throwErrorWithContext(absl::StrCat(
-        "SERVICE respondet with HTTP status code: ",
+        "SERVICE responded with HTTP status code: ",
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
