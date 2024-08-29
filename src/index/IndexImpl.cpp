@@ -483,7 +483,7 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   hasPatternIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
   internalGraphIdDuringIndexBuilding_ = mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
-            << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
+            << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
 
   res.idTriples = std::move(*idTriples.wlock());
