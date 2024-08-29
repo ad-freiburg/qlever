@@ -141,7 +141,8 @@ class PatternCreator {
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
                 basename + ".second-sorter.dat", memoryLimit / 2,
-                ad_utility::makeUnlimitedAllocator<Id>())}, hasPatternPredicateId_{hasPatternPredicateId} {
+                ad_utility::makeUnlimitedAllocator<Id>())},
+        hasPatternPredicateId_{hasPatternPredicateId} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 

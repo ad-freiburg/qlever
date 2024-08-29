@@ -182,7 +182,7 @@ void VocabularyMerger::writeQueueWordsToIdVec(
         wordCallback(nextWord.iriOrLiteral(), nextWord.isExternal());
 
         metaData_.addInternalEntityIfMatches(top.iriOrLiteral(),
-                                                     nextWord.index_);
+                                             nextWord.index_);
         metaData_.numWordsTotal_++;
       }
       if (progressBar.update()) {

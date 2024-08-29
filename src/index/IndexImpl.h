@@ -172,6 +172,7 @@ class IndexImpl {
 
   std::optional<Id> hasPatternIdDuringIndexBuilding_;
   std::optional<Id> internalGraphIdDuringIndexBuilding_;
+
  public:
   explicit IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator);
 

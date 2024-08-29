@@ -135,12 +135,11 @@ struct alignas(256) ItemMapManager {
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
       : map_(alloc), minId_(minId), comparator_(cmp) {
-    for (const auto& [specialIri, specialId]: qlever::specialIds()) {
+    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
       auto iriref = TripleComponent::Iri::fromIriref(specialIri);
       auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
       specialIdMapping_[specialId] = getId(std::move(key));
     }
-
   }
 
   /// Move the held HashMap out as soon as we are done inserting and only need
@@ -261,8 +260,9 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto &map = *itemArray[idx];
-    auto internalGraphId = map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
+    auto& map = *itemArray[idx];
+    auto internalGraphId =
+        map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
     return [&map = *itemArray[idx], indexPtr,
             internalGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
