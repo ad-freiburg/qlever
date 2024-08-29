@@ -11,9 +11,15 @@
 
 namespace qlever {
 
-// A mapping from special builtin IRIs that are not managed via the normal
-// vocabulary to the IDs that are used to represent them. These IDs all have the
-// `Undefined` datatype s.t. they do not accidentally interfere with other IDs.
+// A mapping from special builtin IRIs to special IDs. These IDs all have the
+// `Undefined` datatype such that they do not accidentally interfere with other
+// IDs.
+// IMPORTANT: These IDs can only be used in the very first phase of index
+// building when handing triples from the parser to the index builder. The
+// `VocabularyMerger` assigns "normal" `VocabIndex` IDs for all the entries.
+// These VocabIDs have to be retrieved from the vocabulary and used in all
+// subsequent phases of the index building and when running the server on a
+// built index.
 inline const ad_utility::HashMap<std::string, Id>& specialIds() {
   static const auto ids = []() {
     using S = std::string;

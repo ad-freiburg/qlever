@@ -6,8 +6,6 @@
 
 #include "global/SpecialIds.h"
 
-static const Id hasPatternId = qlever::specialIds().at(HAS_PATTERN_PREDICATE);
-
 // _________________________________________________________________________
 void PatternCreator::processTriple(
     std::array<Id, NumColumnsIndexBuilding> triple,
@@ -65,7 +63,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // subject has a pattern.
   if (!pattern.empty()) {
     auto additionalTriple =
-        std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
+        std::array{subject, idOfHasPattern_, Id::makeFromInt(patternId)};
     tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
     ++numDistinctSubjects_;
   }

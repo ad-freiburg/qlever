@@ -4,8 +4,7 @@
 
 // Common classes / Typedefs that are used during Index Creation
 
-#ifndef QLEVER_INDEXBUILDERTYPES_H
-#define QLEVER_INDEXBUILDERTYPES_H
+#pragma once
 
 #include <memory_resource>
 
@@ -134,7 +133,15 @@ struct alignas(256) ItemMapManager {
   /// Construct by assigning the minimum ID that should be returned by the map.
   explicit ItemMapManager(uint64_t minId, const TripleComponentComparator* cmp,
                           ItemAlloc alloc)
-      : map_(alloc), minId_(minId), comparator_(cmp) {}
+      : map_(alloc), minId_(minId), comparator_(cmp) {
+    // Precompute the mapping from the `specialIds` to their norma IDs in the
+    // vocabulary. This makes resolving such IRIs much cheaper.
+    for (const auto& [specialIri, specialId] : qlever::specialIds()) {
+      auto iriref = TripleComponent::Iri::fromIriref(specialIri);
+      auto key = PossiblyExternalizedIriOrLiteral{std::move(iriref), false};
+      specialIdMapping_[specialId] = getId(std::move(key));
+    }
+  }
 
   /// Move the held HashMap out as soon as we are done inserting and only need
   /// the actual vocabulary.
@@ -144,7 +151,13 @@ struct alignas(256) ItemMapManager {
   /// next free ID to the string, store and return it.
   Id getId(const TripleComponentOrId& keyOrId) {
     if (std::holds_alternative<Id>(keyOrId)) {
-      return std::get<Id>(keyOrId);
+      auto id = std::get<Id>(keyOrId);
+      if (id.getDatatype() != Datatype::Undefined) {
+        return id;
+      } else {
+        // The only IDs with `Undefined` types ca be the `specialIds`.
+        return specialIdMapping_.at(id);
+      }
     }
     const auto& key = std::get<PossiblyExternalizedIriOrLiteral>(keyOrId);
     auto& map = map_.map_;
@@ -175,6 +188,7 @@ struct alignas(256) ItemMapManager {
         [this](const auto&... els) { return std::array{getId(els)...}; }, t);
   }
   ItemMapAndBuffer map_;
+  ad_utility::HashMap<Id, Id> specialIdMapping_;
   uint64_t minId_ = 0;
   const TripleComponentComparator* comparator_ = nullptr;
 };
@@ -248,9 +262,14 @@ auto getIdMapLambdas(
    * - All Ids are assigned according to itemArray[idx]
    */
   const auto itemMapLamdaCreator = [&itemArray, indexPtr](const size_t idx) {
-    auto internalGraphId = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
-    return [&map = *itemArray[idx], indexPtr,
-            internalGraphId](ad_utility::Rvalue auto&& tr) {
+    auto& map = *itemArray[idx];
+    // Resolve the special IDs of the default and internal graph to their actual
+    // IDs. This is precomputed for efficiency gains.
+    auto internalGraphId =
+        map.getId(qlever::specialIds().at(INTERNAL_GRAPH_IRI));
+    auto defaultGraphId = map.getId(qlever::specialIds().at(DEFAULT_GRAPH_IRI));
+    return [&map = *itemArray[idx], indexPtr, internalGraphId,
+            defaultGraphId](ad_utility::Rvalue auto&& tr) {
       auto lt = indexPtr->tripleToInternalRepresentation(AD_FWD(tr));
       OptionalIds res;
       // get Ids for the actual triple and store them in the result.
@@ -274,15 +293,24 @@ auto getIdMapLambdas(
                       " The following lines probably have to be changed when "
                       "the number of payload columns changes");
         // extra triple <subject> @language@<predicate> <object>
-        // The additional triples all have the graph ID of the internal graph.
+        // The additional triples have the graph ID of the internal graph if the
+        // triple was in the default/fallback graph, else they keep their graph
+        // ID.
+        // TODO<joka921> Maybe we should have an `internalGraph` per graph, but
+        // this requires further work. The current approach at least keeps the
+        // language filters working in combination with named graphs and doesn't
+        // add further inconsistencies.
+        auto tripleGraphId = res[0].value()[ADDITIONAL_COLUMN_GRAPH_ID];
+        auto addedTripleGraphId =
+            tripleGraphId == defaultGraphId ? internalGraphId : tripleGraphId;
         res[1].emplace(
-            Arr{spoIds[0], langTaggedPredId, spoIds[2], internalGraphId});
+            Arr{spoIds[0], langTaggedPredId, spoIds[2], addedTripleGraphId});
         // extra triple <object> ql:language-tag <@language>
         res[2].emplace(Arr{spoIds[2],
                            map.getId(TripleComponent{
                                ad_utility::triple_component::Iri::fromIriref(
                                    LANGUAGE_PREDICATE)}),
-                           langTagId, internalGraphId});
+                           langTagId, addedTripleGraphId});
       }
       return res;
     };
@@ -294,4 +322,3 @@ auto getIdMapLambdas(
       ad_tuple_helpers::setupTupleFromCallable<NumThreads>(itemMapLamdaCreator);
   return itemMapLambdaTuple;
 }
-#endif  // QLEVER_INDEXBUILDERTYPES_H

@@ -258,7 +258,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = qlever::specialIds().at(INTERNAL_GRAPH_IRI);
+  Id internalGraph = idOfInternalGraphDuringIndexBuilding_.value();
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -480,8 +480,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
+  idOfHasPatternDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+  idOfInternalGraphDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
-            << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
+            << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
 
   res.idTriples = std::move(*idTriples.wlock());
@@ -535,6 +539,9 @@ IndexImpl::convertPartialToGlobalIds(
       // probably the mapping should also be defined as `HashMap<VocabIndex,
       // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
+        // Check that all the internal, special IDs which we have introduced
+        // for performance reasons are eliminated.
+        AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
       auto iterator = idMap.find(id);
@@ -1522,6 +1529,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // as the old one to see that they match.
     PatternCreator patternCreator{
         onDiskBase_ + ".index.patterns",
+        idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalTriple](const auto& triple) {

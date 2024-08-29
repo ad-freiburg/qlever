@@ -261,14 +261,16 @@ ProtoResult HasPredicateScan::computeResult(
   idTable.setNumColumns(getResultWidth());
 
   const CompactVectorOfStrings<Id>& patterns = getIndex().getPatterns();
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
+          std::nullopt}
+          .toScanSpecification(index)
+          .value();
   auto hasPattern =
-      getExecutionContext()
-          ->getIndex()
-          .getImpl()
-          .getPermutation(Permutation::Enum::PSO)
-          .lazyScan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
-                     std::nullopt, std::nullopt},
-                    std::nullopt, {}, cancellationHandle_);
+      index.getPermutation(Permutation::Enum::PSO)
+          .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);
 
   auto getId = [this](const TripleComponent tc) {
     std::optional<Id> id = tc.toValueId(getIndex().getVocab());
@@ -332,13 +334,15 @@ void HasPredicateScan::computeFreeS(
 void HasPredicateScan::computeFreeO(
     IdTable* resultTable, Id subjectAsId,
     const CompactVectorOfStrings<Id>& patterns) const {
-  auto hasPattern = getExecutionContext()
-                        ->getIndex()
-                        .getImpl()
-                        .getPermutation(Permutation::Enum::PSO)
-                        .scan({qlever::specialIds().at(HAS_PATTERN_PREDICATE),
-                               subjectAsId, std::nullopt},
-                              {}, cancellationHandle_);
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  auto scanSpec =
+      ScanSpecificationAsTripleComponent{
+          TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
+          std::nullopt}
+          .toScanSpecification(index)
+          .value();
+  auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
+                        .scan(std::move(scanSpec), {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
   for (Id patternId : hasPattern.getColumn(0)) {
     const auto& pattern = patterns[patternId.getInt()];
