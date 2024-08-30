@@ -58,6 +58,10 @@ class AggregateExpression : public SparqlExpression {
   // For example, for `SUM(?x + 5)`, `child` is the expression for `?x + 5`,
   // `distinct` is `false`, and `aggregateOp` is the operation for computing
   // the sum.
+  // Note: For almost all aggregates, the `AggregateOperation` is stateless,
+  // hence the default-constructed default argument. The only exception is the
+  // `GROUP_CONCAT` expression, which stores its separator in the
+  // `AggregateOperation`.
   AggregateExpression(bool distinct, Ptr&& child,
                       AggregateOperation aggregateOp = AggregateOperation{});
 
@@ -88,124 +92,13 @@ class AggregateExpression : public SparqlExpression {
 
   // Evaluate a `SingleExpressionResult` (that is, one of the possible
   // `ExpressionResult` variants). Used in the `evaluate` function.
-  //
-  // TODO: Why is this a lambda and not a normal member function? It's rather
-  // long and complex.
-  inline static const auto evaluateOnChildOperand =
-      []<SingleExpressionResult Operand>(
-          const AggregateOperation& aggregateOperation,
-          const ValueId resultForEmptyGroup,
-          const FinalOperation& finalOperation, EvaluationContext* context,
-          bool distinct, Operand&& operand) -> ExpressionResult {
-    // Perform the more efficient calculation on `SetOfInterval`s if it is
-    // possible.
-    if (isAnySpecializedFunctionPossible(
-            aggregateOperation._specializedFunctions, operand)) {
-      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
-          aggregateOperation._specializedFunctions,
-          std::forward<Operand>(operand));
-      AD_CONTRACT_CHECK(optionalResult);
-      return std::move(optionalResult.value());
-    }
-
-    // The number of values we aggregate.
-    auto inputSize = getResultSize(*context, operand);
-
-    // If there are no values, return the neutral element. It is important to
-    // handle this case separately, because the following code only words if
-    // there is at least one value.
-    if (inputSize == 0) {
-      return resultForEmptyGroup;
-    }
-
-    // All aggregate operations are binary, with the same value getter for each
-    // operand.
-    {
-      using V = typename AggregateOperation::ValueGetters;
-      static_assert(std::tuple_size_v<V> == 2);
-      static_assert(std::is_same_v<std::tuple_element_t<0, V>,
-                                   std::tuple_element_t<1, V>>);
-    }
-    const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
-
-    // Helper lambda for aggregating two values.
-    //
-    // TODO: Why is the `context` not passed by reference?
-    auto aggregateTwoValues = [&aggregateOperation, context](
-                                  auto&& x, auto&& y) -> decltype(auto) {
-      if constexpr (requires {
-                      aggregateOperation._function(AD_FWD(x), AD_FWD(y));
-                    }) {
-        return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
-      } else {
-        return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
-      }
-    };
-
-    // A generator for the operands (before the value getter is applied to get
-    // the actual values).
-    auto operands =
-        makeGenerator(std::forward<Operand>(operand), inputSize, context);
-
-    // Set up cancellation handling.
-    auto checkCancellation =
-        [context](ad_utility::source_location location =
-                      ad_utility::source_location::current()) {
-          context->cancellationHandle_->throwIfCancelled(location);
-        };
-
-    // Lambda to compute the aggregate of the given operands. This requires
-    // that `inputs` is not empty.
-    auto computeAggregate = [&valueGetter, context, &finalOperation,
-                             &aggregateTwoValues,
-                             &checkCancellation](auto&& inputs) {
-      auto it = inputs.begin();
-      AD_CORRECTNESS_CHECK(it != inputs.end());
-
-      using ResultType = std::decay_t<decltype(aggregateTwoValues(
-          std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
-      ResultType result = valueGetter(*it, context);
-      checkCancellation();
-      size_t numValues = 1;
-
-      for (++it; it != inputs.end(); ++it) {
-        result = aggregateTwoValues(std::move(result),
-                                    valueGetter(std::move(*it), context));
-        checkCancellation();
-        ++numValues;
-      }
-      result = finalOperation(std::move(result), numValues);
-      checkCancellation();
-      return result;
-    };
-
-    // Compute the aggregate (over all values or, if this is a DISTINCT
-    // aggregate, only over the distinct values).
-    //
-    // NOTE: If the GROUP BY is implicit and we have a single group, that
-    // group can be empty. Then we cannot start with the first value and
-    // successively aggregate the others. Instead, we have to return the
-    // "neutral element" of that aggregation operation.
-    auto result = [&]() {
-      if (distinct) {
-        auto uniqueValues =
-            getUniqueElements(context, inputSize, std::move(operands));
-        checkCancellation();
-        return computeAggregate(std::move(uniqueValues));
-      } else {
-        return computeAggregate(std::move(operands));
-      }
-    }();
-
-    // If the result is numeric, convert it to an `Id`.
-    //
-    // TODO<joka921> Check if this is really necessary, or if we can also use
-    // IDs in the intermediate steps without loss of efficiency.
-    if constexpr (requires { makeNumericId(result); }) {
-      return makeNumericId(result);
-    } else {
-      return result;
-    }
+  struct EvaluateOnChildOperand {
+    template <SingleExpressionResult Operand>
+    ExpressionResult operator()(const AggregateOperation& aggregateOperation,
+                                const ValueId resultForEmptyGroup,
+                                const FinalOperation& finalOperation,
+                                EvaluationContext* context, bool distinct,
+                                Operand&& operand);
   };
 
  private:
@@ -218,12 +111,27 @@ class AggregateExpression : public SparqlExpression {
   AggregateOperation _aggregateOp;
 };
 
+template <auto getDefaultValueForEmptyGroup,
+    size_t NumOperands, typename... Ts>
+struct OperationWithDefault : Operation<NumOperands, Ts...> {
+  static auto resultForEmptyGroup() {
+    if constexpr (std::invocable<decltype(getDefaultValueForEmptyGroup)>) {
+      return getDefaultValueForEmptyGroup();
+    } else {
+      return getDefaultValueForEmptyGroup;
+    }
+  }
+};
+
+
 // Instantiations of `AggregateExpression` for COUNT, SUM, AVG, MIN, and MAX.
 
+
+
 // Shortcut for a binary `AggregateExpression` (all of them are binary).
-template <typename Function, typename ValueGetter>
+template <typename Function, typename ValueGetter, auto getDefaultValue>
 using AGG_EXP = AggregateExpression<
-    Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
+    OperationWithDefault<getDefaultValue, 2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
 // Helper function that for a given `NumericOperation` with numeric arguments
 // and result (integer or floating points), returns the corresponding function

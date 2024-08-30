@@ -325,15 +325,15 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
 // NOTE: This class is defined in the namespace `sparqlExpression` and is
 // different from the class with the same name defined in `Operation.h`
 //
-// TODO: The rest of this comment seems to be outdated. Please check, Johannes.
-//
 // An Operation that consists of a `FunctionAndValueGetters` that takes
-// `NumOperands` parameters. The `FunctionForSetOfIntervalsType` is a function,
-// that can efficiently perform the operation when all the operands are
-// `SetOfInterval`s. It is necessary to use the `FunctionAndValueGetters`
-// struct to allow for multiple `ValueGetters` (a parameter pack, that has to
-// appear at the end of the template declaration) and the default parameter for
-// the `FunctionForSetOfIntervals` (which also has to appear at the end).
+// `NumOperands` parameters. The `SpecializedFunction`s can be used to choose a
+// more efficient implementation given the types of the operands. For example,
+// expressions like `logical-or` or `logical-and` can be implemented more
+// efficiently if all the inputs are `SetOfInterval`s`.
+// Note: It is necessary to use the `FunctionAndValueGetters` struct to allow
+// for multiple `ValueGetters` because there can be multiple `ValueGetters` as
+// well as zero or more `SpezializedFunctions`, but there can only be a single
+// parameter pack in C++.
 template <
     size_t NumOperands,
     ad_utility::isInstantiation<FunctionAndValueGetters>

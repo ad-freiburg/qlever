@@ -64,6 +64,8 @@ TEST(AggregateExpression, max) {
   // Correct comparison between vocab and local vocab entries.
   testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
   testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
+  testMaxId({}, U);
+}
 
   // Test `CountExpression`.
 TEST(AggregateExpression, count) {
@@ -130,20 +132,6 @@ TEST(AggregateExpression, min) {
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("alpha"));
-}
-
-// Test `MaxExpression`.
-TEST(AggregateExpression, max) {
-  auto testMaxId = testAggregate<MaxExpression, Id>;
-  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
-  testMaxId({I(3), U, V(0), L(3), U, (I(-1))}, L(3));
-  testMaxId({}, U);
-
-  auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
-  // TODO<joka921> Implement correct comparison on strings
-  testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
-                lit("äpfel"));
 }
 
 // ______________________________________________________________________________
@@ -220,6 +208,12 @@ TEST(AggregateExpression, CountStar) {
 
   m = makeCountStarExpression(false);
   EXPECT_THAT(m, matcher(t.table.numRows()));
+
+  // Test the correct behavior for an empty input.
+  t.table.clear();
+  EXPECT_THAT(m, matcher(0));
+  m = makeCountStarExpression(true);
+  EXPECT_THAT(m, matcher(0));
 }
 
 // ______________________________________________________________________________
