@@ -473,8 +473,7 @@ class GroupBy : public Operation {
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Join*`.
-  std::optional<OptimizedGroupByData> checkIfJoinWithFullScan(
-      const Operation& join);
+  std::optional<OptimizedGroupByData> checkIfJoinWithFullScan(const Join& join);
 
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and

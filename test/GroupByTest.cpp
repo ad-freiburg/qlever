@@ -29,10 +29,14 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
+using ::testing::Eq;
+using ::testing::Optional;
 
 namespace {
 auto I = IntId;
-}
+// Wrapper type so that we can safely use `IdTable` within gtest matchers.
+using W = CopyShield<IdTable>;
+}  // namespace
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
@@ -487,9 +491,10 @@ struct GroupByOptimizations : ::testing::Test {
       Alias{makeCountPimpl(varX, false), Variable{"?count"}},
       Alias{makeCountPimpl(varX, false), Variable{"?count2"}}};
 
-  const Operation& getOperation(const Tree& tree) {
-    AD_CONTRACT_CHECK(tree->getRootOperation());
-    return *tree->getRootOperation();
+  const Join& getOperation(const Tree& tree) {
+    auto join = std::dynamic_pointer_cast<const Join>(tree->getRootOperation());
+    AD_CONTRACT_CHECK(join);
+    return *join;
   }
 };
 
@@ -1501,6 +1506,9 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
                                     source_location l =
                                         source_location::current()) {
     auto trace = generateLocationTrace(l);
+    auto getId = makeGetId(qec->getIndex());
+    Id idOfX = getId("<x>");
+    Id idOfY = getId("<y>");
     // Set up a `VALUES` clause with three values for `?x`, two of which
     // (`<x>` and `<y>`) actually appear in the test knowledge graph.
     parsedQuery::SparqlValues sparqlValues;
@@ -1519,22 +1527,10 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
         chooseInterface
             ? validForOptimization.computeGroupByForJoinWithFullScan()
             : validForOptimization.computeOptimizedGroupByIfPossible();
-    ASSERT_TRUE(optional.has_value());
-    IdTable result = std::move(optional).value();
-
-    // There are 7 triples with `<x>` as a subject, 0 triples with `<xa>` as a
-    // subject, and 1 triple with `y` as a subject.
-    ASSERT_EQ(result.numColumns(), 2u);
-    ASSERT_EQ(result.size(), 2u);
-
-    auto getId = makeGetId(qec->getIndex());
-    Id idOfX = getId("<x>");
-    Id idOfY = getId("<y>");
-
-    ASSERT_EQ(result(0, 0), idOfX);
-    ASSERT_EQ(result(0, 1), Id::makeFromInt(7));
-    ASSERT_EQ(result(1, 0), idOfY);
-    ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
+    EXPECT_THAT(
+        optional,
+        Optional(Eq(W{makeIdTableFromVector(
+            {{idOfX, Id::makeFromInt(7)}, {idOfY, Id::makeFromInt(1)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1545,9 +1541,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
                                         xyzScanSortedByX, 0, 0);
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     auto result = groupBy.computeGroupByForJoinWithFullScan();
-    ASSERT_TRUE(result.has_value());
-    ASSERT_EQ(result->numColumns(), 2u);
-    ASSERT_EQ(result->size(), 0u);
+    EXPECT_THAT(result, Optional(Eq(W{IdTable{2, qec->getAllocator()}})));
   }
 }
 
@@ -1581,13 +1575,11 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     auto optional = chooseInterface
                         ? groupBy.computeGroupByForSingleIndexScan()
                         : groupBy.computeOptimizedGroupByIfPossible();
-    ASSERT_TRUE(optional.has_value());
-    IdTable result = std::move(optional).value();
 
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
     // The test index currently consists of 15 triples.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(15));
+    EXPECT_THAT(
+        optional,
+        Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(15)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1595,25 +1587,19 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   {
     auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
-    ASSERT_TRUE(optional.has_value());
-    IdTable result = std::move(optional).value();
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(5));
+    ASSERT_THAT(optional,
+                Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(5)}})})));
   }
   {
     auto groupBy =
         GroupBy{qec, emptyVariables, aliasesCountDistinctX, xyzScanSortedByX};
     auto optional = groupBy.computeGroupByForSingleIndexScan();
-    ASSERT_TRUE(optional.has_value());
-    IdTable result = std::move(optional).value();
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(6));
+    ASSERT_THAT(optional,
+                Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(6)}})})));
   }
 }
 // _____________________________________________________________________________
@@ -1665,23 +1651,21 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   auto getId = makeGetId(qec->getIndex());
   {
     auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
-    auto result = groupBy.computeGroupByObjectWithCount();
-    ASSERT_TRUE(result.has_value());
-    ASSERT_EQ(result.value(), makeIdTableFromVector({{getId("<x>"), I(4)},
-                                                     {getId("<z>"), I(1)}}));
+    ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
+                Optional(Eq(W{makeIdTableFromVector(
+                    {{getId("<x>"), I(4)}, {getId("<z>"), I(1)}})})));
   }
 
   // Group by object.
   {
     auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
-    auto result = groupBy.computeGroupByObjectWithCount();
-    ASSERT_TRUE(result.has_value());
-    ASSERT_EQ(result.value(),
-              makeIdTableFromVector({{getId("\"A\""), I(1)},
-                                     {getId("\"alpha\""), I(1)},
-                                     {getId("\"älpha\""), I(1)},
-                                     {getId("\"Beta\""), I(1)},
-                                     {getId("\"zz\"@en"), I(1)}}));
+    ASSERT_THAT(
+        groupBy.computeGroupByObjectWithCount(),
+        Optional(Eq(W{makeIdTableFromVector({{getId("\"A\""), I(1)},
+                                             {getId("\"alpha\""), I(1)},
+                                             {getId("\"älpha\""), I(1)},
+                                             {getId("\"Beta\""), I(1)},
+                                             {getId("\"zz\"@en"), I(1)}})})));
   }
 }
 
