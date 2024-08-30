@@ -2,52 +2,57 @@
 //  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_VOCABULARYTYPES_H
-#define QLEVER_VOCABULARYTYPES_H
+#pragma once
 
 #include <optional>
 
-/// A word and its index in the vocabulary from which it was obtained. A word
-/// that is larger than all words in the vocabulary is represented by
-/// `{std::nullopt, largestIndexInVocabulary + 1}`
-struct WordAndIndex {
-  std::optional<std::string> _word;
-  uint64_t _index;
+// A word and its index in the vocabulary from which it was obtained. Also
+// contains a special state `end()` which can be queried by the `isEnd()`
+// function. This can be used to represent words that are larger than the
+// largest word in the vocabulary, similar to a typical `end()` iterator.
+class WordAndIndex {
+ private:
+  std::optional<std::pair<std::string, uint64_t>> wordAndIndex_;
+  // See the documentation for `previousIndex()` below.
+  std::optional<uint64_t> previousIndex_ = std::nullopt;
 
+ public:
+  // Query for the special `end` semantics.
+  bool isEnd() const { return !wordAndIndex_.has_value(); }
+
+  // Return the word. Throws if `isEnd() == true`.
+  const std::string& word() const {
+    AD_CONTRACT_CHECK(wordAndIndex_.has_value());
+    return wordAndIndex_.value().first;
+  }
+
+  // Return the index. Throws if `isEnd() == true`.
+  uint64_t index() const {
+    AD_CONTRACT_CHECK(wordAndIndex_.has_value());
+    return wordAndIndex_.value().second;
+  }
+
+  // _______________________________________________________
+  uint64_t indexOrDefault(uint64_t defaultValue) const {
+    return isEnd() ? defaultValue : index();
+  }
+
+  // The next valid index before `index()`. If `nullopt` either no
+  // such index exists (because `index()` is already the first valid index),
+  // or the `previousIndex_` simply wasn't set. This member is currently used to
+  // communicate between the `VocabularyInMemoryBinSearch` and the
+  // `InternalExternalVocabulary`.
+  std::optional<uint64_t>& previousIndex() { return previousIndex_; }
+
+  // The default constructor creates a `WordAndIndex` with `isEnd() == true`.
   WordAndIndex() = default;
-  // Constructors that are needed to construct a word and index from one of
-  // `std::string`, `std::string_view`, `std::optional<std::string>`,
-  // `std::optional<std::string_view>` and the index.
-  WordAndIndex(std::optional<std::string> word, uint64_t index)
-      : _word{std::move(word)}, _index{index} {}
+
+  // Explicit factory function for the end state.
+  static WordAndIndex end() { return {}; }
+
+  // Constructors for the ordinary non-end case.
   WordAndIndex(std::string word, uint64_t index)
-      : _word{std::move(word)}, _index{index} {}
-  WordAndIndex(std::optional<std::string_view> word, uint64_t index)
-      : _index{index} {
-    if (word.has_value()) {
-      _word.emplace(word.value());
-    }
-  }
-  WordAndIndex(std::nullopt_t, uint64_t index) : _index{index} {}
-
-  bool operator==(const WordAndIndex& result) const = default;
-  [[nodiscard]] bool has_value() const { return _word.has_value(); }
-
-  // Comparison is only done by the `_index`, since the order of the `_word`
-  // depends on the order in the vocabulary, which is unknown to the
-  // `WordAndIndex`
-  auto operator<=>(const WordAndIndex& rhs) const {
-    return _index <=> rhs._index;
-  }
-
-  // This operator provides human-readable output for a `WordAndIndex`,
-  // useful for testing.
-  friend std::ostream& operator<<(std::ostream& os, const WordAndIndex& wi) {
-    os << "WordAndIndex : ";
-    os << (wi._word.value_or("nullopt"));
-    os << wi._index << ", ";
-    return os;
-  }
+      : wordAndIndex_{std::in_place, std::move(word), index} {}
+  WordAndIndex(std::string_view word, uint64_t index)
+      : wordAndIndex_{std::in_place, std::string{word}, index} {}
 };
-
-#endif  // QLEVER_VOCABULARYTYPES_H

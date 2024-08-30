@@ -108,7 +108,7 @@ void Values::computeMultiplicities() {
 }
 
 // ____________________________________________________________________________
-Result Values::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Values::computeResult([[maybe_unused]] bool requestLaziness) {
   // Set basic properties of the result table.
   IdTable idTable{getExecutionContext()->getAllocator()};
   idTable.setNumColumns(getResultWidth());

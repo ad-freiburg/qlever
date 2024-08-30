@@ -9,13 +9,15 @@
 #include "./util/TripleComponentTestHelpers.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "parser/TurtleParser.h"
+#include "parser/RdfParser.h"
 #include "util/Conversions.h"
 
 using std::string;
 using namespace std::literals;
-using Re2Parser = TurtleStringParser<Tokenizer>;
-using CtreParser = TurtleStringParser<TokenizerCtre>;
+using Re2Parser = RdfStringParser<TurtleParser<Tokenizer>>;
+using CtreParser = RdfStringParser<TurtleParser<TokenizerCtre>>;
+using NQuadRe2Parser = RdfStringParser<NQuadParser<Tokenizer>>;
+using NQuadCtreParser = RdfStringParser<NQuadParser<TokenizerCtre>>;
 
 namespace {
 auto lit = ad_utility::testing::tripleComponentLiteral;
@@ -70,10 +72,10 @@ auto checkParseResult =
 // Formatted output of TurtleTriples in case of test failures.
 std::ostream& operator<<(std::ostream& os, const TurtleTriple& tr) {
   os << "( " << tr.subject_ << " " << tr.predicate_.toStringRepresentation()
-     << " " << tr.object_ << ")";
+     << " " << tr.object_ << " " << tr.graphIri_ << ")";
   return os;
 }
-TEST(TurtleParserTest, prefixedName) {
+TEST(RdfParserTest, prefixedName) {
   auto runCommonTests = [](auto& parser) {
     parser.prefixMap_["wd"] = iri("<www.wikidata.org/>");
     parser.setInputStream("wd:Q430 someotherContent");
@@ -103,7 +105,7 @@ TEST(TurtleParserTest, prefixedName) {
                  typename std::decay_t<decltype(parser)>::ParseException);
   };
   {
-    TurtleStringParser<Tokenizer> p;
+    Re2Parser p;
     runCommonTests(p);
     p.setInputStream(R"(wd:esc\,aped)");
     ASSERT_TRUE(p.prefixedName());
@@ -123,7 +125,7 @@ TEST(TurtleParserTest, prefixedName) {
   }
 
   {
-    TurtleStringParser<TokenizerCtre> p;
+    CtreParser p;
     runCommonTests(p);
     // These unit tests document the current (fast, but suboptimal) behavior of
     // the CTRE parser. TODO: Try to improve the parser without sacrificing
@@ -140,7 +142,7 @@ TEST(TurtleParserTest, prefixedName) {
   }
 }
 
-TEST(TurtleParserTest, prefixID) {
+TEST(RdfParserTest, prefixID) {
   auto runCommonTests = [](const auto& checker) {
     auto p = checker("@prefix bla:<www.bla.org/> .");
     ASSERT_EQ(p.prefixMap_["bla"], iri("<www.bla.org/>"));
@@ -168,7 +170,7 @@ TEST(TurtleParserTest, prefixID) {
   runCommonTests(checkCTRE);
 }
 
-TEST(TurtleParserTest, stringParse) {
+TEST(RdfParserTest, stringParse) {
   auto runCommonTests = [](const auto& checker) {
     std::string s1("\"double quote\"");
     std::string s1Normalized("\"double quote\"");
@@ -192,11 +194,15 @@ TEST(TurtleParserTest, stringParse) {
   runCommonTests(checkCtre);
 }
 
-TEST(TurtleParserTest, rdfLiteral) {
+TEST(RdfParserTest, rdfLiteral) {
   std::vector<string> literals;
   std::vector<TripleComponent> expected;
   literals.emplace_back(R"("simpleString")");
   expected.emplace_back(lit(R"("simpleString")"));
+  literals.emplace_back(R"("string\"with \\ escapes\n"^^<www.x.de>)");
+  expected.emplace_back(TripleComponent::Literal::fromEscapedRdfLiteral(
+      R"("string\"with \\ escapes\n")",
+      TripleComponent::Iri::fromIriref("<www.x.de>")));
   literals.emplace_back(R"("langtag"@en-gb)");
   expected.emplace_back(lit(R"("langtag")", "@en-gb"));
   literals.emplace_back("\"valueLong\"^^<www.someunknownType/integer>");
@@ -235,7 +241,7 @@ TEST(TurtleParserTest, rdfLiteral) {
   runCommonTests(CtreParser{});
 }
 
-TEST(TurtleParserTest, literalAndDatatypeToTripleComponent) {
+TEST(RdfParserTest, literalAndDatatypeToTripleComponent) {
   auto ladttc =
       TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent;
   auto fromIri = TripleComponent::Iri::fromIrirefWithoutBrackets;
@@ -249,7 +255,7 @@ TEST(TurtleParserTest, literalAndDatatypeToTripleComponent) {
   ASSERT_EQ(ladttc("false", fromIri(XSD_BOOLEAN_TYPE)), false);
 }
 
-TEST(TurtleParserTest, blankNode) {
+TEST(RdfParserTest, blankNode) {
   auto runCommonTests = [](const auto& checker) {
     checker(" _:blank1", "_:u_blank1", 9);
     checker(" _:blank1 someRemainder", "_:u_blank1", 9);
@@ -269,7 +275,7 @@ TEST(TurtleParserTest, blankNode) {
   runCommonTests(checkCtreSubject);
 }
 
-TEST(TurtleParserTest, blankNodePropertyList) {
+TEST(RdfParserTest, blankNodePropertyList) {
   auto testPropertyListAsObject = [](auto p) {
     p.activeSubject_ = iri("<s>");
     p.activePredicate_ = iri("<p1>");
@@ -312,7 +318,7 @@ TEST(TurtleParserTest, blankNodePropertyList) {
   testPropertyListAsSubject(CtreParser{});
 }
 
-TEST(TurtleParserTest, object) {
+TEST(RdfParserTest, object) {
   auto runCommonTests = [](auto p) {
     auto sub = iri("<sub>");
     auto pred = iri("<pred>");
@@ -345,7 +351,7 @@ TEST(TurtleParserTest, object) {
   runCommonTests(CtreParser{});
 }
 
-TEST(TurtleParserTest, objectList) {
+TEST(RdfParserTest, objectList) {
   auto runCommonTests = [](auto parser) {
     parser.activeSubject_ = iri("<s>");
     parser.activePredicate_ = iri("<p>");
@@ -369,7 +375,7 @@ TEST(TurtleParserTest, objectList) {
   runCommonTests(CtreParser{});
 }
 
-TEST(TurtleParserTest, predicateObjectList) {
+TEST(RdfParserTest, predicateObjectList) {
   auto runCommonTests = [](auto parser) {
     parser.activeSubject_ = iri("<s>");
     string predL = "\n <p1> <ob1>;<p2> \"ob2\",\n <ob3>";
@@ -386,7 +392,7 @@ TEST(TurtleParserTest, predicateObjectList) {
   runCommonTests(CtreParser{});
 }
 
-TEST(TurtleParserTest, numericLiteral) {
+TEST(RdfParserTest, numericLiteral) {
   std::vector<std::string> literals{"2",   "-2",     "42.209",   "-42.239",
                                     ".74", "2.3e12", "2.34E-14", "-0.3e2",
                                     "3E2", "-14E-1", ".1E1",     "-.2E0"};
@@ -402,11 +408,10 @@ TEST(TurtleParserTest, numericLiteral) {
   }
 }
 
-TEST(TurtleParserTest, numericLiteralErrorBehavior) {
+TEST(RdfParserTest, numericLiteralErrorBehavior) {
   auto assertParsingFails = [](auto& parser, std::string input) {
     parser.setInputStream(input);
-    ASSERT_THROW(parser.parseAndReturnAllTriples(),
-                 TurtleStringParser<Tokenizer>::ParseException);
+    ASSERT_THROW(parser.parseAndReturnAllTriples(), Re2Parser::ParseException);
   };
 
   auto parseAllTriples = [](auto& parser, std::string input) {
@@ -552,14 +557,14 @@ TEST(TurtleParserTest, numericLiteralErrorBehavior) {
   runCommonTests(CtreParser{});
 }
 
-TEST(TurtleParserTest, DateLiterals) {
+TEST(RdfParserTest, DateLiterals) {
   std::vector<std::string> dateLiterals{
       R"("2000-10-15"^^<)"s + XSD_DATE_TYPE + ">",
       R"("-2014-03-16T12:13:52"^^<)"s + XSD_DATETIME_TYPE + ">",
       R"("2084"^^<)"s + XSD_GYEAR_TYPE + ">",
       R"("2083-12"^^<)"s + XSD_GYEARMONTH_TYPE + ">"};
-  using L = DateOrLargeYear;
-  std::vector<DateOrLargeYear> expected{
+  using L = DateYearOrDuration;
+  std::vector<DateYearOrDuration> expected{
       L{Date{2000, 10, 15}}, L{Date{-2014, 3, 16, 12, 13, 52}},
       L{Date{2084, 0, 0}}, L{Date{2083, 12, 0}}};
 
@@ -580,7 +585,7 @@ TEST(TurtleParserTest, DateLiterals) {
   std::vector<TripleComponent::Literal> expectedInvalidDateLiterals{
       lit("\"2000-10\""),   lit("\"2000-50\""), lit(R"("-2014-03-16T12:13")"s),
       lit(R"("2084-12")"s), lit(R"("20##")"s),  lit(R"("2083-12-13")"s)};
-  using L = DateOrLargeYear;
+  using L = DateYearOrDuration;
   for (size_t i = 0; i < invalidDateLiterals.size(); ++i) {
     checkParseResult<Re2Parser, &Re2Parser::object>(
         invalidDateLiterals[i], expectedInvalidDateLiterals[i]);
@@ -589,7 +594,63 @@ TEST(TurtleParserTest, DateLiterals) {
   }
 }
 
-TEST(TurtleParserTest, booleanLiteral) {
+TEST(RdfParserTest, DayTimeDurationLiterals) {
+  std::vector<std::string> dayTimeDurationLiterals{
+      R"("P0DT0H0M0.00S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PT0S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P365DT23H23M59.99S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-PT126.76S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P9999D"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P23DT23.22S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PT72H134M129.98S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
+
+  using L = DateYearOrDuration;
+  auto positive = DayTimeDuration::Type::Positive;
+  auto negative = DayTimeDuration::Type::Negative;
+
+  std::vector<DateYearOrDuration> expected{
+      L{DayTimeDuration{}},
+      L{DayTimeDuration{}},
+      L{DayTimeDuration{negative, 365, 23, 23, 59.9900}},
+      L{DayTimeDuration{negative, 0, 0, 0, 126.7600}},
+      L{DayTimeDuration{negative, 9999, 0, 0, 0.0000}},
+      L{DayTimeDuration{positive, 23, 0, 0, 23.2200}},
+      L{DayTimeDuration{positive, 0, 72, 134, 129.9800}}};
+
+  for (size_t i = 0; i < dayTimeDurationLiterals.size(); ++i) {
+    checkParseResult<Re2Parser, &Re2Parser::object>(dayTimeDurationLiterals[i],
+                                                    expected[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(
+        dayTimeDurationLiterals[i], expected[i]);
+  }
+
+  std::vector<std::string> invalidDayTimeDurationLiterals{
+      R"("PinvalidDH2.53S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P234D23H23M23.55S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("PH-33.33S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P2001693"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-98D59M59.99S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-PDTS"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("P200000032DT4H3M4S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">",
+      R"("-P1048576DT4H3M4.23S"^^<)"s + XSD_DAYTIME_DURATION_TYPE + ">"};
+
+  std::vector<TripleComponent::Literal> expectedInvalidDayTimeDurationLiterals{
+      lit("\"PinvalidDH2.53S\""),    lit("\"P234D23H23M23.55S\""),
+      lit("\"PH-33.33S\""),          lit("\"P2001693\""),
+      lit("\"-98D59M59.99S\""),      lit("\"-PDTS\""),
+      lit("\"P200000032DT4H3M4S\""), lit("\"-P1048576DT4H3M4.23S\"")};
+
+  for (size_t i = 0; i < invalidDayTimeDurationLiterals.size(); ++i) {
+    checkParseResult<Re2Parser, &Re2Parser::object>(
+        invalidDayTimeDurationLiterals[i],
+        expectedInvalidDayTimeDurationLiterals[i]);
+    checkParseResult<CtreParser, &CtreParser::object>(
+        invalidDayTimeDurationLiterals[i],
+        expectedInvalidDayTimeDurationLiterals[i]);
+  }
+}
+
+TEST(RdfParserTest, booleanLiteral) {
   auto runCommonTests = [](const auto& ruleChecker, const auto& ruleParser) {
     ruleChecker("true", true);
     ruleChecker("false", false);
@@ -601,7 +662,7 @@ TEST(TurtleParserTest, booleanLiteral) {
                  parseRule<CtreParser, &CtreParser::booleanLiteral>);
 }
 
-TEST(TurtleParserTest, booleanLiteralLongForm) {
+TEST(RdfParserTest, booleanLiteralLongForm) {
   auto runCommonTests = [](const auto& ruleChecker) {
     ruleChecker("\"true\"^^<http://www.w3.org/2001/XMLSchema#boolean>", true);
     ruleChecker("\"false\"^^<http://www.w3.org/2001/XMLSchema#boolean>", false);
@@ -612,7 +673,7 @@ TEST(TurtleParserTest, booleanLiteralLongForm) {
   runCommonTests(checkParseResult<CtreParser, &CtreParser::rdfLiteral>);
 }
 
-TEST(TurtleParserTest, collection) {
+TEST(RdfParserTest, collection) {
   auto runCommonTests = [](const auto& checker) {
     using TC = TripleComponent;
     using TT = TurtleTriple;
@@ -634,6 +695,54 @@ TEST(TurtleParserTest, collection) {
   runCommonTests(checkParseResult<CtreParser, &CtreParser::collection, 22>);
 }
 
+// Test the parsing of an IRI reference.
+TEST(RdfParserTest, iriref) {
+  // Run test for given parser.
+  auto runTestsForParser = [](auto parser) {
+    std::string iriref_1 = "<fine>";
+    std::string iriref_2 = "<okay ish>";
+    std::string iriref_3 = "<not\x19okay_for_RE2>";
+    std::string iriref_4 = "<throws\"exception>";
+    std::string iriref_5 = "no iriref at all";
+    // The first IRI ref is fine for both parsers.
+    parser.setInputStream(iriref_1);
+    ASSERT_TRUE(parser.iriref());
+    ASSERT_EQ(parser.lastParseResult_, iri(iriref_1));
+    // The second IRI ref is accepted by both parsers, but produces a
+    // warning for the Re2Parser.
+    testing::internal::CaptureStdout();
+    parser.setInputStream(iriref_2);
+    ASSERT_TRUE(parser.iriref());
+    ASSERT_EQ(parser.lastParseResult_, iri(iriref_2));
+    std::string warning = testing::internal::GetCapturedStdout();
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      EXPECT_EQ(warning, "");
+    } else {
+      EXPECT_THAT(warning, ::testing::HasSubstr("not standard-compliant"));
+      EXPECT_THAT(warning, ::testing::HasSubstr(iriref_2));
+    }
+    // The third IRI ref is accepted by the CtreParser, but not by the
+    // Re2Parser.
+    parser.setInputStream(iriref_3);
+    if constexpr (std::is_same_v<decltype(parser), CtreParser>) {
+      ASSERT_TRUE(parser.iriref());
+      ASSERT_EQ(parser.lastParseResult_, iri(iriref_3));
+    } else {
+      ASSERT_FALSE(parser.iriref());
+    }
+    // The fourth IRI ref throws an exception when parsed (because " is
+    // encountered before the closing >).
+    parser.setInputStream(iriref_4);
+    ASSERT_THROW(parser.iriref(), TurtleParser<Tokenizer>::ParseException);
+    // The fifth IRI ref is not recognized as an IRI ref.
+    parser.setInputStream(iriref_5);
+    ASSERT_FALSE(parser.iriref());
+  };
+  // Run tests for both parsers and reset std::cout.
+  runTestsForParser(Re2Parser{});
+  runTestsForParser(CtreParser{});
+}
+
 // Parse the file at `filename` using a parser of type `Parser` and return the
 // sorted result. Iff `useBatchInterface` then the `getBatch()` function is used
 // for parsing, else `getLine()` is used.
@@ -641,7 +750,7 @@ template <typename Parser>
 std::vector<TurtleTriple> parseFromFile(const std::string& filename,
                                         bool useBatchInterface) {
   Parser parserChild{filename};
-  TurtleParserBase& parser = parserChild;
+  RdfParserBase& parser = parserChild;
 
   std::vector<TurtleTriple> result;
   if (useBatchInterface) {
@@ -663,24 +772,28 @@ std::vector<TurtleTriple> parseFromFile(const std::string& filename,
 // function for all the different parsers that can read from a file (stream and
 // parallel parser, with all the combinations of the different tokenizers).
 auto forAllParallelParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleParallelParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleParallelParser<Tokenizer>>(false, args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(true,
-                                                                    args...);
-  function.template operator()<TurtleParallelParser<TokenizerCtre>>(false,
-                                                                    args...);
+  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
+      true, args...);
+  function.template operator()<RdfParallelParser<TurtleParser<Tokenizer>>>(
+      false, args...);
+  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
+      true, args...);
+  function.template operator()<RdfParallelParser<TurtleParser<TokenizerCtre>>>(
+      false, args...);
 }
 auto forAllParsers(const auto& function, const auto&... args) {
-  function.template operator()<TurtleStreamParser<Tokenizer>>(true, args...);
-  function.template operator()<TurtleStreamParser<Tokenizer>>(false, args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(true,
-                                                                  args...);
-  function.template operator()<TurtleStreamParser<TokenizerCtre>>(false,
-                                                                  args...);
+  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
+      true, args...);
+  function.template operator()<RdfStreamParser<TurtleParser<Tokenizer>>>(
+      false, args...);
+  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
+      true, args...);
+  function.template operator()<RdfStreamParser<TurtleParser<TokenizerCtre>>>(
+      false, args...);
   forAllParallelParsers(function, args...);
 }
 
-TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
+TEST(RdfParserTest, TurtleStreamAndParallelParser) {
   std::string filename{"turtleStreamAndParallelParserTest.dat"};
   std::vector<TurtleTriple> expectedTriples;
   {
@@ -705,7 +818,7 @@ TEST(TurtleParserTest, TurtleStreamAndParallelParser) {
 }
 
 // _______________________________________________________________________
-TEST(TurtleParserTest, emptyInput) {
+TEST(RdfParserTest, emptyInput) {
   std::string filename{"turtleParserEmptyInput.dat"};
   FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
@@ -725,7 +838,7 @@ TEST(TurtleParserTest, emptyInput) {
 }
 
 // ________________________________________________________________________
-TEST(TurtleParserTest, multilineComments) {
+TEST(RdfParserTest, multilineComments) {
   std::string filename{"turtleParserMultilineComments.dat"};
   FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
@@ -778,7 +891,7 @@ TEST(TurtleParserTest, multilineComments) {
 // Test that exceptions during the turtle parsing are properly propagated to the
 // calling code. This is especially important for the parallel parsers where the
 // actual parsing happens on background threads.
-TEST(TurtleParserTest, exceptionPropagation) {
+TEST(RdfParserTest, exceptionPropagation) {
   std::string filename{"turtleParserExceptionPropagation.dat"};
   FILE_BUFFER_SIZE = 1000;
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
@@ -797,7 +910,7 @@ TEST(TurtleParserTest, exceptionPropagation) {
 
 // Test that exceptions in the batched reading of the input file are properly
 // propagated.
-TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
+TEST(RdfParserTest, exceptionPropagationFileBufferReading) {
   std::string filename{"turtleParserExceptionPropagationFileBufferReading.dat"};
   auto testWithParser = [&]<typename Parser>(bool useBatchInterface,
                                              std::string_view input) {
@@ -821,7 +934,7 @@ TEST(TurtleParserTest, exceptionPropagationFileBufferReading) {
 // Test that the parallel parser's destructor can be run quickly and without
 // blocking, even when there are still lots of blocks in the pipeline that are
 // currently being parsed.
-TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
+TEST(RdfParserTest, stopParsingOnOutsideFailure) {
 #ifdef _QLEVER_NO_TIMING_TESTS
   GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
 #endif
@@ -851,4 +964,53 @@ TEST(TurtleParserTest, stopParsingOnOutsideFailure) {
   }();
   FILE_BUFFER_SIZE = 40;
   forAllParallelParsers(testWithParser, input);
+}
+
+// _____________________________________________________________________________
+TEST(RdfParserTest, nQuadParser) {
+  auto runTestsForParser = [](auto parser) {
+    parser.setInputStream(
+        "<x> <y> <z> <g>. <x2> <y2> _:blank . <x2> <y2> \"literal\" _:blank2 "
+        ".");
+    auto triples = parser.parseAndReturnAllTriples();
+    auto iri = ad_utility::testing::iri;
+    auto lit = ad_utility::testing::tripleComponentLiteral;
+    std::vector<TurtleTriple> expected;
+    expected.emplace_back(iri("<x>"), iri("<y>"), iri("<z>"), iri("<g>"));
+    auto internalGraphId =
+        qlever::specialIds().at(std::string{DEFAULT_GRAPH_IRI});
+    expected.emplace_back(iri("<x2>"), iri("<y2>"), "_:u_blank",
+                          internalGraphId);
+    expected.emplace_back(iri("<x2>"), iri("<y2>"), lit("literal"),
+                          "_:u_blank2");
+    EXPECT_THAT(triples, ::testing::ElementsAreArray(expected));
+
+    auto expectParsingFails = [](const std::string& input) {
+      auto parser = RdfStringParser<NQuadParser<Tokenizer>>();
+      parser.setInputStream(input);
+      EXPECT_ANY_THROW(parser.parseAndReturnAllTriples());
+    };
+
+    expectParsingFails("<x> <y> <z> <g>");  // missing dot after last triple
+    expectParsingFails("<x> 3 <z> <g> .");  // predicate must be an iriref
+    expectParsingFails("3 <x> <z> <g> .");  // predicate must be an iriref
+    expectParsingFails(
+        "<x> <y> '''literalIllegal''' <g> .");  // No multiline literals in
+                                                // NQuad
+    // format.
+  };
+  runTestsForParser(NQuadRe2Parser{});
+  runTestsForParser(NQuadCtreParser{});
+}
+
+TEST(RdfParserTest, noGetlineInStringParser) {
+  auto runTestsForParser = [](auto parser) {
+    parser.setInputStream("<x> <p> <o> .");
+    TurtleTriple t;
+    EXPECT_ANY_THROW(parser.getLine(&t));
+  };
+  runTestsForParser(NQuadRe2Parser{});
+  runTestsForParser(NQuadCtreParser{});
+  runTestsForParser(Re2Parser{});
+  runTestsForParser(CtreParser{});
 }

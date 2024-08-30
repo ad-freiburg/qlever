@@ -38,8 +38,6 @@ class Permutation {
   using ColumnIndices = CompressedRelationReader::ColumnIndices;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  using ScanSpecification = CompressedRelationReader::ScanSpecification;
-
   // Convert a permutation to the corresponding string, etc. `PSO` is converted
   // to "PSO".
   static std::string_view toString(Enum permutation);

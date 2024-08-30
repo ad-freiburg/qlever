@@ -7,12 +7,12 @@
  *       these patterns to disk, and to read them from disk.
  */
 
-#ifndef QLEVER_PATTERNCREATOR_H
-#define QLEVER_PATTERNCREATOR_H
+#pragma once
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
 #include "global/Pattern.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/StxxlSortFunctors.h"
 #include "util/BufferedVector.h"
 #include "util/ExceptionHandling.h"
@@ -69,9 +69,11 @@ struct PatternStatistics {
 /// these predicates.
 class PatternCreator {
  public:
-  using PSOSorter = ad_utility::CompressedExternalIdTableSorter<SortByPSO, 3>;
+  using PSOSorter =
+      ad_utility::CompressedExternalIdTableSorter<SortByPSONoGraphColumn, 3>;
   using OSPSorter4Cols =
-      ad_utility::CompressedExternalIdTableSorter<SortByOSP, 4>;
+      ad_utility::CompressedExternalIdTableSorter<SortByOSP,
+                                                  NumColumnsIndexBuilding + 1>;
 
   // Combine all the triples that this pattern creator creates.
   struct TripleSorter {
@@ -105,7 +107,7 @@ class PatternCreator {
   // Store the additional triples that are created by the pattern mechanism for
   // the `has-pattern` and `has-predicate` predicates.
   struct TripleAndIsInternal {
-    std::array<Id, 3> triple_;
+    std::array<Id, NumColumnsIndexBuilding> triple_;
     bool isInternal_;
   };
   ad_utility::BufferedVector<TripleAndIsInternal> tripleBuffer_;
@@ -122,9 +124,12 @@ class PatternCreator {
   // True if `finish()` was already called.
   bool isFinished_ = false;
 
+  // The ID of the predicate `ql:has-pattern`.
+  Id idOfHasPattern_;
+
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename,
+  explicit PatternCreator(const string& basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
@@ -135,14 +140,16 @@ class PatternCreator {
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
                 basename + ".second-sorter.dat", memoryLimit / 2,
-                ad_utility::makeUnlimitedAllocator<Id>())} {
+                ad_utility::makeUnlimitedAllocator<Id>())},
+        idOfHasPattern_{idOfHasPattern} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
   // This function has to be called for all the triples in the SPO permutation
   // The `triple` must be >= all previously pushed triples wrt the SPO
   // permutation.
-  void processTriple(std::array<Id, 3> triple, bool ignoreForPatterns);
+  void processTriple(std::array<Id, NumColumnsIndexBuilding> triple,
+                     bool ignoreTripleForPatterns);
 
   // Write the patterns to disk after all triples have been pushed. Calls to
   // `processTriple` after calling `finish` lead to undefined behavior. Note
@@ -175,6 +182,7 @@ class PatternCreator {
 
  private:
   void finishSubject(Id subject, const Pattern& pattern);
+  PatternID finishPattern(const Pattern& pattern);
 
   void printStatistics(PatternStatistics patternStatistics) const;
 
@@ -182,5 +190,3 @@ class PatternCreator {
     return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
-
-#endif  // QLEVER_PATTERNCREATOR_H

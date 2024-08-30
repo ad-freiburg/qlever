@@ -31,7 +31,7 @@ class StallForeverOperation : public Operation {
   using Operation::Operation;
   // Do-nothing operation that runs for 100ms without computing anything, but
   // which can be cancelled.
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto end = std::chrono::steady_clock::now() + 100ms;
     while (std::chrono::steady_clock::now() < end) {
       checkCancellation();
@@ -73,7 +73,7 @@ class ShallowParentOperation : public Operation {
     return {child_.get()};
   }
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override {
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override {
     auto childResult = child_->getResult();
     return {childResult->idTable().clone(), resultSortedOn(),
             childResult->getSharedLocalVocab()};
@@ -82,6 +82,63 @@ class ShallowParentOperation : public Operation {
   // Provide public view of remainingTime for tests
   std::chrono::milliseconds publicRemainingTime() const {
     return remainingTime();
+  }
+};
+
+// Operation that will throw on `computeResult` for testing.
+class AlwaysFailOperation : public Operation {
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  string getCacheKeyImpl() const override { AD_FAIL(); }
+  string getDescriptor() const override {
+    return "AlwaysFailOperationDescriptor";
+  }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  using Operation::Operation;
+  ProtoResult computeResult(bool requestLaziness) override {
+    if (!requestLaziness) {
+      throw std::runtime_error{"AlwaysFailOperation"};
+    }
+    return {[]() -> cppcoro::generator<IdTable> {
+              throw std::runtime_error{"AlwaysFailOperation"};
+              // Required so that the exception only occurs within the generator
+              co_return;
+            }(),
+            resultSortedOn(), LocalVocab{}};
+  }
+};
+
+// Lazy operation that will yield a result with a custom generator you can
+// provide via the constructor.
+class CustomGeneratorOperation : public Operation {
+  cppcoro::generator<IdTable> generator_;
+  std::vector<QueryExecutionTree*> getChildren() override { return {}; }
+  string getCacheKeyImpl() const override { AD_FAIL(); }
+  string getDescriptor() const override {
+    return "CustomGeneratorOperationDescriptor";
+  }
+  size_t getResultWidth() const override { return 0; }
+  size_t getCostEstimate() override { return 0; }
+  uint64_t getSizeEstimateBeforeLimit() override { return 0; }
+  float getMultiplicity([[maybe_unused]] size_t) override { return 0; }
+  bool knownEmptyResult() override { return false; }
+  vector<ColumnIndex> resultSortedOn() const override { return {}; }
+  VariableToColumnMap computeVariableToColumnMap() const override { return {}; }
+
+ public:
+  CustomGeneratorOperation(QueryExecutionContext* context,
+                           cppcoro::generator<IdTable> generator)
+      : Operation{context}, generator_{std::move(generator)} {}
+  ProtoResult computeResult(bool requestLaziness) override {
+    AD_CONTRACT_CHECK(requestLaziness);
+    return {std::move(generator_), resultSortedOn(), LocalVocab{}};
   }
 };
 

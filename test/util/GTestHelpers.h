@@ -50,18 +50,19 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                                               exceptionType)                  \
   try {                                                                       \
     statement;                                                                \
-    FAIL() << "No exception was thrown";                                      \
+    ADD_FAILURE() << "No exception was thrown";                               \
   } catch (const exceptionType& e) {                                          \
     EXPECT_THAT(e.what(), errorMessageMatcher)                                \
         << "The exception message does not match";                            \
   } catch (const std::conditional_t<                                          \
            ad_utility::isSimilar<exceptionType, std::exception>,              \
            ::NeverThrown, std::exception>& exception) {                       \
-    FAIL() << "The thrown exception was "                                     \
-           << ::testing::internal::GetTypeName(typeid(exception))             \
-           << ", expected " #exceptionType;                                   \
+    ADD_FAILURE() << "The thrown exception was "                              \
+                  << ::testing::internal::GetTypeName(typeid(exception))      \
+                  << ", expected " #exceptionType;                            \
   } catch (...) {                                                             \
-    FAIL() << "The thrown exception did not inherit from " #exceptionType;    \
+    ADD_FAILURE()                                                             \
+        << "The thrown exception did not inherit from " #exceptionType;       \
   }                                                                           \
   void()
 
@@ -110,4 +111,16 @@ MATCHER_P2(HasKeyMatching, key, matcher,
   *result_listener << "that contains key \"" << key << "\", with value "
                    << arg[key] << ' ';
   return testing::ExplainMatchResult(matcher, arg[key], result_listener);
+}
+
+// Matcher that can be used the make assertions about objects `<<` (insert into
+// stream) operator.
+MATCHER_P(InsertIntoStream, matcher,
+          (negation ? "does not yield " : "yields ") +
+              testing::DescribeMatcher<std::string>(matcher, negation)) {
+  std::stringstream outStream;
+  outStream << arg;
+  std::string output = outStream.str();
+  *result_listener << "that yields \"" << output << "\"";
+  return testing::ExplainMatchResult(matcher, output, result_listener);
 }

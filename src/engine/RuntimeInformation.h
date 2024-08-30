@@ -22,6 +22,7 @@
 /// time to compute, status, etc.). Also contains the functionality to print
 /// that information nicely formatted and to export it to JSON.
 class RuntimeInformation {
+  using Microseconds = std::chrono::microseconds;
   using Milliseconds = std::chrono::milliseconds;
 
  public:
@@ -47,12 +48,12 @@ class RuntimeInformation {
 
   /// The total time spent computing this operation. This includes the
   /// computation of the children.
-  Milliseconds totalTime_ = ZERO;
+  Microseconds totalTime_ = ZERO;
 
   /// In case this operation was read from the cache, we will store the time
   /// information about the original computation in the following two members.
-  Milliseconds originalTotalTime_ = ZERO;
-  Milliseconds originalOperationTime_ = ZERO;
+  Microseconds originalTotalTime_ = ZERO;
+  Microseconds originalOperationTime_ = ZERO;
 
   /// The estimated cost, size, and column multiplicities of the operation.
   size_t costEstimate_ = 0;
@@ -100,7 +101,7 @@ class RuntimeInformation {
 
   /// Get the time spent computing the operation. This is the total time minus
   /// the time spent computing the children, but always positive.
-  [[nodiscard]] Milliseconds getOperationTime() const;
+  [[nodiscard]] Microseconds getOperationTime() const;
 
   /// Get the cost estimate for this operation. This is the total cost estimate
   /// minus the sum of the cost estimates of all children.
@@ -129,10 +130,10 @@ class RuntimeInformation {
 
   // Set the runtime information for a LIMIT or OFFSET operation as the new root
   // of the tree and make the old root the only child of the LIMIT operation.
-  // The details of the LIMIT/OFFSET, the time (in ms) that was spent computing
-  // it, and the information whether the `actual` operation (the old root of the
-  // runtime information) is written to the cache, are passed in as arguments.
-  void addLimitOffsetRow(const LimitOffsetClause& l, Milliseconds timeForLimit,
+  // The details of the LIMIT/OFFSET and the information whether the `actual`
+  // operation (the old root of the runtime information) is written to the
+  // cache, are passed in as arguments.
+  void addLimitOffsetRow(const LimitOffsetClause& l,
                          bool fullResultIsNotCached);
 
   static std::string_view toString(Status status);

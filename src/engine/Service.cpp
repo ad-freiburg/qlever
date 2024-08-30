@@ -12,8 +12,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
 #include "util/Views.h"
@@ -90,7 +90,7 @@ size_t Service::getCostEstimate() {
 }
 
 // ____________________________________________________________________________
-Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
   std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
   AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
@@ -120,7 +120,7 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  cppcoro::generator<std::span<std::byte>> jsonByteResult = getResultFunction_(
+  HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
@@ -128,34 +128,50 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
   std::basic_string<char, std::char_traits<char>,
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
-  for (std::span<std::byte> bytes : jsonByteResult) {
+  for (std::span<std::byte> bytes : response.body_) {
     jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     checkCancellation();
   }
 
-  // Parse the received result.
-  auto throwErrorWithContext = [&jsonStr](std::string_view sv) {
+  auto throwErrorWithContext = [&jsonStr, &serviceUrl](std::string_view sv) {
     throw std::runtime_error(absl::StrCat(
-        sv,
-        " First 100 bytes: ", std::string_view{jsonStr.data()}.substr(0, 100)));
+        "Error while executing a SERVICE request to <", serviceUrl.asString(),
+        ">: ", sv, ". First 100 bytes of the response: ",
+        std::string_view{jsonStr.data()}.substr(0, 100)));
   };
+
+  // Verify status and content-type of the response.
+  if (response.status_ != boost::beast::http::status::ok) {
+    throwErrorWithContext(absl::StrCat(
+        "SERVICE responded with HTTP status code: ",
+        static_cast<int>(response.status_), ", ",
+        toStd(boost::beast::http::obsolete_reason(response.status_))));
+  }
+
+  if (response.contentType_ != "application/sparql-results+json") {
+    throwErrorWithContext(absl::StrCat(
+        "QLever requires the endpoint of a SERVICE to send the result as "
+        "'application/sparql-results+json' but the endpoint sent '",
+        response.contentType_, "'"));
+  }
+
+  // Parse the received result.
   std::vector<std::string> resVariables;
   std::vector<nlohmann::json> resBindings;
   try {
     auto jsonResult = nlohmann::json::parse(jsonStr);
 
     if (jsonResult.empty()) {
-      throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
-                                            serviceUrl.host(), " is empty"));
+      throwErrorWithContext("Response from SPARQL endpoint is empty");
     }
 
     resVariables = jsonResult["head"]["vars"].get<std::vector<std::string>>();
     resBindings =
         jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
   } catch (const nlohmann::json::parse_error&) {
-    throwErrorWithContext("Failed to parse the Service result as JSON.");
+    throwErrorWithContext("Failed to parse the SERVICE result as JSON");
   } catch (const nlohmann::json::type_error&) {
-    throwErrorWithContext("JSON result does not have the expected structure.");
+    throwErrorWithContext("JSON result does not have the expected structure");
   }
 
   // Check if result header row is expected.
@@ -163,7 +179,7 @@ Result Service::computeResult([[maybe_unused]] bool requestLaziness) {
   std::string expectedHeaderRow = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
   if (headerRow != expectedHeaderRow) {
-    throw std::runtime_error(absl::StrCat(
+    throwErrorWithContext(absl::StrCat(
         "Header row of JSON result for SERVICE query is \"", headerRow,
         "\", but expected \"", expectedHeaderRow, "\""));
   }

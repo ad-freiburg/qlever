@@ -84,8 +84,7 @@ static_assert(!std::default_initializable<VectorWithMemoryLimit<int>>);
 // A class to store the results of expressions that can yield strings or IDs as
 // their result (for example IF and COALESCE). It is also used for expressions
 // that can only yield strings.
-using IdOrLiteralOrIri =
-    std::variant<ValueId, ad_utility::triple_component::LiteralOrIri>;
+using IdOrLiteralOrIri = std::variant<ValueId, LocalVocabEntry>;
 // Printing for GTest.
 void PrintTo(const IdOrLiteralOrIri& var, std::ostream* os);
 
@@ -191,13 +190,21 @@ struct EvaluationContext {
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
+  // A point in time at which the evaluation of the expression is to be
+  // cancelled because of a timeout. This is used by mechanisms that can't use
+  // the `cancellationHandle_` directly, like the sorting in a `COUNT DISTINCT
+  // *` expression.
+  using TimePoint = std::chrono::steady_clock::time_point;
+  TimePoint deadline_;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle);
+                    ad_utility::SharedCancellationHandle cancellationHandle,
+                    TimePoint deadline);
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
@@ -222,8 +229,7 @@ Id constantExpressionResultToId(T&& result, LocalVocabT& localVocab) {
   } else if constexpr (ad_utility::isSimilar<T, IdOrLiteralOrIri>) {
     return std::visit(
         [&localVocab]<typename R>(R&& el) mutable {
-          if constexpr (ad_utility::isSimilar<
-                            R, ad_utility::triple_component::LiteralOrIri>) {
+          if constexpr (ad_utility::isSimilar<R, LocalVocabEntry>) {
             return Id::makeFromLocalVocabIndex(
                 localVocab.getIndexAndAddIfNotContained(AD_FWD(el)));
           } else {
