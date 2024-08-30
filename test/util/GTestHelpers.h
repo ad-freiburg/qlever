@@ -134,7 +134,7 @@ class CopyShield {
 
  public:
   template <typename... Ts>
-  explicit CopyShield(Ts&&... args)
+  explicit CopyShield(Ts&&... args) requires(std::constructible_from<T, Ts...>)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
   auto operator<=>(const T& other) const requires(std::three_way_comparable<T>)
