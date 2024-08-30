@@ -88,6 +88,8 @@ const RE2& Tokenizer::idToRegex(const TurtleTokenId reg) {
       return _tokens.Double;
     case Iriref:
       return _tokens.Iriref;
+    case IrirefRelaxed:
+      return _tokens.IrirefRelaxed;
     case PnameNS:
       return _tokens.PnameNS;
     case PnameLN:

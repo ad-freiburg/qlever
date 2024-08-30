@@ -20,6 +20,7 @@
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
+#include "util/SourceLocation.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
@@ -299,7 +300,10 @@ class IdTable {
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   T& operator()(size_t row, size_t column) requires(!isView) {
-    AD_EXPENSIVE_CHECK(column < data().size());
+    AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
+      return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
+                          numColumns(), ", ", numStaticColumns);
+    });
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
