@@ -6,121 +6,121 @@
 
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 
-namespace sparqlExpression {
-namespace detail {
+namespace sparqlExpression::detail {
 
 // _____________________________________________________________________________
+// Evaluate a `SingleExpressionResult` (that is, one of the possible
+// `ExpressionResult` variants). Used in the `AggregateExpression::evaluate`
+// function.
 template <typename AggregateOperation, typename FinalOperation>
-template <SingleExpressionResult Operand>
-auto AggregateExpression<AggregateOperation, FinalOperation>::
-    EvaluateOnChildOperand::operator()(
-        const AggregateOperation& aggregateOperation,
-        const ValueId resultForEmptyGroup, const FinalOperation& finalOperation,
-        EvaluationContext* context, bool distinct, Operand&& operand)
-        -> ExpressionResult {
-  // Perform the more efficient calculation on `SetOfInterval`s if it is
-  // possible.
-  if (isAnySpecializedFunctionPossible(aggregateOperation._specializedFunctions,
-                                       operand)) {
-    auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
-        aggregateOperation._specializedFunctions,
-        std::forward<Operand>(operand));
-    AD_CONTRACT_CHECK(optionalResult);
-    return std::move(optionalResult.value());
-  }
-
-  // The number of values we aggregate.
-  auto inputSize = getResultSize(*context, operand);
-
-  // If there are no values, return the neutral element. It is important to
-  // handle this case separately, because the following code only words if
-  // there is at least one value.
-  if (inputSize == 0) {
-    return resultForEmptyGroup;
-  }
-
-  // All aggregate operations are binary, with the same value getter for each
-  // operand.
-  {
-    using V = typename AggregateOperation::ValueGetters;
-    static_assert(std::tuple_size_v<V> == 2);
-    static_assert(
-        std::is_same_v<std::tuple_element_t<0, V>, std::tuple_element_t<1, V>>);
-  }
-  const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
-
-  // Helper lambda for aggregating two values.
-  //
-  // TODO: Why is the `context` not passed by reference?
-  auto aggregateTwoValues = [&aggregateOperation, context](
-                                auto&& x, auto&& y) -> decltype(auto) {
-    if constexpr (requires {
-                    aggregateOperation._function(AD_FWD(x), AD_FWD(y));
-                  }) {
-      return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
-    } else {
-      return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
+struct EvaluateOnChildOperand {
+  ExpressionResult operator()(const AggregateOperation& aggregateOperation,
+                              ValueId resultForEmptyGroup,
+                              const FinalOperation& finalOperation,
+                              EvaluationContext* context, bool distinct,
+                              SingleExpressionResult auto&& operand) const {
+    // Perform the more efficient calculation on `SetOfInterval`s if it is
+    // possible.
+    if (isAnySpecializedFunctionPossible(
+            aggregateOperation._specializedFunctions, operand)) {
+      auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
+          aggregateOperation._specializedFunctions, AD_FWD(operand));
+      AD_CONTRACT_CHECK(optionalResult);
+      return std::move(optionalResult.value());
     }
-  };
 
-  // A generator for the operands (before the value getter is applied to get
-  // the actual values).
-  auto operands =
-      makeGenerator(std::forward<Operand>(operand), inputSize, context);
+    // The number of values we aggregate.
+    auto inputSize = getResultSize(*context, operand);
 
-  // Set up cancellation handling.
-  auto checkCancellation =
-      [context](ad_utility::source_location location =
-                    ad_utility::source_location::current()) {
-        context->cancellationHandle_->throwIfCancelled(location);
-      };
+    // If there are no values, return the neutral element. It is important to
+    // handle this case separately, because the following code only words if
+    // there is at least one value.
+    if (inputSize == 0) {
+      return resultForEmptyGroup;
+    }
 
-  // Lambda to compute the aggregate of the given operands. This requires
-  // that `inputs` is not empty.
-  auto computeAggregate = [&valueGetter, context, &finalOperation,
-                           &aggregateTwoValues,
-                           &checkCancellation](auto&& inputs) {
-    auto it = inputs.begin();
-    AD_CORRECTNESS_CHECK(it != inputs.end());
+    // All aggregate operations are binary, with the same value getter for each
+    // operand.
+    {
+      using V = typename AggregateOperation::ValueGetters;
+      static_assert(std::tuple_size_v<V> == 2);
+      static_assert(std::is_same_v<std::tuple_element_t<0, V>,
+                                   std::tuple_element_t<1, V>>);
+    }
+    const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
 
-    using ResultType = std::decay_t<decltype(aggregateTwoValues(
-        std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
-    ResultType result = valueGetter(*it, context);
-    checkCancellation();
-    size_t numValues = 1;
+    // Helper lambda for aggregating two values.
+    //
+    // TODO: Why is the `context` not passed by reference?
+    auto aggregateTwoValues = [&aggregateOperation, context](
+                                  auto&& x, auto&& y) -> decltype(auto) {
+      if constexpr (requires {
+                      aggregateOperation._function(AD_FWD(x), AD_FWD(y));
+                    }) {
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y));
+      } else {
+        return aggregateOperation._function(AD_FWD(x), AD_FWD(y), context);
+      }
+    };
 
-    for (++it; it != inputs.end(); ++it) {
-      result = aggregateTwoValues(std::move(result),
-                                  valueGetter(std::move(*it), context));
+    // A generator for the operands (before the value getter is applied to get
+    // the actual values).
+    auto operands = makeGenerator(AD_FWD(operand), inputSize, context);
+
+    // Set up cancellation handling.
+    auto checkCancellation =
+        [context](ad_utility::source_location location =
+                      ad_utility::source_location::current()) {
+          context->cancellationHandle_->throwIfCancelled(location);
+        };
+
+    // Lambda to compute the aggregate of the given operands. This requires
+    // that `inputs` is not empty.
+    auto computeAggregate = [&valueGetter, context, &finalOperation,
+                             &aggregateTwoValues,
+                             &checkCancellation](auto&& inputs) {
+      auto it = inputs.begin();
+      AD_CORRECTNESS_CHECK(it != inputs.end());
+
+      using ResultType = std::decay_t<decltype(aggregateTwoValues(
+          std::move(valueGetter(*it, context)), valueGetter(*it, context)))>;
+      ResultType result = valueGetter(*it, context);
       checkCancellation();
-      ++numValues;
-    }
-    result = finalOperation(std::move(result), numValues);
-    checkCancellation();
-    return result;
-  };
+      size_t numValues = 1;
 
-  // Compute the aggregate (over all values or, if this is a DISTINCT
-  // aggregate, only over the distinct values).
-  auto result = [&]() {
-    if (distinct) {
-      auto uniqueValues =
-          getUniqueElements(context, inputSize, std::move(operands));
+      for (++it; it != inputs.end(); ++it) {
+        result = aggregateTwoValues(std::move(result),
+                                    valueGetter(std::move(*it), context));
+        checkCancellation();
+        ++numValues;
+      }
+      result = finalOperation(std::move(result), numValues);
       checkCancellation();
-      return computeAggregate(std::move(uniqueValues));
-    } else {
-      return computeAggregate(std::move(operands));
-    }
-  }();
+      return result;
+    };
 
-  // If the result is numeric, convert it to an `Id`.
-  //
-  // TODO<joka921> Check if this is really necessary, or if we can also use
-  // IDs in the intermediate steps without loss of efficiency.
-  if constexpr (requires { makeNumericId(result); }) {
-    return makeNumericId(result);
-  } else {
-    return result;
+    // Compute the aggregate (over all values or, if this is a DISTINCT
+    // aggregate, only over the distinct values).
+    auto result = [&]() {
+      if (distinct) {
+        auto uniqueValues =
+            getUniqueElements(context, inputSize, std::move(operands));
+        checkCancellation();
+        return computeAggregate(std::move(uniqueValues));
+      } else {
+        return computeAggregate(std::move(operands));
+      }
+    }();
+
+    // If the result is numeric, convert it to an `Id`.
+    //
+    // TODO<joka921> Check if this is really necessary, or if we can also use
+    // IDs in the intermediate steps without loss of efficiency.
+    if constexpr (requires { makeNumericId(result); }) {
+      return makeNumericId(result);
+    } else {
+      return result;
+    }
   }
 };
 
@@ -143,7 +143,7 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 
   return std::visit(
       [this, context](auto&& arg) {
-        return EvaluateOnChildOperand{}(
+        return EvaluateOnChildOperand<AggregateOperation, FinalOperation>{}(
             _aggregateOp, this->resultForEmptyGroup(), FinalOperation{},
             context, _distinct, AD_FWD(arg));
       },
@@ -196,5 +196,4 @@ INSTANTIATE_AGG_EXP(decltype(addForSum), NumericValueGetter);
 INSTANTIATE_AGG_EXP(decltype(count), IsValidValueGetter);
 INSTANTIATE_AGG_EXP(decltype(minLambdaForAllTypes), ActualValueGetter);
 INSTANTIATE_AGG_EXP(decltype(maxLambdaForAllTypes), ActualValueGetter);
-}  // namespace detail
-}  // namespace sparqlExpression
+}  // namespace sparqlExpression::detail

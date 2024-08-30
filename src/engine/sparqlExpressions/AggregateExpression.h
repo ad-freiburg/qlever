@@ -16,9 +16,7 @@ namespace sparqlExpression {
 
 // This can be used as the `FinalOperation` parameter to an
 // `AggregateExpression` if there is nothing to be done on the final result.
-inline auto identity = []<typename T>(T&& result, size_t) {
-  return std::forward<T>(result);
-};
+inline auto identity = [](auto&& result, size_t) { return AD_FWD(result); };
 
 namespace detail {
 
@@ -89,17 +87,6 @@ class AggregateExpression : public SparqlExpression {
   // Needed for the pattern trick, see `SparqlExpression.h`.
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
   getVariableForCount() const override;
-
-  // Evaluate a `SingleExpressionResult` (that is, one of the possible
-  // `ExpressionResult` variants). Used in the `evaluate` function.
-  struct EvaluateOnChildOperand {
-    template <SingleExpressionResult Operand>
-    ExpressionResult operator()(const AggregateOperation& aggregateOperation,
-                                ValueId resultForEmptyGroup,
-                                const FinalOperation& finalOperation,
-                                EvaluationContext* context, bool distinct,
-                                Operand&& operand);
-  };
 
  private:
   // _________________________________________________________________________
