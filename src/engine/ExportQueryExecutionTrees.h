@@ -92,6 +92,11 @@ class ExportQueryExecutionTrees {
   getLiteralOrIriFromVocabIndex(const Index& index, Id id,
                                 const LocalVocab& localVocab);
 
+  // TODO<joka921> Comment, this has very particular semantics.
+  static cppcoro::generator<std::string>
+  convertStreamGeneratorForChunkedTransfer(
+      ad_utility::streams::stream_generator streamGenerator);
+
  private:
   // Similar to `computeResult` but returns a stream in
   // QLeverJSON-format.
