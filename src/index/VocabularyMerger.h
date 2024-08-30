@@ -106,8 +106,9 @@ struct VocabularyMetaData {
   const auto& langTaggedPredicates() const { return langTaggedPredicates_; }
   // The prefix range for the internal IRIs in the `ql:` namespace.
   const auto& internalEntities() const { return internalEntities_; }
-  // The number of words for which `addWord()` has been called.
-  size_t numWordsTotal() const { return numWordsTotal_; }
+  // The number of words for which `addWord()` has been called. Needs to return
+  // a reference to be used in combination with a `ProgressBar`.
+  const size_t& numWordsTotal() const { return numWordsTotal_; }
 
   // Return true iff the `id` belongs to one of the two ranges that contain
   // the internal IDs that were added by QLever and were not part of the

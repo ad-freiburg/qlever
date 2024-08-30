@@ -395,6 +395,8 @@ addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
 
+addLinkAndDiscoverTest(LazyJsonParserTest)
+
 addLinkAndDiscoverTest(CacheableGeneratorTest)
 
 addLinkAndDiscoverTest(FilterTest engine)
