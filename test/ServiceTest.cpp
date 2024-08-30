@@ -11,6 +11,7 @@
 #include "engine/Service.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
@@ -45,7 +46,10 @@ class ServiceTest : public ::testing::Test {
   // The code can be found in the history of this PR.
   static auto constexpr getResultFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         std::string predefinedResult) -> Service::GetResultFunction {
+         std::string predefinedResult,
+         boost::beast::http::status status = boost::beast::http::status::ok,
+         std::string contentType =
+             "application/sparql-results+json") -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -69,22 +73,25 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-      return
+      auto body =
           [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
-            // Randomly slice the string to make tests more robust.
-            std::mt19937 rng{std::random_device{}()};
+        // Randomly slice the string to make tests more robust.
+        std::mt19937 rng{std::random_device{}()};
 
-            const std::string resultStr = result;
-            std::uniform_int_distribution<size_t> distribution{
-                0, resultStr.length() / 2};
+        const std::string resultStr = result;
+        std::uniform_int_distribution<size_t> distribution{
+            0, resultStr.length() / 2};
 
-            for (size_t start = 0; start < resultStr.length();) {
-              size_t size = distribution(rng);
-              std::string resultCopy{resultStr.substr(start, size)};
-              co_yield std::as_writable_bytes(std::span{resultCopy});
-              start += size;
-            }
-          }(predefinedResult);
+        for (size_t start = 0; start < resultStr.length();) {
+          size_t size = distribution(rng);
+          std::string resultCopy{resultStr.substr(start, size)};
+          co_yield std::as_writable_bytes(std::span{resultCopy});
+          start += size;
+        }
+      };
+      return (HttpOrHttpsResponse){.status_ = status,
+                                   .contentType_ = contentType,
+                                   .body_ = body(predefinedResult)};
     };
   };
 
@@ -159,28 +166,59 @@ TEST_F(ServiceTest, computeResult) {
 
   // Shorthand to run computeResult with the test parameters given above.
   auto runComputeResult =
-      [&](const std::string& result) -> std::shared_ptr<const Result> {
-    Service s{
-        testQec, parsedServiceClause,
-        getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result)};
+      [&](const std::string& result,
+          boost::beast::http::status status = boost::beast::http::status::ok,
+          std::string contentType = "application/sparql-results+json")
+      -> std::shared_ptr<const Result> {
+    Service s{testQec, parsedServiceClause,
+              getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                       status, contentType)};
     return s.getResult();
   };
 
-  // CHECK 1: Returned Result is no JSON, is empty or has invalid structure
-  // -> an exception should be thrown.
-  ASSERT_ANY_THROW(
+  // CHECK 1: An exception shall be thrown, when
+  // status-code isn't ok, contentType doesn't match
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::bad_request,
+                       "application/sparql-results+json"),
+      ::testing::HasSubstr(
+          "SERVICE responded with HTTP status code: 400, Bad Request."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::ok, "wrong/type"),
+      ::testing::HasSubstr(
+          "QLever requires the endpoint of a SERVICE to send "
+          "the result as 'application/sparql-results+json' but "
+          "the endpoint sent 'wrong/type'."));
+
+  // or Result is no JSON, empty or has invalid structure
+  AD_EXPECT_THROW_WITH_MESSAGE(
       runComputeResult("<?xml version=\"1.0\"?><sparql "
-                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"));
-  ASSERT_ANY_THROW(runComputeResult("{}"));
-  ASSERT_ANY_THROW(runComputeResult("{\"invalid\": \"structure\"}"));
-  ASSERT_ANY_THROW(
+                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"),
+      ::testing::HasSubstr("Failed to parse the SERVICE result as JSON."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{}"),
+      ::testing::HasSubstr("Response from SPARQL endpoint is empty."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{\"invalid\": \"structure\"}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
       runComputeResult("{\"head\": {\"vars\": [1, 2, 3]},"
-                       "\"results\": {\"bindings\": {}}}"));
+                       "\"results\": {\"bindings\": {}}}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
-  ASSERT_ANY_THROW(runComputeResult(genJsonResult(
-      {"y", "x"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult(genJsonResult(
+          {"y", "x"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})),
+      ::testing::HasSubstr("Header row of JSON result for SERVICE query is "
+                           "\"?y ?x\", but expected \"?x ?y\"."));
 
   // CHECK 3: A result row of the returned JSON is missing a variable's value ->
   // undefined value
