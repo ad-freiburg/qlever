@@ -67,7 +67,7 @@ TEST(AggregateExpression, max) {
   testMaxId({}, U);
 }
 
-  // Test `CountExpression`.
+// Test `CountExpression`.
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
   testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));

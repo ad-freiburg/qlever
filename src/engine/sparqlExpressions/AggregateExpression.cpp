@@ -143,9 +143,9 @@ AggregateExpression<AggregateOperation, FinalOperation>::evaluate(
 
   return std::visit(
       [this, context](auto&& arg) {
-        return EvaluateOnChildOperand{}(_aggregateOp, this->resultForEmptyGroup(),
-                                      FinalOperation{}, context, _distinct,
-                                      AD_FWD(arg));
+        return EvaluateOnChildOperand{}(
+            _aggregateOp, this->resultForEmptyGroup(), FinalOperation{},
+            context, _distinct, AD_FWD(arg));
       },
       std::move(childResult));
 }

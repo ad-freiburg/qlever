@@ -1,6 +1,6 @@
 // Copyright 2021, University of Freiburg,
 // Chair of Algorithms and Data Structures.
-// Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -95,7 +95,7 @@ class AggregateExpression : public SparqlExpression {
   struct EvaluateOnChildOperand {
     template <SingleExpressionResult Operand>
     ExpressionResult operator()(const AggregateOperation& aggregateOperation,
-                                const ValueId resultForEmptyGroup,
+                                ValueId resultForEmptyGroup,
                                 const FinalOperation& finalOperation,
                                 EvaluationContext* context, bool distinct,
                                 Operand&& operand);
@@ -111,27 +111,12 @@ class AggregateExpression : public SparqlExpression {
   AggregateOperation _aggregateOp;
 };
 
-template <auto getDefaultValueForEmptyGroup,
-    size_t NumOperands, typename... Ts>
-struct OperationWithDefault : Operation<NumOperands, Ts...> {
-  static auto resultForEmptyGroup() {
-    if constexpr (std::invocable<decltype(getDefaultValueForEmptyGroup)>) {
-      return getDefaultValueForEmptyGroup();
-    } else {
-      return getDefaultValueForEmptyGroup;
-    }
-  }
-};
-
-
 // Instantiations of `AggregateExpression` for COUNT, SUM, AVG, MIN, and MAX.
 
-
-
 // Shortcut for a binary `AggregateExpression` (all of them are binary).
-template <typename Function, typename ValueGetter, auto getDefaultValue>
+template <typename Function, typename ValueGetter>
 using AGG_EXP = AggregateExpression<
-    OperationWithDefault<getDefaultValue, 2, FunctionAndValueGetters<Function, ValueGetter>>>;
+    Operation<2, FunctionAndValueGetters<Function, ValueGetter>>>;
 
 // Helper function that for a given `NumericOperation` with numeric arguments
 // and result (integer or floating points), returns the corresponding function
