@@ -6,6 +6,8 @@
 
 #include <gmock/gmock.h>
 
+#include <concepts>
+
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -135,13 +137,12 @@ class CopyShield {
   explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  auto operator<=>(const T& other) const
-      requires(requires { std::declval<T>() <=> std::declval<T>(); }) {
+  auto operator<=>(const T& other) const requires(std::three_way_comparable<T>)
+  {
     return *pointer_ <=> other;
   }
 
-  bool operator==(const T& other) const
-      requires(requires { std::declval<T>() == std::declval<T>(); }) {
+  bool operator==(const T& other) const requires(std::equality_comparable<T>) {
     return *pointer_ == other;
   }
 };
