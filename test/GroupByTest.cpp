@@ -1529,8 +1529,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
             : validForOptimization.computeOptimizedGroupByIfPossible();
     EXPECT_THAT(
         optional,
-        Optional(Eq(W{makeIdTableFromVector(
-            {{idOfX, Id::makeFromInt(7)}, {idOfY, Id::makeFromInt(1)}})})));
+        Optional(Eq(W{makeIdTableFromVector({{idOfX, I(7)}, {idOfY, I(1)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1577,9 +1576,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
                         : groupBy.computeOptimizedGroupByIfPossible();
 
     // The test index currently consists of 15 triples.
-    EXPECT_THAT(
-        optional,
-        Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(15)}})})));
+    EXPECT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(15)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1589,8 +1586,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
-    ASSERT_THAT(optional,
-                Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(5)}})})));
+    ASSERT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(5)}})})));
   }
   {
     auto groupBy =
@@ -1598,8 +1594,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
-    ASSERT_THAT(optional,
-                Optional(Eq(W{makeIdTableFromVector({{Id::makeFromInt(6)}})})));
+    ASSERT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(6)}})})));
   }
 }
 // _____________________________________________________________________________

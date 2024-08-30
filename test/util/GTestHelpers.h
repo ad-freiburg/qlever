@@ -131,9 +131,6 @@ class CopyShield {
   std::shared_ptr<T> pointer_;
 
  public:
-  explicit CopyShield(T data)
-      : pointer_{std::make_shared<T>(std::move(data))} {}
-
   template <typename... Ts>
   explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
@@ -143,7 +140,7 @@ class CopyShield {
     return *pointer_ <=> other;
   }
 
-  auto operator==(const T& other) const
+  bool operator==(const T& other) const
       requires(requires { std::declval<T>() == std::declval<T>(); }) {
     return *pointer_ == other;
   }
