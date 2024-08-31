@@ -59,12 +59,10 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   IdTable referenceTable3{0, ad_utility::makeUnlimitedAllocator<Id>()};
 
   auto m = matchIdTable;
-  EXPECT_THAT(toVector(std::move(generator)),
-              ElementsAre(m(referenceTable1),
-                          m(referenceTable2),
-                          m(referenceTable3),
-                          m(referenceTable3),
-                          m(referenceTable2)));
+  EXPECT_THAT(
+      toVector(std::move(generator)),
+      ElementsAre(m(referenceTable1), m(referenceTable2), m(referenceTable3),
+                  m(referenceTable3), m(referenceTable2)));
 }
 
 // _____________________________________________________________________________
