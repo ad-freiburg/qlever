@@ -15,7 +15,7 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
       groupByCols_{groupByCols},
-      aggregationData_{initializeAggregationData(aggregateAliases)},
+      aggregationData_{initializeAggregationData(aggregateAliases_)},
       resetAggregationData_{std::apply(
           [](auto&... variants) {
             return std::visit(
