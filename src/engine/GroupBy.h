@@ -86,10 +86,18 @@ class GroupBy : public Operation {
     return {_subtree.get()};
   }
 
+  struct HashMapAliasInformation;
+
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
-  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
+
+  template <size_t NUM_AGGREGATED_COLS>
+  cppcoro::generator<IdTable> computeResultLazily(
+      std::shared_ptr<const Result> subresult,
+      std::vector<HashMapAliasInformation> aggregateAliases,
+      std::vector<size_t> groupByCols) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
