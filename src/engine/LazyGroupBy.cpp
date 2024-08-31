@@ -47,11 +47,26 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::initializeResetAggregationData(
         aggregationData) {
   return std::apply(
       [](auto&... variants) {
-        return std::visit(
-            [](auto&... unwrapped) -> std::function<void()> {
-              return [&]() { (unwrapped.reset(), ...); };
-            },
-            variants...);
+        // Prevent exploding compilation times as the number of aggregated
+        // columns increased compilation times exponentially
+        if constexpr (NUM_AGGREGATED_COLS <= 3) {
+          return std::visit(
+              [](auto&... unwrapped) -> std::function<void()> {
+                return [&]() { (unwrapped.reset(), ...); };
+              },
+              variants...);
+        } else {
+          std::array<std::function<void()>, NUM_AGGREGATED_COLS> resetFunctions{
+              std::visit(
+                  [](auto& unwrapped) -> std::function<void()> {
+                    return [&]() { unwrapped.reset(); };
+                  },
+                  variants)...};
+          return [resetFunctions = std::move(resetFunctions)]() {
+            std::apply([](auto&... resetFunction) { (resetFunction(), ...); },
+                       resetFunctions);
+          };
+        }
       },
       aggregationData);
 }
