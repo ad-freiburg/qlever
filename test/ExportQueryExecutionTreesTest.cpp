@@ -1126,7 +1126,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              ElementsAre(Eq(std::cref(idTable))));
+              ElementsAre(matchIdTable(idTable)));
 }
 
 // _____________________________________________________________________________

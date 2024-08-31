@@ -74,6 +74,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
 
+// `EXPECT` that the `argument` is equal to `std::nullopt`.
 #define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,

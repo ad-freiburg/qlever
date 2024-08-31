@@ -34,6 +34,9 @@ using ::testing::Optional;
 
 namespace {
 auto I = IntId;
+
+// Return a matcher that checks, whether a given `std::optional<IdTable` has a
+// value and that value is equal to `makeIdTableFromVector(table)`.
 auto optionalTable = [](const VectorTable& table) {
   return Optional(matchIdTableFromVector(table));
 };

@@ -106,6 +106,14 @@ struct MatchIdTable {
   auto operator()(Ts&&... ts) const {
     return ::testing::Eq(CopyShield<IdTable>(IdTable{AD_FWD(ts)...}));
   }
+
+  // Overload for lvalue-references (`IdTable`s are not copyable)
+  template <ad_utility::SimilarTo<IdTable> T>
+  auto operator()(T& table) const {
+    // Note: We could use `Eq(cref(table))` , but the explicit deep copy
+    // gets rid of all possibly lifetime and mutability issues.
+    return operator()(table.clone());
+  }
 };
 static constexpr MatchIdTable matchIdTable;
 

@@ -58,12 +58,13 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
   auto referenceTable2 = makeIdTableFromVector({{true}}, asBool);
   IdTable referenceTable3{0, ad_utility::makeUnlimitedAllocator<Id>()};
 
+  auto m = matchIdTable;
   EXPECT_THAT(toVector(std::move(generator)),
-              ElementsAre(Eq(std::cref(referenceTable1)),
-                          Eq(std::cref(referenceTable2)),
-                          Eq(std::cref(referenceTable3)),
-                          Eq(std::cref(referenceTable3)),
-                          Eq(std::cref(referenceTable2))));
+              ElementsAre(m(referenceTable1),
+                          m(referenceTable2),
+                          m(referenceTable3),
+                          m(referenceTable3),
+                          m(referenceTable2)));
 }
 
 // _____________________________________________________________________________
