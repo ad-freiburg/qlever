@@ -10,6 +10,7 @@
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
 #include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
@@ -405,38 +406,6 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 template <size_t NUM_AGGREGATED_COLS>
-std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>
-initializeAggregationData(
-    const std::vector<GroupBy::HashMapAliasInformation>& aggregateAliases) {
-  using enum GroupBy::HashMapAggregateType;
-  std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS> aggregationData{};
-  for (const auto& alias : aggregateAliases) {
-    for (const auto& aggregate : alias.aggregateInfo_) {
-      const auto& aggregationType = aggregate.aggregateType_;
-      auto idx = aggregate.aggregateDataIndex_;
-      if (aggregationType.type_ == AVG) {
-        aggregationData.at(idx) = AvgAggregationData{};
-      } else if (aggregationType.type_ == COUNT) {
-        aggregationData.at(idx) = CountAggregationData{};
-      } else if (aggregationType.type_ == MIN) {
-        aggregationData.at(idx) = MinAggregationData{};
-      } else if (aggregationType.type_ == MAX) {
-        aggregationData.at(idx) = MaxAggregationData{};
-      } else if (aggregationType.type_ == SUM) {
-        aggregationData.at(idx) = SumAggregationData{};
-      } else if (aggregationType.type_ == GROUP_CONCAT) {
-        aggregationData.at(idx) =
-            GroupConcatAggregationData{aggregationType.separator_.value()};
-      } else {
-        AD_THROW("Unsupported aggregate type");
-      }
-    }
-  }
-  return aggregationData;
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult,
     std::vector<HashMapAliasInformation> aggregateAliases,
@@ -446,43 +415,10 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   auto localVocab = subresult->getCopyOfLocalVocab();
 
+  LazyGroupBy<NUM_AGGREGATED_COLS> lazyGroupBy{
+      localVocab, std::move(aggregateAliases), groupByCols};
+
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
-
-  std::array<AggregationData, NUM_AGGREGATED_COLS> aggregationData =
-      initializeAggregationData<NUM_AGGREGATED_COLS>(aggregateAliases);
-
-  // Store the call to reset in a `std::function` to avoid having to expensively
-  // look up type of the variant on every new group that will always be the
-  // same.
-  auto resetAggregationData = std::apply(
-      [](auto&... variants) {
-        return std::visit(
-            [](auto&... unwrapped) -> std::function<void()> {
-              return [&] { (unwrapped.reset(), ...); };
-            },
-            variants...);
-      },
-      aggregationData);
-
-  std::array<std::function<ValueId()>, NUM_AGGREGATED_COLS>
-      calculationFunctions;
-  for (auto& alias : aggregateAliases) {
-    for (auto& aggregate : alias.aggregateInfo_) {
-      calculationFunctions.at(aggregate.aggregateDataIndex_) = std::visit(
-          [&localVocab](const auto& aggregateData) -> std::function<ValueId()> {
-            return [&]() { return aggregateData.calculateResult(&localVocab); };
-          },
-          aggregationData.at(aggregate.aggregateDataIndex_));
-    }
-  }
-  auto calculateAggregateResult =
-      [&calculationFunctions](size_t aggregateIndex) {
-        return calculationFunctions.at(aggregateIndex)();
-      };
-
-  // This stores the values of the group by numColumns for the current block.
-  // A block ends when one of these values changes.
-  std::vector<std::pair<size_t, Id>> currentGroupBlock;
 
   // TODO<RobinTF> Check if it is possible to not prolong the lifetime of this
   // `IdTable` by seeing if the evaluation context really needs a proper
@@ -493,151 +429,6 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
   std::optional<sparqlExpression::EvaluationContext> evaluationContext =
       std::nullopt;
 
-  auto commitRow = [this, &resultTable, &groupByCols, &localVocab,
-                    &calculateAggregateResult, &aggregateAliases,
-                    &currentGroupBlock, &evaluationContext,
-                    resetAggregationData]() {
-    resultTable.emplace_back();
-    for (size_t rowIndex = 0; rowIndex < groupByCols.size(); ++rowIndex) {
-      resultTable.back()[rowIndex] = currentGroupBlock.at(rowIndex).second;
-    }
-
-    for (auto& alias : aggregateAliases) {
-      auto& info = alias.aggregateInfo_;
-
-      // Either:
-      // - One of the variables occurs at the top. This can be copied as the
-      // result
-      // - There is only one aggregate, and it appears at the top. No
-      // substitutions necessary, can evaluate aggregate and copy results
-      // - Possibly multiple aggregates and occurrences of grouped variables.
-      // All have to be substituted away before evaluation
-
-      auto substitutions = alias.groupedVariables_;
-      auto topLevelGroupedVariable = std::ranges::find_if(
-          substitutions, [](HashMapGroupedVariableInformation& val) {
-            return std::get_if<OccurAsRoot>(&val.occurrences_);
-          });
-
-      if (topLevelGroupedVariable != substitutions.end()) {
-        AD_CORRECTNESS_CHECK(!groupByCols.empty());
-        // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
-        // WHERE {...} GROUP BY ?a`, we can copy values directly from the column
-        // of the grouped variable
-        resultTable.back()[alias.outCol_] =
-            currentGroupBlock.at(topLevelGroupedVariable->resultColumnIndex_)
-                .second;
-
-        evaluationContext->_previousResultsFromSameGroup.at(alias.outCol_) =
-            sparqlExpression::copyExpressionResult(
-                sparqlExpression::ExpressionResult{
-                    resultTable.back()[alias.outCol_]});
-      } else if (info.size() == 1 && !info.at(0).parentAndIndex_.has_value()) {
-        // Only one aggregate, and it is at the top of the alias, e.g.
-        // `(AVG(?x) as ?y)`. The grouped by variable cannot occur inside
-        // an aggregate, hence we don't need to substitute anything here
-        auto& aggregate = info.at(0);
-
-        resultTable.back()[alias.outCol_] =
-            calculateAggregateResult(aggregate.aggregateDataIndex_);
-
-        // Copy the result so that future aliases may reuse it
-        evaluationContext->_previousResultsFromSameGroup.at(alias.outCol_) =
-            sparqlExpression::copyExpressionResult(
-                sparqlExpression::ExpressionResult{
-                    resultTable.back()[alias.outCol_]});
-      } else {
-        for (const auto& substitution : substitutions) {
-          const auto& occurrences =
-              get<std::vector<ParentAndChildIndex>>(substitution.occurrences_);
-          // TODO<RobinTF> this always creates a vector of size 1, which is
-          // likely very inefficient.
-          // Substitute in the values of the grouped variable
-          // TODO<RobinTF> check if evaluationContext->size() is correct or it
-          // should be 1
-          substituteGroupVariable(
-              occurrences, &resultTable, resultTable.size() - 1,
-              evaluationContext->size(), substitution.resultColumnIndex_);
-        }
-
-        // Substitute in the results of all aggregates contained in the
-        // expression of the current alias, if `info` is non-empty.
-        // Substitute in the results of all aggregates of `info`.
-        std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
-            originalChildren;
-        originalChildren.reserve(info.size());
-        for (auto& aggregate : info) {
-          ValueId aggregateResult =
-              calculateAggregateResult(aggregate.aggregateDataIndex_);
-
-          // Substitute the resulting vector as a literal
-          auto newExpression = std::make_unique<sparqlExpression::IdExpression>(
-              std::move(aggregateResult));
-
-          AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
-          auto parentAndIndex = aggregate.parentAndIndex_.value();
-          originalChildren.push_back(std::move(
-              parentAndIndex.parent_->children()[parentAndIndex.nThChild_]));
-          parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                               std::move(newExpression));
-        }
-
-        // Evaluate top-level alias expression
-        sparqlExpression::ExpressionResult expressionResult =
-            alias.expr_.getPimpl()->evaluate(&evaluationContext.value());
-
-        // Restore original children
-        for (size_t i = 0; i < info.size(); ++i) {
-          auto& aggregate = info.at(i);
-          auto parentAndIndex = aggregate.parentAndIndex_.value();
-          parentAndIndex.parent_->replaceChild(
-              parentAndIndex.nThChild_, std::move(originalChildren.at(i)));
-        }
-
-        // Copy the result so that future aliases may reuse it
-        evaluationContext->_previousResultsFromSameGroup.at(alias.outCol_) =
-            sparqlExpression::copyExpressionResult(expressionResult);
-
-        // Extract values
-        // SELECT (?x = 1 as ?c) WHERE { ?x ?y ?z } GROUP BY ?x
-        /*resultTable.back()[alias.outCol_] = std::visit(
-            [&localVocab]<sparqlExpression::SingleExpressionResult T>(
-                T&& singleResult) -> Id {
-              constexpr static bool isStrongId = std::is_same_v<T, Id>;
-              AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
-              if constexpr (isStrongId) {
-                return singleResult;
-              } else if constexpr (sparqlExpression::isConstantResult<T>) {
-                return sparqlExpression::detail::constantExpressionResultToId(
-                    AD_FWD(singleResult), localVocab);
-              } else {
-                // This should never happen since aggregates always return
-                // constants.
-                AD_FAIL();
-              }
-            },
-            std::move(expressionResult));*/
-
-        resultTable.back()[alias.outCol_] = std::visit(
-            [&evaluationContext,
-             &localVocab]<sparqlExpression::SingleExpressionResult T>(
-                T&& singleResult) {
-              // TODO<RobinTF> find out how to avoid generator
-              auto generator = sparqlExpression::detail::makeGenerator(
-                  std::forward<T>(singleResult), 1, &evaluationContext.value());
-              for (auto& value : generator) {
-                // Should only ever yield once
-                return sparqlExpression::detail::constantExpressionResultToId(
-                    std::move(value), localVocab);
-              }
-              AD_FAIL();
-            },
-            std::move(expressionResult));
-      }
-    }
-    resetAggregationData();
-  };
-
   for (IdTable& tmpIdTable : subresult->idTables()) {
     if (tmpIdTable.empty()) {
       continue;
@@ -646,11 +437,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     const IdTable& idTable = idTableWrapper.value();
     checkCancellation();
 
-    if (currentGroupBlock.empty()) {
-      for (size_t col : groupByCols) {
-        currentGroupBlock.emplace_back(col, idTable(0, col));
-      }
-    }
+    lazyGroupBy.populateGroupBlock(idTable, 0);
 
     evaluationContext.emplace(*getExecutionContext(),
                               _subtree->getVariableColumns(), idTable,
@@ -664,62 +451,23 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         getInternallyVisibleVariableColumns();
     evaluationContext->_previousResultsFromSameGroup.resize(getResultWidth());
 
-    auto processNextBlock = [&evaluationContext, &aggregateAliases,
-                             &aggregationData](size_t beginIndex,
-                                               size_t endIndex) {
-      size_t blockSize = endIndex - beginIndex;
-      evaluationContext->_beginIndex = beginIndex;
-      evaluationContext->_endIndex = endIndex;
-
-      for (auto& aggregateAlias : aggregateAliases) {
-        for (auto& aggregate : aggregateAlias.aggregateInfo_) {
-          // Evaluate child expression on block
-          auto exprChildren = aggregate.expr_->children();
-          sparqlExpression::ExpressionResult expressionResult =
-              exprChildren[0]->evaluate(&evaluationContext.value());
-
-          auto& aggregateData =
-              aggregationData.at(aggregate.aggregateDataIndex_);
-
-          std::visit(
-              [blockSize,
-               &evaluationContext]<sparqlExpression::SingleExpressionResult T,
-                                   typename A>(T&& singleResult,
-                                               A& aggregateData) {
-                auto generator = sparqlExpression::detail::makeGenerator(
-                    std::forward<T>(singleResult), blockSize,
-                    &evaluationContext.value());
-
-                for (const auto& val : generator) {
-                  aggregateData.addValue(val, &evaluationContext.value());
-                }
-              },
-              std::move(expressionResult), aggregateData);
-        }
-      }
-    };
-
     size_t blockStart = 0;
 
     for (size_t pos = 0; pos < idTable.size(); pos++) {
       checkCancellation();
-      bool rowMatchesCurrentBlock =
-          std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
-                      [&](const auto& columns) {
-                        return idTable(pos, columns.first) == columns.second;
-                      });
-      if (!rowMatchesCurrentBlock) {
-        processNextBlock(blockStart, pos);
-        commitRow();
+      if (!lazyGroupBy.rowMatchesCurrentBlock(idTable, pos)) {
+        lazyGroupBy.processNextBlock(evaluationContext.value(), blockStart,
+                                     pos);
+        lazyGroupBy.commitRow(resultTable, evaluationContext.value());
 
         // setup for processing the next block
         blockStart = pos;
-        for (auto& columnPair : currentGroupBlock) {
-          columnPair.second = idTable(pos, columnPair.first);
-        }
+
+        lazyGroupBy.populateGroupBlock(idTable, pos);
       }
     }
-    processNextBlock(blockStart, idTable.size());
+    lazyGroupBy.processNextBlock(evaluationContext.value(), blockStart,
+                                 idTable.size());
     if (!resultTable.empty()) {
       co_yield resultTable;
       resultTable =
@@ -727,7 +475,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     }
   }
   // Ensure no exception is thrown in empty case
-  if (currentGroupBlock.empty()) {
+  if (lazyGroupBy.noEntriesProcessed()) {
     AD_CORRECTNESS_CHECK(!idTableWrapper.has_value());
     AD_CORRECTNESS_CHECK(!evaluationContext.has_value());
     // Only for queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
@@ -743,7 +491,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         idTableWrapper.value(), getExecutionContext()->getAllocator(),
         localVocab, cancellationHandle_, deadline_);
   }
-  commitRow();
+  lazyGroupBy.commitRow(resultTable, evaluationContext.value());
   co_yield resultTable;
 }
 
