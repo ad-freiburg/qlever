@@ -42,10 +42,10 @@ struct AvgAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
-      return ValueId::makeUndefined();
-    else
-      return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
+    if (error_) return ValueId::makeUndefined();
+    if (count_ == 0) return ValueId::makeFromInt(0);
+
+    return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
   }
 };
 
