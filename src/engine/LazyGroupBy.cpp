@@ -170,9 +170,8 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::commitRow(
           sparqlExpression::copyExpressionResult(expressionResult);
 
       // Extract values
-      // SELECT (?x = 1 as ?c) WHERE { ?x ?y ?z } GROUP BY ?x
-      /*resultTable.back()[alias.outCol_] = std::visit(
-          [&localVocab]<sparqlExpression::SingleExpressionResult T>(
+      resultTable.back()[alias.outCol_] = std::visit(
+          [this]<sparqlExpression::SingleExpressionResult T>(
               T&& singleResult) -> Id {
             constexpr static bool isStrongId = std::is_same_v<T, Id>;
             AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
@@ -180,28 +179,12 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::commitRow(
               return singleResult;
             } else if constexpr (sparqlExpression::isConstantResult<T>) {
               return sparqlExpression::detail::constantExpressionResultToId(
-                  AD_FWD(singleResult), localVocab);
+                  AD_FWD(singleResult), localVocab_);
             } else {
               // This should never happen since aggregates always return
               // constants.
               AD_FAIL();
             }
-          },
-          std::move(expressionResult));*/
-
-      resultTable.back()[alias.outCol_] = std::visit(
-          [this,
-           &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
-              T&& singleResult) {
-            // TODO<RobinTF> find out how to avoid generator
-            auto generator = sparqlExpression::detail::makeGenerator(
-                std::forward<T>(singleResult), 1, &evaluationContext);
-            for (auto& value : generator) {
-              // Should only ever yield once
-              return sparqlExpression::detail::constantExpressionResultToId(
-                  std::move(value), localVocab_);
-            }
-            AD_FAIL();
           },
           std::move(expressionResult));
     }
