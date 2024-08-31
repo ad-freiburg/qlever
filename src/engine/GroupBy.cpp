@@ -387,7 +387,6 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 
-  // TODO<RobinTF> merge section with actual code to avoid duplication
   auto aggregateInfo = computeHashMapOptimizationMetadata(aggregates);
 
   if (!aggregateInfo.has_value()) {
