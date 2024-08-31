@@ -16,16 +16,8 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
       aggregateAliases_{std::move(aggregateAliases)},
       groupByCols_{groupByCols},
       aggregationData_{initializeAggregationData(aggregateAliases_)},
-      resetAggregationData_{std::apply(
-          [](auto&... variants) {
-            return std::visit(
-                [](auto&... unwrapped) -> std::function<void()> {
-                  return [&]() { (unwrapped.reset(), ...); };
-                },
-                variants...);
-          },
-          aggregationData_)} {
-  for (auto& alias : aggregateAliases) {
+      resetAggregationData_{initializeResetAggregationData(aggregationData_)} {
+  for (auto& alias : aggregateAliases_) {
     for (auto& aggregate : alias.aggregateInfo_) {
       calculationFunctions_.at(aggregate.aggregateDataIndex_) = std::visit(
           [&localVocab](const auto& aggregateData) -> std::function<ValueId()> {
@@ -34,6 +26,23 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
           aggregationData_.at(aggregate.aggregateDataIndex_));
     }
   }
+}
+
+// _____________________________________________________________________________
+template <size_t NUM_AGGREGATED_COLS>
+std::function<void()>
+LazyGroupBy<NUM_AGGREGATED_COLS>::initializeResetAggregationData(
+    std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>&
+        aggregationData) {
+  return std::apply(
+      [](auto&... variants) {
+        return std::visit(
+            [](auto&... unwrapped) -> std::function<void()> {
+              return [&]() { (unwrapped.reset(), ...); };
+            },
+            variants...);
+      },
+      aggregationData);
 }
 
 // _____________________________________________________________________________

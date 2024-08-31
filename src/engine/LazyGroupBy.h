@@ -60,4 +60,8 @@ class LazyGroupBy {
   static std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>
   initializeAggregationData(
       const std::vector<GroupBy::HashMapAliasInformation>& aggregateAliases);
+
+  static std::function<void()> initializeResetAggregationData(
+      std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>&
+          aggregationData);
 };
