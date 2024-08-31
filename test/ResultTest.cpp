@@ -401,6 +401,67 @@ TEST(Result, verifyApplyLimitOffsetHandlesZeroLimitCorrectly) {
 }
 
 // _____________________________________________________________________________
+TEST(Result, verifyApplyLimitOffsetHandlesNonZeroOffsetWithoutLimitCorrectly) {
+  auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
+  LimitOffsetClause limitOffset{std::nullopt, 1};
+  {
+    uint32_t callCounter = 0;
+    Result result{idTable.clone(), {}, LocalVocab{}};
+    result.applyLimitOffset(
+        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
+          EXPECT_EQ(innerTable.numRows(), 3);
+          ++callCounter;
+        });
+    EXPECT_EQ(callCounter, 1);
+  }
+
+  for (auto& generator : getAllSubSplits(idTable)) {
+    uint32_t callCounter = 0;
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.applyLimitOffset(
+        limitOffset, [&](std::chrono::microseconds, const IdTable& innerTable) {
+          for (const auto& row : innerTable) {
+            ASSERT_EQ(row.size(), 2);
+            // Make sure we never get values that were supposed to be filtered
+            // out.
+            EXPECT_NE(row[0].getVocabIndex().get(), 0);
+            EXPECT_NE(row[1].getVocabIndex().get(), 7);
+          }
+          ++callCounter;
+        });
+
+    consumeGenerator(result.idTables());
+
+    EXPECT_GE(callCounter, 1);
+  }
+}
+
+// _____________________________________________________________________________
+TEST(Result, verifyApplyLimitOffsetIsNoOpWhenLimitClauseIsRedundant) {
+  auto idTable = makeIdTableFromVector({{0, 7}, {1, 6}, {2, 5}, {3, 4}});
+  LimitOffsetClause limitOffset{std::nullopt, 0};
+  uint32_t callCounter = 0;
+  {
+    Result result{idTable.clone(), {}, LocalVocab{}};
+    result.applyLimitOffset(
+        limitOffset,
+        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+    EXPECT_EQ(callCounter, 0);
+  }
+
+  for (auto& generator : getAllSubSplits(idTable)) {
+    Result result{std::move(generator), {}, LocalVocab{}};
+    result.applyLimitOffset(
+        limitOffset,
+        [&](std::chrono::microseconds, const IdTable&) { ++callCounter; });
+
+    consumeGenerator(result.idTables());
+
+    EXPECT_EQ(callCounter, 0);
+  }
+}
+
+// _____________________________________________________________________________
 using LIC = LimitOffsetClause;
 class ResultLimitTest : public testing::TestWithParam<std::tuple<bool, LIC>> {};
 
