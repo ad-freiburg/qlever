@@ -216,23 +216,7 @@ void GroupBy::processGroup(
   std::visit(visitor, std::move(expressionResult));
 }
 
-/**
- * @brief This method takes a single group and computes the output for the
- *        given aggregate.
- * @param a The aggregate which should be used to create the output
- * @param blockStart Where the group start.
- * @param blockEnd Where the group ends.
- * @param input The input Table.
- * @param result
- * @param inTable The input Result, which is required for its local
- *                vocabulary
- * @param outTable The output Result, the vocabulary of which needs to be
- *                 expanded for GROUP_CONCAT aggregates
- * @param distinctHashSet An empty hash set. This is only passed in as an
- *                        argument to allow for efficient reusage of its
- *                        its already allocated storage.
- */
-
+// _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 IdTable GroupBy::doGroupBy(const IdTable& inTable,
                            const vector<size_t>& groupByCols,
@@ -538,38 +522,29 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() {
         "not supported."};
   }
 
-  // Prepare the `result`
-  size_t numCols = numCounts + 1;
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
-  // A nested lambda that computes the actual result. The outer lambda is
-  // templated on the number of columns (1 or 2) and will be passed to
-  // `callFixedSize`.
-  auto doComputationForNumberOfColumns = [&]<int NUM_COLS>() mutable {
-    auto ignoredRanges =
-        getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
-    const auto& permutation =
-        getExecutionContext()->getIndex().getPimpl().getPermutation(
-            permutationEnum.value());
-    auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
-    if (NUM_COLS == 1) {
-      table.setColumnSubset({{0}});
-    }
-    // TODO<joka921> This is only semi-efficient.
-    auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
-      return std::ranges::any_of(ignoredRanges,
-                                 [id = row[0]](const auto& pair) {
-                                   return id >= pair.first && id < pair.second;
-                                 });
+  auto ignoredRanges =
+      getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
+  const auto& permutation =
+      getExecutionContext()->getIndex().getPimpl().getPermutation(
+          permutationEnum.value());
+  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+  if (numCounts == 0) {
+    table.setColumnSubset({{0}});
+  }
+  // TODO<joka921> This is only semi-efficient.
+  auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
+    return std::ranges::any_of(ignoredRanges, [id = row[0]](const auto& pair) {
+      return id >= pair.first && id < pair.second;
     });
-    table.resize(end.begin() - table.begin());
-    return table;
-  };
+  });
+  table.resize(end.begin() - table.begin());
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
   // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
-  return ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns);
+  return table;
 }
 
 // ____________________________________________________________________________
@@ -731,15 +706,7 @@ std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
 
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
-GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
-  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
-    return std::nullopt;
-  }
-
-  if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
-    return std::nullopt;
-  }
-
+GroupBy::computeHashMapOptimizationMetadata(std::vector<Aggregate>& aliases) {
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -771,6 +738,19 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
   }
 
   return HashMapOptimizationData{aliasesWithAggregateInfo};
+}
+
+// _____________________________________________________________________________
+std::optional<GroupBy::HashMapOptimizationData>
+GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
+  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
+    return std::nullopt;
+  }
+
+  if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
+    return std::nullopt;
+  }
+  return computeHashMapOptimizationMetadata(aliases);
 }
 
 // _____________________________________________________________________________

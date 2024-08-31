@@ -383,6 +383,12 @@ class GroupBy : public Operation {
       std::vector<HashMapAliasInformation>& aggregateAliases,
       LocalVocab* localVocab);
 
+ private:
+  // Reusable implementation of `checkIfHashMapOptimizationPossible`.
+  std::optional<HashMapOptimizationData> computeHashMapOptimizationMetadata(
+      std::vector<Aggregate>& aggregates);
+
+ public:
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
