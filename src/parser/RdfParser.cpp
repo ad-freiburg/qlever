@@ -3,7 +3,7 @@
 // Author: Johannes Kalmbach(joka921) <johannes.kalmbach@gmail.com>
 //
 
-#include "parser/TurtleParser.h"
+#include "parser/RdfParser.h"
 
 #include <absl/strings/charconv.h>
 
@@ -356,7 +356,7 @@ bool TurtleParser<T>::decimal() {
   }
 }
 
-// _______________________________________________________________________
+// ____________________________________________________________________________
 template <class T>
 bool TurtleParser<T>::doubleParse() {
   if (parseTerminal<TurtleTokenId::Double>()) {
@@ -367,10 +367,77 @@ bool TurtleParser<T>::doubleParse() {
   }
 }
 
+// _____________________________________________________________________________
+template <typename T>
+bool NQuadParser<T>::statement() {
+  if (!nQuadSubject()) {
+    return false;
+  }
+  this->check(nQuadPredicate() && nQuadObject());
+  if (!nQuadGraphLabel()) {
+    activeGraphLabel_ = defaultGraphId_;
+  }
+  this->check(this->template skip<TurtleTokenId::Dot>());
+  if (!this->currentTripleIgnoredBecauseOfInvalidLiteral_) {
+    this->triples_.emplace_back(
+        std::move(this->activeSubject_), std::move(this->activePredicate_),
+        std::move(activeObject_), std::move(activeGraphLabel_));
+  }
+  this->currentTripleIgnoredBecauseOfInvalidLiteral_ = false;
+  return true;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool NQuadParser<T>::nQuadLiteral() {
+  // Disallow multiline literals;
+  return Base::rdfLiteralImpl(false);
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool NQuadParser<T>::nQuadSubject() {
+  if (Base::iriref() || Base::blankNodeLabel()) {
+    this->activeSubject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+
+template <typename T>
+bool NQuadParser<T>::nQuadPredicate() {
+  if (Base::iriref()) {
+    this->activePredicate_ = std::move(this->lastParseResult_.getIri());
+    return true;
+  }
+  return false;
+}
+
+template <typename T>
+bool NQuadParser<T>::nQuadObject() {
+  if (Base::iriref() || Base::blankNodeLabel() || nQuadLiteral()) {
+    this->activeObject_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
+// _____________________________________________________________________________
+template <typename T>
+bool NQuadParser<T>::nQuadGraphLabel() {
+  if (Base::iriref() || Base::blankNodeLabel()) {
+    activeGraphLabel_ = std::move(this->lastParseResult_);
+    return true;
+  }
+  return false;
+}
+
 // ______________________________________________________________________
 template <class T>
-bool TurtleParser<T>::rdfLiteral() {
-  if (!stringParse()) {
+bool TurtleParser<T>::rdfLiteralImpl(bool allowMultilineLiterals) {
+  if (!stringParseImpl(allowMultilineLiterals)) {
     return false;
   }
 
@@ -478,7 +545,7 @@ template <class T>
 TripleComponent TurtleParser<T>::literalAndDatatypeToTripleComponent(
     std::string_view normalizedLiteralContent,
     const TripleComponent::Iri& typeIri) {
-  TurtleStringParser<T> parser;
+  RdfStringParser<TurtleParser<T>> parser;
 
   return literalAndDatatypeToTripleComponentImpl(normalizedLiteralContent,
                                                  typeIri, &parser);
@@ -500,7 +567,7 @@ bool TurtleParser<T>::booleanLiteral() {
 
 // ______________________________________________________________________
 template <class T>
-bool TurtleParser<T>::stringParse() {
+bool TurtleParser<T>::stringParseImpl(bool allowMultilineLiterals) {
   // manually parse strings for efficiency
   auto view = tok_.view();
   size_t startPos = 0;
@@ -511,6 +578,9 @@ bool TurtleParser<T>::stringParse() {
     if (view.starts_with(q)) {
       foundString = true;
       startPos = q.size();
+      if (!allowMultilineLiterals && q.size() > 1) {
+        return false;
+      }
       endPos = view.find(q, startPos);
       while (endPos != string::npos) {
         if (view[endPos - 1] == '\\') {
@@ -603,8 +673,8 @@ bool TurtleParser<T>::blankNodeLabel() {
   if (res) {
     // Add a special prefix to ensure that the manually specified blank nodes
     // never interfere with the automatically generated ones. The `substr`
-    // removes the leading `_:` which will be added againg by the `BlankNode`
-    // constructor
+    // removes the leading `_:` which will be added again by the `BlankNode`
+    // constructor.
     lastParseResult_ =
         BlankNode{false, lastParseResult_.getString().substr(2)}.toSparql();
   }
@@ -694,8 +764,8 @@ bool TurtleParser<T>::iriref() {
 
 // ______________________________________________________________________
 template <class T>
-typename TurtleStreamParser<T>::TurtleParserBackupState
-TurtleStreamParser<T>::backupState() const {
+typename RdfStreamParser<T>::TurtleParserBackupState
+RdfStreamParser<T>::backupState() const {
   TurtleParserBackupState b;
   b.numBlankNodes_ = this->numBlankNodes_;
   b.numTriples_ = this->triples_.size();
@@ -706,8 +776,8 @@ TurtleStreamParser<T>::backupState() const {
 
 // _______________________________________________________________
 template <class T>
-bool TurtleStreamParser<T>::resetStateAndRead(
-    TurtleStreamParser::TurtleParserBackupState* bPtr) {
+bool RdfStreamParser<T>::resetStateAndRead(
+    RdfStreamParser::TurtleParserBackupState* bPtr) {
   auto& b = *bPtr;
   auto nextBytesOpt = fileBuffer_->getNextBlock();
   if (!nextBytesOpt || nextBytesOpt.value().empty()) {
@@ -745,7 +815,7 @@ bool TurtleStreamParser<T>::resetStateAndRead(
 }
 
 template <class T>
-void TurtleStreamParser<T>::initialize(const string& filename) {
+void RdfStreamParser<T>::initialize(const string& filename) {
   this->clear();
   fileBuffer_ = std::make_unique<ParallelFileBuffer>(bufferSize_);
   fileBuffer_->open(filename);
@@ -761,7 +831,7 @@ void TurtleStreamParser<T>::initialize(const string& filename) {
 }
 
 template <class T>
-bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
+bool RdfStreamParser<T>::getLine(TurtleTriple* triple) {
   if (triples_.empty()) {
     // if parsing the line fails because our buffer ends before the end of
     // the next statement we need to be able to recover
@@ -778,8 +848,8 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
       try {
         // variable parsedStatement will be true iff a statement can
         // successfully be parsed
-        parsedStatement = this->statement();
-      } catch (const typename TurtleParser<T>::ParseException& p) {
+        parsedStatement = T::statement();
+      } catch (const typename T::ParseException& p) {
         parsedStatement = false;
         ex = p;
       }
@@ -863,7 +933,7 @@ bool TurtleStreamParser<T>::getLine(TurtleTriple* triple) {
 // push another call to this lambda to the `parallelParser_` which will then
 // finish the `tripleCollector_` as soon as all batches have been computed.
 template <typename Tokenizer_T>
-void TurtleParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
+void RdfParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
   if (batchIdx_.fetch_add(1) == numBatchesTotal_) {
     tripleCollector_.finish();
   }
@@ -871,10 +941,10 @@ void TurtleParallelParser<Tokenizer_T>::finishTripleCollectorIfLastBatch() {
 
 // __________________________________________________________________________________
 template <typename Tokenizer_T>
-void TurtleParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
-                                                   auto batch) {
+void RdfParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
+                                                auto batch) {
   try {
-    TurtleStringParser<Tokenizer_T> parser;
+    RdfStringParser<Tokenizer_T> parser;
     parser.prefixMap_ = this->prefixMap_;
     parser.setPositionOffset(parsePosition);
     parser.setInputStream(std::move(batch));
@@ -893,7 +963,7 @@ void TurtleParallelParser<Tokenizer_T>::parseBatch(size_t parsePosition,
 
 // _______________________________________________________________________
 template <typename Tokenizer_T>
-void TurtleParallelParser<Tokenizer_T>::feedBatchesToParser(
+void RdfParallelParser<Tokenizer_T>::feedBatchesToParser(
     auto remainingBatchFromInitialization) {
   bool first = true;
   size_t parsePosition = 0;
@@ -939,14 +1009,14 @@ void TurtleParallelParser<Tokenizer_T>::feedBatchesToParser(
 
 // _______________________________________________________________________
 template <typename Tokenizer_T>
-void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
+void RdfParallelParser<Tokenizer_T>::initialize(const string& filename) {
   ParallelBuffer::BufferType remainingBatchFromInitialization;
   fileBuffer_.open(filename);
   if (auto batch = fileBuffer_.getNextBlock(); !batch) {
     LOG(WARN) << "Empty input to the TURTLE parser, is this what you intended?"
               << std::endl;
   } else {
-    TurtleStringParser<Tokenizer_T> declarationParser{};
+    RdfStringParser<Tokenizer_T> declarationParser{};
     declarationParser.setInputStream(std::move(batch.value()));
     while (declarationParser.parseDirectiveManually()) {
     }
@@ -967,7 +1037,7 @@ void TurtleParallelParser<Tokenizer_T>::initialize(const string& filename) {
 
 // _______________________________________________________________________
 template <class T>
-bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
+bool RdfParallelParser<T>::getLine(TurtleTriple* triple) {
   // If the current batch is out of triples_ get the next batch of triples.
   // We need a while loop instead of a simple if in case there is a batch that
   // contains no triples. (Theoretically this might happen, and it is safer this
@@ -990,7 +1060,7 @@ bool TurtleParallelParser<T>::getLine(TurtleTriple* triple) {
 
 // _______________________________________________________________________
 template <class T>
-std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
+std::optional<std::vector<TurtleTriple>> RdfParallelParser<T>::getBatch() {
   // we need a while in case there is a batch that contains no triples
   // (this should be rare, // TODO warn about this
   while (triples_.empty()) {
@@ -1007,20 +1077,24 @@ std::optional<std::vector<TurtleTriple>> TurtleParallelParser<T>::getBatch() {
 
 // __________________________________________________________
 template <typename T>
-TurtleParallelParser<T>::~TurtleParallelParser() {
+RdfParallelParser<T>::~RdfParallelParser() {
   ad_utility::ignoreExceptionIfThrows(
       [this] {
         parallelParser_.finish();
         tripleCollector_.finish();
         parseFuture_.get();
       },
-      "During the destruction of a TurtleParallelParser");
+      "During the destruction of a RdfParallelParser");
 }
 
 // Explicit instantiations
 template class TurtleParser<Tokenizer>;
 template class TurtleParser<TokenizerCtre>;
-template class TurtleStreamParser<Tokenizer>;
-template class TurtleStreamParser<TokenizerCtre>;
-template class TurtleParallelParser<Tokenizer>;
-template class TurtleParallelParser<TokenizerCtre>;
+template class RdfStreamParser<TurtleParser<Tokenizer>>;
+template class RdfStreamParser<TurtleParser<TokenizerCtre>>;
+template class RdfParallelParser<TurtleParser<Tokenizer>>;
+template class RdfParallelParser<TurtleParser<TokenizerCtre>>;
+template class RdfStreamParser<NQuadParser<Tokenizer>>;
+template class RdfStreamParser<NQuadParser<TokenizerCtre>>;
+template class RdfParallelParser<NQuadParser<Tokenizer>>;
+template class RdfParallelParser<NQuadParser<TokenizerCtre>>;

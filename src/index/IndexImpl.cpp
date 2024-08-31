@@ -14,8 +14,10 @@
 #include <unordered_map>
 
 #include "CompilationInfo.h"
+#include "Index.h"
 #include "absl/strings/str_join.h"
 #include "engine/AddCombinedRowToTable.h"
+#include "engine/CallFixedSize.h"
 #include "index/IndexFormatVersion.h"
 #include "index/PrefixHeuristic.h"
 #include "index/TriplesView.h"
@@ -48,7 +50,7 @@ IndexImpl::IndexImpl(ad_utility::AllocatorWithLimit<Id> allocator)
 
 // _____________________________________________________________________________
 IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
-    std::shared_ptr<TurtleParserBase> parser) {
+    std::shared_ptr<RdfParserBase> parser) {
   auto indexBuilderData =
       passFileForVocabulary(std::move(parser), numTriplesPerBatch_);
 
@@ -59,23 +61,30 @@ IndexBuilderDataAsFirstPermutationSorter IndexImpl::createIdTriplesAndVocab(
   return {indexBuilderData, std::move(firstSorter)};
 }
 
-std::unique_ptr<TurtleParserBase> IndexImpl::makeTurtleParser(
-    const std::string& filename) {
-  auto setTokenizer = [this,
-                       &filename]<template <typename> typename ParserTemplate>()
-      -> std::unique_ptr<TurtleParserBase> {
-    if (onlyAsciiTurtlePrefixes_) {
-      return std::make_unique<ParserTemplate<TokenizerCtre>>(filename);
-    } else {
-      return std::make_unique<ParserTemplate<Tokenizer>>(filename);
-    }
+// _____________________________________________________________________________
+std::unique_ptr<RdfParserBase> IndexImpl::makeRdfParser(
+    const std::string& filename, Index::Filetype type) const {
+  auto makeRdfParserImpl =
+      [&filename]<int useParallel, int isTurtleInput, int useCtre>()
+      -> std::unique_ptr<RdfParserBase> {
+    using TokenizerT =
+        std::conditional_t<useCtre == 1, TokenizerCtre, Tokenizer>;
+    using InnerParser =
+        std::conditional_t<isTurtleInput == 1, TurtleParser<TokenizerT>,
+                           NQuadParser<TokenizerT>>;
+    using Parser =
+        std::conditional_t<useParallel == 1, RdfParallelParser<InnerParser>,
+                           RdfStreamParser<InnerParser>>;
+    return std::make_unique<Parser>(filename);
   };
 
-  if (useParallelParser_) {
-    return setTokenizer.template operator()<TurtleParallelParser>();
-  } else {
-    return setTokenizer.template operator()<TurtleStreamParser>();
-  }
+  // `callFixedSize` litfts runtime integers to compile time integers. We use it
+  // here to create the correct combinations of template arguments.
+  return ad_utility::callFixedSize(
+      std::array{useParallelParser_ ? 1 : 0,
+                 type == Index::Filetype::Turtle ? 1 : 0,
+                 onlyAsciiTurtlePrefixes_ ? 1 : 0},
+      makeRdfParserImpl);
 }
 
 // Several helper functions for joining the OSP permutation with the patterns.
@@ -249,7 +258,7 @@ IndexImpl::buildOspWithPatterns(
   static_assert(NumColumnsIndexBuilding == 4,
                 "When adding additional payload columns, the following code "
                 "has to be changed");
-  Id internalGraph = qlever::specialIds.at(INTERNAL_GRAPH_IRI);
+  Id internalGraph = idOfInternalGraphDuringIndexBuilding_.value();
   for (const auto& row : hasPatternPredicateSortedByPSO->sortedView()) {
     // The repetition of the pattern index (`row[2]`) for the fifth column is
     // useful for generic unit testing, but not needed otherwise.
@@ -260,7 +269,7 @@ IndexImpl::buildOspWithPatterns(
   return thirdSorter;
 }
 // _____________________________________________________________________________
-void IndexImpl::createFromFile(const string& filename) {
+void IndexImpl::createFromFile(const string& filename, Index::Filetype type) {
   if (!loadAllPermutations_ && usePatterns_) {
     throw std::runtime_error{
         "The patterns can only be built when all 6 permutations are created"};
@@ -271,7 +280,7 @@ void IndexImpl::createFromFile(const string& filename) {
   readIndexBuilderSettingsFromFile();
 
   IndexBuilderDataAsFirstPermutationSorter indexBuilderData =
-      createIdTriplesAndVocab(makeTurtleParser(filename));
+      createIdTriplesAndVocab(makeRdfParser(filename, type));
 
   // Write the configuration already at this point, so we have it available in
   // case any of the permutations fail.
@@ -339,7 +348,7 @@ void IndexImpl::createFromFile(const string& filename) {
 
 // _____________________________________________________________________________
 IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
-    std::shared_ptr<TurtleParserBase> parser, size_t linesPerPartial) {
+    std::shared_ptr<RdfParserBase> parser, size_t linesPerPartial) {
   parser->integerOverflowBehavior() = turtleParserIntegerOverflowBehavior_;
   parser->invalidLiteralsAreSkipped() = turtleParserSkipIllegalLiterals_;
   ad_utility::Synchronized<std::unique_ptr<TripleVec>> idTriples(
@@ -471,8 +480,12 @@ IndexBuilderDataAsStxxlVector IndexImpl::passFileForVocabulary(
   LOG(DEBUG) << "Finished merging partial vocabularies" << std::endl;
   IndexBuilderDataAsStxxlVector res;
   res.vocabularyMetaData_ = mergeRes;
+  idOfHasPatternDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(HAS_PATTERN_PREDICATE);
+  idOfInternalGraphDuringIndexBuilding_ =
+      mergeRes.specialIdMapping().at(INTERNAL_GRAPH_IRI);
   LOG(INFO) << "Number of words in external vocabulary: "
-            << res.vocabularyMetaData_.numWordsTotal_ - sizeInternalVocabulary
+            << res.vocabularyMetaData_.numWordsTotal() - sizeInternalVocabulary
             << std::endl;
 
   res.idTriples = std::move(*idTriples.wlock());
@@ -526,6 +539,9 @@ IndexImpl::convertPartialToGlobalIds(
       // probably the mapping should also be defined as `HashMap<VocabIndex,
       // VocabIndex>` instead of `HashMap<Id, Id>`
       if (id.getDatatype() != Datatype::VocabIndex) {
+        // Check that all the internal, special IDs which we have introduced
+        // for performance reasons are eliminated.
+        AD_CORRECTNESS_CHECK(id.getDatatype() != Datatype::Undefined);
         continue;
       }
       auto iterator = idMap.find(id);
@@ -1513,6 +1529,7 @@ std::optional<PatternCreator::TripleSorter> IndexImpl::createSPOAndSOP(
     // as the old one to see that they match.
     PatternCreator patternCreator{
         onDiskBase_ + ".index.patterns",
+        idOfHasPatternDuringIndexBuilding_.value(),
         memoryLimitIndexBuilding() / NUM_EXTERNAL_SORTERS_AT_SAME_TIME};
     auto pushTripleToPatterns = [&patternCreator,
                                  &isInternalTriple](const auto& triple) {

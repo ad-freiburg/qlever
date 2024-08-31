@@ -7,8 +7,7 @@
  *       these patterns to disk, and to read them from disk.
  */
 
-#ifndef QLEVER_PATTERNCREATOR_H
-#define QLEVER_PATTERNCREATOR_H
+#pragma once
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "global/Id.h"
@@ -125,9 +124,12 @@ class PatternCreator {
   // True if `finish()` was already called.
   bool isFinished_ = false;
 
+  // The ID of the predicate `ql:has-pattern`.
+  Id idOfHasPattern_;
+
  public:
   // The patterns will be written to files starting with `basename`.
-  explicit PatternCreator(const string& basename,
+  explicit PatternCreator(const string& basename, Id idOfHasPattern,
                           ad_utility::MemorySize memoryLimit)
       : filename_{basename},
         patternSerializer_{{basename}},
@@ -138,7 +140,8 @@ class PatternCreator {
                 ad_utility::makeUnlimitedAllocator<Id>()),
             std::make_unique<OSPSorter4Cols>(
                 basename + ".second-sorter.dat", memoryLimit / 2,
-                ad_utility::makeUnlimitedAllocator<Id>())} {
+                ad_utility::makeUnlimitedAllocator<Id>())},
+        idOfHasPattern_{idOfHasPattern} {
     LOG(DEBUG) << "Computing predicate patterns ..." << std::endl;
   }
 
@@ -187,5 +190,3 @@ class PatternCreator {
     return *tripleSorter_.triplesWithSubjectPatternsSortedByOsp_;
   }
 };
-
-#endif  // QLEVER_PATTERNCREATOR_H
