@@ -96,7 +96,7 @@ struct MatchIdTableFromVector {
 };
 static constexpr MatchIdTableFromVector matchIdTableFromVector;
 
-// Construct an `IdTable` from the given argumnts, but returns a GMock
+// Construct an `IdTable` from the given arguments, but returns a GMock
 // `matcher`, that matches for equality with the `IdTable`. In particular, the
 // matcher also deals with `IdTable` not being copyable, which requires a
 // workaround for GMock/GTest.
