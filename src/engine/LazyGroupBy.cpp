@@ -20,7 +20,7 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
           [](auto&... variants) {
             return std::visit(
                 [](auto&... unwrapped) -> std::function<void()> {
-                  return [&] { (unwrapped.reset(), ...); };
+                  return [&]() { (unwrapped.reset(), ...); };
                 },
                 variants...);
           },
@@ -138,12 +138,9 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::commitRow(
           originalChildren;
       originalChildren.reserve(info.size());
       for (auto& aggregate : info) {
-        ValueId aggregateResult =
-            calculateAggregateResult(aggregate.aggregateDataIndex_);
-
         // Substitute the resulting vector as a literal
         auto newExpression = std::make_unique<sparqlExpression::IdExpression>(
-            std::move(aggregateResult));
+            calculateAggregateResult(aggregate.aggregateDataIndex_));
 
         AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
         auto parentAndIndex = aggregate.parentAndIndex_.value();
