@@ -20,8 +20,19 @@ LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
   for (auto& alias : aggregateAliases_) {
     for (auto& aggregate : alias.aggregateInfo_) {
       calculationFunctions_.at(aggregate.aggregateDataIndex_) = std::visit(
-          [&localVocab](const auto& aggregateData) -> std::function<ValueId()> {
-            return [&]() { return aggregateData.calculateResult(&localVocab); };
+          [this](const auto& aggregateData) -> std::function<ValueId()> {
+            return [&] { return aggregateData.calculateResult(&localVocab_); };
+          },
+          aggregationData_.at(aggregate.aggregateDataIndex_));
+      addToAggregateFunctions_.at(aggregate.aggregateDataIndex_) = std::visit(
+          [](auto& aggregateData)
+              -> std::function<void(
+                  const std::variant<ValueId, LocalVocabEntry>&,
+                  const sparqlExpression::EvaluationContext*)> {
+            return [&](const std::variant<ValueId, LocalVocabEntry>& id,
+                       const sparqlExpression::EvaluationContext* ctx) {
+              return aggregateData.addValue(id, ctx);
+            };
           },
           aggregationData_.at(aggregate.aggregateDataIndex_));
     }
@@ -214,20 +225,19 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::processNextBlock(
       sparqlExpression::ExpressionResult expressionResult =
           exprChildren[0]->evaluate(&evaluationContext);
 
-      auto& aggregateData = aggregationData_.at(aggregate.aggregateDataIndex_);
-
       std::visit(
-          [blockSize,
-           &evaluationContext]<sparqlExpression::SingleExpressionResult T,
-                               typename A>(T&& singleResult, A& aggregateData) {
+          [this, blockSize, &evaluationContext,
+           &aggregate]<sparqlExpression::SingleExpressionResult T>(
+              T&& singleResult) {
             auto generator = sparqlExpression::detail::makeGenerator(
                 std::forward<T>(singleResult), blockSize, &evaluationContext);
 
             for (const auto& val : generator) {
-              aggregateData.addValue(val, &evaluationContext);
+              addToAggregateFunction(aggregate.aggregateDataIndex_, val,
+                                     &evaluationContext);
             }
           },
-          std::move(expressionResult), aggregateData);
+          std::move(expressionResult));
     }
   }
 }

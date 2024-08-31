@@ -14,6 +14,10 @@ class LazyGroupBy {
   std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS> aggregationData_;
   std::array<std::function<ValueId()>, NUM_AGGREGATED_COLS>
       calculationFunctions_{};
+  std::array<std::function<void(const std::variant<ValueId, LocalVocabEntry>&,
+                                const sparqlExpression::EvaluationContext*)>,
+             NUM_AGGREGATED_COLS>
+      addToAggregateFunctions_{};
 
   // This stores the values of the group by numColumns for the current block.
   // A block ends when one of these values changes.
@@ -51,6 +55,12 @@ class LazyGroupBy {
  private:
   ValueId calculateAggregateResult(size_t aggregateIndex) {
     return calculationFunctions_.at(aggregateIndex)();
+  }
+
+  void addToAggregateFunction(size_t aggregateIndex,
+                              const std::variant<ValueId, LocalVocabEntry>& id,
+                              const sparqlExpression::EvaluationContext* ctx) {
+    return addToAggregateFunctions_.at(aggregateIndex)(id, ctx);
   }
 
   void substituteGroupVariable(
