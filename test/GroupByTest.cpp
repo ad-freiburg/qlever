@@ -29,10 +29,14 @@
 #include "util/IndexTestHelpers.h"
 
 using namespace ad_utility::testing;
+using ::testing::Eq;
+using ::testing::Optional;
 
 namespace {
 auto I = IntId;
-}
+// Wrapper type so that we can safely use `IdTable` within gtest matchers.
+using W = CopyShield<IdTable>;
+}  // namespace
 
 // This fixture is used to create an Index for the tests.
 // The full index creation is required for initialization of the vocabularies.
@@ -487,15 +491,10 @@ struct GroupByOptimizations : ::testing::Test {
       Alias{makeCountPimpl(varX, false), Variable{"?count"}},
       Alias{makeCountPimpl(varX, false), Variable{"?count2"}}};
 
-  const Join* getJoinPtr(const Tree& tree) {
-    auto join = dynamic_cast<const Join*>(tree->getRootOperation().get());
+  const Join& getOperation(const Tree& tree) {
+    auto join = std::dynamic_pointer_cast<const Join>(tree->getRootOperation());
     AD_CONTRACT_CHECK(join);
-    return join;
-  }
-  const IndexScan* getScanPtr(const Tree& tree) {
-    auto scan = dynamic_cast<const IndexScan*>(tree->getRootOperation().get());
-    AD_CONTRACT_CHECK(scan);
-    return scan;
+    return *join;
   }
 };
 
@@ -608,7 +607,8 @@ TEST_F(GroupByOptimizations, checkIfHashMapOptimizationPossible) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join, auto& aggregates) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
-    ASSERT_FALSE(groupBy.checkIfHashMapOptimizationPossible(aggregates));
+    ASSERT_EQ(std::nullopt,
+              groupBy.checkIfHashMapOptimizationPossible(aggregates));
   };
 
   auto testSuccess = [this](const auto& groupByVariables, const auto& aliases,
@@ -1453,7 +1453,8 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& join) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, join};
-    ASSERT_FALSE(groupBy.checkIfJoinWithFullScan(getJoinPtr(join)));
+    ASSERT_EQ(std::nullopt,
+              groupBy.checkIfJoinWithFullScan(getOperation(join)));
   };
 
   // Must have exactly one variable to group by.
@@ -1474,7 +1475,7 @@ TEST_F(GroupByOptimizations, checkIfJoinWithFullScan) {
   // Everything is valid for the following example.
   GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, validJoinWhenGroupingByX};
   auto optimizedAggregateData =
-      groupBy.checkIfJoinWithFullScan(getJoinPtr(validJoinWhenGroupingByX));
+      groupBy.checkIfJoinWithFullScan(getOperation(validJoinWhenGroupingByX));
   ASSERT_TRUE(optimizedAggregateData.has_value());
   ASSERT_EQ(&optimizedAggregateData->otherSubtree_, xScan.get());
   ASSERT_EQ(optimizedAggregateData->permutation_, Permutation::SPO);
@@ -1487,18 +1488,14 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // One of the invalid cases from the previous test.
     GroupBy invalidForOptimization{qec, emptyVariables, aliasesCountX,
                                    validJoinWhenGroupingByX};
-    IdTable result{qec->getAllocator()};
-    ASSERT_FALSE(
-        invalidForOptimization.computeGroupByForJoinWithFullScan(&result));
-    // No optimization was applied, so the result is untouched.
-    AD_CONTRACT_CHECK(result.empty());
+    ASSERT_EQ(std::nullopt,
+              invalidForOptimization.computeGroupByForJoinWithFullScan());
 
     // The child of the GROUP BY is not a join, so this is also
     // invalid.
     GroupBy invalidGroupBy2{qec, variablesOnlyX, emptyAliases, xScan};
-    ASSERT_FALSE(invalidGroupBy2.computeGroupByForJoinWithFullScan(&result));
-    AD_CONTRACT_CHECK(result.empty());
-    ;
+    ASSERT_EQ(std::nullopt,
+              invalidGroupBy2.computeGroupByForJoinWithFullScan());
   }
 
   // `chooseInterface == true` means "use the dedicated
@@ -1509,6 +1506,9 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
                                     source_location l =
                                         source_location::current()) {
     auto trace = generateLocationTrace(l);
+    auto getId = makeGetId(qec->getIndex());
+    Id idOfX = getId("<x>");
+    Id idOfY = getId("<y>");
     // Set up a `VALUES` clause with three values for `?x`, two of which
     // (`<x>` and `<y>`) actually appear in the test knowledge graph.
     parsedQuery::SparqlValues sparqlValues;
@@ -1521,30 +1521,15 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
     // Set up a GROUP BY operation for which the optimization can be applied.
     // The last two arguments of the `Join` constructor are the indices of the
     // join columns.
-    IdTable result(qec->getAllocator());
     auto join = makeExecutionTree<Join>(qec, values, xyzScanSortedByX, 0, 0);
     GroupBy validForOptimization{qec, variablesOnlyX, aliasesCountX, join};
-    if (chooseInterface) {
-      ASSERT_TRUE(
-          validForOptimization.computeGroupByForJoinWithFullScan(&result));
-    } else {
-      ASSERT_TRUE(
-          validForOptimization.computeOptimizedGroupByIfPossible(&result));
-    }
-
-    // There are 7 triples with `<x>` as a subject, 0 triples with `<xa>` as a
-    // subject, and 1 triple with `y` as a subject.
-    ASSERT_EQ(result.numColumns(), 2u);
-    ASSERT_EQ(result.size(), 2u);
-
-    auto getId = makeGetId(qec->getIndex());
-    Id idOfX = getId("<x>");
-    Id idOfY = getId("<y>");
-
-    ASSERT_EQ(result(0, 0), idOfX);
-    ASSERT_EQ(result(0, 1), Id::makeFromInt(7));
-    ASSERT_EQ(result(1, 0), idOfY);
-    ASSERT_EQ(result(1, 1), Id::makeFromInt(1));
+    auto optional =
+        chooseInterface
+            ? validForOptimization.computeGroupByForJoinWithFullScan()
+            : validForOptimization.computeOptimizedGroupByIfPossible();
+    EXPECT_THAT(
+        optional,
+        Optional(Eq(W{makeIdTableFromVector({{idOfX, I(7)}, {idOfY, I(1)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1553,11 +1538,9 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
   {
     auto join = makeExecutionTree<Join>(qec, xScanIriNotInVocab,
                                         xyzScanSortedByX, 0, 0);
-    IdTable result{qec->getAllocator()};
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
-    ASSERT_TRUE(groupBy.computeGroupByForJoinWithFullScan(&result));
-    ASSERT_EQ(result.numColumns(), 2u);
-    ASSERT_EQ(result.size(), 0u);
+    auto result = groupBy.computeGroupByForJoinWithFullScan();
+    EXPECT_THAT(result, Optional(Eq(W{IdTable{2, qec->getAllocator()}})));
   }
 }
 
@@ -1568,9 +1551,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
-    IdTable result{qec->getAllocator()};
-    ASSERT_FALSE(groupBy.computeGroupByForSingleIndexScan(&result));
-    ASSERT_EQ(result.size(), 0u);
+    ASSERT_EQ(std::nullopt, groupBy.computeGroupByForSingleIndexScan());
   };
   // The IndexScan has only one variable, this is currently not supported.
   testFailure(emptyVariables, aliasesCountX, xScan);
@@ -1588,43 +1569,32 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
   // `computeGroupByForJoinWithFullScan` method", `chooseInterface == false`
   // means use the general `computeOptimizedGroupByIfPossible` function.
   auto testWithBothInterfaces = [&](bool chooseInterface) {
-    IdTable result{qec->getAllocator()};
     auto groupBy =
         GroupBy{qec, emptyVariables, aliasesCountX, xyzScanSortedByX};
-    if (chooseInterface) {
-      ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
-    } else {
-      ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
-    }
+    auto optional = chooseInterface
+                        ? groupBy.computeGroupByForSingleIndexScan()
+                        : groupBy.computeOptimizedGroupByIfPossible();
 
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
     // The test index currently consists of 15 triples.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(15));
+    EXPECT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(15)}})})));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
 
   {
-    IdTable result{qec->getAllocator()};
     auto groupBy = GroupBy{qec, emptyVariables, aliasesCountX, xyScan};
-    ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(5));
+    ASSERT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(5)}})})));
   }
   {
-    IdTable result{qec->getAllocator()};
     auto groupBy =
         GroupBy{qec, emptyVariables, aliasesCountDistinctX, xyzScanSortedByX};
-    ASSERT_TRUE(groupBy.computeGroupByForSingleIndexScan(&result));
-    ASSERT_EQ(result.size(), 1);
-    ASSERT_EQ(result.numColumns(), 1);
+    auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
-    ASSERT_EQ(result(0, 0), Id::makeFromInt(6));
+    ASSERT_THAT(optional, Optional(Eq(W{makeIdTableFromVector({{I(6)}})})));
   }
 }
 // _____________________________________________________________________________
@@ -1641,10 +1611,9 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
                          const auto& indexScan,
                          bool callSpecializedMethod = true) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
-    IdTable result{qec->getAllocator()};
     return callSpecializedMethod
-               ? groupBy.computeGroupByObjectWithCount(&result)
-               : groupBy.computeOptimizedGroupByIfPossible(&result);
+               ? groupBy.computeGroupByObjectWithCount().has_value()
+               : groupBy.computeOptimizedGroupByIfPossible().has_value();
   };
 
   // The index scan must have exactly two variables, the IRI must be in the
@@ -1676,23 +1645,22 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   // Group by subject.
   auto getId = makeGetId(qec->getIndex());
   {
-    IdTable result{qec->getAllocator()};
     auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
-    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
-    ASSERT_EQ(result, makeIdTableFromVector(
-                          {{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
+    ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
+                Optional(Eq(W{makeIdTableFromVector(
+                    {{getId("<x>"), I(4)}, {getId("<z>"), I(1)}})})));
   }
 
   // Group by object.
   {
-    IdTable result{qec->getAllocator()};
     auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
-    ASSERT_TRUE(groupBy.computeGroupByObjectWithCount(&result));
-    ASSERT_EQ(result, makeIdTableFromVector({{getId("\"A\""), I(1)},
+    ASSERT_THAT(
+        groupBy.computeGroupByObjectWithCount(),
+        Optional(Eq(W{makeIdTableFromVector({{getId("\"A\""), I(1)},
                                              {getId("\"alpha\""), I(1)},
                                              {getId("\"älpha\""), I(1)},
                                              {getId("\"Beta\""), I(1)},
-                                             {getId("\"zz\"@en"), I(1)}}));
+                                             {getId("\"zz\"@en"), I(1)}})})));
   }
 }
 
@@ -1703,9 +1671,7 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
   auto testFailure = [this](const auto& groupByVariables, const auto& aliases,
                             const auto& indexScan) {
     auto groupBy = GroupBy{qec, groupByVariables, aliases, indexScan};
-    IdTable result{qec->getAllocator()};
-    ASSERT_FALSE(groupBy.computeGroupByForFullIndexScan(&result));
-    ASSERT_EQ(result.size(), 0u);
+    ASSERT_EQ(std::nullopt, groupBy.computeGroupByForFullIndexScan());
   };
   // The IndexScan doesn't have three variables.
   testFailure(variablesOnlyX, aliasesCountX, xScan);
@@ -1732,11 +1698,11 @@ TEST_F(GroupByOptimizations, computeGroupByForFullIndexScan) {
         includeCount
             ? GroupBy{qec, variablesOnlyX, aliasesCountX, xyzScanSortedByX}
             : GroupBy{qec, variablesOnlyX, emptyAliases, xyzScanSortedByX};
-    if (chooseInterface) {
-      ASSERT_TRUE(groupBy.computeGroupByForFullIndexScan(&result));
-    } else {
-      ASSERT_TRUE(groupBy.computeOptimizedGroupByIfPossible(&result));
-    }
+    auto optional = chooseInterface
+                        ? groupBy.computeGroupByForFullIndexScan()
+                        : groupBy.computeOptimizedGroupByIfPossible();
+    ASSERT_TRUE(optional.has_value());
+    result = std::move(optional).value();
 
     // Six distinct subjects.
     ASSERT_EQ(result.size(), 6);
