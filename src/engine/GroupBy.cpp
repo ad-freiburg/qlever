@@ -448,11 +448,37 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
-  // TODO<RobinTF> Consider adding std::monostate to the variant to allow for
-  // assertions that all cases have been and check if all variant types are
-  // trivially initialisable
   std::array<AggregationData, NUM_AGGREGATED_COLS> aggregationData =
       initializeAggregationData<NUM_AGGREGATED_COLS>(aggregateAliases);
+
+  // Store the call to reset in a `std::function` to avoid having to expensively
+  // look up type of the variant on every new group that will always be the
+  // same.
+  auto resetAggregationData = std::apply(
+      [](auto&... variants) {
+        return std::visit(
+            [](auto&... unwrapped) -> std::function<void()> {
+              return [&] { (unwrapped.reset(), ...); };
+            },
+            variants...);
+      },
+      aggregationData);
+
+  std::array<std::function<ValueId()>, NUM_AGGREGATED_COLS>
+      calculationFunctions;
+  for (auto& alias : aggregateAliases) {
+    for (auto& aggregate : alias.aggregateInfo_) {
+      calculationFunctions.at(aggregate.aggregateDataIndex_) = std::visit(
+          [&localVocab](const auto& aggregateData) -> std::function<ValueId()> {
+            return [&]() { return aggregateData.calculateResult(&localVocab); };
+          },
+          aggregationData.at(aggregate.aggregateDataIndex_));
+    }
+  }
+  auto calculateAggregateResult =
+      [&calculationFunctions](size_t aggregateIndex) {
+        return calculationFunctions.at(aggregateIndex)();
+      };
 
   // This stores the values of the group by numColumns for the current block.
   // A block ends when one of these values changes.
@@ -468,8 +494,9 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       std::nullopt;
 
   auto commitRow = [this, &resultTable, &groupByCols, &localVocab,
-                    &aggregationData, &aggregateAliases, &currentGroupBlock,
-                    &evaluationContext]() {
+                    &calculateAggregateResult, &aggregateAliases,
+                    &currentGroupBlock, &evaluationContext,
+                    resetAggregationData]() {
     resultTable.emplace_back();
     for (size_t rowIndex = 0; rowIndex < groupByCols.size(); ++rowIndex) {
       resultTable.back()[rowIndex] = currentGroupBlock.at(rowIndex).second;
@@ -511,11 +538,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         // an aggregate, hence we don't need to substitute anything here
         auto& aggregate = info.at(0);
 
-        resultTable.back()[alias.outCol_] = std::visit(
-            [&localVocab](const auto& aggregateData) {
-              return aggregateData.calculateResult(&localVocab);
-            },
-            aggregationData.at(aggregate.aggregateDataIndex_));
+        resultTable.back()[alias.outCol_] =
+            calculateAggregateResult(aggregate.aggregateDataIndex_);
 
         // Copy the result so that future aliases may reuse it
         evaluationContext->_previousResultsFromSameGroup.at(alias.outCol_) =
@@ -543,11 +567,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             originalChildren;
         originalChildren.reserve(info.size());
         for (auto& aggregate : info) {
-          ValueId aggregateResult = std::visit(
-              [&localVocab](const auto& aggregateData) {
-                return aggregateData.calculateResult(&localVocab);
-              },
-              aggregationData.at(aggregate.aggregateDataIndex_));
+          ValueId aggregateResult =
+              calculateAggregateResult(aggregate.aggregateDataIndex_);
 
           // Substitute the resulting vector as a literal
           auto newExpression = std::make_unique<sparqlExpression::IdExpression>(
@@ -614,9 +635,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             std::move(expressionResult));
       }
     }
-    // TODO<RobinTF> Avoid recomputing this every time, compute once and reuse.
-    aggregationData =
-        initializeAggregationData<NUM_AGGREGATED_COLS>(aggregateAliases);
+    resetAggregationData();
   };
 
   for (IdTable& tmpIdTable : subresult->idTables()) {
