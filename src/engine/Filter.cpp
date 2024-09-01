@@ -7,7 +7,6 @@
 #include "./Filter.h"
 
 #include <algorithm>
-#include <optional>
 #include <sstream>
 
 #include "engine/CallFixedSize.h"
