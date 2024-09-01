@@ -63,7 +63,8 @@ class Filter : public Operation {
   // Perform the actual filter operation of the data provided by
   // `evaluationContext`.
   template <size_t WIDTH>
-  IdTable computeFilterImpl(
+  void computeFilterImpl(
+      IdTableStatic<WIDTH>& resultTable,
       sparqlExpression::EvaluationContext& evaluationContext);
 
   // Run `computeFilterImpl` on the provided IdTable
