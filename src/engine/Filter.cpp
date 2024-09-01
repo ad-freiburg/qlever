@@ -68,10 +68,10 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 
   IdTable result = ad_utility::callFixedSize(
       getSubtree().get()->getResultWidth(),
-      [this, subRes = std::move(subRes)]<size_t WIDTH>() {
+      [this, subRes = std::move(subRes)]<int WIDTH>() {
         IdTable result{WIDTH, getExecutionContext()->getAllocator()};
-        constexpr int intWidth = static_cast<int>(WIDTH);
-        IdTableStatic<intWidth> output = std::move(result).toStatic<intWidth>();
+        IdTableStatic<WIDTH> output =
+            std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
 
         std::vector<ColumnIndex> sortedOn = subRes->sortedBy();
 
@@ -85,7 +85,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
           // EvaluationContext constructor.
           evaluationContext._columnsByWhichResultIsSorted = std::move(sortedOn);
 
-          computeFilterImpl<WIDTH>(output, evaluationContext);
+          computeFilterImpl(output, evaluationContext);
 
           // Reuse vector
           sortedOn = std::move(evaluationContext._columnsByWhichResultIsSorted);
@@ -113,12 +113,12 @@ IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
   evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
 
   size_t width = evaluationContext._inputTable.numColumns();
-  IdTable result = ad_utility::callFixedSize(
-      width, [this, &evaluationContext]<size_t WIDTH>() {
-        constexpr int intWidth = static_cast<int>(WIDTH);
+  IdTable result =
+      ad_utility::callFixedSize(width, [this, &evaluationContext]<int WIDTH>() {
         IdTable result{WIDTH, getExecutionContext()->getAllocator()};
-        IdTableStatic<intWidth> output = std::move(result).toStatic<intWidth>();
-        computeFilterImpl<WIDTH>(output, evaluationContext);
+        IdTableStatic<WIDTH> output =
+            std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
+        computeFilterImpl(output, evaluationContext);
 
         return std::move(output).toDynamic();
       });
@@ -127,11 +127,12 @@ IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
 }
 
 // _____________________________________________________________________________
-template <size_t WIDTH>
+template <int WIDTH>
 void Filter::computeFilterImpl(
     IdTableStatic<WIDTH>& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext) {
-  const auto input = evaluationContext._inputTable.asStaticView<WIDTH>();
+  const auto input =
+      evaluationContext._inputTable.asStaticView<static_cast<size_t>(WIDTH)>();
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 

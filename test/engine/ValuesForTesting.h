@@ -22,7 +22,6 @@ class ValuesForTesting : public Operation {
   size_t sizeEstimate_;
   size_t costEstimate_;
   bool unlikelyToFitInCache_ = false;
-  bool forceFullyMaterialized_ = false;
 
  public:
   // Create an operation that has as its result the given `table` and the given
@@ -199,6 +198,7 @@ class ValuesForTesting : public Operation {
   std::vector<ColumnIndex> resultSortedColumns_;
   LocalVocab localVocab_;
   std::optional<float> multiplicity_;
+  bool forceFullyMaterialized_ = false;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns
