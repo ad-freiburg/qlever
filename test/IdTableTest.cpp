@@ -1078,6 +1078,16 @@ TEST(IdTable, staticAsserts) {
   static_assert(std::ranges::random_access_range<IdTableStatic<1>>);
 }
 
+TEST(IdTable, constructorsAreSfinaeFriendly) {
+  // Check, that constructors that take no allocator are disabled if the
+  // allocator is not default-constructible.
+  static_assert(!std::is_default_constructible_v<IdTable>);
+  static_assert(!std::is_constructible_v<IdTable, size_t>);
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  static_assert(std::is_default_constructible_v<IntTable>);
+  static_assert(std::is_constructible_v<IntTable, size_t>);
+}
+
 // Check that we can completely instantiate `IdTable`s with a different value
 // type and a different underlying storage.
 
