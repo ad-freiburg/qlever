@@ -87,20 +87,20 @@ IdTable makeIdTableFromVector(const VectorTable& content,
 // `matcher`, that matches for equality with the created `IdTable`. In
 // particular, the matcher also deals with `IdTable` not being copyable, which
 // requires a workaround for GMock/GTest.
-struct MatchIdTableFromVector {
+struct MatchesIdTableFromVector {
   template <typename Transformation = decltype(ad_utility::testing::VocabId)>
   auto operator()(const VectorTable& content, Transformation t = {}) const {
     return ::testing::Eq(
         CopyShield<IdTable>(makeIdTableFromVector(content, std::move(t))));
   }
 };
-static constexpr MatchIdTableFromVector matchIdTableFromVector;
+static constexpr MatchesIdTableFromVector matchesIdTableFromVector;
 
 // Construct an `IdTable` from the given arguments, but returns a GMock
 // `matcher`, that matches for equality with the `IdTable`. In particular, the
 // matcher also deals with `IdTable` not being copyable, which requires a
 // workaround for GMock/GTest.
-struct MatchIdTable {
+struct MatchesIdTable {
   template <typename... Ts>
   requires(std::constructible_from<IdTable, Ts && ...>)
   auto operator()(Ts&&... ts) const {
@@ -115,7 +115,7 @@ struct MatchIdTable {
     return operator()(table.clone());
   }
 };
-static constexpr MatchIdTable matchIdTable;
+static constexpr MatchesIdTable matchesIdTable;
 
 /*
  * @brief Tests, whether the given IdTable has the same content as the sample

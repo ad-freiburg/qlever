@@ -231,8 +231,8 @@ std::vector<IdTable> convertToVector(
 }
 
 // match the contents of a `vector<IdTable>` to the given `tables`.
-auto matchIdTables(ad_utility::SimilarTo<IdTable> auto const&... tables) {
-  return ElementsAre(matchIdTable(tables)...);
+auto matchesIdTables(const auto&... tables) {
+  return ElementsAre(matchesIdTable(tables)...);
 }
 
 // Template is only required because inner class is not visible
@@ -1130,7 +1130,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesReturnsSingletonIterator) {
   Result result{idTable.clone(), {}, LocalVocab{}};
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
-  EXPECT_THAT(convertToVector(std::move(generator)), matchIdTables(idTable));
+  EXPECT_THAT(convertToVector(std::move(generator)), matchesIdTables(idTable));
 }
 
 // _____________________________________________________________________________
@@ -1148,7 +1148,7 @@ TEST(ExportQueryExecutionTrees, getIdTablesMirrorsGenerator) {
   auto generator = ExportQueryExecutionTrees::getIdTables(result);
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(idTable1, idTable2));
+              matchesIdTables(idTable1, idTable2));
 }
 
 // _____________________________________________________________________________
@@ -1164,7 +1164,7 @@ TEST(ExportQueryExecutionTrees, ensureCorrectSlicingOfSingleIdTable) {
 
   auto referenceTable = makeIdTableFromVector({{2}});
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(referenceTable));
+              matchesIdTables(referenceTable));
 }
 
 // _____________________________________________________________________________
@@ -1185,7 +1185,7 @@ TEST(ExportQueryExecutionTrees,
   auto referenceTable1 = makeIdTableFromVector({{4}, {5}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(referenceTable1));
+              matchesIdTables(referenceTable1));
 }
 
 // _____________________________________________________________________________
@@ -1206,7 +1206,7 @@ TEST(ExportQueryExecutionTrees,
   auto referenceTable1 = makeIdTableFromVector({{1}, {2}, {3}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(referenceTable1));
+              matchesIdTables(referenceTable1));
 }
 
 // _____________________________________________________________________________
@@ -1228,7 +1228,7 @@ TEST(ExportQueryExecutionTrees,
   auto referenceTable2 = makeIdTableFromVector({{4}});
 
   EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(referenceTable1, referenceTable2));
+              matchesIdTables(referenceTable1, referenceTable2));
 }
 
 // _____________________________________________________________________________
@@ -1253,8 +1253,9 @@ TEST(ExportQueryExecutionTrees,
   auto referenceTable2 = makeIdTableFromVector({{4}, {5}});
   auto referenceTable3 = makeIdTableFromVector({{6}, {7}});
 
-  EXPECT_THAT(convertToVector(std::move(generator)),
-              matchIdTables(referenceTable1, referenceTable2, referenceTable3));
+  EXPECT_THAT(
+      convertToVector(std::move(generator)),
+      matchesIdTables(referenceTable1, referenceTable2, referenceTable3));
 }
 
 // _____________________________________________________________________________
@@ -1287,6 +1288,6 @@ TEST(ExportQueryExecutionTrees, ensureGeneratorIsNotConsumedWhenNotRequired) {
     IdTable referenceTable1 = makeIdTableFromVector({{1}});
     std::vector<IdTable> tables;
     EXPECT_NO_THROW({ tables = convertToVector(std::move(generator)); });
-    EXPECT_THAT(tables, matchIdTables(referenceTable1));
+    EXPECT_THAT(tables, matchesIdTables(referenceTable1));
   }
 }

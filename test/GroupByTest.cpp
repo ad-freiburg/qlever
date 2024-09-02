@@ -37,8 +37,8 @@ auto I = IntId;
 
 // Return a matcher that checks, whether a given `std::optional<IdTable` has a
 // value and that value is equal to `makeIdTableFromVector(table)`.
-auto optionalTable = [](const VectorTable& table) {
-  return Optional(matchIdTableFromVector(table));
+auto optionalHasTable = [](const VectorTable& table) {
+  return Optional(matchesIdTableFromVector(table));
 };
 }  // namespace
 
@@ -1531,7 +1531,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
         chooseInterface
             ? validForOptimization.computeGroupByForJoinWithFullScan()
             : validForOptimization.computeOptimizedGroupByIfPossible();
-    EXPECT_THAT(optional, optionalTable({{idOfX, I(7)}, {idOfY, I(1)}}));
+    EXPECT_THAT(optional, optionalHasTable({{idOfX, I(7)}, {idOfY, I(1)}}));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1542,7 +1542,7 @@ TEST_F(GroupByOptimizations, computeGroupByForJoinWithFullScan) {
                                         xyzScanSortedByX, 0, 0);
     GroupBy groupBy{qec, variablesOnlyX, aliasesCountX, join};
     auto result = groupBy.computeGroupByForJoinWithFullScan();
-    EXPECT_THAT(result, Optional(matchIdTable(2u, qec->getAllocator())));
+    EXPECT_THAT(result, Optional(matchesIdTable(2u, qec->getAllocator())));
   }
 }
 
@@ -1578,7 +1578,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
                         : groupBy.computeOptimizedGroupByIfPossible();
 
     // The test index currently consists of 15 triples.
-    EXPECT_THAT(optional, optionalTable({{I(15)}}));
+    EXPECT_THAT(optional, optionalHasTable({{I(15)}}));
   };
   testWithBothInterfaces(true);
   testWithBothInterfaces(false);
@@ -1588,7 +1588,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of 5 triples that have the predicate
     // `<label>`
-    ASSERT_THAT(optional, optionalTable({{I(5)}}));
+    ASSERT_THAT(optional, optionalHasTable({{I(5)}}));
   }
   {
     auto groupBy =
@@ -1596,7 +1596,7 @@ TEST_F(GroupByOptimizations, computeGroupByForSingleIndexScan) {
     auto optional = groupBy.computeGroupByForSingleIndexScan();
     // The test index currently consists of six distinct subjects:
     // <x>, <y>, <z>, <a>, <b> and <c>.
-    ASSERT_THAT(optional, optionalTable({{I(6)}}));
+    ASSERT_THAT(optional, optionalHasTable({{I(6)}}));
   }
 }
 // _____________________________________________________________________________
@@ -1649,18 +1649,18 @@ TEST_F(GroupByOptimizations, computeGroupByObjectWithCount) {
   {
     auto groupBy = GroupBy{qec, variablesOnlyX, aliasesCountX, xyScan};
     ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
-                optionalTable({{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
+                optionalHasTable({{getId("<x>"), I(4)}, {getId("<z>"), I(1)}}));
   }
 
   // Group by object.
   {
     auto groupBy = GroupBy{qec, variablesOnlyY, aliasesCountY, yxScan};
     ASSERT_THAT(groupBy.computeGroupByObjectWithCount(),
-                optionalTable({{getId("\"A\""), I(1)},
-                               {getId("\"alpha\""), I(1)},
-                               {getId("\"älpha\""), I(1)},
-                               {getId("\"Beta\""), I(1)},
-                               {getId("\"zz\"@en"), I(1)}}));
+                optionalHasTable({{getId("\"A\""), I(1)},
+                                  {getId("\"alpha\""), I(1)},
+                                  {getId("\"älpha\""), I(1)},
+                                  {getId("\"Beta\""), I(1)},
+                                  {getId("\"zz\"@en"), I(1)}}));
   }
 }
 
