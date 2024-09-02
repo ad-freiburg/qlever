@@ -120,7 +120,7 @@ void Result::applyLimitOffset(
   // than the size of the `IdTable`, then this has no effect and runtime
   // `O(1)` (see the docs for `std::shift_left`).
   AD_CONTRACT_CHECK(limitTimeCallback);
-  if (!limitOffset._limit.has_value() && limitOffset._offset == 0) {
+  if (limitOffset.isUnconstrained()) {
     return;
   }
   if (isFullyMaterialized()) {

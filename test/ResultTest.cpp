@@ -8,9 +8,11 @@
 #include "util/IdTableHelpers.h"
 
 using namespace std::chrono_literals;
-using testing::Combine;
+using ::testing::AnyOf;
+using ::testing::Combine;
 using ::testing::HasSubstr;
-using testing::Values;
+using ::testing::Not;
+using ::testing::Values;
 
 namespace {
 // Helper function to generate all possible splits of an IdTable in order to
@@ -352,12 +354,8 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
             ASSERT_EQ(row.size(), 2);
             // Make sure we never get values that were supposed to be filtered
             // out.
-            EXPECT_NE(row[0].getVocabIndex().get(), 0);
-            EXPECT_NE(row[0].getVocabIndex().get(), 1);
-            EXPECT_NE(row[0].getVocabIndex().get(), 4);
-            EXPECT_NE(row[1].getVocabIndex().get(), 9);
-            EXPECT_NE(row[1].getVocabIndex().get(), 8);
-            EXPECT_NE(row[1].getVocabIndex().get(), 5);
+            EXPECT_THAT(row[0].getVocabIndex().get(), Not(AnyOf(0, 1, 4)));
+            EXPECT_THAT(row[1].getVocabIndex().get(), Not(AnyOf(9, 8, 5)));
           }
           totalRows += innerTable.size();
           colSizes.push_back(innerTable.numColumns());
@@ -371,12 +369,8 @@ TEST(Result, verifyApplyLimitOffsetDoesCorrectlyApplyLimitAndOffset) {
         ASSERT_EQ(row.size(), 2);
         // Make sure we never get values that were supposed to be filtered
         // out.
-        EXPECT_NE(row[0].getVocabIndex().get(), 0);
-        EXPECT_NE(row[0].getVocabIndex().get(), 1);
-        EXPECT_NE(row[0].getVocabIndex().get(), 4);
-        EXPECT_NE(row[1].getVocabIndex().get(), 9);
-        EXPECT_NE(row[1].getVocabIndex().get(), 8);
-        EXPECT_NE(row[1].getVocabIndex().get(), 5);
+        EXPECT_THAT(row[0].getVocabIndex().get(), Not(AnyOf(0, 1, 4)));
+        EXPECT_THAT(row[1].getVocabIndex().get(), Not(AnyOf(9, 8, 5)));
       }
     }
 

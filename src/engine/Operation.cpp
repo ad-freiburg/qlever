@@ -157,7 +157,7 @@ ProtoResult Operation::runComputation(const ad_utility::Timer& timer,
   if (!supportsLimit()) {
     runtimeInfo().addLimitOffsetRow(_limit, true);
     AD_CONTRACT_CHECK(!externalLimitApplied_);
-    externalLimitApplied_ = _limit._limit.has_value() || _limit._offset != 0;
+    externalLimitApplied_ = !_limit.isUnconstrained();
     result.applyLimitOffset(_limit, [this](std::chrono::microseconds limitTime,
                                            const IdTable& idTable) {
       updateRuntimeStats(true, idTable.numRows(), idTable.numColumns(),
