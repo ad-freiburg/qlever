@@ -739,13 +739,6 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
         std::vector<std::string>{"?subject", "?predicate", "?object"};
   }
 
-  jsonPrefix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
-      qet.getRootOperation()->getRuntimeInfoWholeQuery());
-  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
-  jsonPrefix["runtimeInformation"]["query_execution_tree"] =
-      nlohmann::ordered_json(runtimeInformation);
-
   std::string prefixStr = jsonPrefix.dump();
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
@@ -768,11 +761,18 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     ++resultSize;
   }
 
+  RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
+
   auto timeResultComputation =
       std::chrono::duration_cast<std::chrono::milliseconds>(
           timeUntilFunctionCall + runtimeInformation.totalTime_);
 
   nlohmann::json jsonSuffix;
+  jsonSuffix["runtimeInformation"]["meta"] = nlohmann::ordered_json(
+      qet.getRootOperation()->getRuntimeInfoWholeQuery());
+  jsonSuffix["runtimeInformation"]["query_execution_tree"] =
+      nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultsize"] = resultSize;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
