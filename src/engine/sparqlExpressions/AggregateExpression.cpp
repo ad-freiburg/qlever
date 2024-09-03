@@ -1,6 +1,7 @@
-//  Copyright 2021, University of Freiburg,
-//                  Chair of Algorithms and Data Structures.
-//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2024, University of Freiburg,
+//                 Chair of Algorithms and Data Structures
+// Authors: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
+//          Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
 
@@ -8,7 +9,6 @@
 
 namespace sparqlExpression::detail {
 
-// _____________________________________________________________________________
 // Evaluate a `SingleExpressionResult` (that is, one of the possible
 // `ExpressionResult` variants). Used in the `AggregateExpression::evaluate`
 // function.
@@ -21,6 +21,8 @@ struct EvaluateOnChildOperand {
                               SingleExpressionResult auto&& operand) const {
     // Perform the more efficient calculation on `SetOfInterval`s if it is
     // possible.
+    //
+    // TODO: Add a unit test for this case.
     if (isAnySpecializedFunctionPossible(
             aggregateOperation._specializedFunctions, operand)) {
       auto optionalResult = evaluateOnSpecializedFunctionsIfPossible(
@@ -33,7 +35,7 @@ struct EvaluateOnChildOperand {
     auto inputSize = getResultSize(*context, operand);
 
     // If there are no values, return the neutral element. It is important to
-    // handle this case separately, because the following code only words if
+    // handle this case separately, because the following code only works if
     // there is at least one value.
     if (inputSize == 0) {
       return resultForEmptyGroup;
@@ -50,8 +52,6 @@ struct EvaluateOnChildOperand {
     const auto& valueGetter = std::get<0>(aggregateOperation._valueGetters);
 
     // Helper lambda for aggregating two values.
-    //
-    // TODO: Why is the `context` not passed by reference?
     auto aggregateTwoValues = [&aggregateOperation, context](
                                   auto&& x, auto&& y) -> decltype(auto) {
       if constexpr (requires {
@@ -74,8 +74,8 @@ struct EvaluateOnChildOperand {
           context->cancellationHandle_->throwIfCancelled(location);
         };
 
-    // Lambda to compute the aggregate of the given operands. This requires
-    // that `inputs` is not empty.
+    // Helper lambda that computes the aggregate of the given operands. This
+    // requires that `inputs` is not empty.
     auto computeAggregate = [&valueGetter, context, &finalOperation,
                              &aggregateTwoValues,
                              &checkCancellation](auto&& inputs) {

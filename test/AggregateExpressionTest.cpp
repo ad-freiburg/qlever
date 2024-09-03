@@ -48,28 +48,12 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
-// ______________________________________________________________________________
-TEST(AggregateExpression, max) {
-  auto testMaxId = testAggregate<MaxExpression, Id>;
-  auto t = TestContext{};
-  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
-  Id beta = t.Beta;    // Vocab Id of the Literal "Beta"
-
-  LocalVocabEntry l =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
-  Id alx = Id::makeFromLocalVocabIndex(&l);
-
-  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
-  // Correct comparison between vocab and local vocab entries.
-  testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
-  testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
-  testMaxId({}, U);
-}
-
 // Test `CountExpression`.
 TEST(AggregateExpression, count) {
   auto testCountId = testAggregate<CountExpression, Id>;
+  // Test cases. Make sure that UNDEF and NaN values are ignored and that the
+  // result for an empty input is 0. The last (Boolean) argument indicates
+  // whether the count should be distinct.
   testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
   testCountId({D(2), D(2), I(2), V(17)}, I(3), true);
   testCountId({U, I(3), U}, I(1));
@@ -113,15 +97,19 @@ TEST(AggregateExpression, avg) {
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
   TestContext t;
-  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
-
-  LocalVocabEntry l =
+  // IDs of one word from the vocabulary ("alpha") and two words
+  // from the local vocabulary ("alx" and "aalx").
+  Id alpha = t.alpha;
+  LocalVocabEntry l1 =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
-  Id alx = Id::makeFromLocalVocabIndex(&l);
+  Id alx = Id::makeFromLocalVocabIndex(&l1);
   LocalVocabEntry l2 =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx");
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
+  // Test cases. Make sure that vocab entries and local vocab entries are
+  // compared correctly, that UNDEF is smaller than any other value, and that
+  // the result for an empty input is UNDEF.
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
   testMinId({V(7), V(2), V(4)}, V(2));
   testMinId({V(7), U, V(2), V(4)}, U);
@@ -132,6 +120,29 @@ TEST(AggregateExpression, min) {
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("alpha"));
+}
+
+// Test `MaxExpression`.
+TEST(AggregateExpression, max) {
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto t = TestContext{};
+  // IDs of two words from the vocabulary ("alpha" and "Beta") and one word
+  // from the local vocabulary ("alx").
+  Id alpha = t.alpha;
+  Id beta = t.Beta;
+  LocalVocabEntry l =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  Id alx = Id::makeFromLocalVocabIndex(&l);
+
+  // Test cases. Make sure that vocab entries and local vocab entries are
+  // compared correctly, that UNDEF is smaller than any other value, and that
+  // the result for an empty input is UNDEF.
+  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
+  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
+  testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
+  testMaxId({U, U, U}, U);
+  testMaxId({}, U);
 }
 
 // ______________________________________________________________________________

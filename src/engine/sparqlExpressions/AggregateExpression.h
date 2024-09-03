@@ -50,13 +50,11 @@ template <typename AggregateOperation,
           typename FinalOperation = decltype(identity)>
 class AggregateExpression : public SparqlExpression {
  public:
-  // Create an aggregate expression, where `child` is the expression to be
-  // aggregated.
+  // Create an aggregate expression from the given arguments. For example, for
+  // `SUM(?x + 5)`, `child` is the expression for `?x + 5`, `distinct` is
+  // `false`, and `aggregateOp` is the operation for computing the sum.
   //
-  // For example, for `SUM(?x + 5)`, `child` is the expression for `?x + 5`,
-  // `distinct` is `false`, and `aggregateOp` is the operation for computing
-  // the sum.
-  // Note: For almost all aggregates, the `AggregateOperation` is stateless,
+  // NOTE: For almost all aggregates, the `AggregateOperation` is stateless,
   // hence the default-constructed default argument. The only exception is the
   // `GROUP_CONCAT` expression, which stores its separator in the
   // `AggregateOperation`.
