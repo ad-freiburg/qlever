@@ -6,6 +6,8 @@
 
 #include <gmock/gmock.h>
 
+#include <concepts>
+
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
 #include "util/json.h"
@@ -124,3 +126,23 @@ MATCHER_P(InsertIntoStream, matcher,
   *result_listener << "that yields \"" << output << "\"";
   return testing::ExplainMatchResult(matcher, output, result_listener);
 }
+
+// Helper type that allows to use non-copyable types in gtest matchers.
+template <typename T>
+class CopyShield {
+  std::shared_ptr<T> pointer_;
+
+ public:
+  template <typename... Ts>
+  explicit CopyShield(Ts&&... args) requires(std::constructible_from<T, Ts...>)
+      : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
+
+  auto operator<=>(const T& other) const requires(std::three_way_comparable<T>)
+  {
+    return *pointer_ <=> other;
+  }
+
+  bool operator==(const T& other) const requires(std::equality_comparable<T>) {
+    return *pointer_ == other;
+  }
+};
