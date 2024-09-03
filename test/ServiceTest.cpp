@@ -186,7 +186,7 @@ TEST_F(ServiceTest, computeResult) {
   };
 
   // Checks that a given result throws a specific error message, however when
-  // the `SILENT` keyword is set it will be catched.
+  // the `SILENT` keyword is set it will be caught.
   auto expectThrowOrSilence =
       [&](const std::string& result, std::string_view errorMsg,
           boost::beast::http::status status = boost::beast::http::status::ok,
