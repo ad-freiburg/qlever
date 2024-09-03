@@ -240,9 +240,14 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
                            LocalVocab* outLocalVocab) const {
   LOG(DEBUG) << "Group by input size " << inTable.size() << std::endl;
   IdTable dynResult{getResultWidth(), getExecutionContext()->getAllocator()};
-  if (inTable.empty()) {
+
+  // If the input is empty, the result is also empty, except for an implicit
+  // GROUP BY (`groupByCols.empty()`), which always has to produce one result
+  // row (see the code further down).
+  if (inTable.empty() && !groupByCols.empty()) {
     return dynResult;
   }
+
   const IdTableView<IN_WIDTH> input = inTable.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(dynResult).toStatic<OUT_WIDTH>();
 
@@ -276,8 +281,8 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
     }
   };
 
+  // Handle the implicit GROUP BY, where the entire input is a single group.
   if (groupByCols.empty()) {
-    // The entire input is a single group
     processNextBlock(0, input.size());
     return std::move(result).toDynamic();
   }
