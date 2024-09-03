@@ -188,4 +188,5 @@ class ExportQueryExecutionTrees {
               ensureCorrectSlicingOfIdTablesWhenFirstAndLastArePartial);
   FRIEND_TEST(ExportQueryExecutionTrees,
               ensureGeneratorIsNotConsumedWhenNotRequired);
+  FRIEND_TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata);
 };
