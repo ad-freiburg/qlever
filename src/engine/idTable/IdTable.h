@@ -181,8 +181,9 @@ class IdTable {
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
   explicit IdTable(size_t numColumns)
-      requires (columnsAreAllocatable && std::is_default_constructible_v<Allocator>)
-      : IdTable(numColumns, Allocator {}){}
+      requires(columnsAreAllocatable &&
+               std::is_default_constructible_v<Allocator>)
+      : IdTable(numColumns, Allocator{}) {}
   explicit IdTable(size_t numColumns, Allocator allocator)
       requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
@@ -227,7 +228,6 @@ class IdTable {
   explicit IdTable(Allocator allocator)
       requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
-
 
   // `IdTables` are expensive to copy, so we disable accidental copies as they
   // are most likely bugs. To explicitly copy an `IdTable`, the `clone()` member
