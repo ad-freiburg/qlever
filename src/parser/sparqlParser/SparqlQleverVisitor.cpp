@@ -705,14 +705,6 @@ GraphPatternOperation Visitor::visit(Parser::OptionalGraphPatternContext* ctx) {
 
 // Parsing for the `serviceGraphPattern` rule.
 parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
-  // If SILENT is specified, report that we do not support it yet.
-  //
-  // TODO: Support it, it's not hard. The semantics of SILENT is that if no
-  // result can be obtained from the remote endpoint, then do as if the SERVICE
-  // clause would not be there = the result is the neutral element.
-  if (ctx->SILENT()) {
-    reportNotSupported(ctx, "SILENT modifier in SERVICE is");
-  }
   // Get the IRI and if a variable is specified, report that we do not support
   // it yet.
   //
@@ -745,8 +737,8 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
   return {std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-          prologueString_,
-          getOriginalInputForContext(ctx->groupGraphPattern())};
+          prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
+          static_cast<bool>(ctx->SILENT())};
 }
 
 // ____________________________________________________________________________

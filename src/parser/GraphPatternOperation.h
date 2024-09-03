@@ -53,6 +53,8 @@ struct Service {
   std::string prologue_;
   // The body of the SPARQL query for the remote endpoint.
   std::string graphPatternAsString_;
+  // The existence of the `SILENT`-keyword.
+  bool silent_;
 };
 
 /// A `BasicGraphPattern` represents a consecutive block of triples.
