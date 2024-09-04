@@ -164,9 +164,7 @@ using AvgExpressionBase =
     AggregateExpression<AvgOperation, decltype(avgFinalOperation)>;
 class AvgExpression : public AvgExpressionBase {
   using AvgExpressionBase::AvgExpressionBase;
-  ValueId resultForEmptyGroup() const override {
-    return Id::makeFromDouble(0.0);
-  }
+  ValueId resultForEmptyGroup() const override { return Id::makeFromInt(0); }
 };
 
 // Compare two arbitrary values (each of which can be an ID, a literal, or an

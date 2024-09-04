@@ -87,7 +87,7 @@ TEST(AggregateExpression, avg) {
   testAvgId({D(2), D(2), I(2)}, D(2), true);
   testAvgId({I(3), U}, U);
   testAvgId({I(3), NaN}, NaN);
-  testAvgId({}, D(0));
+  testAvgId({}, I(0));
 
   auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
