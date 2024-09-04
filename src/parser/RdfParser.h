@@ -42,12 +42,13 @@ struct TurtleTriple {
   TripleComponent subject_;
   TripleComponent::Iri predicate_;
   TripleComponent object_;
+  TripleComponent graphIri_ = qlever::specialIds().at(DEFAULT_GRAPH_IRI);
 
   bool operator==(const TurtleTriple&) const = default;
 };
 
-// A base class for all the different turtle parsers.
-class TurtleParserBase {
+// A base class for all the different turtle and N-Quad parsers.
+class RdfParserBase {
  private:
   // How to handle integer overflow and invalid literals (see below).
   TurtleParserIntegerOverflowBehavior integerOverflowBehavior_ =
@@ -55,7 +56,7 @@ class TurtleParserBase {
   bool invalidLiteralsAreSkipped_ = false;
 
  public:
-  virtual ~TurtleParserBase() = default;
+  virtual ~RdfParserBase() = default;
   // Wrapper to getLine that is expected by the rest of QLever
   bool getLine(TurtleTriple& triple) { return getLine(&triple); }
 
@@ -119,7 +120,7 @@ class TurtleParserBase {
  * @tparam Tokenizer_T
  */
 template <class Tokenizer_T>
-class TurtleParser : public TurtleParserBase {
+class TurtleParser : public RdfParserBase {
  public:
   using ParseException = ::ParseException;
 
@@ -133,6 +134,38 @@ class TurtleParser : public TurtleParserBase {
 
   // Get the currently buffered triples. Used for testing.
   const std::vector<TurtleTriple>& getTriples() const { return triples_; }
+
+  // Convert the content of a literal and its datatype to TripleComponent. In
+  // particular this also handles the cases where the datatype indicates that
+  // the value can be encoded directly into the ID (for example a `typeIri` of
+  // `xsd:integer` will cause the `normalizedLiteralContent` to be parsed as an
+  // integer).
+  static TripleComponent literalAndDatatypeToTripleComponent(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri);
+
+ private:
+  // Impl of the method above, also used in rdfLiteral parsing.
+  static TripleComponent literalAndDatatypeToTripleComponentImpl(
+      std::string_view normalizedLiteralContent,
+      const TripleComponent::Iri& typeIri, TurtleParser<Tokenizer_T>* parser);
+
+  static constexpr std::array<const char*, 12> integerDatatypes_ = {
+      XSD_INT_TYPE,
+      XSD_INTEGER_TYPE,
+      XSD_NON_POSITIVE_INTEGER_TYPE,
+      XSD_NEGATIVE_INTEGER_TYPE,
+      XSD_LONG_TYPE,
+      XSD_SHORT_TYPE,
+      XSD_BYTE_TYPE,
+      XSD_NON_NEGATIVE_INTEGER_TYPE,
+      XSD_UNSIGNED_LONG_TYPE,
+      XSD_UNSIGNED_INT_TYPE,
+      XSD_UNSIGNED_SHORT_TYPE,
+      XSD_POSITIVE_INTEGER_TYPE};
+
+  static constexpr std::array<const char*, 3> floatDatatypes_ = {
+      XSD_DECIMAL_TYPE, XSD_DOUBLE_TYPE, XSD_FLOAT_TYPE};
 
  protected:
   // Data members.
@@ -204,7 +237,7 @@ class TurtleParser : public TurtleParserBase {
     }
   }
 
-  bool statement();
+  virtual bool statement();
 
   // Log error message (with parse position) and throw parse exception.
   [[noreturn]] void raise(std::string_view error_message) {
@@ -253,11 +286,18 @@ class TurtleParser : public TurtleParserBase {
   bool blankNode();
   bool collection();
   bool literal();
-  bool rdfLiteral();
+  // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
+  bool rdfLiteralImpl(bool allowMultilineStrings);
+  bool rdfLiteral() {
+    // Turtle allows for multiline strings.
+    return rdfLiteralImpl(true);
+  }
   bool numericLiteral();
   bool booleanLiteral();
   bool prefixedName();
-  bool stringParse();
+  // The `Impl` indirection is for easier testing in `RdfParserTest.cpp`
+  bool stringParseImpl(bool allowMultilineStrings);
+  bool stringParse() { return stringParseImpl(true); }
 
   // Terminal symbols from the grammar
   // Behavior of the functions is similar to the nonterminals (see above)
@@ -347,34 +387,54 @@ class TurtleParser : public TurtleParserBase {
   void setBlankNodePrefixOnlyForTesting(size_t id) { blankNodePrefix_ = id; }
 
  protected:
-  FRIEND_TEST(TurtleParserTest, prefixedName);
-  FRIEND_TEST(TurtleParserTest, prefixID);
-  FRIEND_TEST(TurtleParserTest, stringParse);
-  FRIEND_TEST(TurtleParserTest, rdfLiteral);
-  FRIEND_TEST(TurtleParserTest, predicateObjectList);
-  FRIEND_TEST(TurtleParserTest, objectList);
-  FRIEND_TEST(TurtleParserTest, object);
-  FRIEND_TEST(TurtleParserTest, blankNode);
-  FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
-  FRIEND_TEST(TurtleParserTest, numericLiteral);
-  FRIEND_TEST(TurtleParserTest, booleanLiteral);
-  FRIEND_TEST(TurtleParserTest, booleanLiteralLongForm);
-  FRIEND_TEST(TurtleParserTest, collection);
+  FRIEND_TEST(RdfParserTest, prefixedName);
+  FRIEND_TEST(RdfParserTest, prefixID);
+  FRIEND_TEST(RdfParserTest, stringParse);
+  FRIEND_TEST(RdfParserTest, rdfLiteral);
+  FRIEND_TEST(RdfParserTest, predicateObjectList);
+  FRIEND_TEST(RdfParserTest, objectList);
+  FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodePropertyList);
+  FRIEND_TEST(RdfParserTest, numericLiteral);
+  FRIEND_TEST(RdfParserTest, booleanLiteral);
+  FRIEND_TEST(RdfParserTest, booleanLiteralLongForm);
+  FRIEND_TEST(RdfParserTest, collection);
+  FRIEND_TEST(RdfParserTest, iriref);
+};
+
+template <class Tokenizer_T>
+class NQuadParser : public TurtleParser<Tokenizer_T> {
+  static inline const TripleComponent defaultGraphId_ =
+      qlever::specialIds().at(DEFAULT_GRAPH_IRI);
+  TripleComponent activeObject_;
+  TripleComponent activeGraphLabel_;
+  using Base = TurtleParser<Tokenizer_T>;
+
+ protected:
+  bool statement() override;
+
+ private:
+  bool nQuadSubject();
+  bool nQuadPredicate();
+  bool nQuadObject();
+  bool nQuadGraphLabel();
+  bool nQuadLiteral();
 };
 
 /**
  * Parses turtle from std::string. Used to perform unit tests for
  * the different parser rules
  */
-template <class Tokenizer_T>
-class TurtleStringParser : public TurtleParser<Tokenizer_T> {
+template <std::derived_from<RdfParserBase> Parser>
+class RdfStringParser : public Parser {
  public:
-  using TurtleParser<Tokenizer_T>::prefixMap_;
-  using TurtleParser<Tokenizer_T>::getLine;
+  using Parser::getLine;
+  using Parser::prefixMap_;
   bool getLine(TurtleTriple* triple) override {
     (void)triple;
     throw std::runtime_error(
-        "TurtleStringParser doesn't support calls to getLine. Only use "
+        "RdfStringParser doesn't support calls to getLine. Only use "
         "parseUtf8String() for unit tests\n");
   }
 
@@ -385,7 +445,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   void initialize(const string& filename) {
     (void)filename;
     throw std::runtime_error(
-        "TurtleStringParser doesn't support calls to initialize. Only use "
+        "RdfStringParser doesn't support calls to initialize. Only use "
         "parseUtf8String() for unit tests\n");
   }
 
@@ -410,7 +470,7 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
 
   // Parse only a single object.
   static TripleComponent parseTripleObject(std::string_view objectString) {
-    TurtleStringParser parser;
+    RdfStringParser parser;
     parser.parseUtf8String(absl::StrCat("<a> <b> ", objectString, "."));
     AD_CONTRACT_CHECK(parser.triples_.size() == 1);
     return std::move(parser.triples_[0].object_);
@@ -459,16 +519,17 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
   // as expected
   size_t getPosition() const { return this->tok_.begin() - tmpToParse_.data(); }
 
-  FRIEND_TEST(TurtleParserTest, prefixedName);
-  FRIEND_TEST(TurtleParserTest, prefixID);
-  FRIEND_TEST(TurtleParserTest, stringParse);
-  FRIEND_TEST(TurtleParserTest, rdfLiteral);
-  FRIEND_TEST(TurtleParserTest, predicateObjectList);
-  FRIEND_TEST(TurtleParserTest, objectList);
-  FRIEND_TEST(TurtleParserTest, object);
-  FRIEND_TEST(TurtleParserTest, blankNode);
-  FRIEND_TEST(TurtleParserTest, blankNodePropertyList);
-  FRIEND_TEST(TurtleParserTest, DateLiterals);
+  FRIEND_TEST(RdfParserTest, prefixedName);
+  FRIEND_TEST(RdfParserTest, prefixID);
+  FRIEND_TEST(RdfParserTest, stringParse);
+  FRIEND_TEST(RdfParserTest, rdfLiteral);
+  FRIEND_TEST(RdfParserTest, predicateObjectList);
+  FRIEND_TEST(RdfParserTest, objectList);
+  FRIEND_TEST(RdfParserTest, object);
+  FRIEND_TEST(RdfParserTest, blankNode);
+  FRIEND_TEST(RdfParserTest, blankNodePropertyList);
+  FRIEND_TEST(RdfParserTest, DateLiterals);
+  FRIEND_TEST(RdfParserTest, DayTimeDurationLiterals);
 };
 
 /**
@@ -476,8 +537,8 @@ class TurtleStringParser : public TurtleParser<Tokenizer_T> {
  * its input file is an uncompressed .ttl file that will be read in
  * chunks. Input file can also be a stream like stdin.
  */
-template <class Tokenizer_T>
-class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
+template <typename Parser>
+class RdfStreamParser : public Parser {
   // struct that can store the state of a parser
   // the previously extracted triples are not stored
   // but only the number of triples that were already present
@@ -491,15 +552,12 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
 
  public:
   // Default construction needed for tests
-  TurtleStreamParser() = default;
-  explicit TurtleStreamParser(const string& filename) {
+  RdfStreamParser() = default;
+  explicit RdfStreamParser(const string& filename) {
     LOG(DEBUG) << "Initialize turtle parsing from uncompressed file or stream "
                << filename << std::endl;
     initialize(filename);
   }
-
-  // inherit the wrapper overload
-  using TurtleParser<Tokenizer_T>::getLine;
 
   bool getLine(TurtleTriple* triple) override;
 
@@ -510,9 +568,9 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
   }
 
  private:
-  using TurtleParser<Tokenizer_T>::tok_;
-  using TurtleParser<Tokenizer_T>::triples_;
-  using TurtleParser<Tokenizer_T>::isParserExhausted_;
+  using Parser::isParserExhausted_;
+  using Parser::tok_;
+  using Parser::triples_;
   // Backup the current state of the turtle parser to a
   // TurtleparserBackupState object
   // This can be used e.g. when parsing from a compressed input
@@ -545,19 +603,19 @@ class TurtleStreamParser : public TurtleParser<Tokenizer_T> {
  * its input file is an uncompressed .ttl file that will be read in
  * chunks. Input file can also be a stream like stdin.
  */
-template <class Tokenizer_T>
-class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
+template <typename Parser>
+class RdfParallelParser : public Parser {
  public:
   using Triple = std::array<string, 3>;
   // Default construction needed for tests
-  TurtleParallelParser() = default;
+  RdfParallelParser() = default;
 
   // If the `sleepTimeForTesting` is set, then after the initialization the
   // parser will sleep for the specified time before parsing each batch s.t.
   // certain corner cases can be tested.
-  explicit TurtleParallelParser(const string& filename,
-                                std::chrono::milliseconds sleepTimeForTesting =
-                                    std::chrono::milliseconds{0})
+  explicit RdfParallelParser(const string& filename,
+                             std::chrono::milliseconds sleepTimeForTesting =
+                                 std::chrono::milliseconds{0})
       : sleepTimeForTesting_(sleepTimeForTesting) {
     LOG(DEBUG)
         << "Initialize parallel Turtle Parsing from uncompressed file or "
@@ -567,7 +625,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   }
 
   // inherit the wrapper overload
-  using TurtleParser<Tokenizer_T>::getLine;
+  using Parser::getLine;
 
   bool getLine(TurtleTriple* triple) override;
 
@@ -589,7 +647,7 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // still running in the background, especially when it is called before the
   // parsing has finished (e.g. in case of an exception in the code that uses
   // the parser).
-  ~TurtleParallelParser() override;
+  ~RdfParallelParser() override;
 
  private:
   // The documentation for this is in the `.cpp` file, because it closely
@@ -602,9 +660,9 @@ class TurtleParallelParser : public TurtleParser<Tokenizer_T> {
   // from the initialization phase where the prefixes are parsed.
   void feedBatchesToParser(auto remainingBatchFromInitialization);
 
-  using TurtleParser<Tokenizer_T>::tok_;
-  using TurtleParser<Tokenizer_T>::triples_;
-  using TurtleParser<Tokenizer_T>::isParserExhausted_;
+  using Parser::isParserExhausted_;
+  using Parser::tok_;
+  using Parser::triples_;
 
   // this many characters will be buffered at once,
   // defaults to a global constant

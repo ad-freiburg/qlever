@@ -3,6 +3,7 @@
 //  Author: Hannah Bast <bast@cs.uni-freiburg.de>
 
 #include <gmock/gmock.h>
+#include <gtest/gtest.h>
 
 #include <ctre-unicode.hpp>
 #include <regex>
@@ -10,13 +11,14 @@
 #include "engine/Service.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/TripleComponentTestHelpers.h"
 #include "util/http/HttpUtils.h"
 
 // Fixture that sets up a test index and a factory for producing mocks for the
-// `getTsvFunction` needed by the `Service` operation.
+// `getResultFunction` needed by the `Service` operation.
 class ServiceTest : public ::testing::Test {
  protected:
   // Query execution context (with small test index) and allocator for testing,
@@ -38,13 +40,16 @@ class ServiceTest : public ::testing::Test {
   //
   // 3. It tests that the post data is as expected.
   //
-  // 4. It returns the specified TSV.
+  // 4. It returns the specified JSON.
   //
   // NOTE: In a previous version of this test, we set up an actual test server.
   // The code can be found in the history of this PR.
-  static auto constexpr getTsvFunctionFactory =
+  static auto constexpr getResultFunctionFactory =
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
-         std::string_view predefinedResult) -> Service::GetTsvFunction {
+         std::string predefinedResult,
+         boost::beast::http::status status = boost::beast::http::status::ok,
+         std::string contentType =
+             "application/sparql-results+json") -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -57,7 +62,7 @@ class ServiceTest : public ::testing::Test {
       // two checks are non-trivial.
       EXPECT_EQ(method, boost::beast::http::verb::post);
       EXPECT_EQ(contentTypeHeader, "application/sparql-query");
-      EXPECT_EQ(acceptHeader, "text/tab-separated-values");
+      EXPECT_EQ(acceptHeader, "application/sparql-results+json");
       EXPECT_EQ(url.asString(), expectedUrl);
 
       // Check that the whitespace-normalized POST data is the expected query.
@@ -68,22 +73,48 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
-      return [](std::string_view result)
-                 -> cppcoro::generator<std::span<std::byte>> {
+      auto body =
+          [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
         // Randomly slice the string to make tests more robust.
         std::mt19937 rng{std::random_device{}()};
-        std::uniform_int_distribution<size_t> distribution{0,
-                                                           result.length() / 2};
 
-        for (size_t start = 0; start < result.length();) {
+        const std::string resultStr = result;
+        std::uniform_int_distribution<size_t> distribution{
+            0, resultStr.length() / 2};
+
+        for (size_t start = 0; start < resultStr.length();) {
           size_t size = distribution(rng);
-          std::string resultCopy{result.substr(start, size)};
+          std::string resultCopy{resultStr.substr(start, size)};
           co_yield std::as_writable_bytes(std::span{resultCopy});
           start += size;
         }
-      }(predefinedResult);
+      };
+      return (HttpOrHttpsResponse){.status_ = status,
+                                   .contentType_ = contentType,
+                                   .body_ = body(predefinedResult)};
     };
   };
+
+  // The following method generates a JSON result from variables and rows for
+  // Testing.
+  // Passing more values per row than variables are given isn't supported.
+  // Generates all cells with the given values and type uri.
+  static std::string genJsonResult(
+      std::vector<std::string_view> vars,
+      std::vector<std::vector<std::string_view>> rows) {
+    nlohmann::json res;
+    res["head"]["vars"] = vars;
+    res["results"]["bindings"] = nlohmann::json::array();
+
+    for (size_t i = 0; i < rows.size(); ++i) {
+      nlohmann::json binding;
+      for (size_t j = 0; j < std::min(rows[i].size(), vars.size()); ++j) {
+        binding[vars[j]] = {{"type", "uri"}, {"value", rows[i][j]}};
+      }
+      res["results"]["bindings"].push_back(binding);
+    }
+    return res.dump();
+  }
 };
 
 // Test basic methods of class `Service`.
@@ -133,39 +164,77 @@ TEST_F(ServiceTest, computeResult) {
   std::string_view expectedSparqlQuery =
       "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }";
 
-  // CHECK 1: Returned TSV is empty -> an exception should be thrown.
-  Service serviceOperation1{
-      testQec, parsedServiceClause,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery, "")};
-  ASSERT_ANY_THROW(serviceOperation1.getResult());
+  // Shorthand to run computeResult with the test parameters given above.
+  auto runComputeResult =
+      [&](const std::string& result,
+          boost::beast::http::status status = boost::beast::http::status::ok,
+          std::string contentType = "application/sparql-results+json")
+      -> std::shared_ptr<const Result> {
+    Service s{testQec, parsedServiceClause,
+              getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
+                                       status, contentType)};
+    return s.getResult();
+  };
 
-  // CHECK 2: Header row of returned TSV is wrong (variables in wrong order) ->
+  // CHECK 1: An exception shall be thrown, when
+  // status-code isn't ok, contentType doesn't match
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::bad_request,
+                       "application/sparql-results+json"),
+      ::testing::HasSubstr(
+          "SERVICE responded with HTTP status code: 400, Bad Request."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("", boost::beast::http::status::ok, "wrong/type"),
+      ::testing::HasSubstr(
+          "QLever requires the endpoint of a SERVICE to send "
+          "the result as 'application/sparql-results+json' but "
+          "the endpoint sent 'wrong/type'."));
+
+  // or Result is no JSON, empty or has invalid structure
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("<?xml version=\"1.0\"?><sparql "
+                       "xmlns=\"http://www.w3.org/2005/sparql-results#\">"),
+      ::testing::HasSubstr("Failed to parse the SERVICE result as JSON."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{}"),
+      ::testing::HasSubstr("Response from SPARQL endpoint is empty."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{\"invalid\": \"structure\"}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult("{\"head\": {\"vars\": [1, 2, 3]},"
+                       "\"results\": {\"bindings\": {}}}"),
+      ::testing::HasSubstr(
+          "JSON result does not have the expected structure."));
+
+  // CHECK 2: Header row of returned JSON is wrong (variables in wrong order) ->
   // an exception should be thrown.
-  Service serviceOperation2{
-      testQec, parsedServiceClause,
-      getTsvFunctionFactory(
-          expectedUrl, expectedSparqlQuery,
-          "?y\t?x\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  ASSERT_ANY_THROW(serviceOperation2.getResult());
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      runComputeResult(genJsonResult(
+          {"y", "x"}, {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})),
+      ::testing::HasSubstr("Header row of JSON result for SERVICE query is "
+                           "\"?y ?x\", but expected \"?x ?y\"."));
 
-  // CHECK 3: In one of the rows with the values, there is a different number of
-  // columns than in the header row.
-  Service serviceOperation3{
-      testQec, parsedServiceClause,
-      getTsvFunctionFactory(
-          expectedUrl, expectedSparqlQuery,
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\n<bli>\t<blu>\n")};
-  ASSERT_ANY_THROW(serviceOperation3.getResult());
+  // CHECK 3: A result row of the returned JSON is missing a variable's value ->
+  // undefined value
+  auto result3 = runComputeResult(
+      genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
+  EXPECT_TRUE(result3);
+  EXPECT_TRUE(result3->idTable().at(1, 1).isUndefined());
 
-  // CHECK 4: Returned TSV has correct format matching the query -> check that
+  testQec->clearCacheUnpinnedOnly();
+
+  // CHECK 4: Returned JSON has correct format matching the query -> check that
   // the result table returned by the operation corresponds to the contents of
-  // the TSV and its local vocabulary are correct.
-  Service serviceOperation4{
-      testQec, parsedServiceClause,
-      getTsvFunctionFactory(
-          expectedUrl, expectedSparqlQuery,
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n")};
-  std::shared_ptr<const Result> result = serviceOperation4.getResult();
+  // the JSON and its local vocabulary are correct.
+  std::shared_ptr<const Result> result = runComputeResult(genJsonResult(
+      {"x", "y"},
+      {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
 
   // Check that `<x>` and `<y>` were contained in the original vocabulary and
   // that `<bla>`, `<bli>`, `<blu>` were added to the (initially empty) local
@@ -189,7 +258,7 @@ TEST_F(ServiceTest, computeResult) {
   Id idBla = Id::makeFromLocalVocabIndex(idxBla.value());
   Id idBlu = Id::makeFromLocalVocabIndex(idxBlu.value());
 
-  // Check that the result table corresponds to the contents of the TSV.
+  // Check that the result table corresponds to the contents of the JSON.
   EXPECT_TRUE(result);
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
@@ -222,9 +291,12 @@ TEST_F(ServiceTest, computeResult) {
 
   Service serviceOperation5{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery5,
-                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
-                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      getResultFunctionFactory(
+          expectedUrl, expectedSparqlQuery5,
+          genJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
+                                           {"bla", "bli", "y"},
+                                           {"blu", "bla", "y"},
+                                           {"bli", "blu", "y"}})),
       siblingTree};
   EXPECT_NO_THROW(serviceOperation5.getResult());
 
@@ -238,9 +310,12 @@ TEST_F(ServiceTest, computeResult) {
       "WHERE { ?x <ble> ?y . ?y <is-a> ?z2 . }";
   Service serviceOperation6{
       testQec, parsedServiceClause5,
-      getTsvFunctionFactory(expectedUrl, expectedSparqlQuery6,
-                            "?x\t?y\t?z2\n<x>\t<y>\t<y>\n<bla>\t<bli>\t<y>\n<"
-                            "blu>\t<bla>\t<y>\n<bli>\t<blu>\t<y>\n"),
+      getResultFunctionFactory(
+          expectedUrl, expectedSparqlQuery6,
+          genJsonResult({"x", "y", "z2"}, {{"x", "y", "y"},
+                                           {"bla", "bli", "y"},
+                                           {"blue", "bla", "y"},
+                                           {"bli", "blu", "y"}})),
       siblingTree};
   EXPECT_NO_THROW(serviceOperation6.getResult());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
@@ -257,10 +332,12 @@ TEST_F(ServiceTest, getCacheKey) {
 
   Service service(
       testQec, parsedServiceClause,
-      getTsvFunctionFactory(
+      getResultFunctionFactory(
           "http://localhorst:80/api",
           "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
-          "?x\t?y\n<x>\t<y>\n<bla>\t<bli>\n<blu>\t<bla>\n<bli>\t<blu>\n"));
+          genJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
 
   auto ck_noSibling = service.getCacheKey();
 
@@ -274,9 +351,9 @@ TEST_F(ServiceTest, getCacheKey) {
               {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
               {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
-  service.setSiblingTree(siblingTree);
 
-  auto ck_sibling = service.getCacheKey();
+  auto ck_sibling =
+      service.createCopyWithSiblingTree(siblingTree)->getCacheKey();
   EXPECT_NE(ck_noSibling, ck_sibling);
 
   auto siblingTree2 = std::make_shared<QueryExecutionTree>(
@@ -286,8 +363,55 @@ TEST_F(ServiceTest, getCacheKey) {
                        {Variable{"?x"}, Variable{"?y"}, Variable{"?z"}},
                        {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))}}}));
 
-  service.setSiblingTree(siblingTree2);
+  auto serviceWithSibling = service.createCopyWithSiblingTree(siblingTree2);
 
-  auto ck_changedSibling = service.getCacheKey();
+  auto ck_changedSibling = serviceWithSibling->getCacheKey();
   EXPECT_NE(ck_sibling, ck_changedSibling);
+}
+
+// Test that bindingToValueId behaves as expected.
+TEST_F(ServiceTest, bindingToTripleComponent) {
+  Index::Vocab vocabulary;
+  nlohmann::json binding;
+
+  // Missing type or value.
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"type", "literal"}}));
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"value", "v"}}));
+
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "42"}, {"datatype", XSD_INT_TYPE}}),
+      42);
+
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hallo Welt"}, {"xml:lang", "de"}}),
+      TripleComponent::Literal::literalWithoutQuotes("Hallo Welt", "@de"));
+
+  EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "literal"}, {"value", "Hello World"}}),
+            TripleComponent::Literal::literalWithoutQuotes("Hello World"));
+
+  // Test literals with escape characters (there used to be a bug for those)
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hello \\World"}}),
+      TripleComponent::Literal::fromEscapedRdfLiteral("\"Hello \\\\World\""));
+
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hallo \\Welt"}, {"xml:lang", "de"}}),
+      TripleComponent::Literal::fromEscapedRdfLiteral("\"Hallo \\\\Welt\"",
+                                                      "@de"));
+
+  EXPECT_EQ(Service::bindingToTripleComponent(
+                {{"type", "uri"}, {"value", "http://doof.org"}}),
+            TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
+
+  // Blank Node not supported yet.
+  EXPECT_ANY_THROW(
+      Service::bindingToTripleComponent({{"type", "bnode"}, {"value", "b"}}));
+
+  EXPECT_ANY_THROW(Service::bindingToTripleComponent(
+      {{"type", "INVALID_TYPE"}, {"value", "v"}}));
 }

@@ -372,11 +372,6 @@ Awaitable<void> Server::process(
 
   // If "query" parameter is given, process query.
   if (auto query = checkParameter("query", std::nullopt)) {
-    if (query.value().empty()) {
-      throw std::runtime_error(
-          "Parameter \"query\" must not have an empty value");
-    }
-
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
@@ -474,7 +469,6 @@ nlohmann::json Server::composeCacheStatsJson() const {
   // converter.
   result["non-pinned-size"] = cache_.nonPinnedSize().getBytes();
   result["pinned-size"] = cache_.pinnedSize().getBytes();
-  result["num-pinned-index-scan-sizes"] = cache_.pinnedSizes().rlock()->size();
   return result;
 }
 
@@ -545,10 +539,11 @@ auto Server::setupCancellationHandle(
 Awaitable<void> Server::sendStreamableResponse(
     const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
     MediaType mediaType, const PlannedQuery& plannedQuery,
-    const QueryExecutionTree& qet,
+    const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
     SharedCancellationHandle cancellationHandle) const {
-  auto responseGenerator = ExportQueryExecutionTrees::computeResultAsStream(
-      plannedQuery.parsedQuery_, qet, mediaType, std::move(cancellationHandle));
+  auto responseGenerator = ExportQueryExecutionTrees::computeResult(
+      plannedQuery.parsedQuery_, qet, mediaType, requestTimer,
+      std::move(cancellationHandle));
 
   auto response = ad_utility::httpUtils::createOkResponse(
       std::move(responseGenerator), request, mediaType);
@@ -590,7 +585,6 @@ boost::asio::awaitable<void> Server::processQuery(
   using namespace ad_utility::httpUtils;
   AD_CONTRACT_CHECK(params.contains("query"));
   const auto& query = params.at("query");
-  AD_CONTRACT_CHECK(!query.empty());
 
   auto sendJson =
       [&request, &send](
@@ -720,35 +714,10 @@ boost::asio::awaitable<void> Server::processQuery(
 
     // This actually processes the query and sends the result in the requested
     // format.
-    switch (mediaType.value()) {
-      using enum MediaType;
-      case csv:
-      case tsv:
-      case octetStream:
-      case sparqlXml:
-      case turtle:
-        co_await sendStreamableResponse(request, send, mediaType.value(),
-                                        plannedQuery.value(), qet,
-                                        cancellationHandle);
-        break;
-      case qleverJson:
-      case sparqlJson: {
-        // Normal case: JSON response
-        auto responseString = co_await computeInNewThread(
-            [&plannedQuery, &qet, &requestTimer, mediaType,
-             &cancellationHandle] {
-              return ExportQueryExecutionTrees::computeResultAsJSON(
-                  plannedQuery.value().parsedQuery_, qet, requestTimer,
-                  mediaType.value(), cancellationHandle);
-            },
-            cancellationHandle);
-        co_await sendJson(std::move(responseString), responseStatus);
-      } break;
-      default:
-        // This should never happen, because we have carefully restricted the
-        // subset of mediaTypes that can occur here.
-        AD_FAIL();
-    }
+    co_await sendStreamableResponse(request, send, mediaType.value(),
+                                    plannedQuery.value(), qet, requestTimer,
+                                    cancellationHandle);
+
     // Print the runtime info. This needs to be done after the query
     // was computed.
 

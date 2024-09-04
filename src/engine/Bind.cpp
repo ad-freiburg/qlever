@@ -81,7 +81,7 @@ std::vector<QueryExecutionTree*> Bind::getChildren() {
 }
 
 // _____________________________________________________________________________
-Result Bind::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Bind::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
   LOG(DEBUG) << "Get input to BIND operation..." << endl;
   std::shared_ptr<const Result> subRes = _subtree->getResult();
@@ -119,7 +119,7 @@ void Bind::computeExpressionBind(
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(),
       inputResultTable.idTable(), getExecutionContext()->getAllocator(),
-      inputResultTable.localVocab(), cancellationHandle_);
+      inputResultTable.localVocab(), cancellationHandle_, deadline_);
 
   sparqlExpression::ExpressionResult expressionResult =
       expression->evaluate(&evaluationContext);

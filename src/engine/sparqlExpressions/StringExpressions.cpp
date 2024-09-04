@@ -112,6 +112,17 @@ struct LiftStringFunction {
   }
 };
 
+// IRI or URI
+//
+// 1. Check for `BASE` URL and if it exists, prepend it.
+// 2. What's the correct behavior for non-strings, like `1` or `true`?
+//
+// @1: TODO implement `BASE`
+// @2: Only a `LiteralOrIri` or an `Id` from `Vocab`/`LocalVocab` is in
+// consideration within the `IriOrUriValueGetter`, hence automatically
+// ignores values like `1`, `true`, `Date` etc.
+using IriOrUriExpression = NARY<1, FV<std::identity, IriOrUriValueGetter>>;
+
 // STRLEN
 [[maybe_unused]] auto strlen = [](std::string_view s) {
   return Id::makeFromInt(static_cast<int64_t>(s.size()));
@@ -399,6 +410,21 @@ class ConcatExpression : public detail::VariadicExpression {
 using EncodeForUriExpression =
     StringExpressionImpl<1, decltype(encodeForUriImpl)>;
 
+// LANGMATCHES
+[[maybe_unused]] inline auto langMatching =
+    [](std::optional<std::string> languageTag,
+       std::optional<std::string> languageRange) {
+      if (!languageTag.has_value() || !languageRange.has_value()) {
+        return Id::makeUndefined();
+      } else {
+        return Id::makeFromBool(ad_utility::isLanguageMatch(
+            languageTag.value(), languageRange.value()));
+      }
+    };
+
+using LangMatches =
+    StringExpressionImpl<2, decltype(langMatching), StringValueGetter>;
+
 // STRING WITH LANGUAGE TAG
 [[maybe_unused]] inline auto strLangTag =
     [](std::optional<std::string> input,
@@ -470,6 +496,11 @@ Expr make(std::same_as<Expr> auto&... children) {
   return std::make_unique<T>(std::move(children)...);
 }
 Expr makeStrExpression(Expr child) { return make<StrExpression>(child); }
+
+Expr makeIriOrUriExpression(Expr child) {
+  return make<IriOrUriExpression>(child);
+}
+
 Expr makeStrlenExpression(Expr child) { return make<StrlenExpression>(child); }
 
 Expr makeSubstrExpression(Expr string, Expr start, Expr length) {
@@ -518,6 +549,10 @@ Expr makeStrLangTagExpression(Expr child1, Expr child2) {
 
 Expr makeStrIriDtExpression(Expr child1, Expr child2) {
   return make<StrIriTagged>(child1, child2);
+}
+
+Expr makeLangMatchesExpression(Expr child1, Expr child2) {
+  return make<LangMatches>(child1, child2);
 }
 
 Expr makeMD5Expression(Expr child) { return make<MD5Expression>(child); }

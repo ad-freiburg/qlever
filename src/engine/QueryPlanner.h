@@ -330,7 +330,7 @@ class QueryPlanner {
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] static std::optional<SubtreePlan> createJoinWithService(
-      SubtreePlan a, SubtreePlan b,
+      const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(

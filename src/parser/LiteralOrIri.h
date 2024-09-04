@@ -60,10 +60,7 @@ class alignas(16) LiteralOrIri {
   }
   bool operator==(const LiteralOrIri&) const = default;
 
-  auto operator<=>(const LiteralOrIri& rhs) const {
-    // TODO<joka921> Use something unicode-based for this.
-    return toStringRepresentation() <=> rhs.toStringRepresentation();
-  }
+  std::strong_ordering operator<=>(const LiteralOrIri& rhs) const;
 
   // Return true if object contains an Iri object
   bool isIri() const;

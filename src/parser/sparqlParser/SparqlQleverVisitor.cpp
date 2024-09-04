@@ -14,8 +14,8 @@
 #include <vector>
 
 #include "absl/time/time.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
-#include "engine/sparqlExpressions/LangExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
@@ -23,9 +23,9 @@
 #include "engine/sparqlExpressions/RelationalExpressions.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
+#include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
@@ -163,15 +163,9 @@ PathObjectPairs joinPredicateAndObject(const VarOrPath& predicate,
 }
 
 // ___________________________________________________________________________
-SparqlExpressionPimpl Visitor::visitExpressionPimpl(auto* ctx,
-                                                    bool allowLanguageFilters) {
-  SparqlExpressionPimpl result{visit(ctx), getOriginalInputForContext(ctx)};
-  if (allowLanguageFilters) {
-    checkUnsupportedLangOperationAllowFilters(ctx, result);
-  } else {
-    checkUnsupportedLangOperation(ctx, result);
-  }
-  return result;
+SparqlExpressionPimpl Visitor::visitExpressionPimpl(
+    auto* ctx, [[maybe_unused]] bool allowLanguageFilters) {
+  return {visit(ctx), getOriginalInputForContext(ctx)};
 }
 
 // ____________________________________________________________________________________
@@ -191,7 +185,17 @@ ParsedQuery Visitor::visit(Parser::QueryContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::QueryOrUpdateContext* ctx) {
   if (ctx->update()) {
-    reportNotSupported(ctx->update(), "SPARQL 1.1 Update");
+    // An empty query currently matches the `update()` rule. We handle this
+    // case manually to get a better error message. If an update query doesn't
+    // have an `update1()`, then it consists of a (possibly empty) prologue, but
+    // has not actual content, see the grammar in `SparqlAutomatic.g4` for
+    // details.
+    if (!ctx->update()->update1()) {
+      reportError(ctx->update(),
+                  "Empty query (this includes queries that only consist "
+                  "of comments or prefix declarations).");
+    }
+    reportNotSupported(ctx->update(), "SPARQL 1.1 Update is");
   } else {
     return visit(ctx->query());
   }
@@ -278,7 +282,7 @@ void Visitor::visit(Parser::NamedGraphClauseContext*) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SourceSelectorContext*) {
+TripleComponent::Iri Visitor::visit(Parser::SourceSelectorContext*) {
   // This rule is only indirectly used by the `DatasetClause` rule which also is
   // not supported and should already have thrown an exception.
   AD_FAIL();
@@ -286,7 +290,10 @@ void Visitor::visit(Parser::SourceSelectorContext*) {
 
 // ____________________________________________________________________________________
 Variable Visitor::visit(Parser::VarContext* ctx) {
-  return Variable{ctx->getText()};
+  // `false` for the second argument means: The variable name is already
+  // validated by the grammar, no need to check it again (which would lead to an
+  // infinite loop here).
+  return Variable{ctx->getText(), false};
 }
 
 // ____________________________________________________________________________________
@@ -597,7 +604,6 @@ GraphPattern Visitor::visit(Parser::GroupGraphPatternContext* ctx) {
         const auto& [variable, language] = langFilterData.value();
         pattern.addLanguageFilter(variable, language);
       } else {
-        checkUnsupportedLangOperation(ctx, filter.expression_);
         pattern._filters.push_back(std::move(filter));
       }
     }
@@ -1045,7 +1051,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(
@@ -1913,8 +1919,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
-        visit(ctx->rdfLiteral()));
+    auto tripleComponent =
+        RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            visit(ctx->rdfLiteral()));
     AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {
@@ -1992,6 +1999,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "iri" || functionName == "uri") {
+    return createUnary(&makeIriOrUriExpression);
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
@@ -2020,6 +2029,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDayExpression);
   } else if (functionName == "tz") {
     return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "timezone") {
+    return createUnary(&makeTimezoneExpression);
   } else if (functionName == "now") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<NowDatetimeExpression>(startTime_);
@@ -2066,7 +2077,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));
-  } else if (functionName == "isiri") {
+  } else if (functionName == "isiri" || functionName == "isuri") {
     return createUnary(&makeIsIriExpression);
   } else if (functionName == "isblank") {
     return createUnary(&makeIsBlankExpression);
@@ -2076,6 +2087,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeIsNumericExpression);
   } else if (functionName == "datatype") {
     return createUnary(&makeDatatypeExpression);
+  } else if (functionName == "langmatches") {
+    return createBinary(&makeLangMatchesExpression);
   } else if (functionName == "bound") {
     return makeBoundExpression(
         std::make_unique<VariableExpression>(visit(ctx->var())));
@@ -2104,16 +2117,11 @@ ExpressionPtr Visitor::visit(Parser::RegexExpressionContext* ctx) {
   }
 }
 
-// _____________________________________________________________________________
+// ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::LangExpressionContext* ctx) {
-  // The constructor of `LangExpression` throws if the subexpression is not a
-  // single variable.
-  try {
-    return std::make_unique<sparqlExpression::LangExpression>(
-        visit(ctx->expression()));
-  } catch (const std::exception& e) {
-    reportError(ctx, e.what());
-  }
+  // The number of children for expression LANG() is fixed to one by the
+  // grammar (or definition of the parser).
+  return sparqlExpression::makeLangExpression(visit(ctx->expression()));
 }
 
 // ____________________________________________________________________________________
@@ -2161,29 +2169,26 @@ void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   using namespace sparqlExpression;
+  const auto& children = ctx->children;
+  std::string functionName =
+      ad_utility::getLowercase(children.at(0)->getText());
+
+  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+    return ad_utility::getLowercase(child->getText()) == "distinct";
+  });
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
-    reportError(ctx,
-                "This parser currently doesn't support COUNT(*), please "
-                "specify an explicit expression for the COUNT");
+    AD_CORRECTNESS_CHECK(functionName == "count");
+    return makeCountStarExpression(distinct);
   }
   auto childExpression = visit(ctx->expression());
-  auto children = ctx->children;
-  bool distinct = false;
-  for (const auto& child : children) {
-    if (ad_utility::getLowercase(child->getText()) == "distinct") {
-      distinct = true;
-    }
-  }
   auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
     return result;
   };
-
-  std::string functionName = ad_utility::getLowercase(children[0]->getText());
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();
@@ -2393,38 +2398,13 @@ void Visitor::reportNotSupported(const antlr4::ParserRuleContext* ctx,
 }
 
 // _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperation(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression()) {
-    throw NotSupportedException{
-        "The LANG function is currently only supported in the construct "
-        "FILTER(LANG(?variable) = \"langtag\" by QLever",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx)};
-  }
-}
-
-// _____________________________________________________________________________
-void Visitor::checkUnsupportedLangOperationAllowFilters(
-    const antlr4::ParserRuleContext* ctx,
-    const SparqlQleverVisitor::SparqlExpressionPimpl& expression) {
-  if (expression.containsLangExpression() &&
-      !expression.getLanguageFilterExpression()) {
-    throw NotSupportedException(
-        "The LANG() function is only supported by QLever in the construct "
-        "FILTER(LANG(?variable) = \"langtag\"",
-        ad_utility::antlr_utility::generateAntlrExceptionMetadata(ctx));
-  }
-}
-
-// _____________________________________________________________________________
 TripleComponent SparqlQleverVisitor::visitGraphTerm(
     const GraphTerm& graphTerm) {
   return graphTerm.visit([]<typename T>(const T& element) -> TripleComponent {
     if constexpr (std::is_same_v<T, Variable>) {
       return element;
     } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
-      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           element.toSparql());
     } else {
       return element.toSparql();

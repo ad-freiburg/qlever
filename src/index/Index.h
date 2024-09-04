@@ -79,7 +79,9 @@ class Index {
   // Create an index from a file. Will write vocabulary and on-disk index data.
   // NOTE: The index can not directly be used after this call, but has to be
   // setup by `createFromOnDiskIndex` after this call.
-  void createFromFile(const std::string& filename);
+  enum class Filetype { Turtle, NQuad };
+  void createFromFile(const std::string& filename,
+                      Filetype filetype = Filetype::Turtle);
 
   // Create an index object from an on-disk index that has previously been
   // constructed using the `createFromFile` method which is typically called via
@@ -118,10 +120,8 @@ class Index {
 
   // TODO<joka921> Once we have an overview over the folding this logic should
   // probably not be in the index class.
-  [[nodiscard]] std::optional<std::string> idToOptionalString(
-      VocabIndex id) const;
-  [[nodiscard]] std::optional<std::string> idToOptionalString(
-      WordVocabIndex id) const;
+  std::string indexToString(VocabIndex id) const;
+  std::string_view indexToString(WordVocabIndex id) const;
 
   std::optional<Id> getId(
       const ad_utility::triple_component::LiteralOrIri& element) const;
@@ -238,23 +238,23 @@ class Index {
    * @param p The Permutation::Enum to use (in particularly POS(), SOP,...
    * members of Index class).
    */
-  IdTable scan(
-      const TripleComponent& col0String,
-      std::optional<std::reference_wrapper<const TripleComponent>> col1String,
-      Permutation::Enum p, Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+  IdTable scan(const ScanSpecificationAsTripleComponent& scanSpecification,
+               Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the overload of `scan` above, but the keys are specified as IDs.
-  IdTable scan(
-      Id col0Id, std::optional<Id> col1Id, Permutation::Enum p,
-      Permutation::ColumnIndicesRef additionalColumns,
-      const ad_utility::SharedCancellationHandle& cancellationHandle) const;
+  IdTable scan(const ScanSpecification& scanSpecification, Permutation::Enum p,
+               Permutation::ColumnIndicesRef additionalColumns,
+               const ad_utility::SharedCancellationHandle& cancellationHandle,
+               const LimitOffsetClause& limitOffset = {}) const;
 
   // Similar to the previous overload of `scan`, but only get the exact size of
   // the scan result.
-  size_t getResultSizeOfScan(const TripleComponent& col0String,
-                             const TripleComponent& col1String,
-                             const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(
+      const ScanSpecificationAsTripleComponent& scanSpecification,
+      const Permutation::Enum& permutation) const;
 
   // Get access to the implementation. This should be used rarely as it
   // requires including the rather expensive `IndexImpl.h` header

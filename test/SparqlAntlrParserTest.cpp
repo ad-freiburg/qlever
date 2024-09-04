@@ -16,12 +16,14 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "SparqlAntlrParserTestHelpers.h"
-#include "engine/sparqlExpressions/LangExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
 #include "engine/sparqlExpressions/RandomExpression.h"
 #include "engine/sparqlExpressions/RegexExpression.h"
 #include "engine/sparqlExpressions/RelationalExpressions.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/ConstructClause.h"
 #include "parser/SparqlParserHelpers.h"
@@ -29,6 +31,7 @@
 #include "util/AllocatorTestHelpers.h"
 #include "util/SourceLocation.h"
 
+namespace {
 using namespace sparqlParserHelpers;
 namespace m = matchers;
 using Parser = SparqlAutomaticParser;
@@ -37,6 +40,10 @@ using Var = Variable;
 auto iri = ad_utility::testing::iri;
 
 auto lit = ad_utility::testing::tripleComponentLiteral;
+
+const ad_utility::HashMap<std::string, std::string> defaultPrefixMap{
+    {std::string{INTERNAL_PREDICATE_PREFIX_NAME},
+     std::string{INTERNAL_PREDICATE_PREFIX_IRI}}};
 
 template <auto F, bool testInsideConstructTemplate = false>
 auto parse =
@@ -144,6 +151,7 @@ using ::testing::IsEmpty;
 using ::testing::Pair;
 using ::testing::SizeIs;
 using ::testing::StrEq;
+}  // namespace
 
 TEST(SparqlParser, NumericLiterals) {
   auto expectNumericLiteral = ExpectCompleteParse<&Parser::numericLiteral>{};
@@ -219,7 +227,8 @@ TEST(SparqlExpressionParser, First) {
       table,
       alloc,
       localVocab,
-      std::make_shared<ad_utility::CancellationHandle<>>()};
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      sparqlExpression::EvaluationContext::TimePoint::max()};
   auto result = resultAsExpression->evaluate(&input);
   AD_CONTRACT_CHECK(std::holds_alternative<Id>(result));
   ASSERT_EQ(std::get<Id>(result).getDatatype(), Datatype::Int);
@@ -617,17 +626,17 @@ TEST(SparqlParser, SolutionModifier) {
   // has to appear before LIMIT.
   expectIncompleteParse("GROUP BY ?var LIMIT 10 ORDER BY ?var");
   expectSolutionModifier("TEXTLIMIT 1 LIMIT 10",
-                         m::SolutionModifier({}, {}, {}, {10, 1, 0}));
+                         m::SolutionModifier({}, {}, {}, {10, 0, 1}));
   expectSolutionModifier(
       "GROUP BY ?var (?b - 10) HAVING (?var != 10) ORDER BY ?var TEXTLIMIT 1 "
       "LIMIT 10 OFFSET 2",
       m::SolutionModifier({Var{"?var"}, "?b - 10"}, {{"(?var != 10)"}},
-                          {VOK{Var{"?var"}, false}}, {10, 1, 2}));
+                          {VOK{Var{"?var"}, false}}, {10, 2, 1}));
   expectSolutionModifier(
       "GROUP BY ?var HAVING (?foo < ?bar) ORDER BY (5 - ?var) TEXTLIMIT 21 "
       "LIMIT 2",
       m::SolutionModifier({Var{"?var"}}, {{"(?foo < ?bar)"}},
-                          {std::pair{"(5 - ?var)", false}}, {2, 21, 0}));
+                          {std::pair{"(5 - ?var)", false}}, {2, 0, 21}));
   expectSolutionModifier(
       "GROUP BY (?var - ?bar) ORDER BY (5 - ?var)",
       m::SolutionModifier({"?var - ?bar"}, {}, {std::pair{"(5 - ?var)", false}},
@@ -861,12 +870,13 @@ TEST(SparqlParser, HavingCondition) {
                         m::stringMatchesFilter("(?height > 1.7)"));
   expectHavingCondition("(?predicate < \"<Z\")",
                         m::stringMatchesFilter("(?predicate < \"<Z\")"));
-  expectHavingConditionFails("(LANG(?x) = \"en\")");
+  expectHavingCondition("(LANG(?x) = \"en\")",
+                        m::stringMatchesFilter("(LANG(?x) = \"en\")"));
 }
 
 TEST(SparqlParser, GroupGraphPattern) {
-  auto expectGraphPattern = ExpectCompleteParse<&Parser::groupGraphPattern>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphPattern =
+      ExpectCompleteParse<&Parser::groupGraphPattern>{defaultPrefixMap};
   auto expectGroupGraphPatternFails =
       ExpectParseFails<&Parser::groupGraphPattern>{{}};
   auto DummyTriplesMatcher = m::Triples({{Var{"?x"}, "?y", Var{"?z"}}});
@@ -937,8 +947,9 @@ TEST(SparqlParser, GroupGraphPattern) {
           m::Triples(
               {{Var{"?x"}, "<is-a>", lit("\"Actor\"")},
                {Var{"?y"}, "<is-a>", iri("<Actor>")},
-               {Var{"?c"}, CONTAINS_ENTITY_PREDICATE, Var{"?x"}},
-               {Var{"?c"}, CONTAINS_WORD_PREDICATE, lit("\"coca* abuse\"")}})));
+               {Var{"?c"}, std::string{CONTAINS_ENTITY_PREDICATE}, Var{"?x"}},
+               {Var{"?c"}, std::string{CONTAINS_WORD_PREDICATE},
+                lit("\"coca* abuse\"")}})));
 
   // Scoping of variables in combination with a BIND clause.
   expectGraphPattern(
@@ -1007,7 +1018,7 @@ TEST(SparqlParser, RDFLiteral) {
                    "\"Astronaut\"^^<http://www.w3.org/2001/XMLSchema#string>"s);
   // The conversion to the internal date format
   // (":v:date:0000000000000001950-01-01T00:00:00") is done by
-  // TurtleStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
+  // RdfStringParser<TokenizerCtre>::parseTripleObject(resultAsString) which
   // is only called at triplesBlock.
   expectRDFLiteral(
       "\"1950-01-01T00:00:00\"^^xsd:dateTime",
@@ -1017,8 +1028,8 @@ TEST(SparqlParser, RDFLiteral) {
 
 TEST(SparqlParser, SelectQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto expectSelectQuery = ExpectCompleteParse<&Parser::selectQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectSelectQuery =
+      ExpectCompleteParse<&Parser::selectQuery>{defaultPrefixMap};
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
@@ -1037,7 +1048,7 @@ TEST(SparqlParser, SelectQuery) {
               m::Select({Var{"?x"}}),
               m::GraphPattern(false, {"(?x != <foo>)"},
                               m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}))),
-          m::pq::LimitOffset({10, 5})));
+          m::pq::LimitOffset({10, 0, 5})));
 
   // ORDER BY
   expectSelectQuery("SELECT ?x WHERE { ?x ?y ?z } ORDER BY ?y ",
@@ -1171,8 +1182,8 @@ TEST(SparqlParser, SelectQuery) {
 
 TEST(SparqlParser, ConstructQuery) {
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
-  auto expectConstructQuery = ExpectCompleteParse<&Parser::constructQuery>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectConstructQuery =
+      ExpectCompleteParse<&Parser::constructQuery>{defaultPrefixMap};
   auto expectConstructQueryFails = ExpectParseFails<&Parser::constructQuery>{};
   expectConstructQuery(
       "CONSTRUCT { } WHERE { ?a ?b ?c }",
@@ -1219,8 +1230,7 @@ TEST(SparqlParser, ConstructQuery) {
 }
 
 TEST(SparqlParser, Query) {
-  auto expectQuery = ExpectCompleteParse<&Parser::query>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectQuery = ExpectCompleteParse<&Parser::query>{defaultPrefixMap};
   auto expectQueryFails = ExpectParseFails<&Parser::query>{};
   // Test that `_originalString` is correctly set.
   expectQuery(
@@ -1405,9 +1415,12 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("ucaSe(?x)", matchUnary(&makeUppercaseExpression));
   expectBuiltInCall("lCase(?x)", matchUnary(&makeLowercaseExpression));
   expectBuiltInCall("StR(?x)", matchUnary(&makeStrExpression));
+  expectBuiltInCall("iRI(?x)", matchUnary(&makeIriOrUriExpression));
+  expectBuiltInCall("uRI(?x)", matchUnary(&makeIriOrUriExpression));
   expectBuiltInCall("year(?x)", matchUnary(&makeYearExpression));
   expectBuiltInCall("month(?x)", matchUnary(&makeMonthExpression));
   expectBuiltInCall("tz(?x)", matchUnary(&makeTimezoneStrExpression));
+  expectBuiltInCall("timezone(?x)", matchUnary(&makeTimezoneExpression));
   expectBuiltInCall("day(?x)", matchUnary(&makeDayExpression));
   expectBuiltInCall("NOW()", matchPtr<NowDatetimeExpression>());
   expectBuiltInCall("hours(?x)", matchUnary(&makeHoursExpression));
@@ -1418,6 +1431,7 @@ TEST(SparqlParser, builtInCall) {
   expectBuiltInCall("floor(?x)", matchUnary(&makeFloorExpression));
   expectBuiltInCall("round(?x)", matchUnary(&makeRoundExpression));
   expectBuiltInCall("ISIRI(?x)", matchUnary(&makeIsIriExpression));
+  expectBuiltInCall("ISUri(?x)", matchUnary(&makeIsIriExpression));
   expectBuiltInCall("ISBLANK(?x)", matchUnary(&makeIsBlankExpression));
   expectBuiltInCall("ISLITERAL(?x)", matchUnary(&makeIsLiteralExpression));
   expectBuiltInCall("ISNUMERIC(?x)", matchUnary(&makeIsNumericExpression));
@@ -1445,7 +1459,12 @@ TEST(SparqlParser, builtInCall) {
                                ::testing::ContainsRegex("flags")));
   expectBuiltInCall("IF(?a, ?h, ?c)", matchNary(&makeIfExpression, Var{"?a"},
                                                 Var{"?h"}, Var{"?c"}));
+  expectBuiltInCall("LANG(?x)", matchUnary(&makeLangExpression));
+  expectFails("LANGMATCHES()");
+  expectFails("LANGMATCHES(?x)");
 
+  expectBuiltInCall("LANGMATCHES(?x, ?y)", matchNary(&makeLangMatchesExpression,
+                                                     Var{"?x"}, Var{"?y"}));
   expectFails("STRDT()");
   expectFails("STRDT(?x)");
   expectBuiltInCall("STRDT(?x, ?y)",
@@ -1470,7 +1489,6 @@ TEST(SparqlParser, builtInCall) {
   // only perform rather simple checks.
   expectBuiltInCall("COUNT(?x)", matchPtr<CountExpression>());
   expectBuiltInCall("regex(?x, \"ab\")", matchPtr<RegexExpression>());
-  expectBuiltInCall("LANG(?x)", matchPtr<LangExpression>());
 
   expectBuiltInCall("MD5(?x)", matchUnary(&makeMD5Expression));
   expectBuiltInCall("SHA1(?x)", matchUnary(&makeSHA1Expression));
@@ -1692,6 +1710,99 @@ TEST(SparqlParser, binaryStringExpressions) {
   expectBuiltInCall("STRBEFORE(?x, ?y)", makeMatcher(&makeStrBeforeExpression));
 }
 
+namespace aggregateTestHelpers {
+using namespace sparqlExpression;
+
+// Return a matcher that checks whether a given `SparqlExpression::Ptr` actually
+// points to an `AggregateExpr`, that the distinctness and the child variable of
+// the aggregate expression match, and that the `AggregateExpr`(via dynamic
+// cast) matches all the `additionalMatchers`.
+template <typename AggregateExpr>
+::testing::Matcher<const SparqlExpression::Ptr&> matchAggregate(
+    bool distinct, const Variable& child, const auto&... additionalMatchers) {
+  using namespace ::testing;
+  using namespace builtInCallTestHelpers;
+  using Exp = SparqlExpression;
+
+  auto innerMatcher = [&]() -> Matcher<const AggregateExpr&> {
+    if constexpr (sizeof...(additionalMatchers) > 0) {
+      return AllOf(additionalMatchers...);
+    } else {
+      return ::testing::_;
+    }
+  }();
+  return Pointee(AllOf(
+      AD_PROPERTY(Exp, isDistinct, Eq(distinct)),
+      AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
+      WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
+}
+}  // namespace aggregateTestHelpers
+
+// ___________________________________________________________
+TEST(SparqlParser, aggregateExpressions) {
+  using namespace sparqlExpression;
+  using namespace builtInCallTestHelpers;
+  using namespace aggregateTestHelpers;
+  using V = Variable;
+  auto expectAggregate = ExpectCompleteParse<&Parser::aggregate>{};
+  auto expectAggregateFails = ExpectParseFails<&Parser::aggregate>{};
+
+  // For the `COUNT *` expression we have completely hidden the type. So we need
+  // to match it via RTTI.
+  auto typeIdLambda = [](const auto& ptr) {
+    return std::type_index{typeid(ptr)};
+  };
+  auto typeIdxCountStar = typeIdLambda(*makeCountStarExpression(true));
+
+  // A matcher that matches a `COUNT *` expression with the given distinctness.
+  auto matchCountStar =
+      [&typeIdLambda, typeIdxCountStar](
+          bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
+    using namespace ::testing;
+    return Pointee(
+        AllOf(AD_PROPERTY(SparqlExpression, isDistinct, Eq(distinct)),
+              ResultOf(typeIdLambda, Eq(typeIdxCountStar))));
+  };
+
+  expectAggregate("COUNT(*)", matchCountStar(false));
+  expectAggregate("COUNT(DISTINCT *)", matchCountStar(true));
+
+  expectAggregate("SAMPLE(?x)",
+                  matchPtrWithVariables<SampleExpression>(V{"?x"}));
+  expectAggregate("Min(?x)", matchAggregate<MinExpression>(false, V{"?x"}));
+  expectAggregate("Min(DISTINCT ?x)",
+                  matchAggregate<MinExpression>(true, V{"?x"}));
+
+  expectAggregate("Max(?x)", matchAggregate<MaxExpression>(false, V{"?x"}));
+  expectAggregate("Max(DISTINCT ?x)",
+                  matchAggregate<MaxExpression>(true, V{"?x"}));
+
+  expectAggregate("Count(?x)", matchAggregate<CountExpression>(false, V{"?x"}));
+  expectAggregate("Count(DISTINCT ?x)",
+                  matchAggregate<CountExpression>(true, V{"?x"}));
+
+  expectAggregate("Avg(?x)", matchAggregate<AvgExpression>(false, V{"?x"}));
+  expectAggregate("Avg(DISTINCT ?x)",
+                  matchAggregate<AvgExpression>(true, V{"?x"}));
+
+  // A matcher for the separator of `GROUP_CONCAT`.
+  auto separator = [](const std::string& sep) {
+    return AD_PROPERTY(GroupConcatExpression, getSeparator, Eq(sep));
+  };
+  expectAggregate("GROUP_CONCAT(?x)", matchAggregate<GroupConcatExpression>(
+                                          false, V{"?x"}, separator(" ")));
+  expectAggregate(
+      "group_concat(DISTINCT ?x)",
+      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(" ")));
+
+  expectAggregate(
+      "GROUP_CONCAT(?x; SEPARATOR= \";\")",
+      matchAggregate<GroupConcatExpression>(false, V{"?x"}, separator(";")));
+  expectAggregate(
+      "group_concat(DISTINCT ?x; SEPARATOR=\";\")",
+      matchAggregate<GroupConcatExpression>(true, V{"?x"}, separator(";")));
+}
+
 // Update queries are WIP. The individual parts to parse some update queries
 // are in place the code to process them is still unfinished. Therefore we
 // don't accept update queries.
@@ -1699,7 +1810,7 @@ TEST(SparqlParser, updateQueryUnsupported) {
   auto expectUpdateFails = ExpectParseFails<&Parser::queryOrUpdate>{};
   auto contains = [](const std::string& s) { return ::testing::HasSubstr(s); };
   auto updateUnsupported =
-      contains("SPARQL 1.1 Update currently not supported by QLever.");
+      contains("SPARQL 1.1 Update is currently not supported by QLever.");
 
   // Test all the cases because some functionality will be enabled shortly.
   expectUpdateFails("INSERT DATA { <a> <b> <c> }", updateUnsupported);
@@ -1719,14 +1830,13 @@ TEST(SparqlParser, updateQueryUnsupported) {
 }
 
 TEST(SparqlParser, UpdateQuery) {
-  auto expectUpdate = ExpectCompleteParse<&Parser::update>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectUpdate = ExpectCompleteParse<&Parser::update>{defaultPrefixMap};
   auto expectUpdateFails = ExpectParseFails<&Parser::update>{};
   auto Iri = [](std::string_view stringWithBrackets) {
     return TripleComponent::Iri::fromIriref(stringWithBrackets);
   };
   auto Literal = [](std::string s) {
-    return TripleComponent::Literal::fromStringRepresentation(s);
+    return TripleComponent::Literal::fromStringRepresentation(std::move(s));
   };
 
   expectUpdate("INSERT DATA { <a> <b> <c> }",
@@ -1780,11 +1890,20 @@ TEST(SparqlParser, UpdateQuery) {
   expectUpdateFails("WITH <foo> DELETE { ?a <b> <c> } WHERE { <d> <e> ?a }");
 }
 
+TEST(SparqlParser, EmptyQuery) {
+  auto expectQueryFails = ExpectParseFails<&Parser::queryOrUpdate>{};
+  auto emptyMatcher = ::testing::HasSubstr("Empty quer");
+  expectQueryFails("", emptyMatcher);
+  expectQueryFails(" ", emptyMatcher);
+  expectQueryFails("PREFIX ex: <http://example.org>", emptyMatcher);
+  expectQueryFails("### Some comment \n \n #someMoreComments", emptyMatcher);
+}
+
 TEST(SparqlParser, GraphOrDefault) {
   // Explicitly test this part, because all features that use it are not yet
   // supported.
-  auto expectGraphOrDefault = ExpectCompleteParse<&Parser::graphOrDefault>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphOrDefault =
+      ExpectCompleteParse<&Parser::graphOrDefault>{defaultPrefixMap};
   expectGraphOrDefault("DEFAULT", testing::VariantWith<DEFAULT>(testing::_));
   expectGraphOrDefault(
       "GRAPH <foo>",
@@ -1793,10 +1912,18 @@ TEST(SparqlParser, GraphOrDefault) {
 }
 
 TEST(SparqlParser, GraphRef) {
-  auto expectGraphRefAll = ExpectCompleteParse<&Parser::graphRefAll>{
-      {{INTERNAL_PREDICATE_PREFIX_NAME, INTERNAL_PREDICATE_PREFIX_IRI}}};
+  auto expectGraphRefAll =
+      ExpectCompleteParse<&Parser::graphRefAll>{defaultPrefixMap};
   expectGraphRefAll("DEFAULT", m::Variant<DEFAULT>());
   expectGraphRefAll("NAMED", m::Variant<NAMED>());
   expectGraphRefAll("ALL", m::Variant<ALL>());
   expectGraphRefAll("GRAPH <foo>", m::GraphRefIri("<foo>"));
+}
+
+TEST(SparqlParser, SourceSelector) {
+  // This will be implemented soon, but for now we test the failure for the
+  // coverage tool.
+  auto expectSelectorFails = ExpectParseFails<&Parser::sourceSelector>{};
+  auto unreachableMatcher = ::testing::HasSubstr("should be unreachable");
+  expectSelectorFails("<x>", unreachableMatcher);
 }

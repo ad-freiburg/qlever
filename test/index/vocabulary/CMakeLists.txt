@@ -1,0 +1,11 @@
+addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
+
+addLinkAndDiscoverTest(VocabularyOnDiskTest index)
+
+addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
+
+addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
+
+addLinkAndDiscoverTest(VocabularyInternalExternalTest vocabulary)
+
+addLinkAndDiscoverTest(VocabularyInMemoryBinSearchTest vocabulary)
