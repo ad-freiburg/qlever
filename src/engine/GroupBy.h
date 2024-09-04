@@ -14,26 +14,22 @@
 #include <vector>
 
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
-#include "parser/ParsedQuery.h"
 #include "util/TypeIdentity.h"
-
-using std::string;
-using std::vector;
-
-// Forward declarations for internal member function
-class IndexScan;
-class Join;
 
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
 class GroupBy : public Operation {
+  using string = std::string;
+  template <typename T>
+  using vector = std::vector<T>;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
@@ -414,9 +410,8 @@ class GroupBy : public Operation {
 
   // Substitute the group values for all occurrences of a group variable.
   void substituteGroupVariable(
-      const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-      IdTable* resultTable, size_t beginIndex, size_t count,
-      size_t columnIndex) const;
+      const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
+      size_t beginIndex, size_t count, size_t columnIndex) const;
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
@@ -436,8 +431,8 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  static std::optional<GroupBy::HashMapAggregateTypeWithData>
-  isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+  static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
+      sparqlExpression::SparqlExpression* expr);
 
   // Find all occurrences of grouped by variable for expression `expr`.
   std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>

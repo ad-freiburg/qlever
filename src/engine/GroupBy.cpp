@@ -6,13 +6,13 @@
 
 #include "engine/GroupBy.h"
 
-#include "absl/strings/str_join.h"
+#include <absl/strings/str_join.h>
+
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/Sort.h"
-#include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -22,7 +22,6 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
-#include "util/Conversions.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
