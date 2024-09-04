@@ -8,7 +8,6 @@
 #include <ctre-unicode.hpp>
 #include <regex>
 
-#include "QueryPlannerTestHelpers.h"
 #include "engine/Service.h"
 #include "global/RuntimeParameters.h"
 #include "parser/GraphPatternOperation.h"
