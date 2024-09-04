@@ -375,32 +375,27 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 
   // TODO<RobinTF> Add runtime parameter to toggle of index scan specific
   // optimizations for performance comparisons
-  if (subresult->isFullyMaterialized()) {
-    size_t inWidth = subresult->idTable().numColumns();
-    size_t outWidth = getResultWidth();
+  if (!subresult->isFullyMaterialized()) {
+    auto aggregateInfo = computeHashMapOptimizationMetadata(aggregates);
 
-    IdTable idTable = CALL_FIXED_SIZE(
-        (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
-        subresult->idTable(), groupByCols, aggregates, &localVocab);
-
-    LOG(DEBUG) << "GroupBy result computation done." << std::endl;
-    return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
+    if (aggregateInfo.has_value()) {
+      size_t size = getResultWidth() - groupByCols.size();
+      cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
+          size, &GroupBy::computeResultLazily, this, std::move(subresult),
+          std::move(aggregateInfo).value().aggregateAliases_,
+          std::move(groupByCols));
+      return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+    }
   }
+  size_t inWidth = subresult->idTable().numColumns();
+  size_t outWidth = getResultWidth();
 
-  auto aggregateInfo = computeHashMapOptimizationMetadata(aggregates);
+  IdTable idTable = CALL_FIXED_SIZE(
+      (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
+      subresult->idTable(), groupByCols, aggregates, &localVocab);
 
-  if (!aggregateInfo.has_value()) {
-    // TODO<RobinTF> Should this throw an exception?
-    return {IdTable{getResultWidth(), getExecutionContext()->getAllocator()},
-            resultSortedOn(), std::move(localVocab)};
-  }
-
-  size_t size = getResultWidth() - groupByCols.size();
-  cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
-      size, &GroupBy::computeResultLazily, this, std::move(subresult),
-      std::move(aggregateInfo).value().aggregateAliases_,
-      std::move(groupByCols));
-  return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+  LOG(DEBUG) << "GroupBy result computation done." << std::endl;
+  return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
 // _____________________________________________________________________________

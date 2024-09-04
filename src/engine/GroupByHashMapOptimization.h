@@ -42,8 +42,13 @@ struct AvgAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_) return ValueId::makeUndefined();
-    if (count_ == 0) return ValueId::makeFromInt(0);
+    if (error_) {
+      return ValueId::makeUndefined();
+    }
+    // AVG(empty group) = 0
+    if (count_ == 0) {
+      return ValueId::makeFromInt(0);
+    }
 
     return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
   }
@@ -142,12 +147,13 @@ struct SumAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
+    if (error_) {
       return ValueId::makeUndefined();
-    else if (intSumValid_)
+    }
+    if (intSumValid_) {
       return ValueId::makeFromInt(intSum_);
-    else
-      return ValueId::makeFromDouble(sum_);
+    }
+    return ValueId::makeFromDouble(sum_);
   }
 
   void reset() { *this = SumAggregationData{}; }
