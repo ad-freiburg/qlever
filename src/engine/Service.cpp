@@ -307,10 +307,12 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
           value, TripleComponent::Iri::fromIrirefWithoutBrackets(
                      cell["datatype"].get<std::string_view>()));
     } else if (cell.contains("xml:lang")) {
-      tc = TripleComponent::Literal::literalWithoutQuotes(
-          value, cell["xml:lang"].get<std::string>());
+      tc = TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(value),
+          cell["xml:lang"].get<std::string>());
     } else {
-      tc = TripleComponent::Literal::literalWithoutQuotes(value);
+      tc = TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(value));
     }
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);

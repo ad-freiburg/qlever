@@ -392,6 +392,18 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
                 {{"type", "literal"}, {"value", "Hello World"}}),
             TripleComponent::Literal::literalWithoutQuotes("Hello World"));
 
+  // Test literals with escape characters (there used to be a bug for those)
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hello \\World"}}),
+      TripleComponent::Literal::fromEscapedRdfLiteral("\"Hello \\\\World\""));
+
+  EXPECT_EQ(
+      Service::bindingToTripleComponent(
+          {{"type", "literal"}, {"value", "Hallo \\Welt"}, {"xml:lang", "de"}}),
+      TripleComponent::Literal::fromEscapedRdfLiteral("\"Hallo \\\\Welt\"",
+                                                      "@de"));
+
   EXPECT_EQ(Service::bindingToTripleComponent(
                 {{"type", "uri"}, {"value", "http://doof.org"}}),
             TripleComponent::Iri::fromIrirefWithoutBrackets("http://doof.org"));
