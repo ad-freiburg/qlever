@@ -383,12 +383,16 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     auto aggregateInfo = computeHashMapOptimizationMetadata(aggregates);
 
     if (aggregateInfo.has_value()) {
+      auto localVocabPointer =
+          std::make_shared<LocalVocab>(std::move(localVocab));
       size_t size = getResultWidth() - groupByCols.size();
-      cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
-          size, &GroupBy::computeResultLazily, this, std::move(subresult),
-          std::move(aggregateInfo).value().aggregateAliases_,
-          std::move(groupByCols));
-      return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+      cppcoro::generator<IdTable> generator =
+          CALL_FIXED_SIZE(size, &GroupBy::computeResultLazily, this,
+                          std::move(subresult), std::move(aggregates),
+                          std::move(aggregateInfo).value().aggregateAliases_,
+                          std::move(groupByCols), localVocabPointer);
+      return {std::move(generator), resultSortedOn(),
+              std::move(localVocabPointer)};
     }
   }
   size_t inWidth = subresult->idTable().numColumns();
@@ -405,58 +409,58 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 // _____________________________________________________________________________
 template <size_t NUM_AGGREGATED_COLS>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
-    std::shared_ptr<const Result> subresult,
+    std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
-    std::vector<size_t> groupByCols) const {
+    std::vector<size_t> groupByCols,
+    std::shared_ptr<LocalVocab> localVocab) const {
   AD_CONTRACT_CHECK(groupByCols.size() + NUM_AGGREGATED_COLS ==
                     getResultWidth());
-
-  auto localVocab = subresult->getCopyOfLocalVocab();
+  std::vector<const LocalVocab*> vocabs{localVocab.get(),
+                                        &subresult->localVocab()};
 
   LazyGroupBy<NUM_AGGREGATED_COLS> lazyGroupBy{
-      localVocab, std::move(aggregateAliases), groupByCols};
+      *localVocab, std::move(aggregateAliases), groupByCols};
+
+  auto createEvaluationContextForTable = [this, &localVocab](IdTable& table) {
+    sparqlExpression::EvaluationContext evaluationContext{
+        *getExecutionContext(),
+        _subtree->getVariableColumns(),
+        table,
+        getExecutionContext()->getAllocator(),
+        *localVocab,
+        cancellationHandle_,
+        deadline_};
+    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+        _groupByVariables.begin(), _groupByVariables.end()};
+    evaluationContext._isPartOfGroupBy = true;
+    evaluationContext._variableToColumnMapPreviousResults =
+        getInternallyVisibleVariableColumns();
+    evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+    return evaluationContext;
+  };
 
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
-  // TODO<RobinTF> Check if it is possible to not prolong the lifetime of this
-  // `IdTable` by seeing if the evaluation context really needs a proper
-  // `IdTable` to work.
-
   // Extend the lifetime of the `IdTable` yielded by the generator a little bit
-  std::optional<IdTable> idTableWrapper = std::nullopt;
-  std::optional<sparqlExpression::EvaluationContext> evaluationContext =
-      std::nullopt;
-
-  for (IdTable& tmpIdTable : subresult->idTables()) {
-    if (tmpIdTable.empty()) {
+  for (IdTable& idTable : subresult->idTables()) {
+    if (idTable.empty()) {
       continue;
     }
-    idTableWrapper = std::move(tmpIdTable);
-    const IdTable& idTable = idTableWrapper.value();
     checkCancellation();
+    *localVocab = LocalVocab::merge(vocabs);
 
     lazyGroupBy.populateGroupBlock(idTable, 0);
 
-    evaluationContext.emplace(*getExecutionContext(),
-                              _subtree->getVariableColumns(), idTable,
-                              getExecutionContext()->getAllocator(), localVocab,
-                              cancellationHandle_, deadline_);
-
-    evaluationContext->_groupedVariables = ad_utility::HashSet<Variable>{
-        _groupByVariables.begin(), _groupByVariables.end()};
-    evaluationContext->_isPartOfGroupBy = true;
-    evaluationContext->_variableToColumnMapPreviousResults =
-        getInternallyVisibleVariableColumns();
-    evaluationContext->_previousResultsFromSameGroup.resize(getResultWidth());
+    sparqlExpression::EvaluationContext evaluationContext =
+        createEvaluationContextForTable(idTable);
 
     size_t blockStart = 0;
 
     for (size_t pos = 0; pos < idTable.size(); pos++) {
       checkCancellation();
       if (!lazyGroupBy.rowMatchesCurrentBlock(idTable, pos)) {
-        lazyGroupBy.processNextBlock(evaluationContext.value(), blockStart,
-                                     pos);
-        lazyGroupBy.commitRow(resultTable, evaluationContext.value());
+        lazyGroupBy.processNextBlock(evaluationContext, blockStart, pos);
+        lazyGroupBy.commitRow(resultTable, evaluationContext);
 
         // setup for processing the next block
         blockStart = pos;
@@ -464,32 +468,50 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         lazyGroupBy.populateGroupBlock(idTable, pos);
       }
     }
-    lazyGroupBy.processNextBlock(evaluationContext.value(), blockStart,
-                                 idTable.size());
+    lazyGroupBy.processNextBlock(evaluationContext, blockStart, idTable.size());
     if (!resultTable.empty()) {
       co_yield resultTable;
       resultTable =
           IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
     }
   }
+  size_t numColumns = _subtree->getRootOperation()->getResultWidth();
   // Ensure no exception is thrown in empty case
   if (lazyGroupBy.noEntriesProcessed()) {
-    AD_CORRECTNESS_CHECK(!idTableWrapper.has_value());
-    AD_CORRECTNESS_CHECK(!evaluationContext.has_value());
     // Only for queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
     // implicit GROUP BY we have to return a single line as a result, otherwise
     // we can safely abort here.
-    if (!groupByCols.empty()) {
-      co_return;
+    if (groupByCols.empty()) {
+      ad_utility::callFixedSize(
+          getResultWidth(),
+          [this, &aggregates, numColumns, &localVocab, &resultTable,
+           &createEvaluationContextForTable]<int OUT_WIDTH>() {
+            IdTableStatic<OUT_WIDTH> table =
+                std::move(resultTable).toStatic<OUT_WIDTH>();
+            IdTable idTable{numColumns,
+                            ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+
+            sparqlExpression::EvaluationContext evaluationContext =
+                createEvaluationContextForTable(idTable);
+            for (const Aggregate& aggregate : aggregates) {
+              processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0,
+                                      &table, 0, aggregate._outCol,
+                                      localVocab.get());
+            }
+            resultTable = std::move(table).toDynamic();
+          });
+      co_yield resultTable;
     }
-    idTableWrapper.emplace(getResultWidth(),
-                           getExecutionContext()->getAllocator());
-    evaluationContext.emplace(
-        *getExecutionContext(), _subtree->getVariableColumns(),
-        idTableWrapper.value(), getExecutionContext()->getAllocator(),
-        localVocab, cancellationHandle_, deadline_);
+    co_return;
   }
-  lazyGroupBy.commitRow(resultTable, evaluationContext.value());
+  IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(
+                                  1_B * sizeof(Id) * numColumns)};
+
+  idTable.push_back(lazyGroupBy.getCurrentRow(numColumns));
+
+  sparqlExpression::EvaluationContext evaluationContext =
+      createEvaluationContextForTable(idTable);
+  lazyGroupBy.commitRow(resultTable, evaluationContext);
   co_yield resultTable;
 }
 

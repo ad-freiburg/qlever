@@ -285,6 +285,17 @@ bool LazyGroupBy<NUM_AGGREGATED_COLS>::rowMatchesCurrentBlock(
 
 // _____________________________________________________________________________
 template <size_t NUM_AGGREGATED_COLS>
+std::vector<Id> LazyGroupBy<NUM_AGGREGATED_COLS>::getCurrentRow(
+    size_t outputSize) const {
+  std::vector result(outputSize, Id::makeUndefined());
+  for (const auto& columnPair : currentGroupBlock_) {
+    result.at(columnPair.first) = columnPair.second;
+  }
+  return result;
+}
+
+// _____________________________________________________________________________
+template <size_t NUM_AGGREGATED_COLS>
 void LazyGroupBy<NUM_AGGREGATED_COLS>::substituteGroupVariable(
     const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
     ValueId value) {

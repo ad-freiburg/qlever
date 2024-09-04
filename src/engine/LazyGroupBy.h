@@ -52,6 +52,8 @@ class LazyGroupBy {
 
   bool noEntriesProcessed() const { return currentGroupBlock_.empty(); }
 
+  std::vector<Id> getCurrentRow(size_t outputSize) const;
+
  private:
   ValueId calculateAggregateResult(size_t aggregateIndex) {
     return calculationFunctions_.at(aggregateIndex)();

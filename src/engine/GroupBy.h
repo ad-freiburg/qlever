@@ -92,8 +92,10 @@ class GroupBy : public Operation {
   template <size_t NUM_AGGREGATED_COLS>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,
+      std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols) const;
+      std::vector<size_t> groupByCols,
+      std::shared_ptr<LocalVocab> localVocab) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,
