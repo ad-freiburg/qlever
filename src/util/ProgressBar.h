@@ -66,7 +66,8 @@ class ProgressBar {
   // outside (and be incremented there). That is because the calling code
   // typically has such a variable anyway (also for other purposes) and it
   // would we unnatural to have it originally in this class.
-  ProgressBar(size_t& numStepsProcessed, std::string displayStringPrefix,
+  template <ad_utility::SimilarTo<size_t> SizeT>
+  ProgressBar(SizeT& numStepsProcessed, std::string displayStringPrefix,
               size_t statisticsBatchSize = DEFAULT_PROGRESS_BAR_BATCH_SIZE,
               SpeedDescriptionFunction getSpeedDescription =
                   DEFAULT_SPEED_DESCRIPTION_FUNCTION,
@@ -145,7 +146,7 @@ class ProgressBar {
 
  private:
   // The total number of units that have been processed so far.
-  size_t& numStepsProcessed_;
+  const size_t& numStepsProcessed_;
   // The first part of the display string (e.g., "Triples processed: ").
   std::string displayStringPrefix_;
   // Update statistics every this many steps.

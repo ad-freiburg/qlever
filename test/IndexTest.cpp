@@ -37,7 +37,7 @@ auto makeTestScanWidthOne = [](const IndexImpl& index) {
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
     IdTable result =
-        index.scan(c0, std::cref(c1), permutation, additionalColumns,
+        index.scan({c0, c1, std::nullopt}, permutation, additionalColumns,
                    std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(result.numColumns(), 1 + additionalColumns.size());
     ASSERT_EQ(result, makeIdTableFromVector(expected));
@@ -53,9 +53,10 @@ auto makeTestScanWidthTwo = [](const IndexImpl& index) {
                   ad_utility::source_location l =
                       ad_utility::source_location::current()) {
     auto t = generateLocationTrace(l);
-    IdTable wol = index.scan(
-        c0, std::nullopt, permutation, Permutation::ColumnIndicesRef{},
-        std::make_shared<ad_utility::CancellationHandle<>>());
+    IdTable wol =
+        index.scan({c0, std::nullopt, std::nullopt}, permutation,
+                   Permutation::ColumnIndicesRef{},
+                   std::make_shared<ad_utility::CancellationHandle<>>());
     ASSERT_EQ(wol, makeIdTableFromVector(expected));
   };
 };
@@ -486,7 +487,8 @@ TEST(IndexTest, getIgnoredIdRanges) {
     ASSERT_TRUE(lambda(std::array{firstLiteral, enLabel, x}));
     ASSERT_FALSE(lambda(std::array{firstLiteral, label, x}));
     ASSERT_FALSE(lambda(std::array{x, label, x}));
-    auto hasPattern = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
+    auto hasPattern =
+        qlever::specialIds().at(std::string{HAS_PATTERN_PREDICATE});
     ASSERT_TRUE(lambda(std::array{firstLiteral, hasPattern, x}));
     EXPECT_THAT(ranges, UnorderedElementsAre(internalEntities, specialIds));
   }

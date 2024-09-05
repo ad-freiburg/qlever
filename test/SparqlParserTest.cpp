@@ -1208,9 +1208,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
                                     "<label>", "en")),
                             Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{Var{"?text"},
-                            PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
-                            Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?text"},
+                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
+                  Var{"?y"}}),
               triples[1]);
   }
   {
@@ -1224,9 +1225,10 @@ TEST(ParserTest, LanguageFilterPostProcessing) {
     ASSERT_EQ((SparqlTriple{iri("<somebody>"), PropertyPath::fromIri("?p"),
                             Var{"?y"}}),
               triples[0]);
-    ASSERT_EQ((SparqlTriple{Var{"?text"},
-                            PropertyPath::fromIri(CONTAINS_ENTITY_PREDICATE),
-                            Var{"?y"}}),
+    ASSERT_EQ((SparqlTriple{
+                  Var{"?text"},
+                  PropertyPath::fromIri(std::string{CONTAINS_ENTITY_PREDICATE}),
+                  Var{"?y"}}),
               triples[1]);
     ASSERT_EQ(
         (SparqlTriple{

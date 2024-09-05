@@ -9,12 +9,15 @@
 #include "../../util/GTestHelpers.h"
 #include "../../util/IdTableHelpers.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "index/StxxlSortFunctors.h"
 
 using ad_utility::source_location;
 using namespace ad_utility::memory_literals;
 
 namespace {
+
+static constexpr size_t NUM_COLS = NumColumnsIndexBuilding;
 
 // From a `generator` that yields  `IdTable`s, create a single `IdTable` that is
 // the concatenation of all the yielded tables.
@@ -144,10 +147,10 @@ TEST(CompressedExternalIdTable, sorterRandomInputs) {
   // Test for dynamic (<0>) and static(<3>) tables.
   // Test the case that there are multiple blocks to merge (many rows but a low
   // memory limit), but also the case that there is a
-  testExternalSorter<0>(3, 10'000, 10_kB);
-  testExternalSorter<0>(3, 1000, 1_MB);
-  testExternalSorter<3>(3, 10'000, 10_kB);
-  testExternalSorter<3>(3, 1000, 1_MB);
+  testExternalSorter<0>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<0>(NUM_COLS, 1000, 1_MB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 10'000, 10_kB);
+  testExternalSorter<NUM_COLS>(NUM_COLS, 1000, 1_MB);
 }
 
 TEST(CompressedExternalIdTable, sorterMemoryLimit) {
@@ -156,9 +159,9 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   // only 100 bytes of memory, not sufficient for merging
   ad_utility::EXTERNAL_ID_TABLE_SORTER_IGNORE_MEMORY_LIMIT_FOR_TESTING = false;
   ad_utility::CompressedExternalIdTableSorter<SortByOSP, 0> writer{
-      filename, 3, 100_B, ad_utility::testing::makeAllocator()};
+      filename, NUM_COLS, 100_B, ad_utility::testing::makeAllocator()};
 
-  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, 3);
+  CopyableIdTable<0> randomTable = createRandomlyFilledIdTable(100, NUM_COLS);
 
   // Pushing always works
   for (const auto& row : randomTable) {
@@ -166,8 +169,9 @@ TEST(CompressedExternalIdTable, sorterMemoryLimit) {
   }
 
   auto generator = writer.sortedView();
-  AD_EXPECT_THROW_WITH_MESSAGE((idTableFromRowGenerator<0>(generator, 3)),
-                               ::testing::ContainsRegex("Insufficient memory"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      (idTableFromRowGenerator<0>(generator, NUM_COLS)),
+      ::testing::ContainsRegex("Insufficient memory"));
 }
 
 template <size_t NumStaticColumns>

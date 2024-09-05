@@ -23,6 +23,13 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/beast.h"
 
+// Helper struct holding the response of a http/https request.
+struct HttpOrHttpsResponse {
+  boost::beast::http::status status_;
+  std::string contentType_;
+  cppcoro::generator<std::span<std::byte>> body_;
+};
+
 // A class for basic communication with a remote server via HTTP or HTTPS. For
 // now, contains functionality for setting up a connection, sending one or
 // several GET or POST requests (and getting the response), and closing the
@@ -40,10 +47,13 @@ class HttpClientImpl {
   ~HttpClientImpl();
 
   // Send a request (the first argument must be either `http::verb::get` or
-  // `http::verb::post`) and return the body of the response (possibly very
-  // large) as an `cppcoro::generator<std::string_view>`. The same connection
-  // can be used for multiple requests in a row.
-  cppcoro::generator<std::span<std::byte>> sendRequest(
+  // `http::verb::post`) and return the status and content-type as
+  // well as the body of the response (possibly very large) as an
+  // `cppcoro::generator<std::span<std::byte>>`. The connection can be used
+  // for only one request, as the client is moved to the content yielding
+  // coroutine.
+  static HttpOrHttpsResponse sendRequest(
+      std::unique_ptr<HttpClientImpl> client,
       const boost::beast::http::verb& method, std::string_view host,
       std::string_view target, ad_utility::SharedCancellationHandle handle,
       std::string_view requestBody = "",
@@ -78,7 +88,7 @@ using HttpsClient =
 // URL and obtaining the result as a `cppcoro::generator<std::span<std::byte>>`.
 // The protocol (HTTP or HTTPS) is chosen automatically based on the URL. The
 // `requestBody` is the payload sent for POST requests (default: empty).
-cppcoro::generator<std::span<std::byte>> sendHttpOrHttpsRequest(
+HttpOrHttpsResponse sendHttpOrHttpsRequest(
     const ad_utility::httpUtils::Url& url,
     ad_utility::SharedCancellationHandle handle,
     const boost::beast::http::verb& method = boost::beast::http::verb::get,

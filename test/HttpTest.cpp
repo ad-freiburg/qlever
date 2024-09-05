@@ -40,27 +40,35 @@ TEST(HttpServer, HttpTest) {
     // Create and run an HTTP server, which replies to each request with three
     // lines: the request method (GET, POST, or OTHER), a copy of the request
     // target (might be empty), and a copy of the request body (might be empty).
-    TestHttpServer httpServer(
-        [](auto request, auto&& send) -> boost::asio::awaitable<void> {
-          std::string methodName;
-          switch (request.method()) {
-            case boost::beast::http::verb::get:
-              methodName = "GET";
-              break;
-            case boost::beast::http::verb::post:
-              methodName = "POST";
-              break;
-            default:
-              methodName = "OTHER";
-          }
-          std::string response = absl::StrCat(
-              methodName, "\n", toStd(request.target()), "\n", request.body());
-          co_return co_await send(createOkResponse(
-              response, request, ad_utility::MediaType::textPlain));
-        });
+    TestHttpServer httpServer([](auto request,
+                                 auto&& send) -> boost::asio::awaitable<void> {
+      std::string methodName;
+      switch (request.method()) {
+        case boost::beast::http::verb::get:
+          methodName = "GET";
+          break;
+        case boost::beast::http::verb::post:
+          methodName = "POST";
+          break;
+        default:
+          methodName = "OTHER";
+      }
+
+      auto response = [](std::string methodName, std::string target,
+                         std::string body) -> cppcoro::generator<std::string> {
+        co_yield methodName;
+        co_yield "\n";
+        co_yield target;
+        co_yield "\n";
+        co_yield body;
+      }(methodName, std::string(toStd(request.target())), request.body());
+
+      co_return co_await send(createOkResponse(
+          std::move(response), request, ad_utility::MediaType::textPlain));
+    });
     httpServer.runInOwnThread();
 
-    // Create a client, and send a GET and a POST request in one session.
+    // Create a client, and send a GET request.
     // The constants in those test loops can be increased to find threading
     // issues using the thread sanitizer. However, these constants can't be
     // higher by default because the checks on GitHub actions will run forever
@@ -71,15 +79,15 @@ TEST(HttpServer, HttpTest) {
         threads.emplace_back([&]() {
           for (size_t j = 0; j < 20; ++j) {
             {
-              HttpClient httpClient("localhost",
-                                    std::to_string(httpServer.getPort()));
-              ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
-                                                        "target1", handle)),
-                        "GET\ntarget1\n");
-              ASSERT_EQ(
-                  toString(httpClient.sendRequest(verb::post, "localhost",
-                                                  "target1", handle, "body1")),
-                  "POST\ntarget1\nbody1");
+              auto httpClient = std::make_unique<HttpClient>(
+                  "localhost", std::to_string(httpServer.getPort()));
+
+              auto response =
+                  HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                          "localhost", "target1", handle);
+              ASSERT_EQ(response.status_, boost::beast::http::status::ok);
+              ASSERT_EQ(response.contentType_, "text/plain");
+              ASSERT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
             }
           }
         });
@@ -89,13 +97,14 @@ TEST(HttpServer, HttpTest) {
     // Do the same thing in a second session (to check if everything is still
     // fine with the server after we have communicated with it for one session).
     {
-      HttpClient httpClient("localhost", std::to_string(httpServer.getPort()));
-      ASSERT_EQ(toString(httpClient.sendRequest(verb::get, "localhost",
-                                                "target2", handle)),
-                "GET\ntarget2\n");
-      ASSERT_EQ(toString(httpClient.sendRequest(verb::post, "localhost",
-                                                "target2", handle, "body2")),
-                "POST\ntarget2\nbody2");
+      auto httpClient = std::make_unique<HttpClient>(
+          "localhost", std::to_string(httpServer.getPort()));
+      auto response =
+          HttpClient::sendRequest(std::move(httpClient), verb::post,
+                                  "localhost", "target2", handle, "body2");
+      ASSERT_EQ(response.status_, boost::beast::http::status::ok);
+      ASSERT_EQ(response.contentType_, "text/plain");
+      ASSERT_EQ(toString(std::move(response.body_)), "POST\ntarget2\nbody2");
     }
 
     // Test if websocket is correctly opened and closed
@@ -124,10 +133,11 @@ TEST(HttpServer, HttpTest) {
     {
       Url url{
           absl::StrCat("http://localhost:", httpServer.getPort(), "/target")};
-      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get)),
+      ASSERT_EQ(toString(sendHttpOrHttpsRequest(url, handle, verb::get).body_),
                 "GET\n/target\n");
       ASSERT_EQ(
-          toString(sendHttpOrHttpsRequest(url, handle, verb::post, "body")),
+          toString(
+              sendHttpOrHttpsRequest(url, handle, verb::post, "body").body_),
           "POST\n/target\nbody");
     }
 

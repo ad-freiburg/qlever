@@ -12,12 +12,14 @@
 #include <utility>
 
 #include "../test/util/GTestHelpers.h"
+#include "util/ConstexprSmallString.h"
 #include "util/ConstexprUtils.h"
 #include "util/Forward.h"
 #include "util/Generator.h"
 #include "util/StringUtils.h"
 
 using ad_utility::constantTimeEquals;
+using ad_utility::constexprStrCat;
 using ad_utility::getUTF8Substring;
 using ad_utility::strIsLangTag;
 using ad_utility::utf8ToLower;
@@ -343,4 +345,28 @@ TEST(StringUtilsTest, strLangTag) {
   ASSERT_TRUE(strIsLangTag("fr-BE-1606nict"));
   ASSERT_TRUE(strIsLangTag("de-CH-x-zh"));
   ASSERT_TRUE(strIsLangTag("en"));
+}
+
+// _____________________________________________________________________________
+TEST(StringUtilsTest, constexprStrCat) {
+  using namespace std::string_view_literals;
+  ASSERT_EQ((constexprStrCat<>()), ""sv);
+  ASSERT_EQ((constexprStrCat<"">()), ""sv);
+  ASSERT_EQ((constexprStrCat<"single">()), "single"sv);
+  ASSERT_EQ((constexprStrCat<"", "single", "">()), "single"sv);
+  ASSERT_EQ((constexprStrCat<"hello", " ", "World!">()), "hello World!"sv);
+  static_assert(constexprStrCat<"hello", " ", "World!">() == "hello World!"sv);
+}
+
+// _____________________________________________________________________________
+TEST(StringUtilsTest, constexprStrCatImpl) {
+  // The coverage tools don't track the compile time usages of these internal
+  // helper functions, so we test them manually.
+  using namespace ad_utility::detail::constexpr_str_cat_impl;
+  ASSERT_EQ((constexprStrCatBufferImpl<"h", "i">()),
+            (std::array{'h', 'i', '\0'}));
+
+  using C = ConstexprString;
+  ASSERT_EQ((catImpl<2>(std::array{C{"h"}, C{"i"}})),
+            (std::array{'h', 'i', '\0'}));
 }
