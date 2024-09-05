@@ -1081,9 +1081,14 @@ TEST(IdTable, staticAsserts) {
 TEST(IdTable, constructorsAreSfinaeFriendly) {
   // Check, that constructors that take no allocator are disabled if the
   // allocator is not default-constructible.
+
+  // `IdTable` (in the public namespace) is templated on an
+  // `AllocatorWithMemoryLimit` which is not default-constructible.
   static_assert(!std::is_default_constructible_v<IdTable>);
   static_assert(!std::is_constructible_v<IdTable, size_t>);
+
   using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  //`IntTable` uses `std::allocator`, which is default-constructible.
   static_assert(std::is_default_constructible_v<IntTable>);
   static_assert(std::is_constructible_v<IntTable, size_t>);
 }
