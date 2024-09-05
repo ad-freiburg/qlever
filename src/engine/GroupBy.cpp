@@ -447,7 +447,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
-  // Extend the lifetime of the `IdTable` yielded by the generator a little bit
+  bool groupSplitAcrossTables = false;
+
   for (IdTable& idTable : subresult->idTables()) {
     if (idTable.empty()) {
       continue;
@@ -465,8 +466,31 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     for (size_t pos = 0; pos < idTable.size(); pos++) {
       checkCancellation();
       if (!lazyGroupBy.rowMatchesCurrentBlock(idTable, pos)) {
-        lazyGroupBy.processNextBlock(evaluationContext, blockStart, pos);
-        lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
+        if (groupSplitAcrossTables) {
+          lazyGroupBy.processNextBlock(evaluationContext, blockStart, pos);
+          lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
+          groupSplitAcrossTables = false;
+        } else {
+          // This processes the whole block in batches if possible
+          resultTable.emplace_back();
+          for (size_t i = 0; i < groupByCols.size(); ++i) {
+            resultTable(resultTable.size() - 1, i) =
+                idTable(blockStart, groupByCols[i]);
+          }
+          ad_utility::callFixedSize(
+              getResultWidth(),
+              [this, &aggregates, &localVocab, &resultTable, &evaluationContext,
+               blockStart, pos]<int OUT_WIDTH>() {
+                IdTableStatic<OUT_WIDTH> table =
+                    std::move(resultTable).toStatic<OUT_WIDTH>();
+                for (const Aggregate& aggregate : aggregates) {
+                  processGroup<OUT_WIDTH>(
+                      aggregate, evaluationContext, blockStart, pos, &table,
+                      table.size() - 1, aggregate._outCol, localVocab.get());
+                }
+                resultTable = std::move(table).toDynamic();
+              });
+        }
 
         // setup for processing the next block
         blockStart = pos;
@@ -474,6 +498,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         lazyGroupBy.populateGroupBlock(idTable, pos);
       }
     }
+    groupSplitAcrossTables = true;
     lazyGroupBy.processNextBlock(evaluationContext, blockStart, idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
       co_yield resultTable;
