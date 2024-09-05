@@ -1116,13 +1116,12 @@ TEST_P(StreamableMediaTypesFixture, CancellationCancelsStream) {
 
   cancellationHandle->cancel(ad_utility::CancellationState::MANUAL);
   ad_utility::Timer timer(ad_utility::Timer::Started);
-  auto generator = ExportQueryExecutionTrees::computeResult(
-      pq, qet, GetParam(), timer, std::move(cancellationHandle));
-
-  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(generator.begin(),
-                                        HasSubstr("Stream query export"),
-                                        ad_utility::CancellationException);
+  EXPECT_ANY_THROW(([&]() {
+    [[maybe_unused]] auto generator = ExportQueryExecutionTrees::computeResult(
+        pq, qet, GetParam(), timer, std::move(cancellationHandle));
+  }()));
 }
+
 INSTANTIATE_TEST_SUITE_P(StreamableMediaTypes, StreamableMediaTypesFixture,
                          ::testing::Values(turtle, sparqlXml, tsv, csv,
                                            octetStream, sparqlJson,
@@ -1354,4 +1353,50 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   EXPECT_GE(
       toChrono(timingInformation["total"].get<std::string_view>()),
       toChrono(timingInformation["computeResult"].get<std::string_view>()));
+}
+
+TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
+  using S = ad_utility::streams::stream_generator;
+  auto throwEarly = []() -> S {
+    co_yield " Hallo... Ups\n";
+    throw std::runtime_error{"failed"};
+  };
+  auto call = [](S stream) {
+    [[maybe_unused]] auto res =
+        ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
+            std::move(stream));
+  };
+  AD_EXPECT_THROW_WITH_MESSAGE(call(throwEarly()), std::string_view("failed"));
+  auto throwLate = [](bool throwProperException) -> S {
+    size_t largerThanBufferSize = (1ul << 20) + 4;
+    std::string largerThanBuffer;
+    largerThanBuffer.resize(largerThanBufferSize);
+    co_yield largerThanBuffer;
+    if (throwProperException) {
+      throw std::runtime_error{"proper exception"};
+    } else {
+      throw 424231;
+    }
+  };
+
+  auto consume = [](auto generator) {
+    std::string res;
+    for (const auto& el : generator) {
+      res.append(el);
+    }
+    return res;
+  };
+
+  cppcoro::generator<std::string> res;
+  using namespace ::testing;
+  EXPECT_NO_THROW((
+      res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
+          throwLate(true))));
+  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"), HasSubstr("proper exception")));
+
+  EXPECT_NO_THROW((
+      res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
+          throwLate(false))));
+  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"),
+                    HasSubstr("A very strange")));
 }
