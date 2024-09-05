@@ -424,7 +424,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
                                         &subresult->localVocab()};
 
   LazyGroupBy<NUM_GROUP_COLUMNS> lazyGroupBy{
-      *localVocab, std::move(aggregateAliases), groupByCols};
+      *localVocab, std::move(aggregateAliases), groupByCols,
+      getExecutionContext()->getAllocator()};
 
   auto createEvaluationContextForTable = [this, &localVocab](IdTable& table) {
     sparqlExpression::EvaluationContext evaluationContext{

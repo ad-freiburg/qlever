@@ -17,15 +17,11 @@ class LazyGroupBy {
   // A block ends when one of these values changes.
   std::vector<std::pair<size_t, Id>> currentGroupBlock_{};
 
-  // Store the call to reset in a `std::function` to avoid having to expensively
-  // look up type of the variant on every new group that will always be the
-  // same.
-  std::function<void()> resetAggregationData_;
-
  public:
   LazyGroupBy(LocalVocab& localVocab,
               std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-              const std::vector<size_t>& groupByCols);
+              const std::vector<size_t>& groupByCols,
+              const ad_utility::AllocatorWithLimit<Id>& allocator);
 
   LazyGroupBy(const LazyGroupBy&) = delete;
   LazyGroupBy(LazyGroupBy&&) = delete;
@@ -59,6 +55,4 @@ class LazyGroupBy {
   static void substituteGroupVariable(
       const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
       ValueId value);
-
-  void initializeAggregationData();
 };

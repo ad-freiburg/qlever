@@ -11,30 +11,12 @@ template <size_t NUM_GROUP_COLUMNS>
 LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
     LocalVocab& localVocab,
     std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-    const std::vector<size_t>& groupByCols)
+    const std::vector<size_t>& groupByCols,
+    const ad_utility::AllocatorWithLimit<Id>& allocator)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
       groupByCols_{groupByCols},
-      aggregationData_{ad_utility::makeAllocatorWithLimit<Id>(
-                           1_B * sizeof(Id) * NUM_GROUP_COLUMNS),
-                       aggregateAliases_, NUM_GROUP_COLUMNS} {}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
-  for (const auto& alias : aggregateAliases_) {
-    for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      // TODO<RobinTF> replace typename with SupportedAggregates
-      std::visit([]<typename T>(T& arg) { arg.at(0).reset(); },
-                 aggregationData_.getAggregationDataVariant(
-                     aggregateInfo.aggregateDataIndex_));
-    }
-  }
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::initializeAggregationData() {
+      aggregationData_{allocator, aggregateAliases_, NUM_GROUP_COLUMNS} {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
       // TODO<RobinTF> replace typename with SupportedAggregates
@@ -51,6 +33,19 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::initializeAggregationData() {
           },
           aggregationData_.getAggregationDataVariant(
               aggregateInfo.aggregateDataIndex_));
+    }
+  }
+}
+
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
+  for (const auto& alias : aggregateAliases_) {
+    for (const auto& aggregateInfo : alias.aggregateInfo_) {
+      // TODO<RobinTF> replace typename with SupportedAggregates
+      std::visit([]<typename T>(T& arg) { arg.at(0).reset(); },
+                 aggregationData_.getAggregationDataVariant(
+                     aggregateInfo.aggregateDataIndex_));
     }
   }
 }
