@@ -177,7 +177,7 @@ struct GroupConcatAggregationData {
 
   // _____________________________________________________________________________
   explicit GroupConcatAggregationData(std::string_view separator)
-      : separator_{std::move(separator)} {
+      : separator_{separator} {
     currentValue_.reserve(20000);
   }
 };
