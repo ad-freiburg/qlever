@@ -171,7 +171,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
 
   checkCancellation();
 
-  if (!pq.datasetClauses_.namedGraphs_.empty()) {
+  const auto& fromNamed = pq.datasetClauses_.namedGraphs_;
+  if (fromNamed.has_value()) {
+    AD_CORRECTNESS_CHECK(!fromNamed.value().empty());
     throw std::runtime_error(
         "FROM NAMED clauses are not yet supported by QLever");
   }
@@ -676,8 +678,9 @@ auto QueryPlanner::seedWithScansAndText(
 
   auto relevantGraphs = activeDatasetClauses_.defaultGraphs_;
   if (graphIri.has_value()) {
-    relevantGraphs.clear();
-    relevantGraphs.insert(graphIri.value());
+    relevantGraphs.reset();
+    relevantGraphs.emplace();
+    relevantGraphs.value().insert(graphIri.value());
   }
 
   for (size_t i = 0; i < tg._nodeMap.size(); ++i) {
@@ -714,47 +717,19 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto makeGraphFilter = [&relevantGraphs](const Variable& var) {
-      std::vector<sparqlExpression::SparqlExpression::Ptr> ptrs;
-      auto lhs = std::make_unique<sparqlExpression::VariableExpression>(var);
-      for (auto& iri : relevantGraphs) {
-        ptrs.push_back(std::make_unique<sparqlExpression::IriExpression>(iri));
-      }
-
-      auto expr = std::make_unique<sparqlExpression::InExpression>(
-          std::move(lhs), std::move(ptrs));
-      return sparqlExpression::SparqlExpressionPimpl{std::move(expr),
-                                                     "FILTER BY GRAPH ID"};
-    };
     auto addIndexScan =
-        [this, pushPlan, node, &makeGraphFilter, &relevantGraphs](
+        [this, pushPlan, node, &relevantGraphs](
             Permutation::Enum permutation,
             std::optional<SparqlTripleSimple> triple = std::nullopt) {
           if (!triple.has_value()) {
             triple = node.triple_.getSimple();
           }
 
-          std::optional<Variable> graphVariable;
-          if (!relevantGraphs.empty()) {
-            graphVariable = generateUniqueVarName();
-            triple->additionalScanColumns_.emplace_back(
-                ADDITIONAL_COLUMN_GRAPH_ID, graphVariable.value());
-          }
           auto scanPlan = [&]() {
             return makeSubtreePlan<IndexScan>(_qec, permutation,
-                                              std::move(triple.value()));
+                                              std::move(triple.value()), relevantGraphs);
           };
-
-          if (relevantGraphs.empty()) {
-            pushPlan(scanPlan());
-            return;
-          } else {
-            auto plan = scanPlan();
-            plan =
-                makeSubtreePlan<Filter>(_qec, std::move(plan._qet),
-                                        makeGraphFilter(graphVariable.value()));
-            pushPlan(std::move(plan));
-          }
+          pushPlan(scanPlan());
         };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {

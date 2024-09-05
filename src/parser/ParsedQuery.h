@@ -9,6 +9,7 @@
 #include <variant>
 #include <vector>
 
+#include "index/ScanSpecification.h"
 #include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "parser/Alias.h"
@@ -39,8 +40,8 @@ using std::vector;
 namespace parsedQuery {
 // A struct for the FROM and FROM NAMED clauses;
 struct DatasetClauses {
-  ad_utility::HashSet<TripleComponent::Iri> defaultGraphs_{};
-  ad_utility::HashSet<TripleComponent::Iri> namedGraphs_{};
+  ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
+  ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
 };
 }  // namespace parsedQuery
 
