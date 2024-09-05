@@ -48,77 +48,101 @@ auto testAggregate = [](std::vector<T> inputAsVector, U expectedResult,
   EXPECT_EQ(res, expectedResult);
 };
 
-// ______________________________________________________________________________
-TEST(AggregateExpression, max) {
-  auto testMaxId = testAggregate<MaxExpression, Id>;
-  auto t = TestContext{};
-  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
-  Id beta = t.Beta;    // Vocab Id of the Literal "Beta"
+// Test `CountExpression`.
+TEST(AggregateExpression, count) {
+  auto testCountId = testAggregate<CountExpression, Id>;
+  // Test cases. Make sure that UNDEF and NaN values are ignored and that the
+  // result for an empty input is 0. The last (Boolean) argument indicates
+  // whether the count should be distinct.
+  testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
+  testCountId({D(2), D(2), I(2), V(17)}, I(3), true);
+  testCountId({U, I(3), U}, I(1));
+  testCountId({I(3), NaN, NaN}, I(2), true);
+  testCountId({}, I(0));
 
-  LocalVocabEntry l =
-      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
-  Id alx = Id::makeFromLocalVocabIndex(&l);
+  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
+  testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+}
 
-  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
-  testMaxId({V(7), U, V(2), V(4)}, V(7));
-  // Correct comparison between vocab and local vocab entries.
-  testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
-  testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
+// Test `SumExpression`.
+TEST(AggregateExpression, sum) {
+  auto testSumId = testAggregate<SumExpression, Id>;
+  testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
+  testSumId({D(2), D(2), I(2)}, D(4), true);
+  testSumId({I(3), U}, U);
+  testSumId({I(3), NaN}, NaN);
+  testSumId({}, I(0));
 
   auto testMaxString = testAggregate<MaxExpression, IdOrLiteralOrIri>;
   testMaxString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("unfug"));
+  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
+  testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
 }
 
-// ______________________________________________________________________________
+// Test `AvgExpression`.
+TEST(AggregateExpression, avg) {
+  auto testAvgId = testAggregate<AvgExpression, Id>;
+  testAvgId({I(3), D(0), I(0), I(4), (I(-2))}, D(1));
+  testAvgId({D(2), D(2), I(2)}, D(2), true);
+  testAvgId({I(3), U}, U);
+  testAvgId({I(3), NaN}, NaN);
+  testAvgId({}, D(0));
+
+  auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
+  testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
+}
+
+// Test `MinExpression`.
 TEST(AggregateExpression, min) {
   auto testMinId = testAggregate<MinExpression, Id>;
   TestContext t;
-  Id alpha = t.alpha;  // Vocab Id of the Literal "alpha"
-
-  LocalVocabEntry l =
+  // IDs of one word from the vocabulary ("alpha") and two words
+  // from the local vocabulary ("alx" and "aalx").
+  Id alpha = t.alpha;
+  LocalVocabEntry l1 =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
-  Id alx = Id::makeFromLocalVocabIndex(&l);
+  Id alx = Id::makeFromLocalVocabIndex(&l1);
   LocalVocabEntry l2 =
       ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("aalx");
   Id aalx = Id::makeFromLocalVocabIndex(&l2);
 
+  // Test cases. Make sure that vocab entries and local vocab entries are
+  // compared correctly, that UNDEF is smaller than any other value, and that
+  // the result for an empty input is UNDEF.
   testMinId({I(3), I(0), I(4), (I(-1))}, I(-1));
   testMinId({V(7), V(2), V(4)}, V(2));
   testMinId({V(7), U, V(2), V(4)}, U);
   testMinId({I(3), alpha, alx, (I(-1))}, I(-1));
   testMinId({I(3), alpha, alx, (I(-1)), U}, U);
   testMinId({alpha, alx, aalx}, aalx);
-
+  testMinId({}, U);
   auto testMinString = testAggregate<MinExpression, IdOrLiteralOrIri>;
   testMinString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")},
                 lit("alpha"));
 }
 
-// ______________________________________________________________________________
-TEST(AggregateExpression, sum) {
-  auto testSumId = testAggregate<SumExpression, Id>;
-  testSumId({I(3), D(23.3), I(0), I(4), (I(-1))}, D(29.3));
-  testSumId({D(2), D(2), I(2)}, D(4), true);
+// Test `MaxExpression`.
+TEST(AggregateExpression, max) {
+  auto testMaxId = testAggregate<MaxExpression, Id>;
+  auto t = TestContext{};
+  // IDs of two words from the vocabulary ("alpha" and "Beta") and one word
+  // from the local vocabulary ("alx").
+  Id alpha = t.alpha;
+  Id beta = t.Beta;
+  LocalVocabEntry l =
+      ad_utility::triple_component::LiteralOrIri::literalWithoutQuotes("alx");
+  Id alx = Id::makeFromLocalVocabIndex(&l);
 
-  testSumId({I(3), U}, U);
-  testSumId({I(3), NaN}, NaN);
-
-  auto testSumString = testAggregate<SumExpression, IdOrLiteralOrIri, Id>;
-  testSumString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
-}
-
-// ______________________________________________________________________________
-TEST(AggregateExpression, count) {
-  auto testCountId = testAggregate<CountExpression, Id>;
-  testCountId({I(3), D(23.3), I(0), I(4), (I(-1))}, I(5));
-  testCountId({D(2), D(2), I(2), V(17)}, I(3), true);
-
-  testCountId({U, I(3), U}, I(1));
-  testCountId({I(3), NaN, NaN}, I(2), true);
-
-  auto testCountString = testAggregate<CountExpression, IdOrLiteralOrIri, Id>;
-  testCountString({lit("alpha"), lit("äpfel"), lit(""), lit("unfug")}, I(4));
+  // Test cases. Make sure that vocab entries and local vocab entries are
+  // compared correctly, that UNDEF is smaller than any other value, and that
+  // the result for an empty input is UNDEF.
+  testMaxId({I(3), U, I(0), I(4), U, (I(-1))}, I(4));
+  testMaxId({V(7), U, V(2), V(4)}, V(7));
+  testMaxId({I(3), U, alpha, alx, U, (I(-1))}, alx);
+  testMaxId({I(3), U, alpha, alx, beta, (I(-1))}, beta);
+  testMaxId({U, U, U}, U);
+  testMaxId({}, U);
 }
 
 // ______________________________________________________________________________
@@ -195,6 +219,12 @@ TEST(AggregateExpression, CountStar) {
 
   m = makeCountStarExpression(false);
   EXPECT_THAT(m, matcher(t.table.numRows()));
+
+  // Test the correct behavior for an empty input.
+  t.table.clear();
+  EXPECT_THAT(m, matcher(0));
+  m = makeCountStarExpression(true);
+  EXPECT_THAT(m, matcher(0));
 }
 
 // ______________________________________________________________________________
