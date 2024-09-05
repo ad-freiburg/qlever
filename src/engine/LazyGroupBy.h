@@ -6,18 +6,12 @@
 
 #include "engine/GroupBy.h"
 
-template <size_t NUM_AGGREGATED_COLS>
+template <size_t NUM_GROUP_COLUMNS>
 class LazyGroupBy {
   LocalVocab& localVocab_;
   std::vector<GroupBy::HashMapAliasInformation> aggregateAliases_;
   const std::vector<size_t>& groupByCols_;
-  std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS> aggregationData_;
-  std::array<std::function<ValueId()>, NUM_AGGREGATED_COLS>
-      calculationFunctions_{};
-  std::array<std::function<void(const std::variant<ValueId, LocalVocabEntry>&,
-                                const sparqlExpression::EvaluationContext*)>,
-             NUM_AGGREGATED_COLS>
-      addToAggregateFunctions_{};
+  GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData_;
 
   // This stores the values of the group by numColumns for the current block.
   // A block ends when one of these values changes.
@@ -41,7 +35,7 @@ class LazyGroupBy {
   void commitRow(IdTable& resultTable,
                  sparqlExpression::EvaluationContext& evaluationContext);
 
-  void resetAggregationData() { resetAggregationData_(); }
+  void resetAggregationData();
 
   void processNextBlock(sparqlExpression::EvaluationContext& evaluationContext,
                         size_t beginIndex, size_t endIndex);
@@ -55,25 +49,15 @@ class LazyGroupBy {
   std::vector<Id> getCurrentRow(size_t outputSize) const;
 
  private:
-  ValueId calculateAggregateResult(size_t aggregateIndex) {
-    return calculationFunctions_.at(aggregateIndex)();
-  }
+  ValueId calculateAggregateResult(size_t aggregateIndex);
 
   void addToAggregateFunction(size_t aggregateIndex,
                               const std::variant<ValueId, LocalVocabEntry>& id,
-                              const sparqlExpression::EvaluationContext* ctx) {
-    return addToAggregateFunctions_.at(aggregateIndex)(id, ctx);
-  }
+                              const sparqlExpression::EvaluationContext* ctx);
 
-  void substituteGroupVariable(
+  static void substituteGroupVariable(
       const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
       ValueId value);
 
-  static std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>
-  initializeAggregationData(
-      const std::vector<GroupBy::HashMapAliasInformation>& aggregateAliases);
-
-  static std::function<void()> initializeResetAggregationData(
-      std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>&
-          aggregationData);
+  void initializeAggregationData();
 };

@@ -7,105 +7,57 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Constants.h"
 
-template <size_t NUM_AGGREGATED_COLS>
-LazyGroupBy<NUM_AGGREGATED_COLS>::LazyGroupBy(
+template <size_t NUM_GROUP_COLUMNS>
+LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
     LocalVocab& localVocab,
     std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
     const std::vector<size_t>& groupByCols)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
       groupByCols_{groupByCols},
-      aggregationData_{initializeAggregationData(aggregateAliases_)},
-      resetAggregationData_{initializeResetAggregationData(aggregationData_)} {
-  for (auto& alias : aggregateAliases_) {
-    for (auto& aggregate : alias.aggregateInfo_) {
-      calculationFunctions_.at(aggregate.aggregateDataIndex_) = std::visit(
-          [this](const auto& aggregateData) -> std::function<ValueId()> {
-            return [&] { return aggregateData.calculateResult(&localVocab_); };
-          },
-          aggregationData_.at(aggregate.aggregateDataIndex_));
-      addToAggregateFunctions_.at(aggregate.aggregateDataIndex_) = std::visit(
-          [](auto& aggregateData)
-              -> std::function<void(
-                  const std::variant<ValueId, LocalVocabEntry>&,
-                  const sparqlExpression::EvaluationContext*)> {
-            return [&](const std::variant<ValueId, LocalVocabEntry>& id,
-                       const sparqlExpression::EvaluationContext* ctx) {
-              return aggregateData.addValue(id, ctx);
-            };
-          },
-          aggregationData_.at(aggregate.aggregateDataIndex_));
+      aggregationData_{ad_utility::makeAllocatorWithLimit<Id>(
+                           1_B * sizeof(Id) * NUM_GROUP_COLUMNS),
+                       aggregateAliases_, NUM_GROUP_COLUMNS} {}
+
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
+  for (const auto& alias : aggregateAliases_) {
+    for (const auto& aggregateInfo : alias.aggregateInfo_) {
+      // TODO<RobinTF> replace typename with SupportedAggregates
+      std::visit([]<typename T>(T& arg) { arg.at(0).reset(); },
+                 aggregationData_.getAggregationDataVariant(
+                     aggregateInfo.aggregateDataIndex_));
     }
   }
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-std::function<void()>
-LazyGroupBy<NUM_AGGREGATED_COLS>::initializeResetAggregationData(
-    std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>&
-        aggregationData) {
-  return std::apply(
-      [](auto&... variants) {
-        // Prevent exploding compilation times as the number of aggregated
-        // columns increased compilation times exponentially
-        if constexpr (NUM_AGGREGATED_COLS <= 3) {
-          return std::visit(
-              [](auto&... unwrapped) -> std::function<void()> {
-                return [&]() { (unwrapped.reset(), ...); };
-              },
-              variants...);
-        } else {
-          std::array<std::function<void()>, NUM_AGGREGATED_COLS> resetFunctions{
-              std::visit(
-                  [](auto& unwrapped) -> std::function<void()> {
-                    return [&]() { unwrapped.reset(); };
-                  },
-                  variants)...};
-          return [resetFunctions = std::move(resetFunctions)]() {
-            std::apply([](auto&... resetFunction) { (resetFunction(), ...); },
-                       resetFunctions);
-          };
-        }
-      },
-      aggregationData);
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS>
-LazyGroupBy<NUM_AGGREGATED_COLS>::initializeAggregationData(
-    const std::vector<GroupBy::HashMapAliasInformation>& aggregateAliases) {
-  using enum GroupBy::HashMapAggregateType;
-  std::array<GroupBy::AggregationData, NUM_AGGREGATED_COLS> aggregationData{};
-  for (const auto& alias : aggregateAliases) {
-    for (const auto& aggregate : alias.aggregateInfo_) {
-      const auto& aggregationType = aggregate.aggregateType_;
-      auto idx = aggregate.aggregateDataIndex_;
-      if (aggregationType.type_ == AVG) {
-        aggregationData.at(idx) = AvgAggregationData{};
-      } else if (aggregationType.type_ == COUNT) {
-        aggregationData.at(idx) = CountAggregationData{};
-      } else if (aggregationType.type_ == MIN) {
-        aggregationData.at(idx) = MinAggregationData{};
-      } else if (aggregationType.type_ == MAX) {
-        aggregationData.at(idx) = MaxAggregationData{};
-      } else if (aggregationType.type_ == SUM) {
-        aggregationData.at(idx) = SumAggregationData{};
-      } else if (aggregationType.type_ == GROUP_CONCAT) {
-        aggregationData.at(idx) =
-            GroupConcatAggregationData{aggregationType.separator_.value()};
-      } else {
-        AD_THROW("Unsupported aggregate type");
-      }
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::initializeAggregationData() {
+  for (const auto& alias : aggregateAliases_) {
+    for (const auto& aggregateInfo : alias.aggregateInfo_) {
+      // TODO<RobinTF> replace typename with SupportedAggregates
+      std::visit(
+          [&aggregateInfo]<typename T>(T& arg) {
+            if constexpr (std::same_as<typename T::value_type,
+                                       GroupConcatAggregationData>) {
+              arg.resize(1,
+                         GroupConcatAggregationData{
+                             aggregateInfo.aggregateType_.separator_.value()});
+            } else {
+              arg.resize(1);
+            }
+          },
+          aggregationData_.getAggregationDataVariant(
+              aggregateInfo.aggregateDataIndex_));
     }
   }
-  return aggregationData;
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-void LazyGroupBy<NUM_AGGREGATED_COLS>::commitRow(
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::commitRow(
     IdTable& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext) {
   resultTable.emplace_back();
@@ -225,8 +177,8 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::commitRow(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-void LazyGroupBy<NUM_AGGREGATED_COLS>::processNextBlock(
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
     sparqlExpression::EvaluationContext& evaluationContext, size_t beginIndex,
     size_t endIndex) {
   size_t blockSize = endIndex - beginIndex;
@@ -259,9 +211,9 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::processNextBlock(
 
 // _____________________________________________________________________________
 
-template <size_t NUM_AGGREGATED_COLS>
-void LazyGroupBy<NUM_AGGREGATED_COLS>::populateGroupBlock(
-    const IdTable& idTable, size_t row) {
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::populateGroupBlock(const IdTable& idTable,
+                                                        size_t row) {
   if (currentGroupBlock_.empty()) {
     for (size_t col : groupByCols_) {
       currentGroupBlock_.emplace_back(col, idTable(0, col));
@@ -274,8 +226,8 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::populateGroupBlock(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-bool LazyGroupBy<NUM_AGGREGATED_COLS>::rowMatchesCurrentBlock(
+template <size_t NUM_GROUP_COLUMNS>
+bool LazyGroupBy<NUM_GROUP_COLUMNS>::rowMatchesCurrentBlock(
     const IdTable& idTable, size_t row) {
   return std::all_of(currentGroupBlock_.begin(), currentGroupBlock_.end(),
                      [&](const auto& columns) {
@@ -284,8 +236,8 @@ bool LazyGroupBy<NUM_AGGREGATED_COLS>::rowMatchesCurrentBlock(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-std::vector<Id> LazyGroupBy<NUM_AGGREGATED_COLS>::getCurrentRow(
+template <size_t NUM_GROUP_COLUMNS>
+std::vector<Id> LazyGroupBy<NUM_GROUP_COLUMNS>::getCurrentRow(
     size_t outputSize) const {
   std::vector result(outputSize, Id::makeUndefined());
   for (const auto& columnPair : currentGroupBlock_) {
@@ -295,8 +247,8 @@ std::vector<Id> LazyGroupBy<NUM_AGGREGATED_COLS>::getCurrentRow(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_AGGREGATED_COLS>
-void LazyGroupBy<NUM_AGGREGATED_COLS>::substituteGroupVariable(
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::substituteGroupVariable(
     const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
     ValueId value) {
   for (const auto& occurrence : occurrences) {
@@ -306,6 +258,29 @@ void LazyGroupBy<NUM_AGGREGATED_COLS>::substituteGroupVariable(
     occurrence.parent_->replaceChild(occurrence.nThChild_,
                                      std::move(newExpression));
   }
+}
+
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
+ValueId LazyGroupBy<NUM_GROUP_COLUMNS>::calculateAggregateResult(
+    size_t aggregateIndex) {
+  return std::visit(
+      [this](const auto& aggregateData) {
+        return aggregateData.at(0).calculateResult(&localVocab_);
+      },
+      aggregationData_.getAggregationDataVariant(aggregateIndex));
+}
+
+// _____________________________________________________________________________
+template <size_t NUM_GROUP_COLUMNS>
+void LazyGroupBy<NUM_GROUP_COLUMNS>::addToAggregateFunction(
+    size_t aggregateIndex, const std::variant<ValueId, LocalVocabEntry>& id,
+    const sparqlExpression::EvaluationContext* ctx) {
+  std::visit(
+      [&id, ctx](auto& aggregateData) {
+        return aggregateData.at(0).addValue(id, ctx);
+      },
+      aggregationData_.getAggregationDataVariant(aggregateIndex));
 }
 
 // _____________________________________________________________________________
