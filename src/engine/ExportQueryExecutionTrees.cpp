@@ -702,7 +702,7 @@ ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
     // that doesn't solve the problem for users of the plain HTTP 1.1 endpoint.
     if (exceptionMessage.has_value()) {
       std::string prefix =
-          "\n !!!! An error has occurred while exporting the query result. "
+          "\n !!!!>># An error has occurred while exporting the query result. "
           "Unfortunately due to limitations in the HTTP 1.1 protocol, there is "
           "no better way to report this than to append it to the incomplete "
           "result. The error message was:\n";

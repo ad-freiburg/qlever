@@ -1322,14 +1322,15 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   };
 
   cppcoro::generator<std::string> res;
+  using namespace ::testing;
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(true))));
-  EXPECT_THAT(consume(std::move(res)), testing::HasSubstr("proper exception"));
+  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"), HasSubstr("proper exception")));
 
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(false))));
-  EXPECT_THAT(consume(std::move(res)),
-              testing::HasSubstr("A very strange exception"));
+  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"),
+                    HasSubstr("A very strange")));
 }

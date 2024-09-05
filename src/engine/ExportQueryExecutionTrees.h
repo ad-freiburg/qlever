@@ -92,7 +92,14 @@ class ExportQueryExecutionTrees {
   getLiteralOrIriFromVocabIndex(const Index& index, Id id,
                                 const LocalVocab& localVocab);
 
-  // TODO<joka921> Comment, this has very particular semantics.
+  // Convert a `stream_generator` to an "ordinary" `generator<string>` that
+  // yields exactly the same chunks as the `stream_generator`. Exceptions that
+  // happen during the creation of the first chunk (default chunk size is 1MB)
+  // will be immediately thrown when calling this function. Exceptions that
+  // happen later will be caught and their exception message will be  yielded by
+  // the resulting `generator<string>` together with a message, that explains,
+  // that there is no good mechanism for handling errors during a chunked HTTP
+  // response transfer.
   static cppcoro::generator<std::string>
   convertStreamGeneratorForChunkedTransfer(
       ad_utility::streams::stream_generator streamGenerator);
