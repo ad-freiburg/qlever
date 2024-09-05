@@ -334,7 +334,11 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
   } else {
-    subresult = _subtree->getResult(requestLaziness);
+    if (requestLaziness) {
+      hashMapOptimizationParams =
+          computeHashMapOptimizationMetadata(aggregates);
+    }
+    subresult = _subtree->getResult(hashMapOptimizationParams.has_value());
   }
 
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
@@ -368,7 +372,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
-  if (hashMapOptimizationParams.has_value()) {
+  if (hashMapOptimizationParams.has_value() &&
+      subresult->isFullyMaterialized()) {
     IdTable idTable = CALL_FIXED_SIZE(
         groupByCols.size(), &GroupBy::computeGroupByForHashMapOptimization,
         this, hashMapOptimizationParams->aggregateAliases_,
@@ -380,19 +385,17 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   // TODO<RobinTF> Add runtime parameter to toggle of index scan specific
   // optimizations for performance comparisons
   if (!subresult->isFullyMaterialized()) {
-    auto aggregateInfo = computeHashMapOptimizationMetadata(aggregates);
+    AD_CORRECTNESS_CHECK(hashMapOptimizationParams.has_value());
 
-    if (aggregateInfo.has_value()) {
-      auto localVocabPointer =
-          std::make_shared<LocalVocab>(std::move(localVocab));
-      cppcoro::generator<IdTable> generator =
-          CALL_FIXED_SIZE(groupByCols.size(), &GroupBy::computeResultLazily,
-                          this, std::move(subresult), std::move(aggregates),
-                          std::move(aggregateInfo).value().aggregateAliases_,
-                          std::move(groupByCols), localVocabPointer);
-      return {std::move(generator), resultSortedOn(),
-              std::move(localVocabPointer)};
-    }
+    auto localVocabPointer =
+        std::make_shared<LocalVocab>(std::move(localVocab));
+    cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
+        groupByCols.size(), &GroupBy::computeResultLazily, this,
+        std::move(subresult), std::move(aggregates),
+        std::move(hashMapOptimizationParams).value().aggregateAliases_,
+        std::move(groupByCols), localVocabPointer);
+    return {std::move(generator), resultSortedOn(),
+            std::move(localVocabPointer)};
   }
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = getResultWidth();
