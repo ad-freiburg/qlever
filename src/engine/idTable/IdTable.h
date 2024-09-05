@@ -180,7 +180,11 @@ class IdTable {
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
-  explicit IdTable(size_t numColumns, Allocator allocator = {})
+  explicit IdTable(size_t numColumns)
+      requires(columnsAreAllocatable &&
+               std::is_default_constructible_v<Allocator>)
+      : IdTable(numColumns, Allocator{}) {}
+  explicit IdTable(size_t numColumns, Allocator allocator)
       requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
@@ -218,7 +222,10 @@ class IdTable {
   // already set up with the correct number of columns and can be used directly.
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
-  explicit IdTable(Allocator allocator = {})
+  IdTable() requires(!isView && columnsAreAllocatable &&
+                     std::is_default_constructible_v<Allocator>)
+      : IdTable{NumColumns, Allocator{}} {};
+  explicit IdTable(Allocator allocator)
       requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
 
