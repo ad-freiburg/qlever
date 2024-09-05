@@ -94,8 +94,8 @@ class GroupBy : public Operation {
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,
       std::vector<HashMapAliasInformation> aggregateAliases,
-      std::vector<size_t> groupByCols,
-      std::shared_ptr<LocalVocab> localVocab) const;
+      std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
+      bool singleIdTable) const;
 
   template <size_t OUT_WIDTH>
   void processGroup(const Aggregate& expression,

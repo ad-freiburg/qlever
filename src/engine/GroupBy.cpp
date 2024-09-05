@@ -334,10 +334,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
   } else {
-    if (requestLaziness) {
-      hashMapOptimizationParams =
-          computeHashMapOptimizationMetadata(aggregates);
-    }
+    hashMapOptimizationParams = computeHashMapOptimizationMetadata(aggregates);
     subresult = _subtree->getResult(hashMapOptimizationParams.has_value());
   }
 
@@ -393,9 +390,16 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
         groupByCols.size(), &GroupBy::computeResultLazily, this,
         std::move(subresult), std::move(aggregates),
         std::move(hashMapOptimizationParams).value().aggregateAliases_,
-        std::move(groupByCols), localVocabPointer);
-    return {std::move(generator), resultSortedOn(),
-            std::move(localVocabPointer)};
+        std::move(groupByCols), localVocabPointer, !requestLaziness);
+    if (requestLaziness) {
+      return {std::move(generator), resultSortedOn(),
+              std::move(localVocabPointer)};
+    }
+    // In this case we expect the generator to yield exactly one `IdTable`.
+    for (IdTable& idTable : generator) {
+      return {std::move(idTable), resultSortedOn(),
+              std::move(*localVocabPointer)};
+    }
   }
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = getResultWidth();
@@ -413,8 +417,8 @@ template <size_t NUM_GROUP_COLUMNS>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
-    std::vector<size_t> groupByCols,
-    std::shared_ptr<LocalVocab> localVocab) const {
+    std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
+    bool singleIdTable) const {
   AD_CONTRACT_CHECK(groupByCols.size() == NUM_GROUP_COLUMNS);
   std::vector<const LocalVocab*> vocabs{localVocab.get(),
                                         &subresult->localVocab()};
@@ -470,7 +474,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       }
     }
     lazyGroupBy.processNextBlock(evaluationContext, blockStart, idTable.size());
-    if (!resultTable.empty()) {
+    if (!singleIdTable && !resultTable.empty()) {
       co_yield resultTable;
       resultTable =
           IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
