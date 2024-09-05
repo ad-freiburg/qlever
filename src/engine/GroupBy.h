@@ -89,7 +89,7 @@ class GroupBy : public Operation {
 
   ProtoResult computeResult(bool requestLaziness) override;
 
-  template <size_t NUM_GROUP_COLUMNS>
+  template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,

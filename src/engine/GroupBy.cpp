@@ -387,8 +387,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     auto localVocabPointer =
         std::make_shared<LocalVocab>(std::move(localVocab));
     cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
-        groupByCols.size(), &GroupBy::computeResultLazily, this,
-        std::move(subresult), std::move(aggregates),
+        (std::array{groupByCols.size(), getResultWidth()}),
+        &GroupBy::computeResultLazily, this, std::move(subresult),
+        std::move(aggregates),
         std::move(hashMapOptimizationParams).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
     if (requestLaziness) {
@@ -413,7 +414,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
+template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
@@ -477,19 +478,14 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             resultTable(resultTable.size() - 1, i) =
                 idTable(blockStart, groupByCols[i]);
           }
-          ad_utility::callFixedSize(
-              getResultWidth(),
-              [this, &aggregates, &localVocab, &resultTable, &evaluationContext,
-               blockStart, pos]<int OUT_WIDTH>() {
-                IdTableStatic<OUT_WIDTH> table =
-                    std::move(resultTable).toStatic<OUT_WIDTH>();
-                for (const Aggregate& aggregate : aggregates) {
-                  processGroup<OUT_WIDTH>(
-                      aggregate, evaluationContext, blockStart, pos, &table,
-                      table.size() - 1, aggregate._outCol, localVocab.get());
-                }
-                resultTable = std::move(table).toDynamic();
-              });
+          IdTableStatic<OUT_WIDTH> table =
+              std::move(resultTable).toStatic<OUT_WIDTH>();
+          for (const Aggregate& aggregate : aggregates) {
+            processGroup<OUT_WIDTH>(aggregate, evaluationContext, blockStart,
+                                    pos, &table, table.size() - 1,
+                                    aggregate._outCol, localVocab.get());
+          }
+          resultTable = std::move(table).toDynamic();
         }
 
         // setup for processing the next block
@@ -513,24 +509,17 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     // implicit GROUP BY we have to return a single line as a result, otherwise
     // we can safely abort here.
     if (groupByCols.empty()) {
-      ad_utility::callFixedSize(
-          getResultWidth(),
-          [this, &aggregates, numColumns, &localVocab, &resultTable,
-           &createEvaluationContextForTable]<int OUT_WIDTH>() {
-            IdTableStatic<OUT_WIDTH> table =
-                std::move(resultTable).toStatic<OUT_WIDTH>();
-            IdTable idTable{numColumns,
-                            ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+      IdTableStatic<OUT_WIDTH> table =
+          std::move(resultTable).toStatic<OUT_WIDTH>();
+      IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
 
-            sparqlExpression::EvaluationContext evaluationContext =
-                createEvaluationContextForTable(idTable);
-            for (const Aggregate& aggregate : aggregates) {
-              processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0,
-                                      &table, 0, aggregate._outCol,
-                                      localVocab.get());
-            }
-            resultTable = std::move(table).toDynamic();
-          });
+      sparqlExpression::EvaluationContext evaluationContext =
+          createEvaluationContextForTable(idTable);
+      for (const Aggregate& aggregate : aggregates) {
+        processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0, &table, 0,
+                                aggregate._outCol, localVocab.get());
+      }
+      resultTable = std::move(table).toDynamic();
       co_yield resultTable;
     }
     co_return;
