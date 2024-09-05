@@ -565,6 +565,12 @@ class IdTable {
     std::swap(data()[c1], data()[c2]);
   }
 
+  void deleteColumn(ColumnIndex colIdx) requires isDynamic {
+    AD_CONTRACT_CHECK(colIdx < numColumns());
+    data().erase(data().begin() + colIdx);
+    numColumns_ --;
+  }
+
   // Helper `struct` that stores a pointer to this table and has an `operator()`
   // that can be called with a reference to an `IdTable` and the index of a row
   // and then returns a `row_reference_restricted` to that row. This struct is
