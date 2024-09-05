@@ -19,9 +19,8 @@ LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
       aggregationData_{allocator, aggregateAliases_, NUM_GROUP_COLUMNS} {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      // TODO<RobinTF> replace typename with SupportedAggregates
       std::visit(
-          [&aggregateInfo]<typename T>(T& arg) {
+          [&aggregateInfo]<SupportedAggregates T>(T& arg) {
             if constexpr (std::same_as<typename T::value_type,
                                        GroupConcatAggregationData>) {
               arg.resize(1,
@@ -42,8 +41,7 @@ template <size_t NUM_GROUP_COLUMNS>
 void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      // TODO<RobinTF> replace typename with SupportedAggregates
-      std::visit([]<typename T>(T& arg) { arg.at(0).reset(); },
+      std::visit([]<SupportedAggregates T>(T& arg) { arg.at(0).reset(); },
                  aggregationData_.getAggregationDataVariant(
                      aggregateInfo.aggregateDataIndex_));
     }

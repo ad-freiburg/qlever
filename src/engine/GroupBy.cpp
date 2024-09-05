@@ -985,7 +985,7 @@ bool GroupBy::hasAnyType(const auto& expr) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapAggregateTypeWithData>
 GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using enum GroupBy::HashMapAggregateType;
+  using enum HashMapAggregateType;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
@@ -1119,9 +1119,8 @@ GroupBy::getHashMapAggregationResults(
 
 // _____________________________________________________________________________
 void GroupBy::substituteGroupVariable(
-    const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-    IdTable* resultTable, size_t beginIndex, size_t count,
-    size_t columnIndex) const {
+    const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
+    size_t beginIndex, size_t count, size_t columnIndex) const {
   decltype(auto) groupValues =
       resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
@@ -1171,11 +1170,6 @@ GroupBy::substituteAllAggregates(
 }
 
 // _____________________________________________________________________________
-template <typename A>
-concept SupportedAggregates =
-    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
-
-// _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
 std::vector<size_t>
 GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
@@ -1207,7 +1201,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   auto resizeVectors =
       []<SupportedAggregates T>(
           T& arg, size_t numberOfGroups,
-          [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData& info) {
+          [[maybe_unused]] const HashMapAggregateTypeWithData& info) {
         if constexpr (std::same_as<typename T::value_type,
                                    GroupConcatAggregationData>) {
           arg.resize(numberOfGroups,

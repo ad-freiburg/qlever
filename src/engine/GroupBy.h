@@ -518,3 +518,8 @@ class GroupBy : public Operation {
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
 };
+
+// _____________________________________________________________________________
+template <typename A>
+concept SupportedAggregates =
+    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
