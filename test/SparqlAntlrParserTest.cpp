@@ -1000,6 +1000,12 @@ TEST(SparqlParser, GroupGraphPattern) {
       m::GraphPattern(m::Service(Iri{"<ep>"}, {Var{"?s"}, Var{"?o"}},
                                  "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }")));
 
+  expectGraphPattern(
+      "{ SERVICE SILENT <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
+      m::GraphPattern(m::Service(Iri{"<ep>"}, {Var{"?s"}, Var{"?o"}},
+                                 "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }", "",
+                                 true)));
+
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
 

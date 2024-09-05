@@ -191,7 +191,7 @@ TEST_F(ServiceTest, computeResult) {
           boost::beast::http::status status = boost::beast::http::status::ok,
           std::string contentType = "application/sparql-results+json") {
         AD_EXPECT_THROW_WITH_MESSAGE(
-            runComputeResult(result, status, contentType),
+            runComputeResult(result, status, contentType, false),
             ::testing::HasSubstr(errorMsg));
         EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
       };
