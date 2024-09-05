@@ -30,12 +30,11 @@
 class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
-  using GetResultFunction =
-      std::function<cppcoro::generator<std::span<std::byte>>(
-          const ad_utility::httpUtils::Url&,
-          ad_utility::SharedCancellationHandle handle,
-          const boost::beast::http::verb&, std::string_view, std::string_view,
-          std::string_view)>;
+  using GetResultFunction = std::function<HttpOrHttpsResponse(
+      const ad_utility::httpUtils::Url&,
+      ad_utility::SharedCancellationHandle handle,
+      const boost::beast::http::verb&, std::string_view, std::string_view,
+      std::string_view)>;
 
  private:
   // The parsed SERVICE clause.
