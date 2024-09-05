@@ -796,6 +796,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
     const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) const
     -> MetadataAndBlocks::FirstAndLastTriple {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
+  // TODO<joka921> These might be empty for local vocab entries etc,
+  // so this function here has to return a `std::optional`.
   AD_CONTRACT_CHECK(!relevantBlocks.empty());
 
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
