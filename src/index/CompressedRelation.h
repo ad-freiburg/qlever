@@ -21,6 +21,7 @@
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
 #include "util/Serializer/SerializeVector.h"
+#include "util/Serializer/SerializeOptional.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
@@ -94,6 +95,15 @@ struct CompressedBlockMetadata {
   PermutedTriple firstTriple_;
   PermutedTriple lastTriple_;
 
+  // If there are only few graphs contained at all in this block, then
+  // the IDs of those graphs are stored here. If there are many different graphs
+  // inside this block, `std::nullopt` is stored.
+  std::optional<std::vector<Id>> containedGraphs_;
+  // True if and only if this block contains (adjacent) triples which only
+  // differ in their Graph ID. Those have to be filtered out when scanning the
+  // blocks.
+  bool containsDuplicatesWithDifferentGraphs_;
+
   // Two of these are equal if all members are equal.
   bool operator==(const CompressedBlockMetadata&) const = default;
 };
@@ -110,6 +120,8 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
+  serializer | arg.containedGraphs_;
+  serializer | arg.containsDuplicatesWithDifferentGraphs_;
 }
 
 // The metadata of a whole compressed "relation", where relation refers to a
@@ -557,10 +569,12 @@ class CompressedRelationReader {
   // are yielded, else all columns are yielded. The blocks are yielded
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
+
+  using BlockGraphFilter = std::function<void(IdTable&, const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle,
-      LimitOffsetClause& limitOffset) const;
+      LimitOffsetClause& limitOffset, BlockGraphFilter) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`

@@ -18,12 +18,12 @@ using std::string;
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTripleSimple& triple)
+                     const SparqlTripleSimple& triple, Graphs graphsToFilter)
     : Operation(qec),
       permutation_(permutation),
       subject_(triple.s_),
       predicate_(triple.p_),
-      object_(triple.o_),
+      object_(triple.o_), graphsToFilter_{std::move(graphsToFilter)},
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
@@ -51,8 +51,8 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
 
 // _____________________________________________________________________________
 IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-                     const SparqlTriple& triple)
-    : IndexScan(qec, permutation, triple.getSimple()) {}
+                     const SparqlTriple& triple, Graphs graphsToFilter)
+    : IndexScan(qec, permutation, triple.getSimple(), std::move(graphsToFilter)) {}
 
 // _____________________________________________________________________________
 string IndexScan::getCacheKeyImpl() const {
@@ -261,7 +261,7 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 // ___________________________________________________________________________
 ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
   auto permutedTriple = getPermutedTriple();
-  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
+  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2], graphsToFilter_};
 }
 
 // ___________________________________________________________________________

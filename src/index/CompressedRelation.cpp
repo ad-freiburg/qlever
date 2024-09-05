@@ -8,6 +8,7 @@
 
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
+#include "engine/Engine.h"
 #include "global/RuntimeParameters.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -53,7 +54,7 @@ CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
     CancellationHandle cancellationHandle,
-    LimitOffsetClause& limitOffset) const {
+    LimitOffsetClause& limitOffset, BlockGraphFilter blockGraphFilter) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -85,7 +86,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     CompressedBlock compressedBlock =
         readCompressedBlockFromFile(block, columnIndices);
     lock.unlock();
-    return std::pair{myIndex, decompressBlock(compressedBlock, block.numRows_)};
+    auto decompressedBlock = decompressBlock(compressedBlock, block.numRows_);
+    blockGraphFilter(decompressedBlock, block);
+    return std::pair{myIndex, std::move(decompressedBlock)};
   };
   const size_t numThreads =
       RuntimeParameters().get<"lazy-index-scan-num-threads">();
@@ -141,6 +144,27 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
 
+  // TODO<joka921> This reads the Graph column twice for `GRAPH` clauses with a variable,
+  // this can possibly be avoided.
+  if (scanSpec.graphsToFilter().has_value()) {
+    columnIndices.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
+  }
+
+  auto filterDuplicatesAndGraphIds = [&columnIndices, &graphs = scanSpec.graphsToFilter()](IdTable& block, const CompressedBlockMetadata& metadata) {
+    if (graphs.has_value()) {
+      size_t graphColumn = columnIndices.size() - 1;
+      // TODO<joka921> We could use column-based algorithms here for higher efficiency.
+      auto removedRange = std::ranges::remove_if(block, [&gs = graphs.value()](Id id){return !gs.contains(id);}, [graphColumn](const auto& row){return row[graphColumn];});
+      block.erase(removedRange.begin(), block.end());
+      block.deleteColumn(block.numColumns() - 1);
+    }
+    if (!metadata.containsDuplicatesWithDifferentGraphs_) {
+      return;
+    }
+    auto [endUnique, _] = std::ranges::unique(block);
+    block.erase(endUnique, block.end());
+  };
+
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),
                                               columnIndices);
@@ -150,6 +174,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   if (beginBlock < endBlock) {
     auto block = getIncompleteBlock(beginBlock);
+    filterDuplicatesAndGraphIds(block, *beginBlock);
     pruneBlock(block, limitOffset);
     details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
@@ -162,12 +187,13 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     // inside the `getIncompleteBlock` lambda.
     auto blockGenerator =
         asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
-                                    cancellationHandle, limitOffset);
+                                    cancellationHandle, limitOffset, filterDuplicatesAndGraphIds);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
     }
     auto lastBlock = getIncompleteBlock(endBlock - 1);
+    filterDuplicatesAndGraphIds(lastBlock, *(beginBlock - 1));
     pruneBlock(lastBlock, limitOffset);
     if (!lastBlock.empty()) {
       details.numElementsYielded_ += lastBlock.numRows();
@@ -689,11 +715,35 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
+
+    //TODO<joka921> Comment the following;
+    // Setup the metadata of the contained Graphs.
+    // TODO<joka921> Change the unit tests, s.t. the following can be a Check.
+    bool hasDuplicates = false;
+    std::optional<std::vector<Id>> containedGraphs;
+    if
+    (buf->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
+      using C = ColumnIndex;
+      auto onlySPO = buf->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
+      size_t numDistinct = Engine::countDistinct(onlySPO, []() {});
+      hasDuplicates = numDistinct != buf->numRows();
+
+      std::vector<Id> graphColumn;
+      std::ranges::copy(buf->getColumn(ADDITIONAL_COLUMN_GRAPH_ID),
+                        std::back_inserter(graphColumn));
+      std::ranges::sort(graphColumn);
+      auto [beginOfUnique, _] = std::ranges::unique(graphColumn);
+      graphColumn.erase(beginOfUnique, graphColumn.end());
+      // TODO<joka921> Proper constant
+      containedGraphs = graphColumn.size() < 20
+                                 ? std::optional{std::move(graphColumn)}
+                                 : std::nullopt;
+    }
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
                                 {first[0], first[1], first[2]},
-                                {last[0], last[1], last[2]}});
+                                {last[0], last[1], last[2]}, std::move(containedGraphs), hasDuplicates});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(buf));
     }
