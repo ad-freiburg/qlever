@@ -34,6 +34,7 @@ ScanSpecificationAsTripleComponent::toScanSpecification(
 
   ScanSpecification::Graphs graphsToFilter = std::nullopt;
   if (graphsToFilter_.has_value()) {
+    graphsToFilter.emplace();
     for (const auto& graph : graphsToFilter_.value()) {
       graphsToFilter->insert(getId(graph).value());
     }

@@ -78,6 +78,10 @@ string IndexScan::getCacheKeyImpl() const {
     os << " Additional Columns: ";
     os << absl::StrJoin(additionalColumns(), " ");
   }
+  if (graphsToFilter_.has_value()) {
+    os << "\nFiltered by Graphs:";
+    os << ad_utility::lazyStrJoin(graphsToFilter_.value() | std::views::transform(&TripleComponent::toRdfLiteral), " ");
+  }
   return std::move(os).str();
 }
 

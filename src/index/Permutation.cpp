@@ -130,6 +130,9 @@ std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
       std::nullopt};
 
   result.firstAndLastTriple_ = reader().getFirstAndLastTriple(result);
+  if (!result.firstAndLastTriple_.has_value()) {
+    return std::nullopt;
+  }
   return result;
 }
 
