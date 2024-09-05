@@ -123,11 +123,12 @@ TEST_F(ServiceTest, basicMethods) {
   // body (empty in this case because this test is not about evaluating a
   // query). The fourth argument plays no role in our test (and isn't really
   // used in `parsedQuery::Service` either).
-  parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
-                                           Iri{"<http://localhorst/api>"},
-                                           "PREFIX doof: <http://doof.org>",
-                                           "{ }",
-                                           false};
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
   // Create an operation from this.
   Service serviceOp{testQec, parsedServiceClause};
 
@@ -154,14 +155,15 @@ TEST_F(ServiceTest, basicMethods) {
 // Tests that `computeResult` behaves as expected.
 TEST_F(ServiceTest, computeResult) {
   // Construct a parsed SERVICE clause by hand, see `basicMethods` test above.
-  parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
-                                           Iri{"<http://localhorst/api>"},
-                                           "PREFIX doof: <http://doof.org>",
-                                           "{ }",
-                                           false};
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
   parsedQuery::Service parsedServiceClauseSilent{
       {Variable{"?x"}, Variable{"?y"}},
-      Iri{"<http://localhorst/api>"},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
       "PREFIX doof: <http://doof.org>",
       "{ }",
       true};
@@ -337,11 +339,12 @@ TEST_F(ServiceTest, computeResult) {
 }
 
 TEST_F(ServiceTest, getCacheKey) {
-  parsedQuery::Service parsedServiceClause{{Variable{"?x"}, Variable{"?y"}},
-                                           Iri{"<http://localhorst/api>"},
-                                           "PREFIX doof: <http://doof.org>",
-                                           "{ }",
-                                           false};
+  parsedQuery::Service parsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      false};
 
   // The cacheKey of the Service Operation has to depend on the cacheKey
   // of the siblingTree, as it might alter the Service Query.

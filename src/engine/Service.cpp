@@ -35,7 +35,7 @@ std::string Service::getCacheKeyImpl() const {
   if (parsedServiceClause_.silent_) {
     os << "SILENT ";
   }
-  os << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
+  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
      << parsedServiceClause_.graphPatternAsString_ << "\n";
   if (siblingTree_ != nullptr) {
@@ -47,8 +47,9 @@ std::string Service::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 std::string Service::getDescriptor() const {
-  return absl::StrCat("Service with IRI ",
-                      parsedServiceClause_.serviceIri_.toSparql());
+  return absl::StrCat(
+      "Service with IRI ",
+      parsedServiceClause_.serviceIri_.toStringRepresentation());
 }
 
 // ____________________________________________________________________________
@@ -117,14 +118,11 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 }
 
+// ____________________________________________________________________________
 ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
   // Get the URL of the SPARQL endpoint.
-  std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
-  AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
-                    serviceIriString.ends_with(">"));
-  serviceIriString.remove_prefix(1);
-  serviceIriString.remove_suffix(1);
-  ad_utility::httpUtils::Url serviceUrl{serviceIriString};
+  ad_utility::httpUtils::Url serviceUrl{
+      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(

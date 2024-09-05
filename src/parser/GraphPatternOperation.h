@@ -48,7 +48,7 @@ struct Service {
   // The visible variables of the service clause.
   std::vector<Variable> visibleVariables_;
   // The URL of the service clause.
-  Iri serviceIri_;
+  TripleComponent::Iri serviceIri_;
   // The prologue (prefix definitions).
   std::string prologue_;
   // The body of the SPARQL query for the remote endpoint.

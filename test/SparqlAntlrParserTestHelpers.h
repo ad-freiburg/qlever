@@ -496,7 +496,8 @@ inline auto InlineData = [](const std::vector<::Variable>& vars,
 };
 
 inline auto Service =
-    [](const ::Iri& iri, const std::vector<::Variable>& variables,
+    [](const TripleComponent::Iri& iri,
+       const std::vector<::Variable>& variables,
        const std::string& graphPattern, const std::string& prologue = "",
        bool silent = false) -> Matcher<const p::GraphPatternOperation&> {
   auto serviceMatcher = testing::AllOf(

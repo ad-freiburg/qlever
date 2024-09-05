@@ -993,18 +993,19 @@ TEST(SparqlParser, GroupGraphPattern) {
           m::InlineData({Var{"?a"}}, {{iri("<a>")}, {iri("<b>")}})));
   expectGraphPattern("{ SERVICE <endpoint> { ?s ?p ?o } }",
                      m::GraphPattern(m::Service(
-                         Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
-                         "{ ?s ?p ?o }")));
+                         TripleComponent::Iri::fromIriref("<endpoint>"),
+                         {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }")));
   expectGraphPattern(
       "{ SERVICE <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
-      m::GraphPattern(m::Service(Iri{"<ep>"}, {Var{"?s"}, Var{"?o"}},
+      m::GraphPattern(m::Service(TripleComponent::Iri::fromIriref("<ep>"),
+                                 {Var{"?s"}, Var{"?o"}},
                                  "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }")));
 
   expectGraphPattern(
       "{ SERVICE SILENT <ep> { { SELECT ?s ?o WHERE { ?s ?p ?o } } } }",
-      m::GraphPattern(m::Service(Iri{"<ep>"}, {Var{"?s"}, Var{"?o"}},
-                                 "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }", "",
-                                 true)));
+      m::GraphPattern(m::Service(
+          TripleComponent::Iri::fromIriref("<ep>"), {Var{"?s"}, Var{"?o"}},
+          "{ { SELECT ?s ?o WHERE { ?s ?p ?o } } }", "", true)));
 
   // SERVICE with a variable endpoint is not yet supported.
   expectGroupGraphPatternFails("{ SERVICE ?endpoint { ?s ?p ?o } }");
@@ -1293,8 +1294,9 @@ TEST(SparqlParser, Query) {
       "SELECT * WHERE { SERVICE <endpoint> { ?s ?p ?o } }",
       m::SelectQuery(m::AsteriskSelect(),
                      m::GraphPattern(m::Service(
-                         Iri{"<endpoint>"}, {Var{"?s"}, Var{"?p"}, Var{"?o"}},
-                         "{ ?s ?p ?o }", "PREFIX doof: <http://doof.org/>"))));
+                         TripleComponent::Iri::fromIriref("<endpoint>"),
+                         {Var{"?s"}, Var{"?p"}, Var{"?o"}}, "{ ?s ?p ?o }",
+                         "PREFIX doof: <http://doof.org/>"))));
 
   // Describe and Ask Queries are not supported.
   expectQueryFails("DESCRIBE *");

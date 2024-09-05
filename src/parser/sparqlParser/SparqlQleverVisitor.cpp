@@ -720,7 +720,9 @@ parsedQuery::Service Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
   }
   AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
-  Iri serviceIri = std::get<Iri>(varOrIri);
+  auto serviceIri =
+      TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
+
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
