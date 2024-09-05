@@ -1066,13 +1066,19 @@ GroupBy::getHashMapAggregationResults(
   using B =
       HashMapAggregationData<NUM_GROUP_COLUMNS>::template ArrayOrVector<Id>;
   for (size_t rowIdx = beginIndex; rowIdx < endIndex; ++rowIdx) {
-    B mapKey;
-    resizeIfVector(mapKey, aggregationData.numOfGroupedColumns_);
+    size_t vectorIdx;
+    // Special case for lazy consumer where the hashmap is not used
+    if (aggregationData.getNumberOfGroups() == 0) {
+      vectorIdx = 0;
+    } else {
+      B mapKey;
+      resizeIfVector(mapKey, aggregationData.numOfGroupedColumns_);
 
-    for (size_t idx = 0; idx < mapKey.size(); ++idx) {
-      mapKey.at(idx) = resultTable->getColumn(idx)[rowIdx];
+      for (size_t idx = 0; idx < mapKey.size(); ++idx) {
+        mapKey.at(idx) = resultTable->getColumn(idx)[rowIdx];
+      }
+      vectorIdx = aggregationData.getIndex(mapKey);
     }
-    auto vectorIdx = aggregationData.getIndex(mapKey);
 
     auto visitor = [&aggregateResults, vectorIdx, rowIdx, beginIndex,
                     localVocab](auto& aggregateDataVariant) {
