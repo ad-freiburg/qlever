@@ -33,7 +33,8 @@ class LazyGroupBy {
   LazyGroupBy& operator=(LazyGroupBy&&) = delete;
 
   void commitRow(IdTable& resultTable,
-                 sparqlExpression::EvaluationContext& evaluationContext);
+                 sparqlExpression::EvaluationContext& evaluationContext,
+                 const GroupBy& groupBy);
 
   void resetAggregationData();
 

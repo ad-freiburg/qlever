@@ -370,7 +370,7 @@ class GroupBy : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
@@ -380,7 +380,7 @@ class GroupBy : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
@@ -418,11 +418,12 @@ class GroupBy : public Operation {
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
   template <size_t NUM_GROUP_COLUMNS>
-  void substituteAllAggregates(
+  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+  substituteAllAggregates(
       std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
       size_t endIndex,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      IdTable* resultTable, LocalVocab* localVocab);
+      IdTable* resultTable, LocalVocab* localVocab) const;
 
   // Check if an expression is of a certain type.
   template <class T>

@@ -59,119 +59,19 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::initializeAggregationData() {
 template <size_t NUM_GROUP_COLUMNS>
 void LazyGroupBy<NUM_GROUP_COLUMNS>::commitRow(
     IdTable& resultTable,
-    sparqlExpression::EvaluationContext& evaluationContext) {
+    sparqlExpression::EvaluationContext& evaluationContext,
+    const GroupBy& groupBy) {
   resultTable.emplace_back();
   for (size_t rowIndex = 0; rowIndex < groupByCols_.size(); ++rowIndex) {
     resultTable.back()[rowIndex] = currentGroupBlock_.at(rowIndex).second;
   }
 
+  evaluationContext._beginIndex = resultTable.size() - 1;
+  evaluationContext._endIndex = resultTable.size();
+
   for (auto& alias : aggregateAliases_) {
-    auto& info = alias.aggregateInfo_;
-
-    // Either:
-    // - One of the variables occurs at the top. This can be copied as the
-    // result
-    // - There is only one aggregate, and it appears at the top. No
-    // substitutions necessary, can evaluate aggregate and copy results
-    // - Possibly multiple aggregates and occurrences of grouped variables.
-    // All have to be substituted away before evaluation
-
-    auto substitutions = alias.groupedVariables_;
-    auto topLevelGroupedVariable = std::ranges::find_if(
-        substitutions, [](GroupBy::HashMapGroupedVariableInformation& val) {
-          return std::get_if<GroupBy::OccurAsRoot>(&val.occurrences_);
-        });
-
-    if (topLevelGroupedVariable != substitutions.end()) {
-      AD_CORRECTNESS_CHECK(!groupByCols_.empty());
-      // If the aggregate is at the top of the alias, e.g. `SELECT (?a as ?x)
-      // WHERE {...} GROUP BY ?a`, we can copy values directly from the column
-      // of the grouped variable
-      resultTable.back()[alias.outCol_] =
-          currentGroupBlock_.at(topLevelGroupedVariable->resultColumnIndex_)
-              .second;
-
-      evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-          sparqlExpression::copyExpressionResult(
-              sparqlExpression::ExpressionResult{
-                  resultTable.back()[alias.outCol_]});
-    } else if (info.size() == 1 && !info.at(0).parentAndIndex_.has_value()) {
-      // Only one aggregate, and it is at the top of the alias, e.g.
-      // `(AVG(?x) as ?y)`. The grouped by variable cannot occur inside
-      // an aggregate, hence we don't need to substitute anything here
-      auto& aggregate = info.at(0);
-
-      resultTable.back()[alias.outCol_] =
-          calculateAggregateResult(aggregate.aggregateDataIndex_);
-
-      // Copy the result so that future aliases may reuse it
-      evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-          sparqlExpression::copyExpressionResult(
-              sparqlExpression::ExpressionResult{
-                  resultTable.back()[alias.outCol_]});
-    } else {
-      for (const auto& substitution : substitutions) {
-        const auto& occurrences =
-            get<std::vector<GroupBy::ParentAndChildIndex>>(
-                substitution.occurrences_);
-        substituteGroupVariable(
-            occurrences, resultTable.back()[substitution.resultColumnIndex_]);
-      }
-
-      // Substitute in the results of all aggregates contained in the
-      // expression of the current alias, if `info` is non-empty.
-      // Substitute in the results of all aggregates of `info`.
-      std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
-          originalChildren;
-      originalChildren.reserve(info.size());
-      for (auto& aggregate : info) {
-        // Substitute the resulting vector as a literal
-        auto newExpression = std::make_unique<sparqlExpression::IdExpression>(
-            calculateAggregateResult(aggregate.aggregateDataIndex_));
-
-        AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
-        auto parentAndIndex = aggregate.parentAndIndex_.value();
-        originalChildren.push_back(std::move(
-            parentAndIndex.parent_->children()[parentAndIndex.nThChild_]));
-        parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                             std::move(newExpression));
-      }
-
-      // Evaluate top-level alias expression
-      sparqlExpression::ExpressionResult expressionResult =
-          alias.expr_.getPimpl()->evaluate(&evaluationContext);
-
-      // Restore original children
-      for (size_t i = 0; i < info.size(); ++i) {
-        auto& aggregate = info.at(i);
-        auto parentAndIndex = aggregate.parentAndIndex_.value();
-        parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                             std::move(originalChildren.at(i)));
-      }
-
-      // Copy the result so that future aliases may reuse it
-      evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
-          sparqlExpression::copyExpressionResult(expressionResult);
-
-      // Extract values
-      resultTable.back()[alias.outCol_] = std::visit(
-          [this]<sparqlExpression::SingleExpressionResult T>(
-              T&& singleResult) -> Id {
-            constexpr static bool isStrongId = std::is_same_v<T, Id>;
-            AD_CONTRACT_CHECK(sparqlExpression::isConstantResult<T>);
-            if constexpr (isStrongId) {
-              return singleResult;
-            } else if constexpr (sparqlExpression::isConstantResult<T>) {
-              return sparqlExpression::detail::constantExpressionResultToId(
-                  AD_FWD(singleResult), localVocab_);
-            } else {
-              // This should never happen since aggregates always return
-              // constants.
-              AD_FAIL();
-            }
-          },
-          std::move(expressionResult));
-    }
+    groupBy.evaluateAlias(alias, &resultTable, evaluationContext,
+                          aggregationData_, &localVocab_);
   }
   resetAggregationData();
 }

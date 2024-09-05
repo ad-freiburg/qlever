@@ -458,7 +458,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       checkCancellation();
       if (!lazyGroupBy.rowMatchesCurrentBlock(idTable, pos)) {
         lazyGroupBy.processNextBlock(evaluationContext, blockStart, pos);
-        lazyGroupBy.commitRow(resultTable, evaluationContext);
+        lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
 
         // setup for processing the next block
         blockStart = pos;
@@ -509,7 +509,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   sparqlExpression::EvaluationContext evaluationContext =
       createEvaluationContextForTable(idTable);
-  lazyGroupBy.commitRow(resultTable, evaluationContext);
+  lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
   co_yield resultTable;
 }
 
@@ -1047,7 +1047,7 @@ GroupBy::getHashMapAggregationResults(
     IdTable* resultTable,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
       getExecutionContext()->getAllocator());
   aggregateResults.resize(endIndex - beginIndex);
@@ -1102,11 +1102,15 @@ void GroupBy::substituteGroupVariable(
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
-void GroupBy::substituteAllAggregates(
+std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+GroupBy::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    IdTable* resultTable, LocalVocab* localVocab) {
+    IdTable* resultTable, LocalVocab* localVocab) const {
+  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+      originalChildren;
+  originalChildren.reserve(info.size());
   // Substitute in the results of all aggregates of `info`.
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
@@ -1119,9 +1123,12 @@ void GroupBy::substituteAllAggregates(
 
     AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
     auto parentAndIndex = aggregate.parentAndIndex_.value();
+    originalChildren.push_back(std::move(
+        parentAndIndex.parent_->children()[parentAndIndex.nThChild_]));
     parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
                                          std::move(newExpression));
   }
+  return originalChildren;
 }
 
 // _____________________________________________________________________________
@@ -1222,7 +1229,7 @@ void GroupBy::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   auto& info = alias.aggregateInfo_;
 
   // Either:
@@ -1290,13 +1297,22 @@ void GroupBy::evaluateAlias(
 
     // Substitute in the results of all aggregates contained in the
     // expression of the current alias, if `info` is non-empty.
-    substituteAllAggregates(info, evaluationContext._beginIndex,
-                            evaluationContext._endIndex, aggregationData,
-                            result, localVocab);
+    std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
+        originalChildren = substituteAllAggregates(
+            info, evaluationContext._beginIndex, evaluationContext._endIndex,
+            aggregationData, result, localVocab);
 
     // Evaluate top-level alias expression
     sparqlExpression::ExpressionResult expressionResult =
         alias.expr_.getPimpl()->evaluate(&evaluationContext);
+
+    // Restore original children
+    for (size_t i = 0; i < info.size(); ++i) {
+      auto& aggregate = info.at(i);
+      auto parentAndIndex = aggregate.parentAndIndex_.value();
+      parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
+                                           std::move(originalChildren.at(i)));
+    }
 
     // Copy the result so that future aliases may reuse it
     evaluationContext._previousResultsFromSameGroup.at(alias.outCol_) =
