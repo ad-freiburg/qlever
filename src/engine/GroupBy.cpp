@@ -24,7 +24,7 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
-using sparqlExpression::SupportedAggregates;
+using groupBy::detail::VectorOfAggregationData;
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -1029,7 +1029,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   }
 
   auto resizeVectors =
-      []<SupportedAggregates T>(
+      []<VectorOfAggregationData T>(
           T& arg, size_t numberOfGroups,
           [[maybe_unused]] const HashMapAggregateTypeWithData& info) {
         if constexpr (std::same_as<typename T::value_type,
@@ -1049,7 +1049,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
 
     std::visit(
         [&resizeVectors, &aggregationTypeWithData,
-         numberOfGroups]<SupportedAggregates T>(T& arg) {
+         numberOfGroups]<VectorOfAggregationData T>(T& arg) {
           resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
@@ -1240,8 +1240,8 @@ static constexpr auto makeProcessGroupsVisitor =
        const std::vector<size_t>& hashEntries) {
       return [blockSize, evaluationContext,
               &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                            SupportedAggregates A>(T&& singleResult,
-                                                   A& aggregationDataVector) {
+                            VectorOfAggregationData A>(
+                 T&& singleResult, A& aggregationDataVector) {
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
