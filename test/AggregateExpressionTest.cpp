@@ -10,6 +10,7 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -239,4 +240,18 @@ TEST(AggregateExpression, CountStarSimpleMembers) {
   EXPECT_THAT(m->children(), ::testing::IsEmpty());
   EXPECT_THAT(m->getUnaggregatedVariables(), ::testing::IsEmpty());
   EXPECT_TRUE(m->isAggregate());
+}
+
+TEST(AggregateExpression, SampleExpressionSimpleMembers) {
+  using namespace sparqlExpression;
+  auto makeSample = [](ExpressionResult result) {
+    return std::make_unique<SampleExpression>(
+        false, std::make_unique<SingleUseExpression>(std::move(result)));
+  };
+
+  auto testSample = [&](ExpressionResult input, ExpressionResult expected) {
+    TestContext testContext;
+    auto result = makeSample(std::move(input))->evaluate(&testContext.context);
+    EXPECT_EQ(result, expected);
+  };
 }

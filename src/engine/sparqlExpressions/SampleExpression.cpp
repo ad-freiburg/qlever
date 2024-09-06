@@ -1,9 +1,6 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
-
-//
-// Created by johannes on 15.09.21.
-//
+//  Copyright 2021, University of Freiburg,
+//                  Chair of Algorithms and Data Structures.
+//  Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #include "./SampleExpression.h"
 
