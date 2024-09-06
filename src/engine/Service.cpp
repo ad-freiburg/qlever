@@ -16,7 +16,6 @@
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Views.h"
 #include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
@@ -32,8 +31,11 @@ Service::Service(QueryExecutionContext* qec,
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
   std::ostringstream os;
-  // TODO: This duplicates code in GraphPatternOperation.cpp .
-  os << "SERVICE " << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
+  os << "SERVICE ";
+  if (parsedServiceClause_.silent_) {
+    os << "SILENT ";
+  }
+  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
      << parsedServiceClause_.graphPatternAsString_ << "\n";
   if (siblingTree_ != nullptr) {
@@ -45,8 +47,9 @@ std::string Service::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 std::string Service::getDescriptor() const {
-  return absl::StrCat("Service with IRI ",
-                      parsedServiceClause_.serviceIri_.toSparql());
+  return absl::StrCat(
+      "Service with IRI ",
+      parsedServiceClause_.serviceIri_.toStringRepresentation());
 }
 
 // ____________________________________________________________________________
@@ -91,14 +94,6 @@ size_t Service::getCostEstimate() {
 
 // ____________________________________________________________________________
 ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
-  // Get the URL of the SPARQL endpoint.
-  std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
-  AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
-                    serviceIriString.ends_with(">"));
-  serviceIriString.remove_prefix(1);
-  serviceIriString.remove_suffix(1);
-  ad_utility::httpUtils::Url serviceUrl{serviceIriString};
-
   // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
     auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
@@ -106,6 +101,28 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
         "{\n" + valuesClause.value() + '\n' +
         parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
   }
+
+  try {
+    return computeResultImpl(requestLaziness);
+  } catch (const ad_utility::CancellationException&) {
+    throw;
+  } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+    throw;
+  } catch (const std::exception&) {
+    // if the `SILENT` keyword is set in the service clause, catch the error and
+    // return a neutral Element.
+    if (parsedServiceClause_.silent_) {
+      return makeNeutralElementResultForSilentFail();
+    }
+    throw;
+  }
+}
+
+// ____________________________________________________________________________
+ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+  // Get the URL of the SPARQL endpoint.
+  ad_utility::httpUtils::Url serviceUrl{
+      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
@@ -147,7 +164,6 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-
   if (response.contentType_ != "application/sparql-results+json") {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
@@ -185,8 +201,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   }
 
   // Set basic properties of the result table.
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   LocalVocab localVocab{};
   // Fill the result table using the `writeJsonResult` method below.
   size_t resWidth = getResultWidth();
@@ -325,4 +340,14 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
     throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
   }
   return tc;
+}
+
+// ____________________________________________________________________________
+ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  idTable.emplace_back();
+  for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
+    idTable(0, colIdx) = Id::makeUndefined();
+  }
+  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }
