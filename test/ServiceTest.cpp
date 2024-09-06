@@ -6,11 +6,15 @@
 #include <gtest/gtest.h>
 
 #include <ctre-unicode.hpp>
+#include <exception>
 #include <regex>
 
 #include "engine/Service.h"
 #include "global/RuntimeParameters.h"
+#include "gmock/gmock.h"
 #include "parser/GraphPatternOperation.h"
+#include "util/AllocatorWithLimit.h"
+#include "util/CancellationHandle.h"
 #include "util/GTestHelpers.h"
 #include "util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
@@ -48,8 +52,9 @@ class ServiceTest : public ::testing::Test {
       [](std::string_view expectedUrl, std::string_view expectedSparqlQuery,
          std::string predefinedResult,
          boost::beast::http::status status = boost::beast::http::status::ok,
-         std::string contentType =
-             "application/sparql-results+json") -> Service::GetResultFunction {
+         std::string contentType = "application/sparql-results+json",
+         std::exception_ptr mockException =
+             nullptr) -> Service::GetResultFunction {
     return [=](const ad_utility::httpUtils::Url& url,
                ad_utility::SharedCancellationHandle,
                const boost::beast::http::verb& method,
@@ -73,6 +78,11 @@ class ServiceTest : public ::testing::Test {
       std::string whitespaceNormalizedPostData =
           std::regex_replace(std::string{postData}, std::regex{"\\s+"}, " ");
       EXPECT_EQ(whitespaceNormalizedPostData, expectedSparqlQuery);
+
+      if (mockException) {
+        std::rethrow_exception(mockException);
+      }
+
       auto body =
           [](std::string result) -> cppcoro::generator<std::span<std::byte>> {
         // Randomly slice the string to make tests more robust.
@@ -226,6 +236,33 @@ TEST_F(ServiceTest, computeResult) {
       "{\"head\": {\"vars\": [1, 2, 3]},"
       "\"results\": {\"bindings\": {}}}",
       "JSON result does not have the expected structure.");
+
+  // CHECK 1b: Even if the SILENT-keyword is set, throw local errors.
+  Service serviceSilent{
+      testQec, parsedServiceClauseSilent,
+      getResultFunctionFactory(
+          expectedUrl, expectedSparqlQuery, "{}",
+          boost::beast::http::status::ok, "application/sparql-results+json",
+          std::make_exception_ptr(
+              ad_utility::CancellationException("Mock Cancellation")))};
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      serviceSilent.computeResultOnlyForTesting(),
+      ::testing::HasSubstr("Mock Cancellation"),
+      ad_utility::CancellationException);
+
+  Service serviceSilent2{
+      testQec, parsedServiceClauseSilent,
+      getResultFunctionFactory(
+          expectedUrl, expectedSparqlQuery, "{}",
+          boost::beast::http::status::ok, "application/sparql-results+json",
+          std::make_exception_ptr(
+              ad_utility::detail::AllocationExceedsLimitException(2_B, 1_B)))};
+
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      serviceSilent2.computeResultOnlyForTesting(),
+      ::testing::HasSubstr("Tried to allocate"),
+      ad_utility::detail::AllocationExceedsLimitException);
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong
   // order) -> an exception should be thrown.
