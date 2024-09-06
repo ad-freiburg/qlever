@@ -509,6 +509,8 @@ class GroupBy : public Operation {
 };
 
 // _____________________________________________________________________________
+namespace sparqlExpression {
 template <typename A>
 concept SupportedAggregates =
     ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
+}

@@ -24,6 +24,8 @@
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
+using sparqlExpression::SupportedAggregates;
+
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
                  std::vector<Alias> aliases,
