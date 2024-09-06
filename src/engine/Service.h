@@ -104,11 +104,17 @@ class Service : public Operation {
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
-  // Compute the result using `getResultFunction_`.
+  // Compute the result using `getResultFunction_` and the siblingTree.
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Actually compute the result for the function above.
+  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
+
+  // Create result for silent fail.
+  ProtoResult makeNeutralElementResultForSilentFail() const;
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.

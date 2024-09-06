@@ -1392,11 +1392,14 @@ TEST(ExportQueryExecutionTrees, convertGeneratorForChunkedTransfer) {
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(true))));
-  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"), HasSubstr("proper exception")));
+  EXPECT_THAT(consume(std::move(res)),
+              AllOf(HasSubstr("!!!!>># An error has occurred"),
+                    HasSubstr("proper exception")));
 
   EXPECT_NO_THROW((
       res = ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
           throwLate(false))));
-  EXPECT_THAT(consume(std::move(res)), AllOf(HasSubstr("!!!!>># An error has occurred"),
+  EXPECT_THAT(consume(std::move(res)),
+              AllOf(HasSubstr("!!!!>># An error has occurred"),
                     HasSubstr("A very strange")));
 }
