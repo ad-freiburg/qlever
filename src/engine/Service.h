@@ -114,7 +114,7 @@ class Service : public Operation {
   std::optional<std::string> getSiblingValuesClause() const;
 
   // Create result for silent fail.
-  ProtoResult makeNeutralElementResultForSilentFail();
+  ProtoResult makeNeutralElementResultForSilentFail() const;
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.

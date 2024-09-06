@@ -343,7 +343,7 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
 }
 
 // ____________________________________________________________________________
-ProtoResult Service::makeNeutralElementResultForSilentFail() {
+ProtoResult Service::makeNeutralElementResultForSilentFail() const {
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   idTable.emplace_back();
   for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
