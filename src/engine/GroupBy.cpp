@@ -322,6 +322,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   // Check if optimization for explicitly sorted child can be applied
   auto hashMapOptimizationParams =
       checkIfHashMapOptimizationPossible(aggregates);
+  bool useHashMapOptimization = hashMapOptimizationParams.has_value();
 
   std::shared_ptr<const Result> subresult;
   if (hashMapOptimizationParams.has_value()) {
@@ -369,8 +370,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     groupByCols.push_back(subtreeVarCols.at(var).columnIndex_);
   }
 
-  if (hashMapOptimizationParams.has_value() &&
-      subresult->isFullyMaterialized()) {
+  if (useHashMapOptimization) {
     IdTable idTable = CALL_FIXED_SIZE(
         groupByCols.size(), &GroupBy::computeGroupByForHashMapOptimization,
         this, hashMapOptimizationParams->aggregateAliases_,
