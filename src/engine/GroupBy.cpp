@@ -457,7 +457,10 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     checkCancellation();
     *localVocab = LocalVocab::merge(vocabs);
 
-    lazyGroupBy.populateGroupBlock(idTable, 0);
+    // This bool happens to be false only for the first iteration.
+    if (!groupSplitAcrossTables) {
+      lazyGroupBy.populateGroupBlock(idTable, 0);
+    }
 
     sparqlExpression::EvaluationContext evaluationContext =
         createEvaluationContextForTable(idTable);
