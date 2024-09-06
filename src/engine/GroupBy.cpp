@@ -421,8 +421,6 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
     bool singleIdTable) const {
   AD_CONTRACT_CHECK(groupByCols.size() == NUM_GROUP_COLUMNS);
-  std::vector<const LocalVocab*> vocabs{localVocab.get(),
-                                        &subresult->localVocab()};
 
   LazyGroupBy<NUM_GROUP_COLUMNS> lazyGroupBy{
       *localVocab, std::move(aggregateAliases), groupByCols,
@@ -455,7 +453,6 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       continue;
     }
     checkCancellation();
-    *localVocab = LocalVocab::merge(vocabs);
 
     // This bool happens to be false only for the first iteration.
     if (!groupSplitAcrossTables) {
