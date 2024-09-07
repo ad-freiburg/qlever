@@ -1342,7 +1342,7 @@ TEST(ExportQueryExecutionTrees, verifyQleverJsonContainsValidMetadata) {
   auto& runtimeInformation = runtimeInformationWrapper["query_execution_tree"];
   EXPECT_EQ(runtimeInformation["result_cols"], 3);
   EXPECT_EQ(runtimeInformation["result_rows"], 4);
-  EXPECT_EQ(json["resultsize"], 4);
+  EXPECT_EQ(json["resultsize"], 5);
   auto& timingInformation = json["time"];
   EXPECT_GE(toChrono(timingInformation["total"].get<std::string_view>()), 1ms);
   // Ensure result is not returned in microseconds and subsequently interpreted
