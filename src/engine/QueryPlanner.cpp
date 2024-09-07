@@ -717,20 +717,20 @@ auto QueryPlanner::seedWithScansAndText(
       continue;
     }
 
-    auto addIndexScan =
-        [this, pushPlan, node, &relevantGraphs](
-            Permutation::Enum permutation,
-            std::optional<SparqlTripleSimple> triple = std::nullopt) {
-          if (!triple.has_value()) {
-            triple = node.triple_.getSimple();
-          }
+    auto addIndexScan = [this, pushPlan, node, &relevantGraphs](
+                            Permutation::Enum permutation,
+                            std::optional<SparqlTripleSimple> triple =
+                                std::nullopt) {
+      if (!triple.has_value()) {
+        triple = node.triple_.getSimple();
+      }
 
-          auto scanPlan = [&]() {
-            return makeSubtreePlan<IndexScan>(_qec, permutation,
-                                              std::move(triple.value()), relevantGraphs);
-          };
-          pushPlan(scanPlan());
-        };
+      auto scanPlan = [&]() {
+        return makeSubtreePlan<IndexScan>(
+            _qec, permutation, std::move(triple.value()), relevantGraphs);
+      };
+      pushPlan(scanPlan());
+    };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
       filters.push_back(std::move(filter));

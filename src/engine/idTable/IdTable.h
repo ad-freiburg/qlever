@@ -575,7 +575,7 @@ class IdTable {
   void deleteColumn(ColumnIndex colIdx) requires isDynamic {
     AD_CONTRACT_CHECK(colIdx < numColumns());
     data().erase(data().begin() + colIdx);
-    numColumns_ --;
+    numColumns_--;
   }
 
   // Helper `struct` that stores a pointer to this table and has an `operator()`

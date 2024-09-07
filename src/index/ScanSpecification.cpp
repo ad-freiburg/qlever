@@ -23,7 +23,7 @@ ScanSpecificationAsTripleComponent::toScanSpecification(
       [&index, &localVocab](
           const std::optional<TripleComponent>& tc) -> std::optional<Id> {
     // TODO<C++23> Use `std::optional::transform`.
-        if (!tc.has_value()) {
+    if (!tc.has_value()) {
       return std::nullopt;
     }
     return TripleComponent{tc.value()}.toValueId(index.getVocab(), localVocab);
@@ -39,7 +39,8 @@ ScanSpecificationAsTripleComponent::toScanSpecification(
       graphsToFilter->insert(getId(graph).value());
     }
   }
-  return ScanSpecification{col0Id, col1Id, col2Id, std::move(localVocab), std::move(graphsToFilter)};
+  return ScanSpecification{col0Id, col1Id, col2Id, std::move(localVocab),
+                           std::move(graphsToFilter)};
 }
 
 // ____________________________________________________________________________

@@ -10,8 +10,8 @@
 
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
-    (ad_utility::similarToInstantiation<T, std::optional> && !std::is_trivially_copyable_v<std::decay_t<T>>)) {
-
+    (ad_utility::similarToInstantiation<T, std::optional> &&
+     !std::is_trivially_copyable_v<std::decay_t<T>>)) {
   if constexpr (ReadSerializer<S>) {
     bool hasValue;
     serializer >> hasValue;

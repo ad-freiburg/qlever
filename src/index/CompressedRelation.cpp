@@ -6,9 +6,9 @@
 
 #include <ranges>
 
+#include "engine/Engine.h"
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
-#include "engine/Engine.h"
 #include "global/RuntimeParameters.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
@@ -53,8 +53,8 @@ static void pruneBlock(auto& block, LimitOffsetClause& limitOffset) {
 CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-    CancellationHandle cancellationHandle,
-    LimitOffsetClause& limitOffset, BlockGraphFilter blockGraphFilter) const {
+    CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+    BlockGraphFilter blockGraphFilter) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
@@ -144,26 +144,31 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
 
-  // TODO<joka921> This reads the Graph column twice for `GRAPH` clauses with a variable,
-  // this can possibly be avoided.
+  // TODO<joka921> This reads the Graph column twice for `GRAPH` clauses with a
+  // variable, this can possibly be avoided.
   if (scanSpec.graphsToFilter().has_value()) {
     columnIndices.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
   }
 
-  auto filterDuplicatesAndGraphIds = [&columnIndices, &graphs = scanSpec.graphsToFilter()](IdTable& block, const CompressedBlockMetadata& metadata) {
-    if (graphs.has_value()) {
-      size_t graphColumn = columnIndices.size() - 1;
-      // TODO<joka921> We could use column-based algorithms here for higher efficiency.
-      auto removedRange = std::ranges::remove_if(block, [&gs = graphs.value()](Id id){return !gs.contains(id);}, [graphColumn](const auto& row){return row[graphColumn];});
-      block.erase(removedRange.begin(), block.end());
-      block.deleteColumn(block.numColumns() - 1);
-    }
-    if (!metadata.containsDuplicatesWithDifferentGraphs_) {
-      return;
-    }
-    auto [endUnique, _] = std::ranges::unique(block);
-    block.erase(endUnique, block.end());
-  };
+  auto filterDuplicatesAndGraphIds =
+      [&columnIndices, &graphs = scanSpec.graphsToFilter()](
+          IdTable& block, const CompressedBlockMetadata& metadata) {
+        if (graphs.has_value()) {
+          size_t graphColumn = columnIndices.size() - 1;
+          // TODO<joka921> We could use column-based algorithms here for higher
+          // efficiency.
+          auto removedRange = std::ranges::remove_if(
+              block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
+              [graphColumn](const auto& row) { return row[graphColumn]; });
+          block.erase(removedRange.begin(), block.end());
+          block.deleteColumn(block.numColumns() - 1);
+        }
+        if (!metadata.containsDuplicatesWithDifferentGraphs_) {
+          return;
+        }
+        auto [endUnique, _] = std::ranges::unique(block);
+        block.erase(endUnique, block.end());
+      };
 
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),
@@ -185,9 +190,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   if (beginBlock + 1 < endBlock) {
     // We copy the cancellationHandle because it is still captured by reference
     // inside the `getIncompleteBlock` lambda.
-    auto blockGenerator =
-        asyncParallelBlockGenerator(beginBlock + 1, endBlock - 1, columnIndices,
-                                    cancellationHandle, limitOffset, filterDuplicatesAndGraphIds);
+    auto blockGenerator = asyncParallelBlockGenerator(
+        beginBlock + 1, endBlock - 1, columnIndices, cancellationHandle,
+        limitOffset, filterDuplicatesAndGraphIds);
     blockGenerator.setDetailsPointer(&details);
     for (auto& block : blockGenerator) {
       co_yield block;
@@ -715,14 +720,12 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-
-    //TODO<joka921> Comment the following;
-    // Setup the metadata of the contained Graphs.
-    // TODO<joka921> Change the unit tests, s.t. the following can be a Check.
+    // TODO<joka921> Comment the following;
+    //  Setup the metadata of the contained Graphs.
+    //  TODO<joka921> Change the unit tests, s.t. the following can be a Check.
     bool hasDuplicates = false;
     std::optional<std::vector<Id>> containedGraphs;
-    if
-    (buf->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
+    if (buf->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
       using C = ColumnIndex;
       auto onlySPO = buf->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
       size_t numDistinct = Engine::countDistinct(onlySPO, []() {});
@@ -736,14 +739,16 @@ void CompressedRelationWriter::compressAndWriteBlock(
       graphColumn.erase(beginOfUnique, graphColumn.end());
       // TODO<joka921> Proper constant
       containedGraphs = graphColumn.size() < 20
-                                 ? std::optional{std::move(graphColumn)}
-                                 : std::nullopt;
+                            ? std::optional{std::move(graphColumn)}
+                            : std::nullopt;
     }
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),
                                 numRows,
                                 {first[0], first[1], first[2]},
-                                {last[0], last[1], last[2]}, std::move(containedGraphs), hasDuplicates});
+                                {last[0], last[1], last[2]},
+                                std::move(containedGraphs),
+                                hasDuplicates});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(buf));
     }
@@ -823,7 +828,8 @@ auto CompressedRelationReader::getFirstAndLastTriple(
   if (firstBlock.empty() || lastBlock.empty()) {
     return std::nullopt;
   }
-  return MetadataAndBlocks::FirstAndLastTriple{rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+  return MetadataAndBlocks::FirstAndLastTriple{rowToTriple(firstBlock.front()),
+                                               rowToTriple(lastBlock.back())};
 }
 
 // ____________________________________________________________________________

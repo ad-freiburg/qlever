@@ -9,9 +9,9 @@
 #include <variant>
 #include <vector>
 
-#include "index/ScanSpecification.h"
 #include "engine/ResultType.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
+#include "index/ScanSpecification.h"
 #include "parser/Alias.h"
 #include "parser/ConstructClause.h"
 #include "parser/GraphPattern.h"

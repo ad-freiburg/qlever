@@ -47,7 +47,7 @@ class ScanSpecification {
   const T& col1Id() const { return col1Id_; }
   const T& col2Id() const { return col2Id_; }
 
-  const Graphs& graphsToFilter() const { return graphsToFilter_;}
+  const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
   bool operator==(const ScanSpecification&) const = default;
 
