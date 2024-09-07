@@ -11,6 +11,8 @@
 #include "engine/QueryExecutionTree.h"
 #include "engine/VariableToColumnMap.h"
 
+using namespace pathSearch;
+
 // _____________________________________________________________________________
 BinSearchWrapper::BinSearchWrapper(const IdTable& table, size_t startCol,
                                    size_t endCol, std::vector<size_t> edgeCols)

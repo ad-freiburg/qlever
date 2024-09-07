@@ -5,88 +5,105 @@
 #pragma once
 
 #include <memory>
-#include <optional>
 #include <span>
-#include <unordered_map>
-#include <unordered_set>
 #include <variant>
 #include <vector>
 
 #include "engine/Operation.h"
-#include "engine/VariableToColumnMap.h"
 #include "global/Id.h"
-#include "index/Vocabulary.h"
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
 using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 using SearchSide = std::variant<Variable, std::vector<Id>>;
 
-/**
- * @brief Represents an edge in the graph.
- */
-struct Edge {
-  // The starting node ID.
-  Id start_;
+namespace pathSearch {
+  /**
+   * @brief Represents an edge in the graph.
+   */
+  struct Edge {
+    // The starting node ID.
+    Id start_;
 
-  // The ending node ID.
-  Id end_;
+    // The ending node ID.
+    Id end_;
 
-  // Properties associated with the edge.
-  std::vector<Id> edgeProperties_;
-};
-
-/**
- * @brief Represents a path consisting of multiple edges.
- */
-struct Path {
-  // The edges that make up the path.
-  std::vector<Edge> edges_;
+    // Properties associated with the edge.
+    std::vector<Id> edgeProperties_;
+  };
 
   /**
-   * @brief Checks if the path is empty.
-   * @return True if the path is empty, false otherwise.
+   * @brief Represents a path consisting of multiple edges.
    */
-  bool empty() const { return edges_.empty(); }
+  struct Path {
+    // The edges that make up the path.
+    std::vector<Edge> edges_;
 
-  /**
-   * @brief Returns the number of edges in the path.
-   * @return The number of edges in the path.
-   */
-  size_t size() const { return edges_.size(); }
+    /**
+     * @brief Checks if the path is empty.
+     * @return True if the path is empty, false otherwise.
+     */
+    bool empty() const { return edges_.empty(); }
 
-  /**
-   * @brief Adds an edge to the end of the path.
-   * @param edge The edge to add.
-   */
-  void push_back(const Edge& edge) { edges_.push_back(edge); }
+    /**
+     * @brief Returns the number of edges in the path.
+     * @return The number of edges in the path.
+     */
+    size_t size() const { return edges_.size(); }
 
-  void pop_back() { edges_.pop_back(); }
+    /**
+     * @brief Adds an edge to the end of the path.
+     * @param edge The edge to add.
+     */
+    void push_back(const Edge& edge) { edges_.push_back(edge); }
 
-  /**
-   * @brief Reverses the order of the edges in the path.
-   */
-  void reverse() { std::ranges::reverse(edges_); }
+    void pop_back() { edges_.pop_back(); }
 
-  Path concat(const Path& other) const {
-    Path path;
-    path.edges_ = edges_;
-    path.edges_.insert(path.edges_.end(), other.edges_.begin(),
-                       other.edges_.end());
-    return path;
-  }
+    /**
+     * @brief Reverses the order of the edges in the path.
+     */
+    void reverse() { std::ranges::reverse(edges_); }
 
-  const Id& end() { return edges_.back().end_; }
-  const Id& first() { return edges_.front().start_; }
-
-  Path startingAt(size_t index) const {
-    std::vector<Edge> edges;
-    for (size_t i = index; i < edges_.size(); i++) {
-      edges.push_back(edges_[i]);
+    Path concat(const Path& other) const {
+      Path path;
+      path.edges_ = edges_;
+      path.edges_.insert(path.edges_.end(), other.edges_.begin(),
+                         other.edges_.end());
+      return path;
     }
-    return Path{edges};
-  }
-};
+
+    const Id& end() { return edges_.back().end_; }
+    const Id& first() { return edges_.front().start_; }
+
+    Path startingAt(size_t index) const {
+      std::vector<Edge> edges;
+      for (size_t i = index; i < edges_.size(); i++) {
+        edges.push_back(edges_[i]);
+      }
+      return Path{edges};
+    }
+  };
+
+  class BinSearchWrapper {
+    const IdTable& table_;
+    size_t startCol_;
+    size_t endCol_;
+    std::vector<size_t> edgeCols_;
+
+   public:
+    BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
+                     std::vector<size_t> edgeCols);
+
+    std::vector<Edge> outgoingEdes(const Id node) const;
+
+    std::span<const Id> getSources() const;
+
+   private:
+    Edge makeEdgeFromRow(size_t row) const;
+  };
+}
+
+using namespace pathSearch;
 
 /**
  * @brief Struct to hold configuration parameters for the path search.
@@ -150,24 +167,6 @@ struct PathSearchConfiguration {
 
     return std::move(os).str();
   }
-};
-
-class BinSearchWrapper {
-  const IdTable& table_;
-  size_t startCol_;
-  size_t endCol_;
-  std::vector<size_t> edgeCols_;
-
- public:
-  BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
-                   std::vector<size_t> edgeCols);
-
-  std::vector<Edge> outgoingEdes(const Id node) const;
-
-  std::span<const Id> getSources() const;
-
- private:
-  Edge makeEdgeFromRow(size_t row) const;
 };
 
 /**
