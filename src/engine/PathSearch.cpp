@@ -181,8 +181,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
 
   const IdTable& dynSub = subRes->idTable();
   if (!dynSub.empty()) {
-    auto timer = ad_utility::Timer(ad_utility::Timer::Stopped);
-    timer.start();
+    auto timer = ad_utility::Timer(ad_utility::Timer::Started);
 
     auto subStartColumn = subtree_->getVariableColumn(config_.start_);
     auto subEndColumn = subtree_->getVariableColumn(config_.end_);
