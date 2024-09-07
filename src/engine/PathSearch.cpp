@@ -352,8 +352,7 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
     sources = binSearch.getSources();
   }
   for (auto source : sources) {
-    for (auto path : binSearch.findPaths(source, targetSet)) {
-      path.reverse();
+    for (auto path : findPaths(source, targetSet, binSearch)) {
       paths.push_back(path);
     }
   }
