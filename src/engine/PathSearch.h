@@ -157,16 +157,12 @@ class BinSearchWrapper {
   size_t startCol_;
   size_t endCol_;
   std::vector<size_t> edgeCols_;
-  std::unordered_map<uint64_t, std::vector<Path>> pathCache_;
 
  public:
   BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
                    std::vector<size_t> edgeCols);
 
   std::vector<Edge> outgoingEdes(const Id node) const;
-
-  std::vector<Path> findPaths(const Id& source,
-                              const std::unordered_set<uint64_t>& targets);
 
   std::span<const Id> getSources() const;
 

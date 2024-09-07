@@ -4,6 +4,7 @@
 
 #include "PathSearch.h"
 
+#include <variant>
 #include <vector>
 
 #include "engine/CallFixedSize.h"
@@ -31,33 +32,6 @@ std::vector<Edge> BinSearchWrapper::outgoingEdes(const Id node) const {
     edges.push_back(edge);
   }
   return edges;
-}
-
-std::vector<Path> BinSearchWrapper::findPaths(
-    const Id& source, const std::unordered_set<uint64_t>& targets) {
-  if (pathCache_.contains(source.getBits())) {
-    return pathCache_[source.getBits()];
-  }
-  pathCache_[source.getBits()] = {};
-  std::vector<Path> paths;
-
-  auto edges = outgoingEdes(source);
-  for (const auto& edge : edges) {
-    if (targets.contains(edge.end_.getBits()) || targets.empty()) {
-      Path path;
-      path.push_back(edge);
-      paths.push_back(std::move(path));
-    }
-    auto partialPaths = findPaths(edge.end_, targets);
-    for (auto path : partialPaths) {
-      path.push_back(edge);
-      paths.push_back(std::move(path));
-    }
-  }
-
-  pathCache_[source.getBits()].insert(pathCache_[source.getBits()].end(),
-                                      paths.begin(), paths.end());
-  return paths;
 }
 
 // _____________________________________________________________________________
@@ -276,64 +250,42 @@ std::span<const Id> PathSearch::handleSearchSide(
 std::vector<Path> PathSearch::findPaths(
     const Id source, const std::unordered_set<uint64_t>& targets,
     const BinSearchWrapper& binSearch) const {
-  std::forward_list<Edge> edgeStack;
+  std::vector<Edge> edgeStack;
   Path currentPath;
   std::unordered_map<uint64_t, std::vector<Path>> pathCache;
+  std::vector<Path> result;
   std::unordered_set<uint64_t> visited;
-
-  auto addToCache =
-      [](std::unordered_map<uint64_t, std::vector<Path>>& pathCache,
-         const Path& path, size_t stopIndex) {
-        for (size_t i = 0; i < stopIndex; i++) {
-          const auto& edge = path.edges_[i];
-          auto startIndex = edge.start_.getBits();
-          pathCache.try_emplace(startIndex, std::vector<Path>());
-          pathCache[startIndex].push_back(path.startingAt(i));
-        }
-      };
 
   visited.insert(source.getBits());
   for (auto edge : binSearch.outgoingEdes(source)) {
-    edgeStack.push_front(std::move(edge));
+    edgeStack.push_back(std::move(edge));
   }
 
   while (!edgeStack.empty()) {
-    auto edge = edgeStack.front();
-    edgeStack.pop_front();
+    auto edge = edgeStack.back();
+    edgeStack.pop_back();
+
+    visited.insert(edge.end_.getBits());
 
     while (!currentPath.empty() && edge.start_ != currentPath.end()) {
+      visited.erase(currentPath.end().getBits());
       currentPath.pop_back();
     }
 
     currentPath.push_back(edge);
 
-    // TODO clean this up
-    if (pathCache.contains(edge.end_.getBits())) {
-      for (auto subPath : pathCache[edge.end_.getBits()]) {
-        if (subPath.first() == currentPath.first()) {
-          addToCache(pathCache, currentPath, currentPath.size());
-        } else {
-          auto fullPath = currentPath.concat(subPath);
-          addToCache(pathCache, fullPath, currentPath.size());
-        }
-      }
-      continue;
-    }
-
     if (targets.empty() || targets.contains(edge.end_.getBits())) {
-      addToCache(pathCache, currentPath, currentPath.size());
+      result.push_back(currentPath);
     }
 
-    if (!visited.contains(edge.end_.getBits())) {
-      for (auto outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
-        edgeStack.push_front(outgoingEdge);
+    for (auto outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
+      if (!visited.contains(outgoingEdge.end_.getBits())){
+        edgeStack.push_back(outgoingEdge);
       }
     }
-
-    visited.insert(edge.end_.getBits());
   }
 
-  return pathCache[source.getBits()];
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -353,6 +305,7 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
   }
   for (auto source : sources) {
     for (auto path : findPaths(source, targetSet, binSearch)) {
+      // path.reverse();
       paths.push_back(path);
     }
   }
