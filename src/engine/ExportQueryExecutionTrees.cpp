@@ -780,16 +780,19 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
                 qet, query.constructClause().triples_, query._limitOffset,
                 std::move(result), std::move(cancellationHandle));
 
-  size_t resultSize = 0;
+  size_t sentResultSize = 0;
   for (const std::string& b : bindings) {
-    if (resultSize > 0) [[likely]] {
+    if (sentResultSize > 0) [[likely]] {
       co_yield ",";
     }
     co_yield b;
-    ++resultSize;
+    ++sentResultSize;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
+  // Take size before implicit limit (more or less meaningless for lazy
+  // operations)
+  size_t actualResultSize = runtimeInformation.numRows_;
   runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
 
   auto timeResultComputation =
@@ -801,7 +804,8 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
-  jsonSuffix["resultsize"] = resultSize;
+  jsonSuffix["resultsize"] =
+      query.hasSelectClause() ? actualResultSize : sentResultSize;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =
