@@ -768,7 +768,10 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   std::shared_ptr<const Result> result =
       qet.getResult(query._limitOffset.requestLaziness());
   result->logResultSize();
-  size_t resultSize = result->idTable().size();
+  std::optional<size_t> resultSizeOrNullopt =
+      result->isFullyMaterialized()
+          ? std::optional<size_t>(result->idTable().size())
+          : std::nullopt;
 
   nlohmann::json jsonPrefix;
 
@@ -804,6 +807,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     co_yield b;
     ++numBindingsYielded;
   }
+  size_t resultSize = resultSizeOrNullopt.value_or(numBindingsYielded);
   if (numBindingsYielded < resultSize) {
     LOG(INFO) << "Number of bindings exported: " << numBindingsYielded << " of "
               << resultSize << std::endl;
