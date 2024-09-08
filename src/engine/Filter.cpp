@@ -65,10 +65,10 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
             resultSortedOn(), std::move(localVocab)};
   }
 
-  IdTable result = ad_utility::callFixedSize(
-      getSubtree().get()->getResultWidth(),
-      [this, subRes = std::move(subRes)]<int WIDTH>() {
-        IdTable result{WIDTH, getExecutionContext()->getAllocator()};
+  size_t width = getSubtree().get()->getResultWidth();
+  IdTable result =
+      ad_utility::callFixedSize(width, [this, &subRes, width]<int WIDTH>() {
+        IdTable result{width, getExecutionContext()->getAllocator()};
         IdTableStatic<WIDTH> output =
             std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
 
@@ -112,9 +112,9 @@ IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
   evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
 
   size_t width = evaluationContext._inputTable.numColumns();
-  IdTable result =
-      ad_utility::callFixedSize(width, [this, &evaluationContext]<int WIDTH>() {
-        IdTable result{WIDTH, getExecutionContext()->getAllocator()};
+  IdTable result = ad_utility::callFixedSize(
+      width, [this, &evaluationContext, width]<int WIDTH>() {
+        IdTable result{width, getExecutionContext()->getAllocator()};
         IdTableStatic<WIDTH> output =
             std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
         computeFilterImpl(output, evaluationContext);
