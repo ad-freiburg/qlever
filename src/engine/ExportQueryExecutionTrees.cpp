@@ -24,12 +24,22 @@ cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
   }
 }
 
-// Return a range that contains the indices of the rows that have to be exported
-// from the `idTable` given the `LimitOffsetClause`. It takes into account the
-// LIMIT, the OFFSET, and the actual size of the `idTable`
+// _____________________________________________________________________________
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result) {
+  // For the purposes of this function, if `_maxSend` is smaller than
+  // `_limit`, simply clamp `_limit` to `_maxSend`.
+  //
+  // NOTE: We do this only here, for the sake of exporting, because we want to
+  // have at least the option that QLever computes the full result (according to
+  // the `LIMIT` and `OFFSET` specified in the query) internally, so that we
+  // can get an accurate count of the result size.
+  if (limitOffset._maxSend.has_value() &&
+      limitOffset._maxSend.value() < limitOffset.limitOrDefault()) {
+    limitOffset._limit = limitOffset._maxSend;
+  }
+
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
   }
@@ -394,7 +404,8 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult(true);
+  std::shared_ptr<const Result> result =
+      qet.getResult(limitAndOffset.requestLaziness());
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -543,7 +554,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       selectClause.getSelectedVariablesAsStrings();
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult(true);
+  std::shared_ptr<const Result> result =
+      qet.getResult(limitAndOffset.requestLaziness());
 
   // In the XML format, the variables don't include the question mark.
   auto varsWithoutQuestionMark = std::views::transform(
@@ -588,7 +600,8 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         CancellationHandle cancellationHandle) {
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result = qet.getResult(true);
+  std::shared_ptr<const Result> result =
+      qet.getResult(limitAndOffset.requestLaziness());
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -728,7 +741,8 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                      std::move(cancellationHandle))
                : constructQueryResultToStream<format>(
                      qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset, qet.getResult(true),
+                     parsedQuery._limitOffset,
+                     qet.getResult(parsedQuery._limitOffset.requestLaziness()),
                      std::move(cancellationHandle));
   };
 
@@ -751,8 +765,10 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
   auto timeUntilFunctionCall = requestTimer.msecs();
-  std::shared_ptr<const Result> result = qet.getResult(true);
+  std::shared_ptr<const Result> result =
+      qet.getResult(query._limitOffset.requestLaziness());
   result->logResultSize();
+  size_t resultSize = result->idTable().size();
 
   nlohmann::json jsonPrefix;
 
@@ -771,6 +787,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   co_yield absl::StrCat(prefixStr.substr(0, prefixStr.size() - 1),
                         R"(,"res":[)");
 
+  // Yield the bindings.
   auto bindings =
       query.hasSelectClause()
           ? selectQueryResultBindingsToQLeverJSON(
@@ -779,14 +796,17 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
           : constructQueryResultBindingsToQLeverJSON(
                 qet, query.constructClause().triples_, query._limitOffset,
                 std::move(result), std::move(cancellationHandle));
-
-  size_t resultSize = 0;
+  size_t numBindingsYielded = 0;
   for (const std::string& b : bindings) {
-    if (resultSize > 0) [[likely]] {
+    if (numBindingsYielded > 0) [[likely]] {
       co_yield ",";
     }
     co_yield b;
-    ++resultSize;
+    ++numBindingsYielded;
+  }
+  if (numBindingsYielded < resultSize) {
+    LOG(INFO) << "Number of bindings exported: " << numBindingsYielded << " of "
+              << resultSize << std::endl;
   }
 
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
@@ -802,6 +822,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
   jsonSuffix["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);
   jsonSuffix["resultsize"] = resultSize;
+  jsonSuffix["sent"] = numBindingsYielded;
   jsonSuffix["time"]["total"] =
       absl::StrCat(requestTimer.msecs().count(), "ms");
   jsonSuffix["time"]["computeResult"] =

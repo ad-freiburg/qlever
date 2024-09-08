@@ -14,10 +14,15 @@
 // been parsed (by the SPARQL parser) and planned (by the query planner) into
 // a serialized result. In particular, it creates TSV, CSV, Turtle, JSON (SPARQL
 // conforming and QLever's flavor) and binary results).
-// This class has only two static public functions, one for the JSON
-// output format (which returns a `nlohmann::json` object) and one for the other
-// result formats (tsv, csv, turtle, binary) which returns a
-// `streamable_generator`.
+//
+// TODO<hannahbast> The following comment seems to be outdated, there is only
+// one public static function now (and a comment which promises another
+// function, but there is no code after that).
+//
+// The class has only two static public functions, one for the JSON output
+// format (which returns a `nlohmann::json` object) and one for the other result
+// formats (tsv, csv, turtle, binary) which returns a `streamable_generator`.
+//
 // TODO<joka921> Also implement a streaming JSON serializer to reduce the RAM
 // consumption of large JSON exports and to make this interface even simpler.
 class ExportQueryExecutionTrees {
@@ -183,7 +188,9 @@ class ExportQueryExecutionTrees {
 
   // Return a range that contains the indices of the rows that have to be
   // exported from the `idTable` given the `LimitOffsetClause`. It takes into
-  // account the LIMIT, the OFFSET, and the actual size of the `idTable`
+  // account the LIMIT, the OFFSET, and the actual size of the `idTable`. It
+  // also takes into account the value of the QLever-specific `send` parameter
+  // (the value of which is stored in `LimitOffsetClause::_maxSend`).
   static cppcoro::generator<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result);
 

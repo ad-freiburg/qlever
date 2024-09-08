@@ -697,20 +697,25 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-    // Apply stricter limit for export if present
-    if (maxSend.has_value()) {
-      auto& pq = plannedQuery.value().parsedQuery_;
-      pq._limitOffset._limit =
-          std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
-    }
-    // Make sure we don't underflow here
-    AD_CORRECTNESS_CHECK(
-        plannedQuery.value().parsedQuery_._limitOffset._offset >=
-        qet.getRootOperation()->getLimit()._offset);
+    // Remember the value of the `send` parameter. It will be applied in
+    // `ExportQueryExecutionTrees` when we materialize a (part of the) result.
+    auto& limitOffset = plannedQuery.value().parsedQuery_._limitOffset;
+    limitOffset._maxSend = maxSend;
+    // Apply stricter limit for export if present.
+    // if (maxSend.has_value()) {
+    //   auto& pq = plannedQuery.value().parsedQuery_;
+    //   pq._limitOffset._limit =
+    //       std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
+    // }
+
     // Don't apply offset twice, if the offset was not applied to the operation
     // then the exporter can safely apply it during export.
-    plannedQuery.value().parsedQuery_._limitOffset._offset -=
-        qet.getRootOperation()->getLimit()._offset;
+    //
+    // TODO<hannahbast> I don't understand why the offset would be "applied
+    // twice" without this code. Is this a code smell?
+    AD_CORRECTNESS_CHECK(limitOffset._offset >=
+                         qet.getRootOperation()->getLimit()._offset);
+    limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;
 
     // This actually processes the query and sends the result in the requested
     // format.
@@ -718,20 +723,14 @@ boost::asio::awaitable<void> Server::processQuery(
                                     plannedQuery.value(), qet, requestTimer,
                                     cancellationHandle);
 
-    // Print the runtime info. This needs to be done after the query
-    // was computed.
-
     // Log that we are done with the query and how long it took.
-    //
-    // NOTE: We need to explicitly stop the `requestTimer` here because in the
-    // sending code above, it is done only in some cases and not in others (in
-    // particular, not for TSV and CSV because for those, the result does not
-    // contain timing information).
     //
     // TODO<joka921> Also log an identifier of the query.
     LOG(INFO) << "Done processing query and sending result"
               << ", total time was " << requestTimer.msecs().count() << " ms"
               << std::endl;
+    // Print the runtime info. This needs to be done after the query
+    // was computed.
     LOG(DEBUG) << "Runtime Info:\n"
                << qet.getRootOperation()->runtimeInfo().toString() << std::endl;
   } catch (const ParseException& e) {

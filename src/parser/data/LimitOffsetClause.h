@@ -15,6 +15,7 @@ struct LimitOffsetClause {
   std::optional<uint64_t> _limit;
   uint64_t _offset = 0;
   std::optional<uint64_t> textLimit_ = std::nullopt;
+  std::optional<uint64_t> _maxSend = std::nullopt;
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
@@ -30,11 +31,12 @@ struct LimitOffsetClause {
     return std::min(actualSize, _offset);
   }
 
-  // When applying the limit and offset to a table of `actualSize`, what is the
-  // actual upper bound (as an index into the table) for the resulting elements.
-  // In the most simple case this is `limit + offset`, but this function handles
-  // all possible overflows. The result will always be `<= actualSize`.
+  // Return the largest index into a table of size `actualSize` when applying
+  // the limit and offset. When a limit and offset are specified and the table
+  // is large enough, this is simply `limit + offset`. Otherwise, it is
+  // appropriately clamped.
   uint64_t upperBound(uint64_t actualSize) const {
+    // TODO<hannahbast>: This looks unnecessarily complicated.
     auto val = limitOrDefault() + _offset;
     val = val >= std::max(limitOrDefault(), _offset)
               ? val
@@ -56,6 +58,12 @@ struct LimitOffsetClause {
   // Note: The `TEXTLIMIT` is ignored for this function, as it is irrelevant
   // almost always.
   bool isUnconstrained() const { return !_limit.has_value() && _offset == 0; }
+
+  // Return true if and only if it is OK to process the query lazily.
+  //
+  // NOTE: If we don't modify the `LIMIT` of the original query, this is always
+  // fine.
+  bool requestLaziness() const { return true; }
 
   bool operator==(const LimitOffsetClause&) const = default;
 };
