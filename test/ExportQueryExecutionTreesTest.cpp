@@ -24,10 +24,10 @@ using ::testing::HasSubstr;
 namespace {
 // Run the given SPARQL `query` on the given Turtle `kg` and export the result
 // as the `mediaType`. `mediaType` must be TSV or CSV.
-std::string runQueryStreamableResult(const std::string& kg,
-                                     const std::string& query,
-                                     ad_utility::MediaType mediaType,
-                                     bool useTextIndex = false) {
+std::string runQueryStreamableResult(
+    const std::string& kg, const std::string& query,
+    ad_utility::MediaType mediaType, bool useTextIndex = false,
+    std::optional<size_t> maxSend = std::nullopt) {
   auto qec =
       ad_utility::testing::getQec(kg, true, true, true, 16_B, useTextIndex);
   // TODO<joka921> There is a bug in the caching that we have yet to trace.
@@ -37,6 +37,7 @@ std::string runQueryStreamableResult(const std::string& kg,
       std::make_shared<ad_utility::CancellationHandle<>>();
   QueryPlanner qp{qec, cancellationHandle};
   auto pq = SparqlParser::parseQuery(query);
+  pq._limitOffset._maxSend = maxSend;
   auto qet = qp.createExecutionTree(pq);
   ad_utility::Timer timer(ad_utility::Timer::Started);
   auto strGenerator = ExportQueryExecutionTrees::computeResult(
@@ -131,6 +132,11 @@ void runSelectQueryTestCase(
   auto xmlAsString = runQueryStreamableResult(testCase.kg, testCase.query,
                                               sparqlXml, useTextIndex);
   EXPECT_EQ(testCase.resultXml, xmlAsString);
+
+  // Test effect of `maxSend = 0`.
+  qleverJSONResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, useTextIndex, 0));
+  ASSERT_EQ(qleverJSONResult["sent"], 0);
 }
 
 // Run a single test case for a CONSTRUCT query.
@@ -155,6 +161,11 @@ void runConstructQueryTestCase(
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
+
+  // Test effect of `maxSend = 0`.
+  qleverJSONStreamResult = nlohmann::json::parse(runQueryStreamableResult(
+      testCase.kg, testCase.query, qleverJson, false, 0));
+  ASSERT_EQ(qleverJSONStreamResult["sent"], 0);
 }
 
 // Create a `json` that can be used as the `resultQLeverJSON` of a
