@@ -134,6 +134,11 @@ void runSelectQueryTestCase(
 }
 
 // Run a single test case for a CONSTRUCT query.
+//
+// NOTE: For `CONSTRUCT` queries, it can currently happen that the internal
+// `result` is (potentially much) larger than what we return because undefined
+// values are filtered out. Hence we here compare `testCase.resultSize` to the
+// value of "sent", and not to "resultsize" like for `SELECT` queries.
 void runConstructQueryTestCase(
     const TestCaseConstructQuery& testCase,
     ad_utility::source_location l = ad_utility::source_location::current()) {
@@ -146,7 +151,7 @@ void runConstructQueryTestCase(
   auto qleverJSONStreamResult = nlohmann::json::parse(
       runQueryStreamableResult(testCase.kg, testCase.query, qleverJson));
   ASSERT_EQ(qleverJSONStreamResult["query"], testCase.query);
-  ASSERT_EQ(qleverJSONStreamResult["resultsize"], testCase.resultSize);
+  ASSERT_EQ(qleverJSONStreamResult["sent"], testCase.resultSize);
   EXPECT_EQ(qleverJSONStreamResult["res"], testCase.resultQLeverJSON);
   EXPECT_EQ(runQueryStreamableResult(testCase.kg, testCase.query, turtle),
             testCase.resultTurtle);
