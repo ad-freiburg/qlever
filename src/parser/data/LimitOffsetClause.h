@@ -12,10 +12,10 @@
 
 // Represents the data returned by a limitOffsetClause.
 struct LimitOffsetClause {
-  std::optional<uint64_t> _limit;
+  std::optional<uint64_t> _limit = std::nullopt;
   uint64_t _offset = 0;
   std::optional<uint64_t> textLimit_ = std::nullopt;
-  std::optional<uint64_t> _maxSend = std::nullopt;
+  std::optional<uint64_t> maxSend_ = std::nullopt;
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.

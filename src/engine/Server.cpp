@@ -700,7 +700,7 @@ boost::asio::awaitable<void> Server::processQuery(
     // Remember the value of the `send` parameter. It will be applied in
     // `ExportQueryExecutionTrees` when we materialize a (part of the) result.
     auto& limitOffset = plannedQuery.value().parsedQuery_._limitOffset;
-    limitOffset._maxSend = maxSend;
+    limitOffset.maxSend_ = maxSend;
     // Apply stricter limit for export if present.
     // if (maxSend.has_value()) {
     //   auto& pq = plannedQuery.value().parsedQuery_;

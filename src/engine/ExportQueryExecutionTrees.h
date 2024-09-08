@@ -190,7 +190,7 @@ class ExportQueryExecutionTrees {
   // exported from the `idTable` given the `LimitOffsetClause`. It takes into
   // account the LIMIT, the OFFSET, and the actual size of the `idTable`. It
   // also takes into account the value of the QLever-specific `send` parameter
-  // (the value of which is stored in `LimitOffsetClause::_maxSend`).
+  // (the value of which is stored in `LimitOffsetClause::maxSend_`).
   static cppcoro::generator<TableWithRange> getRowIndices(
       LimitOffsetClause limitOffset, const Result& result);
 

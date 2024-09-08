@@ -28,16 +28,16 @@ cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result) {
-  // For the purposes of this function, if `_maxSend` is smaller than
-  // `_limit`, simply clamp `_limit` to `_maxSend`.
+  // For the purposes of this function, if `maxSend_` is smaller than
+  // `_limit`, simply clamp `_limit` to `maxSend_`.
   //
   // NOTE: We do this only here, for the sake of exporting, because we want to
   // have at least the option that QLever computes the full result (according to
   // the `LIMIT` and `OFFSET` specified in the query) internally, so that we
   // can get an accurate count of the result size.
-  if (limitOffset._maxSend.has_value() &&
-      limitOffset._maxSend.value() < limitOffset.limitOrDefault()) {
-    limitOffset._limit = limitOffset._maxSend;
+  if (limitOffset.maxSend_.has_value() &&
+      limitOffset.maxSend_.value() < limitOffset.limitOrDefault()) {
+    limitOffset._limit = limitOffset.maxSend_;
   }
 
   if (limitOffset._limit.value_or(1) == 0) {
