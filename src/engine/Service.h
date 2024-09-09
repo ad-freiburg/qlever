@@ -123,6 +123,6 @@ class Service : public Operation {
   // parse JSON here and not a VALUES clause.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
-                       const std::vector<nlohmann::json>& bindings,
+                       cppcoro::generator<nlohmann::json>& response,
                        IdTable* idTable, LocalVocab* localVocab);
 };

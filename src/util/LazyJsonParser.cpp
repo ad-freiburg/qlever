@@ -30,6 +30,20 @@ cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
 }
 
 // ____________________________________________________________________________
+cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
+    cppcoro::generator<std::span<std::byte>> partialJson,
+    std::vector<std::string> arrayPath) {
+  return parse(
+      [](cppcoro::generator<std::span<std::byte>> partialJson)
+          -> cppcoro::generator<std::string> {
+        for (const auto& bytes : partialJson) {
+          co_yield reinterpret_cast<const char*>(bytes.data());
+        }
+      }(std::move(partialJson)),
+      std::move(arrayPath));
+}
+
+// ____________________________________________________________________________
 LazyJsonParser::LazyJsonParser(std::vector<std::string> arrayPath)
     : arrayPath_(std::move(arrayPath)),
       prefixInArray_(absl::StrCat(

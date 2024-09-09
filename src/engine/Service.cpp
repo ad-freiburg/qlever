@@ -16,6 +16,7 @@
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/LazyJsonParser.h"
 #include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
@@ -142,19 +143,20 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
-  std::basic_string<char, std::char_traits<char>,
-                    ad_utility::AllocatorWithLimit<char>>
-      jsonStr(_executionContext->getAllocator());
-  for (std::span<std::byte> bytes : response.body_) {
-    jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
-    checkCancellation();
-  }
+  auto throwErrorWithContext = [&response, &serviceUrl](std::string_view sv) {
+    std::string ctx;
+    ctx.reserve(100);
+    for (const auto& s : std::move(response.body_)) {
+      ctx += reinterpret_cast<const char*>(s.data());
+      if (ctx.size() >= 100) {
+        break;
+      }
+    }
 
-  auto throwErrorWithContext = [&jsonStr, &serviceUrl](std::string_view sv) {
     throw std::runtime_error(absl::StrCat(
         "Error while executing a SERVICE request to <", serviceUrl.asString(),
         ">: ", sv, ". First 100 bytes of the response: ",
-        std::string_view{jsonStr.data()}.substr(0, 100)));
+        ctx.substr(0, std::min(100, (int)ctx.size()))));
   };
 
   // Verify status and content-type of the response.
@@ -171,42 +173,25 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         response.contentType_, "'"));
   }
 
-  // Parse the received result.
-  std::vector<std::string> resVariables;
-  std::vector<nlohmann::json> resBindings;
-  try {
-    auto jsonResult = nlohmann::json::parse(jsonStr);
-
-    if (jsonResult.empty()) {
-      throwErrorWithContext("Response from SPARQL endpoint is empty");
-    }
-
-    resVariables = jsonResult["head"]["vars"].get<std::vector<std::string>>();
-    resBindings =
-        jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
-  } catch (const nlohmann::json::parse_error&) {
-    throwErrorWithContext("Failed to parse the SERVICE result as JSON");
-  } catch (const nlohmann::json::type_error&) {
-    throwErrorWithContext("JSON result does not have the expected structure");
-  }
-
-  // Check if result header row is expected.
-  std::string headerRow = absl::StrCat("?", absl::StrJoin(resVariables, " ?"));
-  std::string expectedHeaderRow = absl::StrJoin(
-      parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
-  if (headerRow != expectedHeaderRow) {
-    throwErrorWithContext(absl::StrCat(
-        "Header row of JSON result for SERVICE query is \"", headerRow,
-        "\", but expected \"", expectedHeaderRow, "\""));
-  }
+  // Prepare the expected Variables as keys for the JSON-bindings. We can't wait
+  // for the variables sent in the response as they're maybe not read before
+  // the bindings.
+  std::vector<std::string> expVariableKeys;
+  std::transform(parsedServiceClause_.visibleVariables_.begin(),
+                 parsedServiceClause_.visibleVariables_.end(),
+                 std::back_inserter(expVariableKeys),
+                 [](const Variable& v) { return v.name().substr(1); });
 
   // Set basic properties of the result table.
   IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   LocalVocab localVocab{};
+
+  auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
+                                                {"results", "bindings"});
+
   // Fill the result table using the `writeJsonResult` method below.
-  size_t resWidth = getResultWidth();
-  CALL_FIXED_SIZE(resWidth, &Service::writeJsonResult, this, resVariables,
-                  resBindings, &idTable, &localVocab);
+  CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this,
+                  expVariableKeys, body, &idTable, &localVocab);
 
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
@@ -214,28 +199,76 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
 // ____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
-                              const std::vector<nlohmann::json>& bindings,
+                              cppcoro::generator<nlohmann::json>& body,
                               IdTable* idTablePtr, LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
 
-  size_t rowIdx = 0;
-  for (const auto& binding : bindings) {
-    idTable.emplace_back();
-    for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
-      TripleComponent tc = binding.contains(vars[colIdx])
-                               ? bindingToTripleComponent(binding[vars[colIdx]])
-                               : TripleComponent::UNDEF();
-
-      Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
-      idTable(rowIdx, colIdx) = id;
-      if (id.getDatatype() == Datatype::LocalVocabIndex) {
-        ++numLocalVocabPerColumn[colIdx];
-      }
+  // Verifies that the result header contains the expected variables.
+  auto verifyVariables = [&](const nlohmann::json& part) {
+    auto vars = part["head"]["vars"].get<std::vector<std::string>>();
+    ad_utility::HashSet<Variable> responseVars;
+    for (const auto& v : vars) {
+      responseVars.emplace("?" + v);
     }
-    rowIdx++;
-    checkCancellation();
+    ad_utility::HashSet<Variable> expectedVars(
+        parsedServiceClause_.visibleVariables_.begin(),
+        parsedServiceClause_.visibleVariables_.end());
+
+    if (responseVars != expectedVars) {
+      throw std::runtime_error(absl::StrCat(
+          "Header row of JSON result for SERVICE query is \"",
+          absl::StrCat("?", absl::StrJoin(vars, " ?")), "\", but expected \"",
+          absl::StrJoin(parsedServiceClause_.visibleVariables_, " ",
+                        Variable::AbslFormatter),
+          "\"."));
+    }
+  };
+
+  auto writeBindings = [&](const std::vector<nlohmann::json>& bindings,
+                           size_t& rowIdx) {
+    for (const auto& binding : bindings) {
+      idTable.emplace_back();
+      for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
+        TripleComponent tc =
+            binding.contains(vars[colIdx])
+                ? bindingToTripleComponent(binding[vars[colIdx]])
+                : TripleComponent::UNDEF();
+
+        Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
+        idTable(rowIdx, colIdx) = id;
+        if (id.getDatatype() == Datatype::LocalVocabIndex) {
+          ++numLocalVocabPerColumn[colIdx];
+        }
+      }
+      rowIdx++;
+      checkCancellation();
+    }
+  };
+
+  size_t rowIdx = 0;
+  bool resultExists{false};
+  for (const nlohmann::json& part : body) {
+    if (part.contains("head")) {
+      AD_CORRECTNESS_CHECK(part["head"].contains("vars") &&
+                           part["head"]["vars"].is_array());
+      verifyVariables(part);
+    }
+    AD_CORRECTNESS_CHECK(part.contains("results") &&
+                         part["results"].contains("bindings") &&
+                         part["results"]["bindings"].is_array());
+    auto bindings =
+        part["results"]["bindings"].get<std::vector<nlohmann::json>>();
+    writeBindings(bindings, rowIdx);
+    resultExists = true;
+  }
+
+  // As the LazyJsonParser only passes parts of the result that match the
+  // expected structure, no result implies an unexpected structure.
+  if (!resultExists) {
+    throw std::runtime_error(
+        "JSON result does not have the expected structure.");
   }
 
   AD_CORRECTNESS_CHECK(rowIdx == idTable.size());

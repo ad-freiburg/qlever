@@ -189,11 +189,11 @@ TEST_F(ServiceTest, computeResult) {
       [&](const std::string& result,
           boost::beast::http::status status = boost::beast::http::status::ok,
           std::string contentType = "application/sparql-results+json",
-          bool silent = false) -> std::shared_ptr<const Result> {
+          bool silent = false) -> Result {
     Service s{testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
               getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                        status, contentType)};
-    return s.getResult();
+    return s.computeResultOnlyForTesting();
   };
 
   // Checks that a given result throws a specific error message, however when
@@ -202,6 +202,7 @@ TEST_F(ServiceTest, computeResult) {
       [&](const std::string& result, std::string_view errorMsg,
           boost::beast::http::status status = boost::beast::http::status::ok,
           std::string contentType = "application/sparql-results+json") {
+        LOG(INFO) << "MSG: " << errorMsg << '\n';
         AD_EXPECT_THROW_WITH_MESSAGE(
             runComputeResult(result, status, contentType, false),
             ::testing::HasSubstr(errorMsg));
@@ -221,14 +222,7 @@ TEST_F(ServiceTest, computeResult) {
                        "the endpoint sent 'wrong/type'.",
                        boost::beast::http::status::ok, "wrong/type");
 
-  // or Result is no JSON, empty or has invalid structure
-  expectThrowOrSilence(
-      "<?xml version=\"1.0\"?><sparql "
-      "xmlns=\"http://www.w3.org/2005/sparql-results#\">",
-      "Failed to parse the SERVICE result as JSON.");
-
-  expectThrowOrSilence("{}", "Response from SPARQL endpoint is empty.");
-
+  // or Result has invalid structure
   expectThrowOrSilence("{\"invalid\": \"structure\"}",
                        "JSON result does not have the expected structure.");
 
@@ -266,25 +260,22 @@ TEST_F(ServiceTest, computeResult) {
 
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong
   // order) -> an exception should be thrown.
-  expectThrowOrSilence(
-      genJsonResult({"y", "x"},
-                    {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
-      "Header row of JSON result for SERVICE query is "
-      "\"?y ?x\", but expected \"?x ?y\".");
+  expectThrowOrSilence(genJsonResult({"x"}, {{"bla"}, {"blu"}, {"bli"}}),
+                       "Header row of JSON result for SERVICE query is "
+                       "\"?x\", but expected \"?x ?y\".");
 
   // CHECK 3: A result row of the returned JSON is missing a variable's
   // value -> undefined value
   auto result3 = runComputeResult(
       genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-  EXPECT_TRUE(result3);
-  EXPECT_TRUE(result3->idTable().at(1, 1).isUndefined());
+  EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
 
   testQec->clearCacheUnpinnedOnly();
 
   // CHECK 4: Returned JSON has correct format matching the query -> check
   // that the result table returned by the operation corresponds to the
   // contents of the JSON and its local vocabulary are correct.
-  std::shared_ptr<const Result> result = runComputeResult(genJsonResult(
+  auto result4 = runComputeResult(genJsonResult(
       {"x", "y"},
       {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
 
@@ -295,7 +286,7 @@ TEST_F(ServiceTest, computeResult) {
   auto getId = ad_utility::testing::makeGetId(testQec->getIndex());
   Id idX = getId("<x>");
   Id idY = getId("<y>");
-  const auto& localVocab = result->localVocab();
+  const auto& localVocab = result4.localVocab();
   EXPECT_EQ(localVocab.size(), 3);
   auto get = [&localVocab](const std::string& s) {
     return localVocab.getIndexOrNullopt(
@@ -312,10 +303,9 @@ TEST_F(ServiceTest, computeResult) {
   Id idBlu = Id::makeFromLocalVocabIndex(idxBlu.value());
 
   // Check that the result table corresponds to the contents of the JSON.
-  EXPECT_TRUE(result);
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-  EXPECT_EQ(result->idTable(), expectedIdTable);
+  EXPECT_EQ(result4.idTable(), expectedIdTable);
 
   // Check 5: When a siblingTree with variables common to the Service
   // Clause is passed, the Service Operation shall use the siblings result
@@ -352,7 +342,7 @@ TEST_F(ServiceTest, computeResult) {
                                            {"blu", "bla", "y"},
                                            {"bli", "blu", "y"}})),
       siblingTree};
-  EXPECT_NO_THROW(serviceOperation5.getResult());
+  EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
 
   // Check 6: SiblingTree's rows exceed maxValue
   const auto maxValueRowsDefault =
@@ -371,7 +361,7 @@ TEST_F(ServiceTest, computeResult) {
                                            {"blue", "bla", "y"},
                                            {"bli", "blu", "y"}})),
       siblingTree};
-  EXPECT_NO_THROW(serviceOperation6.getResult());
+  EXPECT_NO_THROW(serviceOperation6.computeResultOnlyForTesting());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
 }
 
