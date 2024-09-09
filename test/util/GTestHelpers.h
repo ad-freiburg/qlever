@@ -1,12 +1,14 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//  Authors: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//           Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #pragma once
 
 #include <gmock/gmock.h>
 
 #include <concepts>
+#include <optional>
 
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
@@ -71,6 +73,9 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 #define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)    \
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
+
+// `EXPECT` that the `argument` is equal to `std::nullopt`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return
@@ -134,15 +139,20 @@ class CopyShield {
 
  public:
   template <typename... Ts>
-  explicit CopyShield(Ts&&... args) requires(std::constructible_from<T, Ts...>)
+  requires std::constructible_from<T, Ts&&...> explicit CopyShield(Ts&&... args)
       : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
 
-  auto operator<=>(const T& other) const requires(std::three_way_comparable<T>)
-  {
+  template <typename Ts>
+  requires std::constructible_from<T, Ts&&> CopyShield& operator=(Ts&& ts) {
+    pointer_ = std::make_shared<T>(AD_FWD(ts));
+    return *this;
+  }
+
+  auto operator<=>(const T& other) const requires std::three_way_comparable<T> {
     return *pointer_ <=> other;
   }
 
-  bool operator==(const T& other) const requires(std::equality_comparable<T>) {
+  bool operator==(const T& other) const requires std::equality_comparable<T> {
     return *pointer_ == other;
   }
 };
