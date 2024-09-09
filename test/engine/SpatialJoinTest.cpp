@@ -1258,8 +1258,9 @@ TEST(SpatialJoin, getChildren) {
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 2);
 
-  auto assertScanVariables = [](IndexScan* scan1, IndexScan* scan2, bool isSubjectNotObject,
-                              std::string varName1, std::string varName2) {
+  auto assertScanVariables = [](IndexScan* scan1, IndexScan* scan2,
+                                bool isSubjectNotObject, std::string varName1,
+                                std::string varName2) {
     std::string value1 = scan1->getSubject().getVariable().name();
     std::string value2 = scan2->getSubject().getVariable().name();
     if (!isSubjectNotObject) {
@@ -1274,11 +1275,11 @@ TEST(SpatialJoin, getChildren) {
   std::shared_ptr<Operation> op1 =
       spatialJoin->getChildren().at(0)->getRootOperation();
   IndexScan* scan1 = static_cast<IndexScan*>(op1.get());
-  
+
   std::shared_ptr<Operation> op2 =
       spatialJoin->getChildren().at(1)->getRootOperation();
   IndexScan* scan2 = static_cast<IndexScan*>(op2.get());
-  
+
   assertScanVariables(scan1, scan2, true, "?obj1", "?obj2");
   assertScanVariables(scan1, scan2, false, "?point1", "?point2");
 }
@@ -1295,36 +1296,39 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
                                              bool addLeftChildFirst,
                                              size_t expectedResultWidth,
                                              bool testVarToColMap = false) {
-  auto getChild = [](QueryExecutionContext* qec, bool getBigChild, std::string numberOfChild) {
+  auto getChild = [](QueryExecutionContext* qec, bool getBigChild,
+                     std::string numberOfChild) {
     std::string obj = absl::StrCat("?obj", numberOfChild);
     std::string name = absl::StrCat("?name", numberOfChild);
     std::string geo = absl::StrCat("?geo", numberOfChild);
     std::string point = absl::StrCat("?point", numberOfChild);
     if (getBigChild) {
       return computeResultTest::buildMediumChild(
-                qec, {obj, std::string{"<name>"}, name},
-                {obj, std::string{"<hasGeometry>"}, geo},
-                {geo, std::string{"<asWKT>"}, point}, obj, geo);
+          qec, {obj, std::string{"<name>"}, name},
+          {obj, std::string{"<hasGeometry>"}, geo},
+          {geo, std::string{"<asWKT>"}, point}, obj, geo);
     } else {
       return computeResultTest::buildSmallChild(
-                qec, {obj, std::string{"<hasGeometry>"}, geo},
-                {geo, std::string{"<asWKT>"}, point}, geo);
+          qec, {obj, std::string{"<hasGeometry>"}, geo},
+          {geo, std::string{"<asWKT>"}, point}, geo);
     }
   };
-  auto addExpectedColumns = [](std::vector<std::pair<std::string, std::string>> expectedColumns, bool bigChild, std::string numberOfChild) {
-    std::string obj = absl::StrCat("?obj", numberOfChild);
-    std::string name = absl::StrCat("?name", numberOfChild);
-    std::string geo = absl::StrCat("?geo", numberOfChild);
-    std::string point = absl::StrCat("?point", numberOfChild);
-    expectedColumns.push_back({obj, "<node_"});
-    expectedColumns.push_back({geo, "<geometry"});
-    expectedColumns.push_back({point, "\"POINT("});
-    if (bigChild) {
-      expectedColumns.push_back({name, "\""});
-    }
-    return expectedColumns;
-  };
-  
+  auto addExpectedColumns =
+      [](std::vector<std::pair<std::string, std::string>> expectedColumns,
+         bool bigChild, std::string numberOfChild) {
+        std::string obj = absl::StrCat("?obj", numberOfChild);
+        std::string name = absl::StrCat("?name", numberOfChild);
+        std::string geo = absl::StrCat("?geo", numberOfChild);
+        std::string point = absl::StrCat("?point", numberOfChild);
+        expectedColumns.push_back({obj, "<node_"});
+        expectedColumns.push_back({geo, "<geometry"});
+        expectedColumns.push_back({point, "\"POINT("});
+        if (bigChild) {
+          expectedColumns.push_back({name, "\""});
+        }
+        return expectedColumns;
+      };
+
   auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
@@ -1357,8 +1361,10 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   } else {
     std::vector<std::pair<std::string, std::string>> expectedColumns{};
 
-    expectedColumns = addExpectedColumns(expectedColumns, leftSideBigChild, "1");
-    expectedColumns = addExpectedColumns(expectedColumns, rightSideBigChild, "2");
+    expectedColumns =
+        addExpectedColumns(expectedColumns, leftSideBigChild, "1");
+    expectedColumns =
+        addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
     expectedColumns.push_back({"?distOfTheTwoObjectsAddedInternally", "0"});
 
@@ -1430,10 +1436,10 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
   };
 
   auto getChild = [](QueryExecutionContext* qec, bool emptyChild) {
-    std::string predicate = emptyChild? "<notExistingPred>" : "<hasGeometry>";
+    std::string predicate = emptyChild ? "<notExistingPred>" : "<hasGeometry>";
     return computeResultTest::buildSmallChild(
-                qec, {"?obj1", predicate, "?geo1"},
-                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
+        qec, {"?obj1", predicate, "?geo1"},
+        {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
   };
 
   auto qec = localTestHelpers::buildTestQEC();
@@ -1728,8 +1734,8 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   {  // new block for hard coded testing
     // ======================== hard coded test ================================
-    // here the children are only index scans, as they are perfectly predictable in
-    // relation to size and multiplicity estimates
+    // here the children are only index scans, as they are perfectly predictable
+    // in relation to size and multiplicity estimates
     std::string kg = localTestHelpers::createSmallDatasetWithPoints();
 
     // add multiplicities to test knowledge graph
@@ -1784,11 +1790,12 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     // multiplicity of ?geometry: 1,4   multiplicity of ?point: 1   size: 7
 
     if (testMultiplicities) {
-      auto assertMultiplicity = [&](Variable var, double multiplicity, SpatialJoin* spatialjoin, VariableToColumnMap& varColsMap) {
+      auto assertMultiplicity = [&](Variable var, double multiplicity,
+                                    SpatialJoin* spatialJoin,
+                                    VariableToColumnMap& varColsMap) {
         assert_double_with_bounds(
-          spatialJoin->getMultiplicity(
-              varColsMap[var].columnIndex_),
-          multiplicity);
+            spatialJoin->getMultiplicity(varColsMap[var].columnIndex_),
+            multiplicity);
       };
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
