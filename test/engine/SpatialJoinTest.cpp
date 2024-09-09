@@ -190,6 +190,13 @@ void createTestKnowledgeGraph(std::string filename, bool verbose) {
   kg.close();
 }
 
+QueryExecutionContext* buildTestQEC() {
+  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
+  ad_utility::MemorySize blocksizePermutations = 16_MB;
+  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  return qec;
+}
+
 };  // namespace localTestHelpers
 
 namespace computeResultTest {
@@ -319,9 +326,7 @@ void buildAndTestSmallTestSetLargeChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ===================== build the first child ===============================
@@ -356,9 +361,7 @@ void buildAndTestSmallTestSetSmallChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
@@ -389,9 +392,7 @@ void buildAndTestSmallTestSetDiffSizeChildren(
     std::string maxDistanceInMetersString, bool addLeftChildFirst,
     std::vector<std::vector<std::string>> expectedOutput,
     std::vector<std::string> columnNames, bool bigChildLeft) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ========================= build big child =================================
@@ -1137,9 +1138,7 @@ void testAddChild(bool addLeftChildFirst) {
     }
   };
 
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
@@ -1195,9 +1194,7 @@ TEST(SpatialJoin, addChild) {
 }
 
 TEST(SpatialJoin, isConstructed) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
@@ -1230,9 +1227,7 @@ TEST(SpatialJoin, isConstructed) {
 }
 
 TEST(SpatialJoin, getChildren) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
@@ -1263,29 +1258,29 @@ TEST(SpatialJoin, getChildren) {
 
   ASSERT_EQ(spatialJoin->getChildren().size(), 2);
 
+  auto assertScanVariables = [](IndexScan* scan1, IndexScan* scan2, bool isSubjectNotObject,
+                              std::string varName1, std::string varName2) {
+    std::string value1 = scan1->getSubject().getVariable().name();
+    std::string value2 = scan2->getSubject().getVariable().name();
+    if (!isSubjectNotObject) {
+      value1 = scan1->getObject().getVariable().name();
+      value2 = scan2->getObject().getVariable().name();
+    }
+    ASSERT_TRUE(value1 == varName1 || value1 == varName2);
+    ASSERT_TRUE(value2 == varName1 || value2 == varName2);
+    ASSERT_TRUE(value1 != value2);
+  };
+
   std::shared_ptr<Operation> op1 =
       spatialJoin->getChildren().at(0)->getRootOperation();
   IndexScan* scan1 = static_cast<IndexScan*>(op1.get());
-  ASSERT_TRUE((scan1->getSubject().getVariable().name() == "?obj1" ||
-               scan1->getSubject().getVariable().name() == "?obj2"));
-
+  
   std::shared_ptr<Operation> op2 =
       spatialJoin->getChildren().at(1)->getRootOperation();
   IndexScan* scan2 = static_cast<IndexScan*>(op2.get());
-  ASSERT_TRUE((scan2->getSubject().getVariable().name() == "?obj1" ||
-               scan2->getSubject().getVariable().name() == "?obj2"));
-
-  ASSERT_TRUE(scan1->getSubject().getVariable().name() !=
-              scan2->getSubject().getVariable().name());
-
-  ASSERT_TRUE((scan1->getObject().getVariable().name() == "?point1" ||
-               scan1->getObject().getVariable().name() == "?point2"));
-
-  ASSERT_TRUE((scan2->getObject().getVariable().name() == "?point1" ||
-               scan2->getObject().getVariable().name() == "?point2"));
-
-  ASSERT_TRUE(scan1->getObject().getVariable().name() !=
-              scan2->getObject().getVariable().name());
+  
+  assertScanVariables(scan1, scan2, true, "?obj1", "?obj2");
+  assertScanVariables(scan1, scan2, false, "?point1", "?point2");
 }
 
 }  // namespace childrenTesting
@@ -1300,30 +1295,42 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
                                              bool addLeftChildFirst,
                                              size_t expectedResultWidth,
                                              bool testVarToColMap = false) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto getChild = [](QueryExecutionContext* qec, bool getBigChild, std::string numberOfChild) {
+    std::string obj = absl::StrCat("?obj", numberOfChild);
+    std::string name = absl::StrCat("?name", numberOfChild);
+    std::string geo = absl::StrCat("?geo", numberOfChild);
+    std::string point = absl::StrCat("?point", numberOfChild);
+    if (getBigChild) {
+      return computeResultTest::buildMediumChild(
+                qec, {obj, std::string{"<name>"}, name},
+                {obj, std::string{"<hasGeometry>"}, geo},
+                {geo, std::string{"<asWKT>"}, point}, obj, geo);
+    } else {
+      return computeResultTest::buildSmallChild(
+                qec, {obj, std::string{"<hasGeometry>"}, geo},
+                {geo, std::string{"<asWKT>"}, point}, geo);
+    }
+  };
+  auto addExpectedColumns = [](std::vector<std::pair<std::string, std::string>> expectedColumns, bool bigChild, std::string numberOfChild) {
+    std::string obj = absl::StrCat("?obj", numberOfChild);
+    std::string name = absl::StrCat("?name", numberOfChild);
+    std::string geo = absl::StrCat("?geo", numberOfChild);
+    std::string point = absl::StrCat("?point", numberOfChild);
+    expectedColumns.push_back({obj, "<node_"});
+    expectedColumns.push_back({geo, "<geometry"});
+    expectedColumns.push_back({point, "\"POINT("});
+    if (bigChild) {
+      expectedColumns.push_back({name, "\""});
+    }
+    return expectedColumns;
+  };
+  
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
-  auto leftChild =
-      leftSideBigChild
-          ? computeResultTest::buildMediumChild(
-                qec, {"?obj1", std::string{"<name>"}, "?name1"},
-                {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1")
-          : computeResultTest::buildSmallChild(
-                qec, {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
-  auto rightChild =
-      rightSideBigChild
-          ? computeResultTest::buildMediumChild(
-                qec, {"?obj2", std::string{"<name>"}, "?name2"},
-                {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2")
-          : computeResultTest::buildSmallChild(
-                qec, {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?geo2");
+  auto leftChild = getChild(qec, leftSideBigChild, "1");
+  auto rightChild = getChild(qec, rightSideBigChild, "2");
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
@@ -1350,27 +1357,8 @@ void testGetResultWidthOrVariableToColumnMap(bool leftSideBigChild,
   } else {
     std::vector<std::pair<std::string, std::string>> expectedColumns{};
 
-    if (leftSideBigChild) {
-      expectedColumns.push_back({"?obj1", "<node_"});
-      expectedColumns.push_back({"?geo1", "<geometry"});
-      expectedColumns.push_back({"?name1", "\""});
-      expectedColumns.push_back({"?point1", "\"POINT("});
-    } else {
-      expectedColumns.push_back({"?obj1", "<node_"});
-      expectedColumns.push_back({"?geo1", "<geometry"});
-      expectedColumns.push_back({"?point1", "\"POINT("});
-    }
-
-    if (rightSideBigChild) {
-      expectedColumns.push_back({"?obj2", "<node_"});
-      expectedColumns.push_back({"?geo2", "<geometry"});
-      expectedColumns.push_back({"?name2", "\""});
-      expectedColumns.push_back({"?point2", "\"POINT("});
-    } else {
-      expectedColumns.push_back({"?obj2", "<node_"});
-      expectedColumns.push_back({"?geo2", "<geometry"});
-      expectedColumns.push_back({"?point2", "\"POINT("});
-    }
+    expectedColumns = addExpectedColumns(expectedColumns, leftSideBigChild, "1");
+    expectedColumns = addExpectedColumns(expectedColumns, rightSideBigChild, "2");
 
     expectedColumns.push_back({"?distOfTheTwoObjectsAddedInternally", "0"});
 
@@ -1441,30 +1429,19 @@ void testKnownEmptyResult(bool leftSideEmptyChild, bool rightSideEmptyChild,
     ASSERT_EQ(spatialJoin_->knownEmptyResult(), shouldBeEmpty);
   };
 
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto getChild = [](QueryExecutionContext* qec, bool emptyChild) {
+    std::string predicate = emptyChild? "<notExistingPred>" : "<hasGeometry>";
+    return computeResultTest::buildSmallChild(
+                qec, {"?obj1", predicate, "?geo1"},
+                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
+  };
+
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
 
-  auto leftChild =
-      leftSideEmptyChild
-          ? computeResultTest::buildMediumChild(
-                qec, {"?obj1", std::string{"<notExistingPredicate>"}, "?name1"},
-                {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?obj1", "?geo1")
-          : computeResultTest::buildSmallChild(
-                qec, {"?obj1", std::string{"<hasGeometry>"}, "?geo1"},
-                {"?geo1", std::string{"<asWKT>"}, "?point1"}, "?geo1");
-  auto rightChild =
-      rightSideEmptyChild
-          ? computeResultTest::buildMediumChild(
-                qec, {"?obj2", std::string{"<notExistingPredicate>"}, "?name2"},
-                {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?obj2", "?geo2")
-          : computeResultTest::buildSmallChild(
-                qec, {"?obj2", std::string{"<hasGeometry>"}, "?geo2"},
-                {"?geo2", std::string{"<asWKT>"}, "?point2"}, "?geo2");
+  auto leftChild = getChild(qec, leftSideEmptyChild);
+  auto rightChild = getChild(qec, rightSideEmptyChild);
 
   std::shared_ptr<QueryExecutionTree> spatialJoinOperation =
       ad_utility::makeExecutionTree<SpatialJoin>(
@@ -1572,9 +1549,7 @@ TEST(SpatialJoin, getDescriptor) {
 }
 
 TEST(SpatialJoin, getCacheKeyImpl) {
-  std::string kg = localTestHelpers::createSmallDatasetWithPoints();
-  ad_utility::MemorySize blocksizePermutations = 16_MB;
-  auto qec = getQec(kg, true, true, false, blocksizePermutations, false);
+  auto qec = localTestHelpers::buildTestQEC();
   auto numTriples = qec->getIndex().numTriples().normal;
   ASSERT_EQ(numTriples, 15);
   // ====================== build inputs ===================================
@@ -1753,7 +1728,7 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
 
   {  // new block for hard coded testing
     // ======================== hard coded test ================================
-    // here the child are only index scans, as they are perfectly predictable in
+    // here the children are only index scans, as they are perfectly predictable in
     // relation to size and multiplicity estimates
     std::string kg = localTestHelpers::createSmallDatasetWithPoints();
 
@@ -1809,6 +1784,12 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
     // multiplicity of ?geometry: 1,4   multiplicity of ?point: 1   size: 7
 
     if (testMultiplicities) {
+      auto assertMultiplicity = [&](Variable var, double multiplicity, SpatialJoin* spatialjoin, VariableToColumnMap& varColsMap) {
+        assert_double_with_bounds(
+          spatialJoin->getMultiplicity(
+              varColsMap[var].columnIndex_),
+          multiplicity);
+      };
       multiplicitiesBeforeAllChildrenAdded(spatialJoin);
       auto spJoin1 = spatialJoin->addChild(firstChild, firstVariable);
       spatialJoin = static_cast<SpatialJoin*>(spJoin1.get());
@@ -1818,24 +1799,11 @@ void testMultiplicitiesOrSizeEstimate(bool addLeftChildFirst,
       auto varColsMap = spatialJoin->getExternallyVisibleVariableColumns();
       Variable distance{spatialJoin->getInternalDistanceName()};
 
-      assert_double_with_bounds(
-          spatialJoin->getMultiplicity(
-              varColsMap[subj1.getVariable()].columnIndex_),
-          9.8);
-      assert_double_with_bounds(
-          spatialJoin->getMultiplicity(
-              varColsMap[obj1.getVariable()].columnIndex_),
-          7.0);
-      assert_double_with_bounds(
-          spatialJoin->getMultiplicity(
-              varColsMap[subj2.getVariable()].columnIndex_),
-          9.8);
-      assert_double_with_bounds(
-          spatialJoin->getMultiplicity(
-              varColsMap[obj2.getVariable()].columnIndex_),
-          7.0);
-      assert_double_with_bounds(
-          spatialJoin->getMultiplicity(varColsMap[distance].columnIndex_), 1);
+      assertMultiplicity(subj1.getVariable(), 9.8, spatialJoin, varColsMap);
+      assertMultiplicity(obj1.getVariable(), 7.0, spatialJoin, varColsMap);
+      assertMultiplicity(subj2.getVariable(), 9.8, spatialJoin, varColsMap);
+      assertMultiplicity(obj2.getVariable(), 7.0, spatialJoin, varColsMap);
+      assertMultiplicity(distance, 1, spatialJoin, varColsMap);
     } else {
       ASSERT_EQ(leftChild->getSizeEstimate(), 7);
       ASSERT_EQ(rightChild->getSizeEstimate(), 7);
@@ -1864,6 +1832,3 @@ TEST(SpatialJoin, getSizeEstimate) {
 }
 
 }  // namespace getMultiplicityAndSizeEstimate
-
-// test the compute result method on the large dataset from above
-// TODO
