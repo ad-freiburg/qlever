@@ -44,7 +44,7 @@ struct AvgAggregationData {
     if (error_) {
       return ValueId::makeUndefined();
     }
-    // AVG(empty group) = 0
+    // AVG(empty group) = 0, this is mandated by the SPARQL 1.1 standard.
     if (count_ == 0) {
       return ValueId::makeFromInt(0);
     }

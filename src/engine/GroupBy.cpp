@@ -1009,7 +1009,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* expr,
     std::optional<ParentAndChildIndex> parentAndChildIndex,
-    std::vector<GroupBy::HashMapAggregateInformation>& info) {
+    std::vector<HashMapAggregateInformation>& info) {
   if (expr->isAggregate()) {
     if (auto aggregateType = isSupportedAggregate(expr)) {
       info.emplace_back(expr, 0, aggregateType.value(), parentAndChildIndex);

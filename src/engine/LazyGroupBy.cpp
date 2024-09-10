@@ -7,6 +7,8 @@
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Constants.h"
 
+using groupBy::detail::VectorOfAggregationData;
+
 template <size_t NUM_GROUP_COLUMNS>
 LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
     LocalVocab& localVocab,
@@ -20,7 +22,7 @@ LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
       std::visit(
-          [&aggregateInfo]<SupportedAggregates T>(T& arg) {
+          [&aggregateInfo]<VectorOfAggregationData T>(T& arg) {
             if constexpr (std::same_as<typename T::value_type,
                                        GroupConcatAggregationData>) {
               arg.resize(1,
@@ -41,7 +43,7 @@ template <size_t NUM_GROUP_COLUMNS>
 void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      std::visit([]<SupportedAggregates T>(T& arg) { arg.at(0).reset(); },
+      std::visit([]<VectorOfAggregationData T>(T& arg) { arg.at(0).reset(); },
                  aggregationData_.getAggregationDataVariant(
                      aggregateInfo.aggregateDataIndex_));
     }
