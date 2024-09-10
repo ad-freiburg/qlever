@@ -2,9 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_CARTESIANPRODUCTJOIN_H
-#define QLEVER_CARTESIANPRODUCTJOIN_H
-
+#pragma once
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -79,7 +77,7 @@ class CartesianProductJoin : public Operation {
 
  private:
   //! Compute the result of the query-subtree rooted at this element..
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
 
   // Copy each element from the `inputColumn` `groupSize` times to the
   // `targetColumn`. Repeat until the `targetColumn` is completely filled. Skip
@@ -92,5 +90,3 @@ class CartesianProductJoin : public Operation {
                          std::span<const Id> inputColumn, size_t groupSize,
                          size_t offset);
 };
-
-#endif  // QLEVER_CARTESIANPRODUCTJOIN_H

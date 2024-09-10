@@ -36,6 +36,10 @@ std::string indentStr(size_t indent, bool stripped = false) {
   }
   return ind;
 }
+
+auto toMs(std::chrono::microseconds us) {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(us).count();
+}
 }  // namespace
 
 // __________________________________________________________________________
@@ -67,9 +71,9 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
       << '\n';
   out << indentStr(indent) << "columns: " << absl::StrJoin(columnNames_, ", ")
       << '\n';
-  out << indentStr(indent) << "total_time: " << totalTime_.count() << " ms"
+  out << indentStr(indent) << "total_time: " << toMs(totalTime_) << " ms"
       << '\n';
-  out << indentStr(indent) << "operation_time: " << getOperationTime().count()
+  out << indentStr(indent) << "operation_time: " << toMs(getOperationTime())
       << " ms" << '\n';
   out << indentStr(indent) << "status: " << toString(status_) << '\n';
   out << indentStr(indent)
@@ -77,11 +81,10 @@ void RuntimeInformation::writeToStream(std::ostream& out, size_t indent) const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     out << indentStr(indent)
         // TODO<g++12, Clang 17> use `<< originalTotalTime_` directly
-        << "original_total_time: " << originalTotalTime_.count() << " ms"
-        << '\n';
+        << "original_total_time: " << toMs(originalTotalTime_) << " ms" << '\n';
     out << indentStr(indent)
-        << "original_operation_time: " << originalOperationTime_.count()
-        << " ms" << '\n';
+        << "original_operation_time: " << toMs(originalOperationTime_) << " ms"
+        << '\n';
   }
   for (const auto& el : details_.items()) {
     out << indentStr(indent) << "  " << el.key() << ": ";
@@ -134,7 +137,7 @@ void RuntimeInformation::setColumnNames(const VariableToColumnMap& columnMap) {
 }
 
 // __________________________________________________________________________
-std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
+std::chrono::microseconds RuntimeInformation::getOperationTime() const {
   if (cacheStatus_ != ad_utility::CacheStatus::computed) {
     return totalTime_;
   } else {
@@ -145,8 +148,8 @@ std::chrono::milliseconds RuntimeInformation::getOperationTime() const {
         children_ | std::views::transform(&RuntimeInformation::totalTime_);
     // Prevent "negative" computation times in case totalTime_ was not
     // computed for this yet.
-    return std::max(0ms, totalTime_ - std::reduce(timesOfChildren.begin(),
-                                                  timesOfChildren.end(), 0ms));
+    return std::max(0us, totalTime_ - std::reduce(timesOfChildren.begin(),
+                                                  timesOfChildren.end(), 0us));
   }
 }
 
@@ -196,10 +199,10 @@ void to_json(nlohmann::ordered_json& j, const RuntimeInformation& rti) {
       {"result_rows", rti.numRows_},
       {"result_cols", rti.numCols_},
       {"column_names", rti.columnNames_},
-      {"total_time", rti.totalTime_.count()},
-      {"operation_time", rti.getOperationTime().count()},
-      {"original_total_time", rti.originalTotalTime_.count()},
-      {"original_operation_time", rti.originalOperationTime_.count()},
+      {"total_time", toMs(rti.totalTime_)},
+      {"operation_time", toMs(rti.getOperationTime())},
+      {"original_total_time", toMs(rti.originalTotalTime_)},
+      {"original_operation_time", toMs(rti.originalOperationTime_)},
       {"cache_status", ad_utility::toString(rti.cacheStatus_)},
       {"details", rti.details_},
       {"estimated_total_cost", rti.costEstimate_},
@@ -219,7 +222,6 @@ void to_json(nlohmann::ordered_json& j,
 
 // __________________________________________________________________________
 void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
-                                           Milliseconds timeForLimit,
                                            bool fullResultIsNotCached) {
   bool hasLimit = l._limit.has_value();
   bool hasOffset = l._offset != 0;
@@ -233,7 +235,6 @@ void RuntimeInformation::addLimitOffsetRow(const LimitOffsetClause& l,
   numRows_ = l.actualSize(actualOperation->numRows_);
   details_.clear();
   cacheStatus_ = ad_utility::CacheStatus::computed;
-  totalTime_ += timeForLimit;
   actualOperation->addDetail("not-written-to-cache-because-child-of-limit",
                              fullResultIsNotCached);
   actualOperation->eraseDetail("limit");

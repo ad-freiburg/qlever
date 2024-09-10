@@ -8,6 +8,7 @@
 #include <thread>
 
 #include "util/Timer.h"
+#include "util/jthread.h"
 
 using ad_utility::Timer;
 using namespace std::chrono_literals;
@@ -115,4 +116,49 @@ TEST(TimeBlockAndLog, TimeBlockAndLog) {
     std::this_thread::sleep_for(25ms);
   }
   ASSERT_THAT(s, ::testing::MatchesRegex("message: 2[5-9]"));
+}
+
+// ____________________________________________________________________________
+TEST(Timer, ThreadSafeTimerSingleThreaded) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  ad_utility::timer::ThreadSafeTimer t;
+  for (size_t i = 0; i < 10; ++i) {
+    auto m = t.startMeasurement();
+    std::this_thread::sleep_for(1ms);
+  }
+  for (size_t i = 0; i < 10; ++i) {
+    auto m = t.startMeasurement();
+    std::this_thread::sleep_for(1ms);
+    m.stop();
+  }
+  testTime(t.value(), t.msecs(), 20ms);
+}
+
+// ____________________________________________________________________________
+TEST(Timer, ThreadSafeTimerMultiThreaded) {
+#ifdef _QLEVER_NO_TIMING_TESTS
+  GTEST_SKIP_("because _QLEVER_NO_TIMING_TESTS defined");
+#endif
+  ad_utility::timer::ThreadSafeTimer t;
+
+  auto f = [&t]() {
+    auto m = t.startMeasurement();
+    std::this_thread::sleep_for(1ms);
+  };
+
+  ad_utility::Timer singleThreadedTimer{ad_utility::Timer::Started};
+
+  std::vector<ad_utility::JThread> threads;
+  for (size_t i = 0; i < 10; ++i) {
+    threads.emplace_back(f);
+  }
+  threads.clear();
+
+  singleThreadedTimer.stop();
+  // The measurements in the threadsafe timer ran concurrently, so they have
+  // aggregated more than the wall clock time.
+  EXPECT_GT(t.value(), singleThreadedTimer.value());
+  testTime(t.value(), t.msecs(), 10ms);
 }

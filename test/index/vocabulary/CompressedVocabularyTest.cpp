@@ -4,7 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include "./VocabularyTestHelpers.h"
+#include "VocabularyTestHelpers.h"
 #include "index/VocabularyOnDisk.h"
 #include "index/vocabulary/CompressedVocabulary.h"
 #include "index/vocabulary/PrefixCompressor.h"

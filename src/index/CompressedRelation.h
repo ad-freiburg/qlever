@@ -11,6 +11,7 @@
 
 #include "engine/idTable/IdTable.h"
 #include "global/Id.h"
+#include "index/ScanSpecification.h"
 #include "parser/data/LimitOffsetClause.h"
 #include "util/Cache.h"
 #include "util/CancellationHandle.h"
@@ -182,6 +183,14 @@ class CompressedRelationWriter {
   size_t currentRelationPreviousSize_ = 0;
 
   ad_utility::TaskQueue<false> blockWriteQueue_{20, 10};
+  ad_utility::timer::ThreadSafeTimer blockWriteQueueTimer_;
+
+  // This callback is invoked for each block of small relations (which share the
+  // same block), after this block has been completely handled by this writer.
+  // The callback is used to efficiently pass the block from a permutation to
+  // its twin permutation, which only has to re-sort and write the block.
+  using SmallBlocksCallback = std::function<void(std::shared_ptr<IdTable>)>;
+  SmallBlocksCallback smallBlocksCallback_;
 
   // A dummy value for multiplicities that can only later be determined.
   static constexpr float multiplicityDummy = 42.4242f;
@@ -270,7 +279,9 @@ class CompressedRelationWriter {
   void finish() {
     AD_CORRECTNESS_CHECK(currentRelationPreviousSize_ == 0);
     writeBufferedRelationsToSingleBlock();
+    auto timer = blockWriteQueueTimer_.startMeasurement();
     blockWriteQueue_.finish();
+    timer.stop();
     outfile_.wlock()->close();
   }
 
@@ -289,9 +300,13 @@ class CompressedRelationWriter {
 
   // Compress the given `block` and write it to the `outfile_`. The
   // `firstCol0Id` and `lastCol0Id` are needed to set up the block's metadata
-  // which is appended to the internal buffer.
+  // which is appended to the internal buffer. If `invokeCallback` is true and
+  // the `smallBlocksCallback_` is not empty, then
+  // `smallBlocksCallback_(std::move(block))` is called AFTER the block has
+  // completely been dealt with.
   void compressAndWriteBlock(Id firstCol0Id, Id lastCol0Id,
-                             std::shared_ptr<IdTable> block);
+                             std::shared_ptr<IdTable> block,
+                             bool invokeCallback);
 
   // Add a small relation that will be stored in a single block, possibly
   // together with other small relations.
@@ -351,54 +366,6 @@ class CompressedRelationReader {
   using ColumnIndicesRef = std::span<const ColumnIndex>;
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
-
-  // The specification of a scan operation for a given permutation.
-  // Can either be a full scan (all three elements are `std::nullopt`),
-  // a scan for a fixed `col0Id`, a scan for a fixed `col0Id` and `col1Id`,
-  // or even a scan for a single triple to check whether it is contained in
-  // the knowledge graph at all. The values which are `nullopt` become variables
-  // and are returned as columns in the result of the scan.
-  class ScanSpecification {
-   private:
-    using T = std::optional<Id>;
-
-    T col0Id_;
-    T col1Id_;
-    T col2Id_;
-
-    void validate() const {
-      bool c0 = col0Id_.has_value();
-      bool c1 = col1Id_.has_value();
-      bool c2 = col2Id_.has_value();
-      if (!c0) {
-        AD_CORRECTNESS_CHECK(!c1 && !c2);
-      }
-      if (!c1) {
-        AD_CORRECTNESS_CHECK(!c2);
-      }
-    }
-
-   public:
-    ScanSpecification(T col0Id, T col1Id, T col2Id)
-        : col0Id_{col0Id}, col1Id_{col1Id}, col2Id_{col2Id} {
-      validate();
-    }
-    const T& col0Id() const { return col0Id_; }
-    const T& col1Id() const { return col1Id_; }
-    const T& col2Id() const { return col2Id_; }
-
-    // Only used in tests.
-    void setCol1Id(T col1Id) {
-      col1Id_ = col1Id;
-      validate();
-    }
-
-    friend std::ostream& operator<<(std::ostream& os,
-                                    const ScanSpecification& scanSpec) {
-      return os << "ScanSpec(" << scanSpec.col0Id_ << ", " << scanSpec.col1Id_
-                << ", " << scanSpec.col2Id_ << ")";
-    }
-  };
 
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
