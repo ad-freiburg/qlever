@@ -20,8 +20,8 @@
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/SerializeOptional.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
@@ -386,6 +386,9 @@ class CompressedRelationReader {
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
+    // The number of blocks that could be skipped using only their metadata
+    // because the GraphIDs of the block did not match the query.
+    size_t numBlocksSkippedBecauseOfGraph_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
@@ -570,11 +573,14 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
 
-  using BlockGraphFilter = std::function<void(IdTable&, const CompressedBlockMetadata&)>;
+  using BlockGraphFilter =
+      std::function<void(IdTable&, const CompressedBlockMetadata&)>;
+  using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle,
-      LimitOffsetClause& limitOffset, BlockGraphFilter) const;
+      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+      BlockGraphFilter blockGraphFilter,
+      CanBlockBeSkipped canBlockBeSkipped) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
