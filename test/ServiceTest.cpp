@@ -189,11 +189,11 @@ TEST_F(ServiceTest, computeResult) {
       [&](const std::string& result,
           boost::beast::http::status status = boost::beast::http::status::ok,
           std::string contentType = "application/sparql-results+json",
-          bool silent = false) -> std::shared_ptr<const Result> {
+          bool silent = false) -> Result {
     Service s{testQec, silent ? parsedServiceClauseSilent : parsedServiceClause,
               getResultFunctionFactory(expectedUrl, expectedSparqlQuery, result,
                                        status, contentType)};
-    return s.getResult();
+    return s.computeResultOnlyForTesting();
   };
 
   // Checks that a given result throws a specific error message, however when
@@ -264,6 +264,14 @@ TEST_F(ServiceTest, computeResult) {
       ::testing::HasSubstr("Tried to allocate"),
       ad_utility::detail::AllocationExceedsLimitException);
 
+  // CHECK 1c: Accept the content-type regardless of it's case or additional
+  // parameters.
+  EXPECT_NO_THROW(runComputeResult(
+      genJsonResult({"x", "y"},
+                    {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
+      boost::beast::http::status::ok,
+      "APPLICATION/SPARQL-RESULTS+JSON;charset=utf-8"));
+
   // CHECK 2: Header row of returned JSON is wrong (variables in wrong
   // order) -> an exception should be thrown.
   expectThrowOrSilence(
@@ -276,15 +284,14 @@ TEST_F(ServiceTest, computeResult) {
   // value -> undefined value
   auto result3 = runComputeResult(
       genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}));
-  EXPECT_TRUE(result3);
-  EXPECT_TRUE(result3->idTable().at(1, 1).isUndefined());
+  EXPECT_TRUE(result3.idTable().at(1, 1).isUndefined());
 
   testQec->clearCacheUnpinnedOnly();
 
   // CHECK 4: Returned JSON has correct format matching the query -> check
   // that the result table returned by the operation corresponds to the
   // contents of the JSON and its local vocabulary are correct.
-  std::shared_ptr<const Result> result = runComputeResult(genJsonResult(
+  auto result = runComputeResult(genJsonResult(
       {"x", "y"},
       {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
 
@@ -295,7 +302,7 @@ TEST_F(ServiceTest, computeResult) {
   auto getId = ad_utility::testing::makeGetId(testQec->getIndex());
   Id idX = getId("<x>");
   Id idY = getId("<y>");
-  const auto& localVocab = result->localVocab();
+  const auto& localVocab = result.localVocab();
   EXPECT_EQ(localVocab.size(), 3);
   auto get = [&localVocab](const std::string& s) {
     return localVocab.getIndexOrNullopt(
@@ -312,10 +319,9 @@ TEST_F(ServiceTest, computeResult) {
   Id idBlu = Id::makeFromLocalVocabIndex(idxBlu.value());
 
   // Check that the result table corresponds to the contents of the JSON.
-  EXPECT_TRUE(result);
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-  EXPECT_EQ(result->idTable(), expectedIdTable);
+  EXPECT_EQ(result.idTable(), expectedIdTable);
 
   // Check 5: When a siblingTree with variables common to the Service
   // Clause is passed, the Service Operation shall use the siblings result
