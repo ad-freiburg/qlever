@@ -25,3 +25,10 @@ TEST(Constants, testDefaultQueryTimeoutIsStriclyPositive) {
       std::runtime_error);
   EXPECT_NO_THROW(RuntimeParameters().set<"default-query-timeout">(1s));
 }
+
+TEST(Constants, makeInternalIri) {
+  EXPECT_EQ(makeInternalIri("hi", "-bye"),
+            (makeInternalIriConst<"hi", "-bye">()));
+  EXPECT_EQ(makeInternalIri("hi", "-bye"),
+            "<http://qlever.cs.uni-freiburg.de/builtin-functions/hi-bye>");
+}

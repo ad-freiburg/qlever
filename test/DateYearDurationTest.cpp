@@ -8,12 +8,14 @@
 
 #include "./util/GTestHelpers.h"
 #include "global/Constants.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "util/DateYearDuration.h"
 #include "util/Random.h"
 
 using ad_utility::source_location;
+
+namespace {
 
 ad_utility::SlowRandomIntGenerator yearGenerator{-9999, 9999};
 ad_utility::SlowRandomIntGenerator monthGenerator{1, 12};
@@ -22,6 +24,7 @@ ad_utility::SlowRandomIntGenerator hourGenerator{0, 23};
 ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
+}  // namespace
 
 TEST(Date, Size) {
   ASSERT_EQ(sizeof(Date), 8);
@@ -61,6 +64,7 @@ TEST(Date, SetAndExtract) {
   }
 }
 
+namespace {
 Date getRandomDate() {
   auto year = yearGenerator();
   auto month = monthGenerator();
@@ -72,6 +76,7 @@ Date getRandomDate() {
 
   return {year, month, day, hour, minute, second, timeZone};
 }
+}  // namespace
 
 TEST(Date, RangeChecks) {
   Date date = getRandomDate();
@@ -130,6 +135,7 @@ TEST(Date, RangeChecks) {
   ASSERT_EQ(date, dateCopy);
 }
 
+namespace {
 auto dateLessComparator = [](Date a, Date b) -> bool {
   if (a.getYear() != b.getYear()) {
     return a.getYear() < b.getYear();
@@ -168,6 +174,7 @@ void testSorting(std::vector<Date> dates) {
   std::sort(datesCopy.begin(), datesCopy.end(), dateLessComparator);
   ASSERT_EQ(dates, datesCopy);
 }
+}  // namespace
 
 TEST(Date, OrderRandomValues) {
   auto dates = getRandomDates(100);
@@ -291,7 +298,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -405,7 +412,7 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());

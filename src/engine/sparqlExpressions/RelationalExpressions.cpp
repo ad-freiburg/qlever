@@ -308,6 +308,7 @@ RelationalExpression<Comp>::getLanguageFilterExpression() const {
     return getLangFilterData(child2, child1);
   }
 }
+
 namespace {
 // _____________________________________________________________________________
 SparqlExpression::Estimates getEstimatesForFilterExpressionImpl(
