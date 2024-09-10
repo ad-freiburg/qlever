@@ -12,10 +12,12 @@ template <size_t NUM_GROUP_COLUMNS>
 LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
     LocalVocab& localVocab,
     std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-    const ad_utility::AllocatorWithLimit<Id>& allocator)
+    const ad_utility::AllocatorWithLimit<Id>& allocator, size_t numGroupColumns)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
-      aggregationData_{allocator, aggregateAliases_, NUM_GROUP_COLUMNS} {
+      aggregationData_{allocator, aggregateAliases_, numGroupColumns} {
+  AD_CONTRACT_CHECK(numGroupColumns == NUM_GROUP_COLUMNS ||
+                    NUM_GROUP_COLUMNS == 0);
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
       std::visit(
@@ -86,32 +88,21 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
           exprChildren[0]->evaluate(&evaluationContext);
 
       std::visit(
-          [this, blockSize, &evaluationContext,
-           &aggregate]<sparqlExpression::SingleExpressionResult T>(
-              T&& singleResult) {
+          [blockSize,
+           &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+              T&& singleResult, VectorOfAggregationData auto& aggregateData) {
             auto generator = sparqlExpression::detail::makeGenerator(
                 std::forward<T>(singleResult), blockSize, &evaluationContext);
 
             for (const auto& val : generator) {
-              addToAggregateFunction(aggregate.aggregateDataIndex_, val,
-                                     &evaluationContext);
+              aggregateData.at(0).addValue(val, &evaluationContext);
             }
           },
-          std::move(expressionResult));
+          std::move(expressionResult),
+          aggregationData_.getAggregationDataVariant(
+              aggregate.aggregateDataIndex_));
     }
   }
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::addToAggregateFunction(
-    size_t aggregateIndex, const std::variant<ValueId, LocalVocabEntry>& id,
-    const sparqlExpression::EvaluationContext* ctx) {
-  std::visit(
-      [&id, ctx](auto& aggregateData) {
-        return aggregateData.at(0).addValue(id, ctx);
-      },
-      aggregationData_.getAggregationDataVariant(aggregateIndex));
 }
 
 // _____________________________________________________________________________

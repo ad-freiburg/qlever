@@ -15,7 +15,8 @@ class LazyGroupBy {
  public:
   LazyGroupBy(LocalVocab& localVocab,
               std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-              const ad_utility::AllocatorWithLimit<Id>& allocator);
+              const ad_utility::AllocatorWithLimit<Id>& allocator,
+              size_t numGroupColumns);
 
   LazyGroupBy(const LazyGroupBy&) = delete;
   LazyGroupBy(LazyGroupBy&&) = delete;
@@ -32,8 +33,4 @@ class LazyGroupBy {
 
  private:
   void resetAggregationData();
-
-  void addToAggregateFunction(size_t aggregateIndex,
-                              const std::variant<ValueId, LocalVocabEntry>& id,
-                              const sparqlExpression::EvaluationContext* ctx);
 };

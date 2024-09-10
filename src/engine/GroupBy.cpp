@@ -438,12 +438,9 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
     bool singleIdTable) const {
-  AD_CONTRACT_CHECK(groupByCols.size() == NUM_GROUP_COLUMNS ||
-                    NUM_GROUP_COLUMNS == 0);
-
   LazyGroupBy<NUM_GROUP_COLUMNS> lazyGroupBy{
       *localVocab, std::move(aggregateAliases),
-      getExecutionContext()->getAllocator()};
+      getExecutionContext()->getAllocator(), groupByCols.size()};
 
   auto createEvaluationContextForTable = [this,
                                           &localVocab](const IdTable& table) {
