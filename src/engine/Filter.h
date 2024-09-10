@@ -60,14 +60,13 @@ class Filter : public Operation {
 
   ProtoResult computeResult(bool requestLaziness) override;
 
-  // Perform the actual filter operation of the data provided by
-  // `evaluationContext`.
+  // Perform the actual filter operation of the data provided.
   template <int WIDTH>
-  void computeFilterImpl(
-      IdTableStatic<WIDTH>& resultTable,
-      sparqlExpression::EvaluationContext& evaluationContext);
+  void computeFilterImpl(IdTableStatic<WIDTH>& resultTable,
+                         const IdTable& input, const LocalVocab& localVocab,
+                         std::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
   IdTable filterIdTable(const std::shared_ptr<const Result>& subRes,
-                        const IdTable& idTable);
+                        const IdTable& idTable) const;
 };

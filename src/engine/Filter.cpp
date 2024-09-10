@@ -72,22 +72,9 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
         IdTableStatic<WIDTH> output =
             std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
 
-        std::vector<ColumnIndex> sortedOn = subRes->sortedBy();
-
         for (IdTable& idTable : subRes->idTables()) {
-          sparqlExpression::EvaluationContext evaluationContext(
-              *getExecutionContext(), _subtree->getVariableColumns(), idTable,
-              getExecutionContext()->getAllocator(), subRes->localVocab(),
-              cancellationHandle_, deadline_);
-
-          // TODO<joka921> This should be a mandatory argument to the
-          // EvaluationContext constructor.
-          evaluationContext._columnsByWhichResultIsSorted = std::move(sortedOn);
-
-          computeFilterImpl(output, evaluationContext);
-
-          // Reuse vector
-          sortedOn = std::move(evaluationContext._columnsByWhichResultIsSorted);
+          computeFilterImpl(output, idTable, subRes->localVocab(),
+                            subRes->sortedBy());
           checkCancellation();
         }
 
@@ -101,23 +88,15 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 
 // _____________________________________________________________________________
 IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
-                              const IdTable& idTable) {
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), idTable,
-      getExecutionContext()->getAllocator(), subRes->localVocab(),
-      cancellationHandle_, deadline_);
-
-  // TODO<joka921> This should be a mandatory argument to the
-  // EvaluationContext constructor.
-  evaluationContext._columnsByWhichResultIsSorted = subRes->sortedBy();
-
-  size_t width = evaluationContext._inputTable.numColumns();
+                              const IdTable& idTable) const {
+  size_t width = idTable.numColumns();
   IdTable result = ad_utility::callFixedSize(
-      width, [this, &evaluationContext, width]<int WIDTH>() {
+      width, [this, &idTable, width, &subRes]<int WIDTH>() {
         IdTable result{width, getExecutionContext()->getAllocator()};
         IdTableStatic<WIDTH> output =
             std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
-        computeFilterImpl(output, evaluationContext);
+        computeFilterImpl(output, idTable, subRes->localVocab(),
+                          subRes->sortedBy());
 
         return std::move(output).toDynamic();
       });
@@ -127,9 +106,19 @@ IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
 
 // _____________________________________________________________________________
 template <int WIDTH>
-void Filter::computeFilterImpl(
-    IdTableStatic<WIDTH>& resultTable,
-    sparqlExpression::EvaluationContext& evaluationContext) {
+void Filter::computeFilterImpl(IdTableStatic<WIDTH>& resultTable,
+                               const IdTable& inputTable,
+                               const LocalVocab& localVocab,
+                               std::vector<ColumnIndex> sortedBy) const {
+  AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
+  sparqlExpression::EvaluationContext evaluationContext(
+      *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
+      getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
+      deadline_);
+
+  // TODO<joka921> This should be a mandatory argument to the
+  // EvaluationContext constructor.
+  evaluationContext._columnsByWhichResultIsSorted = std::move(sortedBy);
   const auto input =
       evaluationContext._inputTable.asStaticView<static_cast<size_t>(WIDTH)>();
   sparqlExpression::ExpressionResult expressionResult =
