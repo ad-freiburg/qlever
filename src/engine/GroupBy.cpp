@@ -6,12 +6,12 @@
 
 #include "engine/GroupBy.h"
 
-#include "absl/strings/str_join.h"
+#include <absl/strings/str_join.h>
+
 #include "engine/CallFixedSize.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
 #include "engine/Sort.h"
-#include "engine/Values.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
@@ -21,9 +21,10 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
-#include "util/Conversions.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
+
+using groupBy::detail::VectorOfAggregationData;
 
 // _______________________________________________________________________________________________
 GroupBy::GroupBy(QueryExecutionContext* qec, vector<Variable> groupByVariables,
@@ -216,23 +217,7 @@ void GroupBy::processGroup(
   std::visit(visitor, std::move(expressionResult));
 }
 
-/**
- * @brief This method takes a single group and computes the output for the
- *        given aggregate.
- * @param a The aggregate which should be used to create the output
- * @param blockStart Where the group start.
- * @param blockEnd Where the group ends.
- * @param input The input Table.
- * @param result
- * @param inTable The input Result, which is required for its local
- *                vocabulary
- * @param outTable The output Result, the vocabulary of which needs to be
- *                 expanded for GROUP_CONCAT aggregates
- * @param distinctHashSet An empty hash set. This is only passed in as an
- *                        argument to allow for efficient reusage of its
- *                        its already allocated storage.
- */
-
+// _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 IdTable GroupBy::doGroupBy(const IdTable& inTable,
                            const vector<size_t>& groupByCols,
@@ -543,38 +528,29 @@ std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() {
         "not supported."};
   }
 
-  // Prepare the `result`
-  size_t numCols = numCounts + 1;
   _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut({});
 
-  // A nested lambda that computes the actual result. The outer lambda is
-  // templated on the number of columns (1 or 2) and will be passed to
-  // `callFixedSize`.
-  auto doComputationForNumberOfColumns = [&]<int NUM_COLS>() mutable {
-    auto ignoredRanges =
-        getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
-    const auto& permutation =
-        getExecutionContext()->getIndex().getPimpl().getPermutation(
-            permutationEnum.value());
-    auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
-    if (NUM_COLS == 1) {
-      table.setColumnSubset({{0}});
-    }
-    // TODO<joka921> This is only semi-efficient.
-    auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
-      return std::ranges::any_of(ignoredRanges,
-                                 [id = row[0]](const auto& pair) {
-                                   return id >= pair.first && id < pair.second;
-                                 });
+  auto ignoredRanges =
+      getIndex().getImpl().getIgnoredIdRanges(permutationEnum.value()).first;
+  const auto& permutation =
+      getExecutionContext()->getIndex().getPimpl().getPermutation(
+          permutationEnum.value());
+  auto table = permutation.getDistinctCol0IdsAndCounts(cancellationHandle_);
+  if (numCounts == 0) {
+    table.setColumnSubset({{0}});
+  }
+  // TODO<joka921> This is only semi-efficient.
+  auto end = std::ranges::remove_if(table, [&ignoredRanges](const auto& row) {
+    return std::ranges::any_of(ignoredRanges, [id = row[0]](const auto& pair) {
+      return id >= pair.first && id < pair.second;
     });
-    table.resize(end.begin() - table.begin());
-    return table;
-  };
+  });
+  table.resize(end.begin() - table.begin());
 
   // TODO<joka921> This optimization should probably also apply if
   // the query is `SELECT DISTINCT ?s WHERE {?s ?p ?o} ` without a
   // GROUP BY, but that needs to be implemented in the `DISTINCT` operation.
-  return ad_utility::callFixedSize(numCols, doComputationForNumberOfColumns);
+  return table;
 }
 
 // ____________________________________________________________________________
@@ -736,15 +712,7 @@ std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
 
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
-GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
-  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
-    return std::nullopt;
-  }
-
-  if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
-    return std::nullopt;
-  }
-
+GroupBy::computeHashMapOptimizationMetadata(std::vector<Aggregate>& aliases) {
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -776,6 +744,19 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
   }
 
   return HashMapOptimizationData{aliasesWithAggregateInfo};
+}
+
+// _____________________________________________________________________________
+std::optional<GroupBy::HashMapOptimizationData>
+GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
+  if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
+    return std::nullopt;
+  }
+
+  if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
+    return std::nullopt;
+  }
+  return computeHashMapOptimizationMetadata(aliases);
 }
 
 // _____________________________________________________________________________
@@ -847,7 +828,7 @@ bool GroupBy::hasAnyType(const auto& expr) {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapAggregateTypeWithData>
 GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
-  using enum GroupBy::HashMapAggregateType;
+  using enum HashMapAggregateType;
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
@@ -879,7 +860,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* expr,
     std::optional<ParentAndChildIndex> parentAndChildIndex,
-    std::vector<GroupBy::HashMapAggregateInformation>& info) {
+    std::vector<HashMapAggregateInformation>& info) {
   if (expr->isAggregate()) {
     if (auto aggregateType = isSupportedAggregate(expr)) {
       info.emplace_back(expr, 0, aggregateType.value(), parentAndChildIndex);
@@ -942,7 +923,7 @@ GroupBy::getHashMapAggregationResults(
     IdTable* resultTable,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     size_t dataIndex, size_t beginIndex, size_t endIndex,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   sparqlExpression::VectorWithMemoryLimit<ValueId> aggregateResults(
       getExecutionContext()->getAllocator());
   aggregateResults.resize(endIndex - beginIndex);
@@ -975,9 +956,8 @@ GroupBy::getHashMapAggregationResults(
 
 // _____________________________________________________________________________
 void GroupBy::substituteGroupVariable(
-    const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-    IdTable* resultTable, size_t beginIndex, size_t count,
-    size_t columnIndex) const {
+    const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
+    size_t beginIndex, size_t count, size_t columnIndex) const {
   decltype(auto) groupValues =
       resultTable->getColumn(columnIndex).subspan(beginIndex, count);
 
@@ -1001,7 +981,7 @@ void GroupBy::substituteAllAggregates(
     std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
     size_t endIndex,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    IdTable* resultTable, LocalVocab* localVocab) {
+    IdTable* resultTable, LocalVocab* localVocab) const {
   // Substitute in the results of all aggregates of `info`.
   for (auto& aggregate : info) {
     auto aggregateResults = getHashMapAggregationResults(
@@ -1018,11 +998,6 @@ void GroupBy::substituteAllAggregates(
                                          std::move(newExpression));
   }
 }
-
-// _____________________________________________________________________________
-template <typename A>
-concept SupportedAggregates =
-    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
 
 // _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS>
@@ -1054,9 +1029,9 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
   }
 
   auto resizeVectors =
-      []<SupportedAggregates T>(
+      []<VectorOfAggregationData T>(
           T& arg, size_t numberOfGroups,
-          [[maybe_unused]] const GroupBy::HashMapAggregateTypeWithData& info) {
+          [[maybe_unused]] const HashMapAggregateTypeWithData& info) {
         if constexpr (std::same_as<typename T::value_type,
                                    GroupConcatAggregationData>) {
           arg.resize(numberOfGroups,
@@ -1074,7 +1049,7 @@ GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS>::getHashEntries(
 
     std::visit(
         [&resizeVectors, &aggregationTypeWithData,
-         numberOfGroups]<SupportedAggregates T>(T& arg) {
+         numberOfGroups]<VectorOfAggregationData T>(T& arg) {
           resizeVectors(arg, numberOfGroups, aggregationTypeWithData);
         },
         aggregation);
@@ -1117,7 +1092,7 @@ void GroupBy::evaluateAlias(
     HashMapAliasInformation& alias, IdTable* result,
     sparqlExpression::EvaluationContext& evaluationContext,
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   auto& info = alias.aggregateInfo_;
 
   // Either:
@@ -1265,8 +1240,8 @@ static constexpr auto makeProcessGroupsVisitor =
        const std::vector<size_t>& hashEntries) {
       return [blockSize, evaluationContext,
               &hashEntries]<sparqlExpression::SingleExpressionResult T,
-                            SupportedAggregates A>(T&& singleResult,
-                                                   A& aggregationDataVector) {
+                            VectorOfAggregationData A>(
+                 T&& singleResult, A& aggregationDataVector) {
         auto generator = sparqlExpression::detail::makeGenerator(
             std::forward<T>(singleResult), blockSize, evaluationContext);
 
