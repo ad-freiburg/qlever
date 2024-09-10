@@ -27,19 +27,13 @@ class LazyGroupBy {
                  const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
                  const GroupBy& groupBy);
 
-  void resetAggregationData();
-
   void processNextBlock(sparqlExpression::EvaluationContext& evaluationContext,
                         size_t beginIndex, size_t endIndex);
 
  private:
-  ValueId calculateAggregateResult(size_t aggregateIndex);
+  void resetAggregationData();
 
   void addToAggregateFunction(size_t aggregateIndex,
                               const std::variant<ValueId, LocalVocabEntry>& id,
                               const sparqlExpression::EvaluationContext* ctx);
-
-  static void substituteGroupVariable(
-      const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-      ValueId value);
 };

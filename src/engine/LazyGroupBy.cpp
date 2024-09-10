@@ -4,7 +4,6 @@
 
 #include "LazyGroupBy.h"
 
-#include "engine/sparqlExpressions/LiteralExpression.h"
 #include "global/Constants.h"
 
 using groupBy::detail::VectorOfAggregationData;
@@ -101,31 +100,6 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
           std::move(expressionResult));
     }
   }
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::substituteGroupVariable(
-    const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-    ValueId value) {
-  for (const auto& occurrence : occurrences) {
-    auto newExpression =
-        std::make_unique<sparqlExpression::IdExpression>(std::move(value));
-
-    occurrence.parent_->replaceChild(occurrence.nThChild_,
-                                     std::move(newExpression));
-  }
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-ValueId LazyGroupBy<NUM_GROUP_COLUMNS>::calculateAggregateResult(
-    size_t aggregateIndex) {
-  return std::visit(
-      [this](const auto& aggregateData) {
-        return aggregateData.at(0).calculateResult(&localVocab_);
-      },
-      aggregationData_.getAggregationDataVariant(aggregateIndex));
 }
 
 // _____________________________________________________________________________
