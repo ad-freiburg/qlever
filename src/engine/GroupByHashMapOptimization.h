@@ -6,7 +6,6 @@
 #pragma once
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
@@ -186,7 +185,7 @@ struct GroupConcatAggregationData {
 
   // _____________________________________________________________________________
   explicit GroupConcatAggregationData(std::string_view separator)
-      : separator_{std::move(separator)} {
+      : separator_{separator} {
     currentValue_.reserve(20000);
   }
 
