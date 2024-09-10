@@ -12,8 +12,6 @@
 #include "index/Index.h"
 #include "index/IndexBuilderTypes.h"
 #include "index/LocatedTriples.h"
-#include "parser/TurtleParser.h"
-#include "util/HashSet.h"
 
 // A class for maintaining triples that are inserted or deleted after index
 // building, we call these delta triples. How it works in principle:
@@ -109,7 +107,7 @@ class DeltaTriples {
   // action: insert or delete. `targetMap` contains triples for the current
   // action. `inverseMap` contains triples for the inverse action. These are
   // then used to resolve idempotent actions and update the corresponding maps.
-  void DeltaTriples::modifyTriplesImpl(
+  void modifyTriplesImpl(
       ad_utility::SharedCancellationHandle cancellationHandle,
       std::vector<IdTriple<0>> triples, bool shouldExist,
       ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& targetMap,

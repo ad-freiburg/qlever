@@ -10,7 +10,6 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "index/LocatedTriples.h"
-#include "parser/TurtleParser.h"
 
 // ____________________________________________________________________________
 LocatedTriples::iterator& DeltaTriples::LocatedTripleHandles::forPermutation(
