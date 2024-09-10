@@ -386,10 +386,13 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
               std::move(localVocabPointer)};
     }
     // In this case we expect the generator to yield exactly one `IdTable`.
-    for (IdTable& idTable : generator) {
-      return {std::move(idTable), resultSortedOn(),
-              std::move(*localVocabPointer)};
-    }
+    auto iterator = generator.begin();
+    AD_CORRECTNESS_CHECK(iterator != generator.end());
+    IdTable idTable = std::move(*iterator);
+    // Only one result is expected
+    AD_CORRECTNESS_CHECK(++iterator == generator.end());
+    return {std::move(idTable), resultSortedOn(),
+            std::move(*localVocabPointer)};
   }
   size_t inWidth = subresult->idTable().numColumns();
   size_t outWidth = getResultWidth();
