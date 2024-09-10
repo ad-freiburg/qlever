@@ -131,8 +131,9 @@ cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
   }
   auto blocksSpan =
       CompressedRelationReader::getBlocksFromMetadata(metadata.value());
-  std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
-                                              blocksSpan.end()};
+  std::vector<CompressedBlockMetadata> blocks{
+      std::get<std::span<const CompressedBlockMetadata>>(blocksSpan).begin(),
+      std::get<std::span<const CompressedBlockMetadata>>(blocksSpan).end()};
   for (IdTable& idTable : getLazyScan(std::move(blocks))) {
     co_yield std::move(idTable);
   }

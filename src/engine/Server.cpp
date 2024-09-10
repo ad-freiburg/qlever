@@ -666,15 +666,16 @@ nlohmann::json Server::executeUpdateQuery(
   auto timeTemplatePrepration = step.msecs();
   step.start();
 
-  auto resolveVariable = [](const ConstructQueryExportContext& context,
-                            IdOrVariable idOrVar) -> std::optional<Id> {
+  auto resolveVariable = [&res](const size_t& row,
+                                const VariableToColumnMap& variableColumns,
+                                IdOrVariable idOrVar) -> std::optional<Id> {
     if (std::holds_alternative<Variable>(idOrVar)) {
       auto var = std::get<Variable>(std::move(idOrVar));
-      if (!context._variableColumns.contains(var)) {
+      if (!variableColumns.contains(var)) {
         return std::nullopt;
       } else {
-        return context._res.idTable().operator()(
-            context._row, context._variableColumns.at(var).columnIndex_);
+        return res->idTable().operator()(row,
+                                         variableColumns.at(var).columnIndex_);
       }
     } else if (std::holds_alternative<Id>(idOrVar)) {
       return std::get<Id>(idOrVar);
@@ -690,12 +691,10 @@ nlohmann::json Server::executeUpdateQuery(
   // Result size is size(query result) x num template rows
   // TODO: use ExportQueryExecutionTrees::getRowIndices as iterator
   for (size_t i : std::views::iota((size_t)0, res->idTable().size())) {
-    ConstructQueryExportContext context{i, *res, qet.getVariableColumns(),
-                                        qet.getQec()->getIndex()};
     for (const auto& [s, p, o] : toInsertTemplates) {
-      auto subject = resolveVariable(context, s);
-      auto predicate = resolveVariable(context, p);
-      auto object = resolveVariable(context, o);
+      auto subject = resolveVariable(i, qet.getVariableColumns(), s);
+      auto predicate = resolveVariable(i, qet.getVariableColumns(), p);
+      auto object = resolveVariable(i, qet.getVariableColumns(), o);
       if (!subject.has_value() || !predicate.has_value() ||
           !object.has_value()) {
         continue;
@@ -707,9 +706,9 @@ nlohmann::json Server::executeUpdateQuery(
     }
 
     for (const auto& [s, p, o] : toDeleteTemplates) {
-      auto subject = resolveVariable(context, s);
-      auto predicate = resolveVariable(context, p);
-      auto object = resolveVariable(context, o);
+      auto subject = resolveVariable(i, qet.getVariableColumns(), s);
+      auto predicate = resolveVariable(i, qet.getVariableColumns(), p);
+      auto object = resolveVariable(i, qet.getVariableColumns(), o);
       if (!subject.has_value() || !predicate.has_value() ||
           !object.has_value()) {
         continue;
@@ -742,8 +741,7 @@ nlohmann::json Server::executeUpdateQuery(
   j["runtimeInformation"]["meta"] = nlohmann::ordered_json(
       qet.getRootOperation()->getRuntimeInfoWholeQuery());
   RuntimeInformation runtimeInformation = qet.getRootOperation()->runtimeInfo();
-  runtimeInformation.addLimitOffsetRow(
-      query._limitOffset, std::chrono::milliseconds::zero(), false);
+  runtimeInformation.addLimitOffsetRow(query._limitOffset, false);
   runtimeInformation.addDetail("executed-implicitly-during-query-export", true);
   j["runtimeInformation"]["query_execution_tree"] =
       nlohmann::ordered_json(runtimeInformation);

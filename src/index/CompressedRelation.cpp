@@ -783,11 +783,12 @@ void CompressedRelationWriter::compressAndWriteBlock(
 
     // TODO<qup42>: are the blocks generated in order? (the sort in
     // `getFinishedBlocks` suggests not)
-    blockBuffer_.wlock()->push_back(
-        CompressedBlockMetadata{std::move(offsets),
-                                numRows,
-                                {first[0], first[1], first[2]},
-                                {last[0], last[1], last[2]}});
+    blockBuffer_.wlock()->push_back(CompressedBlockMetadata{
+        0,  // will be set later in CompressedRelationWriter::getFinishedBlocks
+        std::move(offsets),
+        numRows,
+        {first[0], first[1], first[2]},
+        {last[0], last[1], last[2]}});
     if (invokeCallback && smallBlocksCallback_) {
       std::invoke(smallBlocksCallback_, std::move(buf));
     }

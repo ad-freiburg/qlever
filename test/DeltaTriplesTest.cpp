@@ -13,7 +13,7 @@
 #include "index/DeltaTriples.h"
 #include "index/IndexImpl.h"
 #include "index/Permutation.h"
-#include "parser/TurtleParser.h"
+#include "parser/RdfParser.h"
 
 namespace Matchers {
 inline auto InAllPermutations = [](auto InnerMatcher) {
@@ -64,7 +64,7 @@ class DeltaTriplesTest : public ::testing::Test {
   // Make `TurtleTriple` from given Turtle input.
   std::vector<TurtleTriple> makeTurtleTriples(
       std::vector<std::string> turtles) {
-    TurtleStringParser<Tokenizer> parser;
+    RdfStringParser<TurtleParser<Tokenizer>> parser;
     // turtles is copied here
     std::ranges::for_each(turtles, [&parser](const std::string& turtle) {
       parser.parseUtf8String(turtle);

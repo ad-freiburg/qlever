@@ -222,8 +222,8 @@ class TripleComponent {
         return Id::makeFromVocabIndex(idx);
       } else if (localVocabIndexOpt.has_value()) {
         return Id::makeFromLocalVocabIndex(localVocabIndexOpt.value());
-      } else if (qlever::specialIds.contains(content)) {
-        return qlever::specialIds.at(content);
+      } else if (qlever::specialIds().contains(content)) {
+        return qlever::specialIds().at(content);
       } else {
         return std::nullopt;
       }
