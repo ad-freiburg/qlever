@@ -89,6 +89,12 @@ class GroupBy : public Operation {
 
   ProtoResult computeResult(bool requestLaziness) override;
 
+  template <int COLS>
+  size_t searchBlockBoundaries(
+      const std::invocable<size_t, size_t> auto& onBlockChange,
+      const IdTableView<COLS>& idTable,
+      std::vector<std::pair<size_t, Id>>& currentGroupBlock) const;
+
   template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,

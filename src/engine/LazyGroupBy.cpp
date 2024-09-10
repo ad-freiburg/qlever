@@ -13,11 +13,9 @@ template <size_t NUM_GROUP_COLUMNS>
 LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
     LocalVocab& localVocab,
     std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
-    const std::vector<size_t>& groupByCols,
     const ad_utility::AllocatorWithLimit<Id>& allocator)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
-      groupByCols_{groupByCols},
       aggregationData_{allocator, aggregateAliases_, NUM_GROUP_COLUMNS} {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
@@ -55,10 +53,11 @@ template <size_t NUM_GROUP_COLUMNS>
 void LazyGroupBy<NUM_GROUP_COLUMNS>::commitRow(
     IdTable& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext,
+    const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
     const GroupBy& groupBy) {
   resultTable.emplace_back();
-  for (size_t rowIndex = 0; rowIndex < groupByCols_.size(); ++rowIndex) {
-    resultTable.back()[rowIndex] = currentGroupBlock_.at(rowIndex).second;
+  for (const auto& [colIdx, value] : currentGroupBlock) {
+    resultTable.back()[colIdx] = value;
   }
 
   evaluationContext._beginIndex = resultTable.size() - 1;
@@ -102,43 +101,6 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
           std::move(expressionResult));
     }
   }
-}
-
-// _____________________________________________________________________________
-
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::populateGroupBlock(const IdTable& idTable,
-                                                        size_t row) {
-  if (currentGroupBlock_.empty()) {
-    for (size_t col : groupByCols_) {
-      currentGroupBlock_.emplace_back(col, idTable(0, col));
-    }
-  } else {
-    for (auto& columnPair : currentGroupBlock_) {
-      columnPair.second = idTable(row, columnPair.first);
-    }
-  }
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-bool LazyGroupBy<NUM_GROUP_COLUMNS>::rowMatchesCurrentBlock(
-    const IdTable& idTable, size_t row) {
-  return std::all_of(currentGroupBlock_.begin(), currentGroupBlock_.end(),
-                     [&](const auto& columns) {
-                       return idTable(row, columns.first) == columns.second;
-                     });
-}
-
-// _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-std::vector<Id> LazyGroupBy<NUM_GROUP_COLUMNS>::getCurrentRow(
-    size_t outputSize) const {
-  std::vector result(outputSize, Id::makeUndefined());
-  for (const auto& columnPair : currentGroupBlock_) {
-    result.at(columnPair.first) = columnPair.second;
-  }
-  return result;
 }
 
 // _____________________________________________________________________________

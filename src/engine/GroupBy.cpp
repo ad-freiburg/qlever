@@ -279,25 +279,12 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
-  size_t blockStart = 0;
-
-  for (size_t pos = 1; pos < input.size(); pos++) {
-    checkCancellation();
-    bool rowMatchesCurrentBlock =
-        std::all_of(currentGroupBlock.begin(), currentGroupBlock.end(),
-                    [&](const auto& columns) {
-                      return input(pos, columns.first) == columns.second;
-                    });
-    if (!rowMatchesCurrentBlock) {
-      processNextBlock(blockStart, pos);
-      // setup for processing the next block
-      blockStart = pos;
-      for (auto& columnPair : currentGroupBlock) {
-        columnPair.second = input(pos, columnPair.first);
-      }
-    }
-  }
-  processNextBlock(blockStart, input.size());
+  // TODO<RobinTF> consider if it's worth skipping the first element here
+  // (because it will always be equal to itself) and introduce an extra
+  // parameter for this.
+  size_t lastBlockStart =
+      searchBlockBoundaries(processNextBlock, input, currentGroupBlock);
+  processNextBlock(lastBlockStart, input.size());
   return std::move(result).toDynamic();
 }
 
@@ -416,6 +403,32 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 }
 
 // _____________________________________________________________________________
+template <int COLS>
+size_t GroupBy::searchBlockBoundaries(
+    const std::invocable<size_t, size_t> auto& onBlockChange,
+    const IdTableView<COLS>& idTable,
+    std::vector<std::pair<size_t, Id>>& currentGroupBlock) const {
+  size_t blockStart = 0;
+
+  for (size_t pos = 0; pos < idTable.size(); pos++) {
+    checkCancellation();
+    bool rowMatchesCurrentBlock =
+        std::ranges::all_of(currentGroupBlock, [&](const auto& colIdxAndValue) {
+          return idTable(pos, colIdxAndValue.first) == colIdxAndValue.second;
+        });
+    if (!rowMatchesCurrentBlock) {
+      onBlockChange(blockStart, pos);
+      // setup for processing the next block
+      blockStart = pos;
+      for (auto& [colIdx, value] : currentGroupBlock) {
+        value = idTable(pos, colIdx);
+      }
+    }
+  }
+  return blockStart;
+}
+
+// _____________________________________________________________________________
 template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
@@ -426,10 +439,11 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
                     NUM_GROUP_COLUMNS == 0);
 
   LazyGroupBy<NUM_GROUP_COLUMNS> lazyGroupBy{
-      *localVocab, std::move(aggregateAliases), groupByCols,
+      *localVocab, std::move(aggregateAliases),
       getExecutionContext()->getAllocator()};
 
-  auto createEvaluationContextForTable = [this, &localVocab](IdTable& table) {
+  auto createEvaluationContextForTable = [this,
+                                          &localVocab](const IdTable& table) {
     sparqlExpression::EvaluationContext evaluationContext{
         *getExecutionContext(),
         _subtree->getVariableColumns(),
@@ -451,54 +465,52 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   bool groupSplitAcrossTables = false;
 
+  std::vector<std::pair<size_t, Id>> currentGroupBlock;
+
   for (IdTable& idTable : subresult->idTables()) {
     if (idTable.empty()) {
       continue;
     }
     checkCancellation();
 
-    // This bool happens to be false only for the first iteration.
-    if (!groupSplitAcrossTables) {
-      lazyGroupBy.populateGroupBlock(idTable, 0);
+    if (currentGroupBlock.empty()) {
+      for (size_t col : groupByCols) {
+        currentGroupBlock.emplace_back(col, idTable(0, col));
+      }
     }
 
     sparqlExpression::EvaluationContext evaluationContext =
         createEvaluationContextForTable(idTable);
 
-    size_t blockStart = 0;
-
-    for (size_t pos = 0; pos < idTable.size(); pos++) {
-      checkCancellation();
-      if (!lazyGroupBy.rowMatchesCurrentBlock(idTable, pos)) {
-        if (groupSplitAcrossTables) {
-          lazyGroupBy.processNextBlock(evaluationContext, blockStart, pos);
-          lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
-          groupSplitAcrossTables = false;
-        } else {
-          // This processes the whole block in batches if possible
-          resultTable.emplace_back();
-          for (size_t i = 0; i < groupByCols.size(); ++i) {
-            resultTable(resultTable.size() - 1, i) =
-                idTable(blockStart, groupByCols[i]);
+    size_t lastBlockStart = searchBlockBoundaries(
+        [&](size_t blockStart, size_t blockEnd) {
+          if (groupSplitAcrossTables) {
+            lazyGroupBy.processNextBlock(evaluationContext, blockStart,
+                                         blockEnd);
+            lazyGroupBy.commitRow(resultTable, evaluationContext,
+                                  currentGroupBlock, *this);
+            groupSplitAcrossTables = false;
+          } else {
+            // This processes the whole block in batches if possible
+            resultTable.emplace_back();
+            for (size_t i = 0; i < groupByCols.size(); ++i) {
+              resultTable(resultTable.size() - 1, i) =
+                  idTable(blockStart, groupByCols[i]);
+            }
+            IdTableStatic<OUT_WIDTH> table =
+                std::move(resultTable).toStatic<OUT_WIDTH>();
+            for (const Aggregate& aggregate : aggregates) {
+              processGroup<OUT_WIDTH>(aggregate, evaluationContext, blockStart,
+                                      blockEnd, &table, table.size() - 1,
+                                      aggregate._outCol, localVocab.get());
+            }
+            resultTable = std::move(table).toDynamic();
           }
-          IdTableStatic<OUT_WIDTH> table =
-              std::move(resultTable).toStatic<OUT_WIDTH>();
-          for (const Aggregate& aggregate : aggregates) {
-            processGroup<OUT_WIDTH>(aggregate, evaluationContext, blockStart,
-                                    pos, &table, table.size() - 1,
-                                    aggregate._outCol, localVocab.get());
-          }
-          resultTable = std::move(table).toDynamic();
-        }
-
-        // setup for processing the next block
-        blockStart = pos;
-
-        lazyGroupBy.populateGroupBlock(idTable, pos);
-      }
-    }
+        },
+        idTable.asStaticView<OUT_WIDTH>(), currentGroupBlock);
     groupSplitAcrossTables = true;
-    lazyGroupBy.processNextBlock(evaluationContext, blockStart, idTable.size());
+    lazyGroupBy.processNextBlock(evaluationContext, lastBlockStart,
+                                 idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
       co_yield resultTable;
       resultTable =
@@ -507,7 +519,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
   }
   size_t numColumns = _subtree->getRootOperation()->getResultWidth();
   // Ensure no exception is thrown in empty case
-  if (lazyGroupBy.noEntriesProcessed()) {
+  if (currentGroupBlock.empty()) {
     // Only for queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
     // implicit GROUP BY we have to return a single line as a result, otherwise
     // we can safely abort here.
@@ -529,12 +541,15 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
   }
   IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(
                                   1_B * sizeof(Id) * numColumns)};
-
-  idTable.push_back(lazyGroupBy.getCurrentRow(numColumns));
+  idTable.emplace_back();
+  for (const auto& [colIdx, value] : currentGroupBlock) {
+    idTable.at(0, colIdx) = value;
+  }
 
   sparqlExpression::EvaluationContext evaluationContext =
       createEvaluationContextForTable(idTable);
-  lazyGroupBy.commitRow(resultTable, evaluationContext, *this);
+  lazyGroupBy.commitRow(resultTable, evaluationContext, currentGroupBlock,
+                        *this);
   co_yield resultTable;
 }
 
