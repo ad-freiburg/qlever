@@ -105,6 +105,16 @@ class DeltaTriples {
       ad_utility::SharedCancellationHandle cancellationHandle,
       std::span<const IdTriple<0>> idTriples, bool shouldExist);
 
+  // Implementation to actually insert triples. `shouldExist` specifies the
+  // action: insert or delete. `targetMap` contains triples for the current
+  // action. `inverseMap` contains triples for the inverse action. These are
+  // then used to resolve idempotent actions and update the corresponding maps.
+  void DeltaTriples::modifyTriplesImpl(
+      ad_utility::SharedCancellationHandle cancellationHandle,
+      std::vector<IdTriple<0>> triples, bool shouldExist,
+      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& targetMap,
+      ad_utility::HashMap<IdTriple<0>, LocatedTripleHandles>& inverseMap);
+
   // Erase `LocatedTriple` object from each `LocatedTriplesPerBlock` list. The
   // argument are iterators for each list, as returned by the method
   // `locateTripleInAllPermutations` above.
