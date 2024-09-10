@@ -324,6 +324,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     _subtree->getRootOperation()->updateRuntimeInformationWhenOptimizedOut(
         {runTimeInfoChildren}, RuntimeInformation::Status::optimizedOut);
   } else {
+    // Always request child operation to provide a lazy result if the aggregate
+    // expressions allow to compute the full result in chunks
     hashMapOptimizationParams = computeHashMapOptimizationMetadata(aggregates);
     subresult = _subtree->getResult(hashMapOptimizationParams.has_value());
   }
