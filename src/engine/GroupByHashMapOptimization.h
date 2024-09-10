@@ -6,7 +6,6 @@
 #pragma once
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
@@ -42,10 +41,15 @@ struct AvgAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
+    if (error_) {
       return ValueId::makeUndefined();
-    else
-      return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
+    }
+    // AVG(empty group) = 0, this is mandated by the SPARQL 1.1 standard.
+    if (count_ == 0) {
+      return ValueId::makeFromInt(0);
+    }
+
+    return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
   }
 };
 
@@ -136,12 +140,13 @@ struct SumAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
+    if (error_) {
       return ValueId::makeUndefined();
-    else if (intSumValid_)
+    }
+    if (intSumValid_) {
       return ValueId::makeFromInt(intSum_);
-    else
-      return ValueId::makeFromDouble(sum_);
+    }
+    return ValueId::makeFromDouble(sum_);
   }
 };
 
@@ -149,7 +154,7 @@ struct SumAggregationData {
 struct GroupConcatAggregationData {
   using ValueGetter = sparqlExpression::detail::StringValueGetter;
   std::string currentValue_;
-  std::string separator_;
+  std::string_view separator_;
 
   // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
@@ -171,8 +176,8 @@ struct GroupConcatAggregationData {
   }
 
   // _____________________________________________________________________________
-  explicit GroupConcatAggregationData(std::string separator)
-      : separator_{std::move(separator)} {
+  explicit GroupConcatAggregationData(std::string_view separator)
+      : separator_{separator} {
     currentValue_.reserve(20000);
   }
 };

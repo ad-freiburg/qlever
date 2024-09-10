@@ -96,6 +96,8 @@ class Result {
          std::vector<ColumnIndex> sortedBy, SharedLocalVocabWrapper localVocab);
   Result(cppcoro::generator<IdTable> idTables,
          std::vector<ColumnIndex> sortedBy, LocalVocab&& localVocab);
+  Result(cppcoro::generator<IdTable> idTables,
+         std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab);
   // Prevent accidental copying of a result table.
   Result(const Result& other) = delete;
   Result& operator=(const Result& other) = delete;
