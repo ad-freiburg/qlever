@@ -30,9 +30,10 @@ class IndexScan final : public Operation {
 
  public:
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt );
+            const SparqlTriple& triple, Graphs graphsToFilter = std::nullopt);
   IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
-            const SparqlTripleSimple& triple, Graphs graphsToFilter = std::nullopt);
+            const SparqlTripleSimple& triple,
+            Graphs graphsToFilter = std::nullopt);
 
   ~IndexScan() override = default;
 

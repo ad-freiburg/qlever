@@ -678,6 +678,41 @@ ExportQueryExecutionTrees::constructQueryResultToStream(
 }
 
 // _____________________________________________________________________________
+cppcoro::generator<std::string>
+ExportQueryExecutionTrees::convertStreamGeneratorForChunkedTransfer(
+    ad_utility::streams::stream_generator streamGenerator) {
+  // Immediately throw any exceptions that occur during the computation of the
+  // first block outside the actual generator. That way we get a proper HTTP
+  // response with error status codes etc. at least for those exceptions.
+  // Note: `begin` advances until the first block.
+  auto it = streamGenerator.begin();
+  return [](auto innerGenerator, auto it) -> cppcoro::generator<std::string> {
+    std::optional<std::string> exceptionMessage;
+    try {
+      for (; it != innerGenerator.end(); ++it) {
+        co_yield std::move(*it);
+      }
+    } catch (const std::exception& e) {
+      exceptionMessage = e.what();
+    } catch (...) {
+      exceptionMessage = "A very strange exception, please report this";
+    }
+    // TODO<joka921, RobinTF> Think of a better way to propagate and log those
+    // errors. We can additionally send them via the websocket connection, but
+    // that doesn't solve the problem for users of the plain HTTP 1.1 endpoint.
+    if (exceptionMessage.has_value()) {
+      std::string prefix =
+          "\n !!!!>># An error has occurred while exporting the query result. "
+          "Unfortunately due to limitations in the HTTP 1.1 protocol, there is "
+          "no better way to report this than to append it to the incomplete "
+          "result. The error message was:\n";
+      co_yield prefix;
+      co_yield exceptionMessage.value();
+    }
+  }(std::move(streamGenerator), std::move(it));
+}
+
+// _____________________________________________________________________________
 cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
     const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
     ad_utility::MediaType mediaType, const ad_utility::Timer& requestTimer,
@@ -706,14 +741,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
   auto inner =
       ad_utility::ConstexprSwitch<csv, tsv, octetStream, turtle, sparqlXml,
                                   sparqlJson, qleverJson>(compute, mediaType);
-  try {
-    for (auto& block : inner) {
-      co_yield std::move(block);
-    }
-  } catch (ad_utility::CancellationException& e) {
-    e.setOperation("Stream query export");
-    throw;
-  }
+  return convertStreamGeneratorForChunkedTransfer(std::move(inner));
 }
 
 // _____________________________________________________________________________
