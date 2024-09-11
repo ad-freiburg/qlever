@@ -60,6 +60,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
   if (beginBlock == endBlock) {
     co_return;
   }
+  std::atomic<size_t> numBlocksPostProcessed = 0;
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
   auto blockIterator = beginBlock;
@@ -91,7 +92,9 @@ CompressedRelationReader::asyncParallelBlockGenerator(
         readCompressedBlockFromFile(block, columnIndices);
     lock.unlock();
     auto decompressedBlock = decompressBlock(compressedBlock, block.numRows_);
-    blockGraphFilter(decompressedBlock, block);
+    if (blockGraphFilter(decompressedBlock, block)) {
+      numBlocksPostProcessed++;
+    }
     return std::pair{myIndex, std::optional{std::move(decompressedBlock)}};
   };
   const size_t numThreads =
@@ -116,6 +119,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       details.numElementsRead_ += block.numRows();
       pruneBlock(block, limitOffset);
       details.numElementsYielded_ += block.numRows();
+      details.numBlocksPostprocessed_ = numBlocksPostProcessed;
       if (!block.empty()) {
         co_yield block;
       }
@@ -176,35 +180,38 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   };
   auto filterDuplicatesAndGraphIds =
       [&columnIndices, &graphs = scanSpec.graphsToFilter()](
-          IdTable& block, const CompressedBlockMetadata& metadata) {
-        bool needsFilteringByGraph = [&]() {
-          if (!graphs.has_value()) {
-            return false;
-          }
-          if (!metadata.containedGraphs_.has_value()) {
-            return false;
-          }
-          const auto& containedGraphs = metadata.containedGraphs_.value();
-          if (containedGraphs.size() == 1 &&
-              graphs.value().contains(containedGraphs.front())) {
-            return false;
-          }
-          return true;
-        }();
-        if (needsFilteringByGraph) {
-          size_t graphColumn = columnIndices.size() - 1;
-          auto removedRange = std::ranges::remove_if(
-              block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
-              [graphColumn](const auto& row) { return row[graphColumn]; });
-          block.erase(removedRange.begin(), block.end());
-          block.deleteColumn(block.numColumns() - 1);
-        }
-        if (!metadata.containsDuplicatesWithDifferentGraphs_) {
-          return;
-        }
-        auto [endUnique, _] = std::ranges::unique(block);
-        block.erase(endUnique, block.end());
-      };
+          IdTable& block, const CompressedBlockMetadata& metadata) -> bool {
+    bool needsFilteringByGraph = [&]() {
+      if (!graphs.has_value()) {
+        return false;
+      }
+      if (!metadata.containedGraphs_.has_value()) {
+        return false;
+      }
+      const auto& containedGraphs = metadata.containedGraphs_.value();
+      if (containedGraphs.size() == 1 &&
+          graphs.value().contains(containedGraphs.front())) {
+        return false;
+      }
+      return true;
+    }();
+    if (needsFilteringByGraph) {
+      size_t graphColumn = columnIndices.size() - 1;
+      auto removedRange = std::ranges::remove_if(
+          block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
+          [graphColumn](const auto& row) { return row[graphColumn]; });
+      block.erase(removedRange.begin(), block.end());
+    }
+    if (graphs.has_value()) {
+      block.deleteColumn(block.numColumns() - 1);
+    }
+    if (!metadata.containsDuplicatesWithDifferentGraphs_) {
+      return needsFilteringByGraph;
+    }
+    auto [endUnique, _] = std::ranges::unique(block);
+    block.erase(endUnique, block.end());
+    return true;
+  };
 
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),

@@ -49,7 +49,7 @@ class ScanSpecification {
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
-  bool operator==(const ScanSpecification&) const = default;
+  // bool operator==(const ScanSpecification&) const = default;
 
   // Only used in tests.
   void setCol1Id(T col1Id) {

@@ -389,6 +389,7 @@ class CompressedRelationReader {
     // The number of blocks that could be skipped using only their metadata
     // because the GraphIDs of the block did not match the query.
     size_t numBlocksSkippedBecauseOfGraph_ = 0;
+    size_t numBlocksPostprocessed_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
@@ -574,7 +575,7 @@ class CompressedRelationReader {
   // multiple worker threads.
 
   using BlockGraphFilter =
-      std::function<void(IdTable&, const CompressedBlockMetadata&)>;
+      std::function<bool(IdTable&, const CompressedBlockMetadata&)>;
   using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
