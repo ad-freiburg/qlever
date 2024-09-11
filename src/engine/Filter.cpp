@@ -55,6 +55,7 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 
     return {std::move(result), resultSortedOn(), std::move(localVocab)};
   }
+
   if (requestLaziness) {
     return {[](auto subRes, auto* self) -> cppcoro::generator<IdTable> {
               for (IdTable& idTable : subRes->idTables()) {
@@ -65,21 +66,16 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
             resultSortedOn(), std::move(localVocab)};
   }
 
+  // If we receive a generator of IdTables, we need to materialize it into a
+  // single IdTable.
   size_t width = getSubtree().get()->getResultWidth();
-  IdTable result =
-      ad_utility::callFixedSize(width, [this, &subRes, width]<int WIDTH>() {
-        IdTable result{width, getExecutionContext()->getAllocator()};
-        IdTableStatic<WIDTH> output =
-            std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
-
-        for (IdTable& idTable : subRes->idTables()) {
-          computeFilterImpl(output, idTable, subRes->localVocab(),
-                            subRes->sortedBy());
-          checkCancellation();
-        }
-
-        return std::move(output).toDynamic();
-      });
+  IdTable result{width, getExecutionContext()->getAllocator()};
+  ad_utility::callFixedSize(width, [this, &subRes, &result]<int WIDTH>() {
+    for (IdTable& idTable : subRes->idTables()) {
+      computeFilterImpl<WIDTH>(result, idTable, subRes->localVocab(),
+                               subRes->sortedBy());
+    }
+  });
 
   LOG(DEBUG) << "Filter result computation done." << endl;
 
@@ -90,27 +86,21 @@ ProtoResult Filter::computeResult(bool requestLaziness) {
 IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
                               const IdTable& idTable) const {
   size_t width = idTable.numColumns();
-  IdTable result = ad_utility::callFixedSize(
-      width, [this, &idTable, width, &subRes]<int WIDTH>() {
-        IdTable result{width, getExecutionContext()->getAllocator()};
-        IdTableStatic<WIDTH> output =
-            std::move(result).toStatic<static_cast<size_t>(WIDTH)>();
-        computeFilterImpl(output, idTable, subRes->localVocab(),
-                          subRes->sortedBy());
-
-        return std::move(output).toDynamic();
-      });
-  checkCancellation();
+  IdTable result{width, getExecutionContext()->getAllocator()};
+  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, result, idTable,
+                  subRes->localVocab(), subRes->sortedBy());
   return result;
 }
 
 // _____________________________________________________________________________
 template <int WIDTH>
-void Filter::computeFilterImpl(IdTableStatic<WIDTH>& resultTable,
+void Filter::computeFilterImpl(IdTable& dynamicResultTable,
                                const IdTable& inputTable,
                                const LocalVocab& localVocab,
                                std::vector<ColumnIndex> sortedBy) const {
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
+  IdTableStatic<WIDTH> resultTable =
+      dynamicResultTable.toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
       getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
@@ -165,6 +155,9 @@ void Filter::computeFilterImpl(IdTableStatic<WIDTH>& resultTable,
       };
 
   std::visit(visitor, std::move(expressionResult));
+
+  dynamicResultTable = std::move(resultTable).toDynamic();
+  checkCancellation();
 }
 
 // _____________________________________________________________________________

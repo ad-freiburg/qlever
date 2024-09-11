@@ -62,8 +62,8 @@ class Filter : public Operation {
 
   // Perform the actual filter operation of the data provided.
   template <int WIDTH>
-  void computeFilterImpl(IdTableStatic<WIDTH>& resultTable,
-                         const IdTable& input, const LocalVocab& localVocab,
+  void computeFilterImpl(IdTable& dynamicResultTable, const IdTable& input,
+                         const LocalVocab& localVocab,
                          std::vector<ColumnIndex> sortedBy) const;
 
   // Run `computeFilterImpl` on the provided IdTable
