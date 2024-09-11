@@ -14,26 +14,22 @@
 #include <vector>
 
 #include "engine/GroupByHashMapOptimization.h"
+#include "engine/Join.h"
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 #include "parser/Alias.h"
-#include "parser/ParsedQuery.h"
 #include "util/TypeIdentity.h"
-
-using std::string;
-using std::vector;
-
-// Forward declarations for internal member function
-class IndexScan;
-class Join;
 
 // Block size for when using the hash map optimization
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
 class GroupBy : public Operation {
+  using string = std::string;
+  template <typename T>
+  using vector = std::vector<T>;
+
  private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
@@ -364,7 +360,7 @@ class GroupBy : public Operation {
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
@@ -374,7 +370,7 @@ class GroupBy : public Operation {
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
@@ -383,6 +379,12 @@ class GroupBy : public Operation {
       std::vector<HashMapAliasInformation>& aggregateAliases,
       LocalVocab* localVocab);
 
+ private:
+  // Reusable implementation of `checkIfHashMapOptimizationPossible`.
+  std::optional<HashMapOptimizationData> computeHashMapOptimizationMetadata(
+      std::vector<Aggregate>& aggregates);
+
+ public:
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
@@ -400,9 +402,8 @@ class GroupBy : public Operation {
 
   // Substitute the group values for all occurrences of a group variable.
   void substituteGroupVariable(
-      const std::vector<GroupBy::ParentAndChildIndex>& occurrences,
-      IdTable* resultTable, size_t beginIndex, size_t count,
-      size_t columnIndex) const;
+      const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
+      size_t beginIndex, size_t count, size_t columnIndex) const;
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`.
@@ -411,7 +412,7 @@ class GroupBy : public Operation {
       std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
       size_t endIndex,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      IdTable* resultTable, LocalVocab* localVocab);
+      IdTable* resultTable, LocalVocab* localVocab) const;
 
   // Check if an expression is of a certain type.
   template <class T>
@@ -422,8 +423,8 @@ class GroupBy : public Operation {
   static bool hasAnyType(const auto& expr);
 
   // Check if an expression is a currently supported aggregate.
-  static std::optional<GroupBy::HashMapAggregateTypeWithData>
-  isSupportedAggregate(sparqlExpression::SparqlExpression* expr);
+  static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
+      sparqlExpression::SparqlExpression* expr);
 
   // Find all occurrences of grouped by variable for expression `expr`.
   std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>
@@ -506,3 +507,10 @@ class GroupBy : public Operation {
   // TODO<joka921> Also inform the query planner (via the cost estimate)
   // that the optimization can be done.
 };
+
+// _____________________________________________________________________________
+namespace groupBy::detail {
+template <typename A>
+concept VectorOfAggregationData =
+    ad_utility::SameAsAnyTypeIn<A, GroupBy::AggregationDataVectors>;
+}
