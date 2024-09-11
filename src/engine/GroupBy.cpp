@@ -279,9 +279,6 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
-  // TODO<RobinTF> consider if it's worth skipping the first element here
-  // (because it will always be equal to itself) and introduce an extra
-  // parameter for this.
   size_t lastBlockStart =
       searchBlockBoundaries(processNextBlock, input, currentGroupBlock);
   processNextBlock(lastBlockStart, input.size());
@@ -309,12 +306,12 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   }
 
   // Check if optimization for explicitly sorted child can be applied
-  auto hashMapOptimizationParams =
+  auto metadataForUnsequentialData =
       checkIfHashMapOptimizationPossible(aggregates);
-  bool useHashMapOptimization = hashMapOptimizationParams.has_value();
+  bool useHashMapOptimization = metadataForUnsequentialData.has_value();
 
   std::shared_ptr<const Result> subresult;
-  if (hashMapOptimizationParams.has_value()) {
+  if (useHashMapOptimization) {
     const auto* child = _subtree->getRootOperation()->getChildren().at(0);
     // Skip sorting
     subresult = child->getResult();
@@ -326,8 +323,9 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   } else {
     // Always request child operation to provide a lazy result if the aggregate
     // expressions allow to compute the full result in chunks
-    hashMapOptimizationParams = computeHashMapOptimizationMetadata(aggregates);
-    subresult = _subtree->getResult(hashMapOptimizationParams.has_value());
+    metadataForUnsequentialData =
+        computeUnsequentialProcessingMetadata(aggregates);
+    subresult = _subtree->getResult(metadataForUnsequentialData.has_value());
   }
 
   LOG(DEBUG) << "GroupBy subresult computation done" << std::endl;
@@ -364,23 +362,21 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
   if (useHashMapOptimization) {
     IdTable idTable = CALL_FIXED_SIZE(
         groupByCols.size(), &GroupBy::computeGroupByForHashMapOptimization,
-        this, hashMapOptimizationParams->aggregateAliases_,
+        this, metadataForUnsequentialData->aggregateAliases_,
         subresult->idTable(), groupByCols, &localVocab);
 
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 
-  // TODO<RobinTF> Add runtime parameter to toggle of index scan specific
-  // optimizations for performance comparisons
   if (!subresult->isFullyMaterialized()) {
-    AD_CORRECTNESS_CHECK(hashMapOptimizationParams.has_value());
+    AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
     auto localVocabPointer =
         std::make_shared<LocalVocab>(std::move(localVocab));
     cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
         getResultWidth(), &GroupBy::computeResultLazily, this,
         std::move(subresult), std::move(aggregates),
-        std::move(hashMapOptimizationParams).value().aggregateAliases_,
+        std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
     if (requestLaziness) {
       return {std::move(generator), resultSortedOn(),
@@ -514,8 +510,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
                                  idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
       co_yield resultTable;
-      resultTable =
-          IdTable{getResultWidth(), getExecutionContext()->getAllocator()};
+      resultTable.clear();
     }
   }
   size_t numColumns = _subtree->getRootOperation()->getResultWidth();
@@ -860,6 +855,8 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
   // TODO<C++23> Use `std::optional::or_else`.
+  // TODO<RobinTF> Add runtime parameter to toggle index scan specific
+  // optimizations for performance comparisons
   if (auto result = computeGroupByForSingleIndexScan()) {
     return result;
   }
@@ -877,7 +874,8 @@ std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
 
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
-GroupBy::computeHashMapOptimizationMetadata(std::vector<Aggregate>& aliases) {
+GroupBy::computeUnsequentialProcessingMetadata(
+    std::vector<Aggregate>& aliases) {
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -921,7 +919,7 @@ GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
   if (!std::dynamic_pointer_cast<const Sort>(_subtree->getRootOperation())) {
     return std::nullopt;
   }
-  return computeHashMapOptimizationMetadata(aliases);
+  return computeUnsequentialProcessingMetadata(aliases);
 }
 
 // _____________________________________________________________________________
@@ -1347,7 +1345,8 @@ void GroupBy::evaluateAlias(
     sparqlExpression::ExpressionResult expressionResult =
         alias.expr_.getPimpl()->evaluate(&evaluationContext);
 
-    // Restore original children
+    // Restore original children. Only necessary when the expression will be
+    // used in the future (not the case for the hash map optimization).
     for (size_t i = 0; i < info.size(); ++i) {
       auto& aggregate = info.at(i);
       auto parentAndIndex = aggregate.parentAndIndex_.value();

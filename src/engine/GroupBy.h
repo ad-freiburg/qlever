@@ -397,7 +397,7 @@ class GroupBy : public Operation {
 
  private:
   // Reusable implementation of `checkIfHashMapOptimizationPossible`.
-  std::optional<HashMapOptimizationData> computeHashMapOptimizationMetadata(
+  std::optional<HashMapOptimizationData> computeUnsequentialProcessingMetadata(
       std::vector<Aggregate>& aggregates);
 
  public:

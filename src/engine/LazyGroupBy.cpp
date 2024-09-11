@@ -77,6 +77,7 @@ void LazyGroupBy::processNextBlock(
     for (auto& aggregate : aggregateAlias.aggregateInfo_) {
       // Evaluate child expression on block
       auto exprChildren = aggregate.expr_->children();
+      AD_CORRECTNESS_CHECK(exprChildren.size() == 1);
       sparqlExpression::ExpressionResult expressionResult =
           exprChildren[0]->evaluate(&evaluationContext);
 
