@@ -6,11 +6,10 @@
 
 #include "engine/GroupBy.h"
 
-template <size_t NUM_GROUP_COLUMNS>
 class LazyGroupBy {
   LocalVocab& localVocab_;
   std::vector<GroupBy::HashMapAliasInformation> aggregateAliases_;
-  GroupBy::HashMapAggregationData<NUM_GROUP_COLUMNS> aggregationData_;
+  GroupBy::HashMapAggregationData<0> aggregationData_;
 
  public:
   LazyGroupBy(LocalVocab& localVocab,

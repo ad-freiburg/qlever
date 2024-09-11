@@ -95,7 +95,7 @@ class GroupBy : public Operation {
       const IdTableView<COLS>& idTable,
       std::vector<std::pair<size_t, Id>>& currentGroupBlock) const;
 
-  template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
+  template <size_t OUT_WIDTH>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,
       std::vector<Aggregate> aggregates,

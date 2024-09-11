@@ -378,9 +378,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     auto localVocabPointer =
         std::make_shared<LocalVocab>(std::move(localVocab));
     cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
-        (std::array{groupByCols.size(), getResultWidth()}),
-        &GroupBy::computeResultLazily, this, std::move(subresult),
-        std::move(aggregates),
+        getResultWidth(), &GroupBy::computeResultLazily, this,
+        std::move(subresult), std::move(aggregates),
         std::move(hashMapOptimizationParams).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
     if (requestLaziness) {
@@ -434,15 +433,15 @@ size_t GroupBy::searchBlockBoundaries(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS, size_t OUT_WIDTH>
+template <size_t OUT_WIDTH>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
     bool singleIdTable) const {
-  LazyGroupBy<NUM_GROUP_COLUMNS> lazyGroupBy{
-      *localVocab, std::move(aggregateAliases),
-      getExecutionContext()->getAllocator(), groupByCols.size()};
+  LazyGroupBy lazyGroupBy{*localVocab, std::move(aggregateAliases),
+                          getExecutionContext()->getAllocator(),
+                          groupByCols.size()};
 
   auto createEvaluationContextForTable = [this,
                                           &localVocab](const IdTable& table) {

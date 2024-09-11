@@ -4,20 +4,16 @@
 
 #include "LazyGroupBy.h"
 
-#include "global/Constants.h"
-
 using groupBy::detail::VectorOfAggregationData;
 
-template <size_t NUM_GROUP_COLUMNS>
-LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
+// _____________________________________________________________________________
+LazyGroupBy::LazyGroupBy(
     LocalVocab& localVocab,
     std::vector<GroupBy::HashMapAliasInformation> aggregateAliases,
     const ad_utility::AllocatorWithLimit<Id>& allocator, size_t numGroupColumns)
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
       aggregationData_{allocator, aggregateAliases_, numGroupColumns} {
-  AD_CONTRACT_CHECK(numGroupColumns == NUM_GROUP_COLUMNS ||
-                    NUM_GROUP_COLUMNS == 0);
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
       std::visit(
@@ -38,8 +34,7 @@ LazyGroupBy<NUM_GROUP_COLUMNS>::LazyGroupBy(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
+void LazyGroupBy::resetAggregationData() {
   for (const auto& alias : aggregateAliases_) {
     for (const auto& aggregateInfo : alias.aggregateInfo_) {
       std::visit([]<VectorOfAggregationData T>(T& arg) { arg.at(0).reset(); },
@@ -50,8 +45,7 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::resetAggregationData() {
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::commitRow(
+void LazyGroupBy::commitRow(
     IdTable& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext,
     const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
@@ -72,8 +66,7 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::commitRow(
 }
 
 // _____________________________________________________________________________
-template <size_t NUM_GROUP_COLUMNS>
-void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
+void LazyGroupBy::processNextBlock(
     sparqlExpression::EvaluationContext& evaluationContext, size_t beginIndex,
     size_t endIndex) {
   size_t blockSize = endIndex - beginIndex;
@@ -104,15 +97,3 @@ void LazyGroupBy<NUM_GROUP_COLUMNS>::processNextBlock(
     }
   }
 }
-
-// _____________________________________________________________________________
-
-template class LazyGroupBy<0>;
-template class LazyGroupBy<1>;
-template class LazyGroupBy<2>;
-template class LazyGroupBy<3>;
-template class LazyGroupBy<4>;
-template class LazyGroupBy<5>;
-static_assert(
-    5 == DEFAULT_MAX_NUM_COLUMNS_STATIC_ID_TABLE,
-    "Please update the explicit template instantiations in `LazyGroupBy.cpp`.");
