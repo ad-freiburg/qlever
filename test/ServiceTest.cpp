@@ -382,15 +382,13 @@ TEST_F(ServiceTest, computeResult) {
 }
 
 TEST_F(ServiceTest, getCacheKey) {
+  // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{
       {Variable{"?x"}, Variable{"?y"}},
       TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
       "PREFIX doof: <http://doof.org>",
       "{ }",
       false};
-
-  // The cacheKey of the Service Operation has to depend on the cacheKey
-  // of the siblingTree, as it might alter the Service Query.
 
   Service service(
       testQec, parsedServiceClause,
@@ -401,8 +399,10 @@ TEST_F(ServiceTest, getCacheKey) {
               {"x", "y"},
               {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
 
-  auto ck_noSibling = service.getCacheKey();
+  auto baseCacheKey = service.getCacheKey();
 
+  // The cacheKey of the Service Operation has to depend on the cacheKey
+  // of the siblingTree, as it might alter the Service Query.
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
   auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -414,9 +414,9 @@ TEST_F(ServiceTest, getCacheKey) {
               {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
 
-  auto ck_sibling =
+  auto siblingCacheKey =
       service.createCopyWithSiblingTree(siblingTree)->getCacheKey();
-  EXPECT_NE(ck_noSibling, ck_sibling);
+  EXPECT_NE(baseCacheKey, siblingCacheKey);
 
   auto siblingTree2 = std::make_shared<QueryExecutionTree>(
       testQec,
@@ -427,8 +427,25 @@ TEST_F(ServiceTest, getCacheKey) {
 
   auto serviceWithSibling = service.createCopyWithSiblingTree(siblingTree2);
 
-  auto ck_changedSibling = serviceWithSibling->getCacheKey();
-  EXPECT_NE(ck_sibling, ck_changedSibling);
+  EXPECT_NE(siblingCacheKey, serviceWithSibling->getCacheKey());
+
+  // SILENT keyword
+  parsedQuery::Service silentParsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      true};
+  Service silentService(
+      testQec, silentParsedServiceClause,
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+
+  EXPECT_NE(baseCacheKey, silentService.getCacheKey());
 }
 
 // Test that bindingToValueId behaves as expected.
