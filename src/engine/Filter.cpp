@@ -87,7 +87,7 @@ IdTable Filter::filterIdTable(const std::shared_ptr<const Result>& subRes,
                               const IdTable& idTable) const {
   size_t width = idTable.numColumns();
   IdTable result{width, getExecutionContext()->getAllocator()};
-  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, result, idTable,
+  CALL_FIXED_SIZE(width, &Filter::computeFilterImpl, this, result, idTable,
                   subRes->localVocab(), subRes->sortedBy());
   return result;
 }
@@ -100,7 +100,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
                                std::vector<ColumnIndex> sortedBy) const {
   AD_CONTRACT_CHECK(inputTable.numColumns() == WIDTH || WIDTH == 0);
   IdTableStatic<WIDTH> resultTable =
-      dynamicResultTable.toStatic<static_cast<size_t>(WIDTH)>();
+      std::move(dynamicResultTable).toStatic<static_cast<size_t>(WIDTH)>();
   sparqlExpression::EvaluationContext evaluationContext(
       *getExecutionContext(), _subtree->getVariableColumns(), inputTable,
       getExecutionContext()->getAllocator(), localVocab, cancellationHandle_,
