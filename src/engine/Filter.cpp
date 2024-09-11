@@ -158,7 +158,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
 
   // Clang 17 seems to incorrectly deduce the type.
   dynamicResultTable =
-      std::move(const_cast<IdTableStatic<WIDTH>>(resultTable)).toDynamic();
+      std::move(const_cast<IdTableStatic<WIDTH>&>(resultTable)).toDynamic();
   checkCancellation();
 }
 
