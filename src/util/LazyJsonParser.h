@@ -22,7 +22,7 @@ class LazyJsonParser {
  public:
   // Parse chunks of json-strings yielding them reconstructed.
   static cppcoro::generator<nlohmann::json> parse(
-      cppcoro::generator<std::string> partialJson,
+      cppcoro::generator<std::string_view> partialJson,
       std::vector<std::string> arrayPath);
 
   // Convenient alternative for the function above using bytes.

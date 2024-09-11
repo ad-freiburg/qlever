@@ -116,6 +116,10 @@ class Service : public Operation {
   // Create result for silent fail.
   ProtoResult makeNeutralElementResultForSilentFail() const;
 
+  // Check that all visible variables of the SERVICE clause exist in the json
+  // object, otherwise throw an error.
+  void verifyVariables(const nlohmann::json& j);
+
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
   //

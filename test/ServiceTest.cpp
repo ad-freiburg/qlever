@@ -202,7 +202,6 @@ TEST_F(ServiceTest, computeResult) {
       [&](const std::string& result, std::string_view errorMsg,
           boost::beast::http::status status = boost::beast::http::status::ok,
           std::string contentType = "application/sparql-results+json") {
-        LOG(INFO) << "MSG: " << errorMsg << '\n';
         AD_EXPECT_THROW_WITH_MESSAGE(
             runComputeResult(result, status, contentType, false),
             ::testing::HasSubstr(errorMsg));
@@ -212,19 +211,23 @@ TEST_F(ServiceTest, computeResult) {
   // CHECK 1: An exception shall be thrown, when
   // status-code isn't ok, contentType doesn't match
   expectThrowOrSilence(
-      "", "SERVICE responded with HTTP status code: 400, Bad Request.",
+      genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
+      "SERVICE responded with HTTP status code: 400, Bad Request.",
       boost::beast::http::status::bad_request,
       "application/sparql-results+json");
 
-  expectThrowOrSilence("",
-                       "QLever requires the endpoint of a SERVICE to send "
-                       "the result as 'application/sparql-results+json' but "
-                       "the endpoint sent 'wrong/type'.",
-                       boost::beast::http::status::ok, "wrong/type");
+  expectThrowOrSilence(
+      genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
+      "QLever requires the endpoint of a SERVICE to send "
+      "the result as 'application/sparql-results+json' but "
+      "the endpoint sent 'wrong/type'.",
+      boost::beast::http::status::ok, "wrong/type");
 
   // or Result has invalid structure
   expectThrowOrSilence("{\"invalid\": \"structure\"}",
                        "JSON result does not have the expected structure.");
+
+  expectThrowOrSilence("", "JSON result does not have the expected structure.");
 
   expectThrowOrSilence(
       "{\"head\": {\"vars\": [1, 2, 3]},"
@@ -258,8 +261,8 @@ TEST_F(ServiceTest, computeResult) {
       ::testing::HasSubstr("Tried to allocate"),
       ad_utility::detail::AllocationExceedsLimitException);
 
-  // CHECK 2: Header row of returned JSON is wrong (variables in wrong
-  // order) -> an exception should be thrown.
+  // CHECK 2: Header row of returned JSON is wrong (missing expected variables)
+  // -> an exception should be thrown.
   expectThrowOrSilence(genJsonResult({"x"}, {{"bla"}, {"blu"}, {"bli"}}),
                        "Header row of JSON result for SERVICE query is "
                        "\"?x\", but expected \"?x ?y\".");
