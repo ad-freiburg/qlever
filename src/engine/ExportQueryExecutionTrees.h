@@ -10,18 +10,8 @@
 #include "util/http/MediaTypes.h"
 #include "util/json.h"
 
-// This class contains all the functionality to convert a query that has already
-// been parsed (by the SPARQL parser) and planned (by the query planner) into
-// a serialized result. In particular, it creates TSV, CSV, Turtle, JSON (SPARQL
-// conforming and QLever's flavor) and binary results).
-//
-// TODO<hannahbast> The following comment seems to be outdated, there is only
-// one public static function now (and a comment which promises another
-// function, but there is no code after that).
-//
-// The class has only two static public functions, one for the JSON output
-// format (which returns a `nlohmann::json` object) and one for the other result
-// formats (tsv, csv, turtle, binary) which returns a `streamable_generator`.
+// Class for computing the result of an already parsed and planned query and
+// exporting it in different formats (TSV, CSV, Turtle, JSON, Binary).
 //
 // TODO<joka921> Also implement a streaming JSON serializer to reduce the RAM
 // consumption of large JSON exports and to make this interface even simpler.
@@ -45,18 +35,6 @@ class ExportQueryExecutionTrees {
       const ParsedQuery& parsedQuery, const QueryExecutionTree& qet,
       MediaType mediaType, const ad_utility::Timer& requestTimer,
       CancellationHandle cancellationHandle);
-
-  // Compute the result of the given `parsedQuery` (created by the
-  // `SparqlParser`) for which the `QueryExecutionTree` has been previously
-  // created by the `QueryPlanner`. The result is converted to the format
-  // specified by the `mediaType`. Supported formats for this function are
-  // `SparqlJSON` and `QLeverJSON`. Note that the SparqlJSON format can only be
-  // used with SELECT queries. Invalid `mediaType`s and invalid combinations of
-  // `mediaType` and the query type will throw. The result is returned as a
-  // single JSON object that is fully materialized before the function returns.
-  // The `requestTimer` is used to report timing statistics on the query. It
-  // must have already run during the query planning to produce the expected
-  // results.
 
   // Convert the `id` to a human-readable string. The `index` is used to resolve
   // `Id`s with datatype `VocabIndex` or `TextRecordIndex`. The `localVocab` is

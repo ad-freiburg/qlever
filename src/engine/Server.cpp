@@ -646,15 +646,6 @@ boost::asio::awaitable<void> Server::processQuery(
       mediaType = ad_utility::getMediaTypeFromAcceptHeader(acceptHeader);
     }
 
-    std::optional<uint64_t> maxSend =
-        params.contains("send") ? std::optional{std::stoul(params.at("send"))}
-                                : std::nullopt;
-    // Limit JSON requests by default
-    if (!maxSend.has_value() && (mediaType == MediaType::sparqlJson ||
-                                 mediaType == MediaType::qleverJson)) {
-      maxSend = MAX_NOF_ROWS_IN_RESULT;
-    }
-
     if (!mediaType.has_value()) {
       co_return co_await send(createBadRequestResponse(
           absl::StrCat("Did not find any supported media type "
@@ -697,22 +688,24 @@ boost::asio::awaitable<void> Server::processQuery(
               << " ms" << std::endl;
     LOG(TRACE) << qet.getCacheKey() << std::endl;
 
-    // Remember the value of the `send` parameter. It will be applied in
-    // `ExportQueryExecutionTrees` when we materialize a (part of the) result.
+    // Read the export limit from the `send` parameter (historical name). This
+    // limits the number of bindings exported in `ExportQueryExecutionTrees`.
+    // Even without "send" parameter, JSON exports are limited to
+    // `MAX_NOF_ROWS_IN_RESULT` bindings.
     auto& limitOffset = plannedQuery.value().parsedQuery_._limitOffset;
-    limitOffset.maxSend_ = maxSend;
-    // Apply stricter limit for export if present.
-    // if (maxSend.has_value()) {
-    //   auto& pq = plannedQuery.value().parsedQuery_;
-    //   pq._limitOffset._limit =
-    //       std::min(maxSend.value(), pq._limitOffset.limitOrDefault());
-    // }
+    auto& exportLimit = limitOffset.exportLimit_;
+    exportLimit = params.contains("send")
+                      ? std::optional{std::stoul(params.at("send"))}
+                      : std::nullopt;
+    if (!exportLimit.has_value() && (mediaType == MediaType::sparqlJson ||
+                                     mediaType == MediaType::qleverJson)) {
+      exportLimit = MAX_NOF_ROWS_IN_RESULT;
+    }
 
-    // Don't apply offset twice, if the offset was not applied to the operation
-    // then the exporter can safely apply it during export.
-    //
-    // TODO<hannahbast> I don't understand why the offset would be "applied
-    // twice" without this code. Is this a code smell?
+    // Make sure that the offset is not applied again when exporting the result
+    // (it is already applied by the root operation in the query execution
+    // tree). Note that we don't need this for the limit because applying a
+    // fixed limit is idempotent.
     AD_CORRECTNESS_CHECK(limitOffset._offset >=
                          qet.getRootOperation()->getLimit()._offset);
     limitOffset._offset -= qet.getRootOperation()->getLimit()._offset;

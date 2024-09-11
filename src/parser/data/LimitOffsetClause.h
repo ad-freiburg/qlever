@@ -15,12 +15,15 @@ struct LimitOffsetClause {
   std::optional<uint64_t> _limit = std::nullopt;
   uint64_t _offset = 0;
   std::optional<uint64_t> textLimit_ = std::nullopt;
-  std::optional<uint64_t> maxSend_ = std::nullopt;
+  std::optional<uint64_t> exportLimit_ = std::nullopt;
 
   // If a limit is specified, return the limit, else return the maximal
   // representable limit.
   uint64_t limitOrDefault() const {
     return _limit.value_or(std::numeric_limits<uint64_t>::max());
+  }
+  uint64_t exportLimitOrDefault() const {
+    return exportLimit_.value_or(std::numeric_limits<uint64_t>::max());
   }
 
   // Return the minimum of the offset and the `actualSize` of a query result.

@@ -28,17 +28,9 @@ cppcoro::generator<const IdTable&> ExportQueryExecutionTrees::getIdTables(
 cppcoro::generator<ExportQueryExecutionTrees::TableWithRange>
 ExportQueryExecutionTrees::getRowIndices(LimitOffsetClause limitOffset,
                                          const Result& result) {
-  // For the purposes of this function, if `maxSend_` is smaller than
-  // `_limit`, simply clamp `_limit` to `maxSend_`.
-  //
-  // NOTE: We do this only here, for the sake of exporting, because we want to
-  // have at least the option that QLever computes the full result (according to
-  // the `LIMIT` and `OFFSET` specified in the query) internally, so that we
-  // can get an accurate count of the result size.
-  if (limitOffset.maxSend_.has_value() &&
-      limitOffset.maxSend_.value() < limitOffset.limitOrDefault()) {
-    limitOffset._limit = limitOffset.maxSend_;
-  }
+  size_t fullResultSize = 0;
+  size_t numRowRemainingForExport = limitOffset.limitOrDefault();
+  size_t numRowRemainingForCounting = limitOffset.limitOrDefault();
 
   if (limitOffset._limit.value_or(1) == 0) {
     co_return;
@@ -404,8 +396,7 @@ ExportQueryExecutionTrees::selectQueryResultToStream(
 
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result =
-      qet.getResult(limitAndOffset.requestLaziness());
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -554,8 +545,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
       selectClause.getSelectedVariablesAsStrings();
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result =
-      qet.getResult(limitAndOffset.requestLaziness());
+  std::shared_ptr<const Result> result = qet.getResult(true);
 
   // In the XML format, the variables don't include the question mark.
   auto varsWithoutQuestionMark = std::views::transform(
@@ -600,8 +590,7 @@ ad_utility::streams::stream_generator ExportQueryExecutionTrees::
         CancellationHandle cancellationHandle) {
   // This call triggers the possibly expensive computation of the query result
   // unless the result is already cached.
-  std::shared_ptr<const Result> result =
-      qet.getResult(limitAndOffset.requestLaziness());
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
   LOG(DEBUG) << "Converting result IDs to their corresponding strings ..."
              << std::endl;
@@ -741,8 +730,7 @@ cppcoro::generator<std::string> ExportQueryExecutionTrees::computeResult(
                      std::move(cancellationHandle))
                : constructQueryResultToStream<format>(
                      qet, parsedQuery.constructClause().triples_,
-                     parsedQuery._limitOffset,
-                     qet.getResult(parsedQuery._limitOffset.requestLaziness()),
+                     parsedQuery._limitOffset, qet.getResult(true),
                      std::move(cancellationHandle));
   };
 
@@ -765,8 +753,7 @@ ExportQueryExecutionTrees::computeResultAsQLeverJSON(
     const ad_utility::Timer& requestTimer,
     CancellationHandle cancellationHandle) {
   auto timeUntilFunctionCall = requestTimer.msecs();
-  std::shared_ptr<const Result> result =
-      qet.getResult(query._limitOffset.requestLaziness());
+  std::shared_ptr<const Result> result = qet.getResult(true);
   result->logResultSize();
   std::optional<size_t> resultSizeOrNullopt =
       result->isFullyMaterialized()
