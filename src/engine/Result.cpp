@@ -95,6 +95,12 @@ Result::Result(cppcoro::generator<IdTable> idTables,
              SharedLocalVocabWrapper{std::move(localVocab)}} {}
 
 // _____________________________________________________________________________
+Result::Result(cppcoro::generator<IdTable> idTables,
+               std::vector<ColumnIndex> sortedBy, LocalVocabPtr localVocab)
+    : Result{std::move(idTables), std::move(sortedBy),
+             SharedLocalVocabWrapper{std::move(localVocab)}} {}
+
+// _____________________________________________________________________________
 // Apply `LimitOffsetClause` to given `IdTable`.
 void resizeIdTable(IdTable& idTable, const LimitOffsetClause& limitOffset) {
   std::ranges::for_each(
