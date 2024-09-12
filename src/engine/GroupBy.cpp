@@ -237,23 +237,8 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
   const IdTableView<IN_WIDTH> input = inTable.asStaticView<IN_WIDTH>();
   IdTableStatic<OUT_WIDTH> result = std::move(dynResult).toStatic<OUT_WIDTH>();
 
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), inTable,
-      getExecutionContext()->getAllocator(), *outLocalVocab,
-      cancellationHandle_, deadline_);
-
-  // In a GROUP BY evaluation, the expressions need to know which variables are
-  // grouped, and to which columns the results of the aliases are written. The
-  // latter information is needed if the expression of an alias reuses the
-  // result variable from a previous alias as an input.
-  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
-      _groupByVariables.begin(), _groupByVariables.end()};
-  evaluationContext._variableToColumnMapPreviousResults =
-      getInternallyVisibleVariableColumns();
-  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
-
-  // Let the evaluation know that we are part of a GROUP BY.
-  evaluationContext._isPartOfGroupBy = true;
+  sparqlExpression::EvaluationContext evaluationContext =
+      createEvaluationContext(*outLocalVocab, inTable);
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
     result.emplace_back();
@@ -285,6 +270,34 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
   return std::move(result).toDynamic();
 }
 
+// _____________________________________________________________________________
+sparqlExpression::EvaluationContext GroupBy::createEvaluationContext(
+    const LocalVocab& localVocab, const IdTable& idTable) const {
+  sparqlExpression::EvaluationContext evaluationContext{
+      *getExecutionContext(),
+      _subtree->getVariableColumns(),
+      idTable,
+      getExecutionContext()->getAllocator(),
+      localVocab,
+      cancellationHandle_,
+      deadline_};
+
+  // In a GROUP BY evaluation, the expressions need to know which variables are
+  // grouped, and to which columns the results of the aliases are written. The
+  // latter information is needed if the expression of an alias reuses the
+  // result variable from a previous alias as an input.
+  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
+      _groupByVariables.begin(), _groupByVariables.end()};
+  evaluationContext._variableToColumnMapPreviousResults =
+      getInternallyVisibleVariableColumns();
+  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
+
+  // Let the evaluation know that we are part of a GROUP BY.
+  evaluationContext._isPartOfGroupBy = true;
+  return evaluationContext;
+}
+
+// _____________________________________________________________________________
 ProtoResult GroupBy::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "GroupBy result computation..." << std::endl;
 
@@ -442,25 +455,6 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
                           getExecutionContext()->getAllocator(),
                           groupByCols.size()};
 
-  auto createEvaluationContextForTable = [this,
-                                          &localVocab](const IdTable& table) {
-    sparqlExpression::EvaluationContext evaluationContext{
-        *getExecutionContext(),
-        _subtree->getVariableColumns(),
-        table,
-        getExecutionContext()->getAllocator(),
-        *localVocab,
-        cancellationHandle_,
-        deadline_};
-    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
-        _groupByVariables.begin(), _groupByVariables.end()};
-    evaluationContext._isPartOfGroupBy = true;
-    evaluationContext._variableToColumnMapPreviousResults =
-        getInternallyVisibleVariableColumns();
-    evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
-    return evaluationContext;
-  };
-
   IdTable resultTable{getResultWidth(), getExecutionContext()->getAllocator()};
 
   bool groupSplitAcrossTables = false;
@@ -482,7 +476,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     }
 
     sparqlExpression::EvaluationContext evaluationContext =
-        createEvaluationContextForTable(idTable);
+        createEvaluationContext(*localVocab, idTable);
 
     size_t lastBlockStart = searchBlockBoundaries(
         [&](size_t blockStart, size_t blockEnd) {
@@ -530,7 +524,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
 
       sparqlExpression::EvaluationContext evaluationContext =
-          createEvaluationContextForTable(idTable);
+          createEvaluationContext(*localVocab, idTable);
       for (const Aggregate& aggregate : aggregates) {
         processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0, &table, 0,
                                 aggregate._outCol, localVocab.get());
@@ -548,7 +542,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
   }
 
   sparqlExpression::EvaluationContext evaluationContext =
-      createEvaluationContextForTable(idTable);
+      createEvaluationContext(*localVocab, idTable);
   lazyGroupBy.commitRow(resultTable, evaluationContext, currentGroupBlock,
                         *this);
   co_yield resultTable;
@@ -1391,17 +1385,8 @@ IdTable GroupBy::createResultFromHashMap(
   }
 
   // Initialize evaluation context
-  sparqlExpression::EvaluationContext evaluationContext(
-      *getExecutionContext(), _subtree->getVariableColumns(), result,
-      getExecutionContext()->getAllocator(), *localVocab, cancellationHandle_,
-      deadline_);
-
-  evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{
-      _groupByVariables.begin(), _groupByVariables.end()};
-  evaluationContext._variableToColumnMapPreviousResults =
-      getInternallyVisibleVariableColumns();
-  evaluationContext._previousResultsFromSameGroup.resize(getResultWidth());
-  evaluationContext._isPartOfGroupBy = true;
+  sparqlExpression::EvaluationContext evaluationContext =
+      createEvaluationContext(*localVocab, result);
 
   ad_utility::Timer evaluationAndResultsTimer{ad_utility::Timer::Started};
   for (size_t i = 0; i < numberOfGroups; i += GROUP_BY_HASH_MAP_BLOCK_SIZE) {

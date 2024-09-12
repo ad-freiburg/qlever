@@ -87,6 +87,11 @@ class GroupBy : public Operation {
  private:
   VariableToColumnMap computeVariableToColumnMap() const override;
 
+  // Helper function to create evaluation contexts in various places for the
+  // GROUP BY operation.
+  sparqlExpression::EvaluationContext createEvaluationContext(
+      const LocalVocab& localVocab, const IdTable& idTable) const;
+
   ProtoResult computeResult(bool requestLaziness) override;
 
   template <int COLS>
