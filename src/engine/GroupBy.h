@@ -94,6 +94,12 @@ class GroupBy : public Operation {
 
   ProtoResult computeResult(bool requestLaziness) override;
 
+  // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
+  // whole group they can be aggregated into ids afterwards. This can happen by
+  // passing a proper callback as `onBlockChange`, or by using the returned
+  // `size_t` which represents the start of the last block. The argument
+  // `currentGroupBlock` is used to store the values of the group by columns for
+  // the current group.
   template <int COLS>
   size_t searchBlockBoundaries(
       const std::invocable<size_t, size_t> auto& onBlockChange,
@@ -116,6 +122,11 @@ class GroupBy : public Operation {
                                  const std::vector<Aggregate>& aggregates,
                                  LocalVocab* localVocab) const;
 
+  // Similar to `doGroupBy`, but works with a a `subresult` that is not fully
+  // materialized, where the generator yields id tables in where the rows are
+  // sorted. Yields the same number of id tables as the input generator,
+  // skipping empty tables unless `singleIdTable` is set which causes the
+  // function to yield a single id table with the complete result.
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,
@@ -443,7 +454,8 @@ class GroupBy : public Operation {
       size_t beginIndex, size_t count, size_t columnIndex) const;
 
   // Substitute the results for all aggregates in `info`. The values of the
-  // grouped variable should be at column 0 in `groupValues`.
+  // grouped variable should be at column 0 in `groupValues`. Return a vector of
+  // the replaced `SparqlExpression`s to potentially put them pack afterwards.
   template <size_t NUM_GROUP_COLUMNS>
   std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
   substituteAllAggregates(

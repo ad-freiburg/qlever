@@ -6,6 +6,9 @@
 
 #include "engine/GroupBy.h"
 
+// Helper class to lazily compute the result of a group by operation. It makes
+// use of the hash map optimization to store the intermediate results of the
+// groups.
 class LazyGroupBy {
   LocalVocab& localVocab_;
   std::vector<GroupBy::HashMapAliasInformation> aggregateAliases_;
@@ -17,19 +20,27 @@ class LazyGroupBy {
               const ad_utility::AllocatorWithLimit<Id>& allocator,
               size_t numGroupColumns);
 
+  // Delete copy and move functions to avoid unexpected behavior.
   LazyGroupBy(const LazyGroupBy&) = delete;
   LazyGroupBy(LazyGroupBy&&) = delete;
   LazyGroupBy& operator=(const LazyGroupBy&) = delete;
   LazyGroupBy& operator=(LazyGroupBy&&) = delete;
 
+  // Commit the current group to the result table. This will write the final id
+  // into the `resultTable` and reset the aggregation data for the next group.
   void commitRow(IdTable& resultTable,
                  sparqlExpression::EvaluationContext& evaluationContext,
                  const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
                  const GroupBy& groupBy);
 
+  // Process the next potentially partial group as a block of rows. This
+  // modifies the state of `aggregateData_`. Call `commitRow` to write the final
+  // result.
   void processNextBlock(sparqlExpression::EvaluationContext& evaluationContext,
                         size_t beginIndex, size_t endIndex);
 
  private:
+  // Reset the stored aggregation data. This is cheaper than recreating the
+  // objects every time.
   void resetAggregationData();
 };
