@@ -275,6 +275,14 @@ TEST_F(ServiceTest, computeResult) {
       ::testing::HasSubstr("Tried to allocate"),
       ad_utility::detail::AllocationExceedsLimitException);
 
+  // CHECK 1c: Accept the content-type regardless of it's case or additional
+  // parameters.
+  EXPECT_NO_THROW(runComputeResult(
+      genJsonResult({"x", "y"},
+                    {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
+      boost::beast::http::status::ok,
+      "APPLICATION/SPARQL-RESULTS+JSON;charset=utf-8"));
+
   // CHECK 2: Header row of returned JSON is wrong (missing expected variables)
   // -> an exception should be thrown.
   expectThrowOrSilence(genJsonResult({"x"}, {{"bla"}, {"blu"}, {"bli"}}),
@@ -292,7 +300,7 @@ TEST_F(ServiceTest, computeResult) {
   // CHECK 4: Returned JSON has correct format matching the query -> check
   // that the result table returned by the operation corresponds to the
   // contents of the JSON and its local vocabulary are correct.
-  auto result4 = runComputeResult(genJsonResult(
+  auto result = runComputeResult(genJsonResult(
       {"x", "y"},
       {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}));
 
@@ -303,7 +311,7 @@ TEST_F(ServiceTest, computeResult) {
   auto getId = ad_utility::testing::makeGetId(testQec->getIndex());
   Id idX = getId("<x>");
   Id idY = getId("<y>");
-  const auto& localVocab = result4.localVocab();
+  const auto& localVocab = result.localVocab();
   EXPECT_EQ(localVocab.size(), 3);
   auto get = [&localVocab](const std::string& s) {
     return localVocab.getIndexOrNullopt(
@@ -322,7 +330,7 @@ TEST_F(ServiceTest, computeResult) {
   // Check that the result table corresponds to the contents of the JSON.
   IdTable expectedIdTable = makeIdTableFromVector(
       {{idX, idY}, {idBla, idBli}, {idBlu, idBla}, {idBli, idBlu}});
-  EXPECT_EQ(result4.idTable(), expectedIdTable);
+  EXPECT_EQ(result.idTable(), expectedIdTable);
 
   // Check 5: When a siblingTree with variables common to the Service
   // Clause is passed, the Service Operation shall use the siblings result
@@ -383,15 +391,13 @@ TEST_F(ServiceTest, computeResult) {
 }
 
 TEST_F(ServiceTest, getCacheKey) {
+  // Base query to check cache-keys against.
   parsedQuery::Service parsedServiceClause{
       {Variable{"?x"}, Variable{"?y"}},
       TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
       "PREFIX doof: <http://doof.org>",
       "{ }",
       false};
-
-  // The cacheKey of the Service Operation has to depend on the cacheKey
-  // of the siblingTree, as it might alter the Service Query.
 
   Service service(
       testQec, parsedServiceClause,
@@ -402,8 +408,10 @@ TEST_F(ServiceTest, getCacheKey) {
               {"x", "y"},
               {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
 
-  auto ck_noSibling = service.getCacheKey();
+  auto baseCacheKey = service.getCacheKey();
 
+  // The cacheKey of the Service Operation has to depend on the cacheKey
+  // of the siblingTree, as it might alter the Service Query.
   auto iri = ad_utility::testing::iri;
   using TC = TripleComponent;
   auto siblingTree = std::make_shared<QueryExecutionTree>(
@@ -415,9 +423,9 @@ TEST_F(ServiceTest, getCacheKey) {
               {{TC(iri("<x>")), TC(iri("<y>")), TC(iri("<z>"))},
                {TC(iri("<blu>")), TC(iri("<bla>")), TC(iri("<blo>"))}}}));
 
-  auto ck_sibling =
+  auto siblingCacheKey =
       service.createCopyWithSiblingTree(siblingTree)->getCacheKey();
-  EXPECT_NE(ck_noSibling, ck_sibling);
+  EXPECT_NE(baseCacheKey, siblingCacheKey);
 
   auto siblingTree2 = std::make_shared<QueryExecutionTree>(
       testQec,
@@ -428,8 +436,25 @@ TEST_F(ServiceTest, getCacheKey) {
 
   auto serviceWithSibling = service.createCopyWithSiblingTree(siblingTree2);
 
-  auto ck_changedSibling = serviceWithSibling->getCacheKey();
-  EXPECT_NE(ck_sibling, ck_changedSibling);
+  EXPECT_NE(siblingCacheKey, serviceWithSibling->getCacheKey());
+
+  // SILENT keyword
+  parsedQuery::Service silentParsedServiceClause{
+      {Variable{"?x"}, Variable{"?y"}},
+      TripleComponent::Iri::fromIriref("<http://localhorst/api>"),
+      "PREFIX doof: <http://doof.org>",
+      "{ }",
+      true};
+  Service silentService(
+      testQec, silentParsedServiceClause,
+      getResultFunctionFactory(
+          "http://localhorst:80/api",
+          "PREFIX doof: <http://doof.org> SELECT ?x ?y WHERE { }",
+          genJsonResult(
+              {"x", "y"},
+              {{"x", "y"}, {"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}})));
+
+  EXPECT_NE(baseCacheKey, silentService.getCacheKey());
 }
 
 // Test that bindingToValueId behaves as expected.

@@ -1,12 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-//
-// Created by johannes on 15.09.21.
-//
-
-#ifndef QLEVER_SAMPLEEXPRESSION_H
-#define QLEVER_SAMPLEEXPRESSION_H
+#pragma once
 
 #include "./SparqlExpression.h"
 #include "absl/strings/str_cat.h"
@@ -37,9 +32,10 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
+  // SAMPLE is an aggregate.
+  bool isAggregate() const override { return true; }
+
  private:
   Ptr _child;
 };
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SAMPLEEXPRESSION_H
