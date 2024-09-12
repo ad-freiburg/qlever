@@ -857,7 +857,8 @@ void IndexImpl::setSettingsFile(const std::string& filename) {
 void IndexImpl::writeConfiguration() const {
   // Copy the configuration and add the current commit hash.
   auto configuration = configurationJson_;
-  configuration["git-hash"] = qlever::version::GitShortHash;
+  configuration["git-hash"] =
+      *qlever::version::gitShortHashWithoutLinking.wlock();
   configuration["index-format-version"] = qlever::indexFormatVersion;
   auto f = ad_utility::makeOfstream(onDiskBase_ + CONFIGURATION_FILE);
   f << configuration;
