@@ -44,7 +44,11 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
 
 // _____________________________________________________________________________
 bool SparqlExpression::containsAggregate() const {
-  if (isAggregate() != AggregateStatus::NoAggregate) return true;
+  if (isAggregate() != AggregateStatus::NoAggregate) {
+    AD_CORRECTNESS_CHECK(isInsideAggregate());
+    return true
+  };
+
   return std::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
 }

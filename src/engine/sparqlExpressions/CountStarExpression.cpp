@@ -16,7 +16,9 @@ class CountStarExpression : public SparqlExpression {
 
  public:
   // _________________________________________________________________________
-  explicit CountStarExpression(bool distinct) : distinct_{distinct} {}
+  explicit CountStarExpression(bool distinct) : distinct_{distinct} {
+    setIsInsideAggregate();
+  }
 
   // _________________________________________________________________________
   ExpressionResult evaluate(
