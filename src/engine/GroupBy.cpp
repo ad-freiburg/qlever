@@ -241,15 +241,9 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
       createEvaluationContext(*outLocalVocab, inTable);
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
-    result.emplace_back();
-    size_t rowIdx = result.size() - 1;
-    for (size_t i = 0; i < groupByCols.size(); ++i) {
-      result(rowIdx, i) = input(blockStart, groupByCols[i]);
-    }
-    for (const Aggregate& a : aggregates) {
-      processGroup<OUT_WIDTH>(a, evaluationContext, blockStart, blockEnd,
-                              &result, rowIdx, a._outCol, outLocalVocab);
-    }
+    this->processNextBlock<OUT_WIDTH>(result, aggregates, evaluationContext,
+                                      blockStart, blockEnd, outLocalVocab,
+                                      groupByCols);
   };
 
   // Handle the implicit GROUP BY, where the entire input is a single group.
@@ -445,6 +439,45 @@ size_t GroupBy::searchBlockBoundaries(
 }
 
 // _____________________________________________________________________________
+template <size_t OUT_WIDTH>
+void GroupBy::processNextBlock(
+    IdTableStatic<OUT_WIDTH>& output, const std::vector<Aggregate>& aggregates,
+    sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
+    size_t blockEnd, LocalVocab* localVocab,
+    const vector<size_t>& groupByCols) const {
+  output.emplace_back();
+  size_t rowIdx = output.size() - 1;
+  for (size_t i = 0; i < groupByCols.size(); ++i) {
+    output(rowIdx, i) =
+        evaluationContext._inputTable(blockStart, groupByCols[i]);
+  }
+  for (const Aggregate& aggregate : aggregates) {
+    processGroup<OUT_WIDTH>(aggregate, evaluationContext, blockStart, blockEnd,
+                            &output, rowIdx, aggregate._outCol, localVocab);
+  }
+}
+
+// _____________________________________________________________________________
+template <size_t OUT_WIDTH>
+void GroupBy::processEmptyImplicitGroup(
+    IdTable& resultTable, const std::vector<Aggregate>& aggregates,
+    LocalVocab* localVocab) const {
+  size_t inWidth = _subtree->getResultWidth();
+  IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+
+  sparqlExpression::EvaluationContext evaluationContext =
+      createEvaluationContext(*localVocab, idTable);
+  resultTable.emplace_back();
+
+  IdTableStatic<OUT_WIDTH> table = std::move(resultTable).toStatic<OUT_WIDTH>();
+  for (const Aggregate& aggregate : aggregates) {
+    processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0, &table, 0,
+                            aggregate._outCol, localVocab);
+  }
+  resultTable = std::move(table).toDynamic();
+}
+
+// _____________________________________________________________________________
 template <size_t IN_WIDTH, size_t OUT_WIDTH>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
@@ -489,18 +522,11 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             groupSplitAcrossTables = false;
           } else {
             // This processes the whole block in batches if possible
-            resultTable.emplace_back();
-            for (size_t i = 0; i < groupByCols.size(); ++i) {
-              resultTable(resultTable.size() - 1, i) =
-                  idTable(blockStart, groupByCols[i]);
-            }
             IdTableStatic<OUT_WIDTH> table =
                 std::move(resultTable).toStatic<OUT_WIDTH>();
-            for (const Aggregate& aggregate : aggregates) {
-              processGroup<OUT_WIDTH>(aggregate, evaluationContext, blockStart,
-                                      blockEnd, &table, table.size() - 1,
-                                      aggregate._outCol, localVocab.get());
-            }
+            processNextBlock<OUT_WIDTH>(table, aggregates, evaluationContext,
+                                        blockStart, blockEnd, localVocab.get(),
+                                        groupByCols);
             resultTable = std::move(table).toDynamic();
           }
         },
@@ -513,27 +539,18 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       resultTable.clear();
     }
   }
-  // Ensure no exception is thrown in empty case
+  // No need for further processing in empty case.
   if (currentGroupBlock.empty()) {
-    // Only for queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
-    // implicit GROUP BY we have to return a single line as a result, otherwise
-    // we can safely abort here.
+    // If we have an implicit group by we need to produce one result row
     if (groupByCols.empty()) {
-      IdTableStatic<OUT_WIDTH> table =
-          std::move(resultTable).toStatic<OUT_WIDTH>();
-      IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
-
-      sparqlExpression::EvaluationContext evaluationContext =
-          createEvaluationContext(*localVocab, idTable);
-      for (const Aggregate& aggregate : aggregates) {
-        processGroup<OUT_WIDTH>(aggregate, evaluationContext, 0, 0, &table, 0,
-                                aggregate._outCol, localVocab.get());
-      }
-      resultTable = std::move(table).toDynamic();
+      processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates,
+                                           localVocab.get());
       co_yield resultTable;
     }
     co_return;
   }
+
+  // Process remaining items in the last group.
   IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(
                                1_B * sizeof(Id) * inWidth)};
   idTable.emplace_back();

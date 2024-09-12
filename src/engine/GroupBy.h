@@ -100,6 +100,22 @@ class GroupBy : public Operation {
       const IdTableView<COLS>& idTable,
       std::vector<std::pair<size_t, Id>>& currentGroupBlock) const;
 
+  // Helper function to process a sorted group within a single id table.
+  template <size_t OUT_WIDTH>
+  void processNextBlock(IdTableStatic<OUT_WIDTH>& output,
+                        const std::vector<Aggregate>& aggregates,
+                        sparqlExpression::EvaluationContext& evaluationContext,
+                        size_t blockStart, size_t blockEnd,
+                        LocalVocab* localVocab,
+                        const vector<size_t>& groupByCols) const;
+
+  // Handle queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
+  // implicit GROUP BY where we have to return a single line as a result.
+  template <size_t OUT_WIDTH>
+  void processEmptyImplicitGroup(IdTable& resultTable,
+                                 const std::vector<Aggregate>& aggregates,
+                                 LocalVocab* localVocab) const;
+
   template <size_t IN_WIDTH, size_t OUT_WIDTH>
   cppcoro::generator<IdTable> computeResultLazily(
       std::shared_ptr<const Result> subresult,
