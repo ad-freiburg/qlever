@@ -114,8 +114,11 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
   sparqlExpression::ExpressionResult expressionResult =
       _expression.getPimpl()->evaluate(&evaluationContext);
 
+  // Note: the explicit (seemingly redundant) capture of `resultTable` is
+  // required to work around a bug in Clang 17, see
+  // https://github.com/llvm/llvm-project/issues/61267
   auto visitor =
-      [this, &resultTable, &input,
+      [this, &resultTable = resultTable, &input,
        &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
           T&& singleResult) {
         if constexpr (std::is_same_v<T, ad_utility::SetOfIntervals>) {
@@ -156,9 +159,7 @@ void Filter::computeFilterImpl(IdTable& dynamicResultTable,
 
   std::visit(visitor, std::move(expressionResult));
 
-  // Clang 17 seems to incorrectly deduce the type.
-  dynamicResultTable =
-      std::move(const_cast<IdTableStatic<WIDTH>&>(resultTable)).toDynamic();
+  dynamicResultTable = std::move(resultTable).toDynamic();
   checkCancellation();
 }
 
