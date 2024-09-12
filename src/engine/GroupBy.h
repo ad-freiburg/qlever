@@ -414,10 +414,6 @@ class GroupBy : public Operation {
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       IdTable* resultTable, LocalVocab* localVocab) const;
 
-  // Check if an expression is of a certain type.
-  template <class T>
-  static T* hasType(sparqlExpression::SparqlExpression* expr);
-
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
       sparqlExpression::SparqlExpression* expr);
