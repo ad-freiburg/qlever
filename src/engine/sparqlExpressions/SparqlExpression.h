@@ -36,18 +36,20 @@ class SparqlExpression {
 
   /// Return all the variables that occur in the expression, but are not
   /// aggregated.
-  virtual std::vector<Variable> getUnaggregatedVariables();
+  virtual std::vector<Variable> getUnaggregatedVariables() const;
 
   // Return true iff this expression contains an aggregate like SUM, COUNT etc.
   // This information is needed to check if there is an implicit GROUP BY in a
   // query because any of the selected aliases contains an aggregate.
   virtual bool containsAggregate() const final;
 
+  enum struct AggregateStatus {
+    NoAggregate,
+    DistinctAggregate,
+    NonDistinctAggregate
+  };
   // Check if expression is aggregate
-  virtual bool isAggregate() const;
-
-  // Check if an expression is distinct (only applies to aggregates)
-  virtual bool isDistinct() const;
+  virtual AggregateStatus isAggregate() const;
 
   // Replace child at index `childIndex` with `newExpression`
   virtual void replaceChild(size_t childIndex,
