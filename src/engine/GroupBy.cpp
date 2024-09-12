@@ -381,7 +381,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 
-  size_t inWidth = _subtree->getRootOperation()->getResultWidth();
+  size_t inWidth = _subtree->getResultWidth();
   size_t outWidth = getResultWidth();
 
   if (!subresult->isFullyMaterialized()) {
@@ -451,6 +451,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::vector<HashMapAliasInformation> aggregateAliases,
     std::vector<size_t> groupByCols, std::shared_ptr<LocalVocab> localVocab,
     bool singleIdTable) const {
+  size_t inWidth = _subtree->getResultWidth();
+  AD_CONTRACT_CHECK(inWidth == IN_WIDTH || IN_WIDTH == 0);
   LazyGroupBy lazyGroupBy{*localVocab, std::move(aggregateAliases),
                           getExecutionContext()->getAllocator(),
                           groupByCols.size()};
@@ -465,8 +467,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     if (idTable.empty()) {
       continue;
     }
-    AD_CORRECTNESS_CHECK(idTable.numColumns() == IN_WIDTH || IN_WIDTH == 0);
-    AD_CORRECTNESS_CHECK(idTable.numColumns() == _subtree->getResultWidth());
+    AD_CORRECTNESS_CHECK(idTable.numColumns() == inWidth);
     checkCancellation();
 
     if (currentGroupBlock.empty()) {
@@ -512,7 +513,6 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       resultTable.clear();
     }
   }
-  size_t numColumns = _subtree->getRootOperation()->getResultWidth();
   // Ensure no exception is thrown in empty case
   if (currentGroupBlock.empty()) {
     // Only for queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
@@ -521,7 +521,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     if (groupByCols.empty()) {
       IdTableStatic<OUT_WIDTH> table =
           std::move(resultTable).toStatic<OUT_WIDTH>();
-      IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
+      IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
 
       sparqlExpression::EvaluationContext evaluationContext =
           createEvaluationContext(*localVocab, idTable);
@@ -534,8 +534,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     }
     co_return;
   }
-  IdTable idTable{numColumns, ad_utility::makeAllocatorWithLimit<Id>(
-                                  1_B * sizeof(Id) * numColumns)};
+  IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(
+                               1_B * sizeof(Id) * inWidth)};
   idTable.emplace_back();
   for (const auto& [colIdx, value] : currentGroupBlock) {
     idTable.at(0, colIdx) = value;
