@@ -399,10 +399,13 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
+  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(6), V(9)}};
 
   std::vector blocks{block1, block2, block3};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
+      firstAndLastTriple};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -426,6 +429,9 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocks.firstAndLastTriple_ =
+      CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple{
+          {V(42), V(4), V(11)}, {V(42), V(4), V(738)}};
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
@@ -445,10 +451,13 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
+  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(20), V(63)}};
 
   std::vector blocks{block1, block2, block3, block4, block5};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+      {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
+      firstAndLastTriple};
 
   CompressedBlockMetadata blockB1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
@@ -468,8 +477,10 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   relationB.col0Id_ = V(47);
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
+  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+      firstAndLastTripleB{{V(47), V(3), V(0)}, {V(47), V(38), V(15)}};
   CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
+      {{V(47), std::nullopt, std::nullopt}, blocksB}, firstAndLastTripleB};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
@@ -502,17 +513,28 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
   metadataAndBlocks.scanSpec_.setCol1Id(V(20));
+  using FL = CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple;
+  metadataAndBlocks.firstAndLastTriple_ =
+      FL{{V(42), V(20), V(5)}, {V(42), V(20), V(63)}};
   metadataAndBlocksB.scanSpec_.setCol1Id(V(38));
+  metadataAndBlocksB.firstAndLastTriple_ =
+      FL{{V(47), V(38), V(5)}, {V(47), V(38), V(15)}};
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocks.firstAndLastTriple_ =
+      FL{{V(42), V(4), V(8)}, {V(42), V(4), V(12)}};
   metadataAndBlocksB.scanSpec_.setCol1Id(std::nullopt);
-  test({std::vector{block2}, std::vector{blockB2, blockB3}});
+  metadataAndBlocksB.firstAndLastTriple_ = firstAndLastTripleB;
+  test({std::vector{block2}, std::vector{blockB3}});
 
   // Fix only the col1Id of the right input.
   metadataAndBlocks.scanSpec_.setCol1Id(std::nullopt);
+  metadataAndBlocks.firstAndLastTriple_ = firstAndLastTriple;
   metadataAndBlocksB.scanSpec_.setCol1Id(V(7));
+  metadataAndBlocksB.firstAndLastTriple_ =
+      FL{{V(47), V(7), V(13)}, {V(47), V(7), V(58)}};
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 

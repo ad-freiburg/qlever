@@ -94,10 +94,10 @@ class Permutation {
 
   std::optional<CompressedRelationMetadata> getMetadata(Id col0Id) const;
 
-  // Return the metadata for the relation specified by the `col0Id`
-  // along with the metadata for all the blocks that contain this relation (also
-  // prefiltered by the `col1Id` if specified). If the `col0Id` does not exist
-  // in this permutation, `nullopt` is returned.
+  // Return the metadata for the scan specified by the `scanSpecification`
+  // along with the metadata for all the blocks that are relevant for this scan.
+  // If there are no matching blocks (meaning that the scan result will be
+  // empty) return `nullopt`.
   std::optional<MetadataAndBlocks> getMetadataAndBlocks(
       const ScanSpecification& scanSpec) const;
 

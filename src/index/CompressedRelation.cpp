@@ -207,10 +207,7 @@ auto getRelevantIdFromTriple(
   AD_CORRECTNESS_CHECK(!scanSpec.col2Id().has_value());
 
   auto [minKey, maxKey] = [&]() {
-    if (!metadataAndBlocks.firstAndLastTriple_.has_value()) {
-      return std::array{Id::min(), Id::max()};
-    }
-    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_.value();
+    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
       return std::array{first.col2Id_, last.col2Id_};
     } else if (scanSpec.col0Id().has_value()) {
@@ -737,17 +734,18 @@ CompressedRelationReader::getRelevantBlocks(
 // _____________________________________________________________________________
 std::span<const CompressedBlockMetadata>
 CompressedRelationReader::getBlocksFromMetadata(
-    const MetadataAndBlocks& metadata) {
+    const MetadataAndBlocksBase& metadata) {
   return getRelevantBlocks(metadata.scanSpec_, metadata.blockMetadata_);
 }
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
-    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) const
-    -> MetadataAndBlocks::FirstAndLastTriple {
+    const CompressedRelationReader::MetadataAndBlocksBase& metadataAndBlocks)
+    const -> std::optional<MetadataAndBlocks::FirstAndLastTriple> {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
-  AD_CONTRACT_CHECK(!relevantBlocks.empty());
-
+  if (relevantBlocks.empty()) {
+    return std::nullopt;
+  }
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
@@ -766,9 +764,12 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 
   auto firstBlock = scanBlock(relevantBlocks.front());
   auto lastBlock = scanBlock(relevantBlocks.back());
-  AD_CORRECTNESS_CHECK(!firstBlock.empty());
+  if (firstBlock.empty()) {
+    return std::nullopt;
+  }
   AD_CORRECTNESS_CHECK(!lastBlock.empty());
-  return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+  return MetadataAndBlocks::FirstAndLastTriple{rowToTriple(firstBlock.front()),
+                                               rowToTriple(lastBlock.back())};
 }
 
 // ____________________________________________________________________________

@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_COMPRESSEDRELATION_H
-#define QLEVER_COMPRESSEDRELATION_H
+#pragma once
 
 #include <algorithm>
 #include <type_traits>
@@ -354,11 +353,15 @@ class CompressedRelationReader {
   // The metadata of a single relation together with a subset of its
   // blocks and possibly a `col1Id` for additional filtering. This is used as
   // the input to several functions below that take such an input.
-  struct MetadataAndBlocks {
+  struct MetadataAndBlocksBase {
     ScanSpecification scanSpec_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
+  };
 
-    // If set, `firstAndLastTriple_` contains the first and the last triple
+  // This struct additionally contains the first and last triple of the scan
+  // result.
+  struct MetadataAndBlocks : public MetadataAndBlocksBase {
+    // `firstAndLastTriple_` contains the first and the last triple
     // of the specified relation (and being filtered by the `col1Id` if
     // specified). This might be different from the first triple in the first
     // block (in the case of the `firstTriple_`, similarly for `lastTriple_`)
@@ -368,7 +371,13 @@ class CompressedRelationReader {
       CompressedBlockMetadata::PermutedTriple firstTriple_;
       CompressedBlockMetadata::PermutedTriple lastTriple_;
     };
-    std::optional<FirstAndLastTriple> firstAndLastTriple_;
+    FirstAndLastTriple firstAndLastTriple_;
+    // Deliberately delete the default constructor, s.t. we don't accidentally
+    // forget to set the `firstAndLastTriple_`
+    MetadataAndBlocks() = delete;
+    MetadataAndBlocks(MetadataAndBlocksBase base, FirstAndLastTriple triples)
+        : MetadataAndBlocksBase(std::move(base)),
+          firstAndLastTriple_(std::move(triples)) {}
   };
 
   struct LazyScanMetadata {
@@ -495,15 +504,15 @@ class CompressedRelationReader {
   // The same function, but specify the arguments as the `MetadataAndBlocks`
   // struct.
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const MetadataAndBlocks& metadataAndBlocks);
+      const MetadataAndBlocksBase& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given arguments would lead to. Throw an exception if the scan result would
+  // given arguments would lead to. Return `nullopt` if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
-  MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
-      const MetadataAndBlocks& metadataAndBlocks) const;
+  std::optional<MetadataAndBlocks::FirstAndLastTriple> getFirstAndLastTriple(
+      const MetadataAndBlocksBase& metadataAndBlocks) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
@@ -592,5 +601,3 @@ class CompressedRelationReader {
  * wrapper.
  * 2. Then add assertions that we only get valid column indices specified.
  */
-
-#endif  // QLEVER_COMPRESSEDRELATION_H

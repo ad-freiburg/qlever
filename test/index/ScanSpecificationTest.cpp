@@ -75,7 +75,12 @@ TEST(ScanSpecification, ScanSpecificationAsTripleComponent) {
   // `toScanSpecification` is `nullopt`.
   TripleComponent notInVocab =
       TripleComponent::Iri::fromIriref("<thisIriIsNotContained>");
-  EXPECT_THAT(STc(notInVocab, xIri, xIri), matchScanSpec(std::nullopt));
-  EXPECT_THAT(STc(xIri, notInVocab, xIri), matchScanSpec(std::nullopt));
-  EXPECT_THAT(STc(xIri, xIri, notInVocab), matchScanSpec(std::nullopt));
+  LocalVocabEntry localVocabEntry{notInVocab.getIri()};
+  auto localVocabId = Id::makeFromLocalVocabIndex(&localVocabEntry);
+  EXPECT_THAT(STc(notInVocab, xIri, xIri),
+              matchScanSpec(S(localVocabId, x, x)));
+  EXPECT_THAT(STc(xIri, notInVocab, xIri),
+              matchScanSpec(S(x, localVocabId, x)));
+  EXPECT_THAT(STc(xIri, xIri, notInVocab),
+              matchScanSpec(S(x, x, localVocabId)));
 }

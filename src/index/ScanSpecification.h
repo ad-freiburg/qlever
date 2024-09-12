@@ -28,7 +28,7 @@ class ScanSpecification {
   T col1Id_;
   T col2Id_;
   std::shared_ptr<const LocalVocab> localVocab_;
-  Graphs graphsToFilter_;
+  Graphs graphsToFilter_{};
   friend class ScanSpecificationAsTripleComponent;
 
   void validate() const;
@@ -49,7 +49,12 @@ class ScanSpecification {
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
-  // bool operator==(const ScanSpecification&) const = default;
+  bool operator==(const ScanSpecification& s) const {
+    auto tie = [](const ScanSpecification& x) {
+      return std::tie(x.col0Id_, x.col1Id_, x.col2Id_, x.graphsToFilter_);
+    };
+    return tie(*this) == tie(s);
+  }
 
   // Only used in tests.
   void setCol1Id(T col1Id) {
@@ -69,7 +74,7 @@ class ScanSpecificationAsTripleComponent {
   T col0_;
   T col1_;
   T col2_;
-  Graphs graphsToFilter_;
+  Graphs graphsToFilter_{};
 
  public:
   // Construct from three optional `TripleComponent`s. If any of the three
