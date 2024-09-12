@@ -416,11 +416,7 @@ class GroupBy : public Operation {
 
   // Check if an expression is of a certain type.
   template <class T>
-  static std::optional<T*> hasType(sparqlExpression::SparqlExpression* expr);
-
-  // Check if an expression is any of any type in `Exprs`
-  template <typename... Exprs>
-  static bool hasAnyType(const auto& expr);
+  static T* hasType(sparqlExpression::SparqlExpression* expr);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(

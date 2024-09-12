@@ -775,7 +775,7 @@ void GroupBy::findGroupedVariableImpl(
     std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>& substitutions,
     const Variable& groupedVariable) {
   if (auto value = hasType<sparqlExpression::VariableExpression>(expr)) {
-    auto variable = value.value()->value();
+    auto variable = value->value();
     if (variable != groupedVariable) return;
     if (parentAndChildIndex.has_value()) {
       auto vector =
@@ -811,18 +811,8 @@ GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
 
 // _____________________________________________________________________________
 template <class T>
-std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
-  auto value = dynamic_cast<T*>(expr);
-  if (value == nullptr)
-    return std::nullopt;
-  else
-    return value;
-}
-
-// _____________________________________________________________________________
-template <typename... Exprs>
-bool GroupBy::hasAnyType(const auto& expr) {
-  return (... || hasType<Exprs>(expr));
+T* GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
+  return dynamic_cast<T*>(expr);
 }
 
 // _____________________________________________________________________________
@@ -849,7 +839,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (hasType<MaxExpression>(expr)) return H{MAX};
   if (hasType<SumExpression>(expr)) return H{SUM};
   if (auto val = hasType<GroupConcatExpression>(expr)) {
-    return H{GROUP_CONCAT, val.value()->getSeparator()};
+    return H{GROUP_CONCAT, val->getSeparator()};
   }
 
   // `expr` is an unsupported aggregate
