@@ -368,13 +368,16 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
   }
 
+  size_t inWidth = _subtree->getRootOperation()->getResultWidth();
+  size_t outWidth = getResultWidth();
+
   if (!subresult->isFullyMaterialized()) {
     AD_CORRECTNESS_CHECK(metadataForUnsequentialData.has_value());
 
     auto localVocabPointer =
         std::make_shared<LocalVocab>(std::move(localVocab));
     cppcoro::generator<IdTable> generator = CALL_FIXED_SIZE(
-        getResultWidth(), &GroupBy::computeResultLazily, this,
+        (std::array{inWidth, outWidth}), &GroupBy::computeResultLazily, this,
         std::move(subresult), std::move(aggregates),
         std::move(metadataForUnsequentialData).value().aggregateAliases_,
         std::move(groupByCols), localVocabPointer, !requestLaziness);
@@ -391,8 +394,8 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
     return {std::move(idTable), resultSortedOn(),
             std::move(*localVocabPointer)};
   }
-  size_t inWidth = subresult->idTable().numColumns();
-  size_t outWidth = getResultWidth();
+
+  AD_CORRECTNESS_CHECK(subresult->idTable().numColumns() == inWidth);
 
   IdTable idTable = CALL_FIXED_SIZE(
       (std::array{inWidth, outWidth}), &GroupBy::doGroupBy, this,
@@ -429,7 +432,7 @@ size_t GroupBy::searchBlockBoundaries(
 }
 
 // _____________________________________________________________________________
-template <size_t OUT_WIDTH>
+template <size_t IN_WIDTH, size_t OUT_WIDTH>
 cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     std::shared_ptr<const Result> subresult, std::vector<Aggregate> aggregates,
     std::vector<HashMapAliasInformation> aggregateAliases,
@@ -468,6 +471,8 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     if (idTable.empty()) {
       continue;
     }
+    AD_CORRECTNESS_CHECK(idTable.numColumns() == IN_WIDTH || IN_WIDTH == 0);
+    AD_CORRECTNESS_CHECK(idTable.numColumns() == _subtree->getResultWidth());
     checkCancellation();
 
     if (currentGroupBlock.empty()) {
@@ -504,7 +509,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             resultTable = std::move(table).toDynamic();
           }
         },
-        idTable.asStaticView<OUT_WIDTH>(), currentGroupBlock);
+        idTable.asStaticView<IN_WIDTH>(), currentGroupBlock);
     groupSplitAcrossTables = true;
     lazyGroupBy.processNextBlock(evaluationContext, lastBlockStart,
                                  idTable.size());
