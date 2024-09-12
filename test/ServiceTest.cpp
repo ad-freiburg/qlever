@@ -229,6 +229,20 @@ TEST_F(ServiceTest, computeResult) {
 
   expectThrowOrSilence("", "JSON result does not have the expected structure.");
 
+  // `head`/`vars` missing
+  expectThrowOrSilence(
+      "{\"results\": {\"bindings\": {{\"x\": {{\"type\": \"uri\"}, {\"value\": "
+      "\"a\"}}, \"y\": {{\"type\": \"uri\"}, {\"value\": \"b\"}}}}}}",
+      "JSON result does not have the expected structure.");
+  expectThrowOrSilence(
+      "{\"head\": {},"
+      "\"results\": {\"bindings\": {}}}",
+      "JSON result does not have the expected structure.");
+  // wrong variables type (array of strings expected)
+  expectThrowOrSilence(
+      "{\"head\": {\"vars\": 1},"
+      "\"results\": {\"bindings\": {}}}",
+      "JSON result does not have the expected structure.");
   expectThrowOrSilence(
       "{\"head\": {\"vars\": [1, 2, 3]},"
       "\"results\": {\"bindings\": {}}}",

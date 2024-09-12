@@ -20,15 +20,19 @@ namespace ad_utility {
  */
 class LazyJsonParser {
  public:
+  // Generator detail, the first 100 input characters for better error context.
+  struct Details {
+    std::string first100_;
+  };
+  using Generator = cppcoro::generator<nlohmann::json, Details>;
+
   // Parse chunks of json-strings yielding them reconstructed.
-  static cppcoro::generator<nlohmann::json> parse(
-      cppcoro::generator<std::string_view> partialJson,
-      std::vector<std::string> arrayPath);
+  static Generator parse(cppcoro::generator<std::string_view> partialJson,
+                         std::vector<std::string> arrayPath);
 
   // Convenient alternative for the function above using bytes.
-  static cppcoro::generator<nlohmann::json> parse(
-      cppcoro::generator<std::span<std::byte>> partialJson,
-      std::vector<std::string> arrayPath);
+  static Generator parse(cppcoro::generator<std::span<std::byte>> partialJson,
+                         std::vector<std::string> arrayPath);
 
  private:
   explicit LazyJsonParser(std::vector<std::string> arrayPath);

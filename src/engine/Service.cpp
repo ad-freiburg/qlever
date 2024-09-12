@@ -16,7 +16,6 @@
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/LazyJsonParser.h"
 #include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
@@ -143,7 +142,7 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
 
-  auto throwErrorWithContext = [&response, &serviceUrl](std::string_view sv) {
+  auto throwErrorWithContext = [this, &response](std::string_view sv) {
     std::string ctx;
     ctx.reserve(100);
     for (const auto& bytes : std::move(response.body_)) {
@@ -153,15 +152,13 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         break;
       }
     }
-
-    throw std::runtime_error(absl::StrCat(
-        "Error while executing a SERVICE request to <", serviceUrl.asString(),
-        ">: ", sv, ". First 100 bytes of the response: ",
-        ctx.substr(0, std::min(100, (int)ctx.size()))));
+    this->throwErrorWithContext(sv,
+                                ctx.substr(0, std::min(100, (int)ctx.size())));
   };
 
   // Verify status and content-type of the response.
   if (response.status_ != boost::beast::http::status::ok) {
+    LOG(INFO) << serviceUrl.asString() << '\n';
     throwErrorWithContext(absl::StrCat(
         "SERVICE responded with HTTP status code: ",
         static_cast<int>(response.status_), ", ",
@@ -199,7 +196,7 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
 // ____________________________________________________________________________
 template <size_t I>
 void Service::writeJsonResult(const std::vector<std::string>& vars,
-                              cppcoro::generator<nlohmann::json>& body,
+                              ad_utility::LazyJsonParser::Generator& body,
                               IdTable* idTablePtr, LocalVocab* localVocab) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
@@ -227,12 +224,15 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 
   size_t rowIdx = 0;
   bool resultExists{false};
+  bool varsChecked{false};
   for (const nlohmann::json& part : body) {
     if (part.contains("head")) {
-      verifyVariables(part);
+      AD_CORRECTNESS_CHECK(!varsChecked);
+      verifyVariables(part, body);
+      varsChecked = true;
     }
     // The LazyJsonParser only yields parts containing the "bindings" array,
-    // therefor we can assume its existence here.
+    // therefore we can assume its existence here.
     AD_CORRECTNESS_CHECK(part.contains("results") &&
                          part["results"].contains("bindings") &&
                          part["results"]["bindings"].is_array());
@@ -242,9 +242,9 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
 
   // As the LazyJsonParser only passes parts of the result that match the
   // expected structure, no result implies an unexpected structure.
-  if (!resultExists) {
-    throw std::runtime_error(
-        "JSON result does not have the expected structure.");
+  if (!resultExists || !varsChecked) {
+    throwErrorWithContext("JSON result does not have the expected structure",
+                          body.details().first100_);
   }
 
   AD_CORRECTNESS_CHECK(rowIdx == idTable.size());
@@ -362,10 +362,12 @@ ProtoResult Service::makeNeutralElementResultForSilentFail() const {
 }
 
 // ____________________________________________________________________________
-void Service::verifyVariables(const nlohmann::json& j) {
+void Service::verifyVariables(
+    const nlohmann::json& j,
+    const ad_utility::LazyJsonParser::Generator& gen) const {
   if (!j["head"].contains("vars") || !j["head"]["vars"].is_array()) {
-    throw std::runtime_error(
-        "JSON result does not have the expected structure.");
+    throwErrorWithContext("JSON result does not have the expected structure",
+                          gen.details().first100_);
   }
 
   auto vars = j["head"]["vars"].get<std::vector<std::string>>();
@@ -378,11 +380,24 @@ void Service::verifyVariables(const nlohmann::json& j) {
       parsedServiceClause_.visibleVariables_.end());
 
   if (responseVars != expectedVars) {
-    throw std::runtime_error(absl::StrCat(
-        "Header row of JSON result for SERVICE query is \"",
-        absl::StrCat("?", absl::StrJoin(vars, " ?")), "\", but expected \"",
-        absl::StrJoin(parsedServiceClause_.visibleVariables_, " ",
-                      Variable::AbslFormatter),
-        "\"."));
+    throwErrorWithContext(
+        absl::StrCat("Header row of JSON result for SERVICE query is \"",
+                     absl::StrCat("?", absl::StrJoin(vars, " ?")),
+                     "\", but expected \"",
+                     absl::StrJoin(parsedServiceClause_.visibleVariables_, " ",
+                                   Variable::AbslFormatter),
+                     "\""),
+        gen.details().first100_);
   }
+}
+
+// ____________________________________________________________________________
+void Service::throwErrorWithContext(std::string_view msg,
+                                    std::string_view first100) const {
+  const ad_utility::httpUtils::Url serviceUrl{
+      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
+
+  throw std::runtime_error(absl::StrCat(
+      "Error while executing a SERVICE request to <", serviceUrl.asString(),
+      ">: ", msg, ". First 100 bytes of the response: '", first100, "'"));
 }

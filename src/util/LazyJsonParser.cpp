@@ -15,13 +15,18 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
-cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
+LazyJsonParser::Generator LazyJsonParser::parse(
     cppcoro::generator<std::string_view> partialJson,
     std::vector<std::string> arrayPath) {
   LazyJsonParser p(std::move(arrayPath));
+  Details& details = co_await cppcoro::getDetails;
   for (const auto& chunk : partialJson) {
+    if (details.first100_.size() < 100) {
+      details.first100_ += chunk.substr(0, 100 - details.first100_.size());
+    }
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
+
       if (p.endReached_) {
         co_return;
       }
@@ -30,7 +35,7 @@ cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
 }
 
 // ____________________________________________________________________________
-cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
+LazyJsonParser::Generator LazyJsonParser::parse(
     cppcoro::generator<std::span<std::byte>> partialJson,
     std::vector<std::string> arrayPath) {
   return parse(
