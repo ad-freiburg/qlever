@@ -8,46 +8,43 @@
 #include "index/IndexImpl.h"
 
 // ____________________________________________________________________________
-std::optional<ScanSpecification>
-ScanSpecificationAsTripleComponent::toScanSpecification(
+ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     const Index& index) const {
   return toScanSpecification(index.getImpl());
 }
 
 // ____________________________________________________________________________
-std::optional<ScanSpecification>
-ScanSpecificationAsTripleComponent::toScanSpecification(
+ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     const IndexImpl& index) const {
-  // TODO<C++23> Use `std::optional::transform`.
-  // TODO<SPARQL UPDATE>: We can also have LocalVocab entries is the
-  // ScanSpecification.
-  bool nonexistingVocabEntryFound = false;
+  LocalVocab localVocab;
   auto getId =
-      [&index, &nonexistingVocabEntryFound](
+      [&index, &localVocab](
           const std::optional<TripleComponent>& tc) -> std::optional<Id> {
+    // TODO<C++23> Use `std::optional::transform`.
     if (!tc.has_value()) {
       return std::nullopt;
     }
-    auto id = tc.value().toValueId(index.getVocab());
-    if (!id.has_value()) {
-      nonexistingVocabEntryFound = true;
-    }
-    return id;
+    return TripleComponent{tc.value()}.toValueId(index.getVocab(), localVocab);
   };
   std::optional<Id> col0Id = getId(col0_);
   std::optional<Id> col1Id = getId(col1_);
   std::optional<Id> col2Id = getId(col2_);
 
-  if (nonexistingVocabEntryFound) {
-    return std::nullopt;
+  ScanSpecification::Graphs graphsToFilter = std::nullopt;
+  if (graphsToFilter_.has_value()) {
+    graphsToFilter.emplace();
+    for (const auto& graph : graphsToFilter_.value()) {
+      graphsToFilter->insert(getId(graph).value());
+    }
   }
-  return ScanSpecification{col0Id, col1Id, col2Id};
+  return {col0Id, col1Id, col2Id, std::move(localVocab),
+          std::move(graphsToFilter)};
 }
 
 // ____________________________________________________________________________
-ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(T col0,
-                                                                       T col1,
-                                                                       T col2) {
+ScanSpecificationAsTripleComponent::ScanSpecificationAsTripleComponent(
+    T col0, T col1, T col2, Graphs graphsToFilter)
+    : graphsToFilter_{std::move(graphsToFilter)} {
   auto toNulloptIfVariable = [](T& tc) -> std::optional<TripleComponent> {
     if (tc.has_value() && tc.value().isVariable()) {
       return std::nullopt;

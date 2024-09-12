@@ -164,8 +164,7 @@ void CountAvailablePredicates::computePatternTrickAllEntities(
       ScanSpecificationAsTripleComponent{
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
-          .toScanSpecification(index)
-          .value();
+          .toScanSpecification(index);
   auto fullHasPattern =
       index.getPermutation(Permutation::Enum::PSO)
           .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);
