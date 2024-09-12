@@ -96,7 +96,7 @@ void DeltaTriples::modifyTriplesImpl(
   std::ranges::sort(triples);
   auto [first, last] = std::ranges::unique(triples);
   triples.erase(first, last);
-  std::erase_if(triples, [this, &targetMap](const IdTriple<0>& triple) {
+  std::erase_if(triples, [&targetMap](const IdTriple<0>& triple) {
     return targetMap.contains(triple);
   });
   std::ranges::for_each(triples,
