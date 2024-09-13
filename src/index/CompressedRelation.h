@@ -331,9 +331,16 @@ class CompressedRelationWriter {
 
   // This is the function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
+  /*
   friend void testCompressedRelations(const auto& inputs,
                                       std::string testCaseName,
                                       ad_utility::MemorySize blocksize);
+                                      */
+  friend std::pair<std::vector<CompressedBlockMetadata>,
+                   std::vector<CompressedRelationMetadata>>
+  compressedRelationTestWriteCompressedRelations(
+      const auto& inputs, std::string filename,
+      ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;

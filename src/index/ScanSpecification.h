@@ -20,14 +20,22 @@ class Index;
 // the knowledge graph at all. The values which are `nullopt` become variables
 // and are returned as columns in the result of the scan.
 class ScanSpecification {
- private:
+ public:
   using T = std::optional<Id>;
   using Graphs = std::optional<ad_utility::HashSet<Id>>;
 
+ private:
   T col0Id_;
   T col1Id_;
   T col2Id_;
+  // A local vocab that is needed in case at least one of the `colXIds_` has
+  // type `LocalVocabIndex`. Note that this doesn't automatically mean that the
+  // scan result will be empty, because local vocab entries might also be
+  // created by SPARQL UPDATE requests.
   std::shared_ptr<const LocalVocab> localVocab_;
+
+  // If specified (i.e. not `nullopt`) then the result of the scan only consists
+  // of triples that belong to one of the graphs.
   Graphs graphsToFilter_{};
   friend class ScanSpecificationAsTripleComponent;
 
@@ -48,13 +56,6 @@ class ScanSpecification {
   const T& col2Id() const { return col2Id_; }
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
-
-  bool operator==(const ScanSpecification& s) const {
-    auto tie = [](const ScanSpecification& x) {
-      return std::tie(x.col0Id_, x.col1Id_, x.col2Id_, x.graphsToFilter_);
-    };
-    return tie(*this) == tie(s);
-  }
 
   // Only used in tests.
   void setCol1Id(T col1Id) {
