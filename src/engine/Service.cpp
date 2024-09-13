@@ -153,13 +153,11 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         break;
       }
     }
-    this->throwErrorWithContext(sv,
-                                ctx.substr(0, std::min(100, (int)ctx.size())));
+    this->throwErrorWithContext(sv, std::string_view(ctx).substr(0, 100));
   };
 
   // Verify status and content-type of the response.
   if (response.status_ != boost::beast::http::status::ok) {
-    LOG(INFO) << serviceUrl.asString() << '\n';
     throwErrorWithContext(absl::StrCat(
         "SERVICE responded with HTTP status code: ",
         static_cast<int>(response.status_), ", ",
@@ -227,26 +225,41 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   size_t rowIdx = 0;
   bool resultExists{false};
   bool varsChecked{false};
-  for (const nlohmann::json& part : body) {
-    if (part.contains("head")) {
-      AD_CORRECTNESS_CHECK(!varsChecked);
-      verifyVariables(part, body);
-      varsChecked = true;
+  try {
+    for (const nlohmann::json& part : body) {
+      if (part.contains("head")) {
+        AD_CORRECTNESS_CHECK(!varsChecked);
+        verifyVariables(part["head"], body.details());
+        varsChecked = true;
+      }
+      // The LazyJsonParser only yields parts containing the "bindings" array,
+      // therefore we can assume its existence here.
+      AD_CORRECTNESS_CHECK(part.contains("results") &&
+                           part["results"].contains("bindings") &&
+                           part["results"]["bindings"].is_array());
+      writeBindings(part["results"]["bindings"], rowIdx);
+      resultExists = true;
     }
-    // The LazyJsonParser only yields parts containing the "bindings" array,
-    // therefore we can assume its existence here.
-    AD_CORRECTNESS_CHECK(part.contains("results") &&
-                         part["results"].contains("bindings") &&
-                         part["results"]["bindings"].is_array());
-    writeBindings(part["results"]["bindings"], rowIdx);
-    resultExists = true;
+  } catch (const ad_utility::LazyJsonParser::Error& e) {
+    throwErrorWithContext(
+        absl::StrCat("Parser failed with error: '", e.what(), "'"),
+        body.details().first100_, body.details().last100_);
   }
 
   // As the LazyJsonParser only passes parts of the result that match the
   // expected structure, no result implies an unexpected structure.
-  if (!resultExists || !varsChecked) {
-    throwErrorWithContext("JSON result does not have the expected structure",
-                          body.details().first100_);
+  if (!resultExists) {
+    throwErrorWithContext(
+        "JSON result does not have the expected structure (results section "
+        "missing)",
+        body.details().first100_, body.details().last100_);
+  }
+
+  if (!varsChecked) {
+    throwErrorWithContext(
+        "JSON result does not have the expected structure (head section "
+        "missing)",
+        body.details().first100_, body.details().last100_);
   }
 
   AD_CORRECTNESS_CHECK(rowIdx == idTable.size());
@@ -318,24 +331,27 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 }
 
 // ____________________________________________________________________________
-TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
-  if (!cell.contains("type") || !cell.contains("value")) {
-    throw std::runtime_error("Missing type or value field in binding.");
+TripleComponent Service::bindingToTripleComponent(
+    const nlohmann::json& binding) {
+  if (!binding.contains("type") || !binding.contains("value")) {
+    throw std::runtime_error(absl::StrCat(
+        "Missing type or value field in binding. The binding is: '",
+        binding.dump(), "'"));
   }
 
-  const auto type = cell["type"].get<std::string_view>();
-  const auto value = cell["value"].get<std::string_view>();
+  const auto type = binding["type"].get<std::string_view>();
+  const auto value = binding["value"].get<std::string_view>();
 
   TripleComponent tc;
   if (type == "literal") {
-    if (cell.contains("datatype")) {
+    if (binding.contains("datatype")) {
       tc = TurtleParser<TokenizerCtre>::literalAndDatatypeToTripleComponent(
           value, TripleComponent::Iri::fromIrirefWithoutBrackets(
-                     cell["datatype"].get<std::string_view>()));
-    } else if (cell.contains("xml:lang")) {
+                     binding["datatype"].get<std::string_view>()));
+    } else if (binding.contains("xml:lang")) {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value),
-          cell["xml:lang"].get<std::string>());
+          binding["xml:lang"].get<std::string>());
     } else {
       tc = TripleComponent::Literal::literalWithNormalizedContent(
           asNormalizedStringViewUnsafe(value));
@@ -348,7 +364,9 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
         "For now, consider filtering them out using the ISBLANK function or "
         "converting them via the STR function.");
   } else {
-    throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
+    throw std::runtime_error(absl::StrCat("Type ", type,
+                                          " is undefined. The binding is: '",
+                                          binding.dump(), "'"));
   }
   return tc;
 }
@@ -365,14 +383,19 @@ ProtoResult Service::makeNeutralElementResultForSilentFail() const {
 
 // ____________________________________________________________________________
 void Service::verifyVariables(
-    const nlohmann::json& j,
-    const ad_utility::LazyJsonParser::Generator& gen) const {
-  if (!j["head"].contains("vars") || !j["head"]["vars"].is_array()) {
-    throwErrorWithContext("JSON result does not have the expected structure",
-                          gen.details().first100_);
+    const nlohmann::json& head,
+    const ad_utility::LazyJsonParser::Details& details) const {
+  std::vector<std::string> vars;
+  try {
+    vars = head.at("vars").get<std::vector<std::string>>();
+  } catch (...) {
+    throw std::runtime_error(
+        absl::StrCat("JSON result does not have the expected structure, as its "
+                     "\"head\" section is not according to the SPARQL "
+                     "standard. The \"head\" section is: '",
+                     head.dump(), "'."));
   }
 
-  auto vars = j["head"]["vars"].get<std::vector<std::string>>();
   ad_utility::HashSet<Variable> responseVars;
   for (const auto& v : vars) {
     responseVars.emplace("?" + v);
@@ -388,18 +411,22 @@ void Service::verifyVariables(
                      "\", but expected \"",
                      absl::StrJoin(parsedServiceClause_.visibleVariables_, " ",
                                    Variable::AbslFormatter),
-                     "\""),
-        gen.details().first100_);
+                     "\". Probable cause: The remote endpoint sent a JSON "
+                     "response that is not according to the SPARQL Standard"),
+        details.first100_, details.last100_);
   }
 }
 
 // ____________________________________________________________________________
 void Service::throwErrorWithContext(std::string_view msg,
-                                    std::string_view first100) const {
+                                    std::string_view first100,
+                                    std::string_view last100) const {
   const ad_utility::httpUtils::Url serviceUrl{
       asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   throw std::runtime_error(absl::StrCat(
       "Error while executing a SERVICE request to <", serviceUrl.asString(),
-      ">: ", msg, ". First 100 bytes of the response: '", first100, "'"));
+      ">: ", msg, ". First 100 bytes of the response: '", first100,
+      (last100.empty() ? "'"
+                       : absl::StrCat(", last 100 bytes: '", last100, "'"))));
 }

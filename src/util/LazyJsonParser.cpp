@@ -22,12 +22,14 @@ LazyJsonParser::Generator LazyJsonParser::parse(
   Details& details = co_await cppcoro::getDetails;
   for (const auto& chunk : partialJson) {
     if (details.first100_.size() < 100) {
-      details.first100_ += chunk.substr(0, 100 - details.first100_.size());
+      details.first100_ += chunk.substr(0, 100);
     }
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
 
       if (p.endReached_) {
+        details.last100_ = chunk.substr(
+            std::max(0, static_cast<int>(chunk.size() - 100)), 100);
         co_return;
       }
     }
@@ -42,8 +44,8 @@ LazyJsonParser::Generator LazyJsonParser::parse(
       [](cppcoro::generator<std::span<std::byte>> partialJson)
           -> cppcoro::generator<std::string_view> {
         for (const auto& bytes : partialJson) {
-          co_yield std::string(reinterpret_cast<const char*>(bytes.data()),
-                               bytes.size());
+          co_yield std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                                    bytes.size());
         }
       }(std::move(partialJson)),
       std::move(arrayPath));
@@ -250,7 +252,7 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
   size_t nextChunkStart =
       materializeEnd == 0 ? 0 : std::min(materializeEnd + 1, input_.size());
   if (input_.size() - nextChunkStart >= 1'000'000) {
-    throw std::runtime_error("Ill formed Json.");
+    throw Error("Ill formed JSON.");
   }
   if (nextChunkStart == 0) {
     return std::nullopt;
@@ -275,7 +277,11 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
     absl::StrAppend(&resStr, suffixInArray_);
   }
 
-  return nlohmann::json::parse(resStr);
+  try {
+    return nlohmann::json::parse(resStr);
+  } catch (const nlohmann::json::parse_error& e) {
+    throw Error(e.what());
+  }
 }
 
 // ____________________________________________________________________________

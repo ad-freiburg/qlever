@@ -99,7 +99,8 @@ class Service : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
-  static TripleComponent bindingToTripleComponent(const nlohmann::json& cell);
+  static TripleComponent bindingToTripleComponent(
+      const nlohmann::json& binding);
 
  private:
   // The string returned by this function is used as cache key.
@@ -119,13 +120,14 @@ class Service : public Operation {
 
   // Check that all visible variables of the SERVICE clause exist in the json
   // object, otherwise throw an error.
-  void verifyVariables(const nlohmann::json& j,
-                       const ad_utility::LazyJsonParser::Generator& gen) const;
+  void verifyVariables(const nlohmann::json& head,
+                       const ad_utility::LazyJsonParser::Details& gen) const;
 
   // Throws an error message, providing the first 100 bytes of the result as
   // context.
-  void throwErrorWithContext(std::string_view msg,
-                             std::string_view first100) const;
+  [[noreturn]] void throwErrorWithContext(
+      std::string_view msg, std::string_view first100,
+      std::string_view last100 = ""sv) const;
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.

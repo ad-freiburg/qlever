@@ -20,11 +20,18 @@ namespace ad_utility {
  */
 class LazyJsonParser {
  public:
-  // Generator detail, the first 100 input characters for better error context.
+  // Generator detail, the first/last 100 input characters for better error
+  // context.
   struct Details {
     std::string first100_;
+    std::string last100_;
   };
   using Generator = cppcoro::generator<nlohmann::json, Details>;
+
+  class Error : public std::runtime_error {
+   public:
+    Error(const std::string& msg) : std::runtime_error(msg) {}
+  };
 
   // Parse chunks of json-strings yielding them reconstructed.
   static Generator parse(cppcoro::generator<std::string_view> partialJson,
