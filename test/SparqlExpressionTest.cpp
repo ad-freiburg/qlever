@@ -1320,8 +1320,9 @@ TEST(SparqlExpression, isAggregateAndIsDistinct) {
   // aggregate with the given distinctness. In particular, the expression itself
   // as well as its child must return `true` for the `isInsideAggregate()`
   // function, and the distinctness of the aggregate itself must match.
-  // If `hasChild` is `false`, then the aggregate is expected to have no
-  // children. This is the case for the `CountStarExpression`.
+  // If `hasChild` is `true`, then the aggregate is expected to have at least
+  // one child. This is the case for all aggregates except the
+  // `CountStarExpression`.
   auto match = [](bool distinct, bool hasChild = true) {
     auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
     auto distinctMatcher =

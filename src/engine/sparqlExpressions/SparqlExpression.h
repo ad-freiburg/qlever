@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SPARQLEXPRESSION_H
-#define QLEVER_SPARQLEXPRESSION_H
+#pragma once
 
 #include <memory>
 #include <span>
@@ -35,11 +34,12 @@ class SparqlExpression {
   virtual std::vector<const Variable*> containedVariables() const final;
 
   // Return all the variables that occur in the expression, but are not
-  // aggregated. The default implementation works for aggregate expressions
-  // (which never have unaggregated variables) and for expressions that only
-  // combine other expressions and therefore propagate their unaggregated
-  // variables. Leaf operations (in particular the `VariableExpression` need to
-  // override this method.
+  // aggregated. These variables must be grouped in a GROUP BY. The default
+  // implementation works for aggregate expressions (which never have
+  // unaggregated variables) and for expressions that only combine other
+  // expressions and therefore propagate their unaggregated variables. Leaf
+  // operations (in particular the `VariableExpression`) need to override this
+  // method.
   virtual std::vector<Variable> getUnaggregatedVariables() const;
 
   // Return true iff this expression contains an aggregate like SUM, COUNT etc.
@@ -118,8 +118,9 @@ class SparqlExpression {
   virtual std::span<SparqlExpression::Ptr> children() final;
   virtual std::span<const SparqlExpression::Ptr> children() const final;
 
-  // Return true if this class or any of its ancestors in the expression tree is
-  // an aggregate. For an example usage see the `LiteralExpression` class.
+  // Return true if this expression or any of its ancestors in the expression
+  // tree is an aggregate. For an example usage see the `LiteralExpression`
+  // class.
   bool isInsideAggregate() const;
 
  private:
@@ -137,5 +138,3 @@ class SparqlExpression {
   virtual void setIsInsideAggregate() final;
 };
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SPARQLEXPRESSION_H

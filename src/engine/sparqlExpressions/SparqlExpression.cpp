@@ -27,7 +27,7 @@ std::vector<const Variable*> SparqlExpression::containedVariables() const {
 // _____________________________________________________________________________
 std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
   // Aggregates always aggregate over all variables, so no variables remain
-  // unaggregated
+  // unaggregated.
   if (isAggregate() != AggregateStatus::NoAggregate) {
     return {};
   }
