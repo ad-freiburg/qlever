@@ -147,3 +147,87 @@ TEST(HttpServer, HttpTest) {
         HttpClient("localhost", std::to_string(httpServer.getPort())));
   }
 }
+
+TEST(HttpServer, ErrorHandlingInSession) {
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+  // Create and run an HTTP server, which replies to each request with three
+  // lines: the request method (GET, POST, or OTHER), a copy of the request
+  // target (might be empty), and a copy of the request body (might be empty).
+
+  std::exception_ptr exception;
+  std::stringstream logStream;
+  ad_utility::setGlobalLoggingStream(&logStream);
+  TestHttpServer httpServer(
+      [&exception](auto request, auto&& send) -> boost::asio::awaitable<void> {
+        std::string methodName;
+        switch (request.method()) {
+          case boost::beast::http::verb::get:
+            methodName = "GET";
+            break;
+          case boost::beast::http::verb::post:
+            methodName = "POST";
+            break;
+          default:
+            methodName = "OTHER";
+        }
+
+        auto response =
+            [](std::string methodName, std::string target,
+               std::string body) -> cppcoro::generator<std::string> {
+          co_yield methodName;
+          co_yield "\n";
+          co_yield target;
+          co_yield "\n";
+          co_yield body;
+        }(methodName, std::string(toStd(request.target())), request.body());
+
+        // First send a response, to make the client happy.
+        co_await send(createOkResponse(std::move(response), request,
+                                       ad_utility::MediaType::textPlain));
+        AD_CORRECTNESS_CHECK(exception);
+        std::rethrow_exception(exception);
+      });
+  httpServer.runInOwnThread();
+
+  auto setExceptionPtr = [&exception, &httpServer,
+                          &handle](auto exceptionObject) {
+    try {
+      throw exceptionObject;
+    } catch (...) {
+      exception = std::current_exception();
+    }
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(httpServer.getPort()));
+
+    auto response = HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                            "localhost", "target1", handle);
+    ASSERT_EQ(response.status_, boost::beast::http::status::ok);
+    ASSERT_EQ(response.contentType_, "text/plain");
+    ASSERT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
+  };
+
+  using namespace ::testing;
+  setExceptionPtr(
+      beast::system_error{boost::asio::error::host_not_found_try_again});
+  EXPECT_THAT(logStream.str(), HasSubstr("Host not found"));
+  logStream.str("");
+
+  setExceptionPtr(beast::system_error{beast::error::timeout});
+  setExceptionPtr(beast::system_error{boost::asio::error::eof});
+  if (LOGLEVEL >= TRACE) {
+    EXPECT_THAT(logStream.str(),
+                AllOf(HasSubstr("due to a timeout"), HasSubstr("End of file")));
+  } else {
+    EXPECT_THAT(logStream.str(), Eq(""));
+  }
+
+  logStream.str("");
+  setExceptionPtr(std::runtime_error{"The runtime error for testing"});
+  EXPECT_THAT(logStream.str(), HasSubstr("The runtime error for testing"));
+
+  logStream.str("");
+  setExceptionPtr(47);
+  EXPECT_THAT(logStream.str(),
+              HasSubstr("Weird exception not inheriting from std::exception"));
+}
