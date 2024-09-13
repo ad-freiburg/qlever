@@ -24,12 +24,12 @@ LazyJsonParser::Generator LazyJsonParser::parse(
     if (details.first100_.size() < 100) {
       details.first100_ += chunk.substr(0, 100);
     }
+    details.last100_ =
+        chunk.substr(std::max(0, static_cast<int>(chunk.size() - 100)), 100);
+
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
-
       if (p.endReached_) {
-        details.last100_ = chunk.substr(
-            std::max(0, static_cast<int>(chunk.size() - 100)), 100);
         co_return;
       }
     }
@@ -252,7 +252,9 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
   size_t nextChunkStart =
       materializeEnd == 0 ? 0 : std::min(materializeEnd + 1, input_.size());
   if (input_.size() - nextChunkStart >= 1'000'000) {
-    throw Error("Ill formed JSON.");
+    throw Error(
+        "QLever currently doesn't support SERVICE results where a single "
+        "result row is larger than 1MB");
   }
   if (nextChunkStart == 0) {
     return std::nullopt;

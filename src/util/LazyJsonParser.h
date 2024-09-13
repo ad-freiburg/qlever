@@ -30,7 +30,7 @@ class LazyJsonParser {
 
   class Error : public std::runtime_error {
    public:
-    Error(const std::string& msg) : std::runtime_error(msg) {}
+    explicit Error(const std::string& msg) : std::runtime_error(msg) {}
   };
 
   // Parse chunks of json-strings yielding them reconstructed.

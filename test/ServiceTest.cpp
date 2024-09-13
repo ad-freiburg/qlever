@@ -255,7 +255,10 @@ TEST_F(ServiceTest, computeResult) {
       "\"head\" section is not according to the SPARQL standard.");
 
   // Internal parser errors.
-  expectThrowOrSilence(std::string(1'000'000, '0'), "Ill formed JSON.");
+  expectThrowOrSilence(
+      std::string(1'000'000, '0'),
+      "QLever currently doesn't support SERVICE results where a single "
+      "result row is larger than 1MB");
 
   // CHECK 1b: Even if the SILENT-keyword is set, throw local errors.
   Service serviceSilent{
