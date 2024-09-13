@@ -51,6 +51,8 @@ struct AvgAggregationData {
 
     return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
   }
+
+  void reset() { *this = AvgAggregationData{}; }
 };
 
 // Data to perform the COUNT aggregation using the HashMap optimization.
@@ -68,6 +70,8 @@ struct CountAggregationData {
       [[maybe_unused]] const LocalVocab* localVocab) const {
     return ValueId::makeFromInt(count_);
   }
+
+  void reset() { *this = CountAggregationData{}; }
 };
 
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
@@ -101,6 +105,8 @@ struct ExtremumAggregationData {
                                                        stringResultGetter),
                       currentValue_);
   }
+
+  void reset() { *this = ExtremumAggregationData{}; }
 };
 
 using MinAggregationData =
@@ -148,6 +154,8 @@ struct SumAggregationData {
     }
     return ValueId::makeFromDouble(sum_);
   }
+
+  void reset() { *this = SumAggregationData{}; }
 };
 
 // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
@@ -180,4 +188,6 @@ struct GroupConcatAggregationData {
       : separator_{separator} {
     currentValue_.reserve(20000);
   }
+
+  void reset() { currentValue_.clear(); }
 };
