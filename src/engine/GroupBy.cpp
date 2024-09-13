@@ -774,8 +774,9 @@ void GroupBy::findGroupedVariableImpl(
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>& substitutions,
     const Variable& groupedVariable) {
-  if (auto value = hasType<sparqlExpression::VariableExpression>(expr)) {
-    auto variable = value.value()->value();
+  AD_CORRECTNESS_CHECK(expr != nullptr);
+  if (auto value = dynamic_cast<sparqlExpression::VariableExpression*>(expr)) {
+    const auto& variable = value->value();
     if (variable != groupedVariable) return;
     if (parentAndChildIndex.has_value()) {
       auto vector =
@@ -810,22 +811,6 @@ GroupBy::findAggregates(sparqlExpression::SparqlExpression* expr) {
 }
 
 // _____________________________________________________________________________
-template <class T>
-std::optional<T*> GroupBy::hasType(sparqlExpression::SparqlExpression* expr) {
-  auto value = dynamic_cast<T*>(expr);
-  if (value == nullptr)
-    return std::nullopt;
-  else
-    return value;
-}
-
-// _____________________________________________________________________________
-template <typename... Exprs>
-bool GroupBy::hasAnyType(const auto& expr) {
-  return (... || hasType<Exprs>(expr));
-}
-
-// _____________________________________________________________________________
 std::optional<GroupBy::HashMapAggregateTypeWithData>
 GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using enum HashMapAggregateType;
@@ -843,13 +828,13 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
 
   using H = HashMapAggregateTypeWithData;
 
-  if (hasType<AvgExpression>(expr)) return H{AVG};
-  if (hasType<CountExpression>(expr)) return H{COUNT};
-  if (hasType<MinExpression>(expr)) return H{MIN};
-  if (hasType<MaxExpression>(expr)) return H{MAX};
-  if (hasType<SumExpression>(expr)) return H{SUM};
-  if (auto val = hasType<GroupConcatExpression>(expr)) {
-    return H{GROUP_CONCAT, val.value()->getSeparator()};
+  if (dynamic_cast<AvgExpression*>(expr)) return H{AVG};
+  if (dynamic_cast<CountExpression*>(expr)) return H{COUNT};
+  if (dynamic_cast<MinExpression*>(expr)) return H{MIN};
+  if (dynamic_cast<MaxExpression*>(expr)) return H{MAX};
+  if (dynamic_cast<SumExpression*>(expr)) return H{SUM};
+  if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
+    return H{GROUP_CONCAT, val->getSeparator()};
   }
 
   // `expr` is an unsupported aggregate
