@@ -23,36 +23,6 @@
 using std::endl;
 using std::string;
 
-namespace {
-class JoinImpl {
- public:
-  /*
-   * @brief Combines 2 rows like in a join and inserts the result in the
-   * given table.
-   *
-   *@tparam The amount of columns in the rows and the table.
-   *
-   * @param[in] The left row of the join.
-   * @param[in] The right row of the join.
-   * @param[in] The numerical position of the join column of row b.
-   * @param[in] The table, in which the new combined row should be inserted.
-   * Must be static.
-   */
-  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-  static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                      const ColumnIndex jcRowB,
-                                      IdTableStatic<TABLE_WIDTH>* table);
-
-  /*
-   * @brief The implementation of hashJoin.
-   */
-  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
-                           const IdTable& dynB, ColumnIndex jc2,
-                           IdTable* dynRes);
-};
-}  // namespace
-
 // _____________________________________________________________________________
 Join::Join(QueryExecutionContext* qec, std::shared_ptr<QueryExecutionTree> t1,
            std::shared_ptr<QueryExecutionTree> t2, ColumnIndex t1JoinCol,
@@ -439,9 +409,8 @@ void Join::join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
 
 // ______________________________________________________________________________
 template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
-                            const IdTable& dynB, ColumnIndex jc2,
-                            IdTable* dynRes) {
+void Join::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
+                        const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes) {
   const IdTableView<L_WIDTH> a = dynA.asStaticView<L_WIDTH>();
   const IdTableView<R_WIDTH> b = dynB.asStaticView<R_WIDTH>();
 
@@ -510,11 +479,11 @@ void JoinImpl::hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
         // branch gets discarded at compile time, which makes this
         // condition have constant runtime.
         if constexpr (leftIsLarger) {
-          JoinImpl::addCombinedRowToIdTable(largerTable[i], row,
-                                            smallerTableJoinColumn, &result);
+          addCombinedRowToIdTable(largerTable[i], row, smallerTableJoinColumn,
+                                  &result);
         } else {
-          JoinImpl::addCombinedRowToIdTable(row, largerTable[i],
-                                            largerTableJoinColumn, &result);
+          addCombinedRowToIdTable(row, largerTable[i], largerTableJoinColumn,
+                                  &result);
         }
       }
     }
@@ -541,14 +510,14 @@ void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
   CALL_FIXED_SIZE(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &JoinImpl::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________
 template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
-void JoinImpl::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
-                                       const ColumnIndex jcRowB,
-                                       IdTableStatic<TABLE_WIDTH>* table) {
+void Join::addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                   const ColumnIndex jcRowB,
+                                   IdTableStatic<TABLE_WIDTH>* table) {
   // Add a new, empty row.
   const size_t backIndex = table->size();
   table->emplace_back();

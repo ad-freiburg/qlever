@@ -95,8 +95,6 @@ class Join : public Operation {
   void join(const IdTable& a, ColumnIndex jc1, const IdTable& b,
             ColumnIndex jc2, IdTable* result) const;
 
-  friend class JoinImpl;
-
   /**
    * @brief Joins IdTables dynA and dynB on join column jc2, returning
    * the result in dynRes. Creates a cross product for matching rows by putting
@@ -135,4 +133,31 @@ class Join : public Operation {
                                               ColumnIndex joinColTable,
                                               IndexScan& scan,
                                               ColumnIndex joinColScan);
+
+  using ScanMethodType = std::function<IdTable(Id)>;
+
+  /*
+   * @brief Combines 2 rows like in a join and inserts the result in the
+   * given table.
+   *
+   *@tparam The amount of columns in the rows and the table.
+   *
+   * @param[in] The left row of the join.
+   * @param[in] The right row of the join.
+   * @param[in] The numerical position of the join column of row b.
+   * @param[in] The table, in which the new combined row should be inserted.
+   * Must be static.
+   */
+  template <typename ROW_A, typename ROW_B, int TABLE_WIDTH>
+  static void addCombinedRowToIdTable(const ROW_A& rowA, const ROW_B& rowB,
+                                      const ColumnIndex jcRowB,
+                                      IdTableStatic<TABLE_WIDTH>* table);
+
+  /*
+   * @brief The implementation of hashJoin.
+   */
+  template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
+  static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
+                           const IdTable& dynB, ColumnIndex jc2,
+                           IdTable* dynRes);
 };
