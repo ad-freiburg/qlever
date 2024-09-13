@@ -774,8 +774,9 @@ void GroupBy::findGroupedVariableImpl(
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>& substitutions,
     const Variable& groupedVariable) {
+  AD_CORRECTNESS_CHECK(expr != nullptr);
   if (auto value = dynamic_cast<sparqlExpression::VariableExpression*>(expr)) {
-    auto variable = value->value();
+    const auto& variable = value->value();
     if (variable != groupedVariable) return;
     if (parentAndChildIndex.has_value()) {
       auto vector =
