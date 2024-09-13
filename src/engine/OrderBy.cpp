@@ -62,6 +62,32 @@ std::string OrderBy::getDescriptor() const {
   return "OrderBy on" + orderByVars;
 }
 
+static auto sortImpl(const auto& sortIndices, auto& idTable, auto width) {
+  // Return true iff `rowA` comes before `rowB` in the sort order specified by
+  // `sortIndices_`.
+  auto comparison = [&sortIndices](const auto& row1, const auto& row2) -> bool {
+    for (auto& [column, isDescending] : sortIndices) {
+      if (row1[column] == row2[column]) {
+        continue;
+      }
+      bool isLessThan =
+          toBoolNotUndef(valueIdComparators::compareIds<
+                         valueIdComparators::ComparisonForIncompatibleTypes::
+                             CompareByType>(
+              row1[column], row2[column], valueIdComparators::Comparison::LT));
+      return isLessThan != isDescending;
+    }
+    return false;
+  };
+
+  // We cannot use the `CALL_FIXED_SIZE` macro here because the `sort` function
+  // is templated not only on the integer `I` (which the `callFixedSize`
+  // function deals with) but also on the `comparison`.
+  ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
+    Engine::sort<I>(&idTable, comparison);
+  });
+}
+
 // _____________________________________________________________________________
 ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   using std::endl;
@@ -99,6 +125,8 @@ ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   // only contains a single datatype, then we can use more efficient
   // implementations here.
 
+  sortImpl(sortIndices_, idTable, width);
+  /*
   // Return true iff `rowA` comes before `rowB` in the sort order specified by
   // `sortIndices_`.
   auto comparison = [this](const auto& row1, const auto& row2) -> bool {
@@ -122,6 +150,7 @@ ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   ad_utility::callFixedSize(width, [&idTable, &comparison]<size_t I>() {
     Engine::sort<I>(&idTable, comparison);
   });
+   */
   // We can't check during sort, so reset status here
   cancellationHandle_->resetWatchDogState();
   checkCancellation();
