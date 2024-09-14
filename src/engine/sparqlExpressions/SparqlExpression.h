@@ -2,8 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_SPARQLEXPRESSION_H
-#define QLEVER_SPARQLEXPRESSION_H
+#pragma once
 
 #include <memory>
 #include <span>
@@ -15,60 +14,67 @@
 
 namespace sparqlExpression {
 
-/// Virtual base class for an arbitrary Sparql Expression which holds the
-/// structure of the expression as well as the logic to evaluate this expression
-/// on a given intermediate result
+// Virtual base class for an arbitrary Sparql Expression which holds the
+// structure of the expression as well as the logic to evaluate this expression
+// on a given intermediate result
 class SparqlExpression {
  private:
   std::string _descriptor;
   bool isInsideAggregate_ = false;
 
  public:
-  /// ________________________________________________________________________
+  // ________________________________________________________________________
   using Ptr = std::unique_ptr<SparqlExpression>;
 
-  /// Evaluate a Sparql expression.
+  // Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
-  /// Return all variables and IRIs, needed for certain parser methods.
-  /// TODO<joka921> should be called getStringLiteralsAndVariables
+  // Return all variables, needed for certain parser methods.
   virtual std::vector<const Variable*> containedVariables() const final;
 
-  /// Return all the variables that occur in the expression, but are not
-  /// aggregated.
-  virtual std::vector<Variable> getUnaggregatedVariables();
+  // Return all the variables that occur in the expression, but are not
+  // aggregated. These variables must be grouped in a GROUP BY. The default
+  // implementation works for aggregate expressions (which never have
+  // unaggregated variables) and for expressions that only combine other
+  // expressions and therefore propagate their unaggregated variables. Leaf
+  // operations (in particular the `VariableExpression`) need to override this
+  // method.
+  virtual std::vector<Variable> getUnaggregatedVariables() const;
 
   // Return true iff this expression contains an aggregate like SUM, COUNT etc.
   // This information is needed to check if there is an implicit GROUP BY in a
   // query because any of the selected aliases contains an aggregate.
   virtual bool containsAggregate() const final;
 
-  // Check if expression is aggregate
-  virtual bool isAggregate() const;
-
-  // Check if an expression is distinct (only applies to aggregates)
-  virtual bool isDistinct() const;
+  // Check if expression is an aggregate. If true, then the return type also
+  // specifies, whether the aggregate is `DISTINCT` or not.
+  enum struct AggregateStatus {
+    NoAggregate,
+    DistinctAggregate,
+    NonDistinctAggregate
+  };
+  virtual AggregateStatus isAggregate() const;
 
   // Replace child at index `childIndex` with `newExpression`
   virtual void replaceChild(size_t childIndex,
                             std::unique_ptr<SparqlExpression> newExpression);
 
-  /// Get a unique identifier for this expression, used as cache key.
+  // Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
 
-  /// Get a short, human readable identifier for this expression.
+  // Get a short, human-readable identifier for this expression.
   virtual const string& descriptor() const final;
   virtual string& descriptor() final;
 
-  /// For the pattern trick we need to know, whether this expression
-  /// is a non-distinct count of a single variable. In this case we return
-  /// the variable. Otherwise we return std::nullopt.
+  // For the pattern trick we need to know, whether this expression
+  // is a non-distinct count of a single variable. In this case we return
+  // the variable. Otherwise we return std::nullopt.
   virtual std::optional<SparqlExpressionPimpl::VariableAndDistinctness>
   getVariableForCount() const;
 
-  /// Helper function for getVariableForCount() : If this
-  /// expression is a single variable, return the name of this variable.
-  /// Otherwise, return std::nullopt.
+  // Helper function for getVariableForCount() : If this
+  // expression is a single variable, return the name of this variable.
+  // Otherwise, return std::nullopt.
   virtual std::optional<::Variable> getVariableOrNullopt() const;
 
   // For the following three functions (`containsLangExpression`,
@@ -111,6 +117,11 @@ class SparqlExpression {
   virtual std::span<SparqlExpression::Ptr> children() final;
   virtual std::span<const SparqlExpression::Ptr> children() const final;
 
+  // Return true if this expression or any of its ancestors in the expression
+  // tree is an aggregate. For an example usage see the `LiteralExpression`
+  // class.
+  bool isInsideAggregate() const;
+
  private:
   virtual std::span<SparqlExpression::Ptr> childrenImpl() = 0;
 
@@ -124,11 +135,5 @@ class SparqlExpression {
   // this expression as well as for all its descendants. This function must be
   // called by all child classes that are aggregate expressions.
   virtual void setIsInsideAggregate() final;
-
-  // Return true if this class or any of its ancestors in the expression tree is
-  // an aggregate. For an example usage see the `LiteralExpression` class.
-  bool isInsideAggregate() const;
 };
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SPARQLEXPRESSION_H
