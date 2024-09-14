@@ -29,8 +29,7 @@ class SparqlExpression {
   // Evaluate a Sparql expression.
   virtual ExpressionResult evaluate(EvaluationContext*) const = 0;
 
-  // Return all variables and IRIs, needed for certain parser methods.
-  // TODO<joka921> should be called getStringLiteralsAndVariables
+  // Return all variables, needed for certain parser methods.
   virtual std::vector<const Variable*> containedVariables() const final;
 
   // Return all the variables that occur in the expression, but are not
