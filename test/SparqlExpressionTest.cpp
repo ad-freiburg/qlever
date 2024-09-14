@@ -11,9 +11,11 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -1302,41 +1304,58 @@ TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, isAggregateAndIsDistinct) {
-  sparqlExpression::IdExpression idExpr(ValueId::makeFromInt(42));
+  using namespace sparqlExpression;
+  IdExpression idExpr(ValueId::makeFromInt(42));
 
-  ASSERT_FALSE(idExpr.isAggregate());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      idExpr.isDistinct(),
-      ::testing::ContainsRegex(
-          "isDistinct\\(\\) maybe only called for aggregate expressions\\. If "
-          "this is an aggregate expression, then the implementation of "
-          "isDistinct\\(\\) is missing for this expression\\. Please report "
-          "this to the developers\\."));
+  using enum SparqlExpression::AggregateStatus;
 
-  Variable varX("?x");
-  sparqlExpression::detail::AvgExpression avgExpression(
-      false, std::make_unique<VariableExpression>(varX));
+  ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
+  ASSERT_FALSE(idExpr.isInsideAggregate());
 
-  ASSERT_TRUE(avgExpression.isAggregate());
-  ASSERT_FALSE(avgExpression.isDistinct());
+  auto varX = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
 
-  sparqlExpression::detail::AvgExpression avgDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX));
+  // Return a matcher that checks whether a given `SparqlExpression` is an
+  // aggregate with the given distinctness. In particular, the expression itself
+  // as well as its child must return `true` for the `isInsideAggregate()`
+  // function, and the distinctness of the aggregate itself must match.
+  // If `hasChild` is `true`, then the aggregate is expected to have at least
+  // one child. This is the case for all aggregates except the
+  // `CountStarExpression`.
+  auto match = [](bool distinct, bool hasChild = true) {
+    auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+    auto distinctMatcher =
+        AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);
+    auto getChild = [](const SparqlExpression& expression) -> decltype(auto) {
+      return *expression.children()[0];
+    };
+    auto insideAggregate =
+        AD_PROPERTY(SparqlExpression, isInsideAggregate, true);
+    using namespace ::testing;
+    auto childMatcher = [&]() -> Matcher<const SparqlExpression&> {
+      if (hasChild) {
+        return ResultOf(getChild, insideAggregate);
+      } else {
+        return ::testing::_;
+      }
+    }();
+    return AllOf(distinctMatcher, insideAggregate, childMatcher);
+  };
 
-  ASSERT_TRUE(avgDistinctExpression.isAggregate());
-  ASSERT_TRUE(avgDistinctExpression.isDistinct());
+  EXPECT_THAT(AvgExpression(false, varX()), match(false));
+  EXPECT_THAT(AvgExpression(true, varX()), match(true));
 
-  sparqlExpression::GroupConcatExpression groupConcatExpression(
-      false, std::make_unique<VariableExpression>(varX), ",");
+  EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
+  EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
 
-  ASSERT_TRUE(groupConcatExpression.isAggregate());
-  ASSERT_FALSE(groupConcatExpression.isDistinct());
+  EXPECT_THAT(SampleExpression(false, varX()), match(false));
+  // For `SAMPLE` the distinctness makes no difference, so we always return `not
+  // distinct`.
+  EXPECT_THAT(SampleExpression(true, varX()), match(false));
 
-  sparqlExpression::GroupConcatExpression groupConcatDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX), ",");
-
-  ASSERT_TRUE(groupConcatDistinctExpression.isAggregate());
-  ASSERT_TRUE(groupConcatDistinctExpression.isDistinct());
+  EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
+  EXPECT_THAT(*makeCountStarExpression(false), match(false, false));
 }
 
 // ___________________________________________________________________________

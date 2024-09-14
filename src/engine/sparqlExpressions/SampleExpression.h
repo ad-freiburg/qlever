@@ -18,12 +18,6 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _____________________________________________________________________
-  vector<Variable> getUnaggregatedVariables() override {
-    // This is an aggregation, so it never leaves any unaggregated variables.
-    return {};
-  }
-
   // __________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
@@ -32,8 +26,12 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
-  // SAMPLE is an aggregate.
-  bool isAggregate() const override { return true; }
+  // SAMPLE is an aggregate, the distinctness doesn't matter, so we return "not
+  // distinct", because that allows for more efficient implementations in GROUP
+  // BY.
+  AggregateStatus isAggregate() const override {
+    return AggregateStatus::NonDistinctAggregate;
+  }
 
  private:
   Ptr _child;
