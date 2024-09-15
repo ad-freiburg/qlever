@@ -69,18 +69,10 @@ ProtoResult OrderBy::computeResult([[maybe_unused]] bool requestLaziness) {
   std::shared_ptr<const Result> subRes = subtree_->getResult();
 
   // TODO<joka921> proper timeout for sorting operations
-  auto sortEstimateCancellationFactor =
-      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
-  if (getExecutionContext()->getSortPerformanceEstimator().estimatedSortTime(
-          subRes->idTable().size(), subRes->idTable().numColumns()) >
-      remainingTime() * sortEstimateCancellationFactor) {
-    // The estimated time for this sort is much larger than the actually
-    // remaining time, cancel this operation
-    throw ad_utility::CancellationException(
-        "OrderBy operation was canceled, because time estimate exceeded "
-        "remaining time by a factor of " +
-        std::to_string(sortEstimateCancellationFactor));
-  }
+  const auto& subTable = subRes->idTable();
+  getExecutionContext()->getSortPerformanceEstimator().throwIfEstimateTooLong(
+      subTable.numRows(), subTable.numColumns(), deadline_,
+      "Sort for COUNT(DISTINCT *)");
 
   LOG(DEBUG) << "OrderBy result computation..." << endl;
   IdTable idTable = subRes->idTable().clone();

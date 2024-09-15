@@ -227,10 +227,10 @@ class Server {
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send) const;
 
   /// Send response for the streamable media types (tsv, csv, octet-stream,
-  /// turtle).
+  /// turtle, sparqlJson, qleverJson).
   Awaitable<void> sendStreamableResponse(
       const ad_utility::httpUtils::HttpRequest auto& request, auto& send,
       ad_utility::MediaType mediaType, const PlannedQuery& plannedQuery,
-      const QueryExecutionTree& qet,
+      const QueryExecutionTree& qet, ad_utility::Timer& requestTimer,
       SharedCancellationHandle cancellationHandle) const;
 };

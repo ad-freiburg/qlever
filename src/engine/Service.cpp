@@ -12,11 +12,11 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/VariableToColumnMap.h"
 #include "global/RuntimeParameters.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
-#include "util/Views.h"
+#include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
@@ -32,8 +32,11 @@ Service::Service(QueryExecutionContext* qec,
 // ____________________________________________________________________________
 std::string Service::getCacheKeyImpl() const {
   std::ostringstream os;
-  // TODO: This duplicates code in GraphPatternOperation.cpp .
-  os << "SERVICE " << parsedServiceClause_.serviceIri_.toSparql() << " {\n"
+  os << "SERVICE ";
+  if (parsedServiceClause_.silent_) {
+    os << "SILENT ";
+  }
+  os << parsedServiceClause_.serviceIri_.toStringRepresentation() << " {\n"
      << parsedServiceClause_.prologue_ << "\n"
      << parsedServiceClause_.graphPatternAsString_ << "\n";
   if (siblingTree_ != nullptr) {
@@ -45,8 +48,9 @@ std::string Service::getCacheKeyImpl() const {
 
 // ____________________________________________________________________________
 std::string Service::getDescriptor() const {
-  return absl::StrCat("Service with IRI ",
-                      parsedServiceClause_.serviceIri_.toSparql());
+  return absl::StrCat(
+      "Service with IRI ",
+      parsedServiceClause_.serviceIri_.toStringRepresentation());
 }
 
 // ____________________________________________________________________________
@@ -91,14 +95,6 @@ size_t Service::getCostEstimate() {
 
 // ____________________________________________________________________________
 ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
-  // Get the URL of the SPARQL endpoint.
-  std::string_view serviceIriString = parsedServiceClause_.serviceIri_.iri();
-  AD_CONTRACT_CHECK(serviceIriString.starts_with("<") &&
-                    serviceIriString.ends_with(">"));
-  serviceIriString.remove_prefix(1);
-  serviceIriString.remove_suffix(1);
-  ad_utility::httpUtils::Url serviceUrl{serviceIriString};
-
   // Try to simplify the Service Query using it's sibling Operation.
   if (auto valuesClause = getSiblingValuesClause(); valuesClause.has_value()) {
     auto openBracketPos = parsedServiceClause_.graphPatternAsString_.find('{');
@@ -106,6 +102,28 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
         "{\n" + valuesClause.value() + '\n' +
         parsedServiceClause_.graphPatternAsString_.substr(openBracketPos + 1);
   }
+
+  try {
+    return computeResultImpl(requestLaziness);
+  } catch (const ad_utility::CancellationException&) {
+    throw;
+  } catch (const ad_utility::detail::AllocationExceedsLimitException&) {
+    throw;
+  } catch (const std::exception&) {
+    // if the `SILENT` keyword is set in the service clause, catch the error and
+    // return a neutral Element.
+    if (parsedServiceClause_.silent_) {
+      return makeNeutralElementResultForSilentFail();
+    }
+    throw;
+  }
+}
+
+// ____________________________________________________________________________
+ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
+  // Get the URL of the SPARQL endpoint.
+  ad_utility::httpUtils::Url serviceUrl{
+      asStringViewUnsafe(parsedServiceClause_.serviceIri_.getContent())};
 
   // Construct the query to be sent to the SPARQL endpoint.
   std::string variablesForSelectClause = absl::StrJoin(
@@ -120,7 +138,7 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
             << ", target: " << serviceUrl.target() << ")" << std::endl
             << serviceQuery << std::endl;
 
-  cppcoro::generator<std::span<std::byte>> jsonByteResult = getResultFunction_(
+  HttpOrHttpsResponse response = getResultFunction_(
       serviceUrl, cancellationHandle_, boost::beast::http::verb::post,
       serviceQuery, "application/sparql-query",
       "application/sparql-results+json");
@@ -128,34 +146,50 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   std::basic_string<char, std::char_traits<char>,
                     ad_utility::AllocatorWithLimit<char>>
       jsonStr(_executionContext->getAllocator());
-  for (std::span<std::byte> bytes : jsonByteResult) {
+  for (std::span<std::byte> bytes : response.body_) {
     jsonStr.append(reinterpret_cast<const char*>(bytes.data()), bytes.size());
     checkCancellation();
   }
 
-  // Parse the received result.
-  auto throwErrorWithContext = [&jsonStr](std::string_view sv) {
+  auto throwErrorWithContext = [&jsonStr, &serviceUrl](std::string_view sv) {
     throw std::runtime_error(absl::StrCat(
-        sv,
-        " First 100 bytes: ", std::string_view{jsonStr.data()}.substr(0, 100)));
+        "Error while executing a SERVICE request to <", serviceUrl.asString(),
+        ">: ", sv, ". First 100 bytes of the response: ",
+        std::string_view{jsonStr.data()}.substr(0, 100)));
   };
+
+  // Verify status and content-type of the response.
+  if (response.status_ != boost::beast::http::status::ok) {
+    throwErrorWithContext(absl::StrCat(
+        "SERVICE responded with HTTP status code: ",
+        static_cast<int>(response.status_), ", ",
+        toStd(boost::beast::http::obsolete_reason(response.status_))));
+  }
+  if (!ad_utility::utf8ToLower(response.contentType_)
+           .starts_with("application/sparql-results+json")) {
+    throwErrorWithContext(absl::StrCat(
+        "QLever requires the endpoint of a SERVICE to send the result as "
+        "'application/sparql-results+json' but the endpoint sent '",
+        response.contentType_, "'"));
+  }
+
+  // Parse the received result.
   std::vector<std::string> resVariables;
   std::vector<nlohmann::json> resBindings;
   try {
     auto jsonResult = nlohmann::json::parse(jsonStr);
 
     if (jsonResult.empty()) {
-      throw std::runtime_error(absl::StrCat("Response from SPARQL endpoint ",
-                                            serviceUrl.host(), " is empty"));
+      throwErrorWithContext("Response from SPARQL endpoint is empty");
     }
 
     resVariables = jsonResult["head"]["vars"].get<std::vector<std::string>>();
     resBindings =
         jsonResult["results"]["bindings"].get<std::vector<nlohmann::json>>();
   } catch (const nlohmann::json::parse_error&) {
-    throwErrorWithContext("Failed to parse the Service result as JSON.");
+    throwErrorWithContext("Failed to parse the SERVICE result as JSON");
   } catch (const nlohmann::json::type_error&) {
-    throwErrorWithContext("JSON result does not have the expected structure.");
+    throwErrorWithContext("JSON result does not have the expected structure");
   }
 
   // Check if result header row is expected.
@@ -163,14 +197,13 @@ ProtoResult Service::computeResult([[maybe_unused]] bool requestLaziness) {
   std::string expectedHeaderRow = absl::StrJoin(
       parsedServiceClause_.visibleVariables_, " ", Variable::AbslFormatter);
   if (headerRow != expectedHeaderRow) {
-    throw std::runtime_error(absl::StrCat(
+    throwErrorWithContext(absl::StrCat(
         "Header row of JSON result for SERVICE query is \"", headerRow,
         "\", but expected \"", expectedHeaderRow, "\""));
   }
 
   // Set basic properties of the result table.
-  IdTable idTable{getExecutionContext()->getAllocator()};
-  idTable.setNumColumns(getResultWidth());
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   LocalVocab localVocab{};
   // Fill the result table using the `writeJsonResult` method below.
   size_t resWidth = getResultWidth();
@@ -291,10 +324,12 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
           value, TripleComponent::Iri::fromIrirefWithoutBrackets(
                      cell["datatype"].get<std::string_view>()));
     } else if (cell.contains("xml:lang")) {
-      tc = TripleComponent::Literal::literalWithoutQuotes(
-          value, cell["xml:lang"].get<std::string>());
+      tc = TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(value),
+          cell["xml:lang"].get<std::string>());
     } else {
-      tc = TripleComponent::Literal::literalWithoutQuotes(value);
+      tc = TripleComponent::Literal::literalWithNormalizedContent(
+          asNormalizedStringViewUnsafe(value));
     }
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
@@ -307,4 +342,14 @@ TripleComponent Service::bindingToTripleComponent(const nlohmann::json& cell) {
     throw std::runtime_error(absl::StrCat("Type ", type, " is undefined."));
   }
   return tc;
+}
+
+// ____________________________________________________________________________
+ProtoResult Service::makeNeutralElementResultForSilentFail() const {
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+  idTable.emplace_back();
+  for (size_t colIdx = 0; colIdx < getResultWidth(); ++colIdx) {
+    idTable(0, colIdx) = Id::makeUndefined();
+  }
+  return {std::move(idTable), resultSortedOn(), LocalVocab{}};
 }

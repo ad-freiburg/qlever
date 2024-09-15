@@ -4,11 +4,15 @@
 
 #include "engine/SortPerformanceEstimator.h"
 
+#include <absl/strings/str_cat.h>
+
 #include <cstdlib>
 
 #include "engine/CallFixedSize.h"
 #include "engine/Engine.h"
 #include "engine/idTable/IdTable.h"
+#include "global/RuntimeParameters.h"
+#include "util/CancellationHandle.h"
 #include "util/Log.h"
 #include "util/Random.h"
 #include "util/Timer.h"
@@ -186,4 +190,23 @@ void SortPerformanceEstimator::computeEstimatesExpensively(
   }
   LOG(DEBUG) << "Done computing sort estimates" << std::endl;
   _estimatesWereCalculated = true;
+}
+// ___________________________________________________________________________
+void SortPerformanceEstimator::throwIfEstimateTooLong(
+    size_t numRows, size_t numColumns,
+    std::chrono::steady_clock::time_point deadline,
+    std::string_view operationDescriptor) const {
+  auto sortEstimateCancellationFactor =
+      RuntimeParameters().get<"sort-estimate-cancellation-factor">();
+  auto now = std::chrono::steady_clock::now();
+  if (now > deadline || estimatedSortTime(numRows, numColumns) >
+                            (deadline - now) * sortEstimateCancellationFactor) {
+    // The estimated time for this sort is much larger than the actually
+    // remaining time, cancel this operation.
+    throw ad_utility::CancellationException(
+        absl::StrCat(operationDescriptor,
+                     " was canceled, because time estimate exceeded "
+                     "remaining time by a factor of ",
+                     sortEstimateCancellationFactor));
+  }
 }

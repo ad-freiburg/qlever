@@ -130,6 +130,62 @@ class Timer {
   }
 };
 
+// A timer that can be used in multithreaded contexts without additional
+// synchronization. It consists of several single-threaded time measurements,
+// the times of which are (atomically) summed up. This means that if some of the
+// single-threaded measurements run in parallel, then the total time will be
+// larger than the elapsed wall clock time.
+class ThreadSafeTimer {
+ private:
+  using Rep = Timer::Duration::rep;
+  std::atomic<Rep> totalTime_ = 0;
+  // The implementation of the single-threaded measurements.
+  class [[nodiscard(
+      "This class measures the time between its construction and destruction. "
+      "Not binding it to a variable thus is probably a bug")]] TimeMeasurement {
+    Timer measuringTimer_{Timer::Started};
+    ThreadSafeTimer* parentTimer_;
+    bool isStopped_ = false;
+
+   public:
+    explicit TimeMeasurement(ThreadSafeTimer* timer)
+        : measuringTimer_(Timer::Started), parentTimer_{timer} {}
+    TimeMeasurement(const TimeMeasurement&) = delete;
+    TimeMeasurement& operator=(const TimeMeasurement&) = delete;
+
+    // Explicitly stop the measurement.
+    void stop() {
+      if (isStopped_) {
+        return;
+      }
+      isStopped_ = true;
+      measuringTimer_.stop();
+      parentTimer_->totalTime_.fetch_add(measuringTimer_.value().count(),
+                                         std::memory_order_release);
+    }
+
+    // Destructor. Implicitly stops the measurement.
+    ~TimeMeasurement() { stop(); }
+  };
+
+ public:
+  // Start a single-threaded time measurement. An explicit call to `stop` on the
+  // returned object, or its destruction, will stop the time measurement, and
+  // will add the elapsed wall clock to the total time of this
+  // `ThreadSafeTimer`.
+  TimeMeasurement startMeasurement() { return TimeMeasurement{this}; }
+
+  // Return the summed time over all finished measurements.
+  Timer::Duration value() const {
+    return Timer::Duration{totalTime_.load(std::memory_order_acquire)};
+  }
+
+  // Return the summed time over all finished measurements, in milliseconds.
+  Timer::Milliseconds msecs() const {
+    return std::chrono::duration_cast<Timer::Milliseconds>(value());
+  }
+};
+
 namespace detail {
 // A helper struct that measures the time from its creation until its
 // destruction and logs the time together with a specified message

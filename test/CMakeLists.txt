@@ -151,7 +151,7 @@ else ()
     linkAndDiscoverTest(TokenTest parser re2 util)
 endif ()
 
-addLinkAndDiscoverTestSerial(TurtleParserTest parser re2)
+addLinkAndDiscoverTestSerial(RdfParserTest parser re2)
 
 addLinkAndDiscoverTest(MultiColumnJoinTest engine)
 
@@ -213,19 +213,10 @@ addLinkAndDiscoverTest(SparqlDataTypesTest engine)
 
 addLinkAndDiscoverTest(ContentEncodingHelperTest http)
 
-addLinkAndDiscoverTest(VocabularyInMemoryTest vocabulary)
-
-addLinkAndDiscoverTest(CompressedVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(UnicodeVocabularyTest vocabulary)
-
-addLinkAndDiscoverTest(CombinedVocabularyTest vocabulary)
 
 addLinkAndDiscoverTest(PrefixCompressorTest)
 
 addLinkAndDiscoverTest(MilestoneIdTest)
-
-addLinkAndDiscoverTest(VocabularyOnDiskTest index)
 
 addLinkAndDiscoverTest(VocabularyTest index)
 
@@ -254,7 +245,7 @@ addLinkAndDiscoverTest(GeoSparqlHelpersTest util)
 
 addLinkAndDiscoverTest(HttpUtilsTest util http)
 
-addLinkAndDiscoverTest(DateYearDurationTest util parser)
+addLinkAndDiscoverTestSerial(DateYearDurationTest util parser)
 
 addLinkAndDiscoverTest(DurationTest util)
 
@@ -403,3 +394,11 @@ addLinkAndDiscoverTest(ChunkedForLoopTest)
 addLinkAndDiscoverTest(FsstCompressorTest fsst)
 
 addLinkAndDiscoverTest(CopyableSynchronizationTest)
+
+addLinkAndDiscoverTest(LazyJsonParserTest)
+
+addLinkAndDiscoverTest(CacheableGeneratorTest)
+
+addLinkAndDiscoverTest(FilterTest engine)
+
+addLinkAndDiscoverTest(ResultTest engine)

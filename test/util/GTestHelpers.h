@@ -1,10 +1,14 @@
 //  Copyright 2022, University of Freiburg,
 //  Chair of Algorithms and Data Structures.
-//  Author: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//  Authors: Julian Mundhahs (mundhahj@informatik.uni-freiburg.de)
+//           Johannes Kalmbach (kalmbach@cs.uni-freiburg.de)
 
 #pragma once
 
 #include <gmock/gmock.h>
+
+#include <concepts>
+#include <optional>
 
 #include "util/SourceLocation.h"
 #include "util/TypeTraits.h"
@@ -50,24 +54,28 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
                                               exceptionType)                  \
   try {                                                                       \
     statement;                                                                \
-    FAIL() << "No exception was thrown";                                      \
+    ADD_FAILURE() << "No exception was thrown";                               \
   } catch (const exceptionType& e) {                                          \
     EXPECT_THAT(e.what(), errorMessageMatcher)                                \
         << "The exception message does not match";                            \
   } catch (const std::conditional_t<                                          \
            ad_utility::isSimilar<exceptionType, std::exception>,              \
            ::NeverThrown, std::exception>& exception) {                       \
-    FAIL() << "The thrown exception was "                                     \
-           << ::testing::internal::GetTypeName(typeid(exception))             \
-           << ", expected " #exceptionType;                                   \
+    ADD_FAILURE() << "The thrown exception was "                              \
+                  << ::testing::internal::GetTypeName(typeid(exception))      \
+                  << ", expected " #exceptionType;                            \
   } catch (...) {                                                             \
-    FAIL() << "The thrown exception did not inherit from " #exceptionType;    \
+    ADD_FAILURE()                                                             \
+        << "The thrown exception did not inherit from " #exceptionType;       \
   }                                                                           \
   void()
 
 #define AD_EXPECT_THROW_WITH_MESSAGE(statement, errorMessageMatcher)    \
   AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(statement, errorMessageMatcher, \
                                         std::exception)
+
+// `EXPECT` that the `argument` is equal to `std::nullopt`.
+#define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return
@@ -123,3 +131,28 @@ MATCHER_P(InsertIntoStream, matcher,
   *result_listener << "that yields \"" << output << "\"";
   return testing::ExplainMatchResult(matcher, output, result_listener);
 }
+
+// Helper type that allows to use non-copyable types in gtest matchers.
+template <typename T>
+class CopyShield {
+  std::shared_ptr<T> pointer_;
+
+ public:
+  template <typename... Ts>
+  requires std::constructible_from<T, Ts&&...> explicit CopyShield(Ts&&... args)
+      : pointer_{std::make_shared<T>(AD_FWD(args)...)} {}
+
+  template <typename Ts>
+  requires std::constructible_from<T, Ts&&> CopyShield& operator=(Ts&& ts) {
+    pointer_ = std::make_shared<T>(AD_FWD(ts));
+    return *this;
+  }
+
+  auto operator<=>(const T& other) const requires std::three_way_comparable<T> {
+    return *pointer_ <=> other;
+  }
+
+  bool operator==(const T& other) const requires std::equality_comparable<T> {
+    return *pointer_ == other;
+  }
+};
