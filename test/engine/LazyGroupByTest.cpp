@@ -2,7 +2,7 @@
 //   Chair of Algorithms and Data Structures.
 //   Author: Robin Textor-Falconi <textorr@informatik.uni-freiburg.de>
 
-#include <gtest/gtest.h>
+#include <gmock/gmock.h>
 
 #include "../util/IdTableHelpers.h"
 #include "../util/IndexTestHelpers.h"
@@ -10,6 +10,7 @@
 #include "engine/GroupBy.h"
 #include "engine/LazyGroupBy.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 namespace {
@@ -115,4 +116,33 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
   EXPECT_EQ(resultTable, makeIdTableFromVector({{3, 8}}, I));
+}
+
+// _____________________________________________________________________________
+TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
+  auto* qec = ad_utility::testing::getQec();
+  Variable variable{"?someVariable"};
+  sparqlExpression::SparqlExpressionPimpl sparqlExpression{
+      std::make_unique<sparqlExpression::GroupConcatExpression>(
+          false,
+          std::make_unique<sparqlExpression::VariableExpression>(variable),
+          "|"),
+      "SUM(?someVariable)"};
+  auto subtree = std::make_shared<QueryExecutionTree>(
+      qec, std::make_shared<ValuesForTesting>(
+               qec, IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
+               std::vector{std::optional{variable}}));
+  GroupBy groupBy{qec, {variable}, {}, subtree};
+  std::vector<GroupBy::Aggregate> aggregates{{std::move(sparqlExpression), 0}};
+  LocalVocab localVocab{};
+  LazyGroupBy lazyGroupBy{
+      localVocab,
+      groupBy.computeUnsequentialProcessingMetadata(aggregates)
+          ->aggregateAliases_,
+      groupBy.allocator(), 1};
+  using namespace ::testing;
+  using Gc = GroupConcatAggregationData;
+  EXPECT_THAT(lazyGroupBy.aggregationData_.getAggregationDataVariant(0),
+              VariantWith<sparqlExpression::VectorWithMemoryLimit<Gc>>(
+                  ElementsAre(Field("separator_", &Gc::separator_, Eq("|")))));
 }

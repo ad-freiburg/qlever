@@ -43,4 +43,6 @@ class LazyGroupBy {
   // Reset the stored aggregation data. This is cheaper than recreating the
   // objects every time.
   void resetAggregationData();
+
+  FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);
 };
