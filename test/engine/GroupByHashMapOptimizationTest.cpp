@@ -29,140 +29,154 @@ class GroupByHashMapOptimizationTest : public ::testing::Test {
       sparqlExpression::EvaluationContext::TimePoint::max()};
 
   Id calculate(const auto& data) { return data.calculateResult(&localVocab_); }
+
+  auto makeCalcAndAddValue(auto& data) {
+    auto calc = [this, &data]() { return calculate(data); };
+    auto addValue = [this, &data](auto&& x) {
+      data.addValue(AD_FWD(x), &context_);
+    };
+    return std::tuple{std::move(calc), std::move(addValue)};
+  }
 };
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest, AvgAggregationDataAggregatesCorrectly) {
   AvgAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(I(1), &context_);
-  EXPECT_DOUBLE_EQ(calculate(data).getDouble(), 1);
-  data.addValue(I(3), &context_);
-  EXPECT_DOUBLE_EQ(calculate(data).getDouble(), 2);
-  data.addValue(D(3), &context_);
-  EXPECT_NEAR(calculate(data).getDouble(), 7 / 3.0, 0.00001);
-
-  data.reset();
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(I(2), &context_);
-  EXPECT_EQ(calculate(data), D(2));
-
-  data.addValue(Id::makeUndefined(), &context_);
-  EXPECT_TRUE(calculate(data).isUndefined());
+  EXPECT_EQ(calc(), I(0));
+  addValue(I(1));
+  EXPECT_DOUBLE_EQ(calc().getDouble(), 1);
+  addValue(I(3));
+  EXPECT_DOUBLE_EQ(calc().getDouble(), 2);
+  addValue(D(3));
+  EXPECT_NEAR(calc().getDouble(), 7 / 3.0, 0.00001);
 
   data.reset();
-  EXPECT_EQ(calculate(data), I(0));
+  EXPECT_EQ(calc(), I(0));
+  addValue(I(2));
+  EXPECT_EQ(calc(), D(2));
+
+  addValue(Id::makeUndefined());
+  EXPECT_TRUE(calc().isUndefined());
+
+  data.reset();
+  EXPECT_EQ(calc(), I(0));
   using ad_utility::triple_component::LiteralOrIri;
   auto literal = LiteralOrIri::literalWithoutQuotes("non-numeric value");
   auto id = Id::makeFromLocalVocabIndex(
       localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
-  data.addValue(id, &context_);
-  EXPECT_TRUE(calculate(data).isUndefined());
+  addValue(id);
+  EXPECT_TRUE(calc().isUndefined());
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest,
        CountAggregationDataAggregatesCorrectly) {
   CountAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(I(1), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(I(3), &context_);
-  EXPECT_EQ(calculate(data), I(2));
-  data.addValue(D(3), &context_);
-  EXPECT_EQ(calculate(data), I(3));
+  EXPECT_EQ(calc(), I(0));
+  addValue(I(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(I(3));
+  EXPECT_EQ(calc(), I(2));
+  addValue(D(3));
+  EXPECT_EQ(calc(), I(3));
 
   data.reset();
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(Id::makeFromBool(false), &context_);
-  EXPECT_EQ(calculate(data), I(1));
+  EXPECT_EQ(calc(), I(0));
+  addValue(Id::makeFromBool(false));
+  EXPECT_EQ(calc(), I(1));
 
-  data.addValue(Id::makeUndefined(), &context_);
-  EXPECT_EQ(calculate(data), I(1));
+  addValue(Id::makeUndefined());
+  EXPECT_EQ(calc(), I(1));
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest, MinAggregationDataAggregatesCorrectly) {
   MinAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  EXPECT_TRUE(calculate(data).isUndefined());
-  data.addValue(I(1), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(I(3), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(D(1), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(D(0), &context_);
-  EXPECT_EQ(calculate(data), D(0));
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(I(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(I(3));
+  EXPECT_EQ(calc(), I(1));
+  addValue(D(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(D(0));
+  EXPECT_EQ(calc(), D(0));
 
   data.reset();
-  EXPECT_TRUE(calculate(data).isUndefined());
-  data.addValue(Id::makeFromBool(true), &context_);
-  EXPECT_EQ(calculate(data), Id::makeFromBool(true));
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(Id::makeFromBool(true));
+  EXPECT_EQ(calc(), Id::makeFromBool(true));
 
   // undefined < everything
-  data.addValue(Id::makeUndefined(), &context_);
-  EXPECT_TRUE(calculate(data).isUndefined());
+  addValue(Id::makeUndefined());
+  EXPECT_TRUE(calc().isUndefined());
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest, MaxAggregationDataAggregatesCorrectly) {
   MaxAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  EXPECT_TRUE(calculate(data).isUndefined());
-  data.addValue(I(1), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(I(3), &context_);
-  EXPECT_EQ(calculate(data), I(3));
-  data.addValue(D(0), &context_);
-  EXPECT_EQ(calculate(data), I(3));
-  data.addValue(D(4), &context_);
-  EXPECT_EQ(calculate(data), D(4));
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(I(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(I(3));
+  EXPECT_EQ(calc(), I(3));
+  addValue(D(0));
+  EXPECT_EQ(calc(), I(3));
+  addValue(D(4));
+  EXPECT_EQ(calc(), D(4));
 
   data.reset();
-  EXPECT_TRUE(calculate(data).isUndefined());
-  data.addValue(Id::makeFromBool(false), &context_);
-  EXPECT_EQ(calculate(data), Id::makeFromBool(false));
+  EXPECT_TRUE(calc().isUndefined());
+  addValue(Id::makeFromBool(false));
+  EXPECT_EQ(calc(), Id::makeFromBool(false));
 
   // undefined < everything
-  data.addValue(Id::makeUndefined(), &context_);
-  EXPECT_EQ(calculate(data), Id::makeFromBool(false));
+  addValue(Id::makeUndefined());
+  EXPECT_EQ(calc(), Id::makeFromBool(false));
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest, SumAggregationDataAggregatesCorrectly) {
   SumAggregationData data;
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(I(1), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(I(3), &context_);
-  EXPECT_EQ(calculate(data), I(4));
-  data.addValue(D(1), &context_);
-  EXPECT_DOUBLE_EQ(calculate(data).getDouble(), 5);
-  data.addValue(D(0), &context_);
-  EXPECT_DOUBLE_EQ(calculate(data).getDouble(), 5);
+  EXPECT_EQ(calc(), I(0));
+  addValue(I(1));
+  EXPECT_EQ(calc(), I(1));
+  addValue(I(3));
+  EXPECT_EQ(calc(), I(4));
+  addValue(D(1));
+  EXPECT_DOUBLE_EQ(calc().getDouble(), 5);
+  addValue(D(0));
+  EXPECT_DOUBLE_EQ(calc().getDouble(), 5);
 
   data.reset();
-  EXPECT_EQ(calculate(data), I(0));
-  data.addValue(Id::makeFromBool(true), &context_);
-  EXPECT_EQ(calculate(data), I(1));
-  data.addValue(Id::makeFromBool(false), &context_);
-  EXPECT_EQ(calculate(data), I(1));
+  EXPECT_EQ(calc(), I(0));
+  addValue(Id::makeFromBool(true));
+  EXPECT_EQ(calc(), I(1));
+  addValue(Id::makeFromBool(false));
+  EXPECT_EQ(calc(), I(1));
 
-  data.addValue(Id::makeUndefined(), &context_);
-  EXPECT_TRUE(calculate(data).isUndefined());
+  addValue(Id::makeUndefined());
+  EXPECT_TRUE(calc().isUndefined());
 }
 
 // _____________________________________________________________________________
 TEST_F(GroupByHashMapOptimizationTest,
        GroupConcatAggregationDataAggregatesCorrectly) {
   GroupConcatAggregationData data{";"};
+  auto [calc, addValue] = makeCalcAndAddValue(data);
 
   auto getResultString = [&]() {
-    auto result = calculate(data);
+    auto result = calc();
     auto index = result.getLocalVocabIndex();
     auto resultString = localVocab_.getWord(index).toStringRepresentation();
     // Strip leading and trailing quotes.
@@ -176,7 +190,7 @@ TEST_F(GroupByHashMapOptimizationTest,
     auto literal = LiteralOrIri::literalWithoutQuotes(std::move(string));
     auto id = Id::makeFromLocalVocabIndex(
         localVocab_.getIndexAndAddIfNotContained(std::move(literal)));
-    data.addValue(id, &context_);
+    addValue(id);
   };
 
   EXPECT_EQ(getResultString(), "");
@@ -191,6 +205,6 @@ TEST_F(GroupByHashMapOptimizationTest,
   EXPECT_EQ(getResultString(), "");
   addString("a");
   EXPECT_EQ(getResultString(), "a");
-  data.addValue(Id::makeUndefined(), &context_);
+  addValue(Id::makeUndefined());
   EXPECT_EQ(getResultString(), "a");
 }
