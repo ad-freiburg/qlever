@@ -7,4 +7,4 @@ add_library(index
         PrefixHeuristic.cpp CompressedRelation.cpp
         PatternCreator.cpp ScanSpecification.cpp
         DeltaTriples.cpp)
-qlever_target_link_libraries(index util parser vocabulary compilationInfo ${STXXL_LIBRARIES})
+qlever_target_link_libraries(index util parser vocabulary ${STXXL_LIBRARIES})
