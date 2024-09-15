@@ -37,6 +37,17 @@ class DeltaTriples {
   // which are not contained in the vocabulary of the original index).
   LocalVocab localVocab_;
 
+  // Assert that the Permutation Enum values have the expected int values.
+  // This is used to store and lookup items that exist for permutation in an
+  // array.
+  static_assert(static_cast<int>(Permutation::Enum::PSO) == 0);
+  static_assert(static_cast<int>(Permutation::Enum::POS) == 1);
+  static_assert(static_cast<int>(Permutation::Enum::SPO) == 2);
+  static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
+  static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
+  static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
+  static_assert(Permutation::ALL.size() == 6);
+
   // The positions of the delta triples in each of the six permutations.
   std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
       locatedTriplesPerBlock_;
@@ -47,13 +58,6 @@ class DeltaTriples {
   // `LocatedTriplesPerBlock` above.
   struct LocatedTripleHandles {
     using It = LocatedTriples::iterator;
-    static_assert(static_cast<int>(Permutation::Enum::PSO) == 0);
-    static_assert(static_cast<int>(Permutation::Enum::POS) == 1);
-    static_assert(static_cast<int>(Permutation::Enum::SPO) == 2);
-    static_assert(static_cast<int>(Permutation::Enum::SOP) == 3);
-    static_assert(static_cast<int>(Permutation::Enum::OPS) == 4);
-    static_assert(static_cast<int>(Permutation::Enum::OSP) == 5);
-    static_assert(Permutation::ALL.size() == 6);
     std::array<It, Permutation::ALL.size()> handles_;
 
     LocatedTriples::iterator& forPermutation(Permutation::Enum permutation);
@@ -89,8 +93,6 @@ class DeltaTriples {
                      std::vector<IdTriple<0>> triples);
 
   // Get `TripleWithPosition` objects for given permutation.
-  LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
-      Permutation::Enum permutation);
   const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
       Permutation::Enum permutation) const;
 
@@ -125,18 +127,11 @@ class DeltaTriples {
 
 // DELTA TRIPLES AND THE CACHE
 //
-// For now, our approach only works when the results of index scans are not
-// cached (unless there are no relevant delta triples for a particular scan).
-// There are two ways how this can play out in the future:
+// Changes to the DeltaTriples invalidate all cache results that have an index
+// scan in their subtree, which is almost all entries in practice.
 //
-// Either we generally do not cache the results of index scans anymore. This
+// We could generally not cache the results of index scans anymore. This
 // would have various advantages, in particular, joining with something like
 // `rdf:type` would then be possible without storing the whole relation in
 // RAM. However, we need a faster decompression then and maybe a smaller block
 // size (currently 8 MB).
-//
-// Or we add the delta triples when iterating over the cached (uncompressed)
-// result from the index scan. In that case, we would need to (in Step 1 above)
-// store and maintain the positions in those uncompressed index scans. However,
-// this would only work for the results of index scans. For the results of more
-// complex subqueries, it's hard to figure out which delta triples are relevant.

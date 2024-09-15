@@ -22,7 +22,7 @@ void DeltaTriples::clear() {
   triplesInserted_.clear();
   triplesDeleted_.clear();
   for (auto& perm : Permutation::ALL) {
-    getLocatedTriplesPerBlock(perm).clear();
+    locatedTriplesPerBlock_[static_cast<int>(perm)].clear();
   }
 }
 
@@ -40,7 +40,8 @@ DeltaTriples::locateAndAddTriples(
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
     intermediateHandles[permutation] =
-        getLocatedTriplesPerBlock(permutation).add(locatedTriples);
+        locatedTriplesPerBlock_[static_cast<int>(permutation)].add(
+            locatedTriples);
     cancellationHandle->throwIfCancelled();
   }
   std::vector<DeltaTriples::LocatedTripleHandles> handles{idTriples.size()};
@@ -59,7 +60,8 @@ void DeltaTriples::eraseTripleInAllPermutations(
   // Erase for all permutations.
   for (auto permutation : Permutation::ALL) {
     auto ltIter = handles.forPermutation(permutation);
-    getLocatedTriplesPerBlock(permutation).erase(ltIter->blockIndex_, ltIter);
+    locatedTriplesPerBlock_[static_cast<int>(permutation)].erase(
+        ltIter->blockIndex_, ltIter);
   }
 }
 
@@ -119,11 +121,5 @@ void DeltaTriples::modifyTriplesImpl(
 // ____________________________________________________________________________
 const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
-  return locatedTriplesPerBlock_[static_cast<int>(permutation)];
-}
-
-// ____________________________________________________________________________
-LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
-    Permutation::Enum permutation) {
   return locatedTriplesPerBlock_[static_cast<int>(permutation)];
 }
