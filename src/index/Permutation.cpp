@@ -136,10 +136,9 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
-  auto [relevantBlocks, blockOffset] =
-      CompressedRelationReader::getRelevantBlocks(
-          scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
-  MetadataAndBlocks result{scanSpec, blockOffset, relevantBlocks, std::nullopt};
+  auto relevantBlocks = CompressedRelationReader::getRelevantBlocks(
+      scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
+  MetadataAndBlocks result{scanSpec, relevantBlocks, std::nullopt};
 
   result.firstAndLastTriple_ =
       reader().getFirstAndLastTriple(result, locatedTriplesPerBlock_);
@@ -154,9 +153,8 @@ Permutation::IdTableGenerator Permutation::lazyScan(
     ad_utility::SharedCancellationHandle cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
   if (!blocks.has_value()) {
-    auto [blockSpan, beginBlockOffset] =
-        CompressedRelationReader::getRelevantBlocks(
-            scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
+    auto blockSpan = CompressedRelationReader::getRelevantBlocks(
+        scanSpec, locatedTriplesPerBlock_.getAugmentedMetadata());
     blocks = std::vector(blockSpan.begin(), blockSpan.end());
   }
   ColumnIndices columns{additionalColumns.begin(), additionalColumns.end()};

@@ -372,7 +372,6 @@ class CompressedRelationReader {
   // the input to several functions below that take such an input.
   struct MetadataAndBlocks {
     ScanSpecification scanSpec_;
-    const size_t blockOffset_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
 
     // If set, `firstAndLastTriple_` contains the first and the last triple
@@ -512,14 +511,14 @@ class CompressedRelationReader {
   // that contain the triples that have the relationId/col0Id that was specified
   // by the `medata`. If the `col1Id` is specified (not `nullopt`), then the
   // blocks are additionally filtered by the given `col1Id`.
-  static std::tuple<std::span<const CompressedBlockMetadata>, size_t>
-  getRelevantBlocks(const ScanSpecification& blockA,
-                    std::span<const CompressedBlockMetadata> blockB);
+  static std::span<const CompressedBlockMetadata> getRelevantBlocks(
+      const ScanSpecification& blockA,
+      std::span<const CompressedBlockMetadata> blockB);
 
   // The same function, but specify the arguments as the `MetadataAndBlocks`
   // struct.
-  static std::tuple<std::span<const CompressedBlockMetadata>, size_t>
-  getBlocksFromMetadata(const MetadataAndBlocks& metadataAndBlocks);
+  static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
+      const MetadataAndBlocks& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the
   // given arguments would lead to. Throw an exception if the scan result would
