@@ -164,7 +164,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-ad_utility::UrlParser::ParsedHTTPRequest Server::getUrlPathAndParameters(
+ad_utility::UrlParser::ParsedHTTPRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
@@ -184,13 +184,11 @@ ad_utility::UrlParser::ParsedHTTPRequest Server::getUrlPathAndParameters(
     // "application/x-www-form-urlencoded" (1) or "application/sparql-query"
     // (2).
     //
-    // (1) The body of the POST request contains a URL-encoded
-    // query (just like in the part of a GET request after the "?"). Reference
-    // Section 2.1.2.
+    // (1) Section 2.1.2: The body of the POST request contains a URL-encoded
+    // query (just like in the part of a GET request after the "?").
     //
-    // (2) The body of the POST request contains *only* the SPARQL
-    // query, but not URL-encoded, and no other URL parameters. Reference
-    // Section 2.1.3.
+    // (2) Section 2.1.3: The body of the POST request contains *only* the
+    // SPARQL query, but not URL-encoded, and no other URL parameters.
     //
     // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
     std::string_view contentType = request.base()[http::field::content_type];
@@ -292,8 +290,8 @@ Awaitable<void> Server::process(
   // Parse the path and the URL parameters from the given request. Works for GET
   // requests as well as the two kinds of POST requests allowed by the SPARQL
   // standard, see method `getUrlPathAndParameters`.
-  const auto parsedUrl = getUrlPathAndParameters(request);
-  const auto& parameters = parsedUrl.parameters_;
+  const auto parsedHttpRequest = parseHttpRequest(request);
+  const auto& parameters = parsedHttpRequest.parameters_;
 
   auto checkParameter = [&parameters](std::string_view key,
                                       std::optional<std::string_view> value,
@@ -355,7 +353,7 @@ Awaitable<void> Server::process(
   }
 
   // Ping with or without message.
-  if (parsedUrl.path_ == "/ping") {
+  if (parsedHttpRequest.path_ == "/ping") {
     if (auto msg = checkParameter("msg", std::nullopt)) {
       LOG(INFO) << "Alive check with message \"" << msg.value() << "\""
                 << std::endl;
@@ -395,13 +393,13 @@ Awaitable<void> Server::process(
   }
 
   // If "query" parameter is given, process query.
-  if (parsedUrl.query_.has_value()) {
+  if (parsedHttpRequest.query_.has_value()) {
     if (auto timeLimit = co_await verifyUserSubmittedQueryTimeout(
             checkParameter("timeout", std::nullopt), accessTokenOk, request,
             send)) {
-      co_return co_await processQuery(parameters, parsedUrl.query_.value(),
-                                      requestTimer, std::move(request), send,
-                                      timeLimit.value());
+      co_return co_await processQuery(
+          parameters, parsedHttpRequest.query_.value(), requestTimer,
+          std::move(request), send, timeLimit.value());
 
     } else {
       // If the optional is empty, this indicates an error response has been
