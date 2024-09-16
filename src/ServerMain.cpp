@@ -107,6 +107,10 @@ int main(int argc, char** argv) {
       optionFactory.getProgramOption<"default-query-timeout">(),
       "Set the default timeout in seconds after which queries are cancelled"
       "automatically.");
+  add("service-max-value-rows,S",
+      optionFactory.getProgramOption<"service-max-value-rows">(),
+      "Maximum number of result rows to be passed into a SERVICE operation to "
+      "optimize it's computation.");
   po::variables_map optionsMap;
 
   try {
