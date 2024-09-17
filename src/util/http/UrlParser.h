@@ -32,13 +32,10 @@ class UrlParser {
 
   // Parse a request HTTP request target into its URL path, URL query
   // parameters. The contained query or update are not extracted.
-  static UrlParser::ParsedHTTPRequest parseRequestTarget(
-      std::string_view target);
+  static ParsedHTTPRequest parseRequestTarget(std::string_view target);
 
   static ad_utility::HashMap<std::string, std::string> paramsToMap(
       boost::urls::params_view params);
-  static ad_utility::HashMap<std::string, std::string> paramsToMap(
-      boost::urls::params_encoded_view params);
 };
 }  // namespace ad_utility
 

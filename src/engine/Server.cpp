@@ -165,7 +165,7 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 
 // _____________________________________________________________________________
 ad_utility::UrlParser::ParsedHTTPRequest Server::parseHttpRequest(
-    const ad_utility::httpUtils::HttpRequest auto& request) {
+    const ad_utility::httpUtils::HttpRequest auto& request) const {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
   ad_utility::UrlParser::ParsedHTTPRequest parsedUrl =

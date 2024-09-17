@@ -35,18 +35,3 @@ ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
   }
   return result;
 }
-
-// _____________________________________________________________________________
-ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
-    boost::urls::params_encoded_view params) {
-  ad_utility::HashMap<std::string, std::string> result;
-  for (auto param : params) {
-    auto [iterator, isNewElement] =
-        result.insert({param.key.decode(boost::urls::encoding_opts(true)),
-                       param.value.decode(boost::urls::encoding_opts(true))});
-    if (!isNewElement) {
-      AD_THROW("Duplicate HTTP parameter: " + iterator->first);
-    }
-  }
-  return result;
-}
