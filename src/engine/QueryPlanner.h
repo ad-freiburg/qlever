@@ -333,6 +333,9 @@ class QueryPlanner {
       const SubtreePlan& a, const SubtreePlan& b,
       const std::vector<std::array<ColumnIndex, 2>>& jcs);
 
+  [[nodiscard]] static std::optional<SubtreePlan> createOptionalJoinWithService(
+      const SubtreePlan& a, const SubtreePlan& b);
+
   [[nodiscard]] vector<SubtreePlan> getOrderByRow(
       const ParsedQuery& pq,
       const std::vector<std::vector<SubtreePlan>>& dpTab) const;
