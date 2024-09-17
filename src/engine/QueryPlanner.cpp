@@ -1825,8 +1825,9 @@ auto QueryPlanner::createJoinWithService(
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createOptionalJoinWithService(
-    const SubtreePlan& a, const SubtreePlan& b) -> std::optional<SubtreePlan> {
+auto QueryPlanner::createOptionalJoinWithService(const SubtreePlan& a,
+                                                 const SubtreePlan& b)
+    -> std::optional<SubtreePlan> {
   // We can only proceed if (only) the right subtree is a `SERVICE`.
   auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
   auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
