@@ -1631,6 +1631,9 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   // further into the query that optional should be resolved by now.
   AD_CONTRACT_CHECK(a.type != SubtreePlan::OPTIONAL);
   if (b.type == SubtreePlan::MINUS) {
+    if (auto opt = createSubtreeWithService<Minus>(a, b)) {
+      return {opt.value()};
+    }
     return {makeSubtreePlan<Minus>(_qec, a._qet, b._qet)};
   }
 
@@ -1638,7 +1641,7 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createJoinCandidates(
   if (b.type == SubtreePlan::OPTIONAL) {
     // If the OPTIONAL subtree's rootOperation is a SERVICE, try to simplify it
     // using the result of the first subtree.
-    if (auto opt = createOptionalJoinWithService(a, b)) {
+    if (auto opt = createSubtreeWithService<OptionalJoin>(a, b)) {
       return {opt.value()};
     }
 
@@ -1825,13 +1828,13 @@ auto QueryPlanner::createJoinWithService(
 }
 
 // _____________________________________________________________________
-auto QueryPlanner::createOptionalJoinWithService(const SubtreePlan& a,
-                                                 const SubtreePlan& b)
+template <typename Operation>
+auto QueryPlanner::createSubtreeWithService(const SubtreePlan& a,
+                                            const SubtreePlan& b)
     -> std::optional<SubtreePlan> {
-  // We can only proceed if (only) the right subtree is a `SERVICE`.
-  auto aRootOp = std::dynamic_pointer_cast<Service>(a._qet->getRootOperation());
+  // The right subtree has to be a Service.
   auto bRootOp = std::dynamic_pointer_cast<Service>(b._qet->getRootOperation());
-  if (static_cast<bool>(aRootOp) || !static_cast<bool>(bRootOp)) {
+  if (!static_cast<bool>(bRootOp)) {
     return std::nullopt;
   }
 
@@ -1839,7 +1842,7 @@ auto QueryPlanner::createOptionalJoinWithService(const SubtreePlan& a,
       makeSubtreePlan(bRootOp->createCopyWithSiblingTree(a._qet));
   auto qec = bRootOp->getExecutionContext();
 
-  SubtreePlan plan = makeSubtreePlan<OptionalJoin>(
+  SubtreePlan plan = makeSubtreePlan<Operation>(
       qec, a._qet, std::move(serviceWithSibling._qet));
   mergeSubtreePlanIds(plan, a, b);
 

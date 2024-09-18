@@ -1087,7 +1087,7 @@ TEST(QueryPlanner, JoinWithService) {
 }
 
 // ___________________________________________________________________________
-TEST(QueryPlanner, OptionalJoinWithService) {
+TEST(QueryPlanner, SubtreeWithService) {
   auto scan = h::IndexScanFromStrings;
   auto sibling = scan("?x", "<is-a>", "?y");
 
@@ -1104,4 +1104,9 @@ TEST(QueryPlanner, OptionalJoinWithService) {
       h::OptionalJoin(
           sibling,
           h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . ?y <is-a> ?a . }"))));
+
+  h::expect(
+      "SELECT * WHERE { ?x <is-a> ?y MINUS{SERVICE <https://endpoint.com> { ?x "
+      "<is-a> ?z . }}}",
+      h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }
