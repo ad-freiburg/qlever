@@ -752,20 +752,26 @@ void IndexImpl::createFromOnDiskIndex(const string& onDiskBase) {
   LOG(DEBUG) << "Number of words in internal and external vocabulary: "
              << vocab_.size() << std::endl;
 
-  pso_.loadFromDisk(onDiskBase_,
-                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::PSO));
-  pos_.loadFromDisk(onDiskBase_,
-                    deltaTriples_->getLocatedTriplesPerBlock(Permutation::POS));
+  pso_.loadFromDisk(onDiskBase_);
+  deltaTriples_->setOriginalMetadata(Permutation::PSO,
+                                     pso_.metaData().blockData());
+  pos_.loadFromDisk(onDiskBase_);
+  deltaTriples_->setOriginalMetadata(Permutation::POS,
+                                     pos_.metaData().blockData());
 
   if (loadAllPermutations_) {
-    ops_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
-                                       Permutation::OPS));
-    osp_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
-                                       Permutation::OSP));
-    spo_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
-                                       Permutation::SPO));
-    sop_.loadFromDisk(onDiskBase_, deltaTriples_->getLocatedTriplesPerBlock(
-                                       Permutation::SOP));
+    ops_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::OPS,
+                                       ops_.metaData().blockData());
+    osp_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::OSP,
+                                       osp_.metaData().blockData());
+    spo_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::SPO,
+                                       spo_.metaData().blockData());
+    sop_.loadFromDisk(onDiskBase_);
+    deltaTriples_->setOriginalMetadata(Permutation::SOP,
+                                       sop_.metaData().blockData());
   } else {
     LOG(INFO) << "Only the PSO and POS permutation were loaded, SPARQL queries "
                  "with predicate variables will therefore not work"

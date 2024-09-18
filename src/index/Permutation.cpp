@@ -18,8 +18,7 @@ Permutation::Permutation(Enum permutation,
       locatedTriplesPerBlock_{locatedTriplesPerBlock} {}
 
 // _____________________________________________________________________
-void Permutation::loadFromDisk(const std::string& onDiskBase,
-                               LocatedTriplesPerBlock& locatedTriplesPerBlock) {
+void Permutation::loadFromDisk(const std::string& onDiskBase) {
   if constexpr (MetaData::isMmapBased_) {
     meta_.setup(onDiskBase + ".index" + fileSuffix_ + MMAP_FILE_SUFFIX,
                 ad_utility::ReuseTag(), ad_utility::AccessPattern::Random);
@@ -37,7 +36,6 @@ void Permutation::loadFromDisk(const std::string& onDiskBase,
   }
   meta_.readFromFile(&file);
   reader_.emplace(allocator_, std::move(file));
-  locatedTriplesPerBlock.setOriginalMetadata(meta_.blockData());
   LOG(INFO) << "Registered " << readableName_
             << " permutation: " << meta_.statistics() << std::endl;
   isLoaded_ = true;

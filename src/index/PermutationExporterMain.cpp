@@ -47,36 +47,49 @@ int main(int argc, char** argv) {
   std::string indexName{argv[1]};
   std::string p{argv[2]};
   LocatedTriplesPerBlock locatedTriplesPerBlock;
+  DeltaTriples& deltaTriples = impl.deltaTriples();
 
   if (p == "sop") {
-    impl.SOP().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.SOP().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::SOP,
+                                     impl.SOP().metaData().blockData());
     dumpToStdout(impl.SOP());
     return EXIT_SUCCESS;
   }
   if (p == "spo") {
-    impl.SPO().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.SPO().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::SPO,
+                                     impl.SPO().metaData().blockData());
     dumpToStdout(impl.SPO());
     return EXIT_SUCCESS;
   }
   if (p == "osp") {
-    impl.OSP().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.OSP().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::OSP,
+                                     impl.OSP().metaData().blockData());
     dumpToStdout(impl.OSP());
     return EXIT_SUCCESS;
   }
   if (p == "ops") {
-    impl.OPS().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.OPS().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::OPS,
+                                     impl.OPS().metaData().blockData());
     dumpToStdout(impl.OPS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pos") {
-    impl.POS().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.POS().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::POS,
+                                     impl.POS().metaData().blockData());
     dumpToStdout(impl.POS());
     return EXIT_SUCCESS;
   }
 
   if (p == "pso") {
-    impl.PSO().loadFromDisk(indexName, locatedTriplesPerBlock);
+    impl.PSO().loadFromDisk(indexName);
+    deltaTriples.setOriginalMetadata(Permutation::PSO,
+                                     impl.PSO().metaData().blockData());
     dumpToStdout(impl.PSO());
     return EXIT_SUCCESS;
   }

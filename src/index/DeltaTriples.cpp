@@ -123,3 +123,11 @@ const LocatedTriplesPerBlock& DeltaTriples::getLocatedTriplesPerBlock(
     Permutation::Enum permutation) const {
   return locatedTriplesPerBlock_[static_cast<int>(permutation)];
 }
+
+// ____________________________________________________________________________
+void DeltaTriples::setOriginalMetadata(
+    Permutation::Enum permutation,
+    std::vector<CompressedBlockMetadata> metadata) {
+  locatedTriplesPerBlock_[static_cast<int>(permutation)].setOriginalMetadata(
+      std::move(metadata));
+}

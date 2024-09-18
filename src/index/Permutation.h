@@ -54,8 +54,7 @@ class Permutation {
                        Allocator allocator);
 
   // everything that has to be done when reading an index from disk
-  void loadFromDisk(const std::string& onDiskBase,
-                    LocatedTriplesPerBlock& locatedTriplesPerBlock);
+  void loadFromDisk(const std::string& onDiskBase);
 
   // For a given ID for the col0, retrieve all IDs of the col1 and col2.
   // If `col1Id` is specified, only the col2 is returned for triples that

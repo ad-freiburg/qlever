@@ -96,6 +96,9 @@ class DeltaTriples {
   const LocatedTriplesPerBlock& getLocatedTriplesPerBlock(
       Permutation::Enum permutation) const;
 
+  void setOriginalMetadata(Permutation::Enum permutation,
+                           std::vector<CompressedBlockMetadata> metadata);
+
  private:
   // Find the position of the given triple in the given permutation and add it
   // to each of the six `LocatedTriplesPerBlock` maps (one per permutation).
