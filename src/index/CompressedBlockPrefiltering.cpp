@@ -4,7 +4,7 @@
 
 #include "index/CompressedBlockPrefiltering.h"
 
-using namespace prefilterExpressions;
+namespace prefilterExpressions {
 
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
@@ -166,3 +166,5 @@ template class RelationalExpressions<CompOp::NE>;
 
 template class LogicalExpressions<LogicalOperators::AND>;
 template class LogicalExpressions<LogicalOperators::OR>;
+
+}  //  namespace prefilterExpressions
