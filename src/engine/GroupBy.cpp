@@ -539,12 +539,15 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
       resultTable.clear();
     }
   }
-  // No need for further processing in empty case.
-  if (currentGroupBlock.empty()) {
+  // No need for final commit when loop was never entered.
+  if (!groupSplitAcrossTables) {
     // If we have an implicit group by we need to produce one result row
     if (groupByCols.empty()) {
       processEmptyImplicitGroup<OUT_WIDTH>(resultTable, aggregates,
                                            localVocab.get());
+      co_yield resultTable;
+    } else if (singleIdTable) {
+      // Yield at least a single empty table if requested.
       co_yield resultTable;
     }
     co_return;

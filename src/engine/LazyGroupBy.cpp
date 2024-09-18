@@ -51,8 +51,10 @@ void LazyGroupBy::commitRow(
     const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
     const GroupBy& groupBy) {
   resultTable.emplace_back();
-  for (const auto& [colIdx, value] : currentGroupBlock) {
+  size_t colIdx = 0;
+  for (const auto& [_, value] : currentGroupBlock) {
     resultTable.back()[colIdx] = value;
+    ++colIdx;
   }
 
   evaluationContext._beginIndex = resultTable.size() - 1;
