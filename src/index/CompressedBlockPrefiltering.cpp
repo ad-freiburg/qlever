@@ -4,10 +4,7 @@
 
 #include "index/CompressedBlockPrefiltering.h"
 
-using prefilterExpressions::CompOp;
-using prefilterExpressions::LogicalExpressions;
-using prefilterExpressions::LogicalOperators;
-using prefilterExpressions::RelationalExpressions;
+using namespace prefilterExpressions;
 
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
@@ -40,7 +37,7 @@ auto RelationalExpressions<Comparison>::lowerIndex(
   using enum CompOp;
   // Extract evaluationColumn specific ValueId from BlockMetadata
   auto getRelevantIdFromBlock =
-      [this, evaluationColumn](const BlockMetadata& blockMetadata) {
+      [evaluationColumn](const BlockMetadata& blockMetadata) {
         return Comparison == LT || Comparison == LE || Comparison == NE
                    ? getIdFromColumnIndex(blockMetadata.firstTriple_,
                                           evaluationColumn)
@@ -62,7 +59,7 @@ auto RelationalExpressions<Comparison>::upperIndex(
     requires(Comparison == CompOp::EQ || Comparison == CompOp::NE) {
   // Extract evaluationColumn specific ValueId from BlockMetadata
   auto getRelevantIdFromBlock =
-      [this, evaluationColumn](const BlockMetadata& blockMetadata) {
+      [evaluationColumn](const BlockMetadata& blockMetadata) {
         return Comparison == CompOp::EQ
                    ? getIdFromColumnIndex(blockMetadata.firstTriple_,
                                           evaluationColumn)
@@ -158,7 +155,6 @@ std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluate(
   }
 };
 
-namespace prefilterExpressions {
 //______________________________________________________________________________
 // Necessary instantiation of template specializations
 template class RelationalExpressions<CompOp::LT>;
@@ -170,5 +166,3 @@ template class RelationalExpressions<CompOp::NE>;
 
 template class LogicalExpressions<LogicalOperators::AND>;
 template class LogicalExpressions<LogicalOperators::OR>;
-
-}  // namespace prefilterExpressions
