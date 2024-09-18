@@ -34,6 +34,15 @@ inline auto NumTriplesInAllPermutations =
                                        LocatedTriplesPerBlock::numTriples,
                                        testing::Eq(expectedNumTriples)));
 };
+inline auto NumTriples =
+    [](size_t inserted, size_t deleted,
+       size_t inAllPermutations) -> testing::Matcher<const DeltaTriples&> {
+  return testing::AllOf(
+      AD_PROPERTY(DeltaTriples, DeltaTriples::numInserted,
+                  testing::Eq(inserted)),
+      AD_PROPERTY(DeltaTriples, DeltaTriples::numDeleted, testing::Eq(deleted)),
+      NumTriplesInAllPermutations(inAllPermutations));
+};
 }  // namespace Matchers
 namespace m = Matchers;
 
@@ -101,43 +110,31 @@ TEST_F(DeltaTriplesTest, clear) {
   auto& vocab = testQec->getIndex().getVocab();
   auto& localVocab = deltaTriples.localVocab();
 
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(0));
+  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
 
   // Insert then clear.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
 
-  ASSERT_EQ(deltaTriples.numInserted(), 1);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(1));
+  EXPECT_THAT(deltaTriples, m::NumTriples(1, 0, 1));
 
   deltaTriples.clear();
 
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(0));
+  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
 
   // Delete, insert and then clear.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  ASSERT_EQ(deltaTriples.numDeleted(), 1);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(1));
+  EXPECT_THAT(deltaTriples, m::NumTriples(0, 1, 1));
 
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<a> <UPP> <A>"}));
 
-  ASSERT_EQ(deltaTriples.numInserted(), 1);
-  ASSERT_EQ(deltaTriples.numDeleted(), 1);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(2));
+  EXPECT_THAT(deltaTriples, m::NumTriples(1, 1, 2));
 
   deltaTriples.clear();
 
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(0));
+  EXPECT_THAT(deltaTriples, m::NumTriples(0, 0, 0));
 }
 
 TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
@@ -152,176 +149,121 @@ TEST_F(DeltaTriplesTest, insertTriplesAndDeleteTriples) {
     return ad_utility::transform(map,
                                  [](const auto& item) { return item.first; });
   };
+  auto UnorderedTriplesAre = [&mapKeys, this, &vocab,
+                              &localVocab](std::vector<std::string> triples)
+      -> testing::Matcher<const ad_utility::HashMap<
+          IdTriple<0>, DeltaTriples::LocatedTripleHandles>&> {
+    return testing::ResultOf(
+        "mapKeys(...)", [&mapKeys](const auto map) { return mapKeys(map); },
+        testing::UnorderedElementsAreArray(
+            makeIdTriples(vocab, localVocab, std::move(triples))));
+  };
+  auto StateIs = [&UnorderedTriplesAre](size_t numInserted, size_t numDeleted,
+                                        size_t numTriplesInAllPermutations,
+                                        std::vector<std::string> inserted,
+                                        std::vector<std::string> deleted)
+      -> testing::Matcher<const DeltaTriples&> {
+    return testing::AllOf(
+        m::NumTriples(numInserted, numDeleted, numTriplesInAllPermutations),
+        AD_FIELD(DeltaTriples, DeltaTriples::triplesInserted_,
+                 UnorderedTriplesAre(std::move(inserted))),
+        AD_FIELD(DeltaTriples, DeltaTriples::triplesDeleted_,
+                 UnorderedTriplesAre(std::move(deleted))));
+  };
 
-  ASSERT_EQ(deltaTriples.numInserted(), 0);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(0));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
+  EXPECT_THAT(deltaTriples, StateIs(0, 0, 0, {}, {}));
 
   // Inserting triples.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 2);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(2));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesInserted_),
-              testing::UnorderedElementsAreArray(makeIdTriples(
-                  vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>"})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
+  EXPECT_THAT(deltaTriples,
+              StateIs(2, 0, 2, {"<A> <B> <C>", "<A> <B> <D>"}, {}));
 
   // We only locate triples in a Block but don't resolve whether they exist.
   // Inserting triples that exist in the index works normally.
   deltaTriples.insertTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <low> <a>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 3);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(3));
   EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab, {"<A> <B> <C>", "<A> <B> <D>", "<A> <low> <a>"})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
+      deltaTriples,
+      StateIs(3, 0, 3, {"<A> <B> <C>", "<A> <B> <D>", "<A> <low> <a>"}, {}));
 
   // Inserting unsorted triples works.
   deltaTriples.insertTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<B> <D> <C>", "<B> <C> <D>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 5);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(5));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesInserted_),
-              testing::UnorderedElementsAreArray(
-                  makeIdTriples(vocab, localVocab,
-                                {"<A> <B> <C>", "<A> <B> <D>", "<B> <D> <C>",
-                                 "<B> <C> <D>", "<A> <low> <a>"})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
+  EXPECT_THAT(deltaTriples,
+              StateIs(5, 0, 5,
+                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <D> <C>",
+                       "<B> <C> <D>", "<A> <low> <a>"},
+                      {}));
 
   // Inserting already inserted triples has no effect.
   deltaTriples.insertTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <C>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 5);
-  ASSERT_EQ(deltaTriples.numDeleted(), 0);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(5));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesInserted_),
-              testing::UnorderedElementsAreArray(
-                  makeIdTriples(vocab, localVocab,
-                                {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
-                                 "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(vocab, localVocab, {})));
+  EXPECT_THAT(deltaTriples,
+              StateIs(5, 0, 5,
+                      {"<A> <B> <C>", "<A> <B> <D>", "<B> <C> <D>",
+                       "<A> <low> <a>", "<B> <D> <C>"},
+                      {}));
 
   // Deleting a previously inserted triple removes it from the inserted
   // triples and adds it to the deleted ones.
   deltaTriples.deleteTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <D>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 4);
-  ASSERT_EQ(deltaTriples.numDeleted(), 1);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(5));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesDeleted_),
-              testing::UnorderedElementsAreArray(
-                  makeIdTriples(vocab, localVocab, {"<A> <B> <D>"})));
+  EXPECT_THAT(deltaTriples, StateIs(4, 1, 5,
+                                    {"<A> <B> <C>", "<B> <C> <D>",
+                                     "<A> <low> <a>", "<B> <D> <C>"},
+                                    {"<A> <B> <D>"}));
 
   // Deleting triples.
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<A> <next> <B>", "<B> <next> <C>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 4);
-  ASSERT_EQ(deltaTriples.numDeleted(), 3);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(7));
   EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesDeleted_),
-              testing::UnorderedElementsAreArray(makeIdTriples(
-                  vocab, localVocab,
-                  {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>"})));
+      deltaTriples,
+      StateIs(4, 3, 7,
+              {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
+              {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>"}));
 
   // Deleting non-existent triples.
   deltaTriples.deleteTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <F>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 4);
-  ASSERT_EQ(deltaTriples.numDeleted(), 4);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(8));
   EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(
-      mapKeys(deltaTriples.triplesDeleted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"})));
+      deltaTriples,
+      StateIs(
+          4, 4, 8,
+          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
+          {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>"}));
 
   // Deleting unsorted triples.
   deltaTriples.deleteTriples(
       cancellationHandle,
       makeIdTriples(vocab, localVocab, {"<C> <prev> <B>", "<B> <prev> <A>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 4);
-  ASSERT_EQ(deltaTriples.numDeleted(), 6);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(10));
   EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesDeleted_),
-              testing::UnorderedElementsAreArray(makeIdTriples(
-                  vocab, localVocab,
-                  {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>",
-                   "<B> <next> <C>", "<C> <prev> <B>", "<B> <prev> <A>"})));
+      deltaTriples,
+      StateIs(4, 6, 10,
+              {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
+              {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>",
+               "<C> <prev> <B>", "<B> <prev> <A>"}));
 
   // Deleting previously deleted triples.
   deltaTriples.deleteTriples(
       cancellationHandle, makeIdTriples(vocab, localVocab, {"<A> <next> <B>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 4);
-  ASSERT_EQ(deltaTriples.numDeleted(), 6);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(10));
   EXPECT_THAT(
-      mapKeys(deltaTriples.triplesInserted_),
-      testing::UnorderedElementsAreArray(makeIdTriples(
-          vocab, localVocab,
-          {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesDeleted_),
-              testing::UnorderedElementsAreArray(makeIdTriples(
-                  vocab, localVocab,
-                  {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>",
-                   "<B> <next> <C>", "<C> <prev> <B>", "<B> <prev> <A>"})));
+      deltaTriples,
+      StateIs(4, 6, 10,
+              {"<A> <B> <C>", "<B> <C> <D>", "<A> <low> <a>", "<B> <D> <C>"},
+              {"<A> <B> <D>", "<A> <B> <F>", "<A> <next> <B>", "<B> <next> <C>",
+               "<C> <prev> <B>", "<B> <prev> <A>"}));
 
   // Inserting previously deleted triple.
   deltaTriples.insertTriples(cancellationHandle,
                              makeIdTriples(vocab, localVocab, {"<A> <B> <F>"}));
-  ASSERT_EQ(deltaTriples.numInserted(), 5);
-  ASSERT_EQ(deltaTriples.numDeleted(), 5);
-  EXPECT_THAT(deltaTriples, m::NumTriplesInAllPermutations(10));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesInserted_),
-              testing::UnorderedElementsAreArray(
-                  makeIdTriples(vocab, localVocab,
-                                {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
-                                 "<A> <low> <a>", "<B> <D> <C>"})));
-  EXPECT_THAT(mapKeys(deltaTriples.triplesDeleted_),
-              testing::UnorderedElementsAreArray(makeIdTriples(
-                  vocab, localVocab,
-                  {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>",
-                   "<C> <prev> <B>", "<B> <prev> <A>"})));
+  EXPECT_THAT(deltaTriples,
+              StateIs(5, 5, 10,
+                      {"<A> <B> <C>", "<A> <B> <F>", "<B> <C> <D>",
+                       "<A> <low> <a>", "<B> <D> <C>"},
+                      {"<A> <B> <D>", "<A> <next> <B>", "<B> <next> <C>",
+                       "<C> <prev> <B>", "<B> <prev> <A>"}));
 }
