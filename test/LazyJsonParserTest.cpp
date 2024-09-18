@@ -14,9 +14,9 @@ TEST(parseTest, parse) {
   const std::vector<std::string> arrayPath = {"results", "bindings"};
 
   auto yieldChars =
-      [](const std::string& s) -> cppcoro::generator<std::string> {
-    for (auto& c : s) {
-      co_yield std::string(1, c);
+      [](const std::string_view s) -> cppcoro::generator<std::string_view> {
+    for (size_t i = 0; i < s.size(); ++i) {
+      co_yield std::string_view(s.data() + i, 1);
     }
   };
   // Check if the parser yields the expected results when parsing each char

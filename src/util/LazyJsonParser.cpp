@@ -15,11 +15,18 @@
 namespace ad_utility {
 
 // ____________________________________________________________________________
-cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
-    cppcoro::generator<std::string> partialJson,
+LazyJsonParser::Generator LazyJsonParser::parse(
+    cppcoro::generator<std::string_view> partialJson,
     std::vector<std::string> arrayPath) {
   LazyJsonParser p(std::move(arrayPath));
+  Details& details = co_await cppcoro::getDetails;
   for (const auto& chunk : partialJson) {
+    if (details.first100_.size() < 100) {
+      details.first100_ += chunk.substr(0, 100);
+    }
+    details.last100_ =
+        chunk.substr(std::max(0, static_cast<int>(chunk.size() - 100)), 100);
+
     if (auto res = p.parseChunk(chunk); res.has_value()) {
       co_yield res;
       if (p.endReached_) {
@@ -27,6 +34,21 @@ cppcoro::generator<nlohmann::json> LazyJsonParser::parse(
       }
     }
   }
+}
+
+// ____________________________________________________________________________
+LazyJsonParser::Generator LazyJsonParser::parse(
+    cppcoro::generator<std::span<std::byte>> partialJson,
+    std::vector<std::string> arrayPath) {
+  return parse(
+      [](cppcoro::generator<std::span<std::byte>> partialJson)
+          -> cppcoro::generator<std::string_view> {
+        for (const auto& bytes : partialJson) {
+          co_yield std::string_view(reinterpret_cast<const char*>(bytes.data()),
+                                    bytes.size());
+        }
+      }(std::move(partialJson)),
+      std::move(arrayPath));
 }
 
 // ____________________________________________________________________________
@@ -230,7 +252,9 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
   size_t nextChunkStart =
       materializeEnd == 0 ? 0 : std::min(materializeEnd + 1, input_.size());
   if (input_.size() - nextChunkStart >= 1'000'000) {
-    throw std::runtime_error("Ill formed Json.");
+    throw Error(
+        "QLever currently doesn't support SERVICE results where a single "
+        "result row is larger than 1MB");
   }
   if (nextChunkStart == 0) {
     return std::nullopt;
@@ -255,7 +279,11 @@ std::optional<nlohmann::json> LazyJsonParser::constructResultFromParsedChunk(
     absl::StrAppend(&resStr, suffixInArray_);
   }
 
-  return nlohmann::json::parse(resStr);
+  try {
+    return nlohmann::json::parse(resStr);
+  } catch (const nlohmann::json::parse_error& e) {
+    throw Error(e.what());
+  }
 }
 
 // ____________________________________________________________________________

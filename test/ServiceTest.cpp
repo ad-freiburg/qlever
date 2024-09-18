@@ -208,34 +208,57 @@ TEST_F(ServiceTest, computeResult) {
         EXPECT_NO_THROW(runComputeResult(result, status, contentType, true));
       };
 
-  // CHECK 1: An exception shall be thrown, when
-  // status-code isn't ok, contentType doesn't match
+  // CHECK 1: An exception shall be thrown (and maybe silenced), when
+  // status-code isn't ok
   expectThrowOrSilence(
-      "", "SERVICE responded with HTTP status code: 400, Bad Request.",
+      genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
+      "SERVICE responded with HTTP status code: 400, Bad Request.",
       boost::beast::http::status::bad_request,
       "application/sparql-results+json");
-
-  expectThrowOrSilence("",
-                       "QLever requires the endpoint of a SERVICE to send "
-                       "the result as 'application/sparql-results+json' but "
-                       "the endpoint sent 'wrong/type'.",
-                       boost::beast::http::status::ok, "wrong/type");
-
-  // or Result is no JSON, empty or has invalid structure
+  // contentType doesn't match
   expectThrowOrSilence(
-      "<?xml version=\"1.0\"?><sparql "
-      "xmlns=\"http://www.w3.org/2005/sparql-results#\">",
-      "Failed to parse the SERVICE result as JSON.");
+      genJsonResult({"x", "y"}, {{"bla", "bli"}, {"blu"}, {"bli", "blu"}}),
+      "QLever requires the endpoint of a SERVICE to send "
+      "the result as 'application/sparql-results+json' but "
+      "the endpoint sent 'wrong/type'.",
+      boost::beast::http::status::ok, "wrong/type");
 
-  expectThrowOrSilence("{}", "Response from SPARQL endpoint is empty.");
-
-  expectThrowOrSilence("{\"invalid\": \"structure\"}",
-                       "JSON result does not have the expected structure.");
-
+  // or Result has invalid structure
+  // `results` missing
+  expectThrowOrSilence("{\"head\": {\"vars\": [\"x\", \"y\"]}}",
+                       "results section missing");
+  expectThrowOrSilence("", "results section missing");
+  // `bindings` missing
   expectThrowOrSilence(
-      "{\"head\": {\"vars\": [1, 2, 3]},"
+      "{\"head\": {\"vars\": [\"x\", \"y\"]},"
+      "\"results\": {}}",
+      "results section missing");
+  // wrong `bindings` type (array expected)
+  expectThrowOrSilence(
+      "{\"head\": {\"vars\": [\"x\", \"y\"]},"
       "\"results\": {\"bindings\": {}}}",
-      "JSON result does not have the expected structure.");
+      "results section missing");
+
+  // `head`/`vars` missing
+  expectThrowOrSilence(
+      "{\"results\": {\"bindings\": [{\"x\": {\"type\": \"uri\", \"value\": "
+      "\"a\"}, \"y\": {\"type\": \"uri\", \"value\": \"b\"}}]}}",
+      "head section missing");
+  expectThrowOrSilence(
+      "{\"head\": {},"
+      "\"results\": {\"bindings\": []}}",
+      "\"head\" section is not according to the SPARQL standard.");
+  // wrong variables type (array of strings expected)
+  expectThrowOrSilence(
+      "{\"head\": {\"vars\": [\"x\", \"y\", 3]},"
+      "\"results\": {\"bindings\": []}}",
+      "\"head\" section is not according to the SPARQL standard.");
+
+  // Internal parser errors.
+  expectThrowOrSilence(
+      std::string(1'000'000, '0'),
+      "QLever currently doesn't support SERVICE results where a single "
+      "result row is larger than 1MB");
 
   // CHECK 1b: Even if the SILENT-keyword is set, throw local errors.
   Service serviceSilent{
@@ -272,13 +295,11 @@ TEST_F(ServiceTest, computeResult) {
       boost::beast::http::status::ok,
       "APPLICATION/SPARQL-RESULTS+JSON;charset=utf-8"));
 
-  // CHECK 2: Header row of returned JSON is wrong (variables in wrong
-  // order) -> an exception should be thrown.
-  expectThrowOrSilence(
-      genJsonResult({"y", "x"},
-                    {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
-      "Header row of JSON result for SERVICE query is "
-      "\"?y ?x\", but expected \"?x ?y\".");
+  // CHECK 2: Header row of returned JSON is wrong (missing expected variables)
+  // -> an exception should be thrown.
+  expectThrowOrSilence(genJsonResult({"x"}, {{"bla"}, {"blu"}, {"bli"}}),
+                       "Header row of JSON result for SERVICE query is "
+                       "\"?x\", but expected \"?x ?y\".");
 
   // CHECK 3: A result row of the returned JSON is missing a variable's
   // value -> undefined value
@@ -358,7 +379,7 @@ TEST_F(ServiceTest, computeResult) {
                                            {"blu", "bla", "y"},
                                            {"bli", "blu", "y"}})),
       siblingTree};
-  EXPECT_NO_THROW(serviceOperation5.getResult());
+  EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
 
   // Check 6: SiblingTree's rows exceed maxValue
   const auto maxValueRowsDefault =
@@ -377,7 +398,7 @@ TEST_F(ServiceTest, computeResult) {
                                            {"blue", "bla", "y"},
                                            {"bli", "blu", "y"}})),
       siblingTree};
-  EXPECT_NO_THROW(serviceOperation6.getResult());
+  EXPECT_NO_THROW(serviceOperation6.computeResultOnlyForTesting());
   RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
 }
 
@@ -454,8 +475,12 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   nlohmann::json binding;
 
   // Missing type or value.
-  EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"type", "literal"}}));
-  EXPECT_ANY_THROW(Service::bindingToTripleComponent({{"value", "v"}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Service::bindingToTripleComponent({{"type", "literal"}}),
+      ::testing::HasSubstr("Missing type or value"));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Service::bindingToTripleComponent({{"value", "v"}}),
+      ::testing::HasSubstr("Missing type or value"));
 
   EXPECT_EQ(
       Service::bindingToTripleComponent(
@@ -491,6 +516,8 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   EXPECT_ANY_THROW(
       Service::bindingToTripleComponent({{"type", "bnode"}, {"value", "b"}}));
 
-  EXPECT_ANY_THROW(Service::bindingToTripleComponent(
-      {{"type", "INVALID_TYPE"}, {"value", "v"}}));
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      Service::bindingToTripleComponent(
+          {{"type", "INVALID_TYPE"}, {"value", "v"}}),
+      ::testing::HasSubstr("Type INVALID_TYPE is undefined"));
 }
