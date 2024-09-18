@@ -1963,7 +1963,7 @@ class GroupByLazyFixture : public ::testing::TestWithParam<bool> {
 };
 }  // namespace
 
-INSTANTIATE_TEST_SUITE_P(TrueFalse, GroupByLazyFixture, testing::Bool());
+INSTANTIATE_TEST_SUITE_P(FalseTrue, GroupByLazyFixture, testing::Bool());
 
 // _____________________________________________________________________________
 TEST_P(GroupByLazyFixture, testEmptyGeneratorYieldsEmptyResult) {
