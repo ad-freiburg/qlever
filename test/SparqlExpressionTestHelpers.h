@@ -61,6 +61,10 @@ struct TestContext {
   // vocab.
   Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha,
       notInVocabIri, notInVocabIriLit;
+  // LocalVocab IDs used for testing the block pre-filtering procedure in
+  // CompressedBlockPrefilteringTest
+  Id berlin, bonn, cologne, dortmund, düsseldorf, essen, frankfurt,
+      frankfurt_oder, hamburg, hannover, ingolstadt, karlsruhe, munich;
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them.
     // Note the `u_` inserted for the blank node (see 'BlankNode.cpp').
@@ -90,12 +94,40 @@ struct TestContext {
         localVocab.getIndexAndAddIfNotContained(iri("<notInVocabD>")));
     notInVocabAelpha = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(lit("notInVocabÄlpha")));
+    notInVocabAelpha = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("notInVocabÄlpha")));
     notInVocabIri =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
             iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")));
     notInVocabIriLit =
         Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
             lit("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")));
+    berlin = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("berlin")));
+    bonn = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("bonn")));
+    cologne = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("cologne")));
+    düsseldorf = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("düsseldorf")));
+    dortmund = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("dortmund")));
+    essen = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("essen")));
+    frankfurt = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("frankfurt")));
+    frankfurt_oder = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("frankfurt (oder)")));
+    hamburg = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("hamburg")));
+    hannover = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("hannover")));
+    ingolstadt = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("ingolstadt")));
+    karlsruhe = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("karlsruhe")));
+    munich = Id::makeFromLocalVocabIndex(
+        localVocab.getIndexAndAddIfNotContained(lit("munich")));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only

@@ -287,6 +287,8 @@ addLinkAndDiscoverTest(AlgorithmTest)
 
 addLinkAndDiscoverTestSerial(CompressedRelationsTest index)
 
+addLinkAndDiscoverTestSerial(CompressedBlockPrefilteringTest index)
+
 addLinkAndDiscoverTest(ExceptionTest)
 
 addLinkAndDiscoverTestSerial(RandomExpressionTest index)
