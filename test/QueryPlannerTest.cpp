@@ -957,7 +957,7 @@ TEST(QueryPlanner, PathSearchSourceBound) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
-      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end"), h::ValuesClause("VALUES (?source) { (<x>) }")), qec);
 }
 
 TEST(QueryPlanner, PathSearchTargetBound) {
@@ -990,7 +990,7 @@ TEST(QueryPlanner, PathSearchTargetBound) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
-      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end"), h::ValuesClause("VALUES (?target) { (<z>) }")), qec);
 }
 
 TEST(QueryPlanner, PathSearchBothBound) {
@@ -1023,7 +1023,7 @@ TEST(QueryPlanner, PathSearchBothBound) {
       "{SELECT * WHERE {"
       "?start <p> ?end."
       "}}}}",
-      h::PathSearch(config, true, true, scan("?start", "<p>", "?end")), qec);
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end"), h::ValuesClause("VALUES (?source\t?target) { (<x> <z>) }"), h::ValuesClause("VALUES (?source\t?target) { (<x> <z>) }")), qec);
 }
 
 // __________________________________________________________________________

@@ -114,6 +114,15 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
 std::vector<QueryExecutionTree*> PathSearch::getChildren() {
   std::vector<QueryExecutionTree*> res;
   res.push_back(subtree_.get());
+
+  if (boundSources_.has_value()) {
+    res.push_back(boundSources_->first.get());
+  }
+
+  if (boundTargets_.has_value()) {
+    res.push_back(boundTargets_->first.get());
+  }
+
   return res;
 };
 
@@ -156,7 +165,14 @@ float PathSearch::getMultiplicity(size_t col) {
 };
 
 // _____________________________________________________________________________
-bool PathSearch::knownEmptyResult() { return subtree_->knownEmptyResult(); };
+bool PathSearch::knownEmptyResult() { 
+  for (auto child: getChildren()) {
+    if (child->knownEmptyResult()) {
+      return true;
+    }
+  }
+  return false;
+};
 
 // _____________________________________________________________________________
 vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };

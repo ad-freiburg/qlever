@@ -304,6 +304,12 @@ inline auto PathSearch =
           AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
     };
 
+inline auto ValuesClause = [](string cacheKey){
+  return RootOperation<::Values>(AllOf(
+    AD_PROPERTY(Values, getCacheKey, cacheKey)
+  ));
+};
+
 // Match a sort operation. Currently, this is only required by the binary search
 // version of the transitive path operation. This matcher checks only the
 // children of the sort operation.
