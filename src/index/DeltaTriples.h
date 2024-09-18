@@ -55,8 +55,6 @@ class DeltaTriples {
   std::array<LocatedTriplesPerBlock, Permutation::ALL.size()>
       locatedTriplesPerBlock_;
 
-  FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
-
   // Each delta triple needs to know where it is stored in each of the six
   // `LocatedTriplesPerBlock` above.
   struct LocatedTripleHandles {

@@ -36,8 +36,8 @@ DeltaTriples::locateAndAddTriples(
   for (auto permutation : Permutation::ALL) {
     auto& perm = index_.getImpl().getPermutation(permutation);
     auto locatedTriples = LocatedTriple::locateTriplesInPermutation(
-        // TODO<qup42>: replace with the method for update block metadata once
-        // integration is done
+        // TODO<qup42>: replace with `getAugmentedMetadata` once integration
+        //  is done
         idTriples, perm.metaData().blockData(), perm.keyOrder(), shouldExist,
         cancellationHandle);
     cancellationHandle->throwIfCancelled();
