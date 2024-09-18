@@ -20,6 +20,11 @@ namespace qlever::version {
 constexpr std::string_view GitHash = ${GIT_HASH};
 constexpr std::string_view GitShortHash = GitHash.substr(0, 6);
 constexpr std::string_view DatetimeOfCompilation = ${DATETIME_OF_COMPILATION};
+
+void copyVersionInfo() {
+  *gitShortHashWithoutLinking.wlock() = GitShortHash;
+  *datetimeOfCompilationWithoutLinking.wlock() = DatetimeOfCompilation;
+}
 }")
 
 # For some reason `CMAKE_CURRENT_SOURCE_DIR` inside this script is

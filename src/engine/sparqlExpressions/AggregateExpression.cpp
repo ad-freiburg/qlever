@@ -157,14 +157,6 @@ AggregateExpression<AggregateOperation, FinalOperation>::childrenImpl() {
   return {&_child, 1};
 }
 
-// _________________________________________________________________________
-template <typename AggregateOperation, typename FinalOperation>
-vector<Variable> AggregateExpression<
-    AggregateOperation, FinalOperation>::getUnaggregatedVariables() {
-  // This is an aggregate, so it never leaves any unaggregated variables.
-  return {};
-}
-
 // __________________________________________________________________________
 template <typename AggregateOperation, typename FinalOperation>
 [[nodiscard]] string

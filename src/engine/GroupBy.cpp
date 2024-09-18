@@ -817,7 +817,9 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   using namespace sparqlExpression;
 
   // `expr` is not a distinct aggregate
-  if (expr->isDistinct()) return std::nullopt;
+  if (expr->isAggregate() !=
+      SparqlExpression::AggregateStatus::NonDistinctAggregate)
+    return std::nullopt;
 
   // `expr` is not a nested aggregated
   if (std::ranges::any_of(expr->children(), [](const auto& ptr) {
@@ -846,7 +848,8 @@ bool GroupBy::findAggregatesImpl(
     sparqlExpression::SparqlExpression* expr,
     std::optional<ParentAndChildIndex> parentAndChildIndex,
     std::vector<HashMapAggregateInformation>& info) {
-  if (expr->isAggregate()) {
+  if (expr->isAggregate() !=
+      sparqlExpression::SparqlExpression::AggregateStatus::NoAggregate) {
     if (auto aggregateType = isSupportedAggregate(expr)) {
       info.emplace_back(expr, 0, aggregateType.value(), parentAndChildIndex);
       return true;
