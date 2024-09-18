@@ -118,15 +118,6 @@ std::vector<BlockMetadata> RelationalExpressions<Comparison>::evaluate(
   }
 };
 
-//______________________________________________________________________________
-// Necessary instantiation of template specializations
-template class RelationalExpressions<CompOp::LT>;
-template class RelationalExpressions<CompOp::LE>;
-template class RelationalExpressions<CompOp::GE>;
-template class RelationalExpressions<CompOp::GT>;
-template class RelationalExpressions<CompOp::EQ>;
-template class RelationalExpressions<CompOp::NE>;
-
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
 template <LogicalOperators Operation>
@@ -167,7 +158,17 @@ std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluate(
   }
 };
 
+namespace prefilterExpressions {
 //______________________________________________________________________________
 // Necessary instantiation of template specializations
+template class RelationalExpressions<CompOp::LT>;
+template class RelationalExpressions<CompOp::LE>;
+template class RelationalExpressions<CompOp::GE>;
+template class RelationalExpressions<CompOp::GT>;
+template class RelationalExpressions<CompOp::EQ>;
+template class RelationalExpressions<CompOp::NE>;
+
 template class LogicalExpressions<LogicalOperators::AND>;
 template class LogicalExpressions<LogicalOperators::OR>;
+
+}  // namespace prefilterExpressions
