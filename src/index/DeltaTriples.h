@@ -29,6 +29,9 @@
 // NOTE: The delta triples currently do not go well together with CACHING. See
 // the discussion at the end of this file.
 class DeltaTriples {
+  FRIEND_TEST(DeltaTriplesTest, insertTriplesAndDeleteTriples);
+  FRIEND_TEST(DeltaTriplesTest, clear);
+
  private:
   // The index to which these triples are added.
   const Index& index_;
@@ -73,7 +76,10 @@ class DeltaTriples {
   explicit DeltaTriples(const Index& index) : index_(index) {}
 
   // Get the common `LocalVocab` of the delta triples.
+ private:
   LocalVocab& localVocab() { return localVocab_; }
+
+ public:
   const LocalVocab& localVocab() const { return localVocab_; }
 
   // Clear `triplesAdded_` and `triplesSubtracted_` and all associated data
