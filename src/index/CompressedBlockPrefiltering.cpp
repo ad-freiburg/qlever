@@ -12,13 +12,14 @@ using prefilterExpressions::RelationalExpressions;
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
 template <CompOp Comparison>
-bool RelationalExpressions<Comparison>::compare(const ValueId& firstId,
-                                                const ValueId& secondId) {
+bool RelationalExpressions<Comparison>::compareImpl(
+    const ValueId& firstId, const ValueId& secondId) const {
+  using enum CompOp;
   // For compactness we combine LE and GT here. In evaluate (see below), for
   // LE we select all blocks at a smaller (lower_bound) index position, and
   // for GT all the respective blocks at larger or equal indices.
-  if constexpr (Comparison == CompOp::LE || Comparison == CompOp::GT) {
-    return compareIds(firstId, secondId, CompOp::LE) ==
+  if constexpr (Comparison == LE || Comparison == GT) {
+    return compareIds(firstId, secondId, LE) ==
            valueIdComparators::ComparisonResult::True;
   } else {
     // Follows the same logic for evaluation as explained above.
@@ -27,7 +28,7 @@ bool RelationalExpressions<Comparison>::compare(const ValueId& firstId,
     // evaluate we calculate a lower_bound and upper_bound over this LT
     // operation, and those bounds act as the plausible range for equality
     // (evaluation of CompOp::NE follows a similar approach).
-    return compareIds(firstId, secondId, CompOp::LT) ==
+    return compareIds(firstId, secondId, LT) ==
            valueIdComparators::ComparisonResult::True;
   }
 }
@@ -36,19 +37,22 @@ bool RelationalExpressions<Comparison>::compare(const ValueId& firstId,
 template <CompOp Comparison>
 auto RelationalExpressions<Comparison>::lowerIndex(
     std::vector<BlockMetadata>& input, size_t evaluationColumn) {
-  // Custom compare function for binary search (lower bound).
-  auto makeCompare = [this, evaluationColumn](
-                         const BlockMetadata& blockMetadata,
-                         const ValueId& referenceId) -> bool {
-    ValueId blockId =
-        Comparison == CompOp::LT || Comparison == CompOp::LE ||
-                Comparison == CompOp::NE
-            ? getIdFromColumnIndex(blockMetadata.firstTriple_, evaluationColumn)
-            : getIdFromColumnIndex(blockMetadata.lastTriple_, evaluationColumn);
-    return compare(blockId, referenceId);
-  };
-  return std::lower_bound(input.begin(), input.end(), referenceId_,
-                          makeCompare);
+  using enum CompOp;
+  // Extract evaluationColumn specific ValueId from BlockMetadata
+  auto getRelevantIdFromBlock =
+      [this, evaluationColumn](const BlockMetadata& blockMetadata) {
+        return Comparison == LT || Comparison == LE || Comparison == NE
+                   ? getIdFromColumnIndex(blockMetadata.firstTriple_,
+                                          evaluationColumn)
+                   : getIdFromColumnIndex(blockMetadata.lastTriple_,
+                                          evaluationColumn);
+      };
+  return std::ranges::lower_bound(
+      input, referenceId_,
+      [this](const ValueId& blockId, const ValueId& referenceId) {
+        return compareImpl(blockId, referenceId);
+      },
+      getRelevantIdFromBlock);
 };
 
 //______________________________________________________________________________
@@ -56,37 +60,41 @@ template <CompOp Comparison>
 auto RelationalExpressions<Comparison>::upperIndex(
     std::vector<BlockMetadata>& input, size_t evaluationColumn)
     requires(Comparison == CompOp::EQ || Comparison == CompOp::NE) {
-  // Custom compare function for binary search (upper bound).
-  auto makeCompare = [this, evaluationColumn](const ValueId& referenceId,
-                                              BlockMetadata& blockMetadata) {
-    return compare(
-        referenceId,
-        Comparison == CompOp::EQ
-            ? getIdFromColumnIndex(blockMetadata.firstTriple_, evaluationColumn)
-            : getIdFromColumnIndex(blockMetadata.lastTriple_,
-                                   evaluationColumn));
-  };
-  // Use the same comparison operations as for the method lowerIndex
-  // (std::lower_bound). However, given that std::upper_bound should return an
-  // index to the first block that is larger than the provided reference value,
-  // we have to swap the input values when calling compare() in makeCompare.
-  // compare(blockId, referenceId) -> compare(referenceId, blockId)
-  return std::upper_bound(input.begin(), input.end(), referenceId_,
-                          makeCompare);
+  // Extract evaluationColumn specific ValueId from BlockMetadata
+  auto getRelevantIdFromBlock =
+      [this, evaluationColumn](const BlockMetadata& blockMetadata) {
+        return Comparison == CompOp::EQ
+                   ? getIdFromColumnIndex(blockMetadata.firstTriple_,
+                                          evaluationColumn)
+                   : getIdFromColumnIndex(blockMetadata.lastTriple_,
+                                          evaluationColumn);
+      };
+  // Use the same comparison operations compareImpl as for the method lowerIndex
+  // (with std::ranges::lower_bound).
+  // However, the difference here is the helper lambda getRelevantIdFromBlock(),
+  // for CompOp::EQ we have to consider the first triple of the respective
+  // BlockMetadata value.
+  return std::ranges::upper_bound(
+      input, referenceId_,
+      [this](const ValueId& blockId, const ValueId& referenceId) {
+        return compareImpl(blockId, referenceId);
+      },
+      getRelevantIdFromBlock);
 };
 
 //______________________________________________________________________________
 template <CompOp Comparison>
 std::vector<BlockMetadata> RelationalExpressions<Comparison>::evaluate(
     std::vector<BlockMetadata>& input, size_t evaluationColumn) {
-  if constexpr (Comparison == CompOp::LT || Comparison == CompOp::LE) {
+  using enum CompOp;
+  if constexpr (Comparison == LT || Comparison == LE) {
     return std::vector<BlockMetadata>(input.begin(),
                                       lowerIndex(input, evaluationColumn));
-  } else if constexpr (Comparison == CompOp::GE || Comparison == CompOp::GT) {
+  } else if constexpr (Comparison == GE || Comparison == GT) {
     // Complementary block selection to LT and LE
     return std::vector<BlockMetadata>(lowerIndex(input, evaluationColumn),
                                       input.end());
-  } else if constexpr (Comparison == CompOp::EQ) {
+  } else if constexpr (Comparison == EQ) {
     return std::vector<BlockMetadata>(lowerIndex(input, evaluationColumn),
                                       upperIndex(input, evaluationColumn));
   } else {
@@ -141,10 +149,9 @@ std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluateOr(
            getIdFromColumnIndex(block2.lastTriple_, evaluationColumn);
   };
   // Given that we have vectors with sorted (BlockMedata) values, we can
-  // use std::set_union, thus the complexity is O(n + m).
-  std::set_union(relevantBlocksChild1.begin(), relevantBlocksChild1.end(),
-                 relevantBlocksChild2.begin(), relevantBlocksChild2.end(),
-                 std::back_inserter(unionedRelevantBlocks), lessThan);
+  // use std::ranges::set_union, thus the complexity is O(n + m).
+  std::ranges::set_union(relevantBlocksChild1, relevantBlocksChild2,
+                         std::back_inserter(unionedRelevantBlocks), lessThan);
   return unionedRelevantBlocks;
 };
 

@@ -82,7 +82,7 @@ class RelationalExpressions : public PrefilterExpression {
   ValueId referenceId_;
   // Helper function that implements the relational comparison on the block
   // values.
-  bool compare(const ValueId& tripleId, const ValueId& otherId);
+  bool compareImpl(const ValueId& tripleId, const ValueId& otherId) const;
   // Helper for providing the lower indices during the evaluation procedure.
   auto lowerIndex(std::vector<BlockMetadata>& input, size_t evaluationColumn);
   // Helper to get the upper indices, necessary for EQ and NE.
