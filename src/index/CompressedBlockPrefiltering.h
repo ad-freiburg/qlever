@@ -124,6 +124,6 @@ using GreaterEqualExpression = RelationalExpressions<CompOp::GE>;
 using GreaterThanExpression = RelationalExpressions<CompOp::GT>;
 
 //______________________________________________________________________________
-// Defintion of the LogicalExpressions for AND, OR and NOT.
+// Definition of the LogicalExpressions for AND, OR and NOT.
 using AndExpression = LogicalExpressions<LogicalOperators::AND>;
 using OrExpression = LogicalExpressions<LogicalOperators::OR>;
