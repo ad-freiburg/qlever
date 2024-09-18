@@ -1,12 +1,7 @@
 //  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
 //  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
-//
-// Created by johannes on 15.09.21.
-//
-
-#ifndef QLEVER_SAMPLEEXPRESSION_H
-#define QLEVER_SAMPLEEXPRESSION_H
+#pragma once
 
 #include "./SparqlExpression.h"
 #include "absl/strings/str_cat.h"
@@ -23,12 +18,6 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   ExpressionResult evaluate(EvaluationContext* context) const override;
 
-  // _____________________________________________________________________
-  vector<Variable> getUnaggregatedVariables() override {
-    // This is an aggregation, so it never leaves any unaggregated variables.
-    return {};
-  }
-
   // __________________________________________________________________________
   string getCacheKey(const VariableToColumnMap& varColMap) const override {
     return absl::StrCat("SAMPLE(", _child->getCacheKey(varColMap), ")");
@@ -37,9 +26,14 @@ class SampleExpression : public SparqlExpression {
   // __________________________________________________________________________
   std::span<Ptr> childrenImpl() override { return {&_child, 1}; }
 
+  // SAMPLE is an aggregate, the distinctness doesn't matter, so we return "not
+  // distinct", because that allows for more efficient implementations in GROUP
+  // BY.
+  AggregateStatus isAggregate() const override {
+    return AggregateStatus::NonDistinctAggregate;
+  }
+
  private:
   Ptr _child;
 };
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SAMPLEEXPRESSION_H

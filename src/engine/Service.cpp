@@ -16,6 +16,7 @@
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
 #include "util/HashSet.h"
+#include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
 
 // ____________________________________________________________________________
@@ -164,7 +165,8 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
         static_cast<int>(response.status_), ", ",
         toStd(boost::beast::http::obsolete_reason(response.status_))));
   }
-  if (response.contentType_ != "application/sparql-results+json") {
+  if (!ad_utility::utf8ToLower(response.contentType_)
+           .starts_with("application/sparql-results+json")) {
     throwErrorWithContext(absl::StrCat(
         "QLever requires the endpoint of a SERVICE to send the result as "
         "'application/sparql-results+json' but the endpoint sent '",

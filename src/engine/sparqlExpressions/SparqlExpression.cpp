@@ -25,7 +25,12 @@ std::vector<const Variable*> SparqlExpression::containedVariables() const {
 }
 
 // _____________________________________________________________________________
-std::vector<Variable> SparqlExpression::getUnaggregatedVariables() {
+std::vector<Variable> SparqlExpression::getUnaggregatedVariables() const {
+  // Aggregates always aggregate over all variables, so no variables remain
+  // unaggregated.
+  if (isAggregate() != AggregateStatus::NoAggregate) {
+    return {};
+  }
   // Default implementation: This expression adds no variables, but all
   // unaggregated variables from the children remain unaggregated.
   std::vector<Variable> result;
@@ -39,20 +44,18 @@ std::vector<Variable> SparqlExpression::getUnaggregatedVariables() {
 
 // _____________________________________________________________________________
 bool SparqlExpression::containsAggregate() const {
-  if (isAggregate()) return true;
+  if (isAggregate() != AggregateStatus::NoAggregate) {
+    AD_CORRECTNESS_CHECK(isInsideAggregate());
+    return true;
+  }
+
   return std::ranges::any_of(
       children(), [](const Ptr& child) { return child->containsAggregate(); });
 }
 
 // _____________________________________________________________________________
-bool SparqlExpression::isAggregate() const { return false; }
-
-// _____________________________________________________________________________
-bool SparqlExpression::isDistinct() const {
-  AD_THROW(
-      "isDistinct() maybe only called for aggregate expressions. If this is "
-      "an aggregate expression, then the implementation of isDistinct() is "
-      "missing for this expression. Please report this to the developers.");
+auto SparqlExpression::isAggregate() const -> AggregateStatus {
+  return AggregateStatus::NoAggregate;
 }
 
 // _____________________________________________________________________________
@@ -155,5 +158,13 @@ void SparqlExpression::setIsInsideAggregate() {
 }
 
 // _____________________________________________________________________________
-bool SparqlExpression::isInsideAggregate() const { return isInsideAggregate_; }
+bool SparqlExpression::isInsideAggregate() const {
+  if (isAggregate() != AggregateStatus::NoAggregate) {
+    AD_CORRECTNESS_CHECK(
+        isInsideAggregate_,
+        "This indicates a missing call to `setIsInsideAggregate()` inside the "
+        "constructor of an aggregate expression");
+  }
+  return isInsideAggregate_;
+}
 }  // namespace sparqlExpression
