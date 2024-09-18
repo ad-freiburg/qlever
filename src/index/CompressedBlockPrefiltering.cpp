@@ -4,6 +4,11 @@
 
 #include "index/CompressedBlockPrefiltering.h"
 
+using prefilterExpressions::CompOp;
+using prefilterExpressions::LogicalExpressions;
+using prefilterExpressions::LogicalOperators;
+using prefilterExpressions::RelationalExpressions;
+
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
 template <CompOp Comparison>

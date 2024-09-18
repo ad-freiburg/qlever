@@ -117,7 +117,7 @@ struct TestContext {
     frankfurt = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(lit("frankfurt")));
     frankfurt_oder = Id::makeFromLocalVocabIndex(
-        localVocab.getIndexAndAddIfNotContained(lit("frankfurt (oder)")));
+        localVocab.getIndexAndAddIfNotContained(lit("frankfurt (FFO)")));
     hamburg = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(lit("hamburg")));
     hannover = Id::makeFromLocalVocabIndex(

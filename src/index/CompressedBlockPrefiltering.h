@@ -16,6 +16,7 @@
 // `firstTriple_` and `lastTriple_` (`PermutedTriple`)
 using BlockMetadata = CompressedBlockMetadata;
 
+namespace prefilterExpressions {
 //______________________________________________________________________________
 /*
 `PrefilterExpression` represents a base class for the following sub-classes that
@@ -114,16 +115,26 @@ class LogicalExpressions : public PrefilterExpression {
       requires(Operation == LogicalOperators::OR);
 };
 
-//______________________________________________________________________________
-// Definition of the RelationalExpressions for LT, LE, EQ, NE, GE and GT.
-using LessThanExpression = RelationalExpressions<CompOp::LT>;
-using LessEqualExpression = RelationalExpressions<CompOp::LE>;
-using EqualExpression = RelationalExpressions<CompOp::EQ>;
-using NotEqualExpression = RelationalExpressions<CompOp::NE>;
-using GreaterEqualExpression = RelationalExpressions<CompOp::GE>;
-using GreaterThanExpression = RelationalExpressions<CompOp::GT>;
+}  // namespace prefilterExpressions
 
 //______________________________________________________________________________
-// Definition of the LogicalExpressions for AND, OR and NOT.
-using AndExpression = LogicalExpressions<LogicalOperators::AND>;
-using OrExpression = LogicalExpressions<LogicalOperators::OR>;
+// Definition of the RelationalExpressions for LT, LE, EQ, NE, GE and GT.
+using LessThanExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::LT>;
+using LessEqualExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::LE>;
+using EqualExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::EQ>;
+using NotEqualExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::NE>;
+using GreaterEqualExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::GE>;
+using GreaterThanExpression = prefilterExpressions::RelationalExpressions<
+    prefilterExpressions::CompOp::GT>;
+
+//______________________________________________________________________________
+// Definition of the LogicalExpressions for AND and OR.
+using AndExpression = prefilterExpressions::LogicalExpressions<
+    prefilterExpressions::LogicalOperators::AND>;
+using OrExpression = prefilterExpressions::LogicalExpressions<
+    prefilterExpressions::LogicalOperators::OR>;
