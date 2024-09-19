@@ -20,7 +20,13 @@ auto I = ad_utility::testing::IntId;
 // _____________________________________________________________________________
 class LazyGroupByTest : public ::testing::Test {
  protected:
+  // Unlimited allocator.
+  ad_utility::AllocatorWithLimit<Id> ua =
+      ad_utility::makeUnlimitedAllocator<Id>();
   QueryExecutionContext* qec_ = ad_utility::testing::getQec();
+  // Initialize dummy instance of GroupBy to be used for testing. The actual
+  // operations will never get executed because we manually test `LazyGroupBy`
+  // here.
   Variable variable_{"?someVariable"};
   sparqlExpression::SparqlExpressionPimpl sparqlExpression_{
       std::make_unique<sparqlExpression::SumExpression>(
@@ -34,6 +40,7 @@ class LazyGroupByTest : public ::testing::Test {
               qec_, IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
               std::vector{std::optional{variable_}}));
   GroupBy groupBy_{qec_, {variable_}, {}, subtree_};
+
   std::vector<GroupBy::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
   LocalVocab localVocab_{};
@@ -64,7 +71,7 @@ class LazyGroupByTest : public ::testing::Test {
 
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
-  IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
+  IdTable resultTable{2, ua};
   GroupBy::GroupBlock block{{0, I(7)}};
   IdTable idTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   auto evaluationContext = makeEvaluationContext(idTable);
@@ -74,14 +81,15 @@ TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
 
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}}, I));
 
+  block.at(0).second = I(9);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}, {7, 0}}, I));
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}, {9, 0}}, I));
 }
 
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
-  IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
+  IdTable resultTable{2, ua};
   GroupBy::GroupBlock block{{0, I(7)}};
   IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
   auto evaluationContext = makeEvaluationContext(idTable);
@@ -89,12 +97,15 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   lazyGroupBy_.processBlock(evaluationContext, 1, 3);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
+  // The `7` is the current group, and the aggregate computes the SUM between
+  // the elements at index 1 and 2, which is  3 + 5 = 8.
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 8}}, I));
 
-  lazyGroupBy_.processBlock(evaluationContext, 0, 1);
-  lazyGroupBy_.processBlock(evaluationContext, 1, 3);
-  lazyGroupBy_.processBlock(evaluationContext, 3, 4);
-  lazyGroupBy_.processBlock(evaluationContext, 4, 4);
+  // the new group starts with a value of 0
+  lazyGroupBy_.processBlock(evaluationContext, 0, 1);  // add 2 -> 2
+  lazyGroupBy_.processBlock(evaluationContext, 1, 3);  // add 3 + 5 = 8 -> 10
+  lazyGroupBy_.processBlock(evaluationContext, 3, 4);  // add 7 -> 17
+  lazyGroupBy_.processBlock(evaluationContext, 4, 4);  // add 0 (empty) -> 17
   block.at(0).second = I(9);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
@@ -103,7 +114,7 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
 
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
-  IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
+  IdTable resultTable{2, ua};
   GroupBy::GroupBlock block{{0, I(3)}};
   {
     IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
@@ -144,5 +155,5 @@ TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized) {
   using Gc = GroupConcatAggregationData;
   EXPECT_THAT(lazyGroupBy.aggregationData_.getAggregationDataVariant(0),
               VariantWith<sparqlExpression::VectorWithMemoryLimit<Gc>>(
-                  ElementsAre(Field("separator_", &Gc::separator_, Eq("|")))));
+                  ElementsAre(AD_FIELD(Gc, separator_, Eq("|")))));
 }
