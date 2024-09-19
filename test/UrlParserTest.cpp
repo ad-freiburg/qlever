@@ -15,7 +15,7 @@ TEST(UrlParserTest, paramsToMap) {
   auto parseParams =
       [](const string& queryString) -> HashMap<std::string, std::string> {
     boost::urls::url_view url(queryString);
-    return UrlParser::paramsToMap(url.params());
+    return url_parser::paramsToMap(url.params());
   };
   auto HashMapEq = [](const HashMap<std::string, std::string>& hashMap)
       -> testing::Matcher<HashMap<std::string, std::string>> {
@@ -34,6 +34,9 @@ TEST(UrlParserTest, paramsToMap) {
   EXPECT_THAT(parseParams("?cmd=stats"), HashMapEq({{"cmd", "stats"}}));
   EXPECT_THAT(parseParams("/ping"), HashMapEq({}));
   EXPECT_THAT(parseParams(""), HashMapEq({}));
+  // Producing a sequence with one empty param here is a design decision by
+  // Boost.URL to make it distinguishable from the case where there is no query
+  // string.
   EXPECT_THAT(parseParams("?"), HashMapEq({{"", ""}}));
   EXPECT_THAT(parseParams("/ping?a=b&c=d"),
               HashMapEq({{"a", "b"}, {"c", "d"}}));
@@ -48,26 +51,27 @@ TEST(UrlParserTest, paramsToMap) {
 }
 
 TEST(UrlParserTest, parseRequestTarget) {
+  using namespace ad_utility::url_parser;
+
   auto IsParsedUrl = [](const string& path,
                         const HashMap<std::string, std::string>& parameters)
-      -> testing::Matcher<const UrlParser::ParsedUrl&> {
+      -> testing::Matcher<const ParsedUrl&> {
     return testing::AllOf(
-        AD_FIELD(UrlParser::ParsedUrl, path_, testing::Eq(path)),
-        AD_FIELD(UrlParser::ParsedUrl, parameters_,
-                 testing::ContainerEq(parameters)));
+        AD_FIELD(ParsedUrl, path_, testing::Eq(path)),
+        AD_FIELD(ParsedUrl, parameters_, testing::ContainerEq(parameters)));
   };
 
-  EXPECT_THAT(UrlParser::parseRequestTarget("/"), IsParsedUrl("/", {}));
-  EXPECT_THAT(UrlParser::parseRequestTarget("/?cmd=stats"),
+  EXPECT_THAT(parseRequestTarget("/"), IsParsedUrl("/", {}));
+  EXPECT_THAT(parseRequestTarget("/?cmd=stats"),
               IsParsedUrl("/", {{"cmd", "stats"}}));
-  EXPECT_THAT(UrlParser::parseRequestTarget("/?cmd=clear-cache"),
+  EXPECT_THAT(parseRequestTarget("/?cmd=clear-cache"),
               IsParsedUrl("/", {{"cmd", "clear-cache"}}));
-  EXPECT_THAT(UrlParser::parseRequestTarget(
+  EXPECT_THAT(parseRequestTarget(
                   "/?query=SELECT%20%2A%20WHERE%20%7B%7D&action=csv_export"),
               IsParsedUrl("/", {{"query", "SELECT * WHERE {}"},
                                 {"action", "csv_export"}}));
-  EXPECT_THAT(UrlParser::parseRequestTarget("/ping?foo=bar"),
+  EXPECT_THAT(parseRequestTarget("/ping?foo=bar"),
               IsParsedUrl("/ping", {{"foo", "bar"}}));
-  EXPECT_THAT(UrlParser::parseRequestTarget("/foo??update=bar"),
+  EXPECT_THAT(parseRequestTarget("/foo??update=bar"),
               IsParsedUrl("/foo", {{"?update", "bar"}}));
 }

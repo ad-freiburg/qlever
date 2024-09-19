@@ -5,10 +5,10 @@
 
 #include "UrlParser.h"
 
-using namespace ad_utility;
+using namespace ad_utility::url_parser;
 
 // _____________________________________________________________________________
-UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
+ParsedUrl ad_utility::url_parser::parseRequestTarget(std::string_view target) {
   auto urlResult = boost::urls::parse_origin_form(target);
   if (urlResult.has_error()) {
     throw std::runtime_error(
@@ -20,8 +20,8 @@ UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
 }
 
 // _____________________________________________________________________________
-ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
-    boost::urls::params_view params) {
+ad_utility::HashMap<std::string, std::string>
+ad_utility::url_parser::paramsToMap(boost::urls::params_view params) {
   ad_utility::HashMap<std::string, std::string> result;
   for (const auto& [key, value, _] : params) {
     auto [blockingElement, wasInserted] = result.insert({key, value});

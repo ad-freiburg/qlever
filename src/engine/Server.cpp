@@ -164,12 +164,12 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-ad_utility::UrlParser::ParsedRequest Server::parseHttpRequest(
+ad_utility::url_parser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  auto parsedUrl = ad_utility::UrlParser::parseRequestTarget(request.target());
-  ad_utility::UrlParser::ParsedRequest parsedRequest{
+  auto parsedUrl = ad_utility::url_parser::parseRequestTarget(request.target());
+  ad_utility::url_parser::ParsedRequest parsedRequest{
       std::move(parsedUrl.path_), std::move(parsedUrl.parameters_),
       std::nullopt};
   auto extractQueryFromParameters = [&parsedRequest]() {
@@ -220,7 +220,7 @@ ad_utility::UrlParser::ParsedRequest Server::parseHttpRequest(
             "the URL.");
       }
       // Set the parameters from the request body.
-      parsedRequest.parameters_ = ad_utility::UrlParser::paramsToMap(
+      parsedRequest.parameters_ = ad_utility::url_parser::paramsToMap(
           boost::urls::parse_query(request.body()).value());
 
       extractQueryFromParameters();

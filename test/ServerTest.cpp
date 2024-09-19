@@ -12,20 +12,23 @@
 #include "util/http/HttpUtils.h"
 #include "util/http/UrlParser.h"
 
-namespace http = boost::beast::http;
-using namespace ad_utility;
+namespace m {
+using namespace ad_utility::url_parser;
+auto ParsedRequest =
+    [](const std::string& path,
+       const ad_utility::HashMap<std::string, std::string>& parameters,
+       const std::optional<std::string>& query)
+    -> testing::Matcher<const ad_utility::url_parser::ParsedRequest> {
+  return testing::AllOf(
+      AD_FIELD(ParsedRequest, path_, testing::Eq(path)),
+      AD_FIELD(ParsedRequest, parameters_, testing::ContainerEq(parameters)),
+      AD_FIELD(ParsedRequest, query_, testing::Eq(query)));
+};
+}  // namespace m
 
 TEST(ServerTest, parseHttpRequest) {
-  auto ParsedRequest = [](const std::string& path,
-                          const HashMap<std::string, std::string>& parameters,
-                          const std::optional<std::string>& query)
-      -> testing::Matcher<const UrlParser::ParsedRequest> {
-    return testing::AllOf(
-        AD_FIELD(UrlParser::ParsedRequest, path_, testing::Eq(path)),
-        AD_FIELD(UrlParser::ParsedRequest, parameters_,
-                 testing::ContainerEq(parameters)),
-        AD_FIELD(UrlParser::ParsedRequest, query_, testing::Eq(query)));
-  };
+  namespace http = boost::beast::http;
+
   auto MakeBasicRequest = [](http::verb method, const std::string& target) {
     // version 11 stands for HTTP/1.1
     return http::request<http::string_body>{method, target, 11};
@@ -42,7 +45,7 @@ TEST(ServerTest, parseHttpRequest) {
     req.prepare_payload();
     return req;
   };
-  auto parse = [](const httpUtils::HttpRequest auto& request) {
+  auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return Server::parseHttpRequest(request);
   };
   // TODO `default-graph-uri` and `named-graph-uri` can appear multiple times.
@@ -51,37 +54,38 @@ TEST(ServerTest, parseHttpRequest) {
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
   const std::string UPDATE = "application/sparql-update";
-  EXPECT_THAT(parse(MakeGetRequest("/")), ParsedRequest("/", {}, std::nullopt));
+  EXPECT_THAT(parse(MakeGetRequest("/")),
+              m::ParsedRequest("/", {}, std::nullopt));
   EXPECT_THAT(parse(MakeGetRequest("/ping")),
-              ParsedRequest("/ping", {}, std::nullopt));
+              m::ParsedRequest("/ping", {}, std::nullopt));
   EXPECT_THAT(parse(MakeGetRequest("/?cmd=stats")),
-              ParsedRequest("/", {{"cmd", "stats"}}, std::nullopt));
+              m::ParsedRequest("/", {{"cmd", "stats"}}, std::nullopt));
   EXPECT_THAT(
       parse(MakeGetRequest(
           "/?query=SELECT%20%2A%20WHERE%20%7B%7D&action=csv_export")),
-      ParsedRequest("/", {{"action", "csv_export"}}, "SELECT * WHERE {}"));
+      m::ParsedRequest("/", {{"action", "csv_export"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(
       parse(MakePostRequest("/", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
+      m::ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(
       parse(MakePostRequest("/", "application/x-www-form-urlencoded",
                             "query=SELECT%20%2A%20WHERE%20%7B%7D&send=100")),
-      ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
+      m::ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED,
                                     "query=SELECT%20%2A%20WHERE%20%7B%7D")),
-              ParsedRequest("/", {}, "SELECT * WHERE {}"));
+              m::ParsedRequest("/", {}, "SELECT * WHERE {}"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakePostRequest("/?send=100", URLENCODED,
                             "query=SELECT%20%2A%20WHERE%20%7B%7D")),
       testing::StrEq("URL-encoded POST requests must not contain query "
                      "parameters in the URL."));
   EXPECT_THAT(parse(MakePostRequest("/", URLENCODED, "cmd=clear-cache")),
-              ParsedRequest("/", {{"cmd", "clear-cache"}}, std::nullopt));
+              m::ParsedRequest("/", {{"cmd", "clear-cache"}}, std::nullopt));
   EXPECT_THAT(parse(MakePostRequest("/", QUERY, "SELECT * WHERE {}")),
-              ParsedRequest("/", {}, "SELECT * WHERE {}"));
+              m::ParsedRequest("/", {}, "SELECT * WHERE {}"));
   EXPECT_THAT(parse(MakePostRequest("/?send=100", QUERY, "SELECT * WHERE {}")),
-              ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
+              m::ParsedRequest("/", {{"send", "100"}}, "SELECT * WHERE {}"));
   AD_EXPECT_THROW_WITH_MESSAGE(
       parse(MakeBasicRequest(http::verb::patch, "/")),
       testing::StrEq(
