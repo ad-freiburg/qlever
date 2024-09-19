@@ -30,7 +30,8 @@ enum struct Datatype {
   Date,
   WordVocabIndex,
   BlankNodeIndex,
-  MaxValue = BlankNodeIndex
+  NewBlankNodeIndex,
+  MaxValue = NewBlankNodeIndex
   // Note: Unfortunately we cannot easily get the size of an enum.
   // If members are added to this enum, then the `MaxValue`
   // alias must always be equal to the last member,
@@ -60,6 +61,8 @@ constexpr std::string_view toString(Datatype type) {
       return "Date";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
+    case Datatype::NewBlankNodeIndex:
+      return "NewBlankNodeIndex";
   }
   // This line is reachable if we cast an arbitrary invalid int to this enum
   AD_FAIL();
@@ -278,6 +281,9 @@ class ValueId {
   static ValueId makeFromBlankNodeIndex(BlankNodeIndex index) {
     return makeFromIndex(index.get(), Datatype::BlankNodeIndex);
   }
+  static ValueId makeFromNewBlankNodeIndex(NewBlankNodeIndex index) {
+    return makeFromIndex(index.get(), Datatype::NewBlankNodeIndex);
+  }
 
   /// Obtain the unsigned index that this `ValueId` encodes. If `getDatatype()
   /// != [VocabIndex|TextRecordIndex|LocalVocabIndex]` then the result is
@@ -297,6 +303,10 @@ class ValueId {
 
   [[nodiscard]] constexpr BlankNodeIndex getBlankNodeIndex() const noexcept {
     return BlankNodeIndex::make(removeDatatypeBits(_bits));
+  }
+  [[nodiscard]] constexpr NewBlankNodeIndex getNewBlankNodeIndex()
+      const noexcept {
+    return NewBlankNodeIndex::make(removeDatatypeBits(_bits));
   }
 
   // Store or load a `Date` object.
@@ -362,6 +372,8 @@ class ValueId {
         return std::invoke(visitor, getDate());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
+      case Datatype::NewBlankNodeIndex:
+        return std::invoke(visitor, getNewBlankNodeIndex());
     }
     AD_FAIL();
   }

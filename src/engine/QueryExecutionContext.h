@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <limits>
 #include <memory>
 #include <shared_mutex>
 #include <string>
@@ -14,6 +15,7 @@
 #include "engine/Result.h"
 #include "engine/RuntimeInformation.h"
 #include "engine/SortPerformanceEstimator.h"
+#include "global/Constants.h"
 #include "global/Id.h"
 #include "index/Index.h"
 #include "util/Cache.h"
@@ -114,6 +116,17 @@ class QueryExecutionContext {
   /// \param runtimeInformation The `RuntimeInformation` to serialize
   void signalQueryUpdate(const RuntimeInformation& runtimeInformation) const {
     updateCallback_(nlohmann::ordered_json(runtimeInformation).dump());
+  }
+
+  // Getter for the global `NEXT_NEWBLANKNODEINDEX` counter.
+  [[nodiscard]] static int getNextNewBlankNodeIndex() {
+    if (NEXT_NEWBLANKNODEINDEX == std::numeric_limits<uint64_t>::max())
+        [[unlikely]] {
+      throw std::runtime_error(
+          "Counter for blank nodes overflowed. Tell the developers to reset "
+          "it.");
+    }
+    return NEXT_NEWBLANKNODEINDEX++;
   }
 
   bool _pinSubtrees;

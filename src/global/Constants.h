@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <chrono>
 #include <limits>
 #include <stdexcept>
@@ -245,3 +246,6 @@ constexpr inline size_t NUM_SORT_THREADS = 4;
 constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
 constexpr inline std::string_view EMPH_OFF = "\033[22m";
+
+// Counter for internal Blank Node Ids.
+inline std::atomic_uint64_t NEXT_NEWBLANKNODEINDEX{0};

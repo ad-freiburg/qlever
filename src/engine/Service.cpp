@@ -15,6 +15,7 @@
 #include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
 #include "util/Exception.h"
+#include "util/HashMap.h"
 #include "util/HashSet.h"
 #include "util/StringUtils.h"
 #include "util/http/HttpUtils.h"
@@ -201,6 +202,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+  ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
     for (const auto& binding : bindings) {
@@ -208,7 +210,7 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
       for (size_t colIdx = 0; colIdx < vars.size(); ++colIdx) {
         TripleComponent tc =
             binding.contains(vars[colIdx])
-                ? bindingToTripleComponent(binding[vars[colIdx]])
+                ? bindingToTripleComponent(binding[vars[colIdx]], blankNodeMap)
                 : TripleComponent::UNDEF();
 
         Id id = std::move(tc).toValueId(getIndex().getVocab(), *localVocab);
@@ -332,7 +334,8 @@ std::optional<std::string> Service::getSiblingValuesClause() const {
 
 // ____________________________________________________________________________
 TripleComponent Service::bindingToTripleComponent(
-    const nlohmann::json& binding) {
+    const nlohmann::json& binding,
+    ad_utility::HashMap<std::string, Id>& blankNodeMap) const {
   if (!binding.contains("type") || !binding.contains("value")) {
     throw std::runtime_error(absl::StrCat(
         "Missing type or value field in binding. The binding is: '",
@@ -359,10 +362,13 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    throw std::runtime_error(
-        "Blank nodes in the result of a SERVICE are currently not supported. "
-        "For now, consider filtering them out using the ISBLANK function or "
-        "converting them via the STR function.");
+    if (!blankNodeMap.contains(value)) {
+      // create a new blankNodeIndex
+      blankNodeMap[value] =
+          Id::makeFromNewBlankNodeIndex(NewBlankNodeIndex::make(
+              getExecutionContext()->getNextNewBlankNodeIndex()));
+    }
+    tc = blankNodeMap[value];
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",

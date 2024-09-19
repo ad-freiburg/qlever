@@ -99,8 +99,9 @@ class Service : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
-  static TripleComponent bindingToTripleComponent(
-      const nlohmann::json& binding);
+  TripleComponent bindingToTripleComponent(
+      const nlohmann::json& binding,
+      ad_utility::HashMap<std::string, Id>& blankNodeMap) const;
 
  private:
   // The string returned by this function is used as cache key.
