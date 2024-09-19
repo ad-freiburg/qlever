@@ -43,9 +43,8 @@ TEST(ServerTest, parseHttpRequest) {
     req.prepare_payload();
     return req;
   };
-  Server s{9999, 1, 5_GB, "984hjsad924"};
-  auto parse = [&s](const ad_utility::httpUtils::HttpRequest auto& request) {
-    return s.parseHttpRequest(request);
+  auto parse = [](const httpUtils::HttpRequest auto& request) {
+    return Server::parseHttpRequest(request);
   };
   // TODO `default-graph-uri` and `named-graph-uri` can appear multiple times.
   // This currently throws an exception and is not considered.
