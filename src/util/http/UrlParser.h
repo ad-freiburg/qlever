@@ -38,8 +38,7 @@ class UrlParser {
     std::optional<std::string> query_;
   };
 
-  // Parse a request HTTP request target into its URL path, URL query
-  // parameters. The contained query or update are not extracted.
+  // Parse the URL path, URL query parameters of a HTTP Request target.
   static ParsedUrl parseRequestTarget(std::string_view target);
 
   // Converts the HTTP Query parameters `params` to a hashmap. Throws an error

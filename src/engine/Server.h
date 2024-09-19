@@ -29,6 +29,8 @@ using std::vector;
 
 //! The HTTP Server used.
 class Server {
+  FRIEND_TEST(ServerTest, parseHttpRequest);
+
  public:
   explicit Server(unsigned short port, size_t numThreads,
                   ad_utility::MemorySize maxMem, std::string accessToken,
