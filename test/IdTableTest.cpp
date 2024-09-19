@@ -1018,8 +1018,8 @@ TEST(IdTable, deleteColumn) {
   ASSERT_NO_THROW(t.deleteColumn(1));
   ASSERT_NO_THROW(t.deleteColumn(0));
   // No more columns left
-  EXPECT_EQ(0, t.numColumns());
-  EXPECT_EQ(3, t.numRows());
+  EXPECT_EQ(t.numColumns(), 0);
+  EXPECT_EQ(t.numRows(), 3);
 }
 
 TEST(IdTable, cornerCases) {
