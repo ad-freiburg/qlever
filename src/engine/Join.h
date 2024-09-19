@@ -136,14 +136,6 @@ class Join : public Operation {
 
   using ScanMethodType = std::function<IdTable(Id)>;
 
-  ScanMethodType getScanMethod(
-      std::shared_ptr<QueryExecutionTree> fullScanDummyTree) const;
-
-  void appendCrossProduct(const IdTable::const_iterator& leftBegin,
-                          const IdTable::const_iterator& leftEnd,
-                          const IdTable::const_iterator& rightBegin,
-                          const IdTable::const_iterator& rightEnd,
-                          IdTable* res) const;
   /*
    * @brief Combines 2 rows like in a join and inserts the result in the
    * given table.
@@ -165,6 +157,7 @@ class Join : public Operation {
    * @brief The implementation of hashJoin.
    */
   template <int L_WIDTH, int R_WIDTH, int OUT_WIDTH>
-  void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
-                    ColumnIndex jc2, IdTable* dynRes);
+  static void hashJoinImpl(const IdTable& dynA, ColumnIndex jc1,
+                           const IdTable& dynB, ColumnIndex jc2,
+                           IdTable* dynRes);
 };
