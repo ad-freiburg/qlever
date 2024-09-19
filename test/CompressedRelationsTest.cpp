@@ -318,17 +318,18 @@ TEST(CompressedRelationWriter, getFirstAndLastTriple) {
     EXPECT_THAT(firstAndLastTriple, matcher);
   };
 
-  // A matcher for a `PermutedTriple` the ints are converted to VocabIds.
+  // A matcher for a `PermutedTriple`. The `int`s are converted to VocabIds.
   auto matchPermutedTriple = [](int a, int b, int c) {
     using P = CompressedBlockMetadata::PermutedTriple;
     return AllOf(AD_FIELD(P, col0Id_, V(a)), AD_FIELD(P, col1Id_, V(b)),
                  AD_FIELD(P, col2Id_, V(c)));
   };
 
-  // A matcher for a `FirstAndLastTriple object`. `a, b, c` specify the first
-  // triple, `d, e, f` specify the last triple.
+  // A matcher for a `FirstAndLastTriple object` where  `(a, b, c)` is the first
+  // triple, and `(d, e, f)` is the last triple.
   auto matchFirstAndLastTriple = [&](int a, int b, int c, int d, int e, int f) {
-    using F = CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple;
+    using F = CompressedRelationReader::ScanSpecAndBlocksAndBounds::
+        FirstAndLastTriple;
     return Optional(
         AllOf(AD_FIELD(F, firstTriple_, matchPermutedTriple(a, b, c)),
               AD_FIELD(F, lastTriple_, matchPermutedTriple(d, e, f))));
@@ -488,11 +489,11 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
-  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
       firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(6), V(9)}};
 
   std::vector blocks{block1, block2, block3};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
       {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
       firstAndLastTriple};
 
@@ -519,7 +520,7 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // is fixed (42), and the second column is also fixed (4).
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
   metadataAndBlocks.firstAndLastTriple_ =
-      CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple{
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
           {V(42), V(4), V(11)}, {V(42), V(4), V(738)}};
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
@@ -540,11 +541,11 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
-  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
       firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(20), V(63)}};
 
   std::vector blocks{block1, block2, block3, block4, block5};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
       {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
       firstAndLastTriple};
 
@@ -566,9 +567,9 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   relationB.col0Id_ = V(47);
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
-  CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
       firstAndLastTripleB{{V(47), V(3), V(0)}, {V(47), V(38), V(15)}};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocksB{
       {{V(47), std::nullopt, std::nullopt}, blocksB}, firstAndLastTripleB};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
@@ -602,7 +603,8 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
   metadataAndBlocks.scanSpec_.setCol1Id(V(20));
-  using FL = CompressedRelationReader::MetadataAndBlocks::FirstAndLastTriple;
+  using FL =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple;
   metadataAndBlocks.firstAndLastTriple_ =
       FL{{V(42), V(20), V(5)}, {V(42), V(20), V(63)}};
   metadataAndBlocksB.scanSpec_.setCol1Id(V(38));

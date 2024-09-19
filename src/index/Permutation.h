@@ -70,7 +70,8 @@ class Permutation {
       const CancellationHandle& cancellationHandle) const;
 
   // Typedef to propagate the `MetadataAndblocks` and `IdTableGenerator` type.
-  using MetadataAndBlocks = CompressedRelationReader::MetadataAndBlocks;
+  using MetadataAndBlocks =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds;
 
   using IdTableGenerator = CompressedRelationReader::IdTableGenerator;
 
@@ -84,7 +85,7 @@ class Permutation {
   //   with the `col1Id` if specified), else the behavior is
   //   undefined.
   // TODO<joka921> We should only communicate this interface via the
-  // `MetadataAndBlocks` class and make this a strong class that always
+  // `ScanSpecAndBlocksAndBounds` class and make this a strong class that always
   // maintains its invariants.
   IdTableGenerator lazyScan(
       const ScanSpecification& scanSpec,

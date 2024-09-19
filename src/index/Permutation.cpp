@@ -124,7 +124,7 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
-  CompressedRelationReader::MetadataAndBlocksBase mb{
+  CompressedRelationReader::ScanSpecAndBlocks mb{
       scanSpec,
       CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData())};
 

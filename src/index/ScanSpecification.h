@@ -32,10 +32,16 @@ class ScanSpecification {
   // type `LocalVocabIndex`. Note that this doesn't automatically mean that the
   // scan result will be empty, because local vocab entries might also be
   // created by SPARQL UPDATE requests.
+  // Note: This `localVocab` keeps the `colXIds` alive in that case. It is a
+  // serious bug, to copy the `colXIds` out of this class. The only valid usage
+  // is to compare them with other IDs as long as the `ScanSpecification` is
+  // still alive.
+  // TODO<joka921> This can be enforced by the type system, but that requires
+  // several intrusive changes in other parts of QLever.
   std::shared_ptr<const LocalVocab> localVocab_;
 
   // If specified (i.e. not `nullopt`) then the result of the scan only consists
-  // of triples that belong to one of the graphs.
+  // of triples that belong to the union of these graphs.
   Graphs graphsToFilter_{};
   friend class ScanSpecificationAsTripleComponent;
 
