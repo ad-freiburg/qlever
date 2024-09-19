@@ -390,11 +390,11 @@ TEST(CompressedRelationMetadata, GettersAndSetters) {
 
 TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}, {}, false};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}};
+      {}, 0, {V(42), V(4), V(13)}, {V(42), V(6), V(9)}, {}, false};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -432,15 +432,15 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
 }
 TEST(CompressedRelationReader, getBlocksForJoin) {
   CompressedBlockMetadata block1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
   CompressedBlockMetadata block2{
-      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}};
+      {}, 0, {V(42), V(3), V(0)}, {V(42), V(4), V(12)}, {}, false};
   CompressedBlockMetadata block3{
-      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}};
+      {}, 0, {V(42), V(5), V(13)}, {V(42), V(8), V(9)}, {}, false};
   CompressedBlockMetadata block4{
-      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}};
+      {}, 0, {V(42), V(8), V(16)}, {V(42), V(20), V(9)}, {}, false};
   CompressedBlockMetadata block5{
-      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}};
+      {}, 0, {V(42), V(20), V(16)}, {V(42), V(20), V(63)}, {}, false};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
@@ -451,17 +451,17 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
       {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
 
   CompressedBlockMetadata blockB1{
-      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
   CompressedBlockMetadata blockB2{
-      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}};
+      {}, 0, {V(47), V(3), V(0)}, {V(47), V(6), V(12)}, {}, false};
   CompressedBlockMetadata blockB3{
-      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}};
+      {}, 0, {V(47), V(7), V(13)}, {V(47), V(9), V(9)}, {}, false};
   CompressedBlockMetadata blockB4{
-      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}};
+      {}, 0, {V(47), V(38), V(7)}, {V(47), V(38), V(8)}, {}, false};
   CompressedBlockMetadata blockB5{
-      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}};
+      {}, 0, {V(47), V(38), V(9)}, {V(47), V(38), V(12)}, {}, false};
   CompressedBlockMetadata blockB6{
-      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}};
+      {}, 0, {V(47), V(38), V(13)}, {V(47), V(38), V(15)}, {}, false};
 
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relationB;
