@@ -40,8 +40,7 @@ void LazyGroupBy::resetAggregationData() {
 void LazyGroupBy::commitRow(
     IdTable& resultTable,
     sparqlExpression::EvaluationContext& evaluationContext,
-    const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
-    const GroupBy& groupBy) {
+    const GroupBy::GroupBlock& currentGroupBlock, const GroupBy& groupBy) {
   resultTable.emplace_back();
   size_t colIdx = 0;
   for (const auto& [_, value] : currentGroupBlock) {

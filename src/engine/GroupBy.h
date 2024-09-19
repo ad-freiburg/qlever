@@ -26,6 +26,10 @@
 static constexpr size_t GROUP_BY_HASH_MAP_BLOCK_SIZE = 262144;
 
 class GroupBy : public Operation {
+ public:
+  using GroupBlock = std::vector<std::pair<size_t, Id>>;
+
+ private:
   using string = std::string;
   template <typename T>
   using vector = std::vector<T>;
@@ -108,8 +112,7 @@ class GroupBy : public Operation {
   template <int COLS>
   size_t searchBlockBoundaries(
       const std::invocable<size_t, size_t> auto& onBlockChange,
-      const IdTableView<COLS>& idTable,
-      std::vector<std::pair<size_t, Id>>& currentGroupBlock) const;
+      const IdTableView<COLS>& idTable, GroupBlock& currentGroupBlock) const;
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>

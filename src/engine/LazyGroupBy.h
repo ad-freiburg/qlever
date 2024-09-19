@@ -30,7 +30,7 @@ class LazyGroupBy {
   // into the `resultTable` and reset the aggregation data for the next group.
   void commitRow(IdTable& resultTable,
                  sparqlExpression::EvaluationContext& evaluationContext,
-                 const std::vector<std::pair<size_t, Id>>& currentGroupBlock,
+                 const GroupBy::GroupBlock& currentGroupBlock,
                  const GroupBy& groupBy);
 
   // Process the next potentially partial group as a block of rows. This

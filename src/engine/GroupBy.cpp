@@ -253,7 +253,7 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
 
   // This stores the values of the group by numColumns for the current block. A
   // block ends when one of these values changes.
-  std::vector<std::pair<size_t, Id>> currentGroupBlock;
+  GroupBlock currentGroupBlock;
   for (size_t col : groupByCols) {
     currentGroupBlock.push_back(std::pair<size_t, Id>(col, input(0, col)));
   }
@@ -415,8 +415,7 @@ ProtoResult GroupBy::computeResult(bool requestLaziness) {
 template <int COLS>
 size_t GroupBy::searchBlockBoundaries(
     const std::invocable<size_t, size_t> auto& onBlockChange,
-    const IdTableView<COLS>& idTable,
-    std::vector<std::pair<size_t, Id>>& currentGroupBlock) const {
+    const IdTableView<COLS>& idTable, GroupBlock& currentGroupBlock) const {
   size_t blockStart = 0;
 
   for (size_t pos = 0; pos < idTable.size(); pos++) {
@@ -493,7 +492,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 
   bool groupSplitAcrossTables = false;
 
-  std::vector<std::pair<size_t, Id>> currentGroupBlock;
+  GroupBlock currentGroupBlock;
 
   for (IdTable& idTable : subresult->idTables()) {
     if (idTable.empty()) {

@@ -65,7 +65,7 @@ class LazyGroupByTest : public ::testing::Test {
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
   IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
-  std::vector<std::pair<size_t, Id>> block{{0, I(7)}};
+  GroupBy::GroupBlock block{{0, I(7)}};
   IdTable idTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   auto evaluationContext = makeEvaluationContext(idTable);
 
@@ -82,7 +82,7 @@ TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
-  std::vector<std::pair<size_t, Id>> block{{0, I(7)}};
+  GroupBy::GroupBlock block{{0, I(7)}};
   IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
   auto evaluationContext = makeEvaluationContext(idTable);
 
@@ -104,7 +104,7 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
 // _____________________________________________________________________________
 TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
   IdTable resultTable{2, ad_utility::makeUnlimitedAllocator<Id>()};
-  std::vector<std::pair<size_t, Id>> block{{0, I(3)}};
+  GroupBy::GroupBlock block{{0, I(3)}};
   {
     IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
     auto evaluationContext = makeEvaluationContext(idTable);
