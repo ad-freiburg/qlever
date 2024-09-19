@@ -60,7 +60,7 @@ void LazyGroupBy::commitRow(
 }
 
 // _____________________________________________________________________________
-void LazyGroupBy::processNextBlock(
+void LazyGroupBy::processBlock(
     sparqlExpression::EvaluationContext& evaluationContext, size_t beginIndex,
     size_t endIndex) {
   size_t blockSize = endIndex - beginIndex;

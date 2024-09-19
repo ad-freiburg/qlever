@@ -36,8 +36,8 @@ class LazyGroupBy {
   // Process the next potentially partial group as a block of rows. This
   // modifies the state of `aggregateData_`. Call `commitRow` to write the final
   // result.
-  void processNextBlock(sparqlExpression::EvaluationContext& evaluationContext,
-                        size_t beginIndex, size_t endIndex);
+  void processBlock(sparqlExpression::EvaluationContext& evaluationContext,
+                    size_t beginIndex, size_t endIndex);
 
  private:
   // Reset the stored aggregation data. This is cheaper than recreating the

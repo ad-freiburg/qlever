@@ -69,7 +69,7 @@ TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
   IdTable idTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)};
   auto evaluationContext = makeEvaluationContext(idTable);
 
-  lazyGroupBy_.processNextBlock(evaluationContext, 0, 0);
+  lazyGroupBy_.processBlock(evaluationContext, 0, 0);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}}, I));
@@ -86,15 +86,15 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
   auto evaluationContext = makeEvaluationContext(idTable);
 
-  lazyGroupBy_.processNextBlock(evaluationContext, 1, 3);
+  lazyGroupBy_.processBlock(evaluationContext, 1, 3);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
   EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 8}}, I));
 
-  lazyGroupBy_.processNextBlock(evaluationContext, 0, 1);
-  lazyGroupBy_.processNextBlock(evaluationContext, 1, 3);
-  lazyGroupBy_.processNextBlock(evaluationContext, 3, 4);
-  lazyGroupBy_.processNextBlock(evaluationContext, 4, 4);
+  lazyGroupBy_.processBlock(evaluationContext, 0, 1);
+  lazyGroupBy_.processBlock(evaluationContext, 1, 3);
+  lazyGroupBy_.processBlock(evaluationContext, 3, 4);
+  lazyGroupBy_.processBlock(evaluationContext, 4, 4);
   block.at(0).second = I(9);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
@@ -109,7 +109,7 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
     IdTable idTable = makeIdTableFromVector({{2}, {3}, {5}, {7}}, I);
     auto evaluationContext = makeEvaluationContext(idTable);
 
-    lazyGroupBy_.processNextBlock(evaluationContext, 1, 3);
+    lazyGroupBy_.processBlock(evaluationContext, 1, 3);
   }
   IdTable idTable = makeIdTableFromVector({}, I);
   auto evaluationContext = makeEvaluationContext(idTable);

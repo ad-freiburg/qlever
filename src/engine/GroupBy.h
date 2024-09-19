@@ -97,9 +97,14 @@ class GroupBy : public Operation {
   // Find the boundaries of blocks in a sorted `IdTable`. If these represent a
   // whole group they can be aggregated into ids afterwards. This can happen by
   // passing a proper callback as `onBlockChange`, or by using the returned
-  // `size_t` which represents the start of the last block. The argument
-  // `currentGroupBlock` is used to store the values of the group by columns for
-  // the current group.
+  // `size_t` which represents the start of the last block. When
+  // `onBlockChanged` is invoked, it will be called with two indices
+  // representing the interval [start, stop) of the passed `idTable`. Because
+  // some group might be bigger than the `idTable` the end of it is not treated
+  // as a boundary and thus `onBlockChange` will not be invoked. Instead this
+  // function returns the starting index of the last block of this `idTable`.
+  // The argument `currentGroupBlock` is used to store the values of the group
+  // by columns for the current group.
   template <int COLS>
   size_t searchBlockBoundaries(
       const std::invocable<size_t, size_t> auto& onBlockChange,
@@ -108,15 +113,15 @@ class GroupBy : public Operation {
 
   // Helper function to process a sorted group within a single id table.
   template <size_t OUT_WIDTH>
-  void processNextBlock(IdTableStatic<OUT_WIDTH>& output,
-                        const std::vector<Aggregate>& aggregates,
-                        sparqlExpression::EvaluationContext& evaluationContext,
-                        size_t blockStart, size_t blockEnd,
-                        LocalVocab* localVocab,
-                        const vector<size_t>& groupByCols) const;
+  void processBlock(IdTableStatic<OUT_WIDTH>& output,
+                    const std::vector<Aggregate>& aggregates,
+                    sparqlExpression::EvaluationContext& evaluationContext,
+                    size_t blockStart, size_t blockEnd, LocalVocab* localVocab,
+                    const vector<size_t>& groupByCols) const;
 
-  // Handle queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with
-  // implicit GROUP BY where we have to return a single line as a result.
+  // Handle queries like `SELECT (COUNT(?x) AS ?c) WHERE {...}` with conditions
+  // that result in an empty result set with implicit GROUP BY where we have to
+  // return a single line as a result.
   template <size_t OUT_WIDTH>
   void processEmptyImplicitGroup(IdTable& resultTable,
                                  const std::vector<Aggregate>& aggregates,

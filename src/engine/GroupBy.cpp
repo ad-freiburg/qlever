@@ -241,9 +241,8 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
       createEvaluationContext(*outLocalVocab, inTable);
 
   auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
-    this->processNextBlock<OUT_WIDTH>(result, aggregates, evaluationContext,
-                                      blockStart, blockEnd, outLocalVocab,
-                                      groupByCols);
+    processBlock<OUT_WIDTH>(result, aggregates, evaluationContext, blockStart,
+                            blockEnd, outLocalVocab, groupByCols);
   };
 
   // Handle the implicit GROUP BY, where the entire input is a single group.
@@ -440,7 +439,7 @@ size_t GroupBy::searchBlockBoundaries(
 
 // _____________________________________________________________________________
 template <size_t OUT_WIDTH>
-void GroupBy::processNextBlock(
+void GroupBy::processBlock(
     IdTableStatic<OUT_WIDTH>& output, const std::vector<Aggregate>& aggregates,
     sparqlExpression::EvaluationContext& evaluationContext, size_t blockStart,
     size_t blockEnd, LocalVocab* localVocab,
@@ -515,8 +514,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     size_t lastBlockStart = searchBlockBoundaries(
         [&](size_t blockStart, size_t blockEnd) {
           if (groupSplitAcrossTables) {
-            lazyGroupBy.processNextBlock(evaluationContext, blockStart,
-                                         blockEnd);
+            lazyGroupBy.processBlock(evaluationContext, blockStart, blockEnd);
             lazyGroupBy.commitRow(resultTable, evaluationContext,
                                   currentGroupBlock, *this);
             groupSplitAcrossTables = false;
@@ -524,16 +522,15 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
             // This processes the whole block in batches if possible
             IdTableStatic<OUT_WIDTH> table =
                 std::move(resultTable).toStatic<OUT_WIDTH>();
-            processNextBlock<OUT_WIDTH>(table, aggregates, evaluationContext,
-                                        blockStart, blockEnd, localVocab.get(),
-                                        groupByCols);
+            processBlock<OUT_WIDTH>(table, aggregates, evaluationContext,
+                                    blockStart, blockEnd, localVocab.get(),
+                                    groupByCols);
             resultTable = std::move(table).toDynamic();
           }
         },
         idTable.asStaticView<IN_WIDTH>(), currentGroupBlock);
     groupSplitAcrossTables = true;
-    lazyGroupBy.processNextBlock(evaluationContext, lastBlockStart,
-                                 idTable.size());
+    lazyGroupBy.processBlock(evaluationContext, lastBlockStart, idTable.size());
     if (!singleIdTable && !resultTable.empty()) {
       co_yield resultTable;
       resultTable.clear();
@@ -553,7 +550,10 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
     co_return;
   }
 
-  // Process remaining items in the last group.
+  // Process remaining items in the last group.  For those we have already
+  // called `lazyGroupBy.processBlock()` but the call to `commitRow` is still
+  // missing. We have to setup a dummy input table and evaluation context, that
+  // have the values of the `currentGroupBlock` in the correct columns.
   IdTable idTable{inWidth, ad_utility::makeAllocatorWithLimit<Id>(
                                1_B * sizeof(Id) * inWidth)};
   idTable.emplace_back();
@@ -1174,10 +1174,8 @@ GroupBy::substituteAllAggregates(
 
     AD_CONTRACT_CHECK(aggregate.parentAndIndex_.has_value());
     auto parentAndIndex = aggregate.parentAndIndex_.value();
-    originalChildren.push_back(std::move(
-        parentAndIndex.parent_->children()[parentAndIndex.nThChild_]));
-    parentAndIndex.parent_->replaceChild(parentAndIndex.nThChild_,
-                                         std::move(newExpression));
+    originalChildren.push_back(parentAndIndex.parent_->replaceChild(
+        parentAndIndex.nThChild_, std::move(newExpression)));
   }
   return originalChildren;
 }
@@ -1354,6 +1352,7 @@ void GroupBy::evaluateAlias(
 
     // Restore original children. Only necessary when the expression will be
     // used in the future (not the case for the hash map optimization).
+    // TODO<C++23> Use `std::views::zip(info, originalChildren)`.
     for (size_t i = 0; i < info.size(); ++i) {
       auto& aggregate = info.at(i);
       auto parentAndIndex = aggregate.parentAndIndex_.value();
