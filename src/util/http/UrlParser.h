@@ -35,10 +35,10 @@ struct ParsedRequest {
   std::optional<std::string> query_;
 };
 
-// Parse the URL path, URL query parameters of a HTTP Request target.
+// Parse the URL path and the URL query parameters of a HTTP Request target.
 ParsedUrl parseRequestTarget(std::string_view target);
 
-// Converts the HTTP Query parameters `params` to a hashmap. Throws an error
+// Convert the HTTP Query parameters `params` to a hashmap. Throw an error
 // if a key is included twice.
 ad_utility::HashMap<std::string, std::string> paramsToMap(
     boost::urls::params_view params);
