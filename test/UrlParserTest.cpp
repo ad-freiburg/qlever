@@ -22,7 +22,10 @@ TEST(UrlParserTest, paramsToMap) {
     return testing::ContainerEq(hashMap);
   };
 
-  EXPECT_THROW(parseParams("?foo=a&foo=b"), std::runtime_error);
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseParams("?foo=a&foo=b"),
+      testing::StrEq(
+          "HTTP parameter \"foo\" is set twice. It is \"a\" and \"b\""));
   // Parameter with key "" is set twice.
   EXPECT_THROW(parseParams("?&"), std::runtime_error);
 
@@ -34,7 +37,6 @@ TEST(UrlParserTest, paramsToMap) {
   EXPECT_THAT(parseParams("?"), HashMapEq({{"", ""}}));
   EXPECT_THAT(parseParams("/ping?a=b&c=d"),
               HashMapEq({{"a", "b"}, {"c", "d"}}));
-  EXPECT_THAT(parseParams("?foo=a"), HashMapEq({{"foo", "a"}}));
   EXPECT_THAT(parseParams("?foo=a"), HashMapEq({{"foo", "a"}}));
   EXPECT_THAT(parseParams("?a=b&c=d&e=f"),
               HashMapEq({{"a", "b"}, {"c", "d"}, {"e", "f"}}));
@@ -50,8 +52,8 @@ TEST(UrlParserTest, parseRequestTarget) {
                         const HashMap<std::string, std::string>& parameters)
       -> testing::Matcher<const UrlParser::ParsedUrl&> {
     return testing::AllOf(
-        AD_FIELD(UrlParser::ParsedUrl, ParsedUrl::path_, testing::Eq(path)),
-        AD_FIELD(UrlParser::ParsedUrl, ParsedUrl::parameters_,
+        AD_FIELD(UrlParser::ParsedUrl, path_, testing::Eq(path)),
+        AD_FIELD(UrlParser::ParsedUrl, parameters_,
                  testing::ContainerEq(parameters)));
   };
 

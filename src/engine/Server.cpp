@@ -172,13 +172,17 @@ ad_utility::UrlParser::ParsedRequest Server::parseHttpRequest(
   ad_utility::UrlParser::ParsedRequest parsedRequest{
       std::move(parsedUrl.path_), std::move(parsedUrl.parameters_),
       std::nullopt};
-
-  if (request.method() == http::verb::get) {
-    // Requests for QLever's custom commands (e.g. retrieving index statistics)
-    // don't have a query.
+  auto extractQueryFromParameters = [&parsedRequest]() {
+    // Some valid requests (e.g. QLever's custom commands like retrieving index
+    // statistics) don't have a query.
     if (parsedRequest.parameters_.contains("query")) {
       parsedRequest.query_ = parsedRequest.parameters_["query"];
+      parsedRequest.parameters_.erase("query");
     }
+  };
+
+  if (request.method() == http::verb::get) {
+    extractQueryFromParameters();
     return parsedRequest;
   }
   if (request.method() == http::verb::post) {
@@ -219,11 +223,7 @@ ad_utility::UrlParser::ParsedRequest Server::parseHttpRequest(
       parsedRequest.parameters_ = ad_utility::UrlParser::paramsToMap(
           boost::urls::parse_query(request.body()).value());
 
-      // Requests for QLever's custom commands (e.g. retrieving index
-      // statistics) don't have a query.
-      if (parsedRequest.parameters_.contains("query")) {
-        parsedRequest.query_ = parsedRequest.parameters_["query"];
-      }
+      extractQueryFromParameters();
 
       return parsedRequest;
     }

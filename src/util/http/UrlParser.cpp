@@ -28,7 +28,7 @@ ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
     if (!wasInserted) {
       throw std::runtime_error(
           absl::StrCat("HTTP parameter \"", key, "\" is set twice. It is \"",
-                       value, "\" and \"", blockingElement->second, "\""));
+                       blockingElement->second, "\" and \"", value, "\""));
     }
   }
   return result;

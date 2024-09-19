@@ -29,8 +29,7 @@ class UrlParser {
 
   // Representation of parsed HTTP request.
   // - `path_` is the URL path
-  // - `parameters_` is a hashmap of the parameters. These can originate from
-  // the HTTP Query parameters or the request body
+  // - `parameters_` is a hashmap of the parameters
   // - `query_` contains the Query
   struct ParsedRequest {
     std::string path_;
