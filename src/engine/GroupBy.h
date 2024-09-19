@@ -34,7 +34,6 @@ class GroupBy : public Operation {
   template <typename T>
   using vector = std::vector<T>;
 
- private:
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
   std::vector<Alias> _aliases;
@@ -435,7 +434,6 @@ class GroupBy : public Operation {
       std::vector<HashMapAliasInformation>& aggregateAliases,
       LocalVocab* localVocab);
 
- public:
   // Reusable implementation of `checkIfHashMapOptimizationPossible`.
   std::optional<HashMapOptimizationData> computeUnsequentialProcessingMetadata(
       std::vector<Aggregate>& aggregates);

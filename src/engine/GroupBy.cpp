@@ -240,7 +240,9 @@ IdTable GroupBy::doGroupBy(const IdTable& inTable,
   sparqlExpression::EvaluationContext evaluationContext =
       createEvaluationContext(*outLocalVocab, inTable);
 
-  auto processNextBlock = [&](size_t blockStart, size_t blockEnd) {
+  auto processNextBlock = [this, &result, &aggregates, &evaluationContext,
+                           &outLocalVocab,
+                           &groupByCols](size_t blockStart, size_t blockEnd) {
     processBlock<OUT_WIDTH>(result, aggregates, evaluationContext, blockStart,
                             blockEnd, outLocalVocab, groupByCols);
   };
@@ -511,7 +513,9 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
         createEvaluationContext(*localVocab, idTable);
 
     size_t lastBlockStart = searchBlockBoundaries(
-        [&](size_t blockStart, size_t blockEnd) {
+        [this, &groupSplitAcrossTables, &lazyGroupBy, &evaluationContext,
+         &resultTable, &currentGroupBlock, &aggregates, &localVocab,
+         &groupByCols](size_t blockStart, size_t blockEnd) {
           if (groupSplitAcrossTables) {
             lazyGroupBy.processBlock(evaluationContext, blockStart, blockEnd);
             lazyGroupBy.commitRow(resultTable, evaluationContext,
