@@ -14,33 +14,25 @@ LazyGroupBy::LazyGroupBy(
     : localVocab_{localVocab},
       aggregateAliases_{std::move(aggregateAliases)},
       aggregationData_{allocator, aggregateAliases_, numGroupColumns} {
-  for (const auto& alias : aggregateAliases_) {
-    for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      std::visit(
-          [&aggregateInfo]<VectorOfAggregationData T>(T& arg) {
-            if constexpr (std::same_as<typename T::value_type,
-                                       GroupConcatAggregationData>) {
-              arg.resize(1,
-                         GroupConcatAggregationData{
-                             aggregateInfo.aggregateType_.separator_.value()});
-            } else {
-              arg.resize(1);
-            }
-          },
-          aggregationData_.getAggregationDataVariant(
-              aggregateInfo.aggregateDataIndex_));
-    }
+  for (const auto& aggregateInfo : allAggregateInfoView()) {
+    visitAggregate(
+        [&aggregateInfo]<VectorOfAggregationData T>(T& arg) {
+          if constexpr (std::same_as<typename T::value_type,
+                                     GroupConcatAggregationData>) {
+            arg.emplace_back(aggregateInfo.aggregateType_.separator_.value());
+          } else {
+            arg.emplace_back();
+          }
+        },
+        aggregateInfo);
   }
 }
 
 // _____________________________________________________________________________
 void LazyGroupBy::resetAggregationData() {
-  for (const auto& alias : aggregateAliases_) {
-    for (const auto& aggregateInfo : alias.aggregateInfo_) {
-      std::visit([]<VectorOfAggregationData T>(T& arg) { arg.at(0).reset(); },
-                 aggregationData_.getAggregationDataVariant(
-                     aggregateInfo.aggregateDataIndex_));
-    }
+  for (const auto& aggregateInfo : allAggregateInfoView()) {
+    visitAggregate([]<VectorOfAggregationData T>(T& arg) { arg.at(0).reset(); },
+                   aggregateInfo);
   }
 }
 
@@ -75,28 +67,35 @@ void LazyGroupBy::processNextBlock(
   evaluationContext._beginIndex = beginIndex;
   evaluationContext._endIndex = endIndex;
 
-  for (auto& aggregateAlias : aggregateAliases_) {
-    for (auto& aggregate : aggregateAlias.aggregateInfo_) {
-      // Evaluate child expression on block
-      auto exprChildren = aggregate.expr_->children();
-      AD_CORRECTNESS_CHECK(exprChildren.size() == 1);
-      sparqlExpression::ExpressionResult expressionResult =
-          exprChildren[0]->evaluate(&evaluationContext);
+  for (const auto& aggregateInfo : allAggregateInfoView()) {
+    // Evaluate child expression on block
+    auto exprChildren = aggregateInfo.expr_->children();
+    AD_CORRECTNESS_CHECK(exprChildren.size() == 1);
+    sparqlExpression::ExpressionResult expressionResult =
+        exprChildren[0]->evaluate(&evaluationContext);
 
-      std::visit(
-          [blockSize,
-           &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
-              T&& singleResult, VectorOfAggregationData auto& aggregateData) {
-            auto generator = sparqlExpression::detail::makeGenerator(
-                std::forward<T>(singleResult), blockSize, &evaluationContext);
+    visitAggregate(
+        [blockSize,
+         &evaluationContext]<sparqlExpression::SingleExpressionResult T>(
+            VectorOfAggregationData auto& aggregateData, T&& singleResult) {
+          auto generator = sparqlExpression::detail::makeGenerator(
+              std::forward<T>(singleResult), blockSize, &evaluationContext);
 
-            for (const auto& val : generator) {
-              aggregateData.at(0).addValue(val, &evaluationContext);
-            }
-          },
-          std::move(expressionResult),
-          aggregationData_.getAggregationDataVariant(
-              aggregate.aggregateDataIndex_));
-    }
+          for (const auto& val : generator) {
+            aggregateData.at(0).addValue(val, &evaluationContext);
+          }
+        },
+        aggregateInfo, std::move(expressionResult));
   }
+}
+
+// _____________________________________________________________________________
+void LazyGroupBy::visitAggregate(
+    const auto& visitor,
+    const GroupBy::HashMapAggregateInformation& aggregateInfo,
+    auto&&... additionalVariants) {
+  std::visit(visitor,
+             aggregationData_.getAggregationDataVariant(
+                 aggregateInfo.aggregateDataIndex_),
+             AD_FWD(additionalVariants)...);
 }

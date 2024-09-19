@@ -44,5 +44,17 @@ class LazyGroupBy {
   // objects every time.
   void resetAggregationData();
 
+  // Helper function to visit the correct variant of the aggregation data.
+  void visitAggregate(const auto& visitor,
+                      const GroupBy::HashMapAggregateInformation& aggregateInfo,
+                      auto&&... additionalVariants);
+
+  auto allAggregateInfoView() const {
+    return aggregateAliases_ |
+           std::views::transform(
+               &GroupBy::HashMapAliasInformation::aggregateInfo_) |
+           std::views::join;
+  }
+
   FRIEND_TEST(LazyGroupBy, verifyGroupConcatIsCorrectlyInitialized);
 };
