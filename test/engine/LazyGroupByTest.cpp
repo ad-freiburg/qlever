@@ -11,6 +11,7 @@
 #include "engine/LazyGroupBy.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
+#include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SparqlExpressionPimpl.h"
 
 namespace {
@@ -27,19 +28,22 @@ class LazyGroupByTest : public ::testing::Test {
   // Initialize dummy instance of GroupBy to be used for testing. The actual
   // operations will never get executed because we manually test `LazyGroupBy`
   // here.
-  Variable variable_{"?someVariable"};
+  Variable xVar_{"?x"};
+  Variable yVar_{"?y"};
   sparqlExpression::SparqlExpressionPimpl sparqlExpression_{
-      std::make_unique<sparqlExpression::SumExpression>(
-          false,
-          std::make_unique<sparqlExpression::VariableExpression>(variable_)),
-      "SUM(?someVariable)"};
+      makeAddExpression(
+          std::make_unique<sparqlExpression::VariableExpression>(yVar_),
+          std::make_unique<sparqlExpression::SumExpression>(
+              false,
+              std::make_unique<sparqlExpression::VariableExpression>(xVar_))),
+      "?y + SUM(?x)"};
   std::shared_ptr<QueryExecutionTree> subtree_ =
       std::make_shared<QueryExecutionTree>(
           qec_,
           std::make_shared<ValuesForTesting>(
-              qec_, IdTable{1, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
-              std::vector{std::optional{variable_}}));
-  GroupBy groupBy_{qec_, {variable_}, {}, subtree_};
+              qec_, IdTable{2, ad_utility::makeAllocatorWithLimit<Id>(0_B)},
+              std::vector{std::optional{xVar_}, std::optional{yVar_}}));
+  GroupBy groupBy_{qec_, {yVar_}, {}, subtree_};
 
   std::vector<GroupBy::Aggregate> aggregates_{
       {std::move(sparqlExpression_), 1}};
@@ -61,8 +65,7 @@ class LazyGroupByTest : public ::testing::Test {
         std::make_shared<ad_utility::CancellationHandle<>>(),
         std::chrono::steady_clock::time_point::max()};
 
-    evaluationContext._groupedVariables =
-        ad_utility::HashSet<Variable>{variable_};
+    evaluationContext._groupedVariables = ad_utility::HashSet<Variable>{yVar_};
     evaluationContext._previousResultsFromSameGroup.resize(2);
     evaluationContext._isPartOfGroupBy = true;
     return evaluationContext;
@@ -79,12 +82,14 @@ TEST_F(LazyGroupByTest, verifyEmptyGroupsAreAggregatedCorrectly) {
   lazyGroupBy_.processBlock(evaluationContext, 0, 0);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}}, I));
+  // The grouped variable has the value 7 here + 0 is still 7.
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 7}}, I));
 
   block.at(0).second = I(9);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 0}, {9, 0}}, I));
+  // The grouped variable has the value 9 here + 0 is still 9.
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 7}, {9, 9}}, I));
 }
 
 // _____________________________________________________________________________
@@ -98,18 +103,18 @@ TEST_F(LazyGroupByTest, verifyGroupsAreAggregatedCorrectly) {
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
   // The `7` is the current group, and the aggregate computes the SUM between
-  // the elements at index 1 and 2, which is  3 + 5 = 8.
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 8}}, I));
+  // the elements at index 1 and 2, which is  7 + 3 + 5 = 15.
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 15}}, I));
 
   // the new group starts with a value of 0
   lazyGroupBy_.processBlock(evaluationContext, 0, 1);  // add 2 -> 2
   lazyGroupBy_.processBlock(evaluationContext, 1, 3);  // add 3 + 5 = 8 -> 10
   lazyGroupBy_.processBlock(evaluationContext, 3, 4);  // add 7 -> 17
   lazyGroupBy_.processBlock(evaluationContext, 4, 4);  // add 0 (empty) -> 17
-  block.at(0).second = I(9);
+  block.at(0).second = I(9);                           // add 9 -> 26
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 8}, {9, 17}}, I));
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{7, 15}, {9, 26}}, I));
 }
 
 // _____________________________________________________________________________
@@ -126,7 +131,8 @@ TEST_F(LazyGroupByTest, verifyCommitWorksWhenOriginalIdTableIsGone) {
   auto evaluationContext = makeEvaluationContext(idTable);
   lazyGroupBy_.commitRow(resultTable, evaluationContext, block, groupBy_);
 
-  EXPECT_EQ(resultTable, makeIdTableFromVector({{3, 8}}, I));
+  // 3 + 3 + 5 = 11
+  EXPECT_EQ(resultTable, makeIdTableFromVector({{3, 11}}, I));
 }
 
 // _____________________________________________________________________________
