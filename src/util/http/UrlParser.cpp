@@ -8,29 +8,27 @@
 using namespace ad_utility;
 
 // _____________________________________________________________________________
-UrlParser::ParsedHTTPRequest UrlParser::parseRequestTarget(
-    std::string_view target) {
-  UrlParser::ParsedHTTPRequest parsed;
-  auto result = boost::urls::parse_origin_form(target);
-  if (result.has_error()) {
-    AD_THROW(absl::StrCat("Failed to parse URL: \"", target, "\"."));
+UrlParser::ParsedUrl UrlParser::parseRequestTarget(std::string_view target) {
+  auto urlResult = boost::urls::parse_origin_form(target);
+  if (urlResult.has_error()) {
+    throw std::runtime_error(
+        absl::StrCat("Failed to parse URL: \"", target, "\"."));
   }
-  boost::url url = result.value();
+  boost::url url = urlResult.value();
 
-  parsed.path_ = url.path();
-  parsed.parameters_ = paramsToMap(url.params());
-
-  return parsed;
+  return {url.path(), paramsToMap(url.params())};
 }
 
 // _____________________________________________________________________________
 ad_utility::HashMap<std::string, std::string> UrlParser::paramsToMap(
     boost::urls::params_view params) {
   ad_utility::HashMap<std::string, std::string> result;
-  for (auto param : params) {
-    auto [iterator, isNewElement] = result.insert({param.key, param.value});
-    if (!isNewElement) {
-      AD_THROW("Duplicate HTTP parameter: " + iterator->first);
+  for (const auto& [key, value, _] : params) {
+    auto [blockingElement, wasInserted] = result.insert({key, value});
+    if (!wasInserted) {
+      throw std::runtime_error(
+          absl::StrCat("HTTP parameter \"", key, "\" is set twice. It is \"",
+                       value, "\" and \"", blockingElement->second, "\""));
     }
   }
   return result;

@@ -106,7 +106,7 @@ class Server {
 
   /// Parse the path and URL parameters from the given request. Supports both
   /// GET and POST request according to the SPARQL 1.1 standard.
-  ad_utility::UrlParser::ParsedHTTPRequest parseHttpRequest(
+  ad_utility::UrlParser::ParsedRequest parseHttpRequest(
       const ad_utility::httpUtils::HttpRequest auto& request) const;
 
   /// Handle a single HTTP request. Check whether a file request or a query was

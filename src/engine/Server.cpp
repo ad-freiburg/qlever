@@ -164,31 +164,34 @@ void Server::run(const string& indexBaseName, bool useText, bool usePatterns,
 }
 
 // _____________________________________________________________________________
-ad_utility::UrlParser::ParsedHTTPRequest Server::parseHttpRequest(
+ad_utility::UrlParser::ParsedRequest Server::parseHttpRequest(
     const ad_utility::httpUtils::HttpRequest auto& request) const {
   // For an HTTP request, `request.target()` yields the HTTP Request-URI.
   // This is a concatenation of the URL path and the query strings.
-  ad_utility::UrlParser::ParsedHTTPRequest parsedUrl =
-      ad_utility::UrlParser::parseRequestTarget(request.target());
+  auto parsedUrl = ad_utility::UrlParser::parseRequestTarget(request.target());
+  ad_utility::UrlParser::ParsedRequest parsedRequest{
+      std::move(parsedUrl.path_), std::move(parsedUrl.parameters_),
+      std::nullopt};
 
   if (request.method() == http::verb::get) {
-    // There can be valid GET requests without a query. E.g. the command to get
-    // index statistics.
-    if (parsedUrl.parameters_.contains("query")) {
-      parsedUrl.query_ = parsedUrl.parameters_["query"];
+    // Requests for QLever's custom commands (e.g. retrieving index statistics)
+    // don't have a query.
+    if (parsedRequest.parameters_.contains("query")) {
+      parsedRequest.query_ = parsedRequest.parameters_["query"];
     }
-    return parsedUrl;
+    return parsedRequest;
   }
   if (request.method() == http::verb::post) {
     // For a POST request, the content type *must* be either
     // "application/x-www-form-urlencoded" (1) or "application/sparql-query"
     // (2).
     //
-    // (1) Section 2.1.2: The body of the POST request contains a URL-encoded
-    // query (just like in the part of a GET request after the "?").
+    // (1) Section 2.1.2: The body of the POST request contains *all* parameters
+    // (including the query) in an encoded form (just like in the part of a GET
+    // request after the "?").
     //
     // (2) Section 2.1.3: The body of the POST request contains *only* the
-    // SPARQL query, but not URL-encoded, and no other URL parameters.
+    // unencoded SPARQL query. There may be additional HTTP query parameters.
     //
     // Reference: https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321
     std::string_view contentType = request.base()[http::field::content_type];
@@ -204,28 +207,29 @@ ad_utility::UrlParser::ParsedHTTPRequest Server::parseHttpRequest(
     // TODO<joka921> Implement more complete parsing that allows the checking of
     // these parameters.
     if (contentType.starts_with(contentTypeUrlEncoded)) {
-      // Query String Parameters must be empty for URL-encoded POST. See
-      // SPARQL 1.1 Protocol Sections 2.1 and 3.1
-      if (!parsedUrl.parameters_.empty()) {
+      // All parameters must be included in the request body for URL-encoded
+      // POST. The HTTP query string parameters must be empty. See SPARQL 1.1
+      // Protocol Sections 2.1.2
+      if (!parsedRequest.parameters_.empty()) {
         throw std::runtime_error(
             "URL-encoded POST requests must not contain query parameters in "
             "the URL.");
       }
       // Set the parameters from the request body.
-      parsedUrl.parameters_ = ad_utility::UrlParser::paramsToMap(
+      parsedRequest.parameters_ = ad_utility::UrlParser::paramsToMap(
           boost::urls::parse_query(request.body()).value());
 
-      if (parsedUrl.parameters_.contains("query")) {
-        parsedUrl.query_ = parsedUrl.parameters_["query"];
-      } else {
-        throw std::runtime_error("POST Request missing \"query\" parameter.");
+      // Requests for QLever's custom commands (e.g. retrieving index
+      // statistics) don't have a query.
+      if (parsedRequest.parameters_.contains("query")) {
+        parsedRequest.query_ = parsedRequest.parameters_["query"];
       }
 
-      return parsedUrl;
+      return parsedRequest;
     }
     if (contentType.starts_with(contentTypeSparqlQuery)) {
-      parsedUrl.query_ = request.body();
-      return parsedUrl;
+      parsedRequest.query_ = request.body();
+      return parsedRequest;
     }
     throw std::runtime_error(
         absl::StrCat("POST request with content type \"", contentType,
