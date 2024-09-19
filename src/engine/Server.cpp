@@ -297,6 +297,16 @@ Awaitable<void> Server::process(
   const auto parsedHttpRequest = parseHttpRequest(request);
   const auto& parameters = parsedHttpRequest.parameters_;
 
+  auto checkParameterNotPresent = [&parameters](
+                                      const std::string& parameterName) {
+    if (parameters.contains(parameterName)) {
+      throw NotSupportedException(absl::StrCat(
+          parameterName, " parameter is currently not supported by QLever."));
+    }
+  };
+  checkParameterNotPresent("default-graph-uri");
+  checkParameterNotPresent("named-graph-uri");
+
   auto checkParameter = [&parameters](std::string_view key,
                                       std::optional<std::string_view> value,
                                       bool accessAllowed = true) {

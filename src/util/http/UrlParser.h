@@ -17,6 +17,10 @@
  * /brief Some helpers to parse request URLs in QLever.
  */
 namespace ad_utility::url_parser {
+// TODO: There can be multiple values for a HTTP query parameter. Some SPARQL
+// features require setting a parameter multiple times. Change the interface
+// s.t. this is supported.
+
 // A parsed URL.
 // - `path_` is the URL path
 // - `parameters_` is a hashmap of the HTTP Query parameters

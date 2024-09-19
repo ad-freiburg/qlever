@@ -48,8 +48,6 @@ TEST(ServerTest, parseHttpRequest) {
   auto parse = [](const ad_utility::httpUtils::HttpRequest auto& request) {
     return Server::parseHttpRequest(request);
   };
-  // TODO `default-graph-uri` and `named-graph-uri` can appear multiple times.
-  // This currently throws an exception and is not considered.
   const std::string URLENCODED =
       "application/x-www-form-urlencoded;charset=UTF-8";
   const std::string QUERY = "application/sparql-query";
