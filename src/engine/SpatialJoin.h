@@ -71,14 +71,6 @@ class SpatialJoin : public Operation {
     return childRight_;
   }
 
-  void onlyForTestingSetAddDistToResult(bool addDistToResult) {
-    addDistToResult_ = addDistToResult;
-  }
-
-  void onlyForBenchmarkingSetUseBaselineAlgorithm(bool useBaselineAlgorithm) {
-    useBaselineAlgorithm_ = useBaselineAlgorithm;
-  }
-
   const string& getInternalDistanceName() const {
     return nameDistanceInternal_;
   }

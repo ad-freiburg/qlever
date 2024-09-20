@@ -36,17 +36,11 @@ void SpatialJoin::parseMaxDistance() {
   std::string errormessage =
       "parsing of the maximum distance for the "
       "SpatialJoin operation was not possible";
-  auto throwIfNotADigit = [&](const char a) {
-    if (!isdigit(a)) {
-      AD_THROW(errormessage);
-    }
-  };
 
   if (ctre::match<MAX_DIST_IN_METERS_REGEX>(input)) {
     std::string number = input.substr(
         MAX_DIST_IN_METERS.size(),
         input.size() - MAX_DIST_IN_METERS.size() - 1);  // -1: compensate for >
-    std::ranges::for_each(number, throwIfNotADigit);
     maxDist_ = std::stoll(number);
   } else {
     AD_THROW(errormessage);
