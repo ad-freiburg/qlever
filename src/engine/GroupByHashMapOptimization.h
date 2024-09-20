@@ -191,3 +191,34 @@ struct GroupConcatAggregationData {
 
   void reset() { currentValue_.clear(); }
 };
+
+// Data to perform SAMPLE aggregation using the HashMap optimization.
+struct SampleAggregationData {
+  std::optional<sparqlExpression::IdOrLiteralOrIri> value_ = std::nullopt;
+
+  // _____________________________________________________________________________
+  void addValue(const sparqlExpression::IdOrLiteralOrIri& value,
+                [[maybe_unused]] const sparqlExpression::EvaluationContext*) {
+    if (!value_.has_value()) {
+      value_.emplace(value);
+    }
+  }
+
+  // _____________________________________________________________________________
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
+    if (!value_.has_value()) {
+      return Id::makeUndefined();
+    }
+    auto valueIdResultGetter = [](ValueId id) { return id; };
+    auto stringResultGetter =
+        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+        };
+    return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
+                                                       stringResultGetter),
+                      value_.value());
+  }
+
+  void reset() { *this = SampleAggregationData{}; }
+};

@@ -22,6 +22,7 @@
 #include "index/Index.h"
 #include "index/IndexImpl.h"
 #include "parser/Alias.h"
+#include "sparqlExpressions/SampleExpression.h"
 #include "util/HashSet.h"
 #include "util/Timer.h"
 
@@ -1023,6 +1024,7 @@ GroupBy::isSupportedAggregate(sparqlExpression::SparqlExpression* expr) {
   if (auto val = dynamic_cast<GroupConcatExpression*>(expr)) {
     return H{GROUP_CONCAT, val->getSeparator()};
   }
+  if (dynamic_cast<SampleExpression*>(expr)) return H{SAMPLE};
 
   // `expr` is an unsupported aggregate
   return std::nullopt;
