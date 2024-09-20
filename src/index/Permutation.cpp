@@ -124,16 +124,16 @@ std::optional<CompressedRelationMetadata> Permutation::getMetadata(
 // _____________________________________________________________________
 std::optional<Permutation::MetadataAndBlocks> Permutation::getMetadataAndBlocks(
     const ScanSpecification& scanSpec) const {
-  MetadataAndBlocks result{
+  CompressedRelationReader::ScanSpecAndBlocks mb{
       scanSpec,
-      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData()),
-      std::nullopt};
+      CompressedRelationReader::getRelevantBlocks(scanSpec, meta_.blockData())};
 
-  result.firstAndLastTriple_ = reader().getFirstAndLastTriple(result);
-  if (!result.firstAndLastTriple_.has_value()) {
+  auto firstAndLastTriple = reader().getFirstAndLastTriple(mb);
+  if (!firstAndLastTriple.has_value()) {
     return std::nullopt;
   }
-  return result;
+  return MetadataAndBlocks{std::move(mb),
+                           std::move(firstAndLastTriple.value())};
 }
 
 // _____________________________________________________________________

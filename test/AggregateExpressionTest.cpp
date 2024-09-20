@@ -10,6 +10,7 @@
 #include "engine/ValuesForTesting.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
 #include "engine/sparqlExpressions/CountStarExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "gtest/gtest.h"
 
 using namespace sparqlExpression;
@@ -87,7 +88,7 @@ TEST(AggregateExpression, avg) {
   testAvgId({D(2), D(2), I(2)}, D(2), true);
   testAvgId({I(3), U}, U);
   testAvgId({I(3), NaN}, NaN);
-  testAvgId({}, D(0));
+  testAvgId({}, I(0));
 
   auto testAvgString = testAggregate<AvgExpression, IdOrLiteralOrIri, Id>;
   testAvgString({lit("alpha"), lit("äpfel"), lit("Beta"), lit("unfug")}, U);
@@ -145,7 +146,7 @@ TEST(AggregateExpression, max) {
   testMaxId({}, U);
 }
 
-// ______________________________________________________________________________
+// _____________________________________________________________________________
 TEST(AggregateExpression, CountStar) {
   auto t = TestContext{};
   // A matcher that first clears the cache and then checks that the result of
@@ -227,16 +228,76 @@ TEST(AggregateExpression, CountStar) {
   EXPECT_THAT(m, matcher(0));
 }
 
-// ______________________________________________________________________________
+// _____________________________________________________________________________
 TEST(AggregateExpression, CountStarSimpleMembers) {
   using namespace sparqlExpression;
+  using enum SparqlExpression::AggregateStatus;
   auto m = makeCountStarExpression(false);
   const auto& exp = *m;
   EXPECT_THAT(exp.getCacheKey({}), ::testing::HasSubstr("COUNT *"));
-  auto m2 = makeCountStarExpression(true);
-  EXPECT_NE(exp.getCacheKey({}), m2->getCacheKey({}));
-
-  EXPECT_THAT(m->children(), ::testing::IsEmpty());
+  EXPECT_THAT(exp.children(), ::testing::IsEmpty());
   EXPECT_THAT(m->getUnaggregatedVariables(), ::testing::IsEmpty());
-  EXPECT_TRUE(m->isAggregate());
+  EXPECT_EQ(exp.isAggregate(), NonDistinctAggregate);
+
+  auto m2 = makeCountStarExpression(true);
+  EXPECT_EQ(m2->isAggregate(), DistinctAggregate);
+  EXPECT_NE(exp.getCacheKey({}), m2->getCacheKey({}));
+}
+
+// _____________________________________________________________________________
+TEST(AggregateExpression, SampleExpression) {
+  using namespace sparqlExpression;
+  auto makeSample = [](ExpressionResult result) {
+    return std::make_unique<SampleExpression>(
+        false, std::make_unique<SingleUseExpression>(std::move(result)));
+  };
+
+  auto testSample = [&](ExpressionResult input, ExpressionResult expected) {
+    TestContext testContext;
+    std::visit(
+        [&testContext]<typename T>(const T& t) {
+          if constexpr (ad_utility::isInstantiation<T, VectorWithMemoryLimit>) {
+            testContext.context._endIndex = t.size();
+          }
+        },
+        input);
+    auto result = makeSample(std::move(input))->evaluate(&testContext.context);
+    EXPECT_EQ(result, expected);
+  };
+
+  testSample(I(3), I(3));
+  auto v = VectorWithMemoryLimit<Id>(makeAllocator());
+  v.push_back(I(34));
+  v.push_back(I(42));
+  testSample(v.clone(), I(34));
+  testSample(ad_utility::SetOfIntervals{}, BoolId(false));
+  testSample(ad_utility::SetOfIntervals{{{3, 17}}}, BoolId(true));
+  v.clear();
+  testSample(v.clone(), U);
+  // The first value of the ?ints variable inside the `TestContext` is `1`.
+  testSample(Variable{"?ints"}, I(1));
+}
+
+// _____________________________________________________________________________
+TEST(AggregateExpression, SampleExpressionSimpleMembers) {
+  using namespace sparqlExpression;
+  auto makeSample = [](Id result, bool distinct = false) {
+    return std::make_unique<SampleExpression>(
+        distinct, std::make_unique<IdExpression>(std::move(result)));
+  };
+
+  auto sample = makeSample(I(3478));
+  using enum SparqlExpression::AggregateStatus;
+  EXPECT_EQ(sample->isAggregate(), NonDistinctAggregate);
+  EXPECT_TRUE(sample->getUnaggregatedVariables().empty());
+  EXPECT_EQ(sample->children().size(), 1u);
+  using namespace ::testing;
+  EXPECT_THAT(sample->getCacheKey({}),
+              AllOf(HasSubstr("SAMPLE"), HasSubstr("#valueId")));
+
+  // DISTINCT makes no difference for sample, so the two SAMPLE s that only
+  // differ in their distinctness even may have the same cache key.
+  auto sample2 = makeSample(I(3478), true);
+  EXPECT_EQ(sample->getCacheKey({}), sample2->getCacheKey({}));
+  EXPECT_EQ(sample2->isAggregate(), NonDistinctAggregate);
 }

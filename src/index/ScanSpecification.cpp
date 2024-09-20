@@ -8,15 +8,13 @@
 #include "index/IndexImpl.h"
 
 // ____________________________________________________________________________
-std::optional<ScanSpecification>
-ScanSpecificationAsTripleComponent::toScanSpecification(
+ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     const Index& index) const {
   return toScanSpecification(index.getImpl());
 }
 
 // ____________________________________________________________________________
-std::optional<ScanSpecification>
-ScanSpecificationAsTripleComponent::toScanSpecification(
+ScanSpecification ScanSpecificationAsTripleComponent::toScanSpecification(
     const IndexImpl& index) const {
   LocalVocab localVocab;
   auto getId =
@@ -39,8 +37,8 @@ ScanSpecificationAsTripleComponent::toScanSpecification(
       graphsToFilter->insert(getId(graph).value());
     }
   }
-  return ScanSpecification{col0Id, col1Id, col2Id, std::move(localVocab),
-                           std::move(graphsToFilter)};
+  return {col0Id, col1Id, col2Id, std::move(localVocab),
+          std::move(graphsToFilter)};
 }
 
 // ____________________________________________________________________________
@@ -76,13 +74,18 @@ size_t ScanSpecificationAsTripleComponent::numColumns() const {
 
 // _____________________________________________________________________________
 void ScanSpecification::validate() const {
-  bool c0 = col0Id_.has_value();
-  bool c1 = col1Id_.has_value();
-  bool c2 = col2Id_.has_value();
-  if (!c0) {
-    AD_CORRECTNESS_CHECK(!c1 && !c2);
-  }
-  if (!c1) {
-    AD_CORRECTNESS_CHECK(!c2);
-  }
+  auto forEach = [this](auto f) {
+    f(col0Id_);
+    f(col1Id_);
+    f(col2Id_);
+  };
+
+  auto checkNulloptImpliesFollowingNullopt = [nulloptFound =
+                                                  false](const T& id) mutable {
+    if (nulloptFound) {
+      AD_CONTRACT_CHECK(!id.has_value());
+    }
+    nulloptFound = !id.has_value();
+  };
+  forEach(checkNulloptImpliesFollowingNullopt);
 }

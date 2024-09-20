@@ -16,7 +16,9 @@ class CountStarExpression : public SparqlExpression {
 
  public:
   // _________________________________________________________________________
-  explicit CountStarExpression(bool distinct) : distinct_{distinct} {}
+  explicit CountStarExpression(bool distinct) : distinct_{distinct} {
+    setIsInsideAggregate();
+  }
 
   // _________________________________________________________________________
   ExpressionResult evaluate(
@@ -68,13 +70,10 @@ class CountStarExpression : public SparqlExpression {
   }
 
   // COUNT * technically is an aggregate.
-  bool isAggregate() const override { return true; }
-
-  // No variables.
-  std::vector<Variable> getUnaggregatedVariables() override { return {}; }
-
-  // __________________________________________________________________
-  bool isDistinct() const override { return distinct_; }
+  AggregateStatus isAggregate() const override {
+    return distinct_ ? AggregateStatus::DistinctAggregate
+                     : AggregateStatus::NonDistinctAggregate;
+  }
 
   // __________________________________________________________________
   string getCacheKey(

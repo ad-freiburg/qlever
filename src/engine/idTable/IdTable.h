@@ -572,6 +572,7 @@ class IdTable {
     std::swap(data()[c1], data()[c2]);
   }
 
+  // Delete the column with the given column index.
   void deleteColumn(ColumnIndex colIdx) requires isDynamic {
     AD_CONTRACT_CHECK(colIdx < numColumns());
     data().erase(data().begin() + colIdx);

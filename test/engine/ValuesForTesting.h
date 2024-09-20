@@ -32,7 +32,8 @@ class ValuesForTesting : public Operation {
                             bool supportsLimit = false,
                             std::vector<ColumnIndex> sortedColumns = {},
                             LocalVocab localVocab = LocalVocab{},
-                            std::optional<float> multiplicity = std::nullopt)
+                            std::optional<float> multiplicity = std::nullopt,
+                            bool forceFullyMaterialized = false)
       : Operation{ctx},
         tables_{},
         variables_{std::move(variables)},
@@ -41,14 +42,16 @@ class ValuesForTesting : public Operation {
         costEstimate_{table.numRows()},
         resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{std::move(localVocab)},
-        multiplicity_{multiplicity} {
+        multiplicity_{multiplicity},
+        forceFullyMaterialized_{forceFullyMaterialized} {
     AD_CONTRACT_CHECK(variables_.size() == table.numColumns());
     tables_.push_back(std::move(table));
   }
   explicit ValuesForTesting(QueryExecutionContext* ctx,
                             std::vector<IdTable> tables,
                             std::vector<std::optional<Variable>> variables,
-                            bool unlikelyToFitInCache = false)
+                            bool unlikelyToFitInCache = false,
+                            std::vector<ColumnIndex> sortedColumns = {})
       : Operation{ctx},
         tables_{std::move(tables)},
         variables_{std::move(variables)},
@@ -56,7 +59,7 @@ class ValuesForTesting : public Operation {
         sizeEstimate_{0},
         costEstimate_{0},
         unlikelyToFitInCache_{unlikelyToFitInCache},
-        resultSortedColumns_{},
+        resultSortedColumns_{std::move(sortedColumns)},
         localVocab_{LocalVocab{}},
         multiplicity_{std::nullopt} {
     AD_CONTRACT_CHECK(
@@ -77,7 +80,7 @@ class ValuesForTesting : public Operation {
 
   // ___________________________________________________________________________
   ProtoResult computeResult(bool requestLaziness) override {
-    if (requestLaziness) {
+    if (requestLaziness && !forceFullyMaterialized_) {
       // Not implemented yet
       AD_CORRECTNESS_CHECK(!supportsLimit_);
       std::vector<IdTable> clones;
@@ -196,6 +199,7 @@ class ValuesForTesting : public Operation {
   std::vector<ColumnIndex> resultSortedColumns_;
   LocalVocab localVocab_;
   std::optional<float> multiplicity_;
+  bool forceFullyMaterialized_ = false;
 };
 
 // Similar to `ValuesForTesting` above, but `knownEmptyResult()` always returns

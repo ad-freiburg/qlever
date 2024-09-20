@@ -76,6 +76,7 @@ https://github.com/google/googletest/blob/main/docs/reference/matchers.md#matche
 
 // `EXPECT` that the `argument` is equal to `std::nullopt`.
 #define AD_EXPECT_NULLOPT(argument) EXPECT_EQ(argument, std::nullopt)
+
 // _____________________________________________________________________________
 // Add the given `source_location`  to all gtest failure messages that occur,
 // while the return value is still in scope. It is important to bind the return

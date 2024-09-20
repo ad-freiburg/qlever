@@ -163,10 +163,12 @@ class ValueId {
         return std::strong_ordering::equal;
       }
     };
-    if (type == VocabIndex) {
+    // GCC 11 issues a false positive warning here, so we try to avoid it by
+    // being over-explicit about the branches here.
+    if (type == VocabIndex && otherType == LocalVocabIndex) {
       return compareVocabAndLocalVocab(getVocabIndex(),
                                        other.getLocalVocabIndex());
-    } else if (otherType == VocabIndex) {
+    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
       auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
                                                     getLocalVocabIndex());
       return 0 <=> inverseOrder;

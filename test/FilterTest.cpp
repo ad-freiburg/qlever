@@ -69,6 +69,42 @@ TEST(Filter, verifyPredicateIsAppliedCorrectlyOnLazyEvaluation) {
 TEST(Filter, verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluation) {
   QueryExecutionContext* qec = ad_utility::testing::getQec();
   qec->getQueryTreeCache().clearAll();
+  IdTable idTable = makeIdTableFromVector({{true},
+                                           {true},
+                                           {false},
+                                           {false},
+                                           {true},
+                                           {true},
+                                           {false},
+                                           {false},
+                                           {false},
+                                           {false},
+                                           {true}},
+                                          asBool);
+
+  ValuesForTesting values{qec, std::move(idTable), {Variable{"?x"}}, false,
+                          {},  LocalVocab{},       std::nullopt,     true};
+  QueryExecutionTree subTree{
+      qec, std::make_shared<ValuesForTesting>(std::move(values))};
+  Filter filter{
+      qec,
+      std::make_shared<QueryExecutionTree>(std::move(subTree)),
+      {std::make_unique<sparqlExpression::VariableExpression>(Variable{"?x"}),
+       "Expression ?x"}};
+
+  auto result = filter.getResult(false, ComputationMode::FULLY_MATERIALIZED);
+  ASSERT_TRUE(result->isFullyMaterialized());
+
+  EXPECT_EQ(
+      result->idTable(),
+      makeIdTableFromVector({{true}, {true}, {true}, {true}, {true}}, asBool));
+}
+
+// _____________________________________________________________________________
+TEST(Filter,
+     verifyPredicateIsAppliedCorrectlyOnNonLazyEvaluationWithLazyChild) {
+  QueryExecutionContext* qec = ad_utility::testing::getQec();
+  qec->getQueryTreeCache().clearAll();
   std::vector<IdTable> idTables;
   idTables.push_back(makeIdTableFromVector(
       {{true}, {true}, {false}, {false}, {true}}, asBool));

@@ -995,6 +995,32 @@ TEST(IdTableStatic, setColumnSubset) {
   // For static tables, we need a permutation, a real subset is not allowed.
   ASSERT_ANY_THROW(t.setColumnSubset(std::vector<ColumnIndex>{1, 2}));
 }
+TEST(IdTable, deleteColumn) {
+  using IntTable = columnBasedIdTable::IdTable<int, 0>;
+  IntTable t{3};  // three columns.
+  t.push_back({0, 10, 20});
+  t.push_back({1, 11, 21});
+  t.push_back({2, 12, 22});
+
+  EXPECT_ANY_THROW(t.deleteColumn(3));
+  EXPECT_ANY_THROW(t.deleteColumn(4));
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  // Set up the expected table.
+  // The middle column was dropped.
+  IntTable e{2};
+  e.push_back({0, 20});
+  e.push_back({1, 21});
+  e.push_back({2, 22});
+  EXPECT_EQ(t.numRows(), 3);
+  EXPECT_EQ(t.numColumns(), 2);
+  EXPECT_EQ(t, e);
+
+  ASSERT_NO_THROW(t.deleteColumn(1));
+  ASSERT_NO_THROW(t.deleteColumn(0));
+  // No more columns left
+  EXPECT_EQ(t.numColumns(), 0);
+  EXPECT_EQ(t.numRows(), 3);
+}
 
 TEST(IdTable, cornerCases) {
   using Dynamic = columnBasedIdTable::IdTable<int, 0>;

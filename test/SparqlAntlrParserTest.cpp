@@ -1745,8 +1745,10 @@ template <typename AggregateExpr>
       return ::testing::_;
     }
   }();
+  using enum SparqlExpression::AggregateStatus;
+  auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
   return Pointee(AllOf(
-      AD_PROPERTY(Exp, isDistinct, Eq(distinct)),
+      AD_PROPERTY(Exp, isAggregate, Eq(aggregateStatus)),
       AD_PROPERTY(Exp, children, ElementsAre(variableExpressionMatcher(child))),
       WhenDynamicCastTo<const AggregateExpr&>(innerMatcher)));
 }
@@ -1773,8 +1775,10 @@ TEST(SparqlParser, aggregateExpressions) {
       [&typeIdLambda, typeIdxCountStar](
           bool distinct) -> ::testing::Matcher<const SparqlExpression::Ptr&> {
     using namespace ::testing;
+    using enum SparqlExpression::AggregateStatus;
+    auto aggregateStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
     return Pointee(
-        AllOf(AD_PROPERTY(SparqlExpression, isDistinct, Eq(distinct)),
+        AllOf(AD_PROPERTY(SparqlExpression, isAggregate, Eq(aggregateStatus)),
               ResultOf(typeIdLambda, Eq(typeIdxCountStar))));
   };
 
@@ -1782,7 +1786,10 @@ TEST(SparqlParser, aggregateExpressions) {
   expectAggregate("COUNT(DISTINCT *)", matchCountStar(true));
 
   expectAggregate("SAMPLE(?x)",
-                  matchPtrWithVariables<SampleExpression>(V{"?x"}));
+                  matchAggregate<SampleExpression>(false, V{"?x"}));
+  expectAggregate("SAMPLE(DISTINCT ?x)",
+                  matchAggregate<SampleExpression>(false, V{"?x"}));
+
   expectAggregate("Min(?x)", matchAggregate<MinExpression>(false, V{"?x"}));
   expectAggregate("Min(DISTINCT ?x)",
                   matchAggregate<MinExpression>(true, V{"?x"}));

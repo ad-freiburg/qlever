@@ -51,6 +51,9 @@ void writeStxxlConfigFile(const string& location, const string& tail) {
 
 // Main function.
 int main(int argc, char** argv) {
+  // Copy the git hash and datetime of compilation (which require relinking)
+  // to make them accessible to other parts of the code
+  qlever::version::copyVersionInfo();
   setlocale(LC_CTYPE, "");
 
   std::locale loc;

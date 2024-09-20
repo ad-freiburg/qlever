@@ -510,7 +510,7 @@ void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
   CALL_FIXED_SIZE(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________

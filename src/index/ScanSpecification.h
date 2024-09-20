@@ -20,15 +20,29 @@ class Index;
 // the knowledge graph at all. The values which are `nullopt` become variables
 // and are returned as columns in the result of the scan.
 class ScanSpecification {
- private:
+ public:
   using T = std::optional<Id>;
   using Graphs = std::optional<ad_utility::HashSet<Id>>;
 
+ private:
   T col0Id_;
   T col1Id_;
   T col2Id_;
+  // A local vocab that is needed in case at least one of the `colXIds_` has
+  // type `LocalVocabIndex`. Note that this doesn't automatically mean that the
+  // scan result will be empty, because local vocab entries might also be
+  // created by SPARQL UPDATE requests.
+  // Note: This `localVocab` keeps the `colXIds` alive in that case. It is a
+  // serious bug, to copy the `colXIds` out of this class. The only valid usage
+  // is to compare them with other IDs as long as the `ScanSpecification` is
+  // still alive.
+  // TODO<joka921> This can be enforced by the type system, but that requires
+  // several intrusive changes in other parts of QLever.
   std::shared_ptr<const LocalVocab> localVocab_;
-  Graphs graphsToFilter_;
+
+  // If specified (i.e. not `nullopt`) then the result of the scan only consists
+  // of triples that belong to the union of these graphs.
+  Graphs graphsToFilter_{};
   friend class ScanSpecificationAsTripleComponent;
 
   void validate() const;
@@ -49,8 +63,6 @@ class ScanSpecification {
 
   const Graphs& graphsToFilter() const { return graphsToFilter_; }
 
-  // bool operator==(const ScanSpecification&) const = default;
-
   // Only used in tests.
   void setCol1Id(T col1Id) {
     col1Id_ = col1Id;
@@ -69,7 +81,7 @@ class ScanSpecificationAsTripleComponent {
   T col0_;
   T col1_;
   T col2_;
-  Graphs graphsToFilter_;
+  Graphs graphsToFilter_{};
 
  public:
   // Construct from three optional `TripleComponent`s. If any of the three
@@ -80,15 +92,9 @@ class ScanSpecificationAsTripleComponent {
                                      Graphs graphsToFilter = std::nullopt);
 
   // Convert to a `ScanSpecification`. The `index` is used to convert the
-  // `TripleComponent` to `Id`s by looking them up in the vocabulary. Return
-  // `nullopt` if and only if one of the vocab lookup fails (then the result of
-  // the corresponding scan will be empty).
-  // TODO<joka921> Once we implement SPARQL UPDATE, we possibly also to use the
-  // `LocalVocab` of the UPDATE triples here.
-  std::optional<ScanSpecification> toScanSpecification(
-      const IndexImpl& index) const;
-  std::optional<ScanSpecification> toScanSpecification(
-      const Index& index) const;
+  // `TripleComponent` to `Id`s by looking them up in the vocabulary.
+  ScanSpecification toScanSpecification(const IndexImpl& index) const;
+  ScanSpecification toScanSpecification(const Index& index) const;
 
   // The number of columns that the corresponding index scan will have.
   size_t numColumns() const;
