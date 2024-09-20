@@ -247,5 +247,6 @@ constexpr inline std::string_view EMPH_ON = "\033[1m";
 /// ANSI escape sequence to print "normal" text again in the console.
 constexpr inline std::string_view EMPH_OFF = "\033[22m";
 
-// Counter for internal Blank Node Ids.
-inline std::atomic_uint64_t NEXT_NEWBLANKNODEINDEX{0};
+// Counter for internal Blank Node Ids that are not part of the index, but were
+// locally added (by SERVICE clauses or expressions).
+inline std::atomic_uint64_t NEXT_LOCALBLANKNODEINDEX{0};

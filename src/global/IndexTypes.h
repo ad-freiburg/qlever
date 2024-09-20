@@ -16,4 +16,5 @@ using LocalVocabIndex = const LocalVocabEntry*;
 using TextRecordIndex = ad_utility::TypedIndex<uint64_t, "TextRecordIndex">;
 using WordVocabIndex = ad_utility::TypedIndex<uint64_t, "WordVocabIndex">;
 using BlankNodeIndex = ad_utility::TypedIndex<uint64_t, "BlankNodeIndex">;
-using NewBlankNodeIndex = ad_utility::TypedIndex<uint64_t, "NewBlankNodeIndex">;
+using LocalBlankNodeIndex =
+    ad_utility::TypedIndex<uint64_t, "LocalBlankNodeIndex">;

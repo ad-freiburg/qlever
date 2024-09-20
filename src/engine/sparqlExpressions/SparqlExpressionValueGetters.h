@@ -144,7 +144,8 @@ struct StringValueGetter : Mixin<StringValueGetter> {
 struct IsBlankNodeValueGetter : Mixin<IsBlankNodeValueGetter> {
   using Mixin<IsBlankNodeValueGetter>::operator();
   Id operator()(ValueId id, const EvaluationContext*) const {
-    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex);
+    return Id::makeFromBool(id.getDatatype() == Datatype::BlankNodeIndex ||
+                            id.getDatatype() == Datatype::LocalBlankNodeIndex);
   }
 
   Id operator()(const LiteralOrIri&, const EvaluationContext*) const {

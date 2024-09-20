@@ -521,14 +521,14 @@ TEST_F(ServiceTest, bindingToTripleComponent) {
   // Blank Nodes.
   EXPECT_EQ(blankNodeMap.size(), 0);
   EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "A"}}),
-            Id::makeFromNewBlankNodeIndex(NewBlankNodeIndex::make(0)));
+            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(0)));
   EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "B"}}),
-            Id::makeFromNewBlankNodeIndex(NewBlankNodeIndex::make(1)));
+            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(1)));
   EXPECT_EQ(blankNodeMap.size(), 2);
 
   // BlankNode exists already, known Id will be used.
   EXPECT_EQ(bTTC({{"type", "bnode"}, {"value", "A"}}),
-            Id::makeFromNewBlankNodeIndex(NewBlankNodeIndex::make(0)));
+            Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(0)));
 
   // Invalid type -> throw.
   AD_EXPECT_THROW_WITH_MESSAGE(

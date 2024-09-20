@@ -215,6 +215,9 @@ ExportQueryExecutionTrees::idToStringAndTypeForEncodedValue(Id id) {
     case BlankNodeIndex:
       return std::pair{absl::StrCat("_:bn", id.getBlankNodeIndex().get()),
                        nullptr};
+    case LocalBlankNodeIndex:
+      return std::pair{absl::StrCat("_:bn", id.getLocalBlankNodeIndex().get()),
+                       nullptr};
     default:
       AD_FAIL();
   }

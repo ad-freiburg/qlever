@@ -202,6 +202,8 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
+  // TODO<joka921> We should include a memory limit, as soon as we can do proper
+  // memory-limited HashMaps.
   ad_utility::HashMap<std::string, Id> blankNodeMap;
 
   auto writeBindings = [&](const nlohmann::json& bindings, size_t& rowIdx) {
@@ -362,13 +364,13 @@ TripleComponent Service::bindingToTripleComponent(
   } else if (type == "uri") {
     tc = TripleComponent::Iri::fromIrirefWithoutBrackets(value);
   } else if (type == "bnode") {
-    if (!blankNodeMap.contains(value)) {
-      // create a new blankNodeIndex
-      blankNodeMap[value] =
-          Id::makeFromNewBlankNodeIndex(NewBlankNodeIndex::make(
-              getExecutionContext()->getNextNewBlankNodeIndex()));
+    auto optEmplace = blankNodeMap.try_emplace(value, Id());
+    if (optEmplace.second) {
+      optEmplace.first->second =
+          Id::makeFromLocalBlankNodeIndex(LocalBlankNodeIndex::make(
+              getExecutionContext()->getNextLocalBlankNodeIndex()));
     }
-    tc = blankNodeMap[value];
+    tc = optEmplace.first->second;
   } else {
     throw std::runtime_error(absl::StrCat("Type ", type,
                                           " is undefined. The binding is: '",
