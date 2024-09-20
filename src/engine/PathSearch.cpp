@@ -106,7 +106,9 @@ PathSearch::PathSearch(QueryExecutionContext* qec,
   }
 
   for (const auto& edgeProperty : config_.edgeProperties_) {
-    variableColumns_[edgeProperty] = makeAlwaysDefinedColumn(colIndex);
+    auto subVarCols = subtree_->getVariableColumns();
+    auto colInfo = subVarCols[edgeProperty];
+    variableColumns_[edgeProperty] = {colIndex, colInfo.mightContainUndef_};
     colIndex++;
   }
 }
