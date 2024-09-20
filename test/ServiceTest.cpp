@@ -164,7 +164,11 @@ TEST_F(ServiceTest, basicMethods) {
 
 // Tests that `computeResult` behaves as expected.
 TEST_F(ServiceTest, computeResult) {
-  for (size_t i = 0; i < 1000; ++i) {
+  // These tests are randomized, and there used to be an error that was found by
+  // these random tests (but not always). Run the tests 10 times, this is a good
+  // compromise between reasonable runtimes of the tests and a reasonable test
+  // coverage.
+  for (size_t i = 0; i < 10; ++i) {
     // Construct a parsed SERVICE clause by hand, see `basicMethods` test above.
     parsedQuery::Service parsedServiceClause{
         {Variable{"?x"}, Variable{"?y"}},
