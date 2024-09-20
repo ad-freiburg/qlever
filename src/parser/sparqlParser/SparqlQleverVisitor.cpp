@@ -711,7 +711,7 @@ GraphPatternOperation Visitor::visitPathQuery(
       pathQuery.childGraphPattern_ = std::move(pattern._child);
     } else {
       throw parsedQuery::PathSearchException(
-          "Unsupported subquery in pathSearch."
+          "Unsupported element in pathSearch."
           "PathQuery may only consist of triples for configuration"
           "And a subquery specifying edges.");
     }
