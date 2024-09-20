@@ -251,8 +251,10 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
   const auto& limit = originalLimit._limit;
   AD_CORRECTNESS_CHECK(!limit.has_value() ||
                        details.numElementsYielded_ <= limit.value());
-  AD_CORRECTNESS_CHECK(numBlocksTotal == details.numBlocksRead_ ||
-                       !limitOffset.isUnconstrained());
+  AD_CORRECTNESS_CHECK(
+      numBlocksTotal ==
+          (details.numBlocksRead_ + details.numBlocksSkippedBecauseOfGraph_) ||
+      !limitOffset.isUnconstrained());
 }
 
 namespace {
