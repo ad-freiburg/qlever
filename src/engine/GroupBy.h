@@ -308,7 +308,7 @@ class GroupBy : public Operation {
   IdTable computeGroupByForHashMapOptimization(
       std::vector<HashMapAliasInformation>& aggregateAliases,
       const IdTable& subresult, const std::vector<size_t>& columnIndices,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   using AggregationData =
       std::variant<AvgAggregationData, CountAggregationData, MinAggregationData,
@@ -434,7 +434,7 @@ class GroupBy : public Operation {
   IdTable createResultFromHashMap(
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       std::vector<HashMapAliasInformation>& aggregateAliases,
-      LocalVocab* localVocab);
+      LocalVocab* localVocab) const;
 
   // Reusable implementation of `checkIfHashMapOptimizationPossible`.
   static std::optional<HashMapOptimizationData>

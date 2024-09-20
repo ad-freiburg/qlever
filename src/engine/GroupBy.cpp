@@ -1378,7 +1378,7 @@ template <size_t NUM_GROUP_COLUMNS>
 IdTable GroupBy::createResultFromHashMap(
     const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
     std::vector<HashMapAliasInformation>& aggregateAliases,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   // Create result table, filling in the group values, since they might be
   // required in evaluation
   ad_utility::Timer sortingTimer{ad_utility::Timer::Started};
@@ -1449,7 +1449,7 @@ template <size_t NUM_GROUP_COLUMNS>
 IdTable GroupBy::computeGroupByForHashMapOptimization(
     std::vector<HashMapAliasInformation>& aggregateAliases,
     const IdTable& subresult, const std::vector<size_t>& columnIndices,
-    LocalVocab* localVocab) {
+    LocalVocab* localVocab) const {
   AD_CONTRACT_CHECK(columnIndices.size() == NUM_GROUP_COLUMNS ||
                     NUM_GROUP_COLUMNS == 0);
 
