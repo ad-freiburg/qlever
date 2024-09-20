@@ -74,4 +74,8 @@ TEST(UrlParserTest, parseRequestTarget) {
               IsParsedUrl("/ping", {{"foo", "bar"}}));
   EXPECT_THAT(parseRequestTarget("/foo??update=bar"),
               IsParsedUrl("/foo", {{"?update", "bar"}}));
+  // This a complete URL and not only the request target
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      parseRequestTarget("file://more-than-target"),
+      testing::StrEq("Failed to parse URL: \"file://more-than-target\"."));
 }
