@@ -59,10 +59,10 @@ auto SparqlExpression::isAggregate() const -> AggregateStatus {
 }
 
 // _____________________________________________________________________________
-void SparqlExpression::replaceChild(
+std::unique_ptr<SparqlExpression> SparqlExpression::replaceChild(
     size_t childIndex, std::unique_ptr<SparqlExpression> newExpression) {
   AD_CONTRACT_CHECK(childIndex < children().size());
-  children()[childIndex] = std::move(newExpression);
+  return std::exchange(children()[childIndex], std::move(newExpression));
 }
 
 // _____________________________________________________________________________

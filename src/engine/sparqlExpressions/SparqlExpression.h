@@ -55,9 +55,10 @@ class SparqlExpression {
   };
   virtual AggregateStatus isAggregate() const;
 
-  // Replace child at index `childIndex` with `newExpression`
-  virtual void replaceChild(size_t childIndex,
-                            std::unique_ptr<SparqlExpression> newExpression);
+  // Replace child at index `childIndex` with `newExpression`. Return the old
+  // child.
+  virtual std::unique_ptr<SparqlExpression> replaceChild(
+      size_t childIndex, std::unique_ptr<SparqlExpression> newExpression);
 
   // Get a unique identifier for this expression, used as cache key.
   virtual string getCacheKey(const VariableToColumnMap& varColMap) const = 0;
