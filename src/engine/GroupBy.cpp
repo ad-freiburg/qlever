@@ -572,7 +572,7 @@ cppcoro::generator<IdTable> GroupBy::computeResultLazily(
 }
 
 // _____________________________________________________________________________
-std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() {
+std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() const {
   // The child must be an `IndexScan` for this optimization.
   auto indexScan =
       std::dynamic_pointer_cast<const IndexScan>(_subtree->getRootOperation());
@@ -621,7 +621,7 @@ std::optional<IdTable> GroupBy::computeGroupByForSingleIndexScan() {
 }
 
 // ____________________________________________________________________________
-std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() {
+std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() const {
   // The child must be an `IndexScan` with exactly two variables.
   auto indexScan =
       std::dynamic_pointer_cast<IndexScan>(_subtree->getRootOperation());
@@ -671,7 +671,7 @@ std::optional<IdTable> GroupBy::computeGroupByObjectWithCount() {
 }
 
 // _____________________________________________________________________________
-std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() {
+std::optional<IdTable> GroupBy::computeGroupByForFullIndexScan() const {
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
@@ -766,7 +766,7 @@ std::optional<Permutation::Enum> GroupBy::getPermutationForThreeVariableTriple(
 
 // ____________________________________________________________________________
 std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
-    const Join& join) {
+    const Join& join) const {
   if (_groupByVariables.size() != 1) {
     return std::nullopt;
   }
@@ -809,7 +809,7 @@ std::optional<GroupBy::OptimizedGroupByData> GroupBy::checkIfJoinWithFullScan(
 }
 
 // ____________________________________________________________________________
-std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() {
+std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() const {
   auto join = std::dynamic_pointer_cast<Join>(_subtree->getRootOperation());
   if (!join) {
     return std::nullopt;
@@ -875,7 +875,7 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() {
 }
 
 // _____________________________________________________________________________
-std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
+std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() const {
   // TODO<C++23> Use `std::optional::or_else`.
   // TODO<RobinTF> Add runtime parameter to toggle index scan specific
   // optimizations for performance comparisons
@@ -897,7 +897,7 @@ std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
 GroupBy::computeUnsequentialProcessingMetadata(
-    std::vector<Aggregate>& aliases) {
+    std::vector<Aggregate>& aliases) const {
   // Get pointers to all aggregate expressions and their parents
   size_t numAggregates = 0;
   std::vector<HashMapAliasInformation> aliasesWithAggregateInfo;
@@ -933,7 +933,8 @@ GroupBy::computeUnsequentialProcessingMetadata(
 
 // _____________________________________________________________________________
 std::optional<GroupBy::HashMapOptimizationData>
-GroupBy::checkIfHashMapOptimizationPossible(std::vector<Aggregate>& aliases) {
+GroupBy::checkIfHashMapOptimizationPossible(
+    std::vector<Aggregate>& aliases) const {
   if (!RuntimeParameters().get<"group-by-hash-map-enabled">()) {
     return std::nullopt;
   }

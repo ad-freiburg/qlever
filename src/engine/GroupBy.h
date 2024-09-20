@@ -168,7 +168,7 @@ class GroupBy : public Operation {
   // This function checks whether such a case applies. In this case the result
   // is computed and returned wrapped in a optional. If no such case applies the
   // optional remains empty.
-  std::optional<IdTable> computeOptimizedGroupByIfPossible();
+  std::optional<IdTable> computeOptimizedGroupByIfPossible() const;
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -181,7 +181,7 @@ class GroupBy : public Operation {
   // The COUNT may be computed on any of the variables in the triple. If the
   // query has that form, the result of the query (which consists of one line)
   // is computed and returned. If not, an empty optional is returned.
-  std::optional<IdTable> computeGroupByForSingleIndexScan();
+  std::optional<IdTable> computeGroupByForSingleIndexScan() const;
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -192,7 +192,7 @@ class GroupBy : public Operation {
   // NOTE: This is exactly what we need for a context-sensitive object AC query
   // without connected triples. The GROUP BY variable can also be omitted in
   // the SELECT clause.
-  std::optional<IdTable> computeGroupByObjectWithCount();
+  std::optional<IdTable> computeGroupByObjectWithCount() const;
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -205,7 +205,7 @@ class GroupBy : public Operation {
   // or `?z`. In the SELECT clause, both of the elements may be omitted, so in
   // the example it is possible to only select `?x` or to only select the
   // `COUNT`.
-  std::optional<IdTable> computeGroupByForFullIndexScan();
+  std::optional<IdTable> computeGroupByForFullIndexScan() const;
 
   // Check if the query represented by this GROUP BY is of the following form:
   //
@@ -217,7 +217,7 @@ class GroupBy : public Operation {
   // Note that `?x` can also be the predicate or object of the three variable
   // triple, and that the COUNT may be by any of the variables `?x`, `?y`, or
   // `?z`.
-  std::optional<IdTable> computeGroupByForJoinWithFullScan();
+  std::optional<IdTable> computeGroupByForJoinWithFullScan() const;
 
   // Stores information required for substitution of an expression in an
   // expression tree.
@@ -436,14 +436,14 @@ class GroupBy : public Operation {
 
   // Reusable implementation of `checkIfHashMapOptimizationPossible`.
   std::optional<HashMapOptimizationData> computeUnsequentialProcessingMetadata(
-      std::vector<Aggregate>& aggregates);
+      std::vector<Aggregate>& aggregates) const;
 
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
   // - Runtime parameter is set
   // - Child operation is SORT
   std::optional<HashMapOptimizationData> checkIfHashMapOptimizationPossible(
-      std::vector<Aggregate>& aggregates);
+      std::vector<Aggregate>& aggregates) const;
 
   // Extract values from `expressionResult` and store them in the rows of
   // `resultTable` specified by the indices in `evaluationContext`, in column
@@ -474,12 +474,12 @@ class GroupBy : public Operation {
       sparqlExpression::SparqlExpression* expr);
 
   // Find all occurrences of grouped by variable for expression `expr`.
-  std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>
+  static std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>
   findGroupedVariable(sparqlExpression::SparqlExpression* expr,
                       const Variable& groupedVariable);
 
   // The recursive implementation of `findGroupedVariable` (see above).
-  void findGroupedVariableImpl(
+  static void findGroupedVariableImpl(
       sparqlExpression::SparqlExpression* expr,
       std::optional<ParentAndChildIndex> parentAndChildIndex,
       std::variant<std::vector<ParentAndChildIndex>, OccurAsRoot>&
@@ -521,7 +521,8 @@ class GroupBy : public Operation {
   // Check if the previously described optimization can be applied. The argument
   // Must be the single subtree of this GROUP BY, properly cast to a `const
   // Join*`.
-  std::optional<OptimizedGroupByData> checkIfJoinWithFullScan(const Join& join);
+  std::optional<OptimizedGroupByData> checkIfJoinWithFullScan(
+      const Join& join) const;
 
   // Check if the following is true: the `tree` represents a three variable
   // triple, that contains both `variableByWhichToSort` and
