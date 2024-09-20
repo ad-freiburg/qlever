@@ -181,6 +181,14 @@ void PathQuery::addBasicPattern(const BasicGraphPattern& pattern) {
 }
 
 // ____________________________________________________________________________
+void PathQuery::addGraph(const GraphPatternOperation& op) {
+  if (childGraphPattern_._graphPatterns.empty()) {
+    auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
+    childGraphPattern_ = std::move(pattern._child);
+  }
+}
+
+// ____________________________________________________________________________
 PathSearchConfiguration PathQuery::toPathSearchConfiguration(
     const Index::Vocab& vocab) const {
   auto sources = toSearchSide(sources_, vocab);

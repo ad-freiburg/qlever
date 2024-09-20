@@ -707,8 +707,7 @@ GraphPatternOperation Visitor::visitPathQuery(
     if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
       pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
     } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-      auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
-      pathQuery.childGraphPattern_ = std::move(pattern._child);
+        pathQuery.addGraph(op);
     } else {
       throw parsedQuery::PathSearchException(
           "Unsupported element in pathSearch."

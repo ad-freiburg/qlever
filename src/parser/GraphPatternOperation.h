@@ -169,6 +169,7 @@ struct PathQuery {
 
   void addParameter(const SparqlTriple& triple);
   void addBasicPattern(const BasicGraphPattern& pattern);
+  void addGraph(const GraphPatternOperation& childGraphPattern);
   std::variant<Variable, std::vector<Id>> toSearchSide(
       std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
   PathSearchConfiguration toPathSearchConfiguration(
