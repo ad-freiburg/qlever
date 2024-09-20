@@ -5,13 +5,26 @@
 #ifndef QLEVER_GEOSPARQLHELPERS_H
 #define QLEVER_GEOSPARQLHELPERS_H
 
+#include <ctre-unicode.hpp>
 #include <limits>
 #include <optional>
 #include <string>
 
+#include "global/GeoPoint.h"
+
 namespace ad_utility {
 
 namespace detail {
+
+static constexpr auto wktPointRegex = ctll::fixed_string(
+    "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
+    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
+    "\\s+"
+    "(-?[0-9+]|-?[0-9]+\\.[0-9]+)"
+    "\\s*\\)\\s*$");
+
+static constexpr double invalidCoordinate =
+    std::numeric_limits<double>::quiet_NaN();
 
 // Implementations of the lambdas below + two helper functions. Note: our SPARQL
 // expression code currently needs lambdas, and we can't define the lambdas in
@@ -23,6 +36,7 @@ double wktLongitudeImpl(const std::string_view point);
 double wktLatitudeImpl(const std::string_view point);
 double wktDistImpl(const std::string_view point1,
                    const std::string_view point2);
+double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 }  // namespace detail
 
@@ -48,6 +62,14 @@ inline auto wktLatitude = [](const std::optional<std::string>& point) {
 // save for when we compute this at indexing time.
 inline auto wktDist = [](const std::optional<std::string>& point1,
                          const std::optional<std::string>& point2) {
+  if (!point1.has_value() || !point2.has_value()) {
+    return std::numeric_limits<double>::quiet_NaN();
+  }
+  return detail::wktDistImpl(point1.value(), point2.value());
+};
+
+inline auto wktDistGeoPoints = [](const std::optional<GeoPoint>& point1,
+                                  const std::optional<GeoPoint>& point2) {
   if (!point1.has_value() || !point2.has_value()) {
     return std::numeric_limits<double>::quiet_NaN();
   }

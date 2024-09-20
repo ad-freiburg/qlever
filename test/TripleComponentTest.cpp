@@ -7,6 +7,8 @@
 
 #include "./util/IdTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
+#include "global/ValueId.h"
+#include "parser/Literal.h"
 #include "parser/TripleComponent.h"
 #include "util/IndexTestHelpers.h"
 
@@ -122,6 +124,16 @@ TEST(TripleComponent, toValueIdIfNotString) {
   ASSERT_EQ(tc.toValueIdIfNotString().value(), I(42));
   tc = 131.4;
   ASSERT_EQ(tc.toValueIdIfNotString().value(), D(131.4));
+
+  ad_utility::triple_component::Literal l =
+      lit("\"POINT(7.8 "
+          "47.9)\"",
+          "^^<http://www.opengis.net/ont/geosparql#wktLiteral>");
+  tc = l;
+  ASSERT_EQ(tc.toValueIdIfNotString().value().getDatatype(),
+            Datatype::GeoPoint);
+  ASSERT_FLOAT_EQ(tc.toValueIdIfNotString().value().getGeoPoint().getLat(),
+                  47.9);
 
   DateYearOrDuration date{123456, DateYearOrDuration::Type::Year};
   tc = date;

@@ -1105,6 +1105,7 @@ TEST(SparqlExpression, testToNumericExpression) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
+  // TODO<ullingerc>: Fix tests after implementation of GeoPoint
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);

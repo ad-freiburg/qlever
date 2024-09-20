@@ -7,6 +7,10 @@
 
 #include "absl/strings/str_cat.h"
 #include "engine/ExportQueryExecutionTrees.h"
+#include "global/Constants.h"
+#include "global/GeoPoint.h"
+#include "parser/NormalizedString.h"
+#include "util/GeoSparqlHelpers.h"
 
 // ____________________________________________________________________________
 std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
@@ -42,8 +46,21 @@ std::ostream& operator<<(std::ostream& stream, const TripleComponent& obj) {
 // ____________________________________________________________________________
 std::optional<Id> TripleComponent::toValueIdIfNotString() const {
   auto visitor = []<typename T>(const T& value) -> std::optional<Id> {
-    if constexpr (std::is_same_v<T, std::string> ||
-                  std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
+    if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, Iri>) {
+      return std::nullopt;
+    } else if constexpr (std::is_same_v<T, Literal>) {
+      // TODO<ullingerc> Probably not a very good idea for performance
+      // of unrelated literals?
+      if (value.hasDatatype() &&
+          value.getDatatype().compare(asNormalizedStringViewUnsafe(
+              std::string_view(GEO_WKT_LITERAL))) == 0) {
+        auto [lng, lat] = ad_utility::detail::parseWktPoint(
+            asStringViewUnsafe(value.getContent()));
+        if (lng != ad_utility::detail::invalidCoordinate &&
+            lat != ad_utility::detail::invalidCoordinate) {
+          return Id::makeFromGeoPoint(GeoPoint(lat, lng));
+        }
+      }
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);

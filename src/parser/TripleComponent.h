@@ -189,6 +189,8 @@ class TripleComponent {
   [[nodiscard]] std::optional<Id> toValueId(
       const Vocabulary& vocabulary) const {
     AD_CONTRACT_CHECK(!isString());
+    std::optional<Id> vid = toValueIdIfNotString();
+    if (vid != std::nullopt) return vid;
     if (isLiteral() || isIri()) {
       VocabIndex idx;
       const std::string& content = isLiteral()
@@ -196,12 +198,9 @@ class TripleComponent {
                                        : getIri().toStringRepresentation();
       if (vocabulary.getId(content, &idx)) {
         return Id::makeFromVocabIndex(idx);
-      } else {
-        return std::nullopt;
       }
-    } else {
-      return toValueIdIfNotString();
     }
+    return std::nullopt;
   }
 
   // Same as the above, but also consider the given local vocabulary. If the

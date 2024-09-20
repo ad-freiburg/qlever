@@ -11,6 +11,8 @@
 #include <functional>
 #include <limits>
 
+#include "global/Constants.h"
+#include "global/GeoPoint.h"
 #include "global/IndexTypes.h"
 #include "util/BitUtils.h"
 #include "util/DateYearDuration.h"
@@ -28,6 +30,7 @@ enum struct Datatype {
   LocalVocabIndex,
   TextRecordIndex,
   Date,
+  GeoPoint,
   WordVocabIndex,
   BlankNodeIndex,
   MaxValue = BlankNodeIndex
@@ -58,6 +61,8 @@ constexpr std::string_view toString(Datatype type) {
       return "WordVocabIndex";
     case Datatype::Date:
       return "Date";
+    case Datatype::GeoPoint:
+      return "GeoPoint";
     case Datatype::BlankNodeIndex:
       return "BlankNodeIndex";
   }
@@ -101,6 +106,15 @@ class ValueId {
   static_assert(static_cast<size_t>(maxStringType_) -
                     static_cast<size_t>(minStringType_) + 1 ==
                 stringTypes_.size());
+
+  // A GeoPoint ValueId has to store two values (lat and lng).
+  // For simplicity each uses half of the available bits.
+  static constexpr T numDataBitsCoordinate = numDataBits / 2;
+  static constexpr T coordinateMaskLng = (1ULL << numDataBitsCoordinate) - 1;
+  static constexpr T coordinateMaskLat = coordinateMaskLng
+                                         << numDataBitsCoordinate;
+  static constexpr T maxCoordinateEncoded =
+      (double)(1 << numDataBitsCoordinate);
 
   /// This exception is thrown if we try to store a value of an index type
   /// (VocabIndex, LocalVocabIndex, TextRecordIndex) that is larger than
@@ -310,6 +324,42 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
+  /// Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
+  /// The conversion will reduce the precision and thus change the value.
+  /// However the lost precision should only be in the range of centimeters.
+  static ValueId makeFromGeoPoint(GeoPoint p) {
+    // Only positive values between 0 and 1
+    double latP = (p.getLat() + COORDINATE_LAT_MAX) / (2 * COORDINATE_LAT_MAX);
+    double lngP = (p.getLng() + COORDINATE_LNG_MAX) / (2 * COORDINATE_LNG_MAX);
+
+    // Stretch to allowed range of values
+    T lat = (int)round(latP * maxCoordinateEncoded);
+    T lng = (int)round(lngP * maxCoordinateEncoded);
+
+    // Use masks to obtain 4 bit type, 30 bit lat, 30 bit lng
+    T bits = (lat << numDataBitsCoordinate) | lng;
+    return addDatatypeBits(bits, Datatype::GeoPoint);
+  }
+
+  /// Obtain a new `GeoPoint` object representing the pair of coordinates that
+  /// this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
+  /// is unspecified.
+  GeoPoint getGeoPoint() const noexcept {
+    T bits = removeDatatypeBits(_bits);
+
+    // Extract lat, lng and transform to double within 0..1 range
+    double latP =
+        ((double)((bits & coordinateMaskLat) >> numDataBitsCoordinate)) /
+        maxCoordinateEncoded;
+    double lngP = ((double)(bits & coordinateMaskLng)) / maxCoordinateEncoded;
+
+    // Restore normal scaling and negative values
+    double lat = (latP * 2 * COORDINATE_LAT_MAX) - COORDINATE_LAT_MAX;
+    double lng = (lngP * 2 * COORDINATE_LNG_MAX) - COORDINATE_LNG_MAX;
+
+    return GeoPoint(lat, lng);
+  }
+
   /// Return the smallest and largest possible `ValueId` wrt the underlying
   /// representation
   constexpr static ValueId min() noexcept {
@@ -360,6 +410,8 @@ class ValueId {
         return std::invoke(visitor, getWordVocabIndex());
       case Datatype::Date:
         return std::invoke(visitor, getDate());
+      case Datatype::GeoPoint:
+        return std::invoke(visitor, getGeoPoint());
       case Datatype::BlankNodeIndex:
         return std::invoke(visitor, getBlankNodeIndex());
     }
@@ -385,6 +437,8 @@ class ValueId {
         ostr << (value ? "true" : "false");
       } else if constexpr (ad_utility::isSimilar<T, DateYearOrDuration>) {
         ostr << value.toStringAndType().first;
+      } else if constexpr (ad_utility::isSimilar<T, GeoPoint>) {
+        ostr << value.toStringRepresentation();
       } else if constexpr (ad_utility::isSimilar<T, LocalVocabIndex>) {
         AD_CORRECTNESS_CHECK(value != nullptr);
         ostr << value->toStringRepresentation();
