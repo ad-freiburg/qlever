@@ -136,6 +136,7 @@ std::vector<QueryExecutionTree*> PathSearch::getChildren() {
 // _____________________________________________________________________________
 std::string PathSearch::getCacheKeyImpl() const {
   std::ostringstream os;
+  os << "PathSearch:\n";
   os << config_.toString();
 
   AD_CORRECTNESS_CHECK(subtree_);
