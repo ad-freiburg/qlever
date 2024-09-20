@@ -33,6 +33,7 @@ class GroupBy : public Operation {
   using string = std::string;
   template <typename T>
   using vector = std::vector<T>;
+  using Allocator = ad_utility::AllocatorWithLimit<Id>;
 
   std::shared_ptr<QueryExecutionTree> _subtree;
   vector<Variable> _groupByVariables;
@@ -411,21 +412,22 @@ class GroupBy : public Operation {
   // of the aggregates stored at `dataIndex`,
   // based on the groups stored in the first column of `resultTable`
   template <size_t NUM_GROUP_COLUMNS>
-  sparqlExpression::VectorWithMemoryLimit<ValueId> getHashMapAggregationResults(
+  static sparqlExpression::VectorWithMemoryLimit<ValueId>
+  getHashMapAggregationResults(
       IdTable* resultTable,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
       size_t dataIndex, size_t beginIndex, size_t endIndex,
-      LocalVocab* localVocab) const;
+      LocalVocab* localVocab, const Allocator& allocator);
 
   // Substitute away any occurrences of the grouped variable and of aggregate
   // results, if necessary, and subsequently evaluate the expression of an
   // alias
   template <size_t NUM_GROUP_COLUMNS>
-  void evaluateAlias(
+  static void evaluateAlias(
       HashMapAliasInformation& alias, IdTable* result,
       sparqlExpression::EvaluationContext& evaluationContext,
       const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      LocalVocab* localVocab) const;
+      LocalVocab* localVocab, const Allocator& allocator);
 
   // Sort the HashMap by key and create result table.
   template <size_t NUM_GROUP_COLUMNS>
@@ -435,8 +437,10 @@ class GroupBy : public Operation {
       LocalVocab* localVocab);
 
   // Reusable implementation of `checkIfHashMapOptimizationPossible`.
-  std::optional<HashMapOptimizationData> computeUnsequentialProcessingMetadata(
-      std::vector<Aggregate>& aggregates) const;
+  static std::optional<HashMapOptimizationData>
+  computeUnsequentialProcessingMetadata(
+      std::vector<Aggregate>& aggregates,
+      const std::vector<Variable>& groupByVariables);
 
   // Check if hash map optimization is applicable. This is the case when
   // the following conditions hold true:
@@ -454,20 +458,22 @@ class GroupBy : public Operation {
       IdTable* resultTable, LocalVocab* localVocab, size_t outCol);
 
   // Substitute the group values for all occurrences of a group variable.
-  void substituteGroupVariable(
+  static void substituteGroupVariable(
       const std::vector<ParentAndChildIndex>& occurrences, IdTable* resultTable,
-      size_t beginIndex, size_t count, size_t columnIndex) const;
+      size_t beginIndex, size_t count, size_t columnIndex,
+      const Allocator& allocator);
 
   // Substitute the results for all aggregates in `info`. The values of the
   // grouped variable should be at column 0 in `groupValues`. Return a vector of
   // the replaced `SparqlExpression`s to potentially put them pack afterwards.
   template <size_t NUM_GROUP_COLUMNS>
-  std::vector<std::unique_ptr<sparqlExpression::SparqlExpression>>
-  substituteAllAggregates(
-      std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
-      size_t endIndex,
-      const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
-      IdTable* resultTable, LocalVocab* localVocab) const;
+  std::
+      vector<std::unique_ptr<sparqlExpression::SparqlExpression>> static substituteAllAggregates(
+          std::vector<HashMapAggregateInformation>& info, size_t beginIndex,
+          size_t endIndex,
+          const HashMapAggregationData<NUM_GROUP_COLUMNS>& aggregationData,
+          IdTable* resultTable, LocalVocab* localVocab,
+          const Allocator& allocator);
 
   // Check if an expression is a currently supported aggregate.
   static std::optional<HashMapAggregateTypeWithData> isSupportedAggregate(
