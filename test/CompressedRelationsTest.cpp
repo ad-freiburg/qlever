@@ -73,16 +73,19 @@ void checkThatTablesAreEqual(const auto& expected, const IdTable& actual,
     }
   }
 }
-
 }  // namespace
 
-// Run a set of tests on a permutation that is defined by the `inputs`. The
-// `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
-// a unique name for the required temporary files and for the implicit cache
-// of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
-// in which the permutation will be compressed and stored on disk.
-void testCompressedRelations(const auto& inputs, std::string testCaseName,
-                             ad_utility::MemorySize blocksize) {
+// Write the given `inputs` (of type `RelationInput`) to a compressed
+// permutation that is stored at the given `filename`.  Return the created
+// metadata for the blocks and large relations.
+// Note: This function can't be declared in the anonymous namespace, because it
+// has to be a `friend` of the `CompressedRelationWriter` class. We therefore
+// give it a rather long name.
+std::pair<std::vector<CompressedBlockMetadata>,
+          std::vector<CompressedRelationMetadata>>
+compressedRelationTestWriteCompressedRelations(
+    const auto& inputs, std::string filename,
+    ad_utility::MemorySize blocksize) {
   // First check the invariants of the `inputs`. They must be sorted by the
   // `col0_` and for each of the `inputs` the `col1And2_` must also be sorted.
   AD_CONTRACT_CHECK(std::ranges::is_sorted(
@@ -94,8 +97,6 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
         });
   }));
 
-  std::string filename = testCaseName + ".dat";
-
   // First create the on-disk permutation.
   size_t numColumns = getNumColumns(inputs) + 1;
   CompressedRelationWriter writer{numColumns, ad_utility::File{filename, "w"},
@@ -105,7 +106,7 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
     size_t i = 0;
     for (const auto& input : inputs) {
       std::string bufferFilename =
-          testCaseName + ".buffers." + std::to_string(i) + ".dat";
+          filename + ".buffers." + std::to_string(i) + ".dat";
       IdTable buffer{numColumns, ad_utility::makeUnlimitedAllocator<Id>()};
       size_t numBlocks = 0;
 
@@ -151,16 +152,53 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
   r >> metaData;
   r >> blocks;
 
-  ASSERT_EQ(metaData.size(), inputs.size());
+  EXPECT_EQ(metaData.size(), inputs.size());
+  return {std::move(blocks), std::move(metaData)};
+}
+
+namespace {
+// Create a safe cleanup object, that automatically tries to delete the file at
+// the given `filename` when it is destroyed. This is used to delete the
+// persistent index files that are created for these tests.
+auto makeCleanup(std::string filename) {
+  return ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
+      [filename = std::move(filename)] { ad_utility::deleteFile(filename); });
+}
+
+// Write the relations specified by the `inputs` to a compressed permutation at
+// `filename`. Return the created metadata for blocks and large relations, as
+// well as a `CompressedRelationReader`. These are exactly the datastructures
+// that are required to test the `CompressedRelationReader` class.
+auto writeAndOpenRelations(const std::vector<RelationInput>& inputs,
+                           std::string filename,
+                           ad_utility::MemorySize blocksize) {
+  auto [blocks, metaData] = compressedRelationTestWriteCompressedRelations(
+      inputs, filename, blocksize);
+  auto reader = [&]() {
+    return std::make_unique<CompressedRelationReader>(
+        ad_utility::makeUnlimitedAllocator<Id>(),
+        ad_utility::File{filename, "r"});
+  };
+  return std::tuple{std::move(blocks), std::move(metaData), reader()};
+}
+
+// Run a set of tests on a permutation that is defined by the `inputs`. The
+// `inputs` must be ordered wrt the `col0_`. `testCaseName` is used to create
+// a unique name for the required temporary files and for the implicit cache
+// of the `CompressedRelationMetaData`. `blocksize` is the size of the blocks
+// in which the permutation will be compressed and stored on disk.
+void testCompressedRelations(const auto& inputs, std::string testCaseName,
+                             ad_utility::MemorySize blocksize) {
+  auto filename = testCaseName + ".dat";
+  auto cleanup = makeCleanup(filename);
+  auto [blocks, metaData, readerPtr] =
+      writeAndOpenRelations(inputs, filename, blocksize);
+  auto& reader = *readerPtr;
 
   auto cancellationHandle =
       std::make_shared<ad_utility::CancellationHandle<>>();
   // Check the contents of the metadata.
 
-  auto cleanup = ad_utility::makeOnDestructionDontThrowDuringStackUnwinding(
-      [&filename] { ad_utility::deleteFile(filename); });
-  CompressedRelationReader reader{ad_utility::makeUnlimitedAllocator<Id>(),
-                                  ad_utility::File{filename, "r"}};
   // TODO<C++23> `std::ranges::to<vector>`.
   std::vector<ColumnIndex> additionalColumns;
   std::ranges::copy(std::views::iota(3ul, getNumColumns(inputs) + 1),
@@ -238,8 +276,6 @@ void testCompressedRelations(const auto& inputs, std::string testCaseName,
   }
 }
 
-namespace {
-
 // Run `testCompressedRelations` (see above) for the given `inputs` and
 // `testCaseName`, but with a set of different `blocksizes` (small and medium
 // size, powers of two and odd), to find subtle rounding bugs when creating the
@@ -260,6 +296,60 @@ TEST(CompressedRelationWriter, SmallRelations) {
         RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i, i - 1}}});
   }
   testWithDifferentBlockSizes(inputs, "smallRelations");
+}
+
+// _____________________________________________________________________________
+TEST(CompressedRelationWriter, getFirstAndLastTriple) {
+  using namespace ::testing;
+  // Write some triples, and prepare an index
+  std::vector<RelationInput> inputs;
+  for (int i = 1; i < 200; ++i) {
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1}, {i - 1, i + 2}, {i + 1, i - 1}}});
+  }
+  auto filename = "getFirstAndLastTriple.dat";
+  auto [blocks, metaData, readerPtr] =
+      writeAndOpenRelations(inputs, filename, 40_B);
+
+  // Test that the result of calling `getFirstAndLastTriple` for the index from
+  // above with the given `ScanSpecification` matches the given `matcher`.
+  auto testFirstAndLastBlock = [&](ScanSpecification spec, auto matcher) {
+    auto firstAndLastTriple = readerPtr->getFirstAndLastTriple({spec, blocks});
+    EXPECT_THAT(firstAndLastTriple, matcher);
+  };
+
+  // A matcher for a `PermutedTriple`. The `int`s are converted to VocabIds.
+  auto matchPermutedTriple = [](int a, int b, int c) {
+    using P = CompressedBlockMetadata::PermutedTriple;
+    return AllOf(AD_FIELD(P, col0Id_, V(a)), AD_FIELD(P, col1Id_, V(b)),
+                 AD_FIELD(P, col2Id_, V(c)));
+  };
+
+  // A matcher for a `FirstAndLastTriple object` where  `(a, b, c)` is the first
+  // triple, and `(d, e, f)` is the last triple.
+  auto matchFirstAndLastTriple = [&](int a, int b, int c, int d, int e, int f) {
+    using F = CompressedRelationReader::ScanSpecAndBlocksAndBounds::
+        FirstAndLastTriple;
+    return Optional(
+        AllOf(AD_FIELD(F, firstTriple_, matchPermutedTriple(a, b, c)),
+              AD_FIELD(F, lastTriple_, matchPermutedTriple(d, e, f))));
+  };
+  // Test for scans with nonempty results with 0, 1, 2, and 3 variables.
+  testFirstAndLastBlock({std::nullopt, std::nullopt, std::nullopt},
+                        matchFirstAndLastTriple(1, 0, 2, 199, 200, 198));
+  testFirstAndLastBlock({V(3), std::nullopt, std::nullopt},
+                        matchFirstAndLastTriple(3, 2, 4, 3, 4, 2));
+  testFirstAndLastBlock({V(4), V(3), std::nullopt},
+                        matchFirstAndLastTriple(4, 3, 5, 4, 3, 6));
+  testFirstAndLastBlock({V(5), V(4), V(6)},
+                        matchFirstAndLastTriple(5, 4, 6, 5, 4, 6));
+
+  // For this scan there is no matching block.
+  testFirstAndLastBlock({V(200), std::nullopt, std::nullopt},
+                        ::testing::Eq(std::nullopt));
+  // For this scan there is a matching block, but the scan would still be empty.
+  testFirstAndLastBlock({V(3), V(3), std::nullopt},
+                        ::testing::Eq(std::nullopt));
 }
 
 // Test for larger relations that span over several blocks. There are no
@@ -399,10 +489,13 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
+      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(6), V(9)}};
 
   std::vector blocks{block1, block2, block3};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
+      {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
+      firstAndLastTriple};
 
   auto test = [&metadataAndBlocks](
                   const std::vector<Id>& joinColumn,
@@ -426,6 +519,9 @@ TEST(CompressedRelationReader, getBlocksForJoinWithColumn) {
   // Test with a fixed col1Id. We now join on the last column, the first column
   // is fixed (42), and the second column is also fixed (4).
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocks.firstAndLastTriple_ =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
+          {V(42), V(4), V(11)}, {V(42), V(4), V(738)}};
   test({V(11), V(27), V(30)}, {block2, block3});
   test({V(12)}, {block2});
   test({V(13)}, {block3});
@@ -445,10 +541,13 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   // We are only interested in blocks with a col0 of `42`.
   CompressedRelationMetadata relation;
   relation.col0Id_ = V(42);
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
+      firstAndLastTriple{{V(42), V(3), V(0)}, {V(42), V(20), V(63)}};
 
   std::vector blocks{block1, block2, block3, block4, block5};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocks{
-      {relation.col0Id_, std::nullopt, std::nullopt}, blocks, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocks{
+      {{relation.col0Id_, std::nullopt, std::nullopt}, blocks},
+      firstAndLastTriple};
 
   CompressedBlockMetadata blockB1{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}};
@@ -468,8 +567,10 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   relationB.col0Id_ = V(47);
 
   std::vector blocksB{blockB1, blockB2, blockB3, blockB4, blockB5, blockB6};
-  CompressedRelationReader::MetadataAndBlocks metadataAndBlocksB{
-      {V(47), std::nullopt, std::nullopt}, blocksB, std::nullopt};
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple
+      firstAndLastTripleB{{V(47), V(3), V(0)}, {V(47), V(38), V(15)}};
+  CompressedRelationReader::ScanSpecAndBlocksAndBounds metadataAndBlocksB{
+      {{V(47), std::nullopt, std::nullopt}, blocksB}, firstAndLastTripleB};
 
   auto test = [&metadataAndBlocks, &metadataAndBlocksB](
                   const std::array<std::vector<CompressedBlockMetadata>, 2>&
@@ -502,17 +603,29 @@ TEST(CompressedRelationReader, getBlocksForJoin) {
   test({std::vector{block2, block3, block4}, std::vector{blockB2, blockB3}});
   // Test with a fixed col1Id on both sides. We now join on the last column.
   metadataAndBlocks.scanSpec_.setCol1Id(V(20));
+  using FL =
+      CompressedRelationReader::ScanSpecAndBlocksAndBounds::FirstAndLastTriple;
+  metadataAndBlocks.firstAndLastTriple_ =
+      FL{{V(42), V(20), V(5)}, {V(42), V(20), V(63)}};
   metadataAndBlocksB.scanSpec_.setCol1Id(V(38));
+  metadataAndBlocksB.firstAndLastTriple_ =
+      FL{{V(47), V(38), V(5)}, {V(47), V(38), V(15)}};
   test({std::vector{block4}, std::vector{blockB4, blockB5}});
 
   // Fix only the col1Id of the left input.
   metadataAndBlocks.scanSpec_.setCol1Id(V(4));
+  metadataAndBlocks.firstAndLastTriple_ =
+      FL{{V(42), V(4), V(8)}, {V(42), V(4), V(12)}};
   metadataAndBlocksB.scanSpec_.setCol1Id(std::nullopt);
-  test({std::vector{block2}, std::vector{blockB2, blockB3}});
+  metadataAndBlocksB.firstAndLastTriple_ = firstAndLastTripleB;
+  test({std::vector{block2}, std::vector{blockB3}});
 
   // Fix only the col1Id of the right input.
   metadataAndBlocks.scanSpec_.setCol1Id(std::nullopt);
+  metadataAndBlocks.firstAndLastTriple_ = firstAndLastTriple;
   metadataAndBlocksB.scanSpec_.setCol1Id(V(7));
+  metadataAndBlocksB.firstAndLastTriple_ =
+      FL{{V(47), V(7), V(13)}, {V(47), V(7), V(58)}};
   test({std::vector{block4, block5}, std::vector{blockB3}});
 }
 

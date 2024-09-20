@@ -2,8 +2,7 @@
 // Chair of Algorithms and Data Structures
 // Author: Johannes Kalmbach <johannes.kalmbach@gmail.com>
 
-#ifndef QLEVER_COMPRESSEDRELATION_H
-#define QLEVER_COMPRESSEDRELATION_H
+#pragma once
 
 #include <algorithm>
 #include <type_traits>
@@ -330,11 +329,13 @@ class CompressedRelationWriter {
   CompressedRelationMetadata addCompleteLargeRelation(Id col0Id,
                                                       auto&& sortedBlocks);
 
-  // This is the function in `CompressedRelationsTest.cpp` that tests the
+  // This is a function in `CompressedRelationsTest.cpp` that tests the
   // internals of this class and therefore needs private access.
-  friend void testCompressedRelations(const auto& inputs,
-                                      std::string testCaseName,
-                                      ad_utility::MemorySize blocksize);
+  friend std::pair<std::vector<CompressedBlockMetadata>,
+                   std::vector<CompressedRelationMetadata>>
+  compressedRelationTestWriteCompressedRelations(
+      const auto& inputs, std::string filename,
+      ad_utility::MemorySize blocksize);
 };
 
 using namespace std::string_view_literals;
@@ -351,14 +352,17 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // The metadata of a single relation together with a subset of its
-  // blocks and possibly a `col1Id` for additional filtering. This is used as
-  // the input to several functions below that take such an input.
-  struct MetadataAndBlocks {
+  // The specification of scan, together with the blocks on which this scan is
+  // to be performed.
+  struct ScanSpecAndBlocks {
     ScanSpecification scanSpec_;
     const std::span<const CompressedBlockMetadata> blockMetadata_;
+  };
 
-    // If set, `firstAndLastTriple_` contains the first and the last triple
+  // This struct additionally contains the first and last triple of the scan
+  // result.
+  struct ScanSpecAndBlocksAndBounds : public ScanSpecAndBlocks {
+    // `firstAndLastTriple_` contains the first and the last triple
     // of the specified relation (and being filtered by the `col1Id` if
     // specified). This might be different from the first triple in the first
     // block (in the case of the `firstTriple_`, similarly for `lastTriple_`)
@@ -368,7 +372,14 @@ class CompressedRelationReader {
       CompressedBlockMetadata::PermutedTriple firstTriple_;
       CompressedBlockMetadata::PermutedTriple lastTriple_;
     };
-    std::optional<FirstAndLastTriple> firstAndLastTriple_;
+    FirstAndLastTriple firstAndLastTriple_;
+    // Deliberately delete the default constructor, s.t. we don't accidentally
+    // forget to set the `firstAndLastTriple_`
+    ScanSpecAndBlocksAndBounds() = delete;
+    ScanSpecAndBlocksAndBounds(ScanSpecAndBlocks base,
+                               FirstAndLastTriple triples)
+        : ScanSpecAndBlocks(std::move(base)),
+          firstAndLastTriple_(std::move(triples)) {}
   };
 
   struct LazyScanMetadata {
@@ -413,7 +424,7 @@ class CompressedRelationReader {
   // (col2) else.
   static std::vector<CompressedBlockMetadata> getBlocksForJoin(
       std::span<const Id> joinColumn,
-      const MetadataAndBlocks& metadataAndBlocks);
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks);
 
   // For each of `metadataAndBlocks, metadataAndBlocks2` get the blocks (an
   // ordered subset of the blocks in the `scanMetadata` that might contain
@@ -423,8 +434,8 @@ class CompressedRelationReader {
   // the metadata, so the middle column (col1) in case the `scanMetadata`
   // doesn't contain a `col1Id`, or the last column (col2) else.
   static std::array<std::vector<CompressedBlockMetadata>, 2> getBlocksForJoin(
-      const MetadataAndBlocks& metadataAndBlocks,
-      const MetadataAndBlocks& metadataAndBlocks2);
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks,
+      const ScanSpecAndBlocksAndBounds& metadataAndBlocks2);
 
   /**
    * @brief For a permutation XYZ, retrieve all Z for given X and Y (if `col1Id`
@@ -492,18 +503,18 @@ class CompressedRelationReader {
       const ScanSpecification& blockA,
       std::span<const CompressedBlockMetadata> blockB);
 
-  // The same function, but specify the arguments as the `MetadataAndBlocks`
-  // struct.
+  // The same function, but specify the arguments as the
+  // `ScanSpecAndBlocksAndBounds` struct.
   static std::span<const CompressedBlockMetadata> getBlocksFromMetadata(
-      const MetadataAndBlocks& metadataAndBlocks);
+      const ScanSpecAndBlocks& metadataAndBlocks);
 
   // Get the first and the last triple that the result of a `scan` with the
-  // given arguments would lead to. Throw an exception if the scan result would
+  // given arguments would lead to. Return `nullopt` if the scan result would
   // be empty. This function is used to more efficiently filter the blocks of
   // index scans between joining them to get better estimates for the beginning
   // and end of incomplete blocks.
-  MetadataAndBlocks::FirstAndLastTriple getFirstAndLastTriple(
-      const MetadataAndBlocks& metadataAndBlocks) const;
+  std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple>
+  getFirstAndLastTriple(const ScanSpecAndBlocks& metadataAndBlocks) const;
 
   // Get access to the underlying allocator
   const Allocator& allocator() const { return allocator_; }
@@ -592,5 +603,3 @@ class CompressedRelationReader {
  * wrapper.
  * 2. Then add assertions that we only get valid column indices specified.
  */
-
-#endif  // QLEVER_COMPRESSEDRELATION_H

@@ -259,7 +259,13 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
+ScanSpecification IndexScan::getScanSpecification() const {
+  const IndexImpl& index = getIndex().getImpl();
+  return getScanSpecificationTc().toScanSpecification(index);
+}
+
+// ___________________________________________________________________________
+ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
   auto permutedTriple = getPermutedTriple();
   return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
 }
@@ -267,11 +273,6 @@ ScanSpecificationAsTripleComponent IndexScan::getScanSpecification() const {
 // ___________________________________________________________________________
 Permutation::IdTableGenerator IndexScan::getLazyScan(
     std::vector<CompressedBlockMetadata> blocks) const {
-  const IndexImpl& index = getIndex().getImpl();
-  auto scanSpecification = getScanSpecification().toScanSpecification(index);
-  if (!scanSpecification.has_value()) {
-    return {};
-  }
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
@@ -280,8 +281,10 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
 
-  return index.getPermutation(permutation())
-      .lazyScan(std::move(scanSpecification).value(), std::move(actualBlocks),
+  return getIndex()
+      .getImpl()
+      .getPermutation(permutation())
+      .lazyScan(getScanSpecification(), std::move(actualBlocks),
                 additionalColumns(), cancellationHandle_, getLimit());
 };
 
@@ -289,12 +292,8 @@ Permutation::IdTableGenerator IndexScan::getLazyScan(
 std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
     const {
   const auto& index = getExecutionContext()->getIndex().getImpl();
-  auto scanSpec = getScanSpecification().toScanSpecification(index);
-  if (!scanSpec.has_value()) {
-    return std::nullopt;
-  }
   return index.getPermutation(permutation())
-      .getMetadataAndBlocks(scanSpec.value());
+      .getMetadataAndBlocks(getScanSpecification());
 };
 
 // ________________________________________________________________

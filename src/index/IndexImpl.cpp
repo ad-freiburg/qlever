@@ -1422,13 +1422,7 @@ IdTable IndexImpl::scan(
     const ad_utility::SharedCancellationHandle& cancellationHandle,
     const LimitOffsetClause& limitOffset) const {
   auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
-  if (!scanSpecification.has_value()) {
-    cancellationHandle->throwIfCancelled();
-    return IdTable{
-        scanSpecificationAsTc.numColumns() + additionalColumns.size(),
-        allocator_};
-  }
-  return scan(scanSpecification.value(), permutation, additionalColumns,
+  return scan(scanSpecification, permutation, additionalColumns,
               cancellationHandle, limitOffset);
 }
 // _____________________________________________________________________________
@@ -1443,14 +1437,9 @@ IdTable IndexImpl::scan(
 
 // _____________________________________________________________________________
 size_t IndexImpl::getResultSizeOfScan(
-    const ScanSpecificationAsTripleComponent& scanSpecificationAsTc,
+    const ScanSpecification& scanSpecification,
     const Permutation::Enum& permutation) const {
-  const Permutation& p = getPermutation(permutation);
-  auto scanSpecification = scanSpecificationAsTc.toScanSpecification(*this);
-  if (!scanSpecification.has_value()) {
-    return 0;
-  }
-  return p.getResultSizeOfScan(scanSpecification.value());
+  return getPermutation(permutation).getResultSizeOfScan(scanSpecification);
 }
 
 // _____________________________________________________________________________

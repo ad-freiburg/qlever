@@ -191,7 +191,8 @@ namespace {
 // single ID from a join column with a complete triple from a block.
 auto getRelevantIdFromTriple(
     CompressedBlockMetadata::PermutedTriple triple,
-    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) {
+    const CompressedRelationReader::ScanSpecAndBlocksAndBounds&
+        metadataAndBlocks) {
   auto idForNonMatchingBlock = [](Id fromTriple, Id key, Id minKey,
                                   Id maxKey) -> std::optional<Id> {
     if (fromTriple < key) {
@@ -207,10 +208,7 @@ auto getRelevantIdFromTriple(
   AD_CORRECTNESS_CHECK(!scanSpec.col2Id().has_value());
 
   auto [minKey, maxKey] = [&]() {
-    if (!metadataAndBlocks.firstAndLastTriple_.has_value()) {
-      return std::array{Id::min(), Id::max()};
-    }
-    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_.value();
+    const auto& [first, last] = metadataAndBlocks.firstAndLastTriple_;
     if (scanSpec.col1Id().has_value()) {
       return std::array{first.col2Id_, last.col2Id_};
     } else if (scanSpec.col0Id().has_value()) {
@@ -242,7 +240,7 @@ auto getRelevantIdFromTriple(
 // _____________________________________________________________________________
 std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
     std::span<const Id> joinColumn,
-    const MetadataAndBlocks& metadataAndBlocks) {
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks) {
   // Get all the blocks where `col0FirstId_ <= col0Id <= col0LastId_`.
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
 
@@ -288,8 +286,8 @@ std::vector<CompressedBlockMetadata> CompressedRelationReader::getBlocksForJoin(
 // _____________________________________________________________________________
 std::array<std::vector<CompressedBlockMetadata>, 2>
 CompressedRelationReader::getBlocksForJoin(
-    const MetadataAndBlocks& metadataAndBlocks1,
-    const MetadataAndBlocks& metadataAndBlocks2) {
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks1,
+    const ScanSpecAndBlocksAndBounds& metadataAndBlocks2) {
   // Associate a block together with the relevant ID (col1 or col2) for this
   // join from the first and last triple.
   struct BlockWithFirstAndLastId {
@@ -303,24 +301,23 @@ CompressedRelationReader::getBlocksForJoin(
     return block1.last_ < block2.first_;
   };
 
-  // Transform all the relevant blocks from a `MetadataAndBlocks` a
+  // Transform all the relevant blocks from a `ScanSpecAndBlocksAndBounds` a
   // `BlockWithFirstAndLastId` struct (see above).
-  auto getBlocksWithFirstAndLastId =
-      [&blockLessThanBlock](const MetadataAndBlocks& metadataAndBlocks) {
-        auto getSingleBlock =
-            [&metadataAndBlocks](const CompressedBlockMetadata& block)
-            -> BlockWithFirstAndLastId {
-          return {
-              block,
+  auto getBlocksWithFirstAndLastId = [&blockLessThanBlock](
+                                         const ScanSpecAndBlocksAndBounds&
+                                             metadataAndBlocks) {
+    auto getSingleBlock =
+        [&metadataAndBlocks](
+            const CompressedBlockMetadata& block) -> BlockWithFirstAndLastId {
+      return {block,
               getRelevantIdFromTriple(block.firstTriple_, metadataAndBlocks),
               getRelevantIdFromTriple(block.lastTriple_, metadataAndBlocks)};
-        };
-        auto result = std::views::transform(
-            getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
-        AD_CORRECTNESS_CHECK(
-            std::ranges::is_sorted(result, blockLessThanBlock));
-        return result;
-      };
+    };
+    auto result = std::views::transform(
+        getBlocksFromMetadata(metadataAndBlocks), getSingleBlock);
+    AD_CORRECTNESS_CHECK(std::ranges::is_sorted(result, blockLessThanBlock));
+    return result;
+  };
 
   auto blocksWithFirstAndLastId1 =
       getBlocksWithFirstAndLastId(metadataAndBlocks1);
@@ -737,17 +734,18 @@ CompressedRelationReader::getRelevantBlocks(
 // _____________________________________________________________________________
 std::span<const CompressedBlockMetadata>
 CompressedRelationReader::getBlocksFromMetadata(
-    const MetadataAndBlocks& metadata) {
+    const ScanSpecAndBlocks& metadata) {
   return getRelevantBlocks(metadata.scanSpec_, metadata.blockMetadata_);
 }
 
 // _____________________________________________________________________________
 auto CompressedRelationReader::getFirstAndLastTriple(
-    const CompressedRelationReader::MetadataAndBlocks& metadataAndBlocks) const
-    -> MetadataAndBlocks::FirstAndLastTriple {
+    const CompressedRelationReader::ScanSpecAndBlocks& metadataAndBlocks) const
+    -> std::optional<ScanSpecAndBlocksAndBounds::FirstAndLastTriple> {
   auto relevantBlocks = getBlocksFromMetadata(metadataAndBlocks);
-  AD_CONTRACT_CHECK(!relevantBlocks.empty());
-
+  if (relevantBlocks.empty()) {
+    return std::nullopt;
+  }
   const auto& scanSpec = metadataAndBlocks.scanSpec_;
 
   auto scanBlock = [&](const CompressedBlockMetadata& block) {
@@ -766,9 +764,12 @@ auto CompressedRelationReader::getFirstAndLastTriple(
 
   auto firstBlock = scanBlock(relevantBlocks.front());
   auto lastBlock = scanBlock(relevantBlocks.back());
-  AD_CORRECTNESS_CHECK(!firstBlock.empty());
+  if (firstBlock.empty()) {
+    return std::nullopt;
+  }
   AD_CORRECTNESS_CHECK(!lastBlock.empty());
-  return {rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
+  return ScanSpecAndBlocksAndBounds::FirstAndLastTriple{
+      rowToTriple(firstBlock.front()), rowToTriple(lastBlock.back())};
 }
 
 // ____________________________________________________________________________
