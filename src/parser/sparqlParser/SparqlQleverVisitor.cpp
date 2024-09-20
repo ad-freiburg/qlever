@@ -705,7 +705,7 @@ GraphPatternOperation Visitor::visitPathQuery(
   auto parsePathQuery = [](parsedQuery::PathQuery& pathQuery,
                            const parsedQuery::GraphPatternOperation& op) {
     if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
-      pathQuery.fromBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
+      pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
     } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
       auto pattern = std::get<parsedQuery::GroupGraphPattern>(op);
       pathQuery.childGraphPattern_ = std::move(pattern._child);

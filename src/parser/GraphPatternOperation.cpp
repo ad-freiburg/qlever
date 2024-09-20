@@ -173,7 +173,7 @@ std::variant<Variable, std::vector<Id>> PathQuery::toSearchSide(
 }
 
 // ____________________________________________________________________________
-void PathQuery::fromBasicPattern(const BasicGraphPattern& pattern) {
+void PathQuery::addBasicPattern(const BasicGraphPattern& pattern) {
   for (SparqlTriple triple : pattern._triples) {
     addParameter(triple);
   }
