@@ -1839,7 +1839,30 @@ auto QueryPlanner::createJoinWithPathSearch(
 
   auto sourceColumn = pathSearch->getSourceColumn();
   auto targetColumn = pathSearch->getTargetColumn();
-  for (auto jc : jcs) {
+  if (jcs.size() == 2) {
+    // To join source and target, both must be variables
+    if (!sourceColumn || !targetColumn) {
+      return std::nullopt;
+    }
+
+    auto firstJc = jcs[0];
+    auto firstCol = aRootOp ? firstJc[0] : firstJc[1];
+    auto firstOtherCol = aRootOp ? firstJc[1]: firstJc[0];
+
+    auto secondJc = jcs[1];
+    auto secondCol = aRootOp ? secondJc[0] : secondJc[1];
+    auto secondOtherCol = aRootOp ? secondJc[1]: secondJc[0];
+
+    if (sourceColumn == firstCol && targetColumn == secondCol) {
+      pathSearch->bindSourceAndTargetSide(
+        sibling._qet, firstOtherCol, secondOtherCol);
+    } else if (sourceColumn == secondCol && targetColumn == firstCol) {
+      pathSearch->bindSourceAndTargetSide(sibling._qet, secondOtherCol, firstOtherCol);
+    } else {
+      return std::nullopt;
+    }
+  } else if (jcs.size() == 1) {
+    auto jc = jcs[0];
     const size_t thisCol = aRootOp ? jc[0] : jc[1];
     const size_t otherCol = aRootOp ? jc[1] : jc[0];
 
@@ -1849,7 +1872,9 @@ auto QueryPlanner::createJoinWithPathSearch(
     } else if (targetColumn && targetColumn == thisCol &&
                !pathSearch->isTargetBound()) {
       pathSearch->bindTargetSide(sibling._qet, otherCol);
-    }
+    } 
+  } else {
+    return std::nullopt;
   }
 
   SubtreePlan plan = makeSubtreePlan(pathSearch);
