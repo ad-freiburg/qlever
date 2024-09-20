@@ -6,6 +6,7 @@
 
 #include <variant>
 #include <vector>
+#include <ranges>
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
@@ -232,7 +233,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto sideTime = timer.msecs();
     timer.start();
 
-    auto paths = allPaths(sources, targets, binSearch);
+    auto paths = allPaths(sources, targets, binSearch, config_.cartesian_);
 
     timer.stop();
     auto searchTime = timer.msecs();
@@ -336,22 +337,30 @@ std::vector<Path> PathSearch::findPaths(
 // _____________________________________________________________________________
 std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
                                        std::span<const Id> targets,
-                                       BinSearchWrapper& binSearch) const {
+                                       BinSearchWrapper& binSearch,
+                                       bool cartesian) const {
   std::vector<Path> paths;
   Path path;
-
-  std::unordered_set<uint64_t> targetSet;
-  for (auto target : targets) {
-    targetSet.insert(target.getBits());
-  }
 
   if (sources.empty()) {
     sources = binSearch.getSources();
   }
-  for (auto source : sources) {
-    for (auto path : findPaths(source, targetSet, binSearch)) {
-      // path.reverse();
-      paths.push_back(path);
+
+  if (cartesian || sources.size() != targets.size()) {
+    std::unordered_set<uint64_t> targetSet;
+    for (auto target : targets) {
+      targetSet.insert(target.getBits());
+    }
+    for (auto source : sources) {
+      for (auto path : findPaths(source, targetSet, binSearch)) {
+        paths.push_back(path);
+      }
+    }
+  } else {
+    for (size_t i = 0; i < sources.size(); i++){
+      for (auto path : findPaths(sources[i], {targets[i].getBits()}, binSearch)) {
+        paths.push_back(path);
+      }
     }
   }
   return paths;

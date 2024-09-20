@@ -124,6 +124,7 @@ struct PathSearchConfiguration {
   Variable edgeColumn_;
   // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
+  bool cartesian_ = true;
 
   bool sourceIsVariable() const {
     return std::holds_alternative<Variable>(sources_);
@@ -273,7 +274,8 @@ class PathSearch : public Operation {
    */
   std::vector<Path> allPaths(std::span<const Id> sources,
                              std::span<const Id> targets,
-                             BinSearchWrapper& binSearch) const;
+                             BinSearchWrapper& binSearch,
+                             bool cartesian) const;
 
   /**
    * @brief Converts paths to a result table with a specified width.

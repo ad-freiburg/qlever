@@ -165,6 +165,7 @@ struct PathQuery {
   PathSearchAlgorithm algorithm_;
 
   GraphPattern childGraphPattern_;
+  bool cartesian_ = true;
 
   void addParameter(const SparqlTriple& triple);
   void fromBasicPattern(const BasicGraphPattern& pattern);

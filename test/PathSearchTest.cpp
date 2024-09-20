@@ -500,3 +500,31 @@ TEST(PathSearchTest, multiSourceMultiTargetallPaths) {
   ASSERT_THAT(resultTable.idTable(),
               ::testing::UnorderedElementsAreArray(expected));
 }
+
+TEST(PathSearchTest, multiSourceMultiTargetallPathsNotCartesian) {
+  auto sub = makeIdTableFromVector({{0, 2}, {1, 2}, {2, 3}, {3, 4}, {3, 5}});
+  auto expected = makeIdTableFromVector({
+      {V(0), V(2), I(0), I(0)},
+      {V(2), V(3), I(0), I(1)},
+      {V(3), V(4), I(0), I(2)},
+      {V(1), V(2), I(1), I(0)},
+      {V(2), V(3), I(1), I(1)},
+      {V(3), V(5), I(1), I(2)},
+  });
+
+  std::vector<Id> sources{V(0), V(1)};
+  std::vector<Id> targets{V(4), V(5)};
+  Vars vars = {Variable{"?start"}, Variable{"?end"}};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Var{"?start"},
+                                 Var{"?end"},
+                                 Var{"?edgeIndex"},
+                                 Var{"?pathIndex"},
+                                 {}, false};
+
+  auto resultTable = performPathSearch(config, std::move(sub), vars);
+  ASSERT_THAT(resultTable.idTable(),
+              ::testing::UnorderedElementsAreArray(expected));
+}

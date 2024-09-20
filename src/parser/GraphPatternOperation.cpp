@@ -121,6 +121,11 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     setVariable("edgeColumn", object, edgeColumn_);
   } else if (predString.ends_with("edgeProperty>")) {
     edgeProperties_.push_back(getVariable("edgeProperty", object));
+  } else if (predString.ends_with("cartesian>")) {
+    if (!object.isBool()) {
+      throw PathSearchException("The parameter 'cartesian' expects a boolean");
+    }
+    cartesian_ = object.getBool();
   } else if (predString.ends_with("algorithm>")) {
     if (!object.isIri()) {
       throw PathSearchException("The 'algorithm' value has to be an Iri");
@@ -193,7 +198,7 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
   return PathSearchConfiguration{
       algorithm_,          sources,        targets,
       start_.value(),      end_.value(),   pathColumn_.value(),
-      edgeColumn_.value(), edgeProperties_};
+      edgeColumn_.value(), edgeProperties_, cartesian_};
 }
 
 // ____________________________________________________________________________
