@@ -14,7 +14,6 @@
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
-using TreeAndCol = std::pair<std::shared_ptr<QueryExecutionTree>, size_t>;
 using SearchSide = std::variant<Variable, std::vector<Id>>;
 
 namespace pathSearch {
@@ -180,8 +179,12 @@ class PathSearch : public Operation {
   // Configuration for the path search.
   PathSearchConfiguration config_;
 
-  std::optional<TreeAndCol> boundSources_;
-  std::optional<TreeAndCol> boundTargets_;
+  std::optional<size_t> sourceCol_;
+  std::optional<size_t> targetCol_;
+
+  std::optional<std::shared_ptr<QueryExecutionTree>> sourceTree_;
+  std::optional<std::shared_ptr<QueryExecutionTree>> targetTree_;
+  std::optional<std::shared_ptr<QueryExecutionTree>> sourceAndTargetTree_;
 
  public:
   PathSearch(QueryExecutionContext* qec,
@@ -222,12 +225,14 @@ class PathSearch : public Operation {
   void bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp,
                       size_t inputCol);
 
+  void bindSourceAndTargetSide(std::shared_ptr<QueryExecutionTree> sourceAndTargetOp, size_t sourceCol, size_t targetCol);
+
   bool isSourceBound() const {
-    return boundSources_.has_value() || !config_.sourceIsVariable();
+    return sourceTree_.has_value() || sourceAndTargetTree_.has_value() || !config_.sourceIsVariable();
   }
 
   bool isTargetBound() const {
-    return boundTargets_.has_value() || !config_.targetIsVariable();
+    return targetTree_.has_value() || sourceAndTargetTree_.has_value() || !config_.targetIsVariable();
   }
 
   std::optional<size_t> getSourceColumn() const {
@@ -252,8 +257,7 @@ class PathSearch : public Operation {
   VariableToColumnMap computeVariableToColumnMap() const override;
 
  private:
-  std::span<const Id> handleSearchSide(
-      const SearchSide& side, const std::optional<TreeAndCol>& binding) const;
+  std::pair<std::span<const Id>, std::span<const Id>> handleSearchSides() const;
 
   /**
    * @brief Finds paths based on the configured algorithm.

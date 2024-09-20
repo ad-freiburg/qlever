@@ -1026,6 +1026,40 @@ TEST(QueryPlanner, PathSearchBothBound) {
       h::PathSearch(config, true, true, scan("?start", "<p>", "?end"), h::ValuesClause("VALUES (?source\t?target) { (<x> <z>) }"), h::ValuesClause("VALUES (?source\t?target) { (<x> <z>) }")), qec);
 }
 
+TEST(QueryPlanner, PathSearchBothBoundIndividually) {
+  auto scan = h::IndexScanFromStrings;
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  Variable sources{"?source"};
+  Variable targets{"?target"};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "VALUES (?source) {(<x>)}"
+      "VALUES (?target) {(<z>)}"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source ?source ;"
+      "pathSearch:target ?target ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}",
+      h::PathSearch(config, true, true, scan("?start", "<p>", "?end"), h::ValuesClause("VALUES (?source) { (<x>) }"), h::ValuesClause("VALUES (?target) { (<z>) }")), qec);
+}
+
 // __________________________________________________________________________
 TEST(QueryPlanner, PathSearchMissingStart) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");

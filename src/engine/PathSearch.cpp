@@ -115,12 +115,16 @@ std::vector<QueryExecutionTree*> PathSearch::getChildren() {
   std::vector<QueryExecutionTree*> res;
   res.push_back(subtree_.get());
 
-  if (boundSources_.has_value()) {
-    res.push_back(boundSources_->first.get());
-  }
+  if (sourceAndTargetTree_.has_value()) {
+    res.push_back(sourceAndTargetTree_.value().get());
+  } else {
+    if (sourceTree_.has_value()) {
+      res.push_back(sourceTree_.value().get());
+    }
 
-  if (boundTargets_.has_value()) {
-    res.push_back(boundTargets_->first.get());
+    if (targetTree_.has_value()) {
+      res.push_back(targetTree_.value().get());
+    }
   }
 
   return res;
@@ -180,13 +184,23 @@ vector<ColumnIndex> PathSearch::resultSortedOn() const { return {}; };
 // _____________________________________________________________________________
 void PathSearch::bindSourceSide(std::shared_ptr<QueryExecutionTree> sourcesOp,
                                 size_t inputCol) {
-  boundSources_ = {sourcesOp, inputCol};
+  sourceTree_ = sourcesOp;
+  sourceCol_ = inputCol;
 }
 
 // _____________________________________________________________________________
 void PathSearch::bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp,
                                 size_t inputCol) {
-  boundTargets_ = {targetsOp, inputCol};
+  targetTree_ = targetsOp;
+  targetCol_ = inputCol;
+}
+
+// _____________________________________________________________________________
+void PathSearch::bindSourceAndTargetSide(std::shared_ptr<QueryExecutionTree> sourceAndTargetOp,
+                                         size_t sourceCol, size_t targetCol) {
+  sourceAndTargetTree_ = sourceAndTargetOp;
+  sourceCol_ = sourceCol;
+  targetCol_ = targetCol;
 }
 
 // _____________________________________________________________________________
@@ -212,10 +226,7 @@ Result PathSearch::computeResult([[maybe_unused]] bool requestLaziness) {
     auto buildingTime = timer.msecs();
     timer.start();
 
-    std::span<const Id> sources =
-        handleSearchSide(config_.sources_, boundSources_);
-    std::span<const Id> targets =
-        handleSearchSide(config_.targets_, boundTargets_);
+    auto [sources, targets] = handleSearchSides();
 
     timer.stop();
     auto sideTime = timer.msecs();
@@ -249,18 +260,35 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
   return variableColumns_;
 };
 
-std::span<const Id> PathSearch::handleSearchSide(
-    const SearchSide& side, const std::optional<TreeAndCol>& binding) const {
-  std::span<const Id> ids;
-  bool isVariable = std::holds_alternative<Variable>(side);
-  if (isVariable && binding.has_value()) {
-    ids = binding->first->getResult()->idTable().getColumn(binding->second);
-  } else if (isVariable) {
-    return {};
-  } else {
-    ids = std::get<std::vector<Id>>(side);
+// _____________________________________________________________________________
+std::pair<std::span<const Id>, std::span<const Id>> PathSearch::handleSearchSides() const {
+  std::span<const Id> sourceIds;
+  std::span<const Id> targetIds;
+
+  if (sourceAndTargetTree_.has_value()) {
+    auto resultTable = sourceAndTargetTree_.value()->getResult();
+    sourceIds = resultTable->idTable().getColumn(sourceCol_.value());
+    targetIds = resultTable->idTable().getColumn(targetCol_.value());
+    return {sourceIds, targetIds};
   }
-  return ids;
+
+  if (sourceTree_.has_value()) {
+    sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(sourceCol_.value());
+  } else if (config_.sourceIsVariable()) {
+    sourceIds = {};
+  } else {
+    sourceIds = std::get<std::vector<Id>>(config_.sources_);
+  }
+
+  if (targetTree_.has_value()) {
+    targetIds = targetTree_.value()->getResult()->idTable().getColumn(targetCol_.value());
+  } else if (config_.targetIsVariable()) {
+    targetIds = {};
+  } else {
+    targetIds = std::get<std::vector<Id>>(config_.targets_);
+  }
+  
+  return {sourceIds, targetIds};
 }
 
 // _____________________________________________________________________________
