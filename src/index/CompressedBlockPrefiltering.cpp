@@ -6,10 +6,28 @@
 
 namespace prefilterExpressions {
 
+// HELPER FUNCTION
+//______________________________________________________________________________
+// Given a PermutedTriple retrieve the suitable Id w.r.t. a column (index).
+static constexpr auto getIdFromColumnIndex(
+    const BlockMetadata::PermutedTriple& permutedTriple, size_t columnIndex) {
+  switch (columnIndex) {
+    case 0:
+      return permutedTriple.col0Id_;
+    case 1:
+      return permutedTriple.col1Id_;
+    case 2:
+      return permutedTriple.col2Id_;
+    default:
+      // Triple!
+      AD_FAIL();
+  }
+};
+
 // SECTION RELATIONAL OPERATIONS
 //______________________________________________________________________________
 template <CompOp Comparison>
-bool RelationalExpressions<Comparison>::compareImpl(
+bool RelationalExpression<Comparison>::compareImpl(
     const ValueId& firstId, const ValueId& secondId) const {
   using enum CompOp;
   // For compactness we combine LE and GT here. In evaluate (see below), for
@@ -32,8 +50,8 @@ bool RelationalExpressions<Comparison>::compareImpl(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-auto RelationalExpressions<Comparison>::lowerIndex(
-    std::vector<BlockMetadata>& input, size_t evaluationColumn) {
+auto RelationalExpression<Comparison>::lowerIndex(
+    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   using enum CompOp;
   // Extract evaluationColumn specific ValueId from BlockMetadata
   auto getRelevantIdFromBlock =
@@ -54,8 +72,8 @@ auto RelationalExpressions<Comparison>::lowerIndex(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-auto RelationalExpressions<Comparison>::upperIndex(
-    std::vector<BlockMetadata>& input, size_t evaluationColumn)
+auto RelationalExpression<Comparison>::upperIndex(
+    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const
     requires(Comparison == CompOp::EQ || Comparison == CompOp::NE) {
   // Extract evaluationColumn specific ValueId from BlockMetadata
   auto getRelevantIdFromBlock =
@@ -81,8 +99,8 @@ auto RelationalExpressions<Comparison>::upperIndex(
 
 //______________________________________________________________________________
 template <CompOp Comparison>
-std::vector<BlockMetadata> RelationalExpressions<Comparison>::evaluate(
-    std::vector<BlockMetadata>& input, size_t evaluationColumn) {
+std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluate(
+    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   using enum CompOp;
   if constexpr (Comparison == LT || Comparison == LE) {
     return std::vector<BlockMetadata>(input.begin(),
@@ -118,8 +136,8 @@ std::vector<BlockMetadata> RelationalExpressions<Comparison>::evaluate(
 // SECTION LOGICAL OPERATIONS
 //______________________________________________________________________________
 template <LogicalOperators Operation>
-std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluateOr(
-    std::vector<BlockMetadata>& input, size_t evaluationColumn)
+std::vector<BlockMetadata> LogicalExpression<Operation>::evaluateOr(
+    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const
     requires(Operation == LogicalOperators::OR) {
   auto relevantBlocksChild1 = child1_->evaluate(input, evaluationColumn);
   auto relevantBlocksChild2 = child2_->evaluate(input, evaluationColumn);
@@ -145,8 +163,8 @@ std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluateOr(
 
 //______________________________________________________________________________
 template <LogicalOperators Operation>
-std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluate(
-    std::vector<BlockMetadata>& input, size_t evaluationColumn) {
+std::vector<BlockMetadata> LogicalExpression<Operation>::evaluate(
+    const std::vector<BlockMetadata>& input, size_t evaluationColumn) const {
   if constexpr (Operation == LogicalOperators::AND) {
     auto resultChild1 = child1_->evaluate(input, evaluationColumn);
     return child2_->evaluate(resultChild1, evaluationColumn);
@@ -157,14 +175,14 @@ std::vector<BlockMetadata> LogicalExpressions<Operation>::evaluate(
 
 //______________________________________________________________________________
 // Necessary instantiation of template specializations
-template class RelationalExpressions<CompOp::LT>;
-template class RelationalExpressions<CompOp::LE>;
-template class RelationalExpressions<CompOp::GE>;
-template class RelationalExpressions<CompOp::GT>;
-template class RelationalExpressions<CompOp::EQ>;
-template class RelationalExpressions<CompOp::NE>;
+template class RelationalExpression<CompOp::LT>;
+template class RelationalExpression<CompOp::LE>;
+template class RelationalExpression<CompOp::GE>;
+template class RelationalExpression<CompOp::GT>;
+template class RelationalExpression<CompOp::EQ>;
+template class RelationalExpression<CompOp::NE>;
 
-template class LogicalExpressions<LogicalOperators::AND>;
-template class LogicalExpressions<LogicalOperators::OR>;
+template class LogicalExpression<LogicalOperators::AND>;
+template class LogicalExpression<LogicalOperators::OR>;
 
 }  //  namespace prefilterExpressions

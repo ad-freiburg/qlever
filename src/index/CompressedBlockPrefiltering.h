@@ -11,12 +11,13 @@
 #include "global/ValueIdComparators.h"
 #include "index/CompressedRelation.h"
 
+namespace prefilterExpressions {
+
 // The compressed block metadata (see `CompressedRelation.h`) that we use to
 // filter out the non-relevant blocks by checking their content of
 // `firstTriple_` and `lastTriple_` (`PermutedTriple`)
 using BlockMetadata = CompressedBlockMetadata;
 
-namespace prefilterExpressions {
 //______________________________________________________________________________
 /*
 `PrefilterExpression` represents a base class for the following sub-classes that
@@ -36,8 +37,9 @@ class PrefilterExpression {
  public:
   // The respective metadata to the blocks is expected to be provided in
   // a sorted order (w.r.t. the relevant column).
-  virtual std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
-                                              size_t evaluationColumn) = 0;
+  virtual std::vector<BlockMetadata> evaluate(
+      const std::vector<BlockMetadata>& input,
+      size_t evaluationColumn) const = 0;
   virtual ~PrefilterExpression() = default;
 };
 
@@ -50,43 +52,29 @@ class PrefilterExpression {
 using CompOp = valueIdComparators::Comparison;
 
 //______________________________________________________________________________
-// Given a PermutedTriple, retrieve the suitable Id w.r.t. a column (index).
-constexpr auto getIdFromColumnIndex =
-    [](const BlockMetadata::PermutedTriple& permutedTriple,
-       const size_t columnIndex) {
-      switch (columnIndex) {
-        case 0:
-          return permutedTriple.col0Id_;
-        case 1:
-          return permutedTriple.col1Id_;
-        case 2:
-          return permutedTriple.col2Id_;
-        default:
-          // Triple!
-          AD_FAIL();
-      }
-    };
-
-//______________________________________________________________________________
 template <CompOp Comparison>
-class RelationalExpressions : public PrefilterExpression {
+class RelationalExpression : public PrefilterExpression {
+ private:
+  // The ValueId on which we perform the relational comparison on.
+  ValueId referenceId_;
+
  public:
-  explicit RelationalExpressions(ValueId referenceId)
+  explicit RelationalExpression(const ValueId referenceId)
       : referenceId_(referenceId) {}
 
-  std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) override;
+  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
+                                      size_t evaluationColumn) const override;
 
  private:
-  // The ValueId the comparison refers to.
-  ValueId referenceId_;
   // Helper function that implements the relational comparison on the block
   // values.
   bool compareImpl(const ValueId& tripleId, const ValueId& otherId) const;
   // Helper for providing the lower indices during the evaluation procedure.
-  auto lowerIndex(std::vector<BlockMetadata>& input, size_t evaluationColumn);
+  auto lowerIndex(const std::vector<BlockMetadata>& input,
+                  size_t evaluationColumn) const;
   // Helper to get the upper indices, necessary for EQ and NE.
-  auto upperIndex(std::vector<BlockMetadata>& input, size_t evaluationColumn)
+  auto upperIndex(const std::vector<BlockMetadata>& input,
+                  size_t evaluationColumn) const
       requires(Comparison == CompOp::EQ || Comparison == CompOp::NE);
 };
 
@@ -97,44 +85,46 @@ enum struct LogicalOperators { AND, OR, NOT };
 
 //______________________________________________________________________________
 template <LogicalOperators Operation>
-class LogicalExpressions : public PrefilterExpression {
- public:
-  explicit LogicalExpressions(std::unique_ptr<PrefilterExpression> child1,
-                              std::unique_ptr<PrefilterExpression> child2)
-      : child1_(std::move(child1)), child2_(std::move(child2)) {}
-
-  std::vector<BlockMetadata> evaluate(std::vector<BlockMetadata>& input,
-                                      size_t evaluationColumn) override;
-
+class LogicalExpression : public PrefilterExpression {
  private:
   std::unique_ptr<PrefilterExpression> child1_;
   std::unique_ptr<PrefilterExpression> child2_;
+
+ public:
+  explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1,
+                             std::unique_ptr<PrefilterExpression> child2)
+      : child1_(std::move(child1)), child2_(std::move(child2)) {}
+
+  std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
+                                      size_t evaluationColumn) const override;
+
+ private:
   // Introduce a helper method for the specification LogicalOperators::OR
-  std::vector<BlockMetadata> evaluateOr(std::vector<BlockMetadata>& input,
-                                        size_t evaluationColumn)
+  std::vector<BlockMetadata> evaluateOr(const std::vector<BlockMetadata>& input,
+                                        size_t evaluationColumn) const
       requires(Operation == LogicalOperators::OR);
 };
 
-}  // namespace prefilterExpressions
-
 //______________________________________________________________________________
-// Definition of the RelationalExpressions for LT, LE, EQ, NE, GE and GT.
-using LessThanExpression = prefilterExpressions::RelationalExpressions<
+// Definition of the RelationalExpression for LT, LE, EQ, NE, GE and GT.
+using LessThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::LT>;
-using LessEqualExpression = prefilterExpressions::RelationalExpressions<
+using LessEqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::LE>;
-using EqualExpression = prefilterExpressions::RelationalExpressions<
+using EqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::EQ>;
-using NotEqualExpression = prefilterExpressions::RelationalExpressions<
+using NotEqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::NE>;
-using GreaterEqualExpression = prefilterExpressions::RelationalExpressions<
+using GreaterEqualExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GE>;
-using GreaterThanExpression = prefilterExpressions::RelationalExpressions<
+using GreaterThanExpression = prefilterExpressions::RelationalExpression<
     prefilterExpressions::CompOp::GT>;
 
 //______________________________________________________________________________
-// Definition of the LogicalExpressions for AND and OR.
-using AndExpression = prefilterExpressions::LogicalExpressions<
+// Definition of the LogicalExpression for AND and OR.
+using AndExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::AND>;
-using OrExpression = prefilterExpressions::LogicalExpressions<
+using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::OR>;
+
+}  // namespace prefilterExpressions

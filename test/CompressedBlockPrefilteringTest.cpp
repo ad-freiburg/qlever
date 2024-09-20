@@ -14,6 +14,7 @@ using ad_utility::testing::DoubleId;
 using ad_utility::testing::IntId;
 using ad_utility::testing::UndefId;
 using sparqlExpression::TestContext;
+using namespace prefilterExpressions;
 
 //______________________________________________________________________________
 struct MetadataBlocks {
@@ -68,7 +69,7 @@ struct MetadataBlocks {
 
 // Test LessThanExpression
 // Remark: We compare w.r.t. the first triple!
-TEST(RelationalExpressions, testLessThanExpressions) {
+TEST(RelationalExpression, testLessThanExpressions) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {};
   // NUMERIC
@@ -118,7 +119,7 @@ TEST(RelationalExpressions, testLessThanExpressions) {
 //______________________________________________________________________________
 // Test LessEqualExpression
 // Remark: We compare w.r.t. the first triple
-TEST(RelationalExpressions, testLessEqualExpressions) {
+TEST(RelationalExpression, testLessEqualExpressions) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {};
   // NUMERIC
@@ -157,7 +158,7 @@ TEST(RelationalExpressions, testLessEqualExpressions) {
 //______________________________________________________________________________
 // Test GreaterThanExpression
 // Remark: We compare w.r.t. the last triple
-TEST(RelationalExpressions, testGreaterThanExpression) {
+TEST(RelationalExpression, testGreaterThanExpression) {
   MetadataBlocks blocks{};
   EXPECT_EQ(blocks.numericBlocks,
             GreaterThanExpression{IntId(10)}.evaluate(blocks.numericBlocks, 0));
@@ -199,7 +200,7 @@ TEST(RelationalExpressions, testGreaterThanExpression) {
 //______________________________________________________________________________
 // Test GreaterEqualExpression
 // Remark: We compare w.r.t. the last triple
-TEST(RelationalExpressions, testGreaterEqualExpression) {
+TEST(RelationalExpression, testGreaterEqualExpression) {
   MetadataBlocks blocks{};
   EXPECT_EQ(blocks.numericBlocks, GreaterEqualExpression{IntId(10)}.evaluate(
                                       blocks.numericBlocks, 0));
@@ -245,7 +246,7 @@ TEST(RelationalExpressions, testGreaterEqualExpression) {
 
 //______________________________________________________________________________
 // Test EqualExpression
-TEST(RelationalExpressions, testEqualExpression) {
+TEST(RelationalExpression, testEqualExpression) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {};
   EXPECT_EQ(expectedResult,
@@ -296,7 +297,7 @@ TEST(RelationalExpressions, testEqualExpression) {
 
 //______________________________________________________________________________
 // Test NotEqualExpression
-TEST(RelationalExpressions, testNotEqualExpression) {
+TEST(RelationalExpression, testNotEqualExpression) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult{};
   EXPECT_EQ(blocks.numericBlocks,
@@ -357,7 +358,7 @@ TEST(RelationalExpressions, testNotEqualExpression) {
 // Test Logical Expressions
 
 // Test AndExpression
-TEST(LogicalExpressions, testAndExpression) {
+TEST(LogicalExpression, testAndExpression) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult{};
   EXPECT_EQ(expectedResult,
@@ -425,7 +426,7 @@ TEST(LogicalExpressions, testAndExpression) {
 
 //______________________________________________________________________________
 // Test OrExpression
-TEST(LogicalExpressions, testOrExpression) {
+TEST(LogicalExpression, testOrExpression) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {blocks.nb1, blocks.nb4,
                                                blocks.nb5};
