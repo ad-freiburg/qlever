@@ -14,9 +14,8 @@
 static constexpr auto valueAdder = []() {
   auto numericValueAdder =
       []<typename T>(T value, double& sum, [[maybe_unused]] const bool& error)
-          requires std::is_arithmetic_v<T> {
-    sum += static_cast<double>(value);
-  };
+          requires std::is_arithmetic_v<T>
+  { sum += static_cast<double>(value); };
   auto nonNumericValueAdder = [](sparqlExpression::detail::NotNumeric,
                                  [[maybe_unused]] const double& sum,
                                  bool& error) { error = true; };
@@ -215,8 +214,8 @@ struct SampleAggregationData {
           auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
           return ValueId::makeFromLocalVocabIndex(localVocabIndex);
         };
-    return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
-                                                       stringResultGetter),
+    return std::visit(ad_utility::OverloadCallOperator{valueIdResultGetter,
+                                                       stringResultGetter},
                       value_.value());
   }
 
