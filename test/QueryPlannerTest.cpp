@@ -890,7 +890,7 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
 
   std::vector<Id> sources{getId("<x>")};
-  std::vector<Id> targets{getId("<y>"), getId("<z>")};
+  std::vector<Id> targets{getId("<z>"), getId("<y>")};
   PathSearchConfiguration config{
       PathSearchAlgorithm::ALL_PATHS,
       sources,

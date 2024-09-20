@@ -263,24 +263,8 @@ inline auto TransitivePath =
     };
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
-  auto sourceMatcher =
-      std::holds_alternative<Variable>(config.sources_)
-          ? AD_FIELD(
-                PathSearchConfiguration, sources_,
-                VariantWith<Variable>(Eq(std::get<Variable>(config.sources_))))
-          : AD_FIELD(
-                PathSearchConfiguration, sources_,
-                VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(
-                    std::get<std::vector<ValueId>>(config.sources_))));
-  auto targetMatcher =
-      std::holds_alternative<Variable>(config.targets_)
-          ? AD_FIELD(
-                PathSearchConfiguration, targets_,
-                VariantWith<Variable>(Eq(std::get<Variable>(config.targets_))))
-          : AD_FIELD(
-                PathSearchConfiguration, targets_,
-                VariantWith<std::vector<ValueId>>(UnorderedElementsAreArray(
-                    std::get<std::vector<ValueId>>(config.targets_))));
+  auto sourceMatcher = AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
+  auto targetMatcher = AD_FIELD(PathSearchConfiguration, targets_, Eq(config.targets_));
   return AllOf(
       AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
       sourceMatcher, targetMatcher,
