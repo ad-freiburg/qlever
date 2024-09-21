@@ -47,7 +47,7 @@ void SpatialJoin::parseMaxDistance() {
   }
 
   if (maxDist_ < 0) {
-    AD_THROW("the maximum distance between two objects must be > 0");
+    AD_THROW("the maximum distance between two objects must be >= 0");
   }
 }
 
