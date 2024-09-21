@@ -15,6 +15,8 @@
 #include "engine/SpatialJoin.h"
 #include "parser/data/Variable.h"
 
+// namespace {  // todo
+
 using namespace ad_utility::testing;
 
 namespace localTestHelpers {
@@ -1839,3 +1841,5 @@ TEST(SpatialJoin, getSizeEstimate) {
 }
 
 }  // namespace getMultiplicityAndSizeEstimate
+
+// }  // anonymous namespace to prevent linking problems

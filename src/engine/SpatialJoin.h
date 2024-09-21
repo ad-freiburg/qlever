@@ -91,9 +91,9 @@ class SpatialJoin : public Operation {
                         ColumnIndex leftPointCol,
                         ColumnIndex rightPointCol) const;
 
-  // helper function, which adds row, which belongs to the result to the result
-  // table. As input it uses a row of the left and a row of the right child
-  // result table
+  // Helper function, which adds a row, which belongs to the result to the result
+  // table. As inputs it uses a row of the left and a row of the right child
+  // result table.
   void addResultTableEntry(IdTable* result, const IdTable* resultLeft,
                            const IdTable* resultRight, size_t rowLeft,
                            size_t rowRight, long long distance) const;

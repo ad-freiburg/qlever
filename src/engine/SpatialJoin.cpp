@@ -283,7 +283,8 @@ void SpatialJoin::addResultTableEntry(IdTable* result,
 Result SpatialJoin::baselineAlgorithm() {
   auto getIdTable = [](std::shared_ptr<QueryExecutionTree> child) {
     std::shared_ptr<const Result> resTable = child->getResult();
-    return &resTable->idTable();
+    auto idTablePtr = &resTable->idTable();
+    return std::pair{idTablePtr, std::move(resTable)};
   };
 
   auto getJoinCol = [](const std::shared_ptr<const QueryExecutionTree>& child,
@@ -293,8 +294,8 @@ Result SpatialJoin::baselineAlgorithm() {
     return varColMap[childVariable].columnIndex_;
   };
 
-  const IdTable* resLeft = getIdTable(childLeft_);
-  const IdTable* resRight = getIdTable(childRight_);
+  const auto [resLeft, keepAliveLeft] = getIdTable(childLeft_);
+  const auto [resRight, keepAliveRight] = getIdTable(childRight_);
   ColumnIndex leftJoinCol = getJoinCol(childLeft_, leftChildVariable_);
   ColumnIndex rightJoinCol = getJoinCol(childRight_, rightChildVariable_);
   size_t numColumns = getResultWidth();
@@ -328,7 +329,6 @@ Result SpatialJoin::computeResult([[maybe_unused]] bool requestLaziness) {
 VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
   VariableToColumnMap variableToColumnMap;
   auto makeUndefCol = makePossiblyUndefinedColumn;
-  auto makeDefCol = makeAlwaysDefinedColumn;
 
   if (!(childLeft_ || childRight_)) {
     // none of the children has been added
@@ -348,16 +348,9 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
       std::ranges::for_each(
           varColsVec,
           [&](const std::pair<Variable, ColumnIndexAndTypeInfo>& varColEntry) {
-            if (varColEntry.second.mightContainUndef_ ==
-                ColumnIndexAndTypeInfo::AlwaysDefined) {
-              variableToColumnMap[varColEntry.first] = makeDefCol(
-                  ColumnIndex{offset + varColEntry.second.columnIndex_});
-            } else {
-              AD_CONTRACT_CHECK(varColEntry.second.mightContainUndef_ ==
-                                ColumnIndexAndTypeInfo::PossiblyUndefined);
-              variableToColumnMap[varColEntry.first] = makeUndefCol(
-                  ColumnIndex{offset + varColEntry.second.columnIndex_});
-            }
+            auto colAndType = varColEntry.second;  // Type info already correct
+            colAndType.columnIndex_ += offset;
+            variableToColumnMap[varColEntry.first] = colAndType;
           });
     };
 
@@ -368,7 +361,7 @@ VariableToColumnMap SpatialJoin::computeVariableToColumnMap() const {
 
     if (addDistToResult_) {
       variableToColumnMap[Variable{nameDistanceInternal_}] =
-          makeDefCol(ColumnIndex{sizeLeft + sizeRight});
+          makeUndefCol(ColumnIndex{sizeLeft + sizeRight});
     }
   }
 
