@@ -1105,25 +1105,14 @@ TEST(SparqlExpression, testToNumericExpression) {
 
 // ____________________________________________________________________________
 TEST(SparqlExpression, geoSparqlExpressions) {
-  // TODO<ullingerc>: Fix tests after implementation of GeoPoint
   auto checkLat = testUnaryExpression<&makeLatitudeExpression>;
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  checkLat(idOrLitOrStringVec({"POINT(24.3 26.8)", "NotAPoint", I(12)}),
-           Ids{D(26.8), U, U});
-  checkLong(idOrLitOrStringVec({D(4.2), "POINT(24.3 26.8)", "NotAPoint"}),
-            Ids{U, D(24.3), U});
-  checkDist(D(0.0), IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)")},
-            IdOrLiteralOrIri{I(12)});
-  checkDist(U, IdOrLiteralOrIri{I(12)},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
-  checkDist(U, IdOrLiteralOrIri{lit("POINT(24.3 26.8)"s)},
-            IdOrLiteralOrIri{lit("NotAPoint")});
-  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")},
-            IdOrLiteralOrIri{lit("POINT(24.3 26.8)")});
+  auto v = ValueId::makeFromGeoPoint(GeoPoint(26.8, 24.3));
+  checkLat(v, Ids{D(26.8)});
+  checkLong(v, Ids{D(24.3)});
+  checkDist(D(0.0), v, v);
 }
 
 // ________________________________________________________________________________________
