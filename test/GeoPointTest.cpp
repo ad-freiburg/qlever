@@ -9,8 +9,8 @@
 TEST(GeoPoint, GeoPoint) {
   GeoPoint g = GeoPoint(70.5, 130.2);
 
-  ASSERT_FLOAT_EQ(g.getLat(), 70.5);
-  ASSERT_FLOAT_EQ(g.getLng(), 130.2);
+  ASSERT_DOUBLE_EQ(g.getLat(), 70.5);
+  ASSERT_DOUBLE_EQ(g.getLng(), 130.2);
 
   ASSERT_THROW(GeoPoint(-99.5, 1.0), CoordinateOutOfRangeException);
   ASSERT_THROW(GeoPoint(99.5, 1.0), CoordinateOutOfRangeException);
@@ -22,26 +22,26 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_NO_THROW(GeoPoint(0, 0));
 
   g = GeoPoint(0, 0);
-  ASSERT_FLOAT_EQ(g.getLat(), 0);
-  ASSERT_FLOAT_EQ(g.getLng(), 0);
+  ASSERT_DOUBLE_EQ(g.getLat(), 0);
+  ASSERT_DOUBLE_EQ(g.getLng(), 0);
   g = GeoPoint(90, 180);
-  ASSERT_FLOAT_EQ(g.getLat(), 90);
-  ASSERT_FLOAT_EQ(g.getLng(), 180);
+  ASSERT_DOUBLE_EQ(g.getLat(), 90);
+  ASSERT_DOUBLE_EQ(g.getLng(), 180);
   g = GeoPoint(-90, -180);
-  ASSERT_FLOAT_EQ(g.getLat(), -90);
-  ASSERT_FLOAT_EQ(g.getLng(), -180);
+  ASSERT_DOUBLE_EQ(g.getLat(), -90);
+  ASSERT_DOUBLE_EQ(g.getLng(), -180);
   g = GeoPoint(-90, 180);
-  ASSERT_FLOAT_EQ(g.getLat(), -90);
-  ASSERT_FLOAT_EQ(g.getLng(), 180);
+  ASSERT_DOUBLE_EQ(g.getLat(), -90);
+  ASSERT_DOUBLE_EQ(g.getLng(), 180);
   g = GeoPoint(90, -180);
-  ASSERT_FLOAT_EQ(g.getLat(), 90);
-  ASSERT_FLOAT_EQ(g.getLng(), -180);
+  ASSERT_DOUBLE_EQ(g.getLat(), 90);
+  ASSERT_DOUBLE_EQ(g.getLng(), -180);
   g = GeoPoint(0, 180);
-  ASSERT_FLOAT_EQ(g.getLat(), 0);
-  ASSERT_FLOAT_EQ(g.getLng(), 180);
+  ASSERT_DOUBLE_EQ(g.getLat(), 0);
+  ASSERT_DOUBLE_EQ(g.getLng(), 180);
   g = GeoPoint(90, 0);
-  ASSERT_FLOAT_EQ(g.getLat(), 90);
-  ASSERT_FLOAT_EQ(g.getLng(), 0);
+  ASSERT_DOUBLE_EQ(g.getLat(), 90);
+  ASSERT_DOUBLE_EQ(g.getLng(), 0);
 }
 
 TEST(GeoPoint, string) {
