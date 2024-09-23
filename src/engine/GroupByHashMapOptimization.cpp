@@ -4,10 +4,6 @@
 
 #include "engine/GroupByHashMapOptimization.h"
 
-#include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
-#include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
-
 // _____________________________________________________________________________
 [[nodiscard]] ValueId AvgAggregationData::calculateResult(
     [[maybe_unused]] const LocalVocab* localVocab) const {
