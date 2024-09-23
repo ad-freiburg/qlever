@@ -3,8 +3,7 @@
 
 // Several templated helper functions that are used for the Expression module
 
-#ifndef QLEVER_SPARQLEXPRESSIONGENERATORS_H
-#define QLEVER_SPARQLEXPRESSIONGENERATORS_H
+#pragma once
 
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/Generator.h"
@@ -157,6 +156,11 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
-}  // namespace sparqlExpression::detail
+inline auto makeStringResultGetter(LocalVocab* localVocab) {
+  return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
+    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
+    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
+  };
+}
 
-#endif  // QLEVER_SPARQLEXPRESSIONGENERATORS_H
+}  // namespace sparqlExpression::detail

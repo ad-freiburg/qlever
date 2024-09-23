@@ -6,6 +6,7 @@
 #pragma once
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/SparqlExpressionGenerators.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
@@ -95,15 +96,11 @@ struct ExtremumAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    auto valueIdResultGetter = [](ValueId id) { return id; };
-    auto stringResultGetter =
-        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-        };
-    return std::visit(ad_utility::OverloadCallOperator(valueIdResultGetter,
-                                                       stringResultGetter),
-                      currentValue_);
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](ValueId id) { return id; },
+            sparqlExpression::detail::makeStringResultGetter(localVocab)},
+        currentValue_);
   }
 
   void reset() { *this = ExtremumAggregationData{}; }
@@ -209,15 +206,11 @@ struct SampleAggregationData {
     if (!value_.has_value()) {
       return Id::makeUndefined();
     }
-    auto valueIdResultGetter = [](ValueId id) { return id; };
-    auto stringResultGetter =
-        [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
-          auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
-          return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-        };
-    return std::visit(ad_utility::OverloadCallOperator{valueIdResultGetter,
-                                                       stringResultGetter},
-                      value_.value());
+    return std::visit(
+        ad_utility::OverloadCallOperator{
+            [](ValueId id) { return id; },
+            sparqlExpression::detail::makeStringResultGetter(localVocab)},
+        value_.value());
   }
 
   void reset() { *this = SampleAggregationData{}; }
