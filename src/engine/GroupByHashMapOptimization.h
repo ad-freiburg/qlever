@@ -41,17 +41,7 @@ struct AvgAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_) {
-      return ValueId::makeUndefined();
-    }
-    // AVG(empty group) = 0, this is mandated by the SPARQL 1.1 standard.
-    if (count_ == 0) {
-      return ValueId::makeFromInt(0);
-    }
-
-    return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
 
   void reset() { *this = AvgAggregationData{}; }
 };
@@ -68,9 +58,7 @@ struct CountAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    return ValueId::makeFromInt(count_);
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
 
   void reset() { *this = CountAggregationData{}; }
 };
@@ -142,15 +130,7 @@ struct SumAggregationData {
 
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
-      [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_) {
-      return ValueId::makeUndefined();
-    }
-    if (intSumValid_) {
-      return ValueId::makeFromInt(intSum_);
-    }
-    return ValueId::makeFromDouble(sum_);
-  }
+      [[maybe_unused]] const LocalVocab* localVocab) const;
 
   void reset() { *this = SumAggregationData{}; }
 };
@@ -171,14 +151,7 @@ struct GroupConcatAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    using namespace ad_utility::triple_component;
-    using Lit = ad_utility::triple_component::Literal;
-    auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(
-        LiteralOrIri{Lit::literalWithNormalizedContent(
-            asNormalizedStringViewUnsafe(currentValue_))});
-    return ValueId::makeFromLocalVocabIndex(localVocabIndex);
-  }
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
 
   // _____________________________________________________________________________
   explicit GroupConcatAggregationData(std::string_view separator)
@@ -202,16 +175,7 @@ struct SampleAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    if (!value_.has_value()) {
-      return Id::makeUndefined();
-    }
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [](ValueId id) { return id; },
-            sparqlExpression::detail::makeStringResultGetter(localVocab)},
-        value_.value());
-  }
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
 
   void reset() { *this = SampleAggregationData{}; }
 };
