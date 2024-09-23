@@ -191,7 +191,7 @@ class TripleComponent {
     AD_CONTRACT_CHECK(!isString());
     std::optional<Id> vid = toValueIdIfNotString();
     if (vid != std::nullopt) return vid;
-    if (isLiteral() || isIri()) {
+    AD_CORRECTNESS_CHECK(isLiteral() || isIri());
       VocabIndex idx;
       const std::string& content = isLiteral()
                                        ? getLiteral().toStringRepresentation()
