@@ -12,16 +12,15 @@
 
 namespace sparqlExpression {
 namespace detail {
-NARY_EXPRESSION(LongitudeExpression, 1,
-                FV<NumericIdWrapper<decltype(ad_utility::wktLongitude), true>,
-                   LiteralFromIdGetter>);
-NARY_EXPRESSION(LatitudeExpression, 1,
-                FV<NumericIdWrapper<decltype(ad_utility::wktLatitude), true>,
-                   LiteralFromIdGetter>);
 NARY_EXPRESSION(
-    DistExpression, 2,
-    FV<NumericIdWrapper<decltype(ad_utility::wktDistGeoPoints), true>,
-       GeoPointValueGetter>);
+    LongitudeExpression, 1,
+    FV<NumericIdWrapper<ad_utility::WktLongitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(
+    LatitudeExpression, 1,
+    FV<NumericIdWrapper<ad_utility::WktLatitude, true>, GeoPointValueGetter>);
+NARY_EXPRESSION(DistExpression, 2,
+                FV<NumericIdWrapper<ad_utility::WktDistGeoPoints, true>,
+                   GeoPointValueGetter>);
 
 }  // namespace detail
 

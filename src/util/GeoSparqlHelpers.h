@@ -10,18 +10,11 @@
 #include <optional>
 #include <string>
 
-#include "global/GeoPoint.h"
+#include "parser/GeoPoint.h"
 
 namespace ad_utility {
 
 namespace detail {
-
-static constexpr auto wktPointRegex = ctll::fixed_string(
-    "^\\s*[Pp][Oo][Ii][Nn][Tt]\\s*\\(\\s*"
-    "(-?[0-9]+|-?[0-9]+\\.[0-9]+)"
-    "\\s+"
-    "(-?[0-9+]|-?[0-9]+\\.[0-9]+)"
-    "\\s*\\)\\s*$");
 
 static constexpr double invalidCoordinate =
     std::numeric_limits<double>::quiet_NaN();
@@ -32,48 +25,47 @@ static constexpr double invalidCoordinate =
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
 std::pair<double, double> parseWktPoint(const std::string_view point);
-double wktLongitudeImpl(const std::string_view point);
-double wktLatitudeImpl(const std::string_view point);
-double wktDistImpl(const std::string_view point1,
-                   const std::string_view point2);
+double wktLongitudeImpl(GeoPoint point);
+double wktLatitudeImpl(GeoPoint point);
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 }  // namespace detail
 
-// Parse the longitude coordinate from a WKT point (it's the first coordinate).
-inline auto wktLongitude = [](const std::optional<std::string>& point) {
-  if (!point.has_value()) {
-    return std::numeric_limits<double>::quiet_NaN();
+// Return the longitude coordinate from a WKT point.
+class WktLongitude {
+ public:
+  double operator()(const std::optional<GeoPoint>& point) const {
+    if (!point.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::wktLongitudeImpl(point.value());
   }
-  return detail::wktLongitudeImpl(point.value());
 };
 
-// Parse the latitude coordinate from a WKT point (it's the second coordinate).
-inline auto wktLatitude = [](const std::optional<std::string>& point) {
-  if (!point.has_value()) {
-    return std::numeric_limits<double>::quiet_NaN();
+// Return the latitude coordinate from a WKT point.
+class WktLatitude {
+ public:
+  double operator()(const std::optional<GeoPoint>& point) const {
+    if (!point.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::wktLatitudeImpl(point.value());
   }
-  return detail::wktLatitudeImpl(point.value());
 };
 
 // Compute the distance in km between two WKT points according to the formula in
 // https://en.wikipedia.org/wiki/Geographical_distance ("ellipsoidal earth
 // projected to a plane"). A more precise way is the Haversine formula, which we
 // save for when we compute this at indexing time.
-inline auto wktDist = [](const std::optional<std::string>& point1,
-                         const std::optional<std::string>& point2) {
-  if (!point1.has_value() || !point2.has_value()) {
-    return std::numeric_limits<double>::quiet_NaN();
+class WktDistGeoPoints {
+ public:
+  double operator()(const std::optional<GeoPoint>& point1,
+                    const std::optional<GeoPoint>& point2) const {
+    if (!point1.has_value() || !point2.has_value()) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    return detail::wktDistImpl(point1.value(), point2.value());
   }
-  return detail::wktDistImpl(point1.value(), point2.value());
-};
-
-inline auto wktDistGeoPoints = [](const std::optional<GeoPoint>& point1,
-                                  const std::optional<GeoPoint>& point2) {
-  if (!point1.has_value() || !point2.has_value()) {
-    return std::numeric_limits<double>::quiet_NaN();
-  }
-  return detail::wktDistImpl(point1.value(), point2.value());
 };
 
 }  // namespace ad_utility

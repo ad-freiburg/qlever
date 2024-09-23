@@ -11,8 +11,8 @@
 #include "engine/ExportQueryExecutionTrees.h"
 #include "engine/Result.h"
 #include "engine/sparqlExpressions/SparqlExpressionTypes.h"
-#include "global/GeoPoint.h"
 #include "global/Id.h"
+#include "parser/GeoPoint.h"
 #include "util/ConstexprSmallString.h"
 #include "util/TypeTraits.h"
 

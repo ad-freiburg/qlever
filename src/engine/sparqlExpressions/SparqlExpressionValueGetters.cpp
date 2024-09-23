@@ -148,7 +148,7 @@ IntDoubleStr ToNumericValueGetter::operator()(
     case Datatype::Bool:
       return static_cast<int>(id.getBool());
     case Datatype::GeoPoint:
-      return id.getGeoPoint().toFullStringRepresentation();
+      return id.getGeoPoint().toStringRepresentation();
     case Datatype::VocabIndex:
     case Datatype::LocalVocabIndex:
     case Datatype::TextRecordIndex:
