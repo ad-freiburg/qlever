@@ -192,13 +192,12 @@ class TripleComponent {
     std::optional<Id> vid = toValueIdIfNotString();
     if (vid != std::nullopt) return vid;
     AD_CORRECTNESS_CHECK(isLiteral() || isIri());
-      VocabIndex idx;
-      const std::string& content = isLiteral()
-                                       ? getLiteral().toStringRepresentation()
-                                       : getIri().toStringRepresentation();
-      if (vocabulary.getId(content, &idx)) {
-        return Id::makeFromVocabIndex(idx);
-      }
+    VocabIndex idx;
+    const std::string& content = isLiteral()
+                                     ? getLiteral().toStringRepresentation()
+                                     : getIri().toStringRepresentation();
+    if (vocabulary.getId(content, &idx)) {
+      return Id::makeFromVocabIndex(idx);
     }
     return std::nullopt;
   }
