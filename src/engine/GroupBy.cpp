@@ -877,13 +877,13 @@ std::optional<IdTable> GroupBy::computeGroupByForJoinWithFullScan() {
 // _____________________________________________________________________________
 std::optional<IdTable> GroupBy::computeOptimizedGroupByIfPossible() {
   // TODO<C++23> Use `std::optional::or_else`.
-  // TODO<RobinTF> Add runtime parameter to toggle index scan specific
-  // optimizations for performance comparisons
-  if (auto result = computeGroupByForSingleIndexScan()) {
-    return result;
-  }
-  if (auto result = computeGroupByForFullIndexScan()) {
-    return result;
+  if (!RuntimeParameters().get<"group-by-disable-index-scan-optimizations">()) {
+    if (auto result = computeGroupByForSingleIndexScan()) {
+      return result;
+    }
+    if (auto result = computeGroupByForFullIndexScan()) {
+      return result;
+    }
   }
   if (auto result = computeGroupByForJoinWithFullScan()) {
     return result;
