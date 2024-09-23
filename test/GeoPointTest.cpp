@@ -96,7 +96,6 @@ TEST(GeoPoint, parseFromLiteral) {
         ad_utility::triple_component::Literal::fromStringRepresentation(
             content);
     auto g = GeoPoint::parseFromLiteral(value);
-    ASSERT_EQ(g.value().getLat(), 0);
     ASSERT_EQ(g.has_value(), hasVal);
     if (g.has_value()) {
       ASSERT_DOUBLE_EQ(g.value().getLat(), lat);
