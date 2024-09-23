@@ -553,3 +553,13 @@ TEST(DateYearOrDuration, Order) {
   ASSERT_LT(d7, d4);
   ASSERT_LT(d7, d6);
 }
+
+// _____________________________________________________________________________
+TEST(DateYearOrDuration, Hashing) {
+  DateYearOrDuration d1{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 0, 23, 23, 62.44}};
+  DateYearOrDuration d2{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 1, 24, 23, 62.44}};
+  ad_utility::HashSet<DateYearOrDuration> set{d1, d2};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
+}

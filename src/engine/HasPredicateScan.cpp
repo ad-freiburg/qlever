@@ -266,8 +266,7 @@ ProtoResult HasPredicateScan::computeResult(
       ScanSpecificationAsTripleComponent{
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), std::nullopt,
           std::nullopt}
-          .toScanSpecification(index)
-          .value();
+          .toScanSpecification(index);
   auto hasPattern =
       index.getPermutation(Permutation::Enum::PSO)
           .lazyScan(scanSpec, std::nullopt, {}, cancellationHandle_);
@@ -339,8 +338,7 @@ void HasPredicateScan::computeFreeO(
       ScanSpecificationAsTripleComponent{
           TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE), subjectAsId,
           std::nullopt}
-          .toScanSpecification(index)
-          .value();
+          .toScanSpecification(index);
   auto hasPattern = index.getPermutation(Permutation::Enum::PSO)
                         .scan(std::move(scanSpec), {}, cancellationHandle_);
   AD_CORRECTNESS_CHECK(hasPattern.numRows() <= 1);
