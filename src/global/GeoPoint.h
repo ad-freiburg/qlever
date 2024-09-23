@@ -9,6 +9,8 @@
 #include <string>
 
 #include "global/Constants.h"
+#include "parser/Iri.h"
+#include "parser/Literal.h"
 #include "util/SourceLocation.h"
 
 /// Exception type for construction of GeoPoints that have invalid values
@@ -61,9 +63,11 @@ class GeoPoint {
   }
 
   std::string toFullStringRepresentation() {
-    // TODO<ullingerc>: use utility functions instead of manual string
-    // operations
-    return absl::StrCat("\"", toStringRepresentation(), "\"^^<",
-                        GEO_WKT_LITERAL, ">");
+    auto lit = ad_utility::triple_component::Literal::literalWithoutQuotes(
+        toStringRepresentation());
+    auto iri = ad_utility::triple_component::Iri::fromIrirefWithoutBrackets(
+        GEO_WKT_LITERAL);
+    lit.addDatatype(iri);
+    return lit.toStringRepresentation();
   }
 };
