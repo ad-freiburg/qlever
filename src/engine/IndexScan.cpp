@@ -6,6 +6,7 @@
 
 #include <absl/strings/str_join.h>
 
+#include <boost/optional.hpp>
 #include <sstream>
 #include <string>
 
@@ -26,17 +27,19 @@ IndexScan::IndexScan(QueryExecutionContext* qec, Permutation::Enum permutation,
       numVariables_(static_cast<size_t>(subject_.isVariable()) +
                     static_cast<size_t>(predicate_.isVariable()) +
                     static_cast<size_t>(object_.isVariable())) {
+  // We previously had `nullptr`s here in unit tests. This is no longer
+  // necessary nor allowed.
+  AD_CONTRACT_CHECK(qec != nullptr);
   for (auto& [idx, variable] : triple.additionalScanColumns_) {
     additionalColumns_.push_back(idx);
     additionalVariables_.push_back(variable);
   }
   sizeEstimate_ = computeSizeEstimate();
 
-  // Check the following invariant: The permuted input triple must contain at
-  // least one variable, and all the variables must be at the end of the
+  // Check the following invariant: All the variables must be at the end of the
   // permuted triple. For example in the PSO permutation, either only the O, or
-  // the S and O, or all three of P, S, O can be variables, all other
-  // combinations are not supported.
+  // the S and O, or all three of P, S, O, or none of them can be variables, all
+  // other combinations are not supported.
   auto permutedTriple = getPermutedTriple();
   for (size_t i = 0; i < 3 - numVariables_; ++i) {
     AD_CONTRACT_CHECK(!permutedTriple.at(i)->isVariable());
@@ -57,7 +60,7 @@ string IndexScan::getCacheKeyImpl() const {
   auto permutationString = Permutation::toString(permutation_);
 
   if (numVariables_ == 3) {
-    os << "SCAN FOR FULL INDEX " << permutationString << " (DUMMY OPERATION)";
+    os << "SCAN FOR FULL INDEX " << permutationString;
 
   } else {
     os << "SCAN " << permutationString << " with ";
@@ -66,10 +69,9 @@ string IndexScan::getCacheKeyImpl() const {
       const auto& key = getPermutedTriple().at(idx)->toRdfLiteral();
       os << keyString << " = \"" << key << "\"";
     };
-    addKey(0);
-    if (numVariables_ == 1) {
+    for (size_t i = 0; i < 3 - numVariables_; ++i) {
+      addKey(i);
       os << ", ";
-      addKey(1);
     }
   }
   if (!additionalColumns_.empty()) {
@@ -92,16 +94,14 @@ size_t IndexScan::getResultWidth() const {
 
 // _____________________________________________________________________________
 vector<ColumnIndex> IndexScan::resultSortedOn() const {
-  switch (numVariables_) {
-    case 1:
-      return {ColumnIndex{0}};
-    case 2:
-      return {ColumnIndex{0}, ColumnIndex{1}};
-    case 3:
-      return {ColumnIndex{0}, ColumnIndex{1}, ColumnIndex{2}};
-    default:
-      AD_FAIL();
+  auto resAsView = ad_utility::integerRange(ColumnIndex{numVariables_});
+  std::vector<ColumnIndex> result{resAsView.begin(), resAsView.end()};
+  for (size_t i = 0; i < additionalColumns_.size(); ++i) {
+    if (additionalColumns_.at(i) == ADDITIONAL_COLUMN_GRAPH_ID) {
+      result.push_back(numVariables_ + i);
+    }
   }
+  return result;
 }
 
 // _____________________________________________________________________________
@@ -122,20 +122,35 @@ VariableToColumnMap IndexScan::computeVariableToColumnMap() const {
   std::ranges::for_each(additionalVariables_, addCol);
   return variableToColumnMap;
 }
+
 // _____________________________________________________________________________
-ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
+cppcoro::generator<IdTable> IndexScan::scanInChunks() const {
+  auto metadata = getMetadataForScan();
+  if (!metadata.has_value()) {
+    co_return;
+  }
+  auto blocksSpan =
+      CompressedRelationReader::getBlocksFromMetadata(metadata.value());
+  std::vector<CompressedBlockMetadata> blocks{blocksSpan.begin(),
+                                              blocksSpan.end()};
+  for (IdTable& idTable : getLazyScan(std::move(blocks))) {
+    co_yield std::move(idTable);
+  }
+}
+
+// _____________________________________________________________________________
+ProtoResult IndexScan::computeResult(bool requestLaziness) {
   LOG(DEBUG) << "IndexScan result computation...\n";
+  if (requestLaziness) {
+    return {scanInChunks(), resultSortedOn(), LocalVocab{}};
+  }
   IdTable idTable{getExecutionContext()->getAllocator()};
 
   using enum Permutation::Enum;
   idTable.setNumColumns(numVariables_);
   const auto& index = _executionContext->getIndex();
-  const auto permutedTriple = getPermutedTriple();
-  if (numVariables_ == 2) {
-    idTable = index.scan(*permutedTriple[0], std::nullopt, permutation_,
-                         additionalColumns(), cancellationHandle_, getLimit());
-  } else if (numVariables_ == 1) {
-    idTable = index.scan(*permutedTriple[0], *permutedTriple[1], permutation_,
+  if (numVariables_ < 3) {
+    idTable = index.scan(getScanSpecification(), permutation_,
                          additionalColumns(), cancellationHandle_, getLimit());
   } else {
     AD_CORRECTNESS_CHECK(numVariables_ == 3);
@@ -150,44 +165,19 @@ ProtoResult IndexScan::computeResult([[maybe_unused]] bool requestLaziness) {
 
 // _____________________________________________________________________________
 size_t IndexScan::computeSizeEstimate() const {
-  if (_executionContext) {
-    // Should always be in this branch. Else is only for test cases.
-
-    // We have to do a simple scan anyway so might as well do it now
-    if (numVariables_ == 1) {
-      // TODO<C++23> Use the monadic operation `std::optional::or_else`.
-      // Note: we cannot use `optional::value_or()` here, because the else
-      // case is expensive to compute, and we need it lazily evaluated.
-      if (auto size = getExecutionContext()->getQueryTreeCache().getPinnedSize(
-              getCacheKey());
-          size.has_value()) {
-        return size.value();
-      } else {
-        // This call explicitly has to read two blocks of triples from memory to
-        // obtain an exact size estimate.
-        return getIndex().getResultSizeOfScan(
-            *getPermutedTriple()[0], *getPermutedTriple().at(1), permutation_);
-      }
-    } else if (numVariables_ == 2) {
-      const TripleComponent& firstKey = *getPermutedTriple().at(0);
-      return getIndex().getCardinality(firstKey, permutation_);
-    } else {
-      // The triple consists of three variables.
-      // TODO<joka921> As soon as all implementations of a full index scan
-      // (Including the "dummy joins" in Join.cpp) consistently exclude the
-      // internal triples, this estimate should be changed to only return
-      // the number of triples in the actual knowledge graph (excluding the
-      // internal triples).
-      AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      return getIndex().numTriples().normalAndInternal_();
-    }
+  AD_CORRECTNESS_CHECK(_executionContext);
+  // We have to do a simple scan anyway so might as well do it now
+  if (numVariables_ < 3) {
+    return getIndex().getResultSizeOfScan(getScanSpecification(), permutation_);
   } else {
-    // Only for test cases. The handling of the objects is to make the
-    // strange query planner tests pass.
-    auto strLen = [](const auto& el) {
-      return (el.isString() ? el.getString() : el.toString()).size();
-    };
-    return 1000 + strLen(subject_) + strLen(object_) + strLen(predicate_);
+    // The triple consists of three variables.
+    // TODO<joka921> As soon as all implementations of a full index scan
+    // (Including the "dummy joins" in Join.cpp) consistently exclude the
+    // internal triples, this estimate should be changed to only return
+    // the number of triples in the actual knowledge graph (excluding the
+    // internal triples).
+    AD_CORRECTNESS_CHECK(numVariables_ == 3);
+    return getIndex().numTriples().normalAndInternal_();
   }
 }
 
@@ -200,29 +190,20 @@ size_t IndexScan::getCostEstimate() {
 
 // _____________________________________________________________________________
 void IndexScan::determineMultiplicities() {
-  multiplicity_.clear();
-  if (_executionContext) {
+  multiplicity_ = [this]() -> std::vector<float> {
     const auto& idx = getIndex();
-    if (numVariables_ == 1) {
+    if (numVariables_ == 0) {
+      return {};
+    } else if (numVariables_ == 1) {
       // There are no duplicate triples in RDF and two elements are fixed.
-      multiplicity_.emplace_back(1);
+      return {1.0f};
     } else if (numVariables_ == 2) {
-      const auto permutedTriple = getPermutedTriple();
-      multiplicity_ = idx.getMultiplicities(*permutedTriple[0], permutation_);
+      return idx.getMultiplicities(*getPermutedTriple()[0], permutation_);
     } else {
       AD_CORRECTNESS_CHECK(numVariables_ == 3);
-      multiplicity_ = idx.getMultiplicities(permutation_);
+      return idx.getMultiplicities(permutation_);
     }
-  } else {
-    // This branch is only used in certain unit tests.
-    multiplicity_.emplace_back(1);
-    if (numVariables_ == 2) {
-      multiplicity_.emplace_back(1);
-    }
-    if (numVariables_ == 3) {
-      multiplicity_.emplace_back(1);
-    }
-  }
+  }();
   for ([[maybe_unused]] size_t i :
        std::views::iota(multiplicity_.size(), getResultWidth())) {
     multiplicity_.emplace_back(1);
@@ -278,56 +259,48 @@ std::array<const TripleComponent* const, 3> IndexScan::getPermutedTriple()
 }
 
 // ___________________________________________________________________________
-Permutation::IdTableGenerator IndexScan::getLazyScan(
-    const IndexScan& s, std::vector<CompressedBlockMetadata> blocks) {
-  const IndexImpl& index = s.getIndex().getImpl();
-  std::optional<Id> col0Id;
-  if (s.numVariables_ < 3) {
-    col0Id = s.getPermutedTriple()[0]->toValueId(index.getVocab()).value();
-  }
-  std::optional<Id> col1Id;
-  if (s.numVariables_ < 2) {
-    col1Id = s.getPermutedTriple()[1]->toValueId(index.getVocab()).value();
-  }
+ScanSpecification IndexScan::getScanSpecification() const {
+  const IndexImpl& index = getIndex().getImpl();
+  return getScanSpecificationTc().toScanSpecification(index);
+}
 
+// ___________________________________________________________________________
+ScanSpecificationAsTripleComponent IndexScan::getScanSpecificationTc() const {
+  auto permutedTriple = getPermutedTriple();
+  return {*permutedTriple[0], *permutedTriple[1], *permutedTriple[2]};
+}
+
+// ___________________________________________________________________________
+Permutation::IdTableGenerator IndexScan::getLazyScan(
+    std::vector<CompressedBlockMetadata> blocks) const {
   // If there is a LIMIT or OFFSET clause that constrains the scan
   // (which can happen with an explicit subquery), we cannot use the prefiltered
   // blocks, as we currently have no mechanism to include limits and offsets
   // into the prefiltering (`std::nullopt` means `scan all blocks`).
-  auto actualBlocks = s.getLimit().isUnconstrained()
+  auto actualBlocks = getLimit().isUnconstrained()
                           ? std::optional{std::move(blocks)}
                           : std::nullopt;
 
-  return index.getPermutation(s.permutation())
-      .lazyScan({col0Id, col1Id, std::nullopt}, std::move(actualBlocks),
-                s.additionalColumns(), s.cancellationHandle_, s.getLimit());
+  return getIndex()
+      .getImpl()
+      .getPermutation(permutation())
+      .lazyScan(getScanSpecification(), std::move(actualBlocks),
+                additionalColumns(), cancellationHandle_, getLimit());
 };
 
 // ________________________________________________________________
-std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan(
-    const IndexScan& s) {
-  auto permutedTriple = s.getPermutedTriple();
-  const IndexImpl& index = s.getIndex().getImpl();
-  auto numVars = s.numVariables_;
-  std::optional<Id> col0Id =
-      numVars == 3 ? std::nullopt
-                   : permutedTriple[0]->toValueId(index.getVocab());
-  std::optional<Id> col1Id =
-      numVars >= 2 ? std::nullopt
-                   : permutedTriple[1]->toValueId(index.getVocab());
-  if ((!col0Id.has_value() && numVars < 3) ||
-      (!col1Id.has_value() && numVars < 2)) {
-    return std::nullopt;
-  }
-
-  return index.getPermutation(s.permutation())
-      .getMetadataAndBlocks({col0Id, col1Id, std::nullopt});
+std::optional<Permutation::MetadataAndBlocks> IndexScan::getMetadataForScan()
+    const {
+  const auto& index = getExecutionContext()->getIndex().getImpl();
+  return index.getPermutation(permutation())
+      .getMetadataAndBlocks(getScanSpecification());
 };
 
 // ________________________________________________________________
 std::array<Permutation::IdTableGenerator, 2>
 IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   AD_CONTRACT_CHECK(s1.numVariables_ <= 3 && s2.numVariables_ <= 3);
+  AD_CONTRACT_CHECK(s1.numVariables_ >= 1 && s2.numVariables_ >= 1);
 
   // This function only works for single column joins. This means that the first
   // variable of both scans must be equal, but all other variables of the scans
@@ -357,8 +330,8 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   }
   AD_CONTRACT_CHECK(other2.size() == numTotal);
 
-  auto metaBlocks1 = getMetadataForScan(s1);
-  auto metaBlocks2 = getMetadataForScan(s2);
+  auto metaBlocks1 = s1.getMetadataForScan();
+  auto metaBlocks2 = s2.getMetadataForScan();
 
   if (!metaBlocks1.has_value() || !metaBlocks2.has_value()) {
     return {{}};
@@ -366,7 +339,7 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
   auto [blocks1, blocks2] = CompressedRelationReader::getBlocksForJoin(
       metaBlocks1.value(), metaBlocks2.value());
 
-  std::array result{getLazyScan(s1, blocks1), getLazyScan(s2, blocks2)};
+  std::array result{s1.getLazyScan(blocks1), s2.getLazyScan(blocks2)};
   result[0].details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   result[1].details().numBlocksAll_ = metaBlocks2.value().blockMetadata_.size();
   return result;
@@ -374,11 +347,11 @@ IndexScan::lazyScanForJoinOfTwoScans(const IndexScan& s1, const IndexScan& s2) {
 
 // ________________________________________________________________
 Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
-    std::span<const Id> joinColumn, const IndexScan& s) {
+    std::span<const Id> joinColumn) const {
   AD_EXPENSIVE_CHECK(std::ranges::is_sorted(joinColumn));
-  AD_CORRECTNESS_CHECK(s.numVariables_ <= 3);
+  AD_CORRECTNESS_CHECK(numVariables_ <= 3 && numVariables_ > 0);
 
-  auto metaBlocks1 = getMetadataForScan(s);
+  auto metaBlocks1 = getMetadataForScan();
 
   if (!metaBlocks1.has_value()) {
     return {};
@@ -386,7 +359,7 @@ Permutation::IdTableGenerator IndexScan::lazyScanForJoinOfColumnWithScan(
   auto blocks = CompressedRelationReader::getBlocksForJoin(joinColumn,
                                                            metaBlocks1.value());
 
-  auto result = getLazyScan(s, blocks);
+  auto result = getLazyScan(blocks);
   result.details().numBlocksAll_ = metaBlocks1.value().blockMetadata_.size();
   return result;
 }

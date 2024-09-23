@@ -2,9 +2,7 @@
 //                  Chair of Algorithms and Data Structures.
 //  Author: Johannes Kalmbach <kalmbach@cs.uni-freiburg.de>
 
-#ifndef QLEVER_CARTESIANPRODUCTJOIN_H
-#define QLEVER_CARTESIANPRODUCTJOIN_H
-
+#pragma once
 #include "engine/Operation.h"
 #include "engine/QueryExecutionTree.h"
 
@@ -92,5 +90,3 @@ class CartesianProductJoin : public Operation {
                          std::span<const Id> inputColumn, size_t groupSize,
                          size_t offset);
 };
-
-#endif  // QLEVER_CARTESIANPRODUCTJOIN_H

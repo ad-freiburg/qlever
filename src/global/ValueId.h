@@ -163,10 +163,12 @@ class ValueId {
         return std::strong_ordering::equal;
       }
     };
-    if (type == VocabIndex) {
+    // GCC 11 issues a false positive warning here, so we try to avoid it by
+    // being over-explicit about the branches here.
+    if (type == VocabIndex && otherType == LocalVocabIndex) {
       return compareVocabAndLocalVocab(getVocabIndex(),
                                        other.getLocalVocabIndex());
-    } else if (otherType == VocabIndex) {
+    } else if (type == LocalVocabIndex && otherType == VocabIndex) {
       auto inverseOrder = compareVocabAndLocalVocab(other.getVocabIndex(),
                                                     getLocalVocabIndex());
       return 0 <=> inverseOrder;
@@ -175,6 +177,14 @@ class ValueId {
     // One of the types is `LocalVocab`, and the other one is a non-string type
     // like `Integer` or `Undefined. Then the comparison by bits automatically
     // compares by the datatype.
+    return _bits <=> other._bits;
+  }
+
+  // When there are no local vocab entries, then comparison can only be done
+  // on the underlying bits, which allows much better code generation (e.g.
+  // vectorization). In particular, this method should for example be used
+  // during index building.
+  constexpr auto compareWithoutLocalVocab(const ValueId& other) const {
     return _bits <=> other._bits;
   }
 

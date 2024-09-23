@@ -17,6 +17,7 @@ add_library(sparqlExpressions
         SparqlExpression.cpp
         ConvertToNumericExpression.cpp
         RdfTermExpressions.cpp
-        LangExpression.cpp)
+        LangExpression.cpp
+        CountStarExpression.cpp)
 
 qlever_target_link_libraries(sparqlExpressions util index Boost::url)

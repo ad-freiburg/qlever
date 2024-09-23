@@ -6,11 +6,10 @@
 
 #include "global/SpecialIds.h"
 
-static const Id hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-
 // _________________________________________________________________________
-void PatternCreator::processTriple(std::array<Id, 3> triple,
-                                   bool ignoreTripleForPatterns) {
+void PatternCreator::processTriple(
+    std::array<Id, NumColumnsIndexBuilding> triple,
+    bool ignoreTripleForPatterns) {
   if (!currentSubject_.has_value()) {
     // This is the very first triple.
     currentSubject_ = triple[0];
@@ -64,7 +63,7 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // subject has a pattern.
   if (!pattern.empty()) {
     auto additionalTriple =
-        std::array{subject, hasPatternId, Id::makeFromInt(patternId)};
+        std::array{subject, idOfHasPattern_, Id::makeFromInt(patternId)};
     tripleSorter_.hasPatternPredicateSortedByPSO_->push(additionalTriple);
     ++numDistinctSubjects_;
   }
@@ -73,14 +72,17 @@ void PatternCreator::finishSubject(Id subject, const Pattern& pattern) {
   // Note: This has to be done for all triples, including those where the
   // subject has no pattern.
   auto curSubject = currentSubject_.value();
-  std::ranges::for_each(tripleBuffer_,
-                        [this, patternId, &curSubject](const auto& t) {
-                          const auto& [s, p, o] = t.triple_;
-                          AD_CORRECTNESS_CHECK(s == curSubject);
-                          ospSorterTriplesWithPattern().push(
-                              std::array{s, p, o, Id::makeFromInt(patternId)});
-                        });
+  std::ranges::for_each(
+      tripleBuffer_, [this, patternId, &curSubject](const auto& t) {
+        static_assert(NumColumnsIndexBuilding == 4,
+                      "The following lines have to be changed when additional "
+                      "payload columns are added");
+        const auto& [s, p, o, g] = t.triple_;
 
+        AD_CORRECTNESS_CHECK(s == curSubject);
+        ospSorterTriplesWithPattern().push(
+            std::array{s, p, o, g, Id::makeFromInt(patternId)});
+      });
   tripleBuffer_.clear();
 }
 

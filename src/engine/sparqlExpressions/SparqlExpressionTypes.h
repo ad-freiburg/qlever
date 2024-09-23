@@ -3,8 +3,7 @@
 
 // Several helper types needed for the SparqlExpression module
 
-#ifndef QLEVER_SPARQLEXPRESSIONTYPES_H
-#define QLEVER_SPARQLEXPRESSIONTYPES_H
+#pragma once
 
 #include <vector>
 
@@ -21,9 +20,9 @@
 
 namespace sparqlExpression {
 
-/// A std::vector<T, AllocatorWithLimit> with deleted copy constructor
-/// and copy assignment. Used in the SparqlExpression module, where we want
-/// no accidental copies of large intermediate results.
+// A std::vector<T, AllocatorWithLimit> with deleted copy constructor
+// and copy assignment. Used in the SparqlExpression module, where we want
+// no accidental copies of large intermediate results.
 template <typename T>
 class VectorWithMemoryLimit
     : public std::vector<T, ad_utility::AllocatorWithLimit<T>> {
@@ -191,13 +190,21 @@ struct EvaluationContext {
 
   ad_utility::SharedCancellationHandle cancellationHandle_;
 
+  // A point in time at which the evaluation of the expression is to be
+  // cancelled because of a timeout. This is used by mechanisms that can't use
+  // the `cancellationHandle_` directly, like the sorting in a `COUNT DISTINCT
+  // *` expression.
+  using TimePoint = std::chrono::steady_clock::time_point;
+  TimePoint deadline_;
+
   /// Constructor for evaluating an expression on the complete input.
   EvaluationContext(const QueryExecutionContext& qec,
                     const VariableToColumnMap& variableToColumnMap,
                     const IdTable& inputTable,
                     const ad_utility::AllocatorWithLimit<Id>& allocator,
                     const LocalVocab& localVocab,
-                    ad_utility::SharedCancellationHandle cancellationHandle);
+                    ad_utility::SharedCancellationHandle cancellationHandle,
+                    TimePoint deadline);
 
   bool isResultSortedBy(const Variable& variable);
   // The size (in number of elements) that this evaluation context refers to.
@@ -311,20 +318,27 @@ std::optional<ExpressionResult> evaluateOnSpecializedFunctionsIfPossible(
   return result;
 }
 
-/// An Operation that consists of a `FunctionAndValueGetters` that takes
-/// `NumOperands` parameters. The `FunctionForSetOfIntervalsType` is a function,
-/// that can efficiently perform the operation when all the operands are
-/// `SetOfInterval`s.
-/// It is necessary to use the `FunctionAndValueGetters` struct to allow for
-/// multiple `ValueGetters` (a parameter pack, that has to appear at the end of
-/// the template declaration) and the default parameter for the
-/// `FunctionForSetOfIntervals` (which also has to appear at the end).
+// Class for an operation used in a `SparqlExpression`, consisting of the
+// function for computing the operation and the value getters for the operands.
+// The number of operands is fixed.
+//
+// NOTE: This class is defined in the namespace `sparqlExpression` and is
+// different from the class with the same name defined in `Operation.h`
+//
+// An Operation that consists of a `FunctionAndValueGetters` that takes
+// `NumOperands` parameters. The `SpecializedFunction`s can be used to choose a
+// more efficient implementation given the types of the operands. For example,
+// expressions like `logical-or` or `logical-and` can be implemented more
+// efficiently if all the inputs are `SetOfInterval`s`.
+// Note: It is necessary to use the `FunctionAndValueGetters` struct to allow
+// for multiple `ValueGetters` because there can be multiple `ValueGetters` as
+// well as zero or more `SpezializedFunctions`, but there can only be a single
+// parameter pack in C++.
 template <
     size_t NumOperands,
     ad_utility::isInstantiation<FunctionAndValueGetters>
         FunctionAndValueGettersT,
     ad_utility::isInstantiation<SpecializedFunction>... SpecializedFunctions>
-
 struct Operation {
  private:
   using OriginalValueGetters = typename FunctionAndValueGettersT::ValueGetters;
@@ -359,5 +373,3 @@ size_t getResultSize(const EvaluationContext& context, const Inputs&...) {
 
 }  // namespace detail
 }  // namespace sparqlExpression
-
-#endif  // QLEVER_SPARQLEXPRESSIONTYPES_H
