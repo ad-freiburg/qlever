@@ -295,8 +295,7 @@ IdTable Index::scan(
 }
 
 // ____________________________________________________________________________
-size_t Index::getResultSizeOfScan(
-    const ScanSpecificationAsTripleComponent& scanSpecification,
-    const Permutation::Enum& permutation) const {
+size_t Index::getResultSizeOfScan(const ScanSpecification& scanSpecification,
+                                  const Permutation::Enum& permutation) const {
   return pimpl_->getResultSizeOfScan(scanSpecification, permutation);
 }
