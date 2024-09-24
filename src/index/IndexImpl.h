@@ -437,9 +437,8 @@ class IndexImpl {
                const LimitOffsetClause& limitOffset = {}) const;
 
   // _____________________________________________________________________________
-  size_t getResultSizeOfScan(
-      const ScanSpecificationAsTripleComponent& scanSpecification,
-      const Permutation::Enum& permutation) const;
+  size_t getResultSizeOfScan(const ScanSpecification& scanSpecification,
+                             const Permutation::Enum& permutation) const;
 
  private:
   // Private member functions

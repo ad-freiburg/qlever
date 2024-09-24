@@ -9,6 +9,7 @@
 #include "engine/Operation.h"
 #include "engine/Values.h"
 #include "parser/ParsedQuery.h"
+#include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
@@ -98,17 +99,35 @@ class Service : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
-  static TripleComponent bindingToTripleComponent(const nlohmann::json& cell);
+  static TripleComponent bindingToTripleComponent(
+      const nlohmann::json& binding);
 
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
-  // Compute the result using `getResultFunction_`.
+  // Compute the result using `getResultFunction_` and the siblingTree.
   ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Actually compute the result for the function above.
+  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
+
+  // Create result for silent fail.
+  ProtoResult makeNeutralElementResultForSilentFail() const;
+
+  // Check that all visible variables of the SERVICE clause exist in the json
+  // object, otherwise throw an error.
+  void verifyVariables(const nlohmann::json& head,
+                       const ad_utility::LazyJsonParser::Details& gen) const;
+
+  // Throws an error message, providing the first 100 bytes of the result as
+  // context.
+  [[noreturn]] void throwErrorWithContext(
+      std::string_view msg, std::string_view first100,
+      std::string_view last100 = ""sv) const;
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
@@ -117,6 +136,6 @@ class Service : public Operation {
   // parse JSON here and not a VALUES clause.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
-                       const std::vector<nlohmann::json>& bindings,
+                       ad_utility::LazyJsonParser::Generator& response,
                        IdTable* idTable, LocalVocab* localVocab);
 };

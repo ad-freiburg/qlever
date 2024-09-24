@@ -6,7 +6,6 @@
 #pragma once
 
 #include "engine/sparqlExpressions/AggregateExpression.h"
-#include "engine/sparqlExpressions/RelationalExpressionHelpers.h"
 #include "engine/sparqlExpressions/SparqlExpressionValueGetters.h"
 
 // _____________________________________________________________________________
@@ -42,11 +41,18 @@ struct AvgAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
+    if (error_) {
       return ValueId::makeUndefined();
-    else
-      return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
+    }
+    // AVG(empty group) = 0, this is mandated by the SPARQL 1.1 standard.
+    if (count_ == 0) {
+      return ValueId::makeFromInt(0);
+    }
+
+    return ValueId::makeFromDouble(sum_ / static_cast<double>(count_));
   }
+
+  void reset() { *this = AvgAggregationData{}; }
 };
 
 // Data to perform the COUNT aggregation using the HashMap optimization.
@@ -64,6 +70,8 @@ struct CountAggregationData {
       [[maybe_unused]] const LocalVocab* localVocab) const {
     return ValueId::makeFromInt(count_);
   }
+
+  void reset() { *this = CountAggregationData{}; }
 };
 
 // Data to perform MIN/MAX aggregation using the HashMap optimization.
@@ -97,6 +105,8 @@ struct ExtremumAggregationData {
                                                        stringResultGetter),
                       currentValue_);
   }
+
+  void reset() { *this = ExtremumAggregationData{}; }
 };
 
 using MinAggregationData =
@@ -136,20 +146,23 @@ struct SumAggregationData {
   // _____________________________________________________________________________
   [[nodiscard]] ValueId calculateResult(
       [[maybe_unused]] const LocalVocab* localVocab) const {
-    if (error_)
+    if (error_) {
       return ValueId::makeUndefined();
-    else if (intSumValid_)
+    }
+    if (intSumValid_) {
       return ValueId::makeFromInt(intSum_);
-    else
-      return ValueId::makeFromDouble(sum_);
+    }
+    return ValueId::makeFromDouble(sum_);
   }
+
+  void reset() { *this = SumAggregationData{}; }
 };
 
 // Data to perform GROUP_CONCAT aggregation using the HashMap optimization.
 struct GroupConcatAggregationData {
   using ValueGetter = sparqlExpression::detail::StringValueGetter;
   std::string currentValue_;
-  std::string separator_;
+  std::string_view separator_;
 
   // _____________________________________________________________________________
   void addValue(auto&& value, const sparqlExpression::EvaluationContext* ctx) {
@@ -171,8 +184,10 @@ struct GroupConcatAggregationData {
   }
 
   // _____________________________________________________________________________
-  explicit GroupConcatAggregationData(std::string separator)
-      : separator_{std::move(separator)} {
+  explicit GroupConcatAggregationData(std::string_view separator)
+      : separator_{separator} {
     currentValue_.reserve(20000);
   }
+
+  void reset() { currentValue_.clear(); }
 };
