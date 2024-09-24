@@ -20,7 +20,8 @@ GeoPoint::T GeoPoint::toBitRepresentation() {
 
     // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
     // rounded to integer
-    T newscaled = static_cast<size_t>(round(downscaled * maxCoordinateEncoded));
+    auto newscaled =
+        static_cast<size_t>(round(downscaled * maxCoordinateEncoded));
     AD_CORRECTNESS_CHECK(0.0 <= newscaled && newscaled <= maxCoordinateEncoded);
     return newscaled;
   };
@@ -54,7 +55,7 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
   constexpr auto extractCoordinate = [](T bits, T mask, T shift,
                                         double maxValue) {
     // Obtain raw value from bits
-    double value = static_cast<double>((bits & mask) >> shift);
+    auto value = static_cast<double>((bits & mask) >> shift);
     AD_CORRECTNESS_CHECK(0.0 <= value && value <= maxCoordinateEncoded);
 
     // Transform to usual scaling

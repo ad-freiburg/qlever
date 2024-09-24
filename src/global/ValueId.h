@@ -319,8 +319,6 @@ class ValueId {
 
   // TODO<joka921> implement dates
 
-  // TODO<ullingerc> static_assert numBits match
-
   /// Create a `ValueId` for a GeoPoint object (representing a POINT from WKT).
   static ValueId makeFromGeoPoint(GeoPoint p) {
     return addDatatypeBits(p.toBitRepresentation(), Datatype::GeoPoint);
@@ -329,7 +327,7 @@ class ValueId {
   /// Obtain a new `GeoPoint` object representing the pair of coordinates that
   /// this `ValueId` encodes. If `getDatatype() != GeoPoint` then the result
   /// is unspecified.
-  GeoPoint getGeoPoint() const noexcept {
+  GeoPoint getGeoPoint() const {
     T bits = removeDatatypeBits(_bits);
     return GeoPoint::fromBitRepresentation(bits);
   }

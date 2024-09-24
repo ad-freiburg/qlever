@@ -63,9 +63,9 @@ class GeoPoint {
     lng_ = lng;
   }
 
-  constexpr double getLat() { return lat_; }
+  constexpr double getLat() const { return lat_; }
 
-  constexpr double getLng() { return lng_; }
+  constexpr double getLng() const { return lng_; }
 
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
