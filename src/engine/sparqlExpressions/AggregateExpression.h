@@ -68,19 +68,15 @@ class AggregateExpression : public SparqlExpression {
   // (needed only for implicit GROUP BYs).
   virtual ValueId resultForEmptyGroup() const = 0;
 
-  // Get the unaggregated variables of the expression (can be empty).
-  vector<Variable> getUnaggregatedVariables() override;
-
   // Yes, this is an aggregate expression.
-  bool isAggregate() const override { return true; }
+  AggregateStatus isAggregate() const override {
+    return _distinct ? AggregateStatus::DistinctAggregate
+                     : AggregateStatus::NonDistinctAggregate;
+  }
 
   // Get the cache key for this expression.
   [[nodiscard]] string getCacheKey(
       const VariableToColumnMap& varColMap) const override;
-
-  // This is only used for aggregate expressions, and then it's exactly the
-  // value of the `distinct` parameter in the constructor.
-  bool isDistinct() const override { return _distinct; }
 
   // Needed for the pattern trick, see `SparqlExpression.h`.
   [[nodiscard]] std::optional<SparqlExpressionPimpl::VariableAndDistinctness>

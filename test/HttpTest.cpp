@@ -147,3 +147,124 @@ TEST(HttpServer, HttpTest) {
         HttpClient("localhost", std::to_string(httpServer.getPort())));
   }
 }
+
+// Test the various `catch` clauses in `HttpServer::session`.
+TEST(HttpServer, ErrorHandlingInSession) {
+  // We will interfere with the logging to test it, so we have to reset the
+  // logging after we are done.
+  absl::Cleanup cleanup{
+      []() { ad_utility::setGlobalLoggingStream(&std::cout); }};
+  ad_utility::SharedCancellationHandle handle =
+      std::make_shared<ad_utility::CancellationHandle<>>();
+
+  // Create an HTTP server, which replies to each request with three
+  // lines: the request method (GET, POST, or OTHER), a copy of the request
+  // target (might be empty), and a copy of the request body (might be empty).
+  // After sending the response, the exception denoted by the `exceptionPtr`
+  // will be thrown. This exception will be propagated to the
+  // `HttpServer::session` method, the exception behavior of which we want to
+  // test.
+  auto makeHttpServer = [](std::exception_ptr exceptionPtr) {
+    AD_CORRECTNESS_CHECK(exceptionPtr);
+    return TestHttpServer([exception = std::move(exceptionPtr)](
+                              auto request,
+                              auto&& send) -> boost::asio::awaitable<void> {
+      std::string methodName;
+      switch (request.method()) {
+        case boost::beast::http::verb::get:
+          methodName = "GET";
+          break;
+        case boost::beast::http::verb::post:
+          methodName = "POST";
+          break;
+        default:
+          methodName = "OTHER";
+      }
+
+      auto response = [](std::string methodName, std::string target,
+                         std::string body) -> cppcoro::generator<std::string> {
+        co_yield methodName;
+        co_yield "\n";
+        co_yield target;
+        co_yield "\n";
+        co_yield body;
+      }(methodName, std::string(toStd(request.target())), request.body());
+
+      // First send a response, to make the client happy.
+      co_await send(createOkResponse(std::move(response), request,
+                                     ad_utility::MediaType::textPlain));
+      // Then throw an exception.
+      AD_CORRECTNESS_CHECK(exception);
+      std::rethrow_exception(exception);
+    });
+  };
+
+  // Do the following: Create an HtttpServer using the above method that throws
+  // the `exceptionObject` after sending the response. Then send an HTTP request
+  // to that server to trigger the exception. Capture the log of the server and
+  // return it, s.t. it can be tested.
+  auto throwAndCaptureLog = [&makeHttpServer, &handle](auto exceptionObject) {
+    // Redirect the log, s.t. we can return it later.
+    std::stringstream logStream;
+    ad_utility::setGlobalLoggingStream(&logStream);
+
+    // Convert the `exceptionObject` to an `exception_ptr`
+    std::exception_ptr exception;
+    try {
+      throw exceptionObject;
+    } catch (...) {
+      exception = std::current_exception();
+    }
+
+    // Create and run a server and send a request to it. The exception will be
+    // caught by the `session` method, and a log statement will be issued
+    // depending on the exception. Note: We need a separate server for each
+    // test, because we need to shut down the server before extracting its log,
+    // otherwise we have a race condition on the logging. An alternative would
+    // be to implement a threadsafe `stringstream`, but the chosen approach also
+    // works for our purposes.
+    auto httpServer = makeHttpServer(exception);
+    httpServer.runInOwnThread();
+    auto httpClient = std::make_unique<HttpClient>(
+        "localhost", std::to_string(httpServer.getPort()));
+
+    auto response = HttpClient::sendRequest(std::move(httpClient), verb::get,
+                                            "localhost", "target1", handle);
+    // Check the response.
+    EXPECT_EQ(response.status_, boost::beast::http::status::ok);
+    EXPECT_EQ(response.contentType_, "text/plain");
+    EXPECT_EQ(toString(std::move(response.body_)), "GET\ntarget1\n");
+
+    // We need to shut down the server first to not have a race condition on the
+    // logging stream.
+    httpServer.shutDown();
+    // logStream.emit();
+    return logStream.str();
+  };
+
+  using namespace ::testing;
+  // Logging of a general `boost` exception.
+  auto s = throwAndCaptureLog(
+      beast::system_error{boost::asio::error::host_not_found_try_again});
+  EXPECT_THAT(s, HasSubstr("Host not found"));
+
+  // The `timeout`and `eof` exceptions are only logged in the `TRACE` level,
+  // normally they are silently caught and ignored.
+  s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
+  s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
+  if (LOGLEVEL >= TRACE) {
+    EXPECT_THAT(s,
+                AllOf(HasSubstr("due to a timeout"), HasSubstr("End of file")));
+  } else {
+    EXPECT_THAT(s, Eq(""));
+  }
+
+  // Handling of `std::exception`.
+  s = throwAndCaptureLog(std::runtime_error{"The runtime error for testing"});
+  EXPECT_THAT(s, HasSubstr("The runtime error for testing"));
+
+  // Thrown object that is not a `std::exception`.
+  s = throwAndCaptureLog(47);
+  EXPECT_THAT(s,
+              HasSubstr("Weird exception not inheriting from std::exception"));
+}
