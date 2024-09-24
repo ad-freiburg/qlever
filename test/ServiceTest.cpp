@@ -387,7 +387,7 @@ TEST_F(ServiceTest, computeResult) {
                                              {"blu", "bla", "y"},
                                              {"bli", "blu", "y"}})),
         siblingTree};
-    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting(true));
+    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
 
     // Check 6: SiblingTree's rows exceed maxValue
     const auto maxValueRowsDefault =
@@ -408,6 +408,31 @@ TEST_F(ServiceTest, computeResult) {
         siblingTree};
     EXPECT_NO_THROW(serviceOperation6.computeResultOnlyForTesting());
     RuntimeParameters().set<"service-max-value-rows">(maxValueRowsDefault);
+
+    // Check 7: Lazy computation
+    Service lazyService{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            expectedUrl, expectedSparqlQuery,
+            genJsonResult({"x", "y"},
+                          {{"bla", "bli"}, {"blu", "bla"}, {"bli", "blu"}}),
+            boost::beast::http::status::ok, "application/sparql-results+json")};
+
+    auto lazyResult = lazyService.computeResultOnlyForTesting(true);
+    // Consume the idTable-generator to actually compute the result.
+    for ([[maybe_unused]] auto& _ : lazyResult.idTables()) {
+    }
+
+    // Check 8: LazyJsonParser Error
+    Service service8{
+        testQec, parsedServiceClause,
+        getResultFunctionFactory(
+            expectedUrl, expectedSparqlQuery, std::string(1'000'000, '0'),
+            boost::beast::http::status::ok, "application/sparql-results+json")};
+
+    AD_EXPECT_THROW_WITH_MESSAGE(
+        service8.computeResultOnlyForTesting(),
+        ::testing::HasSubstr("Parser failed with error"));
   }
 }
 
