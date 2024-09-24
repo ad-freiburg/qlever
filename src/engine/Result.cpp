@@ -203,8 +203,8 @@ void Result::checkDefinedness(const VariableToColumnMap& varColMap) {
     AD_EXPENSIVE_CHECK(performCheck(varColMap, std::get<IdTable>(data_)));
   } else {
     auto generator = [](cppcoro::generator<IdTable> original,
-                        VariableToColumnMap varColMap,
-                        auto performCheck) -> cppcoro::generator<IdTable> {
+                        [[maybe_unused]] VariableToColumnMap varColMap,
+                        [[maybe_unused]] auto performCheck) -> cppcoro::generator<IdTable> {
       for (IdTable& idTable : original) {
         // No need to check subsequent idTables assuming the datatypes
         // don't change mid result.

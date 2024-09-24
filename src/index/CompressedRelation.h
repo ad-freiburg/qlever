@@ -364,6 +364,16 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // TODO<joka921> Comment.
+  struct FilterDuplicatesAndGraphIds {
+    const ScanSpecification::Graphs& graphs;
+    ColumnIndex graphColumn_;
+    bool deleteGraphColumn_;
+    bool operator()(IdTable& block, const CompressedBlockMetadata& metadata);
+  };
+  static std::function<bool(const CompressedBlockMetadata&)> makeCanBlockBeSkipped(
+      const ScanSpecification::Graphs* graphs);
+
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
   struct ScanSpecAndBlocks {

@@ -137,6 +137,58 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 }
 
 // _____________________________________________________________________________
+bool CompressedRelationReader::FilterDuplicatesAndGraphIds::operator()(
+    IdTable& block, const CompressedBlockMetadata& metadata) {
+  bool needsFilteringByGraph = [&]() {
+    if (!graphs.has_value()) {
+      return false;
+    }
+    if (!metadata.containedGraphs_.has_value()) {
+      return true;
+    }
+    const auto& containedGraphs = metadata.containedGraphs_.value();
+    if (containedGraphs.size() == 1 &&
+        graphs.value().contains(containedGraphs.front())) {
+      return false;
+    }
+    return true;
+  }();
+  if (needsFilteringByGraph) {
+    auto removedRange = std::ranges::remove_if(
+        block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
+        [graphColumn = graphColumn_](const auto& row) { return row[graphColumn]; });
+    block.erase(removedRange.begin(), block.end());
+  }
+  if (deleteGraphColumn_) {
+    block.deleteColumn(graphColumn_);
+  }
+  if (!metadata.containsDuplicatesWithDifferentGraphs_) {
+    return needsFilteringByGraph;
+  }
+  auto [endUnique, _] = std::ranges::unique(block);
+  block.erase(endUnique, block.end());
+  return true;
+}
+
+// ______________________________________________________________________________
+std::function<bool(const CompressedBlockMetadata&)> CompressedRelationReader::makeCanBlockBeSkipped(
+    const ScanSpecification::Graphs* graphs) {
+  return [&graphs = *graphs](const CompressedBlockMetadata& block) {
+    if (!graphs.has_value()) {
+      return false;
+    }
+    if (!block.containedGraphs_.has_value()) {
+      return false;
+    }
+    const auto& contained = block.containedGraphs_.value();
+    return std::ranges::none_of(graphs.value(),
+                                [&contained](const auto& graph) {
+                                  return ad_utility::contains(contained, graph);
+                                });
+  };
+}
+
+// _____________________________________________________________________________
 CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     ScanSpecification scanSpec,
     std::vector<CompressedBlockMetadata> blockMetadata,
@@ -164,54 +216,11 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     columnIndices.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
   }
 
-  auto canBlockBeSkipped = [&graphs = scanSpec.graphsToFilter()](
-                               const CompressedBlockMetadata& block) {
-    if (!graphs.has_value()) {
-      return false;
-    }
-    if (!block.containedGraphs_.has_value()) {
-      return false;
-    }
-    const auto& contained = block.containedGraphs_.value();
-    return std::ranges::none_of(graphs.value(),
-                                [&contained](const auto& graph) {
-                                  return ad_utility::contains(contained, graph);
-                                });
-  };
-  auto filterDuplicatesAndGraphIds =
-      [&columnIndices, &graphs = scanSpec.graphsToFilter()](
-          IdTable& block, const CompressedBlockMetadata& metadata) -> bool {
-    bool needsFilteringByGraph = [&]() {
-      if (!graphs.has_value()) {
-        return false;
-      }
-      if (!metadata.containedGraphs_.has_value()) {
-        return false;
-      }
-      const auto& containedGraphs = metadata.containedGraphs_.value();
-      if (containedGraphs.size() == 1 &&
-          graphs.value().contains(containedGraphs.front())) {
-        return false;
-      }
-      return true;
-    }();
-    if (needsFilteringByGraph) {
-      size_t graphColumn = columnIndices.size() - 1;
-      auto removedRange = std::ranges::remove_if(
-          block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
-          [graphColumn](const auto& row) { return row[graphColumn]; });
-      block.erase(removedRange.begin(), block.end());
-    }
-    if (graphs.has_value()) {
-      block.deleteColumn(block.numColumns() - 1);
-    }
-    if (!metadata.containsDuplicatesWithDifferentGraphs_) {
-      return needsFilteringByGraph;
-    }
-    auto [endUnique, _] = std::ranges::unique(block);
-    block.erase(endUnique, block.end());
-    return true;
-  };
+  auto canBlockBeSkipped = makeCanBlockBeSkipped(&scanSpec.graphsToFilter());
+
+  auto filterDuplicatesAndGraphIds = FilterDuplicatesAndGraphIds{
+      scanSpec.graphsToFilter(), columnIndices.size() - 1,
+      scanSpec.graphsToFilter().has_value()};
 
   auto getIncompleteBlock = [&](auto it) {
     auto result = readPossiblyIncompleteBlock(scanSpec, *it, std::ref(details),

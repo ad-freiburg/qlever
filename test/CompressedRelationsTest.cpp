@@ -6,6 +6,7 @@
 
 #include "index/CompressedRelation.h"
 #include "util/GTestHelpers.h"
+#include "./util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -634,4 +635,67 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
   std::stringstream str;
   str << tr;
   ASSERT_EQ(str.str(), "Triple: V:12 V:13 V:27\n");
+}
+
+TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
+  auto table = makeIdTableFromVector({{3}, {3}, {5}});
+  CompressedBlockMetadata metadata{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
+  using Filter = CompressedRelationReader::FilterDuplicatesAndGraphIds;
+  ScanSpecification::Graphs graphs = std::nullopt;
+  Filter f{graphs, 43, false};
+  f(table, metadata);
+  EXPECT_THAT(table, matchesIdTableFromVector({{3}, {3}, {5}}));
+  metadata.containsDuplicatesWithDifferentGraphs_ = true;
+  f(table, metadata);
+  EXPECT_THAT(table, matchesIdTableFromVector({{3}, {5}}));
+
+  // Keep the graph column (the last column), hence there are no duplicates,
+  // but keep only the entries from graphs `1` and `2`.
+  table = makeIdTableFromVector({{3, 1}, {3, 2}, {5, 3}});
+  graphs.emplace();
+  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(1)));
+  graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
+  f.graphColumn_ = 1;
+  f.deleteGraphColumn_ = false;
+  // TODO<joka921> Add tests for the result vvalue of f()
+  f(table, metadata);
+  EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
+
+  // TODO<joka921> Add remaining test cases + AD_EXPENSIVE_CHECKS for sanity.
+}
+
+TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
+  CompressedBlockMetadata metadata{
+      {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
+
+  auto make = &CompressedRelationReader::makeCanBlockBeSkipped;
+  using Graphs = ScanSpecification::Graphs;
+  Graphs graphs = std::nullopt;
+  auto canBeSkipped = make(&graphs);
+  // No information about the contained blocks, and no graph filter specified,
+  // so we cannot skip.
+  EXPECT_FALSE(canBeSkipped(metadata));
+
+  // The block only contains the graph `1`, but we don't filter by graphs,
+  // so it can't be skipped.
+  metadata.containedGraphs_.emplace();
+  metadata.containedGraphs_->push_back(V(1));
+  EXPECT_FALSE(canBeSkipped(metadata));
+
+  graphs.emplace();
+  graphs->insert(V(1));
+  graphs->insert(V(3));
+  // The block only contains the graph `1`, and we in fact want the graphs `1` and `3`,
+  // so it can't be skipped.
+  EXPECT_FALSE(canBeSkipped(metadata));
+
+  // The block contains graph `1`, but we only want graph `3`, so the block can
+  // be skipped.
+  graphs->erase(V(1));
+  EXPECT_TRUE(canBeSkipped(metadata));
+
+  // The block metadata contains no information on the contained graphs, but we only want graph `3`, so the block can't be skipped.
+  metadata.containedGraphs_.reset();
+  EXPECT_FALSE(canBeSkipped(metadata));
 }
