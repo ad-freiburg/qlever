@@ -32,8 +32,8 @@ template <valueIdComparators::Comparison Comp>
                                                         localVocab);
 }
 
-template class ExtremumAggregationData<valueIdComparators::Comparison::LT>;
-template class ExtremumAggregationData<valueIdComparators::Comparison::GT>;
+template struct ExtremumAggregationData<valueIdComparators::Comparison::LT>;
+template struct ExtremumAggregationData<valueIdComparators::Comparison::GT>;
 
 // _____________________________________________________________________________
 [[nodiscard]] ValueId SumAggregationData::calculateResult(
