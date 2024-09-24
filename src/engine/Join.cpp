@@ -575,7 +575,7 @@ void updateRuntimeInfoForLazyScan(
 }  // namespace
 
 // ______________________________________________________________________________________________________
-IdTable Join::computeResultForTwoIndexScans() {
+IdTable Join::computeResultForTwoIndexScans() const {
   auto leftScan =
       std::dynamic_pointer_cast<IndexScan>(_left->getRootOperation());
   auto rightScan =

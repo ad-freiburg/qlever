@@ -108,8 +108,8 @@ class Join : public Operation {
    * @return The result is only sorted, if the bigger table is sorted.
    * Otherwise it is not sorted.
    **/
-  void hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
-                ColumnIndex jc2, IdTable* dynRes);
+  static void hashJoin(const IdTable& dynA, ColumnIndex jc1,
+                       const IdTable& dynB, ColumnIndex jc2, IdTable* dynRes);
 
  protected:
   virtual string getCacheKeyImpl() const override;
@@ -122,7 +122,7 @@ class Join : public Operation {
   // A special implementation that is called when both children are
   // `IndexScan`s. Uses the lazy scans to only retrieve the subset of the
   // `IndexScan`s that is actually needed without fully materializing them.
-  IdTable computeResultForTwoIndexScans();
+  IdTable computeResultForTwoIndexScans() const;
 
   // A special implementation that is called when one of the children is an
   // `IndexScan`. The argument `scanIsLeft` determines whether the `IndexScan`

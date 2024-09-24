@@ -58,9 +58,8 @@ IdTable useJoinFunctionOnIdTables(const IdTableAndJoinColumn& tableA,
  *  `ad_utility::callFixedSize`.
  */
 auto makeHashJoinLambda() {
-  Join J{Join::InvalidOnlyForTestingJoinTag{}, ad_utility::testing::getQec()};
-  return [J = std::move(J)]<int A, int B, int C>(auto&&... args) mutable {
-    return J.hashJoin(AD_FWD(args)...);
+  return []<int A, int B, int C>(auto&&... args) mutable {
+    return Join::hashJoin(AD_FWD(args)...);
   };
 }
 
