@@ -387,7 +387,7 @@ TEST_F(ServiceTest, computeResult) {
                                              {"blu", "bla", "y"},
                                              {"bli", "blu", "y"}})),
         siblingTree};
-    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting());
+    EXPECT_NO_THROW(serviceOperation5.computeResultOnlyForTesting(true));
 
     // Check 6: SiblingTree's rows exceed maxValue
     const auto maxValueRowsDefault =

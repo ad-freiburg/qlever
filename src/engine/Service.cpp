@@ -179,25 +179,30 @@ ProtoResult Service::computeResultImpl([[maybe_unused]] bool requestLaziness) {
                          std::back_inserter(expVariableKeys),
                          [](const Variable& v) { return v.name().substr(1); });
 
-  // Set basic properties of the result table.
-  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
   LocalVocab localVocab{};
-
   auto body = ad_utility::LazyJsonParser::parse(std::move(response.body_),
                                                 {"results", "bindings"});
+  auto generator =
+      computeResultLazily(expVariableKeys, body, &localVocab, !requestLaziness);
 
-  // Fill the result table using the `writeJsonResult` method below.
-  CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this,
-                  expVariableKeys, body, &idTable, &localVocab);
+  if (requestLaziness) {
+    return {std::move(generator), resultSortedOn(), std::move(localVocab)};
+  }
 
+  // For the non-lazy case the generator is supposed to yield exactly one
+  // idTable.
+  auto iterator = generator.begin();
+  AD_CORRECTNESS_CHECK(iterator != generator.end());
+  IdTable idTable = std::move(*iterator);
+  AD_CORRECTNESS_CHECK(++iterator == generator.end());
   return {std::move(idTable), resultSortedOn(), std::move(localVocab)};
 }
 
-// ____________________________________________________________________________
 template <size_t I>
-void Service::writeJsonResult(const std::vector<std::string>& vars,
-                              ad_utility::LazyJsonParser::Generator& body,
-                              IdTable* idTablePtr, LocalVocab* localVocab) {
+void Service::writeJsonResult(
+    const std::vector<std::string>& vars, const nlohmann::json& partJson,
+    IdTable* idTablePtr, LocalVocab* localVocab, size_t& rowIdx,
+    const ad_utility::LazyJsonParser::Details& details) {
   IdTableStatic<I> idTable = std::move(*idTablePtr).toStatic<I>();
   checkCancellation();
   std::vector<size_t> numLocalVocabPerColumn(idTable.numColumns());
@@ -222,52 +227,71 @@ void Service::writeJsonResult(const std::vector<std::string>& vars,
     }
   };
 
-  size_t rowIdx = 0;
-  bool resultExists{false};
-  bool varsChecked{false};
   try {
-    for (const nlohmann::json& part : body) {
-      if (part.contains("head")) {
-        AD_CORRECTNESS_CHECK(!varsChecked);
-        verifyVariables(part["head"], body.details());
-        varsChecked = true;
-      }
-      // The LazyJsonParser only yields parts containing the "bindings" array,
-      // therefore we can assume its existence here.
-      AD_CORRECTNESS_CHECK(part.contains("results") &&
-                           part["results"].contains("bindings") &&
-                           part["results"]["bindings"].is_array());
-      writeBindings(part["results"]["bindings"], rowIdx);
-      resultExists = true;
-    }
+    // The LazyJsonParser only yields partJsons containing the "bindings" array,
+    // therefore we can assume its existence here.
+    AD_CORRECTNESS_CHECK(partJson.contains("results") &&
+                         partJson["results"].contains("bindings") &&
+                         partJson["results"]["bindings"].is_array());
+    writeBindings(partJson["results"]["bindings"], rowIdx);
   } catch (const ad_utility::LazyJsonParser::Error& e) {
     throwErrorWithContext(
         absl::StrCat("Parser failed with error: '", e.what(), "'"),
-        body.details().first100_, body.details().last100_);
+        details.first100_, details.last100_);
   }
 
-  // As the LazyJsonParser only passes parts of the result that match the
-  // expected structure, no result implies an unexpected structure.
+  *idTablePtr = std::move(idTable).toDynamic();
+  checkCancellation();
+}
+
+// ____________________________________________________________________________
+cppcoro::generator<IdTable> Service::computeResultLazily(
+    const std::vector<std::string>& vars,
+    ad_utility::LazyJsonParser::Generator& body, LocalVocab* localVocab,
+    bool singleIdTable) {
+  IdTable idTable{getResultWidth(), getExecutionContext()->getAllocator()};
+
+  size_t rowIdx = 0;
+  bool varsChecked{false};
+  bool resultExists{false};
+  for (const nlohmann::json& partJson : body) {
+    if (partJson.contains("head")) {
+      AD_CORRECTNESS_CHECK(!varsChecked);
+      verifyVariables(partJson["head"], body.details());
+      varsChecked = true;
+    }
+
+    CALL_FIXED_SIZE(getResultWidth(), &Service::writeJsonResult, this, vars,
+                    partJson, &idTable, localVocab, rowIdx, body.details());
+    if (!singleIdTable) {
+      co_yield idTable;
+      idTable.clear();
+    }
+    resultExists = true;
+  }
+
+  // As the LazyJsonParser only passes parts of the result that match
+  // the expected structure, no result implies an unexpected
+  // structure.
   if (!resultExists) {
     throwErrorWithContext(
-        "JSON result does not have the expected structure (results section "
+        "JSON result does not have the expected structure (results "
+        "section "
         "missing)",
         body.details().first100_, body.details().last100_);
   }
 
   if (!varsChecked) {
     throwErrorWithContext(
-        "JSON result does not have the expected structure (head section "
+        "JSON result does not have the expected structure (head "
+        "section "
         "missing)",
         body.details().first100_, body.details().last100_);
   }
 
-  AD_CORRECTNESS_CHECK(rowIdx == idTable.size());
-  LOG(INFO) << "Number of rows in result: " << idTable.size() << std::endl;
-  LOG(INFO) << "Number of entries in local vocabulary per column: "
-            << absl::StrJoin(numLocalVocabPerColumn, ", ") << std::endl;
-  *idTablePtr = std::move(idTable).toDynamic();
-  checkCancellation();
+  if (singleIdTable) {
+    co_yield idTable;
+  }
 }
 
 // ____________________________________________________________________________
