@@ -661,9 +661,9 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   EXPECT_TRUE(f(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
-  // The metadata knows that there is only a single block contained,
-  // so we don't need to filter anything. We additionally test the deletion
-  // of the graph column in this test
+  // The metadata knows that there is only a single block contained, so we don't
+  // need to filter anything. We additionally test the deletion of the graph
+  // column in this test.
   metadata.graphInfo_.emplace();
   metadata.graphInfo_->push_back(V(1));
   f.deleteGraphColumn_ = true;
@@ -728,7 +728,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
 
   // Now make sure that there are too many different graphs in the block, such
-  // that we won't  have the graph info in the metadata.
+  // that we won't have the graph info in the metadata.
   for (size_t i = 0; i < inputs.size(); ++i) {
     inputs.at(i).col1And2_.at(0).at(2) = i;
   }

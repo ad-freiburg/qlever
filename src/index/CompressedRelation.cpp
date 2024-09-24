@@ -218,8 +218,8 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   auto columnIndices = prepareColumnIndices(scanSpec, additionalColumns);
 
-  // TODO<joka921> This reads the Graph column twice for `GRAPH` clauses with a
-  // variable, this can possibly be avoided.
+  // TODO<joka921> This reads the graph column twice for `GRAPH` clauses with a
+  // variable, which can possibly be avoided.
   if (scanSpec.graphsToFilter().has_value()) {
     columnIndices.push_back(ADDITIONAL_COLUMN_GRAPH_ID);
   }

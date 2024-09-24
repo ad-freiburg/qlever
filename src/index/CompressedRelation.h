@@ -417,8 +417,8 @@ class CompressedRelationReader {
       CompressedBlockMetadata::PermutedTriple lastTriple_;
     };
     FirstAndLastTriple firstAndLastTriple_;
-    // Deliberately delete the default constructor, s.t. we don't accidentally
-    // forget to set the `firstAndLastTriple_`
+    // Deliberately delete the default constructor such that we don't
+    // accidentally forget to set the `firstAndLastTriple_`.
     ScanSpecAndBlocksAndBounds() = delete;
     ScanSpecAndBlocksAndBounds(ScanSpecAndBlocks base,
                                FirstAndLastTriple triples)
@@ -429,8 +429,8 @@ class CompressedRelationReader {
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
-    // The number of blocks that could be skipped using only their metadata
-    // because the GraphIDs of the block did not match the query.
+    // The number of blocks that are skipped by looking only at their metadata
+    // (because the graph IDs of the block did not match the query).
     size_t numBlocksSkippedBecauseOfGraph_ = 0;
     size_t numBlocksPostprocessed_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
