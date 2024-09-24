@@ -19,8 +19,8 @@
 #include "util/Generator.h"
 #include "util/MemorySize/MemorySize.h"
 #include "util/Serializer/SerializeArrayOrTuple.h"
-#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/SerializeOptional.h"
+#include "util/Serializer/SerializeVector.h"
 #include "util/Serializer/Serializer.h"
 #include "util/TaskQueue.h"
 
@@ -581,11 +581,12 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
 
-  using BlockGraphFilter = std::function<void(IdTable&, const CompressedBlockMetadata&)>;
+  using BlockGraphFilter =
+      std::function<void(IdTable&, const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
-      CancellationHandle cancellationHandle,
-      LimitOffsetClause& limitOffset, BlockGraphFilter) const;
+      CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
+      BlockGraphFilter) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
