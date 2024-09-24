@@ -699,3 +699,46 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   metadata.containedGraphs_.reset();
   EXPECT_FALSE(canBeSkipped(metadata));
 }
+
+// Test the correct setting of the metadata for the contained graphs.
+TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
+  std::vector<RelationInput> inputs;
+  for (int i = 1; i < 200; ++i) {
+    inputs.push_back(
+        RelationInput{i, {{i - 1, i + 1, 42}, {i - 1, i + 2, 43}, {i, i - 1, 43}}});
+  }
+  using namespace ::testing;
+  {
+    auto [blocks, metadata, reader] =
+        writeAndOpenRelations(inputs, "graphInfo1", 100_kB);
+    EXPECT_EQ(blocks.size(), 1);
+    EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
+    EXPECT_THAT(blocks.at(0).containedGraphs_, Optional(UnorderedElementsAre(V(42), V(43))));
+  }
+
+  // Now make sure that there are too many different graphs in the block, such
+  // that we won't  have the graph info in the metadata.
+  for (size_t i = 0; i < inputs.size(); ++i) {
+    inputs.at(i).col1And2_.at(0).at(2) = i;
+  }
+  {
+    auto [blocks, metadata, reader] =
+        writeAndOpenRelations(inputs, "graphInfo1", 100_kB);
+    EXPECT_EQ(blocks.size(), 1);
+    EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
+    AD_EXPECT_NULLOPT(blocks.at(0).containedGraphs_);
+  }
+
+  // There is a duplicate triple (3, 1, 3) that appears in both graphs 0 and 1
+  inputs.clear();
+  inputs.push_back(RelationInput{3, {{1, 2, 0}, {1, 3, 0}, {1, 3, 1}}});
+
+  {
+    auto [blocks, metadata, reader] =
+        writeAndOpenRelations(inputs, "graphInfo1", 100_kB);
+    EXPECT_EQ(blocks.size(), 1);
+    EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
+    EXPECT_THAT(blocks.at(0).containedGraphs_, Optional(UnorderedElementsAre(V(0), V(1))));
+  }
+
+}
