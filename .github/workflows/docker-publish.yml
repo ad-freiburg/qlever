@@ -68,7 +68,7 @@ jobs:
         # future, then we can set this to `true`. Then the ARM64 image will also
         # be built on pull requests which allows for debugging without changing
         # the master branch.
-        if: false
+        #if: false
         uses: docker/build-push-action@v6
         with:
           context: .
