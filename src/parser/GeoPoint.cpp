@@ -4,6 +4,7 @@
 
 #include "parser/GeoPoint.h"
 
+#include <cmath>
 #include <optional>
 
 #include "parser/Literal.h"
@@ -41,8 +42,7 @@ std::optional<GeoPoint> GeoPoint::parseFromLiteral(
           std::string_view(GEO_WKT_LITERAL))) == 0) {
     auto [lng, lat] = ad_utility::detail::parseWktPoint(
         asStringViewUnsafe(value.getContent()));
-    if (lng != ad_utility::detail::invalidCoordinate &&
-        lat != ad_utility::detail::invalidCoordinate) {
+    if (!std::isnan(lng) && !std::isnan(lat)) {
       return GeoPoint(lat, lng);
     }
   }

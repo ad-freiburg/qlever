@@ -38,8 +38,8 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
     absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
     // This should never happen: if the regex matches, then each of the two
     // coordinate strings should also parse to a double.
-    AD_CONTRACT_CHECK(lng != invalidCoordinate);
-    AD_CONTRACT_CHECK(lat != invalidCoordinate);
+    AD_CONTRACT_CHECK(!std::isnan(lng));
+    AD_CONTRACT_CHECK(!std::isnan(lat));
   }
   return std::pair(lng, lat);
 }
