@@ -666,9 +666,10 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   // column in this test.
   metadata.graphInfo_.emplace();
   metadata.graphInfo_->push_back(V(1));
+  metadata.containsDuplicatesWithDifferentGraphs_ = false;
   f.deleteGraphColumn_ = true;
   table = makeIdTableFromVector({{3, 1}, {4, 1}, {5, 1}});
-  EXPECT_TRUE(f(table, metadata));
+  EXPECT_FALSE(f(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
 
   // TODO<joka921> AD_EXPENSIVE_CHECKS inside the FILTER for sanity.
