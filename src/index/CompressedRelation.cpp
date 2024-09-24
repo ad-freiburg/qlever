@@ -10,6 +10,7 @@
 #include "engine/idTable/CompressedExternalIdTable.h"
 #include "engine/idTable/IdTable.h"
 #include "global/RuntimeParameters.h"
+#include "index/ConstantsIndexBuilding.h"
 #include "util/Cache.h"
 #include "util/CompressionUsingZstd/ZstdWrapper.h"
 #include "util/ConcurrentCache.h"
@@ -19,6 +20,7 @@
 #include "util/ProgressBar.h"
 #include "util/ThreadSafeQueue.h"
 #include "util/Timer.h"
+#include "util/TransparentFunctors.h"
 #include "util/TypeTraits.h"
 
 using namespace std::chrono_literals;
@@ -54,13 +56,13 @@ CompressedRelationReader::IdTableGenerator
 CompressedRelationReader::asyncParallelBlockGenerator(
     auto beginBlock, auto endBlock, ColumnIndices columnIndices,
     CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-    BlockGraphFilter blockGraphFilter,
+    FilterDuplicatesAndGraphs blockGraphFilter,
     CanBlockBeSkipped canBlockBeSkipped) const {
   LazyScanMetadata& details = co_await cppcoro::getDetails;
   if (beginBlock == endBlock) {
     co_return;
   }
-  std::atomic<size_t> numBlocksPostProcessed = 0;
+  std::atomic<size_t> numBlocksPostprocessed = 0;
   const size_t queueSize =
       RuntimeParameters().get<"lazy-index-scan-queue-size">();
   auto blockIterator = beginBlock;
@@ -93,7 +95,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
     lock.unlock();
     auto decompressedBlock = decompressBlock(compressedBlock, block.numRows_);
     if (blockGraphFilter(decompressedBlock, block)) {
-      numBlocksPostProcessed++;
+      numBlocksPostprocessed++;
     }
     return std::pair{myIndex, std::optional{std::move(decompressedBlock)}};
   };
@@ -119,7 +121,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
       details.numElementsRead_ += block.numRows();
       pruneBlock(block, limitOffset);
       details.numElementsYielded_ += block.numRows();
-      details.numBlocksPostprocessed_ = numBlocksPostProcessed;
+      details.numBlocksPostprocessed_ = numBlocksPostprocessed;
       if (!block.empty()) {
         co_yield block;
       }
@@ -137,34 +139,38 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 }
 
 // _____________________________________________________________________________
-bool CompressedRelationReader::FilterDuplicatesAndGraphIds::operator()(
+bool CompressedRelationReader::FilterDuplicatesAndGraphs::operator()(
     IdTable& block, const CompressedBlockMetadata& metadata) {
+  // TODO<joka921> Make this a (private) member function of the struct.
   bool needsFilteringByGraph = [&]() {
     if (!graphs.has_value()) {
       return false;
     }
-    if (!metadata.containedGraphs_.has_value()) {
+    if (!metadata.graphInfo_.has_value()) {
       return true;
     }
-    const auto& containedGraphs = metadata.containedGraphs_.value();
-    if (containedGraphs.size() == 1 &&
-        graphs.value().contains(containedGraphs.front())) {
-      return false;
-    }
-    return true;
+    const auto& containedGraphs = metadata.graphInfo_.value();
+    return (std::ranges::none_of(
+        metadata.graphInfo_.value(),
+        [&wantedGraphs = graphs.value()](Id containedGraph) {
+          return wantedGraphs.contains(containedGraph);
+        }));
   }();
   if (needsFilteringByGraph) {
-    auto removedRange = std::ranges::remove_if(
-        block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
+    auto [beginOfRemoved, _] = std::ranges::remove_if(
+        block,
+        [&wantedGraphs = graphs.value()](Id id) {
+          return !wantedGraphs.contains(id);
+        },
         [graphColumn = graphColumn_](const auto& row) {
           return row[graphColumn];
         });
-    block.erase(removedRange.begin(), block.end());
+    block.erase(beginOfRemoved, block.end());
   }
   if (deleteGraphColumn_) {
     block.deleteColumn(graphColumn_);
   }
-  if (!metadata.containsDuplicatesWithDifferentGraphs_) {
+  if (!metadata.containsDuplicatesWithDifferentGraphs_ || !deleteGraphColumn_) {
     return needsFilteringByGraph;
   }
   auto [endUnique, _] = std::ranges::unique(block);
@@ -173,17 +179,16 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphIds::operator()(
 }
 
 // ______________________________________________________________________________
-std::function<bool(const CompressedBlockMetadata&)>
-CompressedRelationReader::makeCanBlockBeSkipped(
-    const ScanSpecification::Graphs* graphs) {
+auto CompressedRelationReader::makeCanBlockBeSkipped(
+    const ScanSpecification::Graphs* graphs) -> CanBlockBeSkipped {
   return [&graphs = *graphs](const CompressedBlockMetadata& block) {
     if (!graphs.has_value()) {
       return false;
     }
-    if (!block.containedGraphs_.has_value()) {
+    if (!block.graphInfo_.has_value()) {
       return false;
     }
-    const auto& contained = block.containedGraphs_.value();
+    const auto& contained = block.graphInfo_.value();
     return std::ranges::none_of(graphs.value(),
                                 [&contained](const auto& graph) {
                                   return ad_utility::contains(contained, graph);
@@ -221,7 +226,7 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   auto canBlockBeSkipped = makeCanBlockBeSkipped(&scanSpec.graphsToFilter());
 
-  auto filterDuplicatesAndGraphIds = FilterDuplicatesAndGraphIds{
+  auto filterDuplicatesAndGraphIds = FilterDuplicatesAndGraphs{
       scanSpec.graphsToFilter(), columnIndices.size() - 1,
       scanSpec.graphsToFilter().has_value()};
 
@@ -237,6 +242,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
     if (filterDuplicatesAndGraphIds(block, *beginBlock)) {
       ++details.numBlocksPostprocessed_;
     }
+    // TODO<joka921> Can we merge this `pruneBlock` with the above `postprocess`
+    // method? And can /should we include the skipped blocks into the
+    // `limitOffset` calculation?
     pruneBlock(block, limitOffset);
     details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
@@ -778,15 +786,18 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-    // TODO<joka921> Comment the following;
-    //  Setup the metadata of the contained Graphs.
-    //  TODO<joka921> Change the unit tests, s.t. the following can be a Check.
+    // Find out, whether the block contains duplicates and whether it contains
+    // only a few distinct graphs, s.t. we can store this information in the
+    // block metadata.
+    // TODO<joka921> Extract this to a separate function.
     bool hasDuplicates = false;
     std::optional<std::vector<Id>> containedGraphs;
     if (buf->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
       using C = ColumnIndex;
-      auto onlySPO = buf->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
-      size_t numDistinct = Engine::countDistinct(onlySPO, []() {});
+      auto withoutGraphAndAdditionalPayload =
+          buf->asColumnSubsetView(std::array{C{0}, C{1}, C{2}});
+      size_t numDistinct = Engine::countDistinct(
+          withoutGraphAndAdditionalPayload, ad_utility::noop);
       hasDuplicates = numDistinct != buf->numRows();
 
       std::vector<Id> graphColumn;
@@ -795,10 +806,10 @@ void CompressedRelationWriter::compressAndWriteBlock(
       std::ranges::sort(graphColumn);
       auto [beginOfUnique, _] = std::ranges::unique(graphColumn);
       graphColumn.erase(beginOfUnique, graphColumn.end());
-      // TODO<joka921> Proper constant
-      containedGraphs = graphColumn.size() < 20
-                            ? std::optional{std::move(graphColumn)}
-                            : std::nullopt;
+      containedGraphs =
+          graphColumn.size() < MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA
+              ? std::optional{std::move(graphColumn)}
+              : std::nullopt;
     }
     blockBuffer_.wlock()->push_back(
         CompressedBlockMetadata{std::move(offsets),

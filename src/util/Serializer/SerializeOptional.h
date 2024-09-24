@@ -5,9 +5,11 @@
 #pragma once
 #include <optional>
 
-#include "../TypeTraits.h"
-#include "./Serializer.h"
+#include "util/Serializer/Serializer.h"
+#include "util/TypeTraits.h"
 
+// Serialization for `std::optional<T>`
+// TODO<joka921> This still requires some tests.
 namespace ad_utility::serialization {
 AD_SERIALIZE_FUNCTION_WITH_CONSTRAINT(
     (ad_utility::similarToInstantiation<T, std::optional> &&

@@ -97,7 +97,7 @@ struct CompressedBlockMetadata {
   // If there are only few graphs contained at all in this block, then
   // the IDs of those graphs are stored here. If there are many different graphs
   // inside this block, `std::nullopt` is stored.
-  std::optional<std::vector<Id>> containedGraphs_;
+  std::optional<std::vector<Id>> graphInfo_;
   // True if and only if this block contains (adjacent) triples which only
   // differ in their Graph ID. Those have to be filtered out when scanning the
   // blocks.
@@ -119,7 +119,7 @@ AD_SERIALIZE_FUNCTION(CompressedBlockMetadata) {
   serializer | arg.numRows_;
   serializer | arg.firstTriple_;
   serializer | arg.lastTriple_;
-  serializer | arg.containedGraphs_;
+  serializer | arg.graphInfo_;
   serializer | arg.containsDuplicatesWithDifferentGraphs_;
 }
 
@@ -364,15 +364,37 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
-  // TODO<joka921> Comment.
-  struct FilterDuplicatesAndGraphIds {
+  // This struct stores a reference to the (optional) graphs by which a result
+  // is filtered, the column in which the graph ID will reside in a result,
+  // and the information whether this column is required as part of the output,
+  // or whether it should be deleted after filtering. It can then filter a given
+  // block according to those settings.
+  // TODO<joka921> Merge this struct with the following
+  // `CanBlockBeSkipped`thing, s.t. it becomes one struct with two explicit
+  // member functions.
+  // TODO<joka921> The function should be called  `postprocessBlock`.
+  struct FilterDuplicatesAndGraphs {
     const ScanSpecification::Graphs& graphs;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
-    bool operator()(IdTable& block, const CompressedBlockMetadata& metadata);
+
+    // Filter the given containedGraph, s.t. it contains no duplicates and only
+    // the specified graphs. The `metadata` of the containedGraph is used to
+    // compute some possible short cuts (e.g. if we know in advance that the
+    // containedGraph has no duplicates). The return value is `true` if the
+    // `containedGraph` has been modified because it contained duplicates or
+    // triples from unwanted graphs.
+    bool operator()(IdTable& containedGraph,
+                    const CompressedBlockMetadata& metadata);
   };
-  static std::function<bool(const CompressedBlockMetadata&)>
-  makeCanBlockBeSkipped(const ScanSpecification::Graphs* graphs);
+
+  // Return a function that takes a `CompressedBlockMetadata` and returns `true`
+  // iff we can decide by the metadata alone that this block is not needed for
+  // a scan, because it contains not a single triple that is compatible with the
+  // given `graphs`.
+  using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
+  static CanBlockBeSkipped makeCanBlockBeSkipped(
+      const ScanSpecification::Graphs* graphs);
 
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
@@ -595,13 +617,10 @@ class CompressedRelationReader {
   // in the correct order, but asynchronously read and decompressed using
   // multiple worker threads.
 
-  using BlockGraphFilter =
-      std::function<bool(IdTable&, const CompressedBlockMetadata&)>;
-  using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      BlockGraphFilter blockGraphFilter,
+      FilterDuplicatesAndGraphs blockGraphFilter,
       CanBlockBeSkipped canBlockBeSkipped) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
