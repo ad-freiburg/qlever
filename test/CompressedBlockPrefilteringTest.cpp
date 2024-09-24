@@ -68,7 +68,6 @@ struct MetadataBlocks {
 // Test Relational Expressions
 
 // Test LessThanExpression
-// Remark: We compare w.r.t. the first triple!
 TEST(RelationalExpression, testLessThanExpressions) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {};
@@ -118,7 +117,6 @@ TEST(RelationalExpression, testLessThanExpressions) {
 
 //______________________________________________________________________________
 // Test LessEqualExpression
-// Remark: We compare w.r.t. the first triple
 TEST(RelationalExpression, testLessEqualExpressions) {
   MetadataBlocks blocks{};
   std::vector<BlockMetadata> expectedResult = {};
@@ -157,7 +155,6 @@ TEST(RelationalExpression, testLessEqualExpressions) {
 
 //______________________________________________________________________________
 // Test GreaterThanExpression
-// Remark: We compare w.r.t. the last triple
 TEST(RelationalExpression, testGreaterThanExpression) {
   MetadataBlocks blocks{};
   EXPECT_EQ(blocks.numericBlocks,
@@ -199,7 +196,6 @@ TEST(RelationalExpression, testGreaterThanExpression) {
 
 //______________________________________________________________________________
 // Test GreaterEqualExpression
-// Remark: We compare w.r.t. the last triple
 TEST(RelationalExpression, testGreaterEqualExpression) {
   MetadataBlocks blocks{};
   EXPECT_EQ(blocks.numericBlocks, GreaterEqualExpression{IntId(10)}.evaluate(
@@ -480,4 +476,102 @@ TEST(LogicalExpression, testOrExpression) {
             OrExpression(std::make_unique<EqualExpression>(DoubleId(17.00)),
                          std::make_unique<LessThanExpression>(IntId(16.35)))
                 .evaluate(blocks.numericBlocks, 2));
+}
+
+//______________________________________________________________________________
+// Test NotExpression
+TEST(LogicalExpression, testNotExpression) {
+  MetadataBlocks blocks{};
+  TestContext tc{};
+  std::vector<BlockMetadata> expectedResult = {};
+  EXPECT_EQ(expectedResult,
+            NotExpression(std::make_unique<GreaterEqualExpression>(IntId(16)))
+                .evaluate(blocks.numericBlocks, 0));
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<NotExpression>(
+                        std::make_unique<GreaterEqualExpression>(tc.munich)))
+          .evaluate(blocks.vocabBlocks, 1));
+  EXPECT_EQ(expectedResult,
+            NotExpression(std::make_unique<NotExpression>(
+                              std::make_unique<GreaterEqualExpression>(tc.zz)))
+                .evaluate(blocks.vocabBlocks, 1));
+  expectedResult = {blocks.vb4, blocks.vb5};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<NotExpression>(
+                        std::make_unique<GreaterEqualExpression>(tc.karlsruhe)))
+          .evaluate(blocks.vocabBlocks, 1));
+  EXPECT_EQ(
+      blocks.numericBlocks,
+      NotExpression(std::make_unique<NotExpression>(
+                        std::make_unique<GreaterEqualExpression>(IntId(16))))
+          .evaluate(blocks.numericBlocks, 0));
+  expectedResult = {blocks.vb1, blocks.vb2, blocks.vb3};
+  EXPECT_EQ(expectedResult,
+            NotExpression(std::make_unique<GreaterThanExpression>(tc.frankfurt))
+                .evaluate(blocks.vocabBlocks, 1));
+  EXPECT_EQ(blocks.vocabBlocks,
+            NotExpression(std::make_unique<LessEqualExpression>(tc.berlin))
+                .evaluate(blocks.vocabBlocks, 1));
+  expectedResult = {blocks.vb1, blocks.vb2};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<GreaterThanExpression>(tc.düsseldorf))
+          .evaluate(blocks.vocabBlocks, 1));
+  EXPECT_EQ(blocks.numericBlocks,
+            NotExpression(
+                std::make_unique<AndExpression>(
+                    std::make_unique<LessThanExpression>(IntId(13)),
+                    std::make_unique<GreaterEqualExpression>(DoubleId(111.01))))
+                .evaluate(blocks.numericBlocks, 2));
+  expectedResult = {};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(
+          std::make_unique<NotExpression>(std::make_unique<AndExpression>(
+              std::make_unique<LessThanExpression>(IntId(13)),
+              std::make_unique<GreaterEqualExpression>(DoubleId(111.01)))))
+          .evaluate(blocks.numericBlocks, 2));
+  expectedResult = {blocks.vb4, blocks.vb5};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<AndExpression>(
+                        std::make_unique<LessThanExpression>(tc.munich),
+                        std::make_unique<LessEqualExpression>(tc.ingolstadt)))
+          .evaluate(blocks.vocabBlocks, 1));
+  expectedResult = {blocks.vb2, blocks.vb3, blocks.vb4};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<OrExpression>(
+                        std::make_unique<GreaterThanExpression>(tc.hamburg),
+                        std::make_unique<LessEqualExpression>(tc.düsseldorf)))
+          .evaluate(blocks.vocabBlocks, 1));
+  expectedResult = {blocks.nb2, blocks.nb3, blocks.nb4};
+  EXPECT_EQ(expectedResult,
+            NotExpression(std::make_unique<OrExpression>(
+                              std::make_unique<EqualExpression>(DoubleId(0.0)),
+                              std::make_unique<EqualExpression>(IntId(6))))
+                .evaluate(blocks.numericBlocks, 1));
+  expectedResult = {blocks.nb1, blocks.nb2, blocks.nb4, blocks.nb5};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<AndExpression>(
+                        std::make_unique<NotEqualExpression>(DoubleId(0.0)),
+                        std::make_unique<NotEqualExpression>(IntId(6))))
+          .evaluate(blocks.numericBlocks, 1));
+  expectedResult = {blocks.nb3, blocks.nb4};
+  EXPECT_EQ(
+      expectedResult,
+      NotExpression(std::make_unique<OrExpression>(
+                        std::make_unique<LessEqualExpression>(DoubleId(42.0)),
+                        std::make_unique<GreaterEqualExpression>(IntId(48))))
+          .evaluate(blocks.numericBlocks, 0));
+  expectedResult = {blocks.nb1, blocks.nb2, blocks.nb3, blocks.nb5};
+  EXPECT_EQ(expectedResult,
+            NotExpression(
+                std::make_unique<NotExpression>(std::make_unique<OrExpression>(
+                    std::make_unique<LessEqualExpression>(DoubleId(42.25)),
+                    std::make_unique<GreaterEqualExpression>(IntId(51)))))
+                .evaluate(blocks.numericBlocks, 0));
 }

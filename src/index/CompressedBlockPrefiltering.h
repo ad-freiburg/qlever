@@ -35,12 +35,15 @@ Logical Operations - `and` and `or`
 
 class PrefilterExpression {
  public:
+  virtual ~PrefilterExpression() = default;
+
+  virtual std::unique_ptr<PrefilterExpression> logicalComplement() const = 0;
+
   // The respective metadata to the blocks is expected to be provided in
   // a sorted order (w.r.t. the relevant column).
   virtual std::vector<BlockMetadata> evaluate(
       const std::vector<BlockMetadata>& input,
       size_t evaluationColumn) const = 0;
-  virtual ~PrefilterExpression() = default;
 };
 
 //______________________________________________________________________________
@@ -62,20 +65,10 @@ class RelationalExpression : public PrefilterExpression {
   explicit RelationalExpression(const ValueId referenceId)
       : referenceId_(referenceId) {}
 
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
+
   std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
                                       size_t evaluationColumn) const override;
-
- private:
-  // Helper function that implements the relational comparison on the block
-  // values.
-  bool compareImpl(const ValueId& tripleId, const ValueId& otherId) const;
-  // Helper for providing the lower indices during the evaluation procedure.
-  auto lowerIndex(const std::vector<BlockMetadata>& input,
-                  size_t evaluationColumn) const;
-  // Helper to get the upper indices, necessary for EQ and NE.
-  auto upperIndex(const std::vector<BlockMetadata>& input,
-                  size_t evaluationColumn) const
-      requires(Comparison == CompOp::EQ || Comparison == CompOp::NE);
 };
 
 //______________________________________________________________________________
@@ -88,12 +81,18 @@ template <LogicalOperators Operation>
 class LogicalExpression : public PrefilterExpression {
  private:
   std::unique_ptr<PrefilterExpression> child1_;
-  std::unique_ptr<PrefilterExpression> child2_;
+  std::optional<std::unique_ptr<PrefilterExpression>> child2_;
 
  public:
+  // AND and OR
   explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1,
                              std::unique_ptr<PrefilterExpression> child2)
       : child1_(std::move(child1)), child2_(std::move(child2)) {}
+  // NOT
+  explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1)
+      : child1_(std::move(child1->logicalComplement())), child2_(nullptr) {}
+
+  std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 
   std::vector<BlockMetadata> evaluate(const std::vector<BlockMetadata>& input,
                                       size_t evaluationColumn) const override;
@@ -126,5 +125,7 @@ using AndExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::AND>;
 using OrExpression = prefilterExpressions::LogicalExpression<
     prefilterExpressions::LogicalOperators::OR>;
+using NotExpression = prefilterExpressions::LogicalExpression<
+    prefilterExpressions::LogicalOperators::NOT>;
 
 }  // namespace prefilterExpressions
