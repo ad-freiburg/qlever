@@ -364,6 +364,16 @@ class CompressedRelationReader {
   using ColumnIndices = std::vector<ColumnIndex>;
   using CancellationHandle = ad_utility::SharedCancellationHandle;
 
+  // TODO<joka921> Comment.
+  struct FilterDuplicatesAndGraphIds {
+    const ScanSpecification::Graphs& graphs;
+    ColumnIndex graphColumn_;
+    bool deleteGraphColumn_;
+    bool operator()(IdTable& block, const CompressedBlockMetadata& metadata);
+  };
+  static std::function<bool(const CompressedBlockMetadata&)>
+  makeCanBlockBeSkipped(const ScanSpecification::Graphs* graphs);
+
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
   struct ScanSpecAndBlocks {
@@ -397,6 +407,10 @@ class CompressedRelationReader {
   struct LazyScanMetadata {
     size_t numBlocksRead_ = 0;
     size_t numBlocksAll_ = 0;
+    // The number of blocks that could be skipped using only their metadata
+    // because the GraphIDs of the block did not match the query.
+    size_t numBlocksSkippedBecauseOfGraph_ = 0;
+    size_t numBlocksPostprocessed_ = 0;
     // If a LIMIT or OFFSET is present we possibly read more rows than we
     // actually yield.
     size_t numElementsRead_ = 0;
@@ -582,11 +596,13 @@ class CompressedRelationReader {
   // multiple worker threads.
 
   using BlockGraphFilter =
-      std::function<void(IdTable&, const CompressedBlockMetadata&)>;
+      std::function<bool(IdTable&, const CompressedBlockMetadata&)>;
+  using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      BlockGraphFilter) const;
+      BlockGraphFilter blockGraphFilter,
+      CanBlockBeSkipped canBlockBeSkipped) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
