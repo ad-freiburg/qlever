@@ -233,18 +233,24 @@ Alias Visitor::visit(Parser::AliasWithoutBracketsContext* ctx) {
   return {visitExpressionPimpl(ctx->expression()), visit(ctx->var())};
 }
 
-// ____________________________________________________________________________________
-ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
-  ParsedQuery query;
-  // TODO<joka921> This is duplicated code with the SelectQueryContext.
-  ParsedQuery::DatasetClauses& clauses = query.datasetClauses_;
-  for (auto& [dataset, isNamed] : visitVector(ctx->datasetClause())) {
+namespace {
+// TODO<joka921> comment, and maybe move to header for better testability.
+void setGraphs(ParsedQuery::DatasetClauses& clauses,
+               const auto& datasetClause) {
+  for (auto& [dataset, isNamed] : datasetClause) {
     auto& set = isNamed ? clauses.namedGraphs_ : clauses.defaultGraphs_;
     if (!set.has_value()) {
       set.emplace();
     }
     set.value().insert(std::move(dataset));
   }
+}
+}  // namespace
+
+// ____________________________________________________________________________________
+ParsedQuery Visitor::visit(Parser::ConstructQueryContext* ctx) {
+  ParsedQuery query;
+  setGraphs(query.datasetClauses_, visitVector(ctx->datasetClause()));
   if (ctx->constructTemplate()) {
     query._clause = visit(ctx->constructTemplate())
                         .value_or(parsedQuery::ConstructClause{});
@@ -936,15 +942,7 @@ void Visitor::visit(Parser::PrefixDeclContext* ctx) {
 // ____________________________________________________________________________________
 ParsedQuery Visitor::visit(Parser::SelectQueryContext* ctx) {
   parsedQuery_._clause = visit(ctx->selectClause());
-  ParsedQuery::DatasetClauses& clauses = parsedQuery_.datasetClauses_;
-  for (auto& [dataset, isNamed] : visitVector(ctx->datasetClause())) {
-    // TODO<joka921> This is duplicated code with somewhere else.
-    auto& set = isNamed ? clauses.namedGraphs_ : clauses.defaultGraphs_;
-    if (!set.has_value()) {
-      set.emplace();
-    }
-    set.value().insert(std::move(dataset));
-  }
+  setGraphs(parsedQuery_.datasetClauses_, visitVector(ctx->datasetClause()));
   auto [pattern, visibleVariables] = visit(ctx->whereClause());
   parsedQuery_._rootGraphPattern = std::move(pattern);
   parsedQuery_.registerVariablesVisibleInQueryBody(visibleVariables);

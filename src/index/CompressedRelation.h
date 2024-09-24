@@ -371,8 +371,8 @@ class CompressedRelationReader {
     bool deleteGraphColumn_;
     bool operator()(IdTable& block, const CompressedBlockMetadata& metadata);
   };
-  static std::function<bool(const CompressedBlockMetadata&)> makeCanBlockBeSkipped(
-      const ScanSpecification::Graphs* graphs);
+  static std::function<bool(const CompressedBlockMetadata&)>
+  makeCanBlockBeSkipped(const ScanSpecification::Graphs* graphs);
 
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.

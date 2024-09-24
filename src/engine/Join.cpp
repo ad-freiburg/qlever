@@ -565,7 +565,7 @@ void updateRuntimeInfoForLazyScan(
   rti.addDetail("num-blocks-read", metadata.numBlocksRead_);
   rti.addDetail("num-blocks-all", metadata.numBlocksAll_);
   rti.addDetail("num-elements-read", metadata.numElementsRead_);
-  if (metadata.numBlocksSkippedBecauseOfGraph_ >= 0) {
+  if (metadata.numBlocksSkippedBecauseOfGraph_ > 0) {
     rti.addDetail("num-blocks-skipped-graph",
                   metadata.numBlocksSkippedBecauseOfGraph_);
   }

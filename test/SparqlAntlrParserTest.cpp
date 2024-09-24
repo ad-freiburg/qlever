@@ -1040,11 +1040,26 @@ TEST(SparqlParser, SelectQuery) {
   auto expectSelectQueryFails = ExpectParseFails<&Parser::selectQuery>{};
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
-  expectSelectQuery(
-      "SELECT * WHERE { ?a <bar> ?foo }",
-      testing::AllOf(m::SelectQuery(
-          m::AsteriskSelect(),
-          m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})))));
+  using Graphs = ScanSpecificationAsTripleComponent::Graphs;
+  auto defaultMatcherWithouGraph = [](Graphs defaultGraphs = std::nullopt,
+                                      Graphs namedGraphs = std::nullopt) {
+    return testing::AllOf(m::SelectQuery(
+        m::AsteriskSelect(),
+        m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
+        defaultGraphs, namedGraphs));
+  };
+  expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }",
+                    defaultMatcherWithouGraph());
+
+  Graphs defaultGraphs;
+  defaultGraphs.emplace();
+  defaultGraphs->insert(TripleComponent::Iri::fromIriref("<x>"));
+  Graphs namedGraphs;
+  namedGraphs.emplace();
+  namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
+  expectSelectQuery("SELECT * FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
+                    defaultMatcherWithouGraph(defaultGraphs, namedGraphs));
+
   expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
                     testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
                                                   DummyGraphPatternMatcher)));
@@ -1944,8 +1959,12 @@ TEST(SparqlParser, GraphRef) {
 TEST(SparqlParser, SourceSelector) {
   // This will be implemented soon, but for now we test the failure for the
   // coverage tool.
-  auto expectSelectorFails = ExpectParseFails<&Parser::sourceSelector>{};
-  auto unreachableMatcher = ::testing::HasSubstr("should be unreachable");
-  // TODO<joka921> Update the test.
-  // expectSelectorFails("<x>", unreachableMatcher);
+  auto expectSelector = ExpectCompleteParse<&Parser::sourceSelector>{};
+  expectSelector("<x>", m::TripleComponentIri("<x>"));
+
+  auto expectNamedGraph = ExpectCompleteParse<&Parser::namedGraphClause>{};
+  expectNamedGraph("NAMED <x>", m::TripleComponentIri("<x>"));
+
+  auto expectDefaultGraph = ExpectCompleteParse<&Parser::defaultGraphClause>{};
+  expectDefaultGraph("<x>", m::TripleComponentIri("<x>"));
 }

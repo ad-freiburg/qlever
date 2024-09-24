@@ -273,6 +273,10 @@ inline auto PropertyPath = [](const ::PropertyPath& value) {
       ::testing::Eq(value));
 };
 
+inline auto TripleComponentIri = [](const std::string& value) {
+  return ::testing::Eq(TripleComponent::Iri::fromIriref(value));
+};
+
 // _____________________________________________________________________________
 
 // Returns a matcher that accepts a `GraphTerm` or `BlankNode`.
@@ -785,12 +789,19 @@ inline auto SubSelect =
 
 inline auto SelectQuery =
     [](const Matcher<const p::SelectClause&>& selectMatcher,
-       const Matcher<const p::GraphPattern&>& graphPatternMatcher)
-    -> Matcher<const ::ParsedQuery&> {
-  return testing::AllOf(
-      AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
-      AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
-      RootGraphPattern(graphPatternMatcher));
+       const Matcher<const p::GraphPattern&>& graphPatternMatcher,
+       ScanSpecificationAsTripleComponent::Graphs defaultGraphs = std::nullopt,
+       ScanSpecificationAsTripleComponent::Graphs namedGraphs =
+           std::nullopt) -> Matcher<const ::ParsedQuery&> {
+  using namespace ::testing;
+  using DS = ParsedQuery::DatasetClauses;
+  Matcher<const DS&> datasetMatcher =
+      AllOf(Field(&DS::defaultGraphs_, Eq(defaultGraphs)),
+            Field(&DS::namedGraphs_, Eq(namedGraphs)));
+  return AllOf(AD_PROPERTY(ParsedQuery, hasSelectClause, testing::IsTrue()),
+               AD_PROPERTY(ParsedQuery, selectClause, selectMatcher),
+               AD_FIELD(ParsedQuery, datasetClauses_, datasetMatcher),
+               RootGraphPattern(graphPatternMatcher));
 };
 
 namespace pq {

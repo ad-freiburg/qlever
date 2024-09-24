@@ -4,9 +4,9 @@
 
 #include <gtest/gtest.h>
 
+#include "./util/IdTableHelpers.h"
 #include "index/CompressedRelation.h"
 #include "util/GTestHelpers.h"
-#include "./util/IdTableHelpers.h"
 #include "util/IndexTestHelpers.h"
 #include "util/OnDestructionDontThrowDuringStackUnwinding.h"
 #include "util/Serializer/ByteBufferSerializer.h"
@@ -662,6 +662,16 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   f(table, metadata);
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
+  // The metadata knows that there is only a single block contained,
+  // so we don't need to filter anything. We additionally test the deletion
+  // of the graph column in this test
+  metadata.containedGraphs_.emplace();
+  metadata.containedGraphs_->push_back(V(1));
+  f.deleteGraphColumn_ = true;
+  table = makeIdTableFromVector({{3, 1}, {4, 1}, {5, 1}});
+  f(table, metadata);
+  EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
+
   // TODO<joka921> Add remaining test cases + AD_EXPENSIVE_CHECKS for sanity.
 }
 
@@ -686,8 +696,8 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   graphs.emplace();
   graphs->insert(V(1));
   graphs->insert(V(3));
-  // The block only contains the graph `1`, and we in fact want the graphs `1` and `3`,
-  // so it can't be skipped.
+  // The block only contains the graph `1`, and we in fact want the graphs `1`
+  // and `3`, so it can't be skipped.
   EXPECT_FALSE(canBeSkipped(metadata));
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
@@ -695,7 +705,8 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   graphs->erase(V(1));
   EXPECT_TRUE(canBeSkipped(metadata));
 
-  // The block metadata contains no information on the contained graphs, but we only want graph `3`, so the block can't be skipped.
+  // The block metadata contains no information on the contained graphs, but we
+  // only want graph `3`, so the block can't be skipped.
   metadata.containedGraphs_.reset();
   EXPECT_FALSE(canBeSkipped(metadata));
 }
@@ -704,8 +715,8 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   std::vector<RelationInput> inputs;
   for (int i = 1; i < 200; ++i) {
-    inputs.push_back(
-        RelationInput{i, {{i - 1, i + 1, 42}, {i - 1, i + 2, 43}, {i, i - 1, 43}}});
+    inputs.push_back(RelationInput{
+        i, {{i - 1, i + 1, 42}, {i - 1, i + 2, 43}, {i, i - 1, 43}}});
   }
   using namespace ::testing;
   {
@@ -713,7 +724,8 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
         writeAndOpenRelations(inputs, "graphInfo1", 100_kB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
-    EXPECT_THAT(blocks.at(0).containedGraphs_, Optional(UnorderedElementsAre(V(42), V(43))));
+    EXPECT_THAT(blocks.at(0).containedGraphs_,
+                Optional(UnorderedElementsAre(V(42), V(43))));
   }
 
   // Now make sure that there are too many different graphs in the block, such
@@ -738,7 +750,39 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
         writeAndOpenRelations(inputs, "graphInfo1", 100_kB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
-    EXPECT_THAT(blocks.at(0).containedGraphs_, Optional(UnorderedElementsAre(V(0), V(1))));
+    EXPECT_THAT(blocks.at(0).containedGraphs_,
+                Optional(UnorderedElementsAre(V(0), V(1))));
   }
+}
 
+// Test the correct setting of the metadata for the contained graphs.
+TEST(CompressedRelationWriter, scanWithGraphs) {
+  std::vector<RelationInput> inputs;
+  inputs.push_back(RelationInput{42,
+                                 {{3, 4, 0},
+                                  {3, 4, 1},
+                                  {7, 4, 0},
+                                  {8, 4, 0},
+                                  {8, 5, 0},
+                                  {8, 5, 1},
+                                  {9, 4, 1},
+                                  {9, 5, 1}}});
+  using namespace ::testing;
+  for (auto blocksize : std::array{8_B, 16_B, 32_B, 64_B, 128_B}) {
+    auto [blocks, metadata, reader] =
+        writeAndOpenRelations(inputs, "scanWithGraphs", blocksize);
+    ad_utility::HashSet<Id> graphs{V(0)};
+    ScanSpecification spec{V(42), std::nullopt, std::nullopt, {}, graphs};
+    auto handle = std::make_shared<ad_utility::CancellationHandle<>>();
+    auto res = reader->scan(spec, blocks, {}, handle);
+    EXPECT_THAT(res,
+                matchesIdTableFromVector({{3, 4}, {7, 4}, {8, 4}, {8, 5}}));
+
+    graphs.clear();
+    graphs.insert(V(1));
+    spec = ScanSpecification{V(42), std::nullopt, std::nullopt, {}, graphs};
+    res = reader->scan(spec, blocks, {}, handle);
+    EXPECT_THAT(res,
+                matchesIdTableFromVector({{3, 4}, {8, 5}, {9, 4}, {9, 5}}));
+  }
 }

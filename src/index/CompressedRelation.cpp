@@ -156,7 +156,9 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphIds::operator()(
   if (needsFilteringByGraph) {
     auto removedRange = std::ranges::remove_if(
         block, [&gs = graphs.value()](Id id) { return !gs.contains(id); },
-        [graphColumn = graphColumn_](const auto& row) { return row[graphColumn]; });
+        [graphColumn = graphColumn_](const auto& row) {
+          return row[graphColumn];
+        });
     block.erase(removedRange.begin(), block.end());
   }
   if (deleteGraphColumn_) {
@@ -171,7 +173,8 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphIds::operator()(
 }
 
 // ______________________________________________________________________________
-std::function<bool(const CompressedBlockMetadata&)> CompressedRelationReader::makeCanBlockBeSkipped(
+std::function<bool(const CompressedBlockMetadata&)>
+CompressedRelationReader::makeCanBlockBeSkipped(
     const ScanSpecification::Graphs* graphs) {
   return [&graphs = *graphs](const CompressedBlockMetadata& block) {
     if (!graphs.has_value()) {
@@ -231,7 +234,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
 
   if (beginBlock < endBlock) {
     auto block = getIncompleteBlock(beginBlock);
-    filterDuplicatesAndGraphIds(block, *beginBlock);
+    if (filterDuplicatesAndGraphIds(block, *beginBlock)) {
+      ++details.numBlocksPostprocessed_;
+    }
     pruneBlock(block, limitOffset);
     details.numElementsYielded_ += block.numRows();
     if (!block.empty()) {
@@ -250,7 +255,9 @@ CompressedRelationReader::IdTableGenerator CompressedRelationReader::lazyScan(
       co_yield block;
     }
     auto lastBlock = getIncompleteBlock(endBlock - 1);
-    filterDuplicatesAndGraphIds(lastBlock, *(beginBlock - 1));
+    if (filterDuplicatesAndGraphIds(lastBlock, *(endBlock - 1))) {
+      ++details.numBlocksPostprocessed_;
+    }
     pruneBlock(lastBlock, limitOffset);
     if (!lastBlock.empty()) {
       details.numElementsYielded_ += lastBlock.numRows();
