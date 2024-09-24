@@ -141,7 +141,7 @@ CompressedRelationReader::asyncParallelBlockGenerator(
 // _____________________________________________________________________________
 bool CompressedRelationReader::FilterDuplicatesAndGraphs::operator()(
     IdTable& block, const CompressedBlockMetadata& metadata) {
-  // TODO<joka921> Make this a (private) member function of the struct.
+  // TODO<joka921> Make this lambda a (private) member function of the struct.
   bool needsFilteringByGraph = [&]() {
     if (!graphs.has_value()) {
       return false;
@@ -149,12 +149,11 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::operator()(
     if (!metadata.graphInfo_.has_value()) {
       return true;
     }
-    const auto& containedGraphs = metadata.graphInfo_.value();
-    return (std::ranges::none_of(
+    return !std::ranges::all_of(
         metadata.graphInfo_.value(),
         [&wantedGraphs = graphs.value()](Id containedGraph) {
           return wantedGraphs.contains(containedGraph);
-        }));
+        });
   }();
   if (needsFilteringByGraph) {
     auto [beginOfRemoved, _] = std::ranges::remove_if(
@@ -170,7 +169,7 @@ bool CompressedRelationReader::FilterDuplicatesAndGraphs::operator()(
   if (deleteGraphColumn_) {
     block.deleteColumn(graphColumn_);
   }
-  if (!metadata.containsDuplicatesWithDifferentGraphs_ || !deleteGraphColumn_) {
+  if (!metadata.containsDuplicatesWithDifferentGraphs_) {
     return needsFilteringByGraph;
   }
   auto [endUnique, _] = std::ranges::unique(block);

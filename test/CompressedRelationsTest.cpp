@@ -668,10 +668,10 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   metadata.graphInfo_->push_back(V(1));
   f.deleteGraphColumn_ = true;
   table = makeIdTableFromVector({{3, 1}, {4, 1}, {5, 1}});
-  EXPECT_FALSE(f(table, metadata));
+  EXPECT_TRUE(f(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
 
-  // TODO<joka921> Add remaining test cases + AD_EXPENSIVE_CHECKS for sanity.
+  // TODO<joka921> AD_EXPENSIVE_CHECKS inside the FILTER for sanity.
 }
 
 TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
@@ -713,7 +713,9 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
 // Test the correct setting of the metadata for the contained graphs.
 TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   std::vector<RelationInput> inputs;
-  for (int i = 1; i < 10 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA; ++i) {
+  for (int i = 1;
+       static_cast<size_t>(i) < 10 * MAX_NUM_GRAPHS_STORED_IN_BLOCK_METADATA;
+       ++i) {
     inputs.push_back(RelationInput{
         i, {{i - 1, i + 1, 42}, {i - 1, i + 2, 43}, {i, i - 1, 43}}});
   }
