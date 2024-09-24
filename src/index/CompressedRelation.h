@@ -369,19 +369,17 @@ class CompressedRelationReader {
   // and the information whether this column is required as part of the output,
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
-  // TODO<joka921> Merge this struct with the following
-  // `CanBlockBeSkipped`thing, s.t. it becomes one struct with two explicit
-  // member functions.
+  // TODO<joka921> Merge this `struct` with the following `CanBlockBeSkipped`
+  // thing such that it becomes one `struct` with two explicit member functions.
   // TODO<joka921> The function should be called  `postprocessBlock`.
   struct FilterDuplicatesAndGraphs {
     const ScanSpecification::Graphs& graphs;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
-
-    // Filter the given containedGraph, s.t. it contains no duplicates and only
-    // the specified graphs. The `metadata` of the containedGraph is used to
-    // compute some possible short cuts (e.g. if we know in advance that the
-    // containedGraph has no duplicates). The return value is `true` if the
+    // Filter `containedGraph` such that it contains no duplicates and only the
+    // specified graphs. The `metadata` of `containedGraph` is used for
+    // possible shortcuts (for example, if we know that there are no duplicates,
+    // we do not have to eliminate them). The return value is `true` if the
     // `containedGraph` has been modified because it contained duplicates or
     // triples from unwanted graphs.
     bool operator()(IdTable& containedGraph,

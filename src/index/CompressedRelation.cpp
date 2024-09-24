@@ -785,10 +785,10 @@ void CompressedRelationWriter::compressAndWriteBlock(
     AD_CORRECTNESS_CHECK(firstCol0Id == first[0]);
     AD_CORRECTNESS_CHECK(lastCol0Id == last[0]);
 
-    // Find out, whether the block contains duplicates and whether it contains
-    // only a few distinct graphs, s.t. we can store this information in the
+    // Find out whether the block contains duplicates and whether it contains
+    // only a few distinct graphs such that we can store this information in the
     // block metadata.
-    // TODO<joka921> Extract this to a separate function.
+    // TODO<joka921> Extract this as a separate function.
     bool hasDuplicates = false;
     std::optional<std::vector<Id>> containedGraphs;
     if (buf->numColumns() > ADDITIONAL_COLUMN_GRAPH_ID) {
