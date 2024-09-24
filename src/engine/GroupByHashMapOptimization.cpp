@@ -25,6 +25,17 @@
 }
 
 // _____________________________________________________________________________
+template <valueIdComparators::Comparison Comp>
+[[nodiscard]] ValueId ExtremumAggregationData<Comp>::calculateResult(
+    LocalVocab* localVocab) const {
+  return sparqlExpression::detail::idOrLiteralOrIriToId(currentValue_,
+                                                        localVocab);
+}
+
+template class ExtremumAggregationData<valueIdComparators::Comparison::LT>;
+template class ExtremumAggregationData<valueIdComparators::Comparison::GT>;
+
+// _____________________________________________________________________________
 [[nodiscard]] ValueId SumAggregationData::calculateResult(
     [[maybe_unused]] const LocalVocab* localVocab) const {
   if (error_) {
@@ -53,9 +64,7 @@
   if (!value_.has_value()) {
     return Id::makeUndefined();
   }
-  return std::visit(
-      ad_utility::OverloadCallOperator{
-          [](ValueId id) { return id; },
-          sparqlExpression::detail::makeStringResultGetter(localVocab)},
-      value_.value());
+
+  return sparqlExpression::detail::idOrLiteralOrIriToId(value_.value(),
+                                                        localVocab);
 }

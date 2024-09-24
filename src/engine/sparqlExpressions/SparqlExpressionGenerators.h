@@ -156,11 +156,22 @@ auto applyOperation(size_t numElements, Operation&&, EvaluationContext* context,
   return std::apply(getResultFromValueGetters, ValueGetters{});
 }
 
+// Return a lambda that takes a `LiteralOrIri` and converts it to an `Id` by
+// adding it to the `localVocab`.
 inline auto makeStringResultGetter(LocalVocab* localVocab) {
   return [localVocab](const ad_utility::triple_component::LiteralOrIri& str) {
     auto localVocabIndex = localVocab->getIndexAndAddIfNotContained(str);
     return ValueId::makeFromLocalVocabIndex(localVocabIndex);
   };
+}
+
+// Return the `Id` if the passed `value` contains one, alternatively add the
+// literal or iri in the `value` to the `localVocab` and return the newly
+// created `Id` instead.
+inline Id idOrLiteralOrIriToId(const IdOrLiteralOrIri& value, LocalVocab* localVocab) {
+  return std::visit(ad_utility::OverloadCallOperator{[](ValueId id) { return id; },
+                                                     makeStringResultGetter(localVocab)},
+                    value);
 }
 
 }  // namespace sparqlExpression::detail

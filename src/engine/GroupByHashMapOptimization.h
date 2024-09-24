@@ -83,13 +83,7 @@ struct ExtremumAggregationData {
   }
 
   // _____________________________________________________________________________
-  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const {
-    return std::visit(
-        ad_utility::OverloadCallOperator{
-            [](ValueId id) { return id; },
-            sparqlExpression::detail::makeStringResultGetter(localVocab)},
-        currentValue_);
-  }
+  [[nodiscard]] ValueId calculateResult(LocalVocab* localVocab) const;
 
   void reset() { *this = ExtremumAggregationData{}; }
 };

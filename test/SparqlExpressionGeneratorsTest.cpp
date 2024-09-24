@@ -20,3 +20,17 @@ TEST(SparqlExpressionGenerators, makeStringResultGetter) {
   EXPECT_EQ(result.getLocalVocabIndex()->toStringRepresentation(),
             "\"Test String\"");
 }
+
+// _____________________________________________________________________________
+TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
+  using ad_utility::triple_component::LiteralOrIri;
+  auto literal = LiteralOrIri::literalWithoutQuotes("Test String");
+  LocalVocab localVocab{};
+
+  auto result = idOrLiteralOrIriToId(literal, &localVocab);
+
+  EXPECT_EQ(result.getLocalVocabIndex()->toStringRepresentation(),
+            "\"Test String\"");
+  // Should be the identity function for regular ids.
+  EXPECT_EQ(result, idOrLiteralOrIriToId(result, &localVocab));
+}
