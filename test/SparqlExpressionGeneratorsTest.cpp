@@ -32,5 +32,6 @@ TEST(SparqlExpressionGenerators, idOrLiteralOrIriToId) {
   EXPECT_EQ(result.getLocalVocabIndex()->toStringRepresentation(),
             "\"Test String\"");
   // Should be the identity function for regular ids.
-  EXPECT_EQ(result, idOrLiteralOrIriToId(result, &localVocab));
+  EXPECT_EQ(result.getBits(),
+            idOrLiteralOrIriToId(result, &localVocab).getBits());
 }
