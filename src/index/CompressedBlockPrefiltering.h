@@ -90,7 +90,7 @@ class LogicalExpression : public PrefilterExpression {
       : child1_(std::move(child1)), child2_(std::move(child2)) {}
   // NOT
   explicit LogicalExpression(std::unique_ptr<PrefilterExpression> child1)
-      : child1_(std::move(child1->logicalComplement())), child2_(nullptr) {}
+      : child1_(child1->logicalComplement()), child2_(nullptr) {}
 
   std::unique_ptr<PrefilterExpression> logicalComplement() const override;
 

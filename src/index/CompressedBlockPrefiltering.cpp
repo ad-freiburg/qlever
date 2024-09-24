@@ -92,15 +92,14 @@ std::vector<BlockMetadata> RelationalExpression<Comparison>::evaluate(
   // Given the relevant Id ranges, retrieve the corresponding relevant
   // BlockMetadata values from vector input and add them to the relevantBlocks
   // vector.
-  for (const auto& range : relevantIdRanges) {
+  for (const auto& [firstId, secondId] : relevantIdRanges) {
     relevantBlocks.insert(
         relevantBlocks.end(),
-        input.begin() + std::distance(valueIdsInput.begin(), range.first) / 2,
+        input.begin() + std::distance(valueIdsInput.begin(), firstId) / 2,
         // Round up, for Ids contained within the bounding Ids of firstTriple
         // and lastTriple we have to include the respective metadata block
         // (that block is partially relevant).
-        input.begin() +
-            std::distance(valueIdsInput.begin(), range.second + 1) / 2);
+        input.begin() + std::distance(valueIdsInput.begin(), secondId + 1) / 2);
   }
   relevantBlocks.shrink_to_fit();
   return relevantBlocks;
@@ -117,7 +116,7 @@ LogicalExpression<Operation>::logicalComplement() const {
       // Logically we complement (negate) a NOT here => NOT cancels out.
       // Therefore, we can simply return the child of the respective NOT
       // expression after undoing its previous complementation.
-      return std::move(child1_->logicalComplement());
+      return child1_->logicalComplement();
     // Source De-Morgan's laws: De Morgan's laws, Wikipedia.
     // Reference: https://en.wikipedia.org/wiki/De_Morgan%27s_laws
     case OR:
@@ -176,8 +175,6 @@ std::vector<BlockMetadata> LogicalExpression<Operation>::evaluate(
     return evaluateOr(input, evaluationColumn);
   } else {
     static_assert(Operation == NOT);
-    // Given that the child expression has already been negated during the (NOT)
-    // expression construction, we just have to evaluate it.
     return child1_->evaluate(input, evaluationColumn);
   }
 };
