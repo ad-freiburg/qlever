@@ -1039,6 +1039,11 @@ queries:
       - num_rows: 17
       - num_cols: 4
       - selected: ["?path", "?edge", "?start", "?end"]
+      - contains_row: ["0", "0", "<Mary_Ann_Leeper>", "<Radiobiochemist>"]
+      - contains_row: ["0", "1", "<Radiobiochemist>", "<Chemist>"]
+      - contains_row: ["0", "2", "<Chemist>", "<Literature_Subject>"]
+      - contains_row: ["4", "0", "<Mary_Ann_Leeper>", "<Biochemist>"]
+      - contains_row: ["4", "1", "<Biochemist>", "<Literature_Subject>"]
 
 
   - query : property_path_inverse
