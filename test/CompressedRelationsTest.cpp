@@ -673,8 +673,6 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   table = makeIdTableFromVector({{3, 1}, {4, 1}, {5, 1}});
   EXPECT_FALSE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
-
-  // TODO<joka921> AD_EXPENSIVE_CHECKS inside the FILTER for sanity.
 }
 
 TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
