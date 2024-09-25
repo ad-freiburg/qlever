@@ -7,6 +7,7 @@
 
 #include "global/Constants.h"
 #include "parser/GeoPoint.h"
+#include "util/GTestHelpers.h"
 #include "util/GeoSparqlHelpers.h"
 
 TEST(GeoPoint, GeoPoint) {
@@ -29,6 +30,8 @@ TEST(GeoPoint, GeoPoint) {
   ASSERT_THROW(GeoPoint(ad_utility::detail::invalidCoordinate,
                         ad_utility::detail::invalidCoordinate),
                CoordinateOutOfRangeException);
+  AD_EXPECT_THROW_WITH_MESSAGE(GeoPoint(100, 200),
+                               ::testing::ContainsRegex("out of range"));
 
   ASSERT_NO_THROW(GeoPoint(0, 180));
   ASSERT_NO_THROW(GeoPoint(0, -180));
