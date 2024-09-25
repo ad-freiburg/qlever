@@ -9,41 +9,64 @@
 
 #include "parser/Literal.h"
 #include "parser/NormalizedString.h"
+#include "util/Exception.h"
 #include "util/GeoSparqlHelpers.h"
 
 // _____________________________________________________________________________
-GeoPoint::T GeoPoint::toBitRepresentation() {
+GeoPoint::GeoPoint(double lat, double lng) : lat_{lat}, lng_{lng} {
+  // Ensure valid lat and lng values
+  if (lat < -COORDINATE_LAT_MAX || lat > COORDINATE_LAT_MAX || std::isnan(lat))
+    throw CoordinateOutOfRangeException(lat, true);
+  if (lng < -COORDINATE_LNG_MAX || lng > COORDINATE_LNG_MAX || std::isnan(lng))
+    throw CoordinateOutOfRangeException(lng, false);
+};
+
+// _____________________________________________________________________________
+GeoPoint::T GeoPoint::toBitRepresentation() const {
   // Transforms a normal-scaled geographic coordinate to an integer
   constexpr auto scaleCoordinate = [](double value, double maxValue) {
     // Only positive values between 0 and 1
     double downscaled = (value + maxValue) / (2 * maxValue);
-    AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0);
+
+    AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
+      return absl::StrCat("downscaled coordinate value ", downscaled,
+                          " does not statisfy [0,1] constraint");
+    });
 
     // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
     // rounded to integer
     auto newscaled =
         static_cast<size_t>(round(downscaled * maxCoordinateEncoded));
-    AD_CORRECTNESS_CHECK(0.0 <= newscaled && newscaled <= maxCoordinateEncoded);
+
+    AD_CORRECTNESS_CHECK(
+        0.0 <= newscaled && newscaled <= maxCoordinateEncoded, [&]() {
+          return absl::StrCat("scaled coordinate value ", newscaled,
+                              " does not statisfy [0,", maxCoordinateEncoded,
+                              "] constraint");
+        });
     return newscaled;
   };
 
   T lat = scaleCoordinate(getLat(), COORDINATE_LAT_MAX);
   T lng = scaleCoordinate(getLng(), COORDINATE_LNG_MAX);
 
-  // Use shift to obtain 30 bit lat followed by 30 bit lng in one 60 bit int
-  return (lat << numDataBitsCoordinate) | lng;
+  // Use shift to obtain 30 bit lat followed by 30 bit lng in lower bits
+  auto bits = (lat << numDataBitsCoordinate) | lng;
+
+  // Ensure the highest 4 bits are 0
+  AD_CORRECTNESS_CHECK((bits & coordinateMaskFreeBits) == 0);
+  return bits;
 };
 
 // _____________________________________________________________________________
 std::optional<GeoPoint> GeoPoint::parseFromLiteral(
     const ad_utility::triple_component::Literal& value) {
   if (value.hasDatatype() &&
-      value.getDatatype().compare(asNormalizedStringViewUnsafe(
-          std::string_view(GEO_WKT_LITERAL))) == 0) {
+      value.getDatatype() == asNormalizedStringViewUnsafe(GEO_WKT_LITERAL)) {
     auto [lng, lat] = ad_utility::detail::parseWktPoint(
         asStringViewUnsafe(value.getContent()));
     if (!std::isnan(lng) && !std::isnan(lat)) {
-      return GeoPoint(lat, lng);
+      return GeoPoint{lat, lng};
     }
   }
   return std::nullopt;
@@ -69,5 +92,15 @@ GeoPoint GeoPoint::fromBitRepresentation(T bits) {
   double lng =
       extractCoordinate(bits, coordinateMaskLng, 0, COORDINATE_LNG_MAX);
 
-  return GeoPoint(lat, lng);
+  return {lat, lng};
+};
+
+std::string GeoPoint::toStringRepresentation() const {
+  // Extra conversion using std::to_string to get more decimals
+  return absl::StrCat("POINT(", std::to_string(getLng()), " ",
+                      std::to_string(getLat()), ")");
+};
+
+std::pair<std::string, const char*> GeoPoint::toStringAndType() const {
+  return std::pair(toStringRepresentation(), GEO_WKT_LITERAL);
 };

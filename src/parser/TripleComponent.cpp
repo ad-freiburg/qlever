@@ -50,7 +50,9 @@ std::optional<Id> TripleComponent::toValueIdIfNotString() const {
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, Literal>) {
       auto geopoint = GeoPoint::parseFromLiteral(value);
-      if (geopoint.has_value()) return Id::makeFromGeoPoint(geopoint.value());
+      if (geopoint.has_value()) {
+        return Id::makeFromGeoPoint(geopoint.value());
+      }
       return std::nullopt;
     } else if constexpr (std::is_same_v<T, int64_t>) {
       return Id::makeFromInt(value);

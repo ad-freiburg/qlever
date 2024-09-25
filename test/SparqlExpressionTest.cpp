@@ -17,6 +17,7 @@
 #include "engine/sparqlExpressions/NaryExpression.h"
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
+#include "parser/GeoPoint.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
 
@@ -1109,10 +1110,30 @@ TEST(SparqlExpression, geoSparqlExpressions) {
   auto checkLong = testUnaryExpression<&makeLongitudeExpression>;
   auto checkDist = std::bind_front(testNaryExpression, &makeDistExpression);
 
-  auto v = ValueId::makeFromGeoPoint(GeoPoint(26.8, 24.3));
-  checkLat(v, Ids{D(26.8)});
-  checkLong(v, Ids{D(24.3)});
+  auto p = GeoPoint(26.8, 24.3);
+  auto v = ValueId::makeFromGeoPoint(p);
+
+  // Should provide the same values, however with some precision loss, as the
+  // bit representation only uses 30 bits per coordinate, not a full double
+  auto actualValues = GeoPoint::fromBitRepresentation(
+      GeoPoint(26.8, 24.3).toBitRepresentation());
+  auto actualLat = actualValues.getLat();
+  auto actualLng = actualValues.getLng();
+  constexpr auto precision = 0.0001;
+  EXPECT_NEAR(actualLat, 26.8, precision);
+  EXPECT_NEAR(actualLng, 24.3, precision);
+  auto vLat = ValueId::makeFromDouble(actualLat);
+  auto vLng = ValueId::makeFromDouble(actualLng);
+
+  checkLat(v, vLat);
+  checkLong(v, vLng);
   checkDist(D(0.0), v, v);
+  checkLat(idOrLitOrStringVec({"NotAPoint", I(12)}), Ids{U, U});
+  checkLong(idOrLitOrStringVec({D(4.2), "NotAPoint"}), Ids{U, U});
+  checkDist(U, v, IdOrLiteralOrIri{I(12)});
+  checkDist(U, IdOrLiteralOrIri{I(12)}, v);
+  checkDist(U, v, IdOrLiteralOrIri{lit("NotAPoint")});
+  checkDist(U, IdOrLiteralOrIri{lit("NotAPoint")}, v);
 }
 
 // ________________________________________________________________________________________

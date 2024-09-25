@@ -8,11 +8,8 @@
 
 #include <string>
 
-#include "global/Constants.h"
 #include "parser/Literal.h"
 #include "util/SourceLocation.h"
-
-class Literal;
 
 /// Exception type for construction of GeoPoints that have invalid values
 struct CoordinateOutOfRangeException : public std::exception {
@@ -49,19 +46,13 @@ class GeoPoint {
   static constexpr T coordinateMaskLng = (1ULL << numDataBitsCoordinate) - 1;
   static constexpr T coordinateMaskLat = coordinateMaskLng
                                          << numDataBitsCoordinate;
+  static constexpr T coordinateMaskFreeBits =
+      ~(coordinateMaskLat | coordinateMaskLng);
   static constexpr double maxCoordinateEncoded =
-      (double)(1 << numDataBitsCoordinate);
+      (double)((1 << numDataBitsCoordinate) - 1);
 
   // Construct GeoPoint and ensure valid coordinate values
-  GeoPoint(double lat, double lng) {
-    if (lat < -COORDINATE_LAT_MAX || lat > COORDINATE_LAT_MAX)
-      throw CoordinateOutOfRangeException(lat, true);
-    if (lng < -COORDINATE_LNG_MAX || lng > COORDINATE_LNG_MAX)
-      throw CoordinateOutOfRangeException(lng, false);
-
-    lat_ = lat;
-    lng_ = lng;
-  }
+  GeoPoint(double lat, double lng);
 
   constexpr double getLat() const { return lat_; }
 
@@ -70,11 +61,14 @@ class GeoPoint {
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
   // However the lost precision should only be in the range of centimeters.
-  T toBitRepresentation();
+  // Guarantees to only use the lower numDataBits (currenty 60 bits),
+  // with lng stored in the lower 30 and lat stored in the upper 30 bits of
+  // the lower 60.
+  T toBitRepresentation() const;
 
   // Restore a GeoPoint object from a single bitstring produced by the above
   // function. Due to the reduction of precision this object will not have the
-  // identical value.
+  // identical value. Ignores the upper 4 bits (only uses the lower numDataBits)
   static GeoPoint fromBitRepresentation(T bits);
 
   // Construct a GeoPoint from a Literal if this Literal represents a WKT POINT,
@@ -82,13 +76,7 @@ class GeoPoint {
   static std::optional<GeoPoint> parseFromLiteral(
       const ad_utility::triple_component::Literal& value);
 
-  std::string toStringRepresentation() {
-    // Extra conversion using std::to_string to get more decimals
-    return absl::StrCat("POINT(", std::to_string(getLng()), " ",
-                        std::to_string(getLat()), ")");
-  }
+  std::string toStringRepresentation() const;
 
-  std::pair<std::string, const char*> toStringAndType() {
-    return std::pair(toStringRepresentation(), GEO_WKT_LITERAL);
-  }
+  std::pair<std::string, const char*> toStringAndType() const;
 };

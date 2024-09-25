@@ -38,17 +38,11 @@ std::pair<double, double> parseWktPoint(const std::string_view point) {
     absl::from_chars(lat_sv.data(), lat_sv.data() + lat_sv.size(), lat);
     // This should never happen: if the regex matches, then each of the two
     // coordinate strings should also parse to a double.
-    AD_CONTRACT_CHECK(!std::isnan(lng));
-    AD_CONTRACT_CHECK(!std::isnan(lat));
+    AD_CORRECTNESS_CHECK(!std::isnan(lng));
+    AD_CORRECTNESS_CHECK(!std::isnan(lat));
   }
   return std::pair(lng, lat);
 }
-
-// Parse longitude from WKT point.
-double wktLongitudeImpl(GeoPoint point) { return point.getLng(); }
-
-// Parse latitude from WKT point.
-double wktLatitudeImpl(GeoPoint point) { return point.getLat(); }
 
 // Compute distance (in km) between two WKT points.
 double wktDistImpl(GeoPoint point1, GeoPoint point2) {

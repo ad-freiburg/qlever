@@ -25,8 +25,13 @@ static constexpr double invalidCoordinate =
 // TODO: Make the SPARQL expressions work for function pointers or
 // std::function.
 std::pair<double, double> parseWktPoint(const std::string_view point);
-double wktLongitudeImpl(GeoPoint point);
-double wktLatitudeImpl(GeoPoint point);
+
+// Parse longitude from WKT point.
+inline double wktLongitudeImpl(GeoPoint point) { return point.getLng(); }
+
+// Parse latitude from WKT point.
+inline double wktLatitudeImpl(GeoPoint point) { return point.getLat(); }
+
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 }  // namespace detail
@@ -38,7 +43,7 @@ class WktLongitude {
     if (!point.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
-    return detail::wktLongitudeImpl(point.value());
+    return point.value().getLng();
   }
 };
 
@@ -49,7 +54,7 @@ class WktLatitude {
     if (!point.has_value()) {
       return std::numeric_limits<double>::quiet_NaN();
     }
-    return detail::wktLatitudeImpl(point.value());
+    return point.value().getLat();
   }
 };
 
