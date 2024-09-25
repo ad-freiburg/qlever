@@ -638,16 +638,18 @@ TEST(CompressedRelationReader, PermutedTripleToString) {
 }
 
 TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
-  auto table = makeIdTableFromVector({{3}, {3}, {5}});
+  auto table = makeIdTableFromVector({{3}, {4}, {5}});
   CompressedBlockMetadata metadata{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
   using Filter = CompressedRelationReader::FilterDuplicatesAndGraphs;
   ScanSpecification::Graphs graphs = std::nullopt;
   Filter f{graphs, 43, false};
-  f(table, metadata);
-  EXPECT_THAT(table, matchesIdTableFromVector({{3}, {3}, {5}}));
+  EXPECT_FALSE(f.postprocessBlock(table, metadata));
+  EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
+
+  table = makeIdTableFromVector({{3}, {3}, {5}});
   metadata.containsDuplicatesWithDifferentGraphs_ = true;
-  EXPECT_TRUE(f(table, metadata));
+  EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {5}}));
 
   // Keep the graph column (the last column), hence there are no duplicates,
@@ -658,7 +660,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   graphs->insert(ValueId::makeFromVocabIndex(VocabIndex::make(2)));
   f.graphColumn_ = 1;
   f.deleteGraphColumn_ = false;
-  EXPECT_TRUE(f(table, metadata));
+  EXPECT_TRUE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3, 1}, {3, 2}}));
 
   // The metadata knows that there is only a single block contained, so we don't
@@ -669,7 +671,7 @@ TEST(CompressedRelationReader, filterDuplicatesAndGraphs) {
   metadata.containsDuplicatesWithDifferentGraphs_ = false;
   f.deleteGraphColumn_ = true;
   table = makeIdTableFromVector({{3, 1}, {4, 1}, {5, 1}});
-  EXPECT_FALSE(f(table, metadata));
+  EXPECT_FALSE(f.postprocessBlock(table, metadata));
   EXPECT_THAT(table, matchesIdTableFromVector({{3}, {4}, {5}}));
 
   // TODO<joka921> AD_EXPENSIVE_CHECKS inside the FILTER for sanity.
@@ -679,36 +681,36 @@ TEST(CompressedRelationReader, makeCanBeSkippedForBlock) {
   CompressedBlockMetadata metadata{
       {}, 0, {V(16), V(0), V(0)}, {V(38), V(4), V(12)}, {}, false};
 
-  auto make = &CompressedRelationReader::makeCanBlockBeSkipped;
   using Graphs = ScanSpecification::Graphs;
   Graphs graphs = std::nullopt;
-  auto canBeSkipped = make(&graphs);
+  auto filter =
+      CompressedRelationReader::FilterDuplicatesAndGraphs{graphs, 0, false};
   // No information about the contained blocks, and no graph filter specified,
   // so we cannot skip.
-  EXPECT_FALSE(canBeSkipped(metadata));
+  EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 
   // The graph info says that the block only contains the graph `1`, but we
   // don't filter by graphs, so it can't be skipped.
   metadata.graphInfo_.emplace();
   metadata.graphInfo_->push_back(V(1));
-  EXPECT_FALSE(canBeSkipped(metadata));
+  EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 
   // The graph info says that the block only contains the graph `1`, and we in
   // fact want the graphs `1` and `3`, so it can't be skipped.
   graphs.emplace();
   graphs->insert(V(1));
   graphs->insert(V(3));
-  EXPECT_FALSE(canBeSkipped(metadata));
+  EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 
   // The block contains graph `1`, but we only want graph `3`, so the block can
   // be skipped.
   graphs->erase(V(1));
-  EXPECT_TRUE(canBeSkipped(metadata));
+  EXPECT_TRUE(filter.canBlockBeSkipped(metadata));
 
   // The block metadata contains no information on the contained graphs, but we
   // only want graph `3`, so the block can't be skipped.
   metadata.graphInfo_.reset();
-  EXPECT_FALSE(canBeSkipped(metadata));
+  EXPECT_FALSE(filter.canBlockBeSkipped(metadata));
 }
 
 // Test the correct setting of the metadata for the contained graphs.
@@ -723,7 +725,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   using namespace ::testing;
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_GB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,
@@ -737,7 +739,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
   }
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_GB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_FALSE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     AD_EXPECT_NULLOPT(blocks.at(0).graphInfo_);
@@ -749,7 +751,7 @@ TEST(CompressedRelationWriter, graphInfoInBlockMetadata) {
 
   {
     auto [blocks, metadata, reader] =
-        writeAndOpenRelations(inputs, "graphInfo1", 100_GB);
+        writeAndOpenRelations(inputs, "graphInfo1", 100_MB);
     EXPECT_EQ(blocks.size(), 1);
     EXPECT_TRUE(blocks.at(0).containsDuplicatesWithDifferentGraphs_);
     EXPECT_THAT(blocks.at(0).graphInfo_,

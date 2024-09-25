@@ -369,11 +369,8 @@ class CompressedRelationReader {
   // and the information whether this column is required as part of the output,
   // or whether it should be deleted after filtering. It can then filter a given
   // block according to those settings.
-  // TODO<joka921> Merge this `struct` with the following `CanBlockBeSkipped`
-  // thing such that it becomes one `struct` with two explicit member functions.
-  // TODO<joka921> The function should be called  `postprocessBlock`.
   struct FilterDuplicatesAndGraphs {
-    const ScanSpecification::Graphs& graphs;
+    const ScanSpecification::Graphs& desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
     // Filter `containedGraph` such that it contains no duplicates and only the
@@ -382,17 +379,23 @@ class CompressedRelationReader {
     // we do not have to eliminate them). The return value is `true` if the
     // `containedGraph` has been modified because it contained duplicates or
     // triples from unwanted graphs.
-    bool operator()(IdTable& containedGraph,
-                    const CompressedBlockMetadata& metadata);
-  };
+    bool postprocessBlock(IdTable& block,
+                          const CompressedBlockMetadata& metadata) const;
+    bool canBlockBeSkipped(const CompressedBlockMetadata&) const;
 
-  // Return a function that takes a `CompressedBlockMetadata` and returns `true`
-  // iff we can decide by the metadata alone that this block is not needed for
-  // a scan, because it contains not a single triple that is compatible with the
-  // given `graphs`.
-  using CanBlockBeSkipped = std::function<bool(const CompressedBlockMetadata&)>;
-  static CanBlockBeSkipped makeCanBlockBeSkipped(
-      const ScanSpecification::Graphs* graphs);
+   private:
+    // Return true iff all triples from the block belong to the desired graphs,
+    // and if this fact can be determined by looking at the metadata alone.
+    bool blockNeedsFilteringByGraph(
+        const CompressedBlockMetadata& metadata) const;
+
+    // Implementation of the various steps of `postprocessBlock`. Each of them
+    // returns `true` iff filtering the block was necessary.
+    bool filterByGraphIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& metadata) const;
+    bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& metadata) const;
+  };
 
   // The specification of scan, together with the blocks on which this scan is
   // to be performed.
@@ -618,8 +621,7 @@ class CompressedRelationReader {
   IdTableGenerator asyncParallelBlockGenerator(
       auto beginBlock, auto endBlock, ColumnIndices columnIndices,
       CancellationHandle cancellationHandle, LimitOffsetClause& limitOffset,
-      FilterDuplicatesAndGraphs blockGraphFilter,
-      CanBlockBeSkipped canBlockBeSkipped) const;
+      FilterDuplicatesAndGraphs blockGraphFilter) const;
 
   // Return a vector that consists of the concatenation of `baseColumns` and
   // `additionalColumns`
