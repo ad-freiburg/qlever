@@ -244,6 +244,7 @@ TEST(HttpServer, ErrorHandlingInSession) {
 
   using namespace ::testing;
   // Logging of a general `boost` exception.
+  std::string result;
   auto s = throwAndCaptureLog(
       beast::system_error{boost::asio::error::host_not_found_try_again});
   // TODO<joka921> Debug the docker arm build
@@ -251,6 +252,7 @@ TEST(HttpServer, ErrorHandlingInSession) {
   try {
     throw beast::system_error{boost::asio::error::host_not_found_try_again};
   } catch (const boost::system::system_error& error) {
+    result = error.what();
     if (error.code() == http::error::end_of_stream) {
       isEqual = true;
     } else if (error.code() == beast::error::timeout ||
@@ -259,9 +261,12 @@ TEST(HttpServer, ErrorHandlingInSession) {
     }
   }
 
+  EXPECT_THAT(result, HasSubstr("not found"));
+  EXPECT_THAT(s, HasSubstr("not found"));
+
   ASSERT_FALSE(isEqual);
 
-    // The `timeout`and `eof` exceptions are only logged in the `TRACE` level,
+  // The `timeout`and `eof` exceptions are only logged in the `TRACE` level,
   // normally they are silently caught and ignored.
   s = throwAndCaptureLog(beast::system_error{beast::error::timeout});
   s += throwAndCaptureLog(beast::system_error{boost::asio::error::eof});
