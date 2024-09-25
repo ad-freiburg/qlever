@@ -26,12 +26,6 @@ static constexpr double invalidCoordinate =
 // std::function.
 std::pair<double, double> parseWktPoint(const std::string_view point);
 
-// Parse longitude from WKT point.
-inline double wktLongitudeImpl(GeoPoint point) { return point.getLng(); }
-
-// Parse latitude from WKT point.
-inline double wktLatitudeImpl(GeoPoint point) { return point.getLat(); }
-
 double wktDistImpl(GeoPoint point1, GeoPoint point2);
 
 }  // namespace detail
