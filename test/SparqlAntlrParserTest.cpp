@@ -1041,15 +1041,17 @@ TEST(SparqlParser, SelectQuery) {
   auto DummyGraphPatternMatcher =
       m::GraphPattern(m::Triples({{Var{"?x"}, "?y", Var{"?z"}}}));
   using Graphs = ScanSpecificationAsTripleComponent::Graphs;
-  auto defaultMatcherWithouGraph = [](Graphs defaultGraphs = std::nullopt,
-                                      Graphs namedGraphs = std::nullopt) {
+
+  // A matcher that matches the query `SELECT* { ?a <bar> ?foo}`, where the
+  // FROM and FROM NAMED clauses can still be specified via arguments.
+  auto selectABarFooMatcher = [](Graphs defaultGraphs = std::nullopt,
+                                 Graphs namedGraphs = std::nullopt) {
     return testing::AllOf(m::SelectQuery(
         m::AsteriskSelect(),
         m::GraphPattern(m::Triples({{Var{"?a"}, "<bar>", Var{"?foo"}}})),
         defaultGraphs, namedGraphs));
   };
-  expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }",
-                    defaultMatcherWithouGraph());
+  expectSelectQuery("SELECT * WHERE { ?a <bar> ?foo }", selectABarFooMatcher());
 
   Graphs defaultGraphs;
   defaultGraphs.emplace();
@@ -1058,7 +1060,7 @@ TEST(SparqlParser, SelectQuery) {
   namedGraphs.emplace();
   namedGraphs->insert(TripleComponent::Iri::fromIriref("<y>"));
   expectSelectQuery("SELECT * FROM <x> FROM NAMED <y> WHERE { ?a <bar> ?foo }",
-                    defaultMatcherWithouGraph(defaultGraphs, namedGraphs));
+                    selectABarFooMatcher(defaultGraphs, namedGraphs));
 
   expectSelectQuery("SELECT * WHERE { ?x ?y ?z }",
                     testing::AllOf(m::SelectQuery(m::AsteriskSelect(),
@@ -1196,13 +1198,6 @@ TEST(SparqlParser, SelectQuery) {
       "SELECT (?x AS ?y) WHERE { ?x <is-a> ?y }",
       contains(
           "The target ?y of an AS clause was already used in the query body."));
-
-  // TODO<joka921> These are now supported... add the corresponding tests
-
-  /*
-  expectSelectQueryFails("SELECT * FROM <defaultDataset> WHERE { ?x ?y ?z }",
-                         contains("FROM clauses are currently not supported"));
-                         */
 }
 
 TEST(SparqlParser, ConstructQuery) {

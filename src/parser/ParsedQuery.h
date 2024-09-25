@@ -40,7 +40,9 @@ using std::vector;
 namespace parsedQuery {
 // A struct for the FROM and FROM NAMED clauses;
 struct DatasetClauses {
+  // FROM clauses.
   ScanSpecificationAsTripleComponent::Graphs defaultGraphs_{};
+  // FROM NAMED clauses.
   ScanSpecificationAsTripleComponent::Graphs namedGraphs_{};
 };
 }  // namespace parsedQuery
@@ -65,10 +67,6 @@ std::ostream& operator<<(std::ostream& out, const PropertyPath& p);
 namespace parsedQuery {
 struct GraphPatternOperation;
 }
-
-struct DatasetClause {
-  ad_utility::HashSet<TripleComponent::Iri> defaultSets_;
-};
 
 // A parsed SPARQL query. To be extended.
 class ParsedQuery {

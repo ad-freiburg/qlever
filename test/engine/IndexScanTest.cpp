@@ -391,13 +391,13 @@ TEST(IndexScan, namedGraphs) {
       TripleComponent::Iri::fromIriref("<graph2>")};
   auto scan = IndexScan{qec, Permutation::PSO, triple, graphs};
   using namespace testing;
-  EXPECT_THAT(scan.getGraphs(), Optional(graphs));
+  EXPECT_THAT(scan.graphsToFilter(), Optional(graphs));
   EXPECT_THAT(scan.getCacheKey(),
               HasSubstr("Filtered by Graphs:<graph1> <graph2>"));
   EXPECT_THAT(scan.getScanSpecificationTc().graphsToFilter(), Optional(graphs));
 
   auto scanNoGraphs = IndexScan{qec, Permutation::PSO, triple};
-  EXPECT_EQ(scanNoGraphs.getGraphs(), std::nullopt);
+  EXPECT_EQ(scanNoGraphs.graphsToFilter(), std::nullopt);
   EXPECT_THAT(scanNoGraphs.getCacheKey(),
               Not(HasSubstr("Filtered by Graphs:")));
   EXPECT_THAT(scanNoGraphs.getScanSpecificationTc().graphsToFilter(),

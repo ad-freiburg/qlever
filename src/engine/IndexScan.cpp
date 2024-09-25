@@ -81,11 +81,14 @@ string IndexScan::getCacheKeyImpl() const {
     os << absl::StrJoin(additionalColumns(), " ");
   }
   if (graphsToFilter_.has_value()) {
+    // The graphs are stored as a hash set, but we need a deterministic order.
+    std::vector<std::string> graphIdVec;
+    std::ranges::transform(graphsToFilter_.value(),
+                           std::back_inserter(graphIdVec),
+                           &TripleComponent::toRdfLiteral);
+    std::ranges::sort(graphIdVec);
     os << "\nFiltered by Graphs:";
-    os << ad_utility::lazyStrJoin(
-        graphsToFilter_.value() |
-            std::views::transform(&TripleComponent::toRdfLiteral),
-        " ");
+    os << absl::StrJoin(graphIdVec, " ");
   }
   return std::move(os).str();
 }

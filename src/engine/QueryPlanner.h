@@ -28,7 +28,8 @@ class QueryPlanner {
 
   // Create the best execution tree for the given query according to the
   // optimization algorithm and cost estimates of the QueryPlanner.
-  QueryExecutionTree createExecutionTree(ParsedQuery& pq);
+  QueryExecutionTree createExecutionTree(ParsedQuery& pq,
+                                         bool isSubquery = false);
 
   class TripleGraph {
    public:
@@ -213,7 +214,8 @@ class QueryPlanner {
   // result. This is relevant for subqueries, which are currently optimized
   // independently of the rest of the query, but where it depends on the rest
   // of the query, which ordering of the result is best.
-  [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(ParsedQuery& pq);
+  [[nodiscard]] std::vector<SubtreePlan> createExecutionTrees(
+      ParsedQuery& pq, bool isSubquery = false);
 
  private:
   QueryExecutionContext* _qec;

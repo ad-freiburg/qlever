@@ -80,13 +80,26 @@ QueryPlanner::QueryPlanner(QueryExecutionContext* qec,
 
 // _____________________________________________________________________________
 std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
-    ParsedQuery& pq) {
+    ParsedQuery& pq, bool isSubquery) {
+  // Store the dataset clause (FROM and FROM NAMED clauses), s.t. we have access
+  // to them down the callstack. Subqueries can't have their own dataset clause,
+  // but inherit it from the parent query.
+  auto datasetClauseIsEmpty = [](const auto& datasetClause) {
+    return !datasetClause.defaultGraphs_.has_value() &&
+           !datasetClause.namedGraphs_.has_value();
+  };
+  if (!isSubquery) {
+    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(activeDatasetClauses_));
+    activeDatasetClauses_ = pq.datasetClauses_;
+  } else {
+    AD_CORRECTNESS_CHECK(datasetClauseIsEmpty(pq.datasetClauses_));
+  }
+
   // Look for ql:has-predicate to determine if the pattern trick should be used.
   // If the pattern trick is used, the ql:has-predicate triple will be removed
   // from the list of where clause triples. Otherwise, the ql:has-predicate
   // triple will be handled using a `HasPredicateScan`.
-  auto datasetClauseBackup =
-      std::exchange(activeDatasetClauses_, pq.datasetClauses_);
+
   using checkUsePatternTrick::PatternTrickTuple;
   const auto patternTrickTuple =
       _enablePatternTrick ? checkUsePatternTrick::checkUsePatternTrick(&pq)
@@ -178,14 +191,14 @@ std::vector<QueryPlanner::SubtreePlan> QueryPlanner::createExecutionTrees(
         "FROM NAMED clauses are not yet supported by QLever");
   }
 
-  activeDatasetClauses_ = std::move(datasetClauseBackup);
   return lastRow;
 }
 
 // _____________________________________________________________________
-QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq) {
+QueryExecutionTree QueryPlanner::createExecutionTree(ParsedQuery& pq,
+                                                     bool isSubquery) {
   try {
-    auto lastRow = createExecutionTrees(pq);
+    auto lastRow = createExecutionTrees(pq, isSubquery);
     auto minInd = findCheapestExecutionTree(lastRow);
     LOG(DEBUG) << "Done creating execution plan.\n";
     return *lastRow[minInd]._qet;
@@ -676,6 +689,8 @@ auto QueryPlanner::seedWithScansAndText(
     idShift++;
   }
 
+  // If this group has an explicit graph specified (because it is a `GRAPH
+  // <graphIri> {...}` clause), use that graph, else use the default graphs.
   auto relevantGraphs = activeDatasetClauses_.defaultGraphs_;
   if (graphIri.has_value()) {
     relevantGraphs.reset();
@@ -725,11 +740,8 @@ auto QueryPlanner::seedWithScansAndText(
         triple = node.triple_.getSimple();
       }
 
-      auto scanPlan = [&]() {
-        return makeSubtreePlan<IndexScan>(
-            _qec, permutation, std::move(triple.value()), relevantGraphs);
-      };
-      pushPlan(scanPlan());
+      pushPlan(makeSubtreePlan<IndexScan>(
+          _qec, permutation, std::move(triple.value()), relevantGraphs));
     };
 
     auto addFilter = [&filters = result.filters_](SparqlFilter filter) {
@@ -2003,6 +2015,8 @@ void QueryPlanner::GraphPatternPlanner::visitGroupOptionalOrMinus(
   // For OPTIONAL or MINUS, optimization "across" the OPTIONAL or MINUS is
   // forbidden. Optimize all previously collected candidates, and then perform
   // an optional or minus join.
+  // Note: OPTIONAL or MINUS can never have a graph specified, hence the
+  // `nullopt`.
   optimizeCommutatively(std::nullopt);
   AD_CORRECTNESS_CHECK(candidatePlans_.size() == 1);
   std::vector<SubtreePlan> nextCandidates;
@@ -2202,7 +2216,7 @@ void QueryPlanner::GraphPatternPlanner::visitSubquery(
 
   // For a subquery, make sure that one optimal result for each ordering
   // of the result (by a single column) is contained.
-  auto candidatesForSubquery = planner_.createExecutionTrees(subquery);
+  auto candidatesForSubquery = planner_.createExecutionTrees(subquery, true);
   // Make sure that variables that are not selected by the subquery are
   // not visible.
   auto setSelectedVariables = [&](SubtreePlan& plan) {

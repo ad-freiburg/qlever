@@ -147,12 +147,12 @@ class SparqlQleverVisitor {
 
   [[noreturn]] static ParsedQuery visit(const Parser::AskQueryContext* ctx);
 
-  struct SingleDatasetClause {
+  struct DatasetClause {
     TripleComponent::Iri dataset_;
     bool isNamed_;
   };
 
-  SingleDatasetClause visit(Parser::DatasetClauseContext* ctx);
+  DatasetClause visit(Parser::DatasetClauseContext* ctx);
 
   TripleComponent::Iri visit(Parser::DefaultGraphClauseContext* ctx);
 
