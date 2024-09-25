@@ -569,7 +569,7 @@ void updateRuntimeInfoForLazyScan(
     rti.addDetail("num-blocks-skipped-graph",
                   metadata.numBlocksSkippedBecauseOfGraph_);
   }
-  if (metadata.numBlocksPostprocessed_ >= 0) {
+  if (metadata.numBlocksPostprocessed_ > 0) {
     rti.addDetail("num-blocks-postprocessed", metadata.numBlocksPostprocessed_);
   }
 }
