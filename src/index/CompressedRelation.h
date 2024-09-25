@@ -381,10 +381,10 @@ class CompressedRelationReader {
     bool postprocessBlock(IdTable& block,
                           const CompressedBlockMetadata& blockMetadata) const;
 
-    // Return true, if the block to which the `desiredGraph` belongs contains no
-    // matching triples and therefore doesn't have to be read from disk, and if
-    // this fact can be determined by looking at the `desiredGraph` alone.
-    bool canBlockBeSkipped(const CompressedBlockMetadata& desiredGraph) const;
+    // Return true, iff a block, specified by the `blockMetadata` contains no
+    // triples from `desiredGraphs_` and therefore doesn't have to be read from
+    // disk, and if this fact can be determined by `blockMetadata` alone.
+    bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
    private:
     // Return true iff all triples from the block belong to the
