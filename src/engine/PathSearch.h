@@ -14,53 +14,32 @@
 
 enum class PathSearchAlgorithm { ALL_PATHS };
 
+/**
+ * @brief Represents the source or target side of a PathSearch.
+ * The side can either be a variable or a list of Ids.
+ */
 using SearchSide = std::variant<Variable, std::vector<Id>>;
 
 namespace pathSearch {
-  /**
-   * @brief Represents an edge in the graph.
-   */
   struct Edge {
-    // The starting node ID.
     Id start_;
 
-    // The ending node ID.
     Id end_;
 
-    // Properties associated with the edge.
     std::vector<Id> edgeProperties_;
   };
 
-  /**
-   * @brief Represents a path consisting of multiple edges.
-   */
   struct Path {
-    // The edges that make up the path.
     std::vector<Edge> edges_;
 
-    /**
-     * @brief Checks if the path is empty.
-     * @return True if the path is empty, false otherwise.
-     */
     bool empty() const { return edges_.empty(); }
 
-    /**
-     * @brief Returns the number of edges in the path.
-     * @return The number of edges in the path.
-     */
     size_t size() const { return edges_.size(); }
 
-    /**
-     * @brief Adds an edge to the end of the path.
-     * @param edge The edge to add.
-     */
     void push_back(const Edge& edge) { edges_.push_back(edge); }
 
     void pop_back() { edges_.pop_back(); }
 
-    /**
-     * @brief Reverses the order of the edges in the path.
-     */
     void reverse() { std::ranges::reverse(edges_); }
 
     Path concat(const Path& other) const {
@@ -83,6 +62,13 @@ namespace pathSearch {
     }
   };
 
+  /**
+   * @class BinSearchWrapper
+   * @brief Encapsulates logic for binary search of edges in
+   * an IdTable. It provides methods to find outgoing edges from
+   * a node and retrie
+   *
+   */
   class BinSearchWrapper {
     const IdTable& table_;
     size_t startCol_;
@@ -93,8 +79,19 @@ namespace pathSearch {
     BinSearchWrapper(const IdTable& table, size_t startCol, size_t endCol,
                      std::vector<size_t> edgeCols);
 
+    /**
+     * @brief Return all outgoing edges of a node
+     *
+     * @param node The start node of the outgoing edges
+     */
     std::vector<Edge> outgoingEdes(const Id node) const;
 
+    /**
+     * @brief Returns the start nodes of all edges.
+     * In case the sources field for the path search is empty,
+     * the search starts from all possible sources (i.e. all
+     * start nodes). Returns only unique start nodes.
+     */
     std::span<const Id> getSources() const;
 
    private:
@@ -104,25 +101,14 @@ namespace pathSearch {
 
 using namespace pathSearch;
 
-/**
- * @brief Struct to hold configuration parameters for the path search.
- */
 struct PathSearchConfiguration {
-  // The path search algorithm to use.
   PathSearchAlgorithm algorithm_;
-  // The source node ID.
   SearchSide sources_;
-  // A list of target node IDs.
   SearchSide targets_;
-  // Variable representing the start column in the result.
   Variable start_;
-  // Variable representing the end column in the result.
   Variable end_;
-  // Variable representing the path column in the result.
   Variable pathColumn_;
-  // Variable representing the edge column in the result.
   Variable edgeColumn_;
-  // Variables representing edge property columns.
   std::vector<Variable> edgeProperties_;
   bool cartesian_ = true;
 
@@ -170,16 +156,21 @@ struct PathSearchConfiguration {
 };
 
 /**
- * @brief Class to perform various path search algorithms on a graph.
+ * @class PathSearch
+ * @brief Main class implementing the path search operation.
+ * It manages the configuration, executes the search and
+ * builds the ResultTable.
+ *
  */
 class PathSearch : public Operation {
   std::shared_ptr<QueryExecutionTree> subtree_;
   size_t resultWidth_;
   VariableToColumnMap variableColumns_;
 
-  // Configuration for the path search.
   PathSearchConfiguration config_;
 
+  // The following optional fields are filled, depending
+  // on how the PathSearch is bound.
   std::optional<size_t> sourceCol_;
   std::optional<size_t> targetCol_;
 

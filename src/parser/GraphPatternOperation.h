@@ -167,11 +167,56 @@ struct PathQuery {
   GraphPattern childGraphPattern_;
   bool cartesian_ = true;
 
+  /**
+   * @brief Add a parameter to the PathQuery from the given triple.
+   * The predicate of the triple determines the parameter name and the object
+   * of the triple determines the parameter value. The subject is ignored.
+   * Throws a PathSearchException if an unsupported algorithm is given or if the
+   * predicate contains an unknown parameter name.
+   *
+   * @param triple A SparqlTriple that contains the parameter info
+   */
   void addParameter(const SparqlTriple& triple);
+
+  /**
+   * @brief Add the parameters from a BasicGraphPattern to the PathQuery
+   *
+   * @param pattern 
+   */
   void addBasicPattern(const BasicGraphPattern& pattern);
+
+  /**
+   * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
+   * the edges of the graph that is used by the path search
+   *
+   * @param childGraphPattern 
+   */
   void addGraph(const GraphPatternOperation& childGraphPattern);
+
+  /**
+   * @brief Convert the vector of triple components into a SearchSide
+   * The SeachSide can either be a variable or a list of Ids.
+   * A PathSearchException is thrown if more than one variable is given.
+   *
+   * @param side A vector of TripleComponents, containing either exactly one
+   *             Variable or zero or more ValueIds
+   * @param vocab A Vocabulary containing the Ids of the TripleComponents.
+   *              The Vocab is only used if the given vector contains IRIs. 
+   */
   std::variant<Variable, std::vector<Id>> toSearchSide(
       std::vector<TripleComponent> side, const Index::Vocab& vocab) const;
+
+  /**
+   * @brief Convert this PathQuery into a PathSearchConfiguration object.
+   * This method checks if all required parameters are set and converts
+   * the PathSearch sources and targets into SearchSides.
+   * A PathSearchException is thrown if required paramaters are missing.
+   * The required parameters are start, end, pathColumn and edgeColumn.
+   *
+   * @param vocab A vocab containing the Ids of the IRIs in
+   *              sources_ and targets_
+   * @return A valid PathSearchConfiguration
+   */
   PathSearchConfiguration toPathSearchConfiguration(
       const Index::Vocab& vocab) const;
 };
