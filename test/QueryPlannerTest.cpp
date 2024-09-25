@@ -1164,6 +1164,56 @@ TEST(QueryPlanner, PathSearchMultipleStarts) {
 }
 
 // __________________________________________________________________________
+TEST(QueryPlanner, PathSearchMissingEnd) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(h::parseAndPlan(std::move(query), qec),
+                                        HasSubstr("Missing parameter 'end'"),
+                                        parsedQuery::PathSearchException);
+}
+
+// __________________________________________________________________________
+TEST(QueryPlanner, PathSearchMultipleEnds) {
+  auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  auto query =
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end1;"
+      "pathSearch:end ?end2;"
+      "{SELECT * WHERE {"
+      "?start <p> ?end."
+      "}}}}";
+  AD_EXPECT_THROW_WITH_MESSAGE_AND_TYPE(
+      h::parseAndPlan(std::move(query), qec),
+      HasSubstr("parameter 'end' has already been set "
+                "to variable: '?end1'. New variable: '?end2'"),
+      parsedQuery::PathSearchException);
+}
+
+// __________________________________________________________________________
 TEST(QueryPlanner, PathSearchStartNotVariable) {
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
   auto getId = ad_utility::testing::makeGetId(qec->getIndex());
