@@ -252,9 +252,7 @@ TEST(HttpServer, ErrorHandlingInSession) {
   // Docker cross-compilation build for ARM, this test sometimes fails because
   // we don't land in the correct catch clause for some reason. This needs
   // further debugging.
-  EXPECT_THAT(s, AnyOf(HasSubstr("not found"), Eq(""));
-
-  ASSERT_FALSE(isEqual);
+  EXPECT_THAT(s, AnyOf(HasSubstr("not found"), Eq("")));
 
   // The `timeout`and `eof` exceptions are only logged in the `TRACE` level,
   // normally they are silently caught and ignored.
