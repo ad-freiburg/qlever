@@ -16,8 +16,10 @@
 #include "engine/Filter.h"
 #include "engine/IndexScan.h"
 #include "engine/Join.h"
+#include "engine/Minus.h"
 #include "engine/MultiColumnJoin.h"
 #include "engine/NeutralElementOperation.h"
+#include "engine/OptionalJoin.h"
 #include "engine/OrderBy.h"
 #include "engine/PathSearch.h"
 #include "engine/QueryExecutionTree.h"
@@ -206,6 +208,10 @@ inline auto IndexScanFromStrings =
 // For the following Join algorithms the order of the children is not important.
 inline auto MultiColumnJoin = MatchTypeAndUnorderedChildren<::MultiColumnJoin>;
 inline auto Join = MatchTypeAndUnorderedChildren<::Join>;
+
+constexpr auto OptionalJoin = MatchTypeAndOrderedChildren<::OptionalJoin>;
+
+constexpr auto Minus = MatchTypeAndOrderedChildren<::Minus>;
 
 // Return a matcher that matches a query execution tree that consists of
 // multiple JOIN operations that join the `children`. The `INTERNAL SORT BY`

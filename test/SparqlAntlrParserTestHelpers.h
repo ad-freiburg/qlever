@@ -495,17 +495,18 @@ inline auto InlineData = [](const std::vector<::Variable>& vars,
   return detail::GraphPatternOperation<p::Values>(Values(vars, values));
 };
 
-inline auto Service = [](const ::Iri& iri,
-                         const std::vector<::Variable>& variables,
-                         const std::string& graphPattern,
-                         const std::string& prologue =
-                             "") -> Matcher<const p::GraphPatternOperation&> {
+inline auto Service =
+    [](const TripleComponent::Iri& iri,
+       const std::vector<::Variable>& variables,
+       const std::string& graphPattern, const std::string& prologue = "",
+       bool silent = false) -> Matcher<const p::GraphPatternOperation&> {
   auto serviceMatcher = testing::AllOf(
       AD_FIELD(p::Service, serviceIri_, testing::Eq(iri)),
       AD_FIELD(p::Service, visibleVariables_,
                testing::UnorderedElementsAreArray(variables)),
       AD_FIELD(p::Service, graphPatternAsString_, testing::Eq(graphPattern)),
-      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)));
+      AD_FIELD(p::Service, prologue_, testing::Eq(prologue)),
+      AD_FIELD(p::Service, silent_, testing::Eq(silent)));
   return detail::GraphPatternOperation<p::Service>(serviceMatcher);
 };
 

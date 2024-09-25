@@ -9,6 +9,7 @@
 #include "engine/Operation.h"
 #include "engine/Values.h"
 #include "parser/ParsedQuery.h"
+#include "util/LazyJsonParser.h"
 #include "util/http/HttpClient.h"
 
 // The SERVICE operation. Sends a query to the remote endpoint specified by the
@@ -30,12 +31,11 @@
 class Service : public Operation {
  public:
   // The type of the function used to obtain the results, see below.
-  using GetResultFunction =
-      std::function<cppcoro::generator<std::span<std::byte>>(
-          const ad_utility::httpUtils::Url&,
-          ad_utility::SharedCancellationHandle handle,
-          const boost::beast::http::verb&, std::string_view, std::string_view,
-          std::string_view)>;
+  using GetResultFunction = std::function<HttpOrHttpsResponse(
+      const ad_utility::httpUtils::Url&,
+      ad_utility::SharedCancellationHandle handle,
+      const boost::beast::http::verb&, std::string_view, std::string_view,
+      std::string_view)>;
 
  private:
   // The parsed SERVICE clause.
@@ -58,10 +58,19 @@ class Service : public Operation {
           GetResultFunction getResultFunction = sendHttpOrHttpsRequest,
           std::shared_ptr<QueryExecutionTree> siblingTree = nullptr);
 
-  // Set the siblingTree (subTree that will later be joined with the Result of
-  // the Service Operation), used to reduce the Service Queries Complexity.
-  void setSiblingTree(std::shared_ptr<QueryExecutionTree> siblingTree) {
-    siblingTree_ = siblingTree;
+  // Create a new `Service` operation, that is equal to `*this` but additionally
+  // respects the `siblingTree`. The sibling tree is a partial query that will
+  // later be joined with the result of the `Service`. If the result of the
+  // sibling is small, it will be used to constrain the SERVICE query using a
+  // `VALUES` clause.
+  [[nodiscard]] std::shared_ptr<Service> createCopyWithSiblingTree(
+      std::shared_ptr<QueryExecutionTree> siblingTree) const {
+    AD_CORRECTNESS_CHECK(siblingTree_ == nullptr);
+    // TODO<joka921> This copies the `parsedServiceClause_`. We could probably
+    // use a `shared_ptr` here to reduce the copying during QueryPlanning.
+    return std::make_shared<Service>(getExecutionContext(),
+                                     parsedServiceClause_, getResultFunction_,
+                                     std::move(siblingTree));
   }
 
   // Methods inherited from base class `Operation`.
@@ -90,17 +99,35 @@ class Service : public Operation {
   vector<QueryExecutionTree*> getChildren() override { return {}; }
 
   // Convert the given binding to TripleComponent.
-  static TripleComponent bindingToTripleComponent(const nlohmann::json& cell);
+  static TripleComponent bindingToTripleComponent(
+      const nlohmann::json& binding);
 
  private:
   // The string returned by this function is used as cache key.
   std::string getCacheKeyImpl() const override;
 
-  // Compute the result using `getResultFunction_`.
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  // Compute the result using `getResultFunction_` and the siblingTree.
+  ProtoResult computeResult([[maybe_unused]] bool requestLaziness) override;
+
+  // Actually compute the result for the function above.
+  ProtoResult computeResultImpl([[maybe_unused]] bool requestLaziness);
 
   // Get a VALUES clause that contains the values of the siblingTree's result.
   std::optional<std::string> getSiblingValuesClause() const;
+
+  // Create result for silent fail.
+  ProtoResult makeNeutralElementResultForSilentFail() const;
+
+  // Check that all visible variables of the SERVICE clause exist in the json
+  // object, otherwise throw an error.
+  void verifyVariables(const nlohmann::json& head,
+                       const ad_utility::LazyJsonParser::Details& gen) const;
+
+  // Throws an error message, providing the first 100 bytes of the result as
+  // context.
+  [[noreturn]] void throwErrorWithContext(
+      std::string_view msg, std::string_view first100,
+      std::string_view last100 = ""sv) const;
 
   // Write the given JSON result to the given result object. The `I` is the
   // width of the result table.
@@ -109,6 +136,6 @@ class Service : public Operation {
   // parse JSON here and not a VALUES clause.
   template <size_t I>
   void writeJsonResult(const std::vector<std::string>& vars,
-                       const std::vector<nlohmann::json>& bindings,
+                       ad_utility::LazyJsonParser::Generator& response,
                        IdTable* idTable, LocalVocab* localVocab);
 };

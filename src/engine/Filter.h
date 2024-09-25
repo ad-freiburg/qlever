@@ -58,9 +58,15 @@ class Filter : public Operation {
     return _subtree->getVariableColumns();
   }
 
-  Result computeResult([[maybe_unused]] bool requestLaziness) override;
+  ProtoResult computeResult(bool requestLaziness) override;
 
-  template <size_t WIDTH>
-  void computeFilterImpl(IdTable* outputIdTable,
-                         const Result& inputResultTable);
+  // Perform the actual filter operation of the data provided.
+  template <int WIDTH>
+  void computeFilterImpl(IdTable& dynamicResultTable, const IdTable& input,
+                         const LocalVocab& localVocab,
+                         std::vector<ColumnIndex> sortedBy) const;
+
+  // Run `computeFilterImpl` on the provided IdTable
+  IdTable filterIdTable(const std::shared_ptr<const Result>& subRes,
+                        const IdTable& idTable) const;
 };

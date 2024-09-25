@@ -1,5 +1,5 @@
-//  Copyright 2021, University of Freiburg, Chair of Algorithms and Data
-//  Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
+// Copyright 2021, University of Freiburg, Chair of Algorithms and Data
+// Structures. Author: Johannes Kalmbach <kalmbacj@cs.uni-freiburg.de>
 
 #pragma once
 
@@ -20,6 +20,7 @@
 #include "util/Iterators.h"
 #include "util/LambdaHelpers.h"
 #include "util/ResetWhenMoved.h"
+#include "util/SourceLocation.h"
 #include "util/UninitializedAllocator.h"
 #include "util/Views.h"
 
@@ -179,7 +180,11 @@ class IdTable {
   // Then the argument `numColumns` and `NumColumns` (the static and the
   // dynamic number of columns) must be equal, else a runtime check fails.
   // Note: this also allows to create an empty view.
-  explicit IdTable(size_t numColumns, Allocator allocator = {})
+  explicit IdTable(size_t numColumns)
+      requires(columnsAreAllocatable &&
+               std::is_default_constructible_v<Allocator>)
+      : IdTable(numColumns, Allocator{}) {}
+  explicit IdTable(size_t numColumns, Allocator allocator)
       requires columnsAreAllocatable
       : numColumns_{numColumns}, allocator_{std::move(allocator)} {
     if constexpr (!isDynamic) {
@@ -217,7 +222,10 @@ class IdTable {
   // already set up with the correct number of columns and can be used directly.
   // If `NumColumns == 0` then the number of columns has to be specified via
   // `setNumColumns()`.
-  explicit IdTable(Allocator allocator = {})
+  IdTable() requires(!isView && columnsAreAllocatable &&
+                     std::is_default_constructible_v<Allocator>)
+      : IdTable{NumColumns, Allocator{}} {};
+  explicit IdTable(Allocator allocator)
       requires(!isView && columnsAreAllocatable)
       : IdTable{NumColumns, std::move(allocator)} {};
 
@@ -299,7 +307,10 @@ class IdTable {
   // TODO<joka921, C++23> Use the multidimensional subscript operator.
   // TODO<joka921, C++23> Use explicit object parameters ("deducing this").
   T& operator()(size_t row, size_t column) requires(!isView) {
-    AD_EXPENSIVE_CHECK(column < data().size());
+    AD_EXPENSIVE_CHECK(column < data().size(), [&]() {
+      return absl::StrCat(row, " , ", column, ", ", data().size(), " ",
+                          numColumns(), ", ", numStaticColumns);
+    });
     AD_EXPENSIVE_CHECK(row < data().at(column).size());
     return data()[column][row];
   }
@@ -561,6 +572,13 @@ class IdTable {
     std::swap(data()[c1], data()[c2]);
   }
 
+  // Delete the column with the given column index.
+  void deleteColumn(ColumnIndex colIdx) requires isDynamic {
+    AD_CONTRACT_CHECK(colIdx < numColumns());
+    data().erase(data().begin() + colIdx);
+    numColumns_--;
+  }
+
   // Helper `struct` that stores a pointer to this table and has an `operator()`
   // that can be called with a reference to an `IdTable` and the index of a row
   // and then returns a `row_reference_restricted` to that row. This struct is
@@ -750,6 +768,17 @@ class IdTableStatic
   IdTableStatic& operator=(Base&& b) {
     *(static_cast<Base*>(this)) = std::move(b);
     return *this;
+  }
+
+  // This operator is only for debugging and testing. It returns a
+  // human-readable representation.
+  friend std::ostream& operator<<(std::ostream& os,
+                                  const IdTableStatic& idTable) {
+    os << "{ ";
+    std::ranges::copy(
+        idTable, std::ostream_iterator<columnBasedIdTable::Row<Id>>(os, " "));
+    os << "}";
+    return os;
   }
 };
 

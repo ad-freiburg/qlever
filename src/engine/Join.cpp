@@ -90,7 +90,7 @@ string Join::getCacheKeyImpl() const {
 string Join::getDescriptor() const { return "Join on " + _joinVar.name(); }
 
 // _____________________________________________________________________________
-Result Join::computeResult([[maybe_unused]] bool requestLaziness) {
+ProtoResult Join::computeResult([[maybe_unused]] bool requestLaziness) {
   LOG(DEBUG) << "Getting sub-results for join result computation..." << endl;
   size_t leftWidth = _left->getResultWidth();
   size_t rightWidth = _right->getResultWidth();
@@ -510,7 +510,7 @@ void Join::hashJoin(const IdTable& dynA, ColumnIndex jc1, const IdTable& dynB,
                     ColumnIndex jc2, IdTable* dynRes) {
   CALL_FIXED_SIZE(
       (std::array{dynA.numColumns(), dynB.numColumns(), dynRes->numColumns()}),
-      &Join::hashJoinImpl, this, dynA, jc1, dynB, jc2, dynRes);
+      &Join::hashJoinImpl, dynA, jc1, dynB, jc2, dynRes);
 }
 
 // ___________________________________________________________________________
@@ -633,8 +633,8 @@ IdTable Join::computeResultForIndexScanAndIdTable(const IdTable& idTable,
                               : joinColMap.permutationLeft())};
 
   ad_utility::Timer timer{ad_utility::timer::Timer::InitialStatus::Started};
-  auto rightBlocksInternal = IndexScan::lazyScanForJoinOfColumnWithScan(
-      permutationIdTable.col(), scan);
+  auto rightBlocksInternal =
+      scan.lazyScanForJoinOfColumnWithScan(permutationIdTable.col());
   auto rightBlocks = convertGenerator(std::move(rightBlocksInternal));
 
   runtimeInfo().addDetail("time-for-filtering-blocks", timer.msecs());

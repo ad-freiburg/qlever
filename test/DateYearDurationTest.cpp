@@ -8,12 +8,14 @@
 
 #include "./util/GTestHelpers.h"
 #include "global/Constants.h"
+#include "parser/RdfParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
-#include "util/Date.h"
+#include "util/DateYearDuration.h"
 #include "util/Random.h"
 
 using ad_utility::source_location;
+
+namespace {
 
 ad_utility::SlowRandomIntGenerator yearGenerator{-9999, 9999};
 ad_utility::SlowRandomIntGenerator monthGenerator{1, 12};
@@ -22,6 +24,7 @@ ad_utility::SlowRandomIntGenerator hourGenerator{0, 23};
 ad_utility::SlowRandomIntGenerator minuteGenerator{0, 59};
 ad_utility::RandomDoubleGenerator secondGenerator{0, 59.9999};
 ad_utility::SlowRandomIntGenerator timeZoneGenerator{-23, 23};
+}  // namespace
 
 TEST(Date, Size) {
   ASSERT_EQ(sizeof(Date), 8);
@@ -61,6 +64,7 @@ TEST(Date, SetAndExtract) {
   }
 }
 
+namespace {
 Date getRandomDate() {
   auto year = yearGenerator();
   auto month = monthGenerator();
@@ -72,6 +76,7 @@ Date getRandomDate() {
 
   return {year, month, day, hour, minute, second, timeZone};
 }
+}  // namespace
 
 TEST(Date, RangeChecks) {
   Date date = getRandomDate();
@@ -130,6 +135,7 @@ TEST(Date, RangeChecks) {
   ASSERT_EQ(date, dateCopy);
 }
 
+namespace {
 auto dateLessComparator = [](Date a, Date b) -> bool {
   if (a.getYear() != b.getYear()) {
     return a.getYear() < b.getYear();
@@ -168,6 +174,7 @@ void testSorting(std::vector<Date> dates) {
   std::sort(datesCopy.begin(), datesCopy.end(), dateLessComparator);
   ASSERT_EQ(dates, datesCopy);
 }
+}  // namespace
 
 TEST(Date, OrderRandomValues) {
   auto dates = getRandomDates(100);
@@ -275,7 +282,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
                       int minute = 0, double second = 0.0,
                       Date::TimeZone timeZone = 0) {
   ASSERT_NO_THROW(std::invoke(parseFunction, input));
-  DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
+  DateYearOrDuration dateLarge = std::invoke(parseFunction, input);
   EXPECT_TRUE(dateLarge.isDate());
   EXPECT_EQ(dateLarge.getYear(), year);
   auto d = dateLarge.getDate();
@@ -291,7 +298,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -303,7 +310,7 @@ auto testDatetimeImpl(auto parseFunction, std::string_view input,
 auto testDatetime(std::string_view input, int year, int month, int day,
                   int hour, int minute = 0, double second = 0.0,
                   Date::TimeZone timeZone = 0) {
-  return testDatetimeImpl(DateOrLargeYear::parseXsdDatetime, input,
+  return testDatetimeImpl(DateYearOrDuration::parseXsdDatetime, input,
                           XSD_DATETIME_TYPE, year, month, day, hour, minute,
                           second, timeZone);
 }
@@ -313,15 +320,15 @@ auto testDate(std::string_view input, int year, int month, int day,
               Date::TimeZone timeZone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
-                          year, month, day, -1, 0, 0, timeZone);
+  return testDatetimeImpl(DateYearOrDuration::parseXsdDate, input,
+                          XSD_DATE_TYPE, year, month, day, -1, 0, 0, timeZone);
 }
 
 // Specialization of `testDatetimeImpl` for parsing `xsd:gYear`.
 auto testYear(std::string_view input, int year, Date::TimeZone timeZone = 0,
               source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
+  return testDatetimeImpl(DateYearOrDuration::parseGYear, input, XSD_GYEAR_TYPE,
                           year, 0, 0, -1, 0, 0, timeZone);
 }
 
@@ -330,7 +337,7 @@ auto testYearMonth(std::string_view input, int year, int month,
                    Date::TimeZone timeZone = 0,
                    source_location l = source_location::current()) {
   auto t = generateLocationTrace(l);
-  return testDatetimeImpl(DateOrLargeYear::parseGYearMonth, input,
+  return testDatetimeImpl(DateYearOrDuration::parseGYearMonth, input,
                           XSD_GYEARMONTH_TYPE, year, month, 0, -1, 0, 0,
                           timeZone);
 }
@@ -377,7 +384,7 @@ TEST(Date, parseYear) {
 }
 
 TEST(Date, timeZoneWithMinutes) {
-  auto d = DateOrLargeYear::parseGYear("2034+01:13");
+  auto d = DateYearOrDuration::parseGYear("2034+01:13");
   // `1:13` as a timeZone is silently rounded down to `1`.
   ASSERT_EQ(std::get<int>(d.getDate().getTimeZone()), 1);
 }
@@ -388,11 +395,11 @@ namespace {
 // that the result of this parsing, when converted back to a string, yields
 // `input` again.
 auto testLargeYearImpl(auto parseFunction, std::string_view input,
-                       const char* type, DateOrLargeYear::Type typeEnum,
+                       const char* type, DateYearOrDuration::Type typeEnum,
                        int64_t year,
                        std::optional<std::string> actualOutput = std::nullopt) {
   ASSERT_NO_THROW(std::invoke(parseFunction, input));
-  DateOrLargeYear dateLarge = std::invoke(parseFunction, input);
+  DateYearOrDuration dateLarge = std::invoke(parseFunction, input);
   ASSERT_FALSE(dateLarge.isDate());
   EXPECT_EQ(dateLarge.getYear(), year);
   ASSERT_EQ(dateLarge.getType(), typeEnum);
@@ -405,7 +412,7 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
   EXPECT_STREQ(type, outputType);
 
   TripleComponent parsedAsTurtle =
-      TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           absl::StrCat("\"", input, "\"^^<", type, ">"));
   auto optionalId = parsedAsTurtle.toValueIdIfNotString();
   ASSERT_TRUE(optionalId.has_value());
@@ -417,16 +424,16 @@ auto testLargeYearImpl(auto parseFunction, std::string_view input,
 auto testLargeYearDatetime(
     std::string_view input, int64_t year,
     std::optional<std::string> actualOutput = std::nullopt) {
-  return testLargeYearImpl(DateOrLargeYear::parseXsdDatetime, input,
-                           XSD_DATETIME_TYPE, DateOrLargeYear::Type::DateTime,
-                           year, std::move(actualOutput));
+  return testLargeYearImpl(
+      DateYearOrDuration::parseXsdDatetime, input, XSD_DATETIME_TYPE,
+      DateYearOrDuration::Type::DateTime, year, std::move(actualOutput));
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:date`
 auto testLargeYearDate(std::string_view input, int64_t year,
                        std::optional<std::string> actualOutput = std::nullopt) {
-  return testLargeYearImpl(DateOrLargeYear::parseXsdDate, input, XSD_DATE_TYPE,
-                           DateOrLargeYear::Type::Date, year,
+  return testLargeYearImpl(DateYearOrDuration::parseXsdDate, input,
+                           XSD_DATE_TYPE, DateYearOrDuration::Type::Date, year,
                            std::move(actualOutput));
 }
 
@@ -435,16 +442,16 @@ auto testLargeYearGYearMonth(
     std::string_view input, int64_t year,
     std::optional<std::string> actualOutput = std::nullopt) {
   return testLargeYearImpl(
-      DateOrLargeYear::parseGYearMonth, input, XSD_GYEARMONTH_TYPE,
-      DateOrLargeYear::Type::YearMonth, year, std::move(actualOutput));
+      DateYearOrDuration::parseGYearMonth, input, XSD_GYEARMONTH_TYPE,
+      DateYearOrDuration::Type::YearMonth, year, std::move(actualOutput));
 }
 
 // Specialization of `testLargeYearImpl` for `xsd:gYear`
 auto testLargeYearGYear(
     std::string_view input, int64_t year,
     std::optional<std::string> actualOutput = std::nullopt) {
-  return testLargeYearImpl(DateOrLargeYear::parseGYear, input, XSD_GYEAR_TYPE,
-                           DateOrLargeYear::Type::Year, year,
+  return testLargeYearImpl(DateYearOrDuration::parseGYear, input,
+                           XSD_GYEAR_TYPE, DateYearOrDuration::Type::Year, year,
                            std::move(actualOutput));
 }
 }  // namespace
@@ -467,11 +474,11 @@ TEST(Date, parseLargeYearCornerCases) {
   // If the date is too low or too high, a warning is printed and the year is
   // clipped to the min or max value that is representable.
   testLargeYearGYear(std::to_string(std::numeric_limits<int64_t>::max()),
-                     DateOrLargeYear::maxYear,
-                     std::to_string(DateOrLargeYear::maxYear));
+                     DateYearOrDuration::maxYear,
+                     std::to_string(DateYearOrDuration::maxYear));
   testLargeYearGYear(std::to_string(std::numeric_limits<int64_t>::min()),
-                     DateOrLargeYear::minYear,
-                     std::to_string(DateOrLargeYear::minYear));
+                     DateYearOrDuration::minYear,
+                     std::to_string(DateYearOrDuration::minYear));
 
   // When the year has more than four digits, then the information about the
   // date and time is lost.
@@ -490,7 +497,7 @@ TEST(Date, parseLargeYearCornerCases) {
 }
 
 TEST(Date, parseErrors) {
-  using D = DateOrLargeYear;
+  using D = DateYearOrDuration;
   using E = DateParseException;
   ASSERT_THROW(D::parseGYear("1994-12"), E);
   ASSERT_THROW(D::parseGYear("Kartoffelsalat"), E);
@@ -502,31 +509,57 @@ TEST(Date, parseErrors) {
   ASSERT_THROW(D::parseXsdDate("Kartoffelsalat"), E);
 }
 
-TEST(DateOrLargeYear, AssertionFailures) {
+TEST(DateYearOrDuration, AssertionFailures) {
   // These values are out of range.
-  ASSERT_ANY_THROW(DateOrLargeYear(std::numeric_limits<int64_t>::min(),
-                                   DateOrLargeYear::Type::Year));
-  ASSERT_ANY_THROW(DateOrLargeYear(std::numeric_limits<int64_t>::max(),
-                                   DateOrLargeYear::Type::Year));
+  ASSERT_ANY_THROW(DateYearOrDuration(std::numeric_limits<int64_t>::min(),
+                                      DateYearOrDuration::Type::Year));
+  ASSERT_ANY_THROW(DateYearOrDuration(std::numeric_limits<int64_t>::max(),
+                                      DateYearOrDuration::Type::Year));
 
   // These years have to be stored as a `Date`, not as a large year.
-  ASSERT_ANY_THROW(DateOrLargeYear(-9998, DateOrLargeYear::Type::Year));
-  ASSERT_ANY_THROW(DateOrLargeYear(2021, DateOrLargeYear::Type::Year));
+  ASSERT_ANY_THROW(DateYearOrDuration(-9998, DateYearOrDuration::Type::Year));
+  ASSERT_ANY_THROW(DateYearOrDuration(2021, DateYearOrDuration::Type::Year));
 
   // Calling `getDate` on an object that is stored as a large year.
-  DateOrLargeYear d{123456, DateOrLargeYear::Type::Year};
+  DateYearOrDuration d{123456, DateYearOrDuration::Type::Year};
   ASSERT_ANY_THROW(d.getDate());
 }
 
-TEST(DateOrLargeYear, Order) {
-  DateOrLargeYear d1{-12345, DateOrLargeYear::Type::Year};
-  DateOrLargeYear d2{Date{2022, 7, 16}};
-  DateOrLargeYear d3{12345, DateOrLargeYear::Type::Year};
+TEST(DateYearOrDuration, Order) {
+  DateYearOrDuration d1{-12345, DateYearOrDuration::Type::Year};
+  DateYearOrDuration d2{Date{2022, 7, 16}};
+  DateYearOrDuration d3{12345, DateYearOrDuration::Type::Year};
+  DateYearOrDuration d4{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 0, 23, 23, 62.44}};
+  DateYearOrDuration d5{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 1, 24, 23, 62.44}};
+  DateYearOrDuration d6{
+      DayTimeDuration{DayTimeDuration::Type::Negative, 1, 24, 23, 62.44}};
+  DateYearOrDuration d7{
+      DayTimeDuration{DayTimeDuration::Type::Negative, 1, 25, 23, 62.44}};
 
   ASSERT_EQ(d1, d1);
   ASSERT_EQ(d2, d2);
   ASSERT_EQ(d3, d3);
+  ASSERT_EQ(d4, d4);
+  ASSERT_EQ(d5, d5);
+  ASSERT_EQ(d6, d6);
+  ASSERT_EQ(d7, d7);
   ASSERT_LT(d1, d2);
   ASSERT_LT(d2, d3);
   ASSERT_LT(d1, d3);
+  ASSERT_LT(d4, d5);
+  ASSERT_LT(d6, d5);
+  ASSERT_LT(d7, d4);
+  ASSERT_LT(d7, d6);
+}
+
+// _____________________________________________________________________________
+TEST(DateYearOrDuration, Hashing) {
+  DateYearOrDuration d1{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 0, 23, 23, 62.44}};
+  DateYearOrDuration d2{
+      DayTimeDuration{DayTimeDuration::Type::Positive, 1, 24, 23, 62.44}};
+  ad_utility::HashSet<DateYearOrDuration> set{d1, d2};
+  EXPECT_THAT(set, ::testing::UnorderedElementsAre(d1, d2));
 }

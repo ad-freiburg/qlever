@@ -57,11 +57,13 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
     const Index& index) {
   static constexpr size_t col0IdTag = 43;
   auto cancellationDummy = std::make_shared<ad_utility::CancellationHandle<>>();
-  auto hasPatternId = qlever::specialIds.at(HAS_PATTERN_PREDICATE);
-  auto checkSingleElement = [&cancellationDummy, &hasPatternId](
+  auto iriOfHasPattern =
+      TripleComponent::Iri::fromIriref(HAS_PATTERN_PREDICATE);
+  auto checkSingleElement = [&cancellationDummy, &iriOfHasPattern](
                                 const Index& index, size_t patternIdx, Id id) {
     auto scanResultHasPattern = index.scan(
-        hasPatternId, id, Permutation::Enum::PSO, {}, cancellationDummy);
+        ScanSpecificationAsTripleComponent{iriOfHasPattern, id, std::nullopt},
+        Permutation::Enum::PSO, {}, cancellationDummy);
     // Each ID has at most one pattern, it can have none if it doesn't
     // appear as a subject in the knowledge graph.
     AD_CORRECTNESS_CHECK(scanResultHasPattern.numRows() <= 1);
@@ -79,19 +81,17 @@ void checkConsistencyBetweenPatternPredicateAndAdditionalColumn(
         auto cancellationDummy =
             std::make_shared<ad_utility::CancellationHandle<>>();
         auto scanResult = index.scan(
-            col0Id, std::nullopt, permutation,
+            ScanSpecification{col0Id, std::nullopt, std::nullopt}, permutation,
             std::array{ColumnIndex{ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN},
                        ColumnIndex{ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN}},
             cancellationDummy);
         ASSERT_EQ(scanResult.numColumns(), 4u);
         for (const auto& row : scanResult) {
-          auto patternIdx =
-              row[ADDITIONAL_COLUMN_INDEX_SUBJECT_PATTERN - 1].getInt();
+          auto patternIdx = row[2].getInt();
           Id subjectId = row[subjectColIdx];
           checkSingleElement(index, patternIdx, subjectId);
           Id objectId = objectColIdx == col0IdTag ? col0Id : row[objectColIdx];
-          auto patternIdxObject =
-              row[ADDITIONAL_COLUMN_INDEX_OBJECT_PATTERN - 1].getInt();
+          auto patternIdxObject = row[3].getInt();
           checkSingleElement(index, patternIdxObject, objectId);
         }
       };
@@ -141,14 +141,26 @@ Index makeTestIndex(const std::string& indexBasename,
         "<x> <label> \"alpha\" . <x> <label> \"älpha\" . <x> <label> \"A\" . "
         "<x> "
         "<label> \"Beta\". <x> <is-a> <y>. <y> <is-a> <x>. <z> <label> "
-        "\"zz\"@en";
+        "\"zz\"@en . <zz> <label> <zz>";
   }
 
   FILE_BUFFER_SIZE = 1000;
   BUFFER_SIZE_JOIN_PATTERNS_WITH_OSP = 2;
-  std::fstream f(inputFilename, std::ios_base::out);
-  f << turtleInput.value();
-  f.close();
+  {
+    std::fstream f(inputFilename, std::ios_base::out);
+    f << turtleInput.value();
+    f.close();
+  }
+  {
+    std::fstream settingsFile(inputFilename + ".settings.json",
+                              std::ios_base::out);
+    nlohmann::json settingsJson;
+    if (!createTextIndex) {
+      settingsJson["prefixes-external"] = std::vector<std::string>{""};
+      settingsJson["languages-internal"] = std::vector<std::string>{""};
+    }
+    settingsFile << settingsJson.dump();
+  }
   {
     Index index = makeIndexWithTestSettings();
     // This is enough for 2 triples per block. This is deliberately chosen as a
@@ -159,6 +171,7 @@ Index makeTestIndex(const std::string& indexBasename,
     index.blocksizePermutationsPerColumn() = blocksizePermutations;
     index.setOnDiskBase(indexBasename);
     index.usePatterns() = usePatterns;
+    index.setSettingsFile(inputFilename + ".settings.json");
     index.loadAllPermutations() = loadAllPermutations;
     index.createFromFile(inputFilename);
     if (createTextIndex) {
@@ -259,7 +272,9 @@ QueryExecutionContext* getQec(std::optional<std::string> turtleInput,
                          blocksizePermutations, createTextIndex)),
                      std::make_unique<QueryResultCache>()});
   }
-  return contextMap.at(key).qec_.get();
+  auto* qec = contextMap.at(key).qec_.get();
+  qec->getIndex().getImpl().setGlobalIndexAndComparatorOnlyForTesting();
+  return qec;
 }
 
 // ___________________________________________________________

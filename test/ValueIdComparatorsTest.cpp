@@ -8,6 +8,7 @@
 #include "./ValueIdTestHelpers.h"
 #include "./util/GTestHelpers.h"
 #include "./util/IdTestHelpers.h"
+#include "./util/IndexTestHelpers.h"
 #include "global/ValueIdComparators.h"
 #include "util/Random.h"
 
@@ -40,7 +41,15 @@ inline std::ostream& operator<<(std::ostream& str, Comparison c) {
 }  // namespace valueIdComparators
 using ad_utility::source_location;
 
-TEST(ValueIdComparators, GetRangeForDatatype) {
+struct ValueIdComparators : public ::testing::Test {
+  ValueIdComparators() {
+    // We need to initialize a (static). index, otherwise we can't compare
+    // VocabIndex to LocalVocabIndex entries
+    ad_utility::testing::getQec();
+  }
+};
+
+TEST_F(ValueIdComparators, GetRangeForDatatype) {
   std::vector<Datatype> datatypes{Datatype::Int,
                                   Datatype::Double,
                                   Datatype::VocabIndex,
@@ -52,14 +61,22 @@ TEST(ValueIdComparators, GetRangeForDatatype) {
   std::sort(ids.begin(), ids.end(), compareByBits);
   for (auto datatype : datatypes) {
     auto [begin, end] = getRangeForDatatype(ids.begin(), ids.end(), datatype);
+    auto hasMatchingDatatype = [&datatype](ValueId id) {
+      std::array vocabTypes{Datatype::VocabIndex, Datatype::LocalVocabIndex};
+      if (ad_utility::contains(vocabTypes, datatype)) {
+        return ad_utility::contains(vocabTypes, id.getDatatype());
+      } else {
+        return id.getDatatype() == datatype;
+      }
+    };
     for (auto it = ids.begin(); it < begin; ++it) {
-      ASSERT_NE(it->getDatatype(), datatype);
+      ASSERT_FALSE(hasMatchingDatatype(*it));
     }
     for (auto it = begin; it < end; ++it) {
-      ASSERT_EQ(it->getDatatype(), datatype);
+      ASSERT_TRUE(hasMatchingDatatype(*it));
     }
     for (auto it = end; it < ids.end(); ++it) {
-      ASSERT_NE(it->getDatatype(), datatype);
+      ASSERT_FALSE(hasMatchingDatatype(*it));
     }
   }
 }
@@ -98,7 +115,12 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
     auto it = begin;
 
     auto isMatching = [&](ValueId a, ValueId b) {
-      return isMatchingDatatype(a) && applyComparator(comparator, a, b);
+      bool m = isMatchingDatatype(a);
+      if (!m) {
+        return m;
+      }
+      auto y = applyComparator(comparator, a, b);
+      return y;
     };
     using enum ComparisonResult;
     for (auto [rangeBegin, rangeEnd] : ranges) {
@@ -133,7 +155,7 @@ auto testGetRangesForId(auto begin, auto end, ValueId id,
 
 // Test that `getRangesFromId` works correctly for `ValueId`s of the numeric
 // types (`Int` and `Double`)
-TEST(ValueIdComparators, NumericTypes) {
+TEST_F(ValueIdComparators, NumericTypes) {
   auto impl = [](Datatype datatype, auto isTypeMatching, auto applyComparator) {
     auto ids = makeRandomIds();
     std::sort(ids.begin(), ids.end(), compareByBits);
@@ -177,7 +199,7 @@ TEST(ValueIdComparators, NumericTypes) {
 }
 
 // Test that `getRangesFromId` works correctly for the undefined ID.
-TEST(ValueIdComparators, Undefined) {
+TEST_F(ValueIdComparators, Undefined) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
   auto undefined = ValueId::makeUndefined();
@@ -239,7 +261,7 @@ auto testGetRangesForEqualIds(auto begin, auto end, ValueId idBegin,
 // Test that `getRangesFromId` works correctly for `ValueId`s of the unsigned
 // index types (`VocabIndex`, `TextRecordIndex`, `LocalVocabIndex`,
 // `WordVocabIndex`).
-TEST(ValueIdComparators, IndexTypes) {
+TEST_F(ValueIdComparators, IndexTypes) {
   auto ids = makeRandomIds();
   std::sort(ids.begin(), ids.end(), compareByBits);
 
@@ -253,10 +275,19 @@ TEST(ValueIdComparators, IndexTypes) {
         ad_utility::SlowRandomIntGenerator<uint64_t>(0, numEntries - 1);
 
     auto isTypeMatching = [&](ValueId id) {
+      auto vocabTypes =
+          std::array{Datatype::LocalVocabIndex, Datatype::VocabIndex};
+      if (ad_utility::contains(vocabTypes, datatype)) {
+        return ad_utility::contains(vocabTypes, id.getDatatype());
+      }
       return id.getDatatype() == datatype;
     };
 
     auto applyComparator = [&](auto comparator, ValueId a, ValueId b) {
+      if (a.getDatatype() == Datatype::LocalVocabIndex ||
+          a.getDatatype() == Datatype::VocabIndex) {
+        return comparator(a, b);
+      }
       return comparator(std::invoke(getFromId, a), std::invoke(getFromId, b));
     };
 
@@ -276,6 +307,8 @@ TEST(ValueIdComparators, IndexTypes) {
     }
   };
 
+  // TODO<joka921> The tests for local vocab and VocabIndex now have to be more
+  // complex....
   testImpl.operator()<Datatype::VocabIndex>(&getVocabIndex);
   testImpl.operator()<Datatype::TextRecordIndex>(&getTextRecordIndex);
   testImpl.operator()<Datatype::LocalVocabIndex>(&getLocalVocabIndex);
@@ -283,7 +316,7 @@ TEST(ValueIdComparators, IndexTypes) {
 }
 
 // _______________________________________________________________________
-TEST(ValueIdComparators, undefinedWithItself) {
+TEST_F(ValueIdComparators, undefinedWithItself) {
   auto u = ValueId::makeUndefined();
   using enum ComparisonResult;
   using enum ComparisonForIncompatibleTypes;
@@ -303,7 +336,7 @@ TEST(ValueIdComparators, undefinedWithItself) {
 }
 
 // _______________________________________________________________________
-TEST(ValueIdComparators, contractViolations) {
+TEST_F(ValueIdComparators, contractViolations) {
   auto u = ValueId::makeUndefined();
   auto I = ad_utility::testing::IntId;
   // Invalid value for the `Comparison` enum.

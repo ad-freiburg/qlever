@@ -11,9 +11,11 @@
 #include "./util/GTestHelpers.h"
 #include "./util/TripleComponentTestHelpers.h"
 #include "engine/sparqlExpressions/AggregateExpression.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NaryExpression.h"
+#include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/SparqlExpression.h"
 #include "util/AllocatorTestHelpers.h"
 #include "util/Conversions.h"
@@ -454,7 +456,8 @@ TEST(SparqlExpression, dateOperators) {
   auto checkSeconds = testUnaryExpression<&makeSecondsExpression>;
   auto check = [&checkYear, &checkMonth, &checkDay, &checkHours, &checkMinutes,
                 &checkSeconds](
-                   const DateOrLargeYear& date, std::optional<int> expectedYear,
+                   const DateYearOrDuration& date,
+                   std::optional<int> expectedYear,
                    std::optional<int> expectedMonth = std::nullopt,
                    std::optional<int> expectedDay = std::nullopt,
                    std::optional<int> expectedHours = std::nullopt,
@@ -485,7 +488,7 @@ TEST(SparqlExpression, dateOperators) {
                  Ids{optToIdDouble(expectedSeconds)});
   };
 
-  using D = DateOrLargeYear;
+  using D = DateYearOrDuration;
   // Now the checks for dates with varying level of detail.
   check(D::parseXsdDatetime("1970-04-22T11:53:42.25"), 1970, 4, 22, 11, 53,
         42.25);
@@ -517,39 +520,57 @@ TEST(SparqlExpression, dateOperators) {
   testYear(Ids{Id::makeFromBool(false)}, Ids{U});
   testYear(IdOrLiteralOrIriVec{lit("noDate")}, Ids{U});
 
-  // test makeTimezoneStrExpression
+  // test makeTimezoneStrExpression / makeTimezoneExpression
+  auto positive = DayTimeDuration::Type::Positive;
+  auto negative = DayTimeDuration::Type::Negative;
   using Timezone = std::variant<Date::NoTimeZone, Date::TimeZoneZ, int>;
   auto checkStrTimezone = testUnaryExpression<&makeTimezoneStrExpression>;
+  auto checkTimezone = testUnaryExpression<&makeTimezoneExpression>;
+  Id U = Id::makeUndefined();
   Timezone tz = -5;
-  auto d1 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto d1 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration1 = DateYearOrDuration(DayTimeDuration{negative, 0, 5, 0, 0.0});
   checkStrTimezone(Ids{Id::makeFromDate(d1)},
                    IdOrLiteralOrIriVec{lit("-05:00")});
+  checkTimezone(Ids{Id::makeFromDate(d1)}, Ids{Id::makeFromDate(duration1)});
   tz = 23;
-  auto d2 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto d2 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration2 = DateYearOrDuration(DayTimeDuration{positive, 0, 23, 0, 0.0});
+  checkTimezone(Ids{Id::makeFromDate(d2)}, Ids{Id::makeFromDate(duration2)});
   checkStrTimezone(Ids{Id::makeFromDate(d2)},
                    IdOrLiteralOrIriVec{lit("+23:00")});
   tz = Date::TimeZoneZ{};
-  auto d3 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto d3 = DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  auto duration3 = DateYearOrDuration(DayTimeDuration{});
+  checkTimezone(Ids{Id::makeFromDate(d3)}, Ids{Id::makeFromDate(duration3)});
   checkStrTimezone(Ids{Id::makeFromDate(d3)}, IdOrLiteralOrIriVec{lit("Z")});
   tz = Date::NoTimeZone{};
-  DateOrLargeYear d4 = DateOrLargeYear(Date(2011, 1, 10, 14, 45, 13.815, tz));
+  DateYearOrDuration d4 =
+      DateYearOrDuration(Date(2011, 1, 10, 14, 45, 13.815, tz));
   checkStrTimezone(Ids{Id::makeFromDate(d4)}, IdOrLiteralOrIriVec{lit("")});
-  DateOrLargeYear d5 = DateOrLargeYear(Date(2012, 1, 4, 14, 45));
+  checkTimezone(Ids{Id::makeFromDate(d4)}, Ids{U});
+  DateYearOrDuration d5 = DateYearOrDuration(Date(2012, 1, 4, 14, 45));
   checkStrTimezone(Ids{Id::makeFromDate(d5)}, IdOrLiteralOrIriVec{lit("")});
-  Id U = Id::makeUndefined();
+  checkTimezone(Ids{Id::makeFromDate(d5)}, Ids{U});
   checkStrTimezone(IdOrLiteralOrIriVec{lit("2011-01-10T14:")},
                    IdOrLiteralOrIriVec{U});
   checkStrTimezone(Ids{Id::makeFromDouble(120.0123)}, IdOrLiteralOrIriVec{U});
+  checkTimezone(Ids{Id::makeFromDouble(2.34)}, Ids{U});
   checkStrTimezone(Ids{Id::makeUndefined()}, IdOrLiteralOrIriVec{U});
-  DateOrLargeYear d6 = DateOrLargeYear(-1394785, DateOrLargeYear::Type::Year);
+  DateYearOrDuration d6 =
+      DateYearOrDuration(-1394785, DateYearOrDuration::Type::Year);
+  checkTimezone(Ids{Id::makeFromDate(d6)}, Ids{U});
   checkStrTimezone(Ids{Id::makeFromDate(d6)}, IdOrLiteralOrIriVec{lit("")});
-  DateOrLargeYear d7 = DateOrLargeYear(10000, DateOrLargeYear::Type::Year);
+  DateYearOrDuration d7 =
+      DateYearOrDuration(10000, DateYearOrDuration::Type::Year);
   checkStrTimezone(Ids{Id::makeFromDate(d7)}, IdOrLiteralOrIriVec{lit("")});
+  checkTimezone(Ids{Id::makeFromDate(d7)}, Ids{U});
 }
 
 // _____________________________________________________________________________________
 auto checkStrlen = testUnaryExpression<&makeStrlenExpression>;
 auto checkStr = testUnaryExpression<&makeStrExpression>;
+auto checkIriOrUri = testUnaryExpression<&makeIriOrUriExpression>;
 static auto makeStrlenWithStr = [](auto arg) {
   return makeStrlenExpression(makeStrExpression(std::move(arg)));
 };
@@ -578,6 +599,39 @@ TEST(SparqlExpression, stringOperators) {
            IdOrLiteralOrIriVec{lit("true"), lit("false"), lit("true")});
   checkStr(IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")},
            IdOrLiteralOrIriVec{lit("one"), lit("two"), lit("three")});
+
+  auto T = Id::makeFromBool(true);
+  auto F = Id::makeFromBool(false);
+  auto dateDate =
+      Id::makeFromDate(DateYearOrDuration::parseXsdDate("2025-01-01"));
+  auto dateLYear = Id::makeFromDate(
+      DateYearOrDuration(11853, DateYearOrDuration::Type::Year));
+  // Test `iriOrUriExpression`.
+  // test invalid
+  checkIriOrUri(IdOrLiteralOrIriVec{U, IntId(2), DoubleId(12.99), dateDate,
+                                    dateLYear, T, F},
+                IdOrLiteralOrIriVec{U, U, U, U, U, U, U});
+  // test valid
+  checkIriOrUri(
+      IdOrLiteralOrIriVec{
+          lit("bimbim"), iriref("<bambim>"),
+          lit("https://www.bimbimbam/2001/bamString"),
+          lit("http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort"),
+          lit("http://www.w3.org/2001/XMLSchema#string"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          testContext().notInVocabIri, testContext().notInVocabIriLit,
+          lit("http://example/"), iriref("<http://\t\t\nexample/>"),
+          lit("\t\n\r")},
+      IdOrLiteralOrIriVec{
+          iriref("<bimbim>"), iriref("<bambim>"),
+          iriref("<https://www.bimbimbam/2001/bamString>"),
+          iriref("<http://www.w3.\torg/2001/\nXMLSchema#\runsignedShort>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          iriref("<http://www.w3.org/2001/XMLSchema#string>"),
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
+          iriref("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>"),
+          iriref("<http://example/>"), iriref("<http://\t\t\nexample/>"),
+          iriref("<\t\n\r>")});
 
   // A simple test for uniqueness of the cache key.
   auto c1a = makeStrlenExpression(std::make_unique<IriExpression>(iri("<bim>")))
@@ -885,11 +939,11 @@ TEST(SparqlExpression, isSomethingFunctions) {
 // ____________________________________________________________________________
 TEST(SparqlExpression, DatatypeExpression) {
   U = Id::makeUndefined();
-  auto d1 = DateOrLargeYear::parseXsdDatetime("1900-12-13T03:12:00.33Z");
-  auto d2 = DateOrLargeYear::parseGYear("-10000");
-  auto d3 = DateOrLargeYear::parseGYear("1900");
-  auto d4 = DateOrLargeYear::parseXsdDate("2024-06-13");
-  auto d5 = DateOrLargeYear::parseGYearMonth("2024-06");
+  auto d1 = DateYearOrDuration::parseXsdDatetime("1900-12-13T03:12:00.33Z");
+  auto d2 = DateYearOrDuration::parseGYear("-10000");
+  auto d3 = DateYearOrDuration::parseGYear("1900");
+  auto d4 = DateYearOrDuration::parseXsdDate("2024-06-13");
+  auto d5 = DateYearOrDuration::parseGYearMonth("2024-06");
   Id DateId1 = Id::makeFromDate(d1);
   Id DateId2 = Id::makeFromDate(d2);
   Id DateId3 = Id::makeFromDate(d3);
@@ -1250,41 +1304,58 @@ TEST(SparqlExpression, replaceChildThrowsIfOutOfRange) {
 
 // ______________________________________________________________________________
 TEST(SparqlExpression, isAggregateAndIsDistinct) {
-  sparqlExpression::IdExpression idExpr(ValueId::makeFromInt(42));
+  using namespace sparqlExpression;
+  IdExpression idExpr(ValueId::makeFromInt(42));
 
-  ASSERT_FALSE(idExpr.isAggregate());
-  AD_EXPECT_THROW_WITH_MESSAGE(
-      idExpr.isDistinct(),
-      ::testing::ContainsRegex(
-          "isDistinct\\(\\) maybe only called for aggregate expressions\\. If "
-          "this is an aggregate expression, then the implementation of "
-          "isDistinct\\(\\) is missing for this expression\\. Please report "
-          "this to the developers\\."));
+  using enum SparqlExpression::AggregateStatus;
 
-  Variable varX("?x");
-  sparqlExpression::detail::AvgExpression avgExpression(
-      false, std::make_unique<VariableExpression>(varX));
+  ASSERT_EQ(idExpr.isAggregate(), NoAggregate);
+  ASSERT_FALSE(idExpr.isInsideAggregate());
 
-  ASSERT_TRUE(avgExpression.isAggregate());
-  ASSERT_FALSE(avgExpression.isDistinct());
+  auto varX = []() {
+    return std::make_unique<VariableExpression>(Variable{"?x"});
+  };
 
-  sparqlExpression::detail::AvgExpression avgDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX));
+  // Return a matcher that checks whether a given `SparqlExpression` is an
+  // aggregate with the given distinctness. In particular, the expression itself
+  // as well as its child must return `true` for the `isInsideAggregate()`
+  // function, and the distinctness of the aggregate itself must match.
+  // If `hasChild` is `true`, then the aggregate is expected to have at least
+  // one child. This is the case for all aggregates except the
+  // `CountStarExpression`.
+  auto match = [](bool distinct, bool hasChild = true) {
+    auto aggStatus = distinct ? DistinctAggregate : NonDistinctAggregate;
+    auto distinctMatcher =
+        AD_PROPERTY(SparqlExpression, isAggregate, aggStatus);
+    auto getChild = [](const SparqlExpression& expression) -> decltype(auto) {
+      return *expression.children()[0];
+    };
+    auto insideAggregate =
+        AD_PROPERTY(SparqlExpression, isInsideAggregate, true);
+    using namespace ::testing;
+    auto childMatcher = [&]() -> Matcher<const SparqlExpression&> {
+      if (hasChild) {
+        return ResultOf(getChild, insideAggregate);
+      } else {
+        return ::testing::_;
+      }
+    }();
+    return AllOf(distinctMatcher, insideAggregate, childMatcher);
+  };
 
-  ASSERT_TRUE(avgDistinctExpression.isAggregate());
-  ASSERT_TRUE(avgDistinctExpression.isDistinct());
+  EXPECT_THAT(AvgExpression(false, varX()), match(false));
+  EXPECT_THAT(AvgExpression(true, varX()), match(true));
 
-  sparqlExpression::GroupConcatExpression groupConcatExpression(
-      false, std::make_unique<VariableExpression>(varX), ",");
+  EXPECT_THAT(GroupConcatExpression(false, varX(), " "), match(false));
+  EXPECT_THAT(GroupConcatExpression(true, varX(), " "), match(true));
 
-  ASSERT_TRUE(groupConcatExpression.isAggregate());
-  ASSERT_FALSE(groupConcatExpression.isDistinct());
+  EXPECT_THAT(SampleExpression(false, varX()), match(false));
+  // For `SAMPLE` the distinctness makes no difference, so we always return `not
+  // distinct`.
+  EXPECT_THAT(SampleExpression(true, varX()), match(false));
 
-  sparqlExpression::GroupConcatExpression groupConcatDistinctExpression(
-      true, std::make_unique<VariableExpression>(varX), ",");
-
-  ASSERT_TRUE(groupConcatDistinctExpression.isAggregate());
-  ASSERT_TRUE(groupConcatDistinctExpression.isDistinct());
+  EXPECT_THAT(*makeCountStarExpression(true), match(true, false));
+  EXPECT_THAT(*makeCountStarExpression(false), match(false, false));
 }
 
 // ___________________________________________________________________________

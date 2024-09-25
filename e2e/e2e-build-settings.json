@@ -1,5 +1,7 @@
 {
   "num-triples-per-batch" : 40000,
   "parser-batch-size" : 1000,
-  "ascii-prefixes-only":false
+  "ascii-prefixes-only": false,
+  "languages-internal": [""],
+  "prefixes-external": [""]
 }

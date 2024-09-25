@@ -46,16 +46,21 @@ struct TestContext {
   LocalVocab localVocab;
   IdTable table{qec->getAllocator()};
   sparqlExpression::EvaluationContext context{
-      *qec,       varToColMap,
-      table,      qec->getAllocator(),
-      localVocab, std::make_shared<ad_utility::CancellationHandle<>>()};
+      *qec,
+      varToColMap,
+      table,
+      qec->getAllocator(),
+      localVocab,
+      std::make_shared<ad_utility::CancellationHandle<>>(),
+      EvaluationContext::TimePoint::max()};
   std::function<Id(const std::string&)> getId =
       ad_utility::testing::makeGetId(qec->getIndex());
   // IDs of literals and entities in the vocabulary of the index.
   Id x, label, alpha, aelpha, A, Beta, zz, blank;
   // IDs of literals (the first two) and entities (the latter two) in the local
   // vocab.
-  Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha;
+  Id notInVocabA, notInVocabB, notInVocabC, notInVocabD, notInVocabAelpha,
+      notInVocabIri, notInVocabIriLit;
   TestContext() {
     // First get some IDs for strings from the vocabulary to later reuse them.
     // Note the `u_` inserted for the blank node (see 'BlankNode.cpp').
@@ -85,6 +90,12 @@ struct TestContext {
         localVocab.getIndexAndAddIfNotContained(iri("<notInVocabD>")));
     notInVocabAelpha = Id::makeFromLocalVocabIndex(
         localVocab.getIndexAndAddIfNotContained(lit("notInVocabÄlpha")));
+    notInVocabIri =
+        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            iri("<http://www.w3.org/1999/02/22-rdf-syntax-ns#langString>")));
+    notInVocabIriLit =
+        Id::makeFromLocalVocabIndex(localVocab.getIndexAndAddIfNotContained(
+            lit("http://www.w3.org/1999/02/22-rdf-syntax-ns#langString")));
 
     // Set up the `table` that represents the previous partial query results. It
     // has five columns/variables: ?ints (only integers), ?doubles (only

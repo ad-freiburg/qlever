@@ -14,6 +14,7 @@
 #include <vector>
 
 #include "absl/time/time.h"
+#include "engine/sparqlExpressions/CountStarExpression.h"
 #include "engine/sparqlExpressions/GroupConcatExpression.h"
 #include "engine/sparqlExpressions/LiteralExpression.h"
 #include "engine/sparqlExpressions/NowDatetimeExpression.h"
@@ -23,9 +24,9 @@
 #include "engine/sparqlExpressions/SampleExpression.h"
 #include "engine/sparqlExpressions/UuidExpressions.h"
 #include "parser/GraphPatternOperation.h"
+#include "parser/RdfParser.h"
 #include "parser/SparqlParser.h"
 #include "parser/TokenizerCtre.h"
-#include "parser/TurtleParser.h"
 #include "parser/data/Variable.h"
 #include "util/StringUtils.h"
 #include "util/TransparentFunctors.h"
@@ -282,7 +283,7 @@ void Visitor::visit(Parser::NamedGraphClauseContext*) {
 }
 
 // ____________________________________________________________________________________
-void Visitor::visit(Parser::SourceSelectorContext*) {
+TripleComponent::Iri Visitor::visit(Parser::SourceSelectorContext*) {
   // This rule is only indirectly used by the `DatasetClause` rule which also is
   // not supported and should already have thrown an exception.
   AD_FAIL();
@@ -290,7 +291,10 @@ void Visitor::visit(Parser::SourceSelectorContext*) {
 
 // ____________________________________________________________________________________
 Variable Visitor::visit(Parser::VarContext* ctx) {
-  return Variable{ctx->getText()};
+  // `false` for the second argument means: The variable name is already
+  // validated by the grammar, no need to check it again (which would lead to an
+  // infinite loop here).
+  return Variable{ctx->getText(), false};
 }
 
 // ____________________________________________________________________________________
@@ -727,14 +731,6 @@ GraphPatternOperation Visitor::visitPathQuery(
 
 // Parsing for the `serviceGraphPattern` rule.
 GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
-  // If SILENT is specified, report that we do not support it yet.
-  //
-  // TODO: Support it, it's not hard. The semantics of SILENT is that if no
-  // result can be obtained from the remote endpoint, then do as if the SERVICE
-  // clause would not be there = the result is the neutral element.
-  if (ctx->SILENT()) {
-    reportNotSupported(ctx, "SILENT modifier in SERVICE is");
-  }
   // Get the IRI and if a variable is specified, report that we do not support
   // it yet.
   //
@@ -750,12 +746,13 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
     reportNotSupported(ctx->varOrIri(), "Variable endpoint in SERVICE is");
   }
   AD_CONTRACT_CHECK(std::holds_alternative<Iri>(varOrIri));
-  Iri serviceIri = std::get<Iri>(varOrIri);
-  if (serviceIri.toSparql() ==
+  auto serviceIri =
+      TripleComponent::Iri::fromIriref(std::get<Iri>(varOrIri).iri());
+
+  if (serviceIri.toStringRepresentation() ==
       "<https://qlever.cs.uni-freiburg.de/pathSearch/>") {
     return visitPathQuery(ctx);
   }
-
   // Parse the body of the SERVICE query. Add the visible variables from the
   // SERVICE clause to the visible variables so far, but also remember them
   // separately (with duplicates removed) because we need them in `Service.cpp`
@@ -771,9 +768,9 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.begin(),
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
-  return parsedQuery::Service{
-      std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-      prologueString_, getOriginalInputForContext(ctx->groupGraphPattern())};
+    return parsedQuery::Service{std::move(visibleVariablesServiceQuery), std::move(serviceIri),
+          prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
+          static_cast<bool>(ctx->SILENT())};
 }
 
 // ____________________________________________________________________________
@@ -1078,7 +1075,7 @@ TripleComponent Visitor::visit(Parser::DataBlockValueContext* ctx) {
   if (ctx->iri()) {
     return visit(ctx->iri());
   } else if (ctx->rdfLiteral()) {
-    return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+    return RdfStringParser<TurtleParser<Tokenizer>>::parseTripleObject(
         visit(ctx->rdfLiteral()));
   } else if (ctx->numericLiteral()) {
     return std::visit(
@@ -1946,8 +1943,9 @@ ExpressionPtr Visitor::visit(Parser::PrimaryExpressionContext* ctx) {
   using namespace sparqlExpression;
 
   if (ctx->rdfLiteral()) {
-    auto tripleComponent = TurtleStringParser<TokenizerCtre>::parseTripleObject(
-        visit(ctx->rdfLiteral()));
+    auto tripleComponent =
+        RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
+            visit(ctx->rdfLiteral()));
     AD_CORRECTNESS_CHECK(!tripleComponent.isIri() &&
                          !tripleComponent.isString());
     if (tripleComponent.isLiteral()) {
@@ -2025,6 +2023,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   };
   if (functionName == "str") {
     return createUnary(&makeStrExpression);
+  } else if (functionName == "iri" || functionName == "uri") {
+    return createUnary(&makeIriOrUriExpression);
   } else if (functionName == "strlang") {
     return createBinary(&makeStrLangTagExpression);
   } else if (functionName == "strdt") {
@@ -2053,6 +2053,8 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
     return createUnary(&makeDayExpression);
   } else if (functionName == "tz") {
     return createUnary(&makeTimezoneStrExpression);
+  } else if (functionName == "timezone") {
+    return createUnary(&makeTimezoneExpression);
   } else if (functionName == "now") {
     AD_CONTRACT_CHECK(argList.empty());
     return std::make_unique<NowDatetimeExpression>(startTime_);
@@ -2099,7 +2101,7 @@ ExpressionPtr Visitor::visit([[maybe_unused]] Parser::BuiltInCallContext* ctx) {
   } else if (functionName == "concat") {
     AD_CORRECTNESS_CHECK(ctx->expressionList());
     return makeConcatExpression(visit(ctx->expressionList()));
-  } else if (functionName == "isiri") {
+  } else if (functionName == "isiri" || functionName == "isuri") {
     return createUnary(&makeIsIriExpression);
   } else if (functionName == "isblank") {
     return createUnary(&makeIsBlankExpression);
@@ -2191,29 +2193,26 @@ void Visitor::visit(const Parser::NotExistsFuncContext* ctx) {
 // ____________________________________________________________________________________
 ExpressionPtr Visitor::visit(Parser::AggregateContext* ctx) {
   using namespace sparqlExpression;
+  const auto& children = ctx->children;
+  std::string functionName =
+      ad_utility::getLowercase(children.at(0)->getText());
+
+  const bool distinct = std::ranges::any_of(children, [](auto* child) {
+    return ad_utility::getLowercase(child->getText()) == "distinct";
+  });
   // the only case that there is no child expression is COUNT(*), so we can
   // check this outside the if below.
   if (!ctx->expression()) {
-    reportError(ctx,
-                "This parser currently doesn't support COUNT(*), please "
-                "specify an explicit expression for the COUNT");
+    AD_CORRECTNESS_CHECK(functionName == "count");
+    return makeCountStarExpression(distinct);
   }
   auto childExpression = visit(ctx->expression());
-  auto children = ctx->children;
-  bool distinct = false;
-  for (const auto& child : children) {
-    if (ad_utility::getLowercase(child->getText()) == "distinct") {
-      distinct = true;
-    }
-  }
   auto makePtr = [&]<typename ExpressionType>(auto&&... additionalArgs) {
     ExpressionPtr result{std::make_unique<ExpressionType>(
         distinct, std::move(childExpression), AD_FWD(additionalArgs)...)};
     result->descriptor() = ctx->getText();
     return result;
   };
-
-  std::string functionName = ad_utility::getLowercase(children[0]->getText());
 
   if (functionName == "count") {
     return makePtr.operator()<CountExpression>();
@@ -2429,7 +2428,7 @@ TripleComponent SparqlQleverVisitor::visitGraphTerm(
     if constexpr (std::is_same_v<T, Variable>) {
       return element;
     } else if constexpr (std::is_same_v<T, Literal> || std::is_same_v<T, Iri>) {
-      return TurtleStringParser<TokenizerCtre>::parseTripleObject(
+      return RdfStringParser<TurtleParser<TokenizerCtre>>::parseTripleObject(
           element.toSparql());
     } else {
       return element.toSparql();
