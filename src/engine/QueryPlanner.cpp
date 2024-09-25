@@ -35,6 +35,7 @@
 #include "engine/TransitivePathBase.h"
 #include "engine/Union.h"
 #include "engine/Values.h"
+#include "global/Id.h"
 #include "parser/Alias.h"
 #include "parser/SparqlParserHelpers.h"
 #include "util/Exception.h"
@@ -1832,6 +1833,13 @@ auto QueryPlanner::createJoinWithPathSearch(
   auto pathSearch = aRootOp ? aRootOp : bRootOp;
   auto sibling = bRootOp ? a : b;
 
+  auto decideColumns = [aRootOp](std::array<ColumnIndex, 2> joinColumns) -> std::pair<ColumnIndex, ColumnIndex> {
+    auto thisCol = aRootOp ? joinColumns[0] : joinColumns[1];
+    auto otherCol = aRootOp ? joinColumns[1] : joinColumns[0];
+    return {thisCol, otherCol};
+  };
+
+
   // Only source and target may be bound directly
   if (jcs.size() > 2) {
     return std::nullopt;
@@ -1839,19 +1847,31 @@ auto QueryPlanner::createJoinWithPathSearch(
 
   auto sourceColumn = pathSearch->getSourceColumn();
   auto targetColumn = pathSearch->getTargetColumn();
+
+  // Either source or target column have to be a variable to create a join
+  if (!sourceColumn && !targetColumn) {
+    return std::nullopt;
+  }
+
+  // A join on an edge property column should not create any candidates
+  auto isJoinOnSourceOrTarget = [sourceColumn, targetColumn](size_t joinColumn) -> bool {
+    return ((sourceColumn && sourceColumn.value() == joinColumn) ||
+            (targetColumn && targetColumn.value() == joinColumn));
+  };
+
   if (jcs.size() == 2) {
     // To join source and target, both must be variables
     if (!sourceColumn || !targetColumn) {
       return std::nullopt;
     }
 
-    auto firstJc = jcs[0];
-    auto firstCol = aRootOp ? firstJc[0] : firstJc[1];
-    auto firstOtherCol = aRootOp ? firstJc[1]: firstJc[0];
+    auto [firstCol, firstOtherCol] = decideColumns(jcs[0]);
 
-    auto secondJc = jcs[1];
-    auto secondCol = aRootOp ? secondJc[0] : secondJc[1];
-    auto secondOtherCol = aRootOp ? secondJc[1]: secondJc[0];
+    auto [secondCol, secondOtherCol] = decideColumns(jcs[1]);
+
+    if (!isJoinOnSourceOrTarget(firstCol) && !isJoinOnSourceOrTarget(secondCol)) {
+      return std::nullopt;
+    }
 
     if (sourceColumn == firstCol && targetColumn == secondCol) {
       pathSearch->bindSourceAndTargetSide(
@@ -1862,9 +1882,11 @@ auto QueryPlanner::createJoinWithPathSearch(
       return std::nullopt;
     }
   } else if (jcs.size() == 1) {
-    auto jc = jcs[0];
-    const size_t thisCol = aRootOp ? jc[0] : jc[1];
-    const size_t otherCol = aRootOp ? jc[1] : jc[0];
+    auto [thisCol, otherCol] = decideColumns(jcs[0]);
+
+    if (!isJoinOnSourceOrTarget(thisCol)) {
+      return std::nullopt;
+    }
 
     if (sourceColumn && sourceColumn == thisCol &&
         !pathSearch->isSourceBound()) {

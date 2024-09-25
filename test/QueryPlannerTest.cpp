@@ -927,6 +927,47 @@ TEST(QueryPlanner, PathSearchWithMultipleEdgePropertiesAndTargets) {
       qec);
 }
 
+TEST(QueryPlanner, PathSearchJoinOnEdgeProperty) {
+  auto scan = h::IndexScanFromStrings;
+  auto join = h::Join;
+  auto qec = ad_utility::testing::getQec(
+      "<x> <p1> <m1>. <m1> <p2> <y>. <y> <p1> <m2>. <m2> <p2> <z>");
+  auto getId = ad_utility::testing::makeGetId(qec->getIndex());
+
+  std::vector<Id> sources{getId("<x>")};
+  std::vector<Id> targets{getId("<z>")};
+  PathSearchConfiguration config{PathSearchAlgorithm::ALL_PATHS,
+                                 sources,
+                                 targets,
+                                 Variable("?start"),
+                                 Variable("?end"),
+                                 Variable("?path"),
+                                 Variable("?edge"),
+                                 {Variable("?middle")}};
+  h::expect(
+      "PREFIX pathSearch: <https://qlever.cs.uni-freiburg.de/pathSearch/>"
+      "SELECT ?start ?end ?path ?edge WHERE {"
+      "VALUES ?middle {<m1>} "
+      "SERVICE pathSearch: {"
+      "_:path pathSearch:algorithm pathSearch:allPaths ;"
+      "pathSearch:source <x> ;"
+      "pathSearch:target <z> ;"
+      "pathSearch:pathColumn ?path ;"
+      "pathSearch:edgeColumn ?edge ;"
+      "pathSearch:start ?start;"
+      "pathSearch:end ?end;"
+      "pathSearch:edgeProperty ?middle;"
+      "{SELECT * WHERE {"
+      "?start <p1> ?middle."
+      "?middle <p2> ?end."
+      "}}}}",
+      join(h::Sort(h::ValuesClause("VALUES (?middle) { (<m1>) }")),
+           h::Sort(h::PathSearch(config, true, true,
+                    h::Sort(join(scan("?start", "<p1>", "?middle"),
+                                 scan("?middle", "<p2>", "?end")))))),
+      qec);
+}
+
 TEST(QueryPlanner, PathSearchSourceBound) {
   auto scan = h::IndexScanFromStrings;
   auto qec = ad_utility::testing::getQec("<x> <p> <y>. <y> <p> <z>");
