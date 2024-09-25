@@ -81,8 +81,9 @@ inline auto MatchTypeAndOrderedChildren =
 constexpr auto IndexScan =
     [](TripleComponent subject, TripleComponent predicate,
        TripleComponent object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {}, const ScanSpecificationAsTripleComponent::Graphs& graphs = std::nullopt)
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const ScanSpecificationAsTripleComponent::Graphs& graphs =
+           std::nullopt) -> QetMatcher {
   size_t numVariables = static_cast<size_t>(subject.isVariable()) +
                         static_cast<size_t>(predicate.isVariable()) +
                         static_cast<size_t>(object.isVariable());
@@ -95,8 +96,7 @@ constexpr auto IndexScan =
             AD_PROPERTY(IndexScan, getSubject, Eq(subject)),
             AD_PROPERTY(IndexScan, getPredicate, Eq(predicate)),
             AD_PROPERTY(IndexScan, getObject, Eq(object)),
-            AD_PROPERTY(IndexScan, getGraphs, Eq(graphs))
-            ));
+            AD_PROPERTY(IndexScan, getGraphs, Eq(graphs))));
 };
 
 // Match the `NeutralElementOperation`.
@@ -190,8 +190,9 @@ inline auto CountAvailablePredicates =
 inline auto IndexScanFromStrings =
     [](std::string_view subject, std::string_view predicate,
        std::string_view object,
-       const std::vector<Permutation::Enum>& allowedPermutations = {}, const std::optional<ad_utility::HashSet<std::string>> graphs = std::nullopt)
-    -> QetMatcher {
+       const std::vector<Permutation::Enum>& allowedPermutations = {},
+       const std::optional<ad_utility::HashSet<std::string>> graphs =
+           std::nullopt) -> QetMatcher {
   auto strToComp = [](std::string_view s) -> TripleComponent {
     if (s.starts_with("?")) {
       return ::Variable{std::string{s}};
@@ -204,7 +205,7 @@ inline auto IndexScanFromStrings =
   ScanSpecificationAsTripleComponent::Graphs graphsOut = std::nullopt;
   if (graphs.has_value()) {
     graphsOut.emplace();
-    for (const auto&  graphIn : graphs.value()) {
+    for (const auto& graphIn : graphs.value()) {
       graphsOut->insert(strToComp(graphIn));
     }
   }

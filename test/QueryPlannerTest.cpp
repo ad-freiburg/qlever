@@ -1117,10 +1117,18 @@ TEST(QueryPlanner, NamedGraphs) {
   h::expect("SELECT * FROM <x> FROM <y> WHERE { ?x ?y ?z}",
             scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
 
+
+  // TODO<joka921> more complex tests with subqueries etc.
+  // TODO<joka921> Fix the following test case (the named graphs should be
+  // propagated to the lower levels.
+  /*
+  h::expect("SELECT * FROM <x> FROM <y> { SELECT * {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+            */
+
   h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
             scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
 
-  // TODO<joka921> more complex tests with subqueries etc.
 
   AD_EXPECT_THROW_WITH_MESSAGE(
       h::expect("SELECT * FROM <x> FROM NAMED <y> WHERE { ?x ?y ?z}",
