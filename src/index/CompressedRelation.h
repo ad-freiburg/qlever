@@ -373,28 +373,32 @@ class CompressedRelationReader {
     const ScanSpecification::Graphs& desiredGraphs_;
     ColumnIndex graphColumn_;
     bool deleteGraphColumn_;
-    // Filter `containedGraph` such that it contains no duplicates and only the
-    // specified graphs. The `metadata` of `containedGraph` is used for
-    // possible shortcuts (for example, if we know that there are no duplicates,
-    // we do not have to eliminate them). The return value is `true` if the
-    // `containedGraph` has been modified because it contained duplicates or
-    // triples from unwanted graphs.
+    // Filter `block` such that it contains only the specified graphs and no
+    // duplicates. The `blockMetadata` of `block` is used for possible shortcuts
+    // (for example, if we know that there are no duplicates, we do not have to
+    // eliminate them). The return value is `true` if the `block` has been
+    // modified because it contained duplicates or triples from unwanted graphs.
     bool postprocessBlock(IdTable& block,
-                          const CompressedBlockMetadata& metadata) const;
-    bool canBlockBeSkipped(const CompressedBlockMetadata&) const;
+                          const CompressedBlockMetadata& blockMetadata) const;
+
+    // Return true, iff a block, specified by the `blockMetadata` contains no
+    // triples from `desiredGraphs_` and therefore doesn't have to be read from
+    // disk, and if this fact can be determined by `blockMetadata` alone.
+    bool canBlockBeSkipped(const CompressedBlockMetadata& blockMetadata) const;
 
    private:
-    // Return true iff all triples from the block belong to the desired graphs,
-    // and if this fact can be determined by looking at the metadata alone.
+    // Return true iff all triples from the block belong to the
+    // `desiredGraphs_`, and if this fact can be determined by looking at the
+    // metadata alone.
     bool blockNeedsFilteringByGraph(
         const CompressedBlockMetadata& metadata) const;
 
     // Implementation of the various steps of `postprocessBlock`. Each of them
     // returns `true` iff filtering the block was necessary.
     bool filterByGraphIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& metadata) const;
-    bool filterDuplicatesIfNecessary(
-        IdTable& block, const CompressedBlockMetadata& metadata) const;
+        IdTable& block, const CompressedBlockMetadata& blockMetadata) const;
+    static bool filterDuplicatesIfNecessary(
+        IdTable& block, const CompressedBlockMetadata& blockMetadata);
   };
 
   // The specification of scan, together with the blocks on which this scan is

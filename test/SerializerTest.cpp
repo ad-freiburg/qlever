@@ -550,11 +550,11 @@ TEST(Serializer, serializeOptional) {
   ByteBufferWriteSerializer writer;
   writer << s;
   writer << nil;
-  std::optional<std::string> s2;
-  std::optional<std::string> nilTarget = "bye";
+  std::optional<std::string> sExpected;
+  std::optional<std::string> nilExpected = "bye";
   ByteBufferReadSerializer reader{std::move(writer).data()};
-  reader >> s2;
-  reader >> nilTarget;
-  EXPECT_THAT(s2, ::testing::Optional(std::string("hallo")));
-  EXPECT_EQ(nilTarget, std::nullopt);
+  reader >> sExpected;
+  reader >> nilExpected;
+  EXPECT_THAT(sExpected, ::testing::Optional(std::string("hallo")));
+  EXPECT_EQ(nilExpected, std::nullopt);
 }
