@@ -2232,3 +2232,4 @@ void QueryPlanner::GraphPatternPlanner::optimizeCommutatively(
   candidatePlans_.push_back(std::move(lastRow));
   planner_.checkCancellation();
 }
+

@@ -1110,3 +1110,20 @@ TEST(QueryPlanner, SubtreeWithService) {
       "<is-a> ?z . }}}",
       h::Minus(sibling, h::Sort(h::Service(sibling, "{ ?x <is-a> ?z . }"))));
 }
+
+TEST(QueryPlanner, NamedGraphs) {
+  auto scan = h::IndexScanFromStrings;
+  using Graphs = ad_utility::HashSet<std::string>;
+  h::expect("SELECT * FROM <x> FROM <y> WHERE { ?x ?y ?z}",
+            scan("?x", "?y", "?z", {}, Graphs{"<x>", "<y>"}));
+
+  h::expect("SELECT * FROM <x> WHERE { GRAPH <z> {?x ?y ?z}}",
+            scan("?x", "?y", "?z", {}, Graphs{"<z>"}));
+
+  // TODO<joka921> more complex tests with subqueries etc.
+
+  AD_EXPECT_THROW_WITH_MESSAGE(
+      h::expect("SELECT * FROM <x> FROM NAMED <y> WHERE { ?x ?y ?z}",
+                ::testing::_),
+      ::testing::HasSubstr("FROM NAMED clauses are not yet supported"));
+}

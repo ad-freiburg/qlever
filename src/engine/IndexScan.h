@@ -40,6 +40,7 @@ class IndexScan final : public Operation {
   const TripleComponent& getPredicate() const { return predicate_; }
   const TripleComponent& getSubject() const { return subject_; }
   const TripleComponent& getObject() const { return object_; }
+  const auto& getGraphs() const { return graphsToFilter_; }
 
   const std::vector<ColumnIndex>& additionalColumns() const {
     return additionalColumns_;
