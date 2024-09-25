@@ -30,7 +30,7 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
 
     AD_CORRECTNESS_CHECK(0.0 <= downscaled && downscaled <= 1.0, [&]() {
       return absl::StrCat("downscaled coordinate value ", downscaled,
-                          " does not statisfy [0,1] constraint");
+                          " does not satisfy [0,1] constraint");
     });
 
     // Stretch to allowed range of values between 0 and maxCoordinateEncoded,
@@ -41,7 +41,7 @@ GeoPoint::T GeoPoint::toBitRepresentation() const {
     AD_CORRECTNESS_CHECK(
         0.0 <= newscaled && newscaled <= maxCoordinateEncoded, [&]() {
           return absl::StrCat("scaled coordinate value ", newscaled,
-                              " does not statisfy [0,", maxCoordinateEncoded,
+                              " does not satisfy [0,", maxCoordinateEncoded,
                               "] constraint");
         });
     return newscaled;

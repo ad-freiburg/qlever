@@ -61,7 +61,7 @@ class GeoPoint {
   // Convert the value of this GeoPoint object to a single bitstring.
   // The conversion will reduce the precision and thus change the value.
   // However the lost precision should only be in the range of centimeters.
-  // Guarantees to only use the lower numDataBits (currenty 60 bits),
+  // Guarantees to only use the lower numDataBits (currently 60 bits),
   // with lng stored in the lower 30 and lat stored in the upper 30 bits of
   // the lower 60.
   T toBitRepresentation() const;
