@@ -212,7 +212,7 @@ struct PathQuery {
    * @brief Convert this PathQuery into a PathSearchConfiguration object.
    * This method checks if all required parameters are set and converts
    * the PathSearch sources and targets into SearchSides.
-   * A PathSearchException is thrown if required paramaters are missing.
+   * A PathSearchException is thrown if required parameters are missing.
    * The required parameters are start, end, pathColumn and edgeColumn.
    *
    * @param vocab A vocab containing the Ids of the IRIs in
