@@ -522,7 +522,8 @@ TEST(PathSearchTest, multiSourceMultiTargetallPathsNotCartesian) {
                                  Var{"?end"},
                                  Var{"?edgeIndex"},
                                  Var{"?pathIndex"},
-                                 {}, false};
+                                 {},
+                                 false};
 
   auto resultTable = performPathSearch(config, std::move(sub), vars);
   ASSERT_THAT(resultTable.idTable(),

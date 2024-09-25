@@ -711,7 +711,7 @@ GraphPatternOperation Visitor::visitPathQuery(
     if (std::holds_alternative<parsedQuery::BasicGraphPattern>(op)) {
       pathQuery.addBasicPattern(std::get<parsedQuery::BasicGraphPattern>(op));
     } else if (std::holds_alternative<parsedQuery::GroupGraphPattern>(op)) {
-        pathQuery.addGraph(op);
+      pathQuery.addGraph(op);
     } else {
       throw parsedQuery::PathSearchException(
           "Unsupported element in pathSearch."
@@ -768,9 +768,10 @@ GraphPatternOperation Visitor::visit(Parser::ServiceGraphPatternContext* ctx) {
                            visibleVariablesServiceQuery.begin(),
                            visibleVariablesServiceQuery.end());
   // Create suitable `parsedQuery::Service` object and return it.
-    return parsedQuery::Service{std::move(visibleVariablesServiceQuery), std::move(serviceIri),
-          prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
-          static_cast<bool>(ctx->SILENT())};
+  return parsedQuery::Service{
+      std::move(visibleVariablesServiceQuery), std::move(serviceIri),
+      prologueString_, getOriginalInputForContext(ctx->groupGraphPattern()),
+      static_cast<bool>(ctx->SILENT())};
 }
 
 // ____________________________________________________________________________

@@ -269,8 +269,10 @@ inline auto TransitivePath =
     };
 
 inline auto PathSearchConfigMatcher = [](PathSearchConfiguration config) {
-  auto sourceMatcher = AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
-  auto targetMatcher = AD_FIELD(PathSearchConfiguration, targets_, Eq(config.targets_));
+  auto sourceMatcher =
+      AD_FIELD(PathSearchConfiguration, sources_, Eq(config.sources_));
+  auto targetMatcher =
+      AD_FIELD(PathSearchConfiguration, targets_, Eq(config.targets_));
   return AllOf(
       AD_FIELD(PathSearchConfiguration, algorithm_, Eq(config.algorithm_)),
       sourceMatcher, targetMatcher,
@@ -294,10 +296,9 @@ inline auto PathSearch =
           AD_PROPERTY(PathSearch, isTargetBound, Eq(targetBound))));
     };
 
-inline auto ValuesClause = [](string cacheKey){
-  return RootOperation<::Values>(AllOf(
-    AD_PROPERTY(Values, getCacheKey, cacheKey)
-  ));
+inline auto ValuesClause = [](string cacheKey) {
+  return RootOperation<::Values>(
+      AllOf(AD_PROPERTY(Values, getCacheKey, cacheKey)));
 };
 
 // Match a sort operation. Currently, this is only required by the binary search

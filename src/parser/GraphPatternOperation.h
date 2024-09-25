@@ -183,7 +183,7 @@ struct PathQuery {
   /**
    * @brief Add the parameters from a BasicGraphPattern to the PathQuery
    *
-   * @param pattern 
+   * @param pattern
    */
   void addBasicPattern(const BasicGraphPattern& pattern);
 
@@ -191,7 +191,7 @@ struct PathQuery {
    * @brief Add a GraphPatternOperation to the PathQuery. The pattern specifies
    * the edges of the graph that is used by the path search
    *
-   * @param childGraphPattern 
+   * @param childGraphPattern
    */
   void addGraph(const GraphPatternOperation& childGraphPattern);
 
@@ -203,7 +203,7 @@ struct PathQuery {
    * @param side A vector of TripleComponents, containing either exactly one
    *             Variable or zero or more ValueIds
    * @param vocab A Vocabulary containing the Ids of the TripleComponents.
-   *              The Vocab is only used if the given vector contains IRIs. 
+   *              The Vocab is only used if the given vector contains IRIs.
    */
   std::variant<Variable, std::vector<Id>> toSearchSide(
       std::vector<TripleComponent> side, const Index::Vocab& vocab) const;

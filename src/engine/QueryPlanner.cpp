@@ -1876,12 +1876,12 @@ auto QueryPlanner::createJoinWithPathSearch(
   auto pathSearch = aRootOp ? aRootOp : bRootOp;
   auto sibling = bRootOp ? a : b;
 
-  auto decideColumns = [aRootOp](std::array<ColumnIndex, 2> joinColumns) -> std::pair<ColumnIndex, ColumnIndex> {
+  auto decideColumns = [aRootOp](std::array<ColumnIndex, 2> joinColumns)
+      -> std::pair<ColumnIndex, ColumnIndex> {
     auto thisCol = aRootOp ? joinColumns[0] : joinColumns[1];
     auto otherCol = aRootOp ? joinColumns[1] : joinColumns[0];
     return {thisCol, otherCol};
   };
-
 
   // Only source and target may be bound directly
   if (jcs.size() > 2) {
@@ -1897,7 +1897,8 @@ auto QueryPlanner::createJoinWithPathSearch(
   }
 
   // A join on an edge property column should not create any candidates
-  auto isJoinOnSourceOrTarget = [sourceColumn, targetColumn](size_t joinColumn) -> bool {
+  auto isJoinOnSourceOrTarget = [sourceColumn,
+                                 targetColumn](size_t joinColumn) -> bool {
     return ((sourceColumn && sourceColumn.value() == joinColumn) ||
             (targetColumn && targetColumn.value() == joinColumn));
   };
@@ -1912,15 +1913,17 @@ auto QueryPlanner::createJoinWithPathSearch(
 
     auto [secondCol, secondOtherCol] = decideColumns(jcs[1]);
 
-    if (!isJoinOnSourceOrTarget(firstCol) && !isJoinOnSourceOrTarget(secondCol)) {
+    if (!isJoinOnSourceOrTarget(firstCol) &&
+        !isJoinOnSourceOrTarget(secondCol)) {
       return std::nullopt;
     }
 
     if (sourceColumn == firstCol && targetColumn == secondCol) {
-      pathSearch->bindSourceAndTargetSide(
-        sibling._qet, firstOtherCol, secondOtherCol);
+      pathSearch->bindSourceAndTargetSide(sibling._qet, firstOtherCol,
+                                          secondOtherCol);
     } else if (sourceColumn == secondCol && targetColumn == firstCol) {
-      pathSearch->bindSourceAndTargetSide(sibling._qet, secondOtherCol, firstOtherCol);
+      pathSearch->bindSourceAndTargetSide(sibling._qet, secondOtherCol,
+                                          firstOtherCol);
     } else {
       return std::nullopt;
     }
@@ -1937,7 +1940,7 @@ auto QueryPlanner::createJoinWithPathSearch(
     } else if (targetColumn && targetColumn == thisCol &&
                !pathSearch->isTargetBound()) {
       pathSearch->bindTargetSide(sibling._qet, otherCol);
-    } 
+    }
   } else {
     return std::nullopt;
   }

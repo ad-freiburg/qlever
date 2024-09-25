@@ -4,9 +4,9 @@
 
 #include "PathSearch.h"
 
+#include <ranges>
 #include <variant>
 #include <vector>
-#include <ranges>
 
 #include "engine/CallFixedSize.h"
 #include "engine/QueryExecutionTree.h"
@@ -173,8 +173,8 @@ float PathSearch::getMultiplicity(size_t col) {
 };
 
 // _____________________________________________________________________________
-bool PathSearch::knownEmptyResult() { 
-  for (auto child: getChildren()) {
+bool PathSearch::knownEmptyResult() {
+  for (auto child : getChildren()) {
     if (child->knownEmptyResult()) {
       return true;
     }
@@ -200,8 +200,9 @@ void PathSearch::bindTargetSide(std::shared_ptr<QueryExecutionTree> targetsOp,
 }
 
 // _____________________________________________________________________________
-void PathSearch::bindSourceAndTargetSide(std::shared_ptr<QueryExecutionTree> sourceAndTargetOp,
-                                         size_t sourceCol, size_t targetCol) {
+void PathSearch::bindSourceAndTargetSide(
+    std::shared_ptr<QueryExecutionTree> sourceAndTargetOp, size_t sourceCol,
+    size_t targetCol) {
   sourceAndTargetTree_ = sourceAndTargetOp;
   sourceCol_ = sourceCol;
   targetCol_ = targetCol;
@@ -265,7 +266,8 @@ VariableToColumnMap PathSearch::computeVariableToColumnMap() const {
 };
 
 // _____________________________________________________________________________
-std::pair<std::span<const Id>, std::span<const Id>> PathSearch::handleSearchSides() const {
+std::pair<std::span<const Id>, std::span<const Id>>
+PathSearch::handleSearchSides() const {
   std::span<const Id> sourceIds;
   std::span<const Id> targetIds;
 
@@ -277,7 +279,8 @@ std::pair<std::span<const Id>, std::span<const Id>> PathSearch::handleSearchSide
   }
 
   if (sourceTree_.has_value()) {
-    sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(sourceCol_.value());
+    sourceIds = sourceTree_.value()->getResult()->idTable().getColumn(
+        sourceCol_.value());
   } else if (config_.sourceIsVariable()) {
     sourceIds = {};
   } else {
@@ -285,13 +288,14 @@ std::pair<std::span<const Id>, std::span<const Id>> PathSearch::handleSearchSide
   }
 
   if (targetTree_.has_value()) {
-    targetIds = targetTree_.value()->getResult()->idTable().getColumn(targetCol_.value());
+    targetIds = targetTree_.value()->getResult()->idTable().getColumn(
+        targetCol_.value());
   } else if (config_.targetIsVariable()) {
     targetIds = {};
   } else {
     targetIds = std::get<std::vector<Id>>(config_.targets_);
   }
-  
+
   return {sourceIds, targetIds};
 }
 
@@ -328,7 +332,7 @@ std::vector<Path> PathSearch::findPaths(
     }
 
     for (auto outgoingEdge : binSearch.outgoingEdes(edge.end_)) {
-      if (!visited.contains(outgoingEdge.end_.getBits())){
+      if (!visited.contains(outgoingEdge.end_.getBits())) {
         edgeStack.push_back(outgoingEdge);
       }
     }
@@ -360,8 +364,9 @@ std::vector<Path> PathSearch::allPaths(std::span<const Id> sources,
       }
     }
   } else {
-    for (size_t i = 0; i < sources.size(); i++){
-      for (auto path : findPaths(sources[i], {targets[i].getBits()}, binSearch)) {
+    for (size_t i = 0; i < sources.size(); i++) {
+      for (auto path :
+           findPaths(sources[i], {targets[i].getBits()}, binSearch)) {
         paths.push_back(path);
       }
     }

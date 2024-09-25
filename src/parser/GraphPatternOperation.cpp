@@ -82,26 +82,27 @@ void PathQuery::addParameter(const SparqlTriple& triple) {
     throw PathSearchException("Predicates must be IRIs");
   }
 
-  auto getVariable = [](std::string_view parameter, const TripleComponent& object) {
+  auto getVariable = [](std::string_view parameter,
+                        const TripleComponent& object) {
     if (!object.isVariable()) {
       throw PathSearchException(absl::StrCat("The value ", object.toString(),
-                                " for parameter '", parameter,
-                                "' has to be a variable"));
+                                             " for parameter '", parameter,
+                                             "' has to be a variable"));
     }
 
     return object.getVariable();
   };
 
-  auto setVariable = [&](std::string_view parameter, const TripleComponent& object,
+  auto setVariable = [&](std::string_view parameter,
+                         const TripleComponent& object,
                          std::optional<Variable>& existingValue) {
     auto variable = getVariable(parameter, object);
 
     if (existingValue.has_value()) {
-      throw PathSearchException(absl::StrCat("The parameter '", parameter,
-                                "' has already been set to variable: '",
-                                existingValue.value().toSparql(),
-                                "'. New variable: '", object.toString(),
-                                "'."));
+      throw PathSearchException(absl::StrCat(
+          "The parameter '", parameter, "' has already been set to variable: '",
+          existingValue.value().toSparql(), "'. New variable: '",
+          object.toString(), "'."));
     }
 
     existingValue = object.getVariable();
@@ -206,8 +207,8 @@ PathSearchConfiguration PathQuery::toPathSearchConfiguration(
   }
 
   return PathSearchConfiguration{
-      algorithm_,          sources,        targets,
-      start_.value(),      end_.value(),   pathColumn_.value(),
+      algorithm_,          sources,         targets,
+      start_.value(),      end_.value(),    pathColumn_.value(),
       edgeColumn_.value(), edgeProperties_, cartesian_};
 }
 
