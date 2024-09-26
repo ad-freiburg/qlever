@@ -759,14 +759,10 @@ struct BlockZipperJoinImpl {
   using ProjectedEl = LeftSide::ProjectedEl;
   static_assert(std::same_as<ProjectedEl, typename RightSide::ProjectedEl>);
 
-  // The largest element for which all blocks are currently stored in the buffer
-  // and processed.
-  std::optional<ProjectedEl> currentMinEl_ = std::nullopt;
-
   // Create an equality comparison from the `lessThan` predicate.
   bool eq(const auto& el1, const auto& el2) {
     return !lessThan_(el1, el2) && !lessThan_(el2, el1);
-  };
+  }
 
   // Recompute the `currentEl`. It is the minimum of the last element in the
   // first block of either of the join sides.
@@ -940,7 +936,7 @@ struct BlockZipperJoinImpl {
         return ad_utility::noop;
       }
     }();
-    [[maybe_unused]] auto res = zipperJoinWithUndef(
+    zipperJoinWithUndef(
         std::ranges::subrange{subrangeLeft.begin(), currentElItL},
         std::ranges::subrange{subrangeRight.begin(), currentElItR}, lessThan_,
         addRowIndex, noop, noop, addNotFoundRowIndex);
@@ -988,9 +984,7 @@ struct BlockZipperJoinImpl {
     }
 
     // Add the remaining blocks such that condition 3 from above is fulfilled.
-    auto blockStatus = fillEqualToCurrentElBothSides(getCurrentEl());
-    currentMinEl_ = getCurrentEl();
-    return blockStatus;
+    return fillEqualToCurrentElBothSides(getCurrentEl());
   }
 
   // Combine the above functionality and perform one round of joining.
@@ -999,11 +993,10 @@ struct BlockZipperJoinImpl {
   void joinBuffers(BlockStatus& blockStatus) {
     auto& currentBlocksLeft = leftSide_.currentBlocks_;
     auto& currentBlocksRight = rightSide_.currentBlocks_;
-    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
-        currentBlocksLeft, currentBlocksRight, getCurrentEl());
-
-    // TODO<joka921> This should still be the same.
     ProjectedEl currentEl = getCurrentEl();
+    joinAndRemoveLessThanCurrentEl<DoOptionalJoin>(
+        currentBlocksLeft, currentBlocksRight, currentEl);
+
     // At this point the `currentBlocksLeft/Right` only consist of elements `>=
     // currentEl`. We now obtain a view on the elements `== currentEl` which are
     // needed for the next step (the Cartesian product). In the last block,
